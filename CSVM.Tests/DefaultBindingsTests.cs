@@ -405,6 +405,35 @@ public class DefaultBindingsTests
         }
     }
 
+    /// <summary>The VR recenter is appended last and ships as a flight action on Home, which the
+    /// original leaves free. Its pad rows are the touchpad click and first back paddle, which no
+    /// other flight action holds. It reaches the Original controls page's Other tab after the
+    /// graphics switch.</summary>
+    [Fact]
+    public void TheVrRecenter_IsAppendedAndShipsOnHomeAndTheSparePadButtons()
+    {
+        var all = Enum.GetValues<InputAction>();
+        Assert.Equal(93, (int)InputAction.RecenterHeadset);
+        Assert.Equal(all.Length - 1, (int)InputAction.RecenterHeadset);
+
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var shipped = new[]
+        {
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Home)),
+            new Binding(Pad, BindingControl.Button((int)JoyButton.Touchpad)),
+            new Binding(Pad, BindingControl.Button((int)JoyButton.Paddle1)),
+        };
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.RecenterHeadset));
+        Assert.Equal(shipped, map.Bindings(InputAction.RecenterHeadset));
+        foreach (var binding in shipped)
+        {
+            Assert.Equal(new[] { InputAction.RecenterHeadset }, map.OwnersOf(binding));
+        }
+
+        var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
+        Assert.Equal(other.IndexOf(InputAction.ToggleGraphicsMode) + 1, other.IndexOf(InputAction.RecenterHeadset));
+    }
+
     /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its
     /// Views 1 page has them that way: neither row carries a joystick button there. Recorded so
     /// neither drifts onto a pad control, where it would state a mode a pad player cannot state

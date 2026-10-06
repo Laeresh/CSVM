@@ -86,6 +86,9 @@ public sealed class PlaneBuilder
     private readonly bool _withDamagePanels;
     private readonly bool _withCockpitInterior;
     private readonly bool _withDockingHook;
+    // InteriorScale times the caller's interiorScaleFactor: the stereo path's per-plane factor,
+    // 1 everywhere else. The mount and the interior's depth bias both take it.
+    private readonly float _interiorScale;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
     private readonly List<Node3D> _cockpitDamagePanels = new();
@@ -104,9 +107,10 @@ public sealed class PlaneBuilder
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
         bool cockpitInterior = false, bool dockingHook = false, PlanePainter? painter = null,
-        bool raceGhost = false, bool xrInterior = false)
+        bool raceGhost = false, bool xrInterior = false, float interiorScaleFactor = 1f)
     {
         _gamez = gamez;
+        _interiorScale = InteriorScale * interiorScaleFactor;
         _textures = textures;
         _scheme = scheme;
         _painter = scheme != null ? painter : null;
@@ -128,7 +132,7 @@ public sealed class PlaneBuilder
                 cullBackfaces: true,
                 textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
             {
-                DepthBiasScale = 1f / InteriorScale,
+                DepthBiasScale = 1f / _interiorScale,
                 // The panel is a wall of soft-alpha decals over dark instruments, which is where
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
@@ -414,7 +418,7 @@ public sealed class PlaneBuilder
             }
             n3d.Transform = new Transform3D(
                 new Basis(Vector3.Right, HeadPitchOffsetRad)
-                    .Scaled(Vector3.One * InteriorScale),
+                    .Scaled(Vector3.One * _interiorScale),
                 CockpitCameraOffset);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);

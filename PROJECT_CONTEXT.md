@@ -97,7 +97,7 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
 
 - `CSVM/`, the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CSVM/shaders/`, shared `.gdshaderinc` blocks `#include`d by the generated shaders (instance-uniform order, sRGB, fog, lights, clock).
-- `CSVM/data/`, **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`) and `effect_pools.json` (per-root effect-template pool sizes; see `docs/architecture/Utils.md` on `EffectPools`).
+- `CSVM/data/`, **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`) and `effect_pools.json` (per-root effect-template pool sizes; see `docs/architecture/Utils.md` on `EffectPools`), and `vr_cockpits.json` (per-plane VR interior scale and seated eye offset; see `docs/architecture/Flight.md` on `VrCockpits`).
 - `CSVM.Tests/`, the xUnit project (`dotnet test`): reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
 - `CrimsonSkiesGame/`, the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/`, extraction output workdir (git-ignored), mirroring the game's ZBD structure. Loaders prefer an unpacked sibling folder over its `.zip`. Layout + what is deliberately not loaded: `docs/tooling.md`.

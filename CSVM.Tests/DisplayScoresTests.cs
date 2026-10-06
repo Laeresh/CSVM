@@ -26,11 +26,8 @@ public class DisplayScoresTests
     [Fact]
     public void TheActionIsAppendedAfterEveryMemberThatAlreadyExisted()
     {
-        var all = Enum.GetValues<InputAction>();
         Assert.Equal(91, (int)InputAction.LookUpRightRear);
         Assert.Equal(92, (int)InputAction.DisplayScores);
-        Assert.Equal(InputAction.DisplayScores, all.Max());
-        Assert.Equal(all.Length - 1, (int)InputAction.DisplayScores);
     }
 
     [Fact]

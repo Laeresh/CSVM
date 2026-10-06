@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Spec;
@@ -63,11 +62,10 @@ public static class XrLaunch
 /// <summary>
 /// The stereo path of one process, built only for OpenXR (<c>--xr-mode on</c> ahead of <c>--</c>)
 /// or the <c>--xr-sim</c> stand-in (<see cref="XrSimInterface"/>). Its <see cref="Boot"/> points
-/// the main viewport at the interface and hangs an <see cref="XROrigin3D"/> with the tracked
-/// <see cref="XRCamera3D"/> under it. Each frame the origin moves to the flown aircraft's eye
-/// (<see cref="XrMount"/>), whichever interface draws. It logs the boot, the OpenXR session states,
-/// and a frame-pacing line once a wall second. The flat camera stays current: its near and far
-/// planes, Environment and zone cull mask serve the stereo render. The eyes come from the origin.
+/// the main viewport at the interface and builds the one VR seat's <see cref="XrRig"/>: an
+/// <see cref="XROrigin3D"/> with the tracked <see cref="XRCamera3D"/> under it. Each frame it has
+/// the rig place itself, whichever interface draws, and recenters when the runtime asks. It logs
+/// the boot, the OpenXR session states, and a frame-pacing line once a wall second.
 /// </summary>
 public partial class XrSession : Node
 {
@@ -77,18 +75,16 @@ public partial class XrSession : Node
 
     private readonly XrFrameWindow _window = new();
     private XRInterface _xr = null!;
-    private Camera3D _eye = null!;
-    private Func<IReadOnlyList<PlayerRig>> _rigs = null!;
     private MeasuredRenderTime _renderTime = null!;
-    private XROrigin3D _origin = null!;
     private string _thread = "";
+    // Why a recenter waits for the head's first tracked pose, or null when none waits.
+    private string? _recenterPending;
     private long _lastStamp;
     private double _gpuSumMs;
     private int _gpuFrames;
 
-    /// <summary>The tracked head under the origin, where the player's eyes are in the world. Not the
-    /// current camera; see the type's summary.</summary>
-    public XRCamera3D Head { get; private set; } = null!;
+    /// <summary>The one VR seat: the origin, the tracked head and the pane it flies.</summary>
+    public XrRig Rig { get; private set; } = null!;
 
     /// <summary>True when a headset runtime paces the frames, so the desktop V-Sync and cap stay
     /// off (<see cref="VSyncSetting.Headset"/>). The stand-in has no runtime and keeps the flat
@@ -97,11 +93,9 @@ public partial class XrSession : Node
 
     /// <summary>Starts the headset path if Godot brought OpenXR up, else the stand-in headset when
     /// <paramref name="sim"/> asks for it, else logs why not and returns null. The persistent flat
-    /// camera <paramref name="eye"/> is the origin's fallback while no flight is live. The live
-    /// session's panes come from <paramref name="rigs"/>, empty at the menu. The caller adds the
-    /// returned node to the tree.</summary>
-    public static XrSession? Boot(Viewport root, Camera3D eye, Func<IReadOnlyList<PlayerRig>> rigs,
-        MeasuredRenderTime renderTime, XrSimSpec? sim)
+    /// camera <paramref name="eye"/> is the origin's fallback while no session binds a pane to
+    /// <see cref="Rig"/>. The caller adds the returned node to the tree.</summary>
+    public static XrSession? Boot(Viewport root, Camera3D eye, MeasuredRenderTime renderTime, XrSimSpec? sim)
     {
         bool requested = XrLaunch.Requested(System.Environment.GetCommandLineArgs(),
             ProjectSettings.GetSetting(XrLaunch.EnabledSetting).AsBool());
@@ -112,7 +106,7 @@ public partial class XrSession : Node
                 Log.Warn("core", $"xr: OpenXR is live, ignoring --xr-sim");
             }
 
-            return BootOpenXr(root, eye, rigs, renderTime, xr);
+            return BootOpenXr(root, eye, renderTime, xr);
         }
 
         if (requested)
@@ -122,7 +116,7 @@ public partial class XrSession : Node
 
         if (sim != null)
         {
-            return BootSim(root, eye, rigs, renderTime, sim);
+            return BootSim(root, eye, renderTime, sim);
         }
 
         if (!requested)
@@ -135,12 +129,13 @@ public partial class XrSession : Node
 
     public override void _Process(double delta)
     {
-        var (mount, pilot) = CurrentMount();
-        _origin.GlobalTransform = mount;
-        if (pilot?.Dressing.Stereo is { } cockpit)
+        if (_recenterPending is { } why && HeadTracked())
         {
-            cockpit.Follow(mount, pilot);
+            _recenterPending = null;
+            Rig.Recenter(why);
         }
+
+        Rig.Place();
 
         var (_, gpuMs) = _renderTime.Read();
         _gpuSumMs += gpuMs;
@@ -165,10 +160,14 @@ public partial class XrSession : Node
         _lastStamp = stamp;
     }
 
-    private static XrSession BootOpenXr(Viewport root, Camera3D eye, Func<IReadOnlyList<PlayerRig>> rigs,
-        MeasuredRenderTime renderTime, OpenXRInterface xr)
+    // Whether the runtime reports the head as tracked, which is when a recenter has a pose to take.
+    private static bool HeadTracked() =>
+        XRServer.GetTracker("head") is XRPositionalTracker head
+        && head.HasPose("default") && head.GetPose("default").HasTrackingData;
+
+    private static XrSession BootOpenXr(Viewport root, Camera3D eye, MeasuredRenderTime renderTime, OpenXRInterface xr)
     {
-        var session = Build(root, eye, rigs, renderTime, xr);
+        var session = Build(root, eye, renderTime, xr);
         VSyncSetting.Apply(VSyncSetting.Headset);
         session._window.SetRefreshHz(xr.DisplayRefreshRate);
         session.WireSessionLog(xr);
@@ -179,8 +178,7 @@ public partial class XrSession : Node
         return session;
     }
 
-    private static XrSession? BootSim(Viewport root, Camera3D eye, Func<IReadOnlyList<PlayerRig>> rigs,
-        MeasuredRenderTime renderTime, XrSimSpec sim)
+    private static XrSession? BootSim(Viewport root, Camera3D eye, MeasuredRenderTime renderTime, XrSimSpec sim)
     {
         // ⚠ Do not turn UseXR on without the tag. The stereo render then has no multiview shader
         // variants to draw with, and Godot compiles them only at engine start.
@@ -199,7 +197,7 @@ public partial class XrSession : Node
             return null;
         }
 
-        var session = Build(root, eye, rigs, renderTime, xr);
+        var session = Build(root, eye, renderTime, xr);
         var inv = CultureInfo.InvariantCulture;
         string head = string.Format(inv, "{0:0.###}/{1:0.###}/{2:0.###}", sim.Head.X, sim.Head.Y, sim.Head.Z);
         Log.Info("core", $"xr: sim live eye_px={sim.EyePx.X}x{sim.EyePx.Y} fov_deg={sim.FovDeg.ToString("0.##", inv)} ipd_mm={sim.IpdMm.ToString("0.##", inv)} yaw_deg={sim.YawDeg.ToString("0.##", inv)} pitch_deg={sim.PitchDeg.ToString("0.##", inv)} head_m={head} shot={sim.Shot.ToString().ToLowerInvariant()} render_thread={session._thread}");
@@ -207,24 +205,22 @@ public partial class XrSession : Node
     }
 
     // The nodes and the main viewport's switch every interface shares.
-    private static XrSession Build(Viewport root, Camera3D eye, Func<IReadOnlyList<PlayerRig>> rigs,
-        MeasuredRenderTime renderTime, XRInterface xr)
+    private static XrSession Build(Viewport root, Camera3D eye, MeasuredRenderTime renderTime, XRInterface xr)
     {
         var session = new XrSession
         {
             Name = "xr_session",
             ProcessPriority = AfterCameraWriters,
             _xr = xr,
-            _eye = eye,
-            _rigs = rigs,
             _renderTime = renderTime,
             // On the main thread this is true only when the render runs on it too.
             _thread = RenderingServer.IsOnRenderThread() ? "safe" : "separate",
         };
-        session._origin = new XROrigin3D { Name = "xr_origin" };
-        session.Head = new XRCamera3D { Name = "xr_head", Current = false };
-        session._origin.AddChild(session.Head);
-        session.AddChild(session._origin);
+        var origin = new XROrigin3D { Name = "xr_origin" };
+        var head = new XRCamera3D { Name = "xr_head", Current = false };
+        origin.AddChild(head);
+        session.AddChild(origin);
+        session.Rig = new XrRig(origin, head, eye, pilot => pilot.Dressing.Stereo);
         // After the headset's own interface, so its pre-render reads the eyes that one just located.
         var feed = new XrEyeFeed();
         XRServer.AddInterface(feed);
@@ -237,23 +233,19 @@ public partial class XrSession : Node
     private static string Field(Godot.Collections.Dictionary info, string key) =>
         info.ContainsKey(key) ? info[key].AsString() : "?";
 
-    // The first pane's flat camera and aircraft; the persistent camera while no flight is up. The
-    // pilot comes back too, live or null, for the interior that follows the origin.
-    private (Transform3D Mount, FlightController? Pilot) CurrentMount()
-    {
-        var rigs = _rigs();
-        var rig = rigs.Count > 0 ? rigs[0] : null;
-        var camera = rig != null && IsInstanceValid(rig.Camera) ? rig.Camera : _eye;
-        var pilot = rig?.Controller is { } controller && IsInstanceValid(controller) ? controller : null;
-        Basis? attitude = pilot is { FirstPersonView: true, Crashed: false } ? pilot.GlobalTransform.Basis : null;
-        return (XrMount.For(camera.GlobalTransform, attitude), pilot);
-    }
-
+    // Besides the log, the two moments the seated eye goes back onto the cockpit eye by itself. On
+    // focus, Local space has left the head wherever the runtime put it. The runtime's own recenter
+    // moves Local space under the frame set earlier.
     private void WireSessionLog(OpenXRInterface xr)
     {
         xr.SessionBegun += () => Log.Info("core", $"xr: session begun refresh_hz={xr.DisplayRefreshRate:0.#}");
         xr.SessionVisible += () => Log.Info("core", $"xr: session visible");
-        xr.SessionFocussed += () => Log.Info("core", $"xr: session focused");
+        xr.SessionFocussed += () =>
+        {
+            Log.Info("core", $"xr: session focused");
+            _recenterPending = "session focused";
+        };
+        xr.PoseRecentered += () => _recenterPending = "the runtime recentered";
         xr.SessionStopping += () => Log.Info("core", $"xr: session stopping");
         xr.SessionLossPending += () => Log.Warn("core", $"xr: session loss pending");
         xr.InstanceExiting += () => Log.Info("core", $"xr: instance exiting");

@@ -7,7 +7,8 @@ namespace CSVM.Flight.Camera;
 /// player's tracked head moves about. In a first-person view it is the flat camera's eye at the
 /// aircraft's own attitude. The headset supplies the look, so the flat view's fixed head pitch is
 /// left out. Every other view keeps the flat camera's eye with its heading only. A chase swing or a
-/// tumbling wreck then never rolls or pitches the player's horizon. Engine-free, so it unit-tests.
+/// tumbling wreck then never rolls or pitches the player's horizon. Engine-free, so it unit-tests;
+/// <c>XrRig.cs</c> applies it.
 /// </summary>
 public static class XrMount
 {
@@ -16,12 +17,15 @@ public static class XrMount
 
     /// <summary>The origin pose for a flat camera at <paramref name="eye"/>. Pass the aircraft's
     /// drawn attitude as <paramref name="firstPersonAttitude"/> while a first-person view of a live
-    /// aircraft holds the camera, and null otherwise.</summary>
-    public static Transform3D For(in Transform3D eye, Basis? firstPersonAttitude)
+    /// aircraft holds the camera, and null otherwise. A first-person origin moves by the plane's
+    /// seated <paramref name="eyeOffset"/>, given in the aircraft's frame; the other views ignore it.
+    /// </summary>
+    public static Transform3D For(in Transform3D eye, Basis? firstPersonAttitude, Vector3 eyeOffset = default)
     {
         if (firstPersonAttitude is { } attitude)
         {
-            return new Transform3D(attitude.Orthonormalized(), eye.Origin);
+            var axes = attitude.Orthonormalized();
+            return new Transform3D(axes, eye.Origin + (axes * eyeOffset));
         }
 
         return new Transform3D(Level(eye.Basis), eye.Origin);

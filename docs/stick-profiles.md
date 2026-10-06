@@ -261,6 +261,7 @@ The name in the file comes first, then the name the Controls screen shows.
 | `ChatEveryone` | Chat to Everyone | Network games. |
 | `ChatTeam` | Chat to Team | Network games. |
 | `ToggleGraphicsMode` | Toggle Graphics Mode | Switches between the original and the enhanced graphics. |
+| `RecenterHeadset` | Recenter Headset | VR only: brings the seated eye back onto the cockpit eye. |
 
 ### `menu`
 

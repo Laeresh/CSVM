@@ -130,7 +130,7 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
 (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/RaceGhost.cs
 The race ghost: how solid another race pilot's aircraft draws at a camera distance (`Alpha`,

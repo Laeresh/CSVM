@@ -108,8 +108,9 @@ public partial class GameSession : Node3D
     private readonly Camera3D _camera;
     private readonly DirectionalLight3D _sun;
     private readonly Godot.Environment? _env;
-    // The stereo path's tracked head, null in a flat launch. A session given one draws its lens
-    // flare and full-view colour layers in the world, since a stereo viewport draws no canvas layer.
+    // The VR seat's rig, null in a flat launch, and the first pane binds to it. Its head places the
+    // lens flare and full-view colour layers in the world, since a stereo viewport draws no canvas.
+    private readonly XrRig? _xrRig;
     private readonly Node3D? _xrHead;
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
     // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
@@ -353,7 +354,8 @@ public partial class GameSession : Node3D
             TraceSteps = _spec.DebugNetTrace,
         };
         _camera = ctx.Camera;
-        _xrHead = ctx.XrHead;
+        _xrRig = ctx.Xr;
+        _xrHead = _xrRig?.Head;
         _orbit = ctx.Orbit;
         _sun = ctx.Sun;
         _env = ctx.Env;
@@ -928,6 +930,9 @@ public partial class GameSession : Node3D
             // Restore the persistent (Launcher-owned) main camera: splitscreen stood it down while
             // the panes rendered, and the launchscreen and the next session expect it current.
             _camera.Current = true;
+            // The VR seat is Launcher-owned as well; the origin falls back to that camera.
+            if (_rigs.Count > 0)
+                _xrRig?.Release(_rigs[0]);
             // The sun is Launcher-owned too, so a splitscreen session's pane default leaves with it.
             FollowPaneShadows(1);
             // A line still open when the session ends leaves no field for the keyboard to type into.
@@ -2064,6 +2069,7 @@ public partial class GameSession : Node3D
             PauseState = _pauseState!,
             StuntBoard = boards.BuildSoloStuntBoard,
             ToggleGraphicsMode = _toggleGraphicsMode,
+            RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
@@ -2727,6 +2733,7 @@ public partial class GameSession : Node3D
             // gate, and WeatherRig.Tick only ever NARROWS the band.
             _camera.CullMask = SplitScreen.PaneCullMask(Mech3.ZoneGate.OpenCullMask(_camera.CullMask));
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
+            _xrRig?.Bind(_rigs[0]);
             return;
         }
 
@@ -2754,6 +2761,8 @@ public partial class GameSession : Node3D
                 VisualLayer = SplitScreen.PlayerVisualLayer(i),
             });
         }
+        // VR flies one seat and the launch refuses more; should panes stand anyway, the first flies.
+        _xrRig?.Bind(_rigs[0]);
         Log.Info("flight", $"splitscreen: {count} panes sharing one world ({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
     }
 

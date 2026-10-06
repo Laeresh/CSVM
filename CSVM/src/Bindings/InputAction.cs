@@ -169,4 +169,8 @@ public enum InputAction
     // The original's Display Scores (Multiplayer Only), Tab by default: held, it shows the race's
     // or the Dogfight's standings in that seat's pane. Appended because the enum is positional.
     DisplayScores,
+
+    // Bringing a VR headset's seated eye back onto the cockpit eye, Home by default. This port's own
+    // flight action, inert without a headset. Appended because the enum is positional.
+    RecenterHeadset,
 }

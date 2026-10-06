@@ -154,9 +154,12 @@ internal sealed class HumanFlightAdapter
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
+        // The stereo interior's per-plane scale goes on the mount before XrCockpit captures it.
+        bool xrInterior = _policy.XrInterior && !remote;
+        var vrCockpit = xrInterior ? _policy.XrCockpits.For(planeName) : VrCockpit.Default;
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
-            raceGhost: _world.Racing, xrInterior: _policy.XrInterior && !remote);
+            raceGhost: _world.Racing, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
         var planeModel = planeBuilder.Build(planeName);
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
@@ -183,8 +186,8 @@ internal sealed class HumanFlightAdapter
                 Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
                 Interior = planeBuilder.CockpitInterior,
                 Panel = CockpitGauges.Bind(planeBuilder),
-                Stereo = _policy.XrInterior && !remote && planeBuilder.CockpitInterior is { } interior
-                    ? new XrCockpit(interior)
+                Stereo = xrInterior && planeBuilder.CockpitInterior is { } interior
+                    ? new XrCockpit(interior, vrCockpit.EyeOffsetInAircraft)
                     : null,
             },
             Scheme = scheme,
@@ -194,6 +197,10 @@ internal sealed class HumanFlightAdapter
         };
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
+        if (controller.Dressing.Stereo != null)
+            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft of the marker");
+        // The recenter action, for the seat the headset flies.
+        controller.RecenterHeadset = remote ? null : _human.RecenterHeadset;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
         // The graphics-mode action, for a seat somebody sits at here, like the pause key below.

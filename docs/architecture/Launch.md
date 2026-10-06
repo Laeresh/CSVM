@@ -121,10 +121,10 @@ The stereo path of a process, built once by `Launcher._Ready` when Godot brought
 (`--xr-mode on` before `--`), else for `--xr-sim` through `XrSimInterface.cs` when the launch carries
 its feature tag; otherwise `Boot` logs why not and builds nothing. It turns the main viewport's
 `UseXR` on, paces by `Utils/VSyncSetting.cs`'s `Headset` under OpenXR alone, adds `XrEyeFeed.cs`,
-and each frame places an `XROrigin3D` with the tracked `XRCamera3D` (`Head`) at the first pane's
-eye (`Flight/Camera/XrMount.cs`), then that pane's interior (`Flight/Hud/XrCockpit.cs`). The flat
-camera stays current for near/far, Environment and the zone cull mask. It logs the boot, the session
-states and an `xr frames` Debug line per wall second (`XrFrameWindow.cs`); `XrLaunch` reads `--xr-mode`.
+and builds the VR seat's `Flight/Camera/XrRig.cs` (`Rig`), which it has place itself each frame. It
+recenters on the head's first tracked pose after the session gains focus and after the runtime's
+own recenter. It logs the boot, the session states and an `xr frames` Debug line per wall second
+(`XrFrameWindow.cs`); `XrLaunch` reads `--xr-mode`.
 
 ## src/Launch/XrRelaunch.cs
 VR mode's relaunch rules, engine-free. OpenXR starts only with the engine, so the saved option
@@ -149,7 +149,8 @@ through Godot's own XR path with no runtime, a pinned `head` tracker and `Flight
 answering the renderer's per-eye transform and projection. The window shows both eyes side by side
 without lens distortion; `Tooling/CaptureDirector.cs` reads the eye layers for a screenshot. The
 multiview shader variants come from the `csvm_xr_sim` feature tag the launch scripts set, never from
-this code. Read `XrSession.cs` for the boot.
+this code. It reports the head again on a recenter, as OpenXR does every frame, and `MoveHead` lets
+a suite move it. Read `XrSession.cs` for the boot.
 
 ## src/Launch/XrEyeFeed.cs
 A tracking-only `XRInterfaceExtension`, never primary, that hands the stereo cockpit interior the

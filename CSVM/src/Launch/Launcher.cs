@@ -867,7 +867,7 @@ public partial class Launcher : Node3D
 
         // OpenXR starts with the engine or not at all, and the --xr-sim stand-in only with its feature
         // tag. Without either Boot builds nothing, so a flat launch draws and paces exactly as it did.
-        _xr = XrSession.Boot(GetViewport(), _camera, () => _session?.Rigs ?? NoRigs, _renderTime, _spec.XrSim);
+        _xr = XrSession.Boot(GetViewport(), _camera, _renderTime, _spec.XrSim);
         if (_xr != null)
         {
             AddChild(_xr);
@@ -2093,7 +2093,7 @@ public partial class Launcher : Node3D
             CaptureDirector = _captureDirector,
             MasterSeed = _masterSeed,
             Camera = _camera,
-            XrHead = _xr?.Head,
+            Xr = _xr?.Rig,
             Orbit = _orbit,
             Sun = _sun,
             Env = _env,
@@ -3653,9 +3653,9 @@ public sealed class LauncherContext
     public required ulong MasterSeed { get; init; }
     public required Camera3D Camera { get; init; }
 
-    /// <summary>The stereo path's tracked head (<see cref="XrSession.Head"/>), null in a flat launch.
-    /// A session given one draws its lens flare and full-view colour layers in the world.</summary>
-    public Node3D? XrHead { get; init; }
+    /// <summary>The VR seat's rig (<see cref="XrSession.Rig"/>), null in a flat launch. A session given
+    /// one binds its pane to it and draws its lens flare and full-view colour layers in the world.</summary>
+    public XrRig? Xr { get; init; }
 
     public required OrbitCamera Orbit { get; init; }
     public required DirectionalLight3D Sun { get; init; }

@@ -210,6 +210,11 @@ public static class DefaultBindings
         // The scores table on the original's own Tab. Back is a pad button no other flight action
         // holds, and the conventional place for a held scoreboard.
         b.Keys(InputAction.DisplayScores, Key.Tab).Buttons(InputAction.DisplayScores, JoyButton.Back);
+
+        // The VR recenter, this port's own action, on Home, a key the original leaves free. Every
+        // common pad button is spent above. The pad gets the touchpad click and the first back paddle.
+        b.Keys(InputAction.RecenterHeadset, Key.Home)
+            .Buttons(InputAction.RecenterHeadset, JoyButton.Touchpad, JoyButton.Paddle1);
         return b;
     }
 

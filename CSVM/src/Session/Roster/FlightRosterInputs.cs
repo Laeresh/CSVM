@@ -77,6 +77,11 @@ internal sealed class FlightRosterPolicy
     /// interior out of the main world.</summary>
     public bool XrInterior { get; init; }
 
+    /// <summary>The per-plane VR cockpit data a stereo interior is built with
+    /// (<c>data/vr_cockpits.json</c>), read once per session and only under
+    /// <see cref="XrInterior"/>. Every other session holds the defaults and opens no file.</summary>
+    public VrCockpits XrCockpits { get; init; } = VrCockpits.Defaults;
+
     public static FlightRosterPolicy From(SessionSpec spec) => new()
     {
         HoldSets = spec.HoldSets,
@@ -118,8 +123,11 @@ internal sealed class FlightRosterPolicy
         MouseCaptureAllowed = MouseCapture.Allowed(
             DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
         // Read here for the same reason: the stereo path is the process's, booted before any session.
-        XrInterior = CSVM.Flight.Hud.XrCockpit.Live && !spec.CockpitPass,
+        XrInterior = StereoInterior(spec),
+        XrCockpits = StereoInterior(spec) ? VrCockpits.Load() : VrCockpits.Defaults,
     };
+
+    private static bool StereoInterior(SessionSpec spec) => CSVM.Flight.Hud.XrCockpit.Live && !spec.CockpitPass;
 }
 
 internal sealed class AircraftAssemblyResources
@@ -210,6 +218,10 @@ internal sealed class HumanRosterBindings
     /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
     /// leaves it inert.</summary>
     public Action? ToggleGraphicsMode { get; init; }
+
+    /// <summary>What a local seat's recenter action does: the VR seat's recenter, null in a flat
+    /// session, which leaves the action inert.</summary>
+    public Action? RecenterHeadset { get; init; }
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }

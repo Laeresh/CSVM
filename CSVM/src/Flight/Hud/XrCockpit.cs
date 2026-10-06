@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using Godot;
 
@@ -11,9 +12,9 @@ namespace CSVM.Flight.Hud;
 /// Its shader, <c>Mech3/SceneBuilder.cs</c>'s stereo interior variant, places each vertex from its
 /// offset to the drawing eye, which <c>Launch/XrEyeFeed.cs</c> writes from the render thread.
 /// Hidden, it goes back under the airframe, so nothing reading its world position finds it at the
-/// origin. <c>Launch/XrSession.cs</c> calls <see cref="Follow"/> every frame.
+/// origin. <c>Flight/Camera/XrRig.cs</c> calls <see cref="Follow"/> every frame.
 /// </summary>
-public sealed class XrCockpit
+public sealed class XrCockpit : IXrInterior
 {
     // Sorts the interior's blended surfaces after every world one. At the origin its own depth
     // would sort the glass among world objects as far away as the chapter origin.
@@ -30,11 +31,14 @@ public sealed class XrCockpit
     private bool _lifted;
 
     /// <summary>Follows <paramref name="interior"/>, as the plane builder mounted it under the
-    /// airframe. The interior must have been built for the stereo path (<c>xrInterior</c>).</summary>
-    public XrCockpit(Node3D interior)
+    /// airframe, with the seated eye <paramref name="eyeOffset"/> from the mount's origin in the
+    /// aircraft's frame (<see cref="VrCockpit.EyeOffsetInAircraft"/>). The interior must have been
+    /// built for the stereo path (<c>xrInterior</c>).</summary>
+    public XrCockpit(Node3D interior, Vector3 eyeOffset = default)
     {
         _interior = interior;
         _mount = interior.Transform;
+        EyeOffset = eyeOffset;
         Collect(interior, _geometry);
     }
 
@@ -45,9 +49,13 @@ public sealed class XrCockpit
     /// <summary>The interior this follows.</summary>
     public Node3D Interior => _interior;
 
-    /// <summary>The aircraft-frame point the XR origin stands at. It is the interior's own origin,
-    /// mounted at the <c>cockpit_camera</c> marker where the flat eye is.</summary>
-    public Vector3 EyeInAircraft => _mount.Origin;
+    /// <summary>The seated eye's offset from the interior's own origin, in the aircraft's frame. The
+    /// XR origin's placement adds the same offset, so the eye and this point move together.</summary>
+    public Vector3 EyeOffset { get; }
+
+    /// <summary>The aircraft-frame point the XR origin stands at: the interior's own origin, mounted
+    /// at the <c>cockpit_camera</c> marker where the flat eye is, plus <see cref="EyeOffset"/>.</summary>
+    public Vector3 EyeInAircraft => _mount.Origin + EyeOffset;
 
     /// <summary>Declares the global uniforms the stereo interior's shader reads. Once per process,
     /// before any plane is built, only when the stereo path is live.</summary>

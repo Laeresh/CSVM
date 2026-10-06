@@ -286,6 +286,11 @@ public partial class FlightController : Node3D
     /// plane's. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
     public Action? ToggleGraphicsMode;
 
+    /// <summary>What <see cref="InputAction.RecenterHeadset"/> does: the VR seat's recenter, set by
+    /// the session for the seat the headset flies. Null, in every flat session, leaves the action
+    /// inert.</summary>
+    public Action? RecenterHeadset;
+
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
     /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
     /// "rematch" instead of "respawn me", checked before the crash branch. That is the R-ownership
@@ -603,6 +608,7 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _suppliedInputSource;
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
     private bool _graphicsTogglePrev;            // previous frame's ToggleGraphicsMode state (edge detection)
+    private bool _recenterPrev;                  // previous frame's RecenterHeadset state (edge detection)
     private ImmediateMesh? _probe;              // debug collision-probe line
     // The built parent, pose and visibility of every node the death defs play on, captured before
     // the first crash. That covers the airframe, the wreck and the adopted eject pilot. A
@@ -2486,6 +2492,7 @@ public partial class FlightController : Node3D
         if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
         PollGraphicsModeToggle();
+        PollRecenterHeadset();
         // ⚠ Ahead of the inert return as well. A seat flagged inert mid-session must give the
         // pointer back, and this is the only frame that would notice.
         StepMouseCapture(halted || Pause.SheetOverFlight);
@@ -3948,6 +3955,16 @@ public partial class FlightController : Node3D
         if (down && !_graphicsTogglePrev)
             ToggleGraphicsMode!();
         _graphicsTogglePrev = down;
+    }
+
+    // The recenter's edge, polled beside the graphics switch so it works over a halted sim too.
+    // Silent where the options pages own the keyboard.
+    private void PollRecenterHeadset()
+    {
+        bool down = RecenterHeadset != null && !Pause.Silenced && _actions.Held(InputAction.RecenterHeadset);
+        if (down && !_recenterPrev)
+            RecenterHeadset!();
+        _recenterPrev = down;
     }
 
     // One frame of the pause key, and what its edges ask of this seat. Returns the clock's halt.

@@ -322,8 +322,18 @@ shows it is top level at the world origin, turned to the XR origin's axes and of
 origin as the airframe holds it (`InOrigin`, engine-free), so every transform Godot composes for it
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
 its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. Hidden, it
-goes back under the airframe. `Live` tells a plane build to choose that shader;
-`Launch/XrSession.cs` calls `Follow` each frame.
+goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
+plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
+seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame.
+
+## src/Flight/Hud/VrCockpits.cs
+The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
+headset: under `planes`, keyed by plane node name (`player_bhawk`), `interiorScaleFactor` multiplies
+the `cockpit1` mount's `Mech3/PlaneBuilder.cs` `InteriorScale` (0.25 to 4, default 1) and `eyeOffsetZ`
+moves the seated eye in metres along the mount's tilted Z, positive aft (at most 1 m, default 0); keys
+starting `_` are notes. A plane or field left out takes the default. Read once per session by
+`Session/Roster/FlightRosterInputs.cs` only when the stereo path draws the interior; a missing or
+malformed file or entry warns and falls back. `Session/Roster/HumanFlightAdapter.cs` applies it.
 
 ## src/Flight/Hud/CockpitGauges.cs
 The authored instrument panel inside the pilot's own `cockpit1` interior: five needle nodes take an
@@ -1421,14 +1431,25 @@ deck and whiteout copies, which re-anchor every frame and so need one set per pa
 cloud field is deliberately not one of them, being world-anchored geometry every pane shares
 behind a cull mask. `CameraWeatherState` is a per-rig field rather than a shared one, since
 splitscreen panes can sit in different states at the same instant; `Session/WeatherRig.Tick`
-writes it each frame.
+writes it each frame. `Xr` is the VR seat's `XrRig.cs` while the headset flies the pane, and
+`SkyAnchor` then centres the sky on the tracked head rather than the camera.
 
 ## src/Flight/Camera/XrMount.cs
 Where a headset's tracking origin sits in the world each frame, engine-free: in a first-person view
 of a live aircraft, the flat camera's eye at the aircraft's attitude (the flat view's fixed head
 pitch left out, since the headset supplies the look); in every other view, the flat camera's eye
-with its heading only, so a chase swing or a tumbling wreck never rolls the player's horizon.
-`Launch/XrSession.cs` is the one caller.
+with its heading only, so a chase swing or a tumbling wreck never rolls the player's horizon. A
+first-person origin also moves by the plane's seated eye offset. `XrRig.cs` is the one caller.
+
+## src/Flight/Camera/XrRig.cs
+The VR flavour of `PlayerRig.cs`: the one VR seat's `XROrigin3D` and tracked `XRCamera3D` (`Head`),
+and the pane bound to them (`Bind`, `Release`). `Launch/XrSession.cs` builds it at boot and calls
+`Place` each frame after every camera writer: the origin to the pane's eye by `XrMount.cs`, the
+persistent camera with no pane, then the pilot's stereo interior through `IXrInterior`, which
+`Flight/Hud/XrCockpit.cs` implements, since this namespace names nothing in Flight but the airframe.
+`Recenter` is `XRServer.CenterOnHmd` keeping the head's tilt and not its height. The pane's dome and
+deck follow `Head` through `PlayerRig.SkyAnchor`. `Launch/Launcher.cs`'s `LauncherContext.Xr` hands
+it to a session, which binds its first pane.
 
 ## src/Flight/Camera/XrSimEyes.cs
 The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch and an offset

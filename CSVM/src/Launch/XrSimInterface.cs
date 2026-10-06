@@ -16,23 +16,37 @@ public partial class XrSimInterface : XRInterfaceExtension
     /// <summary>The name the interface registers under with <see cref="XRServer"/>.</summary>
     public const string InterfaceName = "CSVM xr-sim";
 
-    private readonly XrSimEyes _eyes;
     private readonly Vector2 _eyePx;
+    private readonly float _ipdMm;
+    private readonly float _fovDeg;
+    // Swapped whole, never edited, so a render-thread read sees one pose or the other.
+    private volatile Pinned _pinned;
     private XRPositionalTracker? _head;
     private bool _initialized;
 
     /// <summary>Required by Godot's script instancing; never used.</summary>
     public XrSimInterface()
+        : this(XrSimSpec.Default)
     {
-        _eyes = new XrSimEyes(0f, 0f, Vector3.Zero, XrSimSpec.Default.IpdMm, XrSimSpec.Default.FovDeg);
-        _eyePx = XrSimSpec.Default.EyePx;
     }
 
     /// <summary>The headset <paramref name="spec"/> describes.</summary>
     public XrSimInterface(XrSimSpec spec)
     {
-        _eyes = new XrSimEyes(spec.YawDeg, spec.PitchDeg, spec.Head, spec.IpdMm, spec.FovDeg);
+        _ipdMm = spec.IpdMm;
+        _fovDeg = spec.FovDeg;
+        _pinned = new Pinned(new XrSimEyes(spec.YawDeg, spec.PitchDeg, spec.Head, spec.IpdMm, spec.FovDeg));
         _eyePx = spec.EyePx;
+    }
+
+    private XrSimEyes Eyes => _pinned.Eyes;
+
+    /// <summary>Moves the pinned head as a player shifting in the seat would, for a suite: a launch's
+    /// head stays where its flag put it. The tracker reports the new pose at once.</summary>
+    public void MoveHead(float yawDeg, float pitchDeg, Vector3 head)
+    {
+        _pinned = new Pinned(new XrSimEyes(yawDeg, pitchDeg, head, _ipdMm, _fovDeg));
+        PublishHead();
     }
 
     public override StringName _GetName() => InterfaceName;
@@ -55,9 +69,12 @@ public partial class XrSimInterface : XRInterfaceExtension
             Name = "head",
             Description = "xr-sim pinned head",
         };
-        _head.SetPose("default", _eyes.Head, Vector3.Zero, Vector3.Zero, XRPose.TrackingConfidenceEnum.High);
+        PublishHead();
         XRServer.AddTracker(_head);
         XRServer.PrimaryInterface = this;
+        // A recenter reaches XRCamera3D only through the head's next pose, which OpenXR reports
+        // every frame and this pinned head never would.
+        XRServer.ReferenceFrameChanged += PublishHead;
         _initialized = true;
         return true;
     }
@@ -69,6 +86,7 @@ public partial class XrSimInterface : XRInterfaceExtension
             return;
         }
 
+        XRServer.ReferenceFrameChanged -= PublishHead;
         if (_head != null)
         {
             XRServer.RemoveTracker(_head);
@@ -102,14 +120,14 @@ public partial class XrSimInterface : XRInterfaceExtension
     public override uint _GetViewCount() => 2;
 
     // The two below run on the render thread. XRServer hands that thread its own copy of the
-    // origin, recenter frame and scale, and the eyes are immutable, so nothing here races.
-    public override Transform3D _GetCameraTransform() => _eyes.Camera(XRServer.WorldScale);
+    // origin, recenter frame and scale, and the pinned eyes are swapped whole, so nothing here races.
+    public override Transform3D _GetCameraTransform() => Eyes.Camera(XRServer.WorldScale);
 
     public override Transform3D _GetTransformForView(uint view, Transform3D camTransform) =>
-        _eyes.View(view, camTransform, XRServer.GetReferenceFrame(), XRServer.WorldScale);
+        Eyes.View(view, camTransform, XRServer.GetReferenceFrame(), XRServer.WorldScale);
 
     public override double[] _GetProjectionForView(uint view, double aspect, double zNear, double zFar) =>
-        _eyes.Projection(aspect, zNear, zFar);
+        Eyes.Projection(aspect, zNear, zFar);
 
     public override void _PostDrawViewport(Rid renderTarget, Rect2 screenRect)
     {
@@ -125,4 +143,10 @@ public partial class XrSimInterface : XRInterfaceExtension
         AddBlit(renderTarget, whole, new Rect2I(origin, half), true, 0, false, Vector2.Zero, 0.0, 0.0, 1.0, 1.0);
         AddBlit(renderTarget, whole, new Rect2I(origin + new Vector2I(half.X, 0), half), true, 1, false, Vector2.Zero, 0.0, 0.0, 1.0, 1.0);
     }
+
+    // The head tracker's pose, which XRCamera3D takes with the recenter frame applied.
+    private void PublishHead() =>
+        _head?.SetPose("default", Eyes.Head, Vector3.Zero, Vector3.Zero, XRPose.TrackingConfidenceEnum.High);
+
+    private sealed record Pinned(XrSimEyes Eyes);
 }

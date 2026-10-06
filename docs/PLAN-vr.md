@@ -207,7 +207,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the VR rig
 
 6. ◐ B6 VR mode option, relaunch, fallback and mode gating
-7. ☐ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
+7. ◐ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
 8. ☐ B8 The cockpit interior in the main world under VR
 9. ☐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
 
@@ -1103,30 +1103,113 @@ The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratc
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
 clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
 
-## B7 ☐ The XR rig in `PlayerRig`, recenter and per-plane scale data
+## B7 ◐ The XR rig in `PlayerRig`, recenter and per-plane scale data
+
+**Outcome: built and pinned on the stand-in; the recenter at the headset is owed.** The VR seat is
+`Flight/Camera/XrRig.cs`, bound to the session's first `PlayerRig`; the sky follows the tracked
+head; recenter is automatic on focus and on the runtime's own recenter, and a new action on `Home`;
+`CSVM/data/vr_cockpits.json` ships Decision 13's defaults for all eleven planes.
 
 **Goal.** In a VR flight the XR origin follows the plane's first-person pose with the per-plane
-world scale and eye offset from `data/vr_cockpits.json`; the camera-anchored skydome and cloud deck
-follow the XR camera; recenter snaps the seated eye back to `cockpit_camera`.
+interior scale and eye offset from `data/vr_cockpits.json`; the camera-anchored skydome and cloud
+deck follow the XR camera; recenter snaps the seated eye back to `cockpit_camera`.
 
-**Evidence (confidence: lead-only).** Single player uses the main viewport's camera
-(`Flight/Camera/PlayerRig.cs:29-40`); the dome and deck are anchored per rig every frame by reading
-`Camera.Position` (`PlayerRig.cs:49-62`, the anchoring loop in `GameSession`). A5 measured the world and the hulls as
-metres and the interior as a separately scaled set piece, so the file's per-plane scale is best
-applied to the `cockpit1` mount (`PlaneBuilder.InteriorScale`, 0.04 today) with
-`XRServer.world_scale` left at 1.0, and the eye offset in the mount's own frame along its Z axis.
+**Evidence (confidence: traced to the Godot 4.7-stable source for the recenter and the head node's
+update; measured on the stand-in for the placement, the offset, the recenter and the sky; lead-only
+for anything a headset shows until the author's run).**
+- `XRServer::center_on_hmd` (`servers/xr/xr_server.cpp`) clears the reference frame, takes the
+  **primary interface's `get_camera_transform`** (not the `head` tracker), keeps only its heading
+  under `ResetButKeepTilt`, zeroes the height only with `keep_height`, stores the inverse and emits
+  `reference_frame_changed`. So the head's current point becomes the origin, which `XrRig` stands
+  at `XrCockpit.EyeInAircraft`: a recenter puts the eye there with no further arithmetic.
+- `XRNode3D`/`XRCamera3D` (`scene/3d/xr/xr_nodes.cpp`) take the reference frame only through the
+  tracker's next `pose_changed` (`XRPose::get_adjusted_transform`); nothing listens to
+  `reference_frame_changed`. OpenXR reports the head every frame, so a headset's `Head` follows a
+  frame later; the stand-in's pinned head never re-reported, so it now republishes its pose on that
+  signal and `XrSimInterface.MoveHead` lets a suite move it (A2's finding that `CenterOnHmd` works
+  under `--xr-sim` holds for the eyes, which apply the frame in `XrSimEyes.View`, and now for `Head`).
+- The suite `xr-rig-seat` (C1 Bloodhawk at -6350, 300, -4144 on a rotated attitude, the stand-in
+  interface live, no stereo viewport): the seated head 0 mm from the `cockpit_camera` marker and from
+  the flat cockpit camera's eye, the lifted interior 0 mm from where the airframe holds it; with a
+  6 cm aft offset the head lands on `EyeInAircraft` (0 mm off, 59.945 mm from the marker) and the
+  interior stays put; a moved head (yaw 30, pitch -12, 5/3/10 cm) leaves the eye by 170.9 mm, the
+  dome sits 0 mm from the tracked head and the deck follows it across; `Recenter` returns the head to
+  `EyeInAircraft` (0 mm), facing the origin's heading with the -12° tilt kept, and the renderer's
+  two eyes straddle it 0.488 mm off and 63.026 mm apart. With the rig released, the dome sits on the
+  flat camera again.
+- `FamilyOrderTests` forbids `Flight.Camera` naming `Flight.Hud`, so the rig reaches the interior
+  through `IXrInterior` (in `XrRig.cs`, implemented by `XrCockpit`) and a resolver `XrSession`
+  passes (`pilot => pilot.Dressing.Stereo`).
+- A5's numbers are the file's `_proposed` notes and stay unapplied (Decision 13): interior factor
+  1.0 (0.040 m per unit) on all eleven; `eyeOffsetZ` 0.06 on the Warhawk (dials at 0.32 m, under the
+  0.33 m floor); factor 0.875 (0.035) to try first on the Hoplite, Hellhound and Balmoral; and, on
+  every plane but the Warhawk, a forward move of 0.09-0.17 m as E20's first alternative for the head
+  plate. The factor also scales the interior's depth bias (`DepthBiasScale = 1/scale`), so a priority
+  level stays the same depth at any factor.
 
-**Approach.** An XR flavour of `PlayerRig` holding the `XROrigin3D`/`XRCamera3D`, the anchoring loop
-reading the XR camera, recenter as a new named action, and the data file read once per session.
-Integrates A3's precision fix.
+**Approach (landed, VR only).**
+- `Flight/Camera/XrRig.cs`: the seat's `XROrigin3D` and `XRCamera3D`, `Bind`/`Release` of one pane
+  (`PlayerRig.Xr`), `Place()` (the pane's camera and pilot, else the persistent camera) and
+  `Place(eye, aircraft, attitude, interior)`, which suites call, and `Recenter`
+  (`CenterOnHmd(ResetButKeepTilt, keepHeight: false)`). `XrSession` keeps the boot, the runtime
+  log and the frame pacing, builds the rig, calls `Place` at priority 2000, and recenters on the
+  head's first tracked pose after `SessionFocussed` and after `PoseRecentered`. `GameSession` binds
+  `_rigs[0]` in `BuildRigs` and releases it at exit; `LauncherContext.Xr` replaces `XrHead`
+  (`GameSession._xrHead` is now `Xr.Head`, so C14's flare and quads are unchanged).
+- `PlayerRig.SkyAnchor` is the head under VR and `Camera.Position` otherwise; `WeatherRig.Tick` reads
+  it for the dome, the deck, the whiteout and the weather state. The flat path reads exactly what it
+  read, and the suites still receive the Launcher's `_camera`; the cull mask stays on the flat camera.
+- `XrMount.For(eye, attitude, eyeOffset)` adds the offset, in the aircraft's axes, in first person
+  only. `XrCockpit(interior, eyeOffset)` carries it, so `EyeInAircraft` and the origin move together.
+- `Flight/Hud/VrCockpits.cs` reads the file once per session in `FlightRosterPolicy.From`, only when
+  the stereo interior is built; `HumanFlightAdapter` passes the factor to `PlaneBuilder`
+  (`interiorScaleFactor`, mount and depth bias) before `XrCockpit` captures the mount, and the
+  offset to `XrCockpit`. Fields and ranges: docs/architecture/Flight.md on `VrCockpits`.
+- `InputAction.RecenterHeadset` (appended, 93), a flight action on `Home` (free in the original's
+  table) and on the pad's touchpad click and first back paddle, the only buttons no flight action
+  holds; `FlightController` polls its edge beside the graphics switch and calls the session's
+  recenter, null in flat play. The Original controls page lists it on Other after the graphics
+  switch, and docs/controls.md has its row. C11 adds the XR controller binding.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Contract for C10, C12 and D19.** Reach the seat through `LauncherContext.Xr` (or
+`GameSession`'s `_xrRig`): `Head` is the tracked head, `Origin` the tracking space, `Pane` the bound
+`PlayerRig`. Anything head-locked or cockpit-locked builds A3b's two pieces (a top-level node in the
+origin's frame and a shader that subtracts the fed eye) and places itself after `XrRig.Place`, at a
+process priority above 2000, as `HeadLockedQuads` does. A recenter moves the eyes, not the origin,
+so a cockpit-locked panel needs no recenter handling and a head-locked one follows `Head`. The
+theater screen at a menu has no pane: the origin stands at the persistent camera, heading only.
 
-**Verify.** <TODO: an `--xr-sim` suite pinning the eye at `cockpit_camera` and the dome centred on
-the XR camera.>
+**Model recommendation.** Standard; the one trap needing the source read was `center_on_hmd`'s use
+of the interface camera and the head node's lag.
 
-**⚠ Traps.** The suites receive `_camera` from the Launcher (`Launch/Launcher.cs:849`); a rig change
-that swaps the camera object must keep the flat suites reading the camera they read today.
+**Verify.** Units: `CSVM.Tests/VrCockpitsTests.cs` (the committed file at the defaults, missing and
+malformed fallbacks, the offset along the tilted Z, the mount's first-person-only offset),
+`DefaultBindingsTests.TheVrRecenter_IsAppendedAndShipsOnHomeAndTheSparePadButtons`. Suite
+`xr-rig-seat`. The goldens stage: 27 of 27 hash-identical, the three stereo shots included (with
+defaults nothing they draw moves). A first goldens run flipped `c1-flight-kill` once
+(`e4984f01` to `344e2358`) with another session's Godot running; the same build's rerun was 27/27.
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+```
+Look for: (1) sitting off-centre when the game starts, the view still opens on the cockpit eye,
+gunsight ahead, and the log has `xr: recentered (session focused)`; (2) lean 20 cm to one side and
+turn the head, press `Home` (or a PlayStation pad's touchpad click): the eye returns to the cockpit
+eye facing the nose with the head's tilt kept, `xr: recentered (the recenter action)`; (3) hold the
+headset's system button for the runtime's recenter: the same, `xr: recentered (the runtime
+recentered)`; (4) leaning about, the moon and the horizon dome show no parallax. The same on SteamVR.
+
+**⚠ Traps.**
+- The suites receive `_camera` from the Launcher (`Launch/Launcher.cs`); the flat rig keeps that
+  camera and `SkyAnchor` reads it unchanged, so no flat suite reads anything new.
+- Do not put the per-plane scale on `XRServer.world_scale`: it resizes the sky and every aircraft.
+- After `CenterOnHmd` the `XRCamera3D` moves only on the head's next pose; read the eyes
+  (`GetTransformForView`) or wait a frame, never `Head` straight after a recenter on a headset.
+- A second `XrCockpit` over a lifted interior captures the lifted transform; hide it and `Follow`
+  once (which lowers it) before building another.
+
+**Verified.** <pending orchestrator run>
 
 ## B8 ☐ The cockpit interior in the main world under VR
 
@@ -1410,7 +1493,7 @@ nearer than the HUD panel (C12).
 
 **Approach (landed).** `Launch/SkyStage.cs` builds `WorldFlareRig` in place of `LensFlareRig` when
 `UsesWorldFlare` holds: a stereo session (the launcher hands `GameSession` the XR head through
-`LauncherContext.XrHead`, read-only from `XrSession.Head`), or a flat Enhanced session without
+`LauncherContext.Xr`, read-only from `XrRig.Head`), or a flat Enhanced session without
 `--screen-flare`, chosen at the build. A stereo session places the flare for the head's pose and
 builds `HeadLockedQuads`, which follows the whiteout rectangle, `ScreenFlash.CurrentFor(0)`, the
 world rig's wash and the director's `LeavingFade`; the flat canvas layers are untouched. The ring
