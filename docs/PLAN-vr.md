@@ -216,7 +216,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 10. ◐ C10 The virtual theater screen for menus, boards and cinemas
 11. ◐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
-12. ☐ C12 The cockpit-locked HUD panel
+12. ◐ C12 The cockpit-locked HUD panel
 13. ◐ C13 World-tied markers and the edge-marker ring
    ◐ C13b The gunsight reticle collimated at infinity in VR
 14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
@@ -1938,25 +1938,177 @@ passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 
 `c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
 hash-identical on two goldens re-runs (#114's pattern). The headset checks named above are still owed.
 
-## C12 ☐ The cockpit-locked HUD panel
+## C12 ◐ The cockpit-locked HUD panel
+
+**Outcome: built and measured on the stand-in; legibility, distance, angle and glance comfort are
+owed at the headset.** A stereo session parents the flown pane's flight chrome (the HUD and its
+message stack, the held scores, the chat) into a 2560x1440 surface, the HUD's own reference frame,
+and shows it on a quad in the XR origin's frame. The quad is the flat first-person pane set 2 m ahead
+of the seat: every surface pixel lands where the flat Nose view draws it. It rides the seat in
+Cockpit and Nose and the rigid chase pose in Chase, never the head. Flat play builds none of it; the
+24 flat goldens are hash-identical.
 
 **Goal.** In VR the flat HUD chrome (gauges, compass tape, messages, chat, prompt line, scores) is
 drawn on a quad fixed to the cockpit 1.5-2 m ahead and slightly low, readable with a glance.
 
-**Evidence (confidence: lead-only).** The HUD is CanvasLayers built in
-`Flight/Airframe/FlightController.cs:1233, 1239`, sized by `Flight/Hud/HudMetrics.cs` from the root
-window height.
+**Evidence (confidence: traced to code and the Godot 4.7-stable source for the layout and the text
+rasterisation; measured on the stand-in for placement, precision and the goldens; the sizes are a
+judgement from headset density, TUNE for the author).** Tools and captures are in `.scratch/C12/`
+(`C12_probe.ps1`, `C12_burst.ps1`, `C12_jitter.py`, `C12_register.py`, `C12_compass.py`,
+`C12_gold.ps1`, `C12_diff.py`); the fetched sources are in `.scratch/C12-src`.
+- **Reparent, not rehost.** C10's contract proposed `CanvasRehost` over the HUD layers. A rehosted
+  control keeps the root's layout, and under XR the root's layout is one eye's render target
+  (2112x2304 on the author's VDXR, 640x720 on the stand-in): an aspect near 0.9 that no HUD layout
+  was tuned for, at a size the runtime and a render-scale change decide. Text on a rehosted layer
+  also rasterises at the root's `oversampling_override`, which the theater sets to its own surface
+  scale (`canvas_item.cpp` reads `get_viewport()->get_oversampling()`). The splitscreen seam already
+  parents a pane's HUD into a SubViewport (`FlightController.HudParent`), so the panel takes that
+  seam: `PlayerRig.ChromeParent` is the panel's `PanelSurface`, read by `HumanFlightAdapter` (the
+  HUD and messages layers), `ScoresOverlay.Attach` and `SessionNet.WireChat`. The surface is its own
+  viewport, so text rasterises at its own oversampling of 1, and its layout is fixed whatever the
+  runtime. The world overlays (whiteout, flare, flash) stay on `HudParent`; the headset draws them
+  as quads of their own (C14).
+- **`HudMetrics` takes the panel as the window.** `WindowSize(control)` is the panel surface's size
+  for a control whose viewport is a `XrHudPanel.PanelSurface`, else the root window, as before;
+  `Scale`, `PaneFactor` and `ReadingBox` read it. On the panel the HUD lays out at scale 1, pane factor
+  1, reading box the whole 2560x1440, exactly the 1440p reference frame (`xr-hud-panel`).
+- **Proposed sizes (TUNE).** Distance 2 m, the far end of the decision's range and the head ring's
+  own distance (C13), so a ring arrow over the panel sits within 3 % of its depth rather than in
+  front of it. Axis 4.70° under the seat's: the original's first-person head tilt
+  (`PlaneBuilder.HeadPitchOffsetRad`), the decision's "slightly low", and the axis the flat Cockpit
+  and Nose views are centred on. Height 46.83°, the flat Nose and Chase view's
+  (`CameraController.ExternalFovDeg`), so a quad 3.079 x 1.732 m, 76.7° wide. That is 30.8 surface
+  rows per degree: the smallest chrome text, the 19.2-row readout rung (the dogfight status line, the
+  stunt status), spans 0.62°, about 13 px at the author's 2112x2304 per eye (about 21 px per degree);
+  the message stack's 30 rows span 0.97° and the prompt line's 48 rows 1.56°. Legibility sets the
+  floor: a panel half that tall would put the readout rung near 6 px. The flat layout keeps its
+  places, so the dial columns stand about ±28° out and 11° to 24° under the seat's axis, the heading
+  tape 18° over it and the message stack 9° over it; a glance reaches the messages, a small head
+  turn the dials. In Cockpit the flat HUD already drops the screen dials and tape for the interior's
+  own, so the panel carries text there.
+- **The panel is the flat first-person pane, measured.** The stand-in's left eye on the flat Nose
+  camera (`--stage=empty --plane=player_bhawk --pos=0,300,0 --direction=-0.743,0,-0.669 --view=nose
+  --hold=0,0,0,0.6 --frames=60`, `--xr-sim=eye=1280x720,fov=75.178179,ipd=20,head=0.01/0/0,shot=left,
+  pitch=-4.70001`) against the flat frame of the same pose, least-squares subpixel shift per element
+  (`C12_register.py`): all five dials (-0.000, -0.000) px. Control: the flat frame resampled half a
+  pixel reads 0.500. The heading tape's bar edges differ by up to 0.5 px (`C12_compass.py`); its
+  ticks are point-sampled and the flat 720-row frame lays the HUD out at scale 0.5, so its edges fall
+  on half pixels the panel's 1440 rows draw whole. Lead, not separated further.
+- **Precise far from the origin (A3's method).** The panel takes A3b's two pieces: the quad at the
+  world origin in the XR origin's axes (`XrHudPanelLayout.Placement`) and the theater's eye-feed vertex
+  stage. A scratch magenta card on the panel, flown C1 bursts (`--chapter=C1 --plane=player_bhawk
+  --pos=X,300,0 --direction=-0.743,0,-0.669 --view=cockpit --hold=0,0,0,0.6
+  --xr-sim=eye=2732x2732,fov=100,shot=left --frames=60 --shots=6`, 27 px per degree, card edges
+  located subpixel by `C12_jitter.py`), worst frame-to-frame edge step:
 
-**Approach.** Under VR parent the chrome layers into a SubViewport shown on a cockpit-locked quad, and
-give `HudMetrics` a panel size in place of the window height. <TODO: the panel's pixel size, distance
-and angle; the author judges legibility.>
+  | Placement | 0 km | 20 km |
+  |---|---|---|
+  | eye feed (landed) | 0.010 px | 0.010 px |
+  | Godot's own transform (control) | 0.019 px | 1.371 px |
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+  The 0.010 px is the instrument's own drift (left and right edges part symmetrically as the world
+  behind the card changes) and is the same at both distances. The control is 0.05° at 20 km, the
+  magnitude A3 measured on a world-placed HUD quad, so the instrument can fail (METHOD-9). The
+  arithmetic is pinned engine-free too (`XrHudPanelLayoutTests`): at 20 km on a rotated, rolled
+  origin the panel's path recovers a corner's eye-frame position within 20 µm where Godot's own
+  composition misses by more than 200 µm.
+- **Follows the seat, not the head** (suite `xr-hud-panel`, a rig over a live stand-in interface,
+  20 km out on a rotated heading): the panel stands at its pose in the origin's frame; the stand-in
+  head moved 116 mm, turned 30° and pitched 12° leaves the quad's transform unchanged; a turned aircraft turns it
+  51.5° with it, at the same pose in the seat; before a rigid chase pose it stands at the same pose
+  ahead of the chase eye. Control: the panel built on the head's transform fails the head check by
+  1161 mm.
+- **Chase, decided: the same panel relative to the origin.** B9 makes the origin the view's own
+  frame in every view (the seat in Cockpit and Nose, the rigid chase pose, a level held heading for
+  the static cameras), and the flat game draws one HUD overlay in every view, so the panel stays the
+  view's pane: 2 m ahead of the chase eye, turning with the aircraft in the rigid chase and level in
+  `--xr-chase=level`. A panel kept at the cockpit seat would hang 15-26 m ahead of the chase eye as a
+  small card over the aircraft. The flat crash and static cameras hide the HUD layer, and the panel
+  hides with it (it shows only while a chrome layer draws).
+- **Compositing.** Each surface texel is taken from premultiplied sRGB and mixed over the frame in
+  gamma space as a canvas layer is (the cards' `GammaMixComposite`); a clear texel is discarded.
+  Depth test off, priority `HudPanelPriority` 115: over the world cards (112) and the interior's
+  glass (110), under the ring (116), the sun wash (120) and the fade (121), as the flat HUD sits over
+  the cockpit pass. Under Enhanced the AgX tonemap acts on it as on the cards (SHOT-46), owed at the
+  headset with C10's boards.
+- **Goldens.** New `stage-hud-panel-xr-sim` (empty stage, nose view, both 640x720 eyes, frame 60):
+  `23f8dde9`, one hash over seven runs, frame-sensitive 31.06 %. Moved and re-pinned, each one hash over
+  three runs: `c3-flare-xr-sim`, `c1-moon-xr-sim` and `stage-markers-xr-sim` (the nose view's dials and
+  tape now draw on the panel), and `c1-cockpit-xr-sim` (1 px at 1 level) and `c1-cockpit-xr-sim-aft`
+  (272 px, at most 4 levels, on the collimated reticle's lines alone). The two Cockpit shots show no
+  panel texel (the surface was read back fully clear at frame 100); hiding the quad restores both
+  hashes while the HUD stays on the surface, and the same move remains with the quad's screen read
+  removed (verification GOLD-20, and the finding for C13b below). `c1-cockpit-xr-sim-far`,
+  `stage-gunsight-xr-sim` and `menu-original-xr-sim` are unmoved; the 24 flat shots are
+  hash-identical.
 
-**Verify.** <TODO: an `--xr-sim` golden of the panel in flight.>
+**Approach (landed, VR only).** `Flight/Hud/XrHudPanel.cs` (the node, its `PanelSurface`, the quad and
+its shader) and `Flight/Hud/XrHudPanelLayout.cs` (the geometry, engine-free). `Launch/GameSession.cs`
+builds it beside `XrMarkers` when the launcher hands it an XR rig and sets `_rigs[0].ChromeParent` to
+its surface before any seat's HUD is built. `HudMetrics.WindowSize`; `PlayerRig.ChromeParent`, read by
+`HumanFlightAdapter`, `ScoresOverlay` and `SessionNet.WireChat`. A flat seat's `ChromeParent` is null,
+so every flat path parents exactly where it did.
 
-**⚠ Traps.** The world-tied markers (C13) must leave the panel, otherwise they are drawn at panel
-depth.
+**Resolved TODOs (proposed values, TUNE for the author).** The panel's pixel size 2560x1440, distance
+2 m, axis 4.70° under the seat's, height 46.83° (above). The tier: Standard; the deciding facts (the
+eye-size root layout, the rasterisation scale) came from reading the source.
+
+**Model recommendation.** Standard.
+
+**Verify.** Units: `CSVM.Tests/XrHudPanelLayoutTests.cs` (the reference frame, the pose on the
+first-person axis facing the eye, every surface point on the flat Nose view's pixel, the 46.83°
+span, the eye-feed placement's small numbers, the 20 km arithmetic). Suite `xr-hud-panel`. Suites
+`-Filter xr`, `hud`, `scores`, `chat`, `splitscreen`, `head-locked`, `theater`, `cockpit` pass with
+clean engine errors. Goldens as above. The registration and the bursts re-run with the commands above
+and the `.scratch/C12/` tools; the bursts need the scratch card, which is not in the tree.
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, Original then Enhanced:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=nose
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=nose
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --stunt --chapter=C1 --plane=player_bhawk --view=nose
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=nose --graphics=enhanced
+```
+Look for: (1) legibility: in Nose (first line) the dial faces, their figures and the heading tape
+read without leaning in, and in the stunt run (fifth line) the status line's small text reads; say
+if the panel should be larger (`XrHudPanelLayout.Default`'s 46.83°) or nearer or farther (2 m);
+(2) angle and glance comfort: the dial columns sit low left and right and the tape and messages
+above the gunsight; say whether reading a dial with a glance and a small head turn is comfortable,
+or the panel should drop further below the seat's axis (4.70°); (3) the panel stays fixed to the
+aircraft as you turn and lean your head, and banks with the aircraft; (4) in Cockpit (second line)
+the kill and crash messages appear on the panel over the dash and read at its depth, with no doubled
+image against the dash; (5) overlap with the ring: a Fury below and behind puts its ring arrow and
+label over the lower panel; say whether they read; (6) Chase (third line): the dials hang 2 m ahead
+of the chase eye, banking with the aircraft; (7) at the far corner (fourth line) the dials hold steady
+with no shimmer; (8) under Enhanced (last line) the dial colours against the flat game.
+
+**⚠ Traps.**
+- The world-tied markers (C13) must leave the panel, otherwise they are drawn at panel depth;
+  `XrMarkers` sets `MarksInWorld` on the three marker controls, and the panel leaves them be.
+- Do not rehost the HUD layers onto the panel through `CanvasRehost`: a rehosted control lays out
+  on the eye-size root and rasterises its text at the theater's oversampling.
+- Do not size anything on the panel from the root window: under XR the root is an eye's render
+  target. `HudMetrics.WindowSize` is the one door.
+- The panel shows whenever a chrome layer holds a visible item, which includes the chat and scores
+  layers during a presenting cutscene; D15's pair cameras would draw it (finding below).
+
+**Findings for other items.**
+- D15: the panel can show during a presenting cutscene (the cutscene hides the HUD's own readouts
+  through `SetPilotHudVisible`, not the chat and scores layers or the dogfight HUD), so its quad
+  belongs on D15's `SplitScreen.HeadsetLayer`; this tree lacks the constant, so set
+  `XrHudPanel`'s quad `Layers` to it at the merge.
+- C13b: the collimated reticle's overlay and the interior glass share priority 110 and, lifted, one
+  sort depth, so their order is the renderer's to choose and moves when any other transparent joins
+  the frame (the HUD panel's fully discarded quad moved the reticle's lines by up to 4 levels, about
+  the glass's 0.02 tint alpha times the line). A distinct priority or sorting offset for the overlay
+  would pin it. Lead: the order swap is inferred, not read out of the renderer.
+- C10: `UI/Overlays/ObjectivesHud.cs` draws the campaign objectives readout on `HudLayers.Board`, so
+  in a stereo flight it goes to the theater and, being a board layer, raises the screen over a
+  dimmed world when it shows. Not checked at the stand-in.
+
+**Verified.** <pending orchestrator run>
 
 ## C13 ◐ World-tied markers and the edge-marker ring
 

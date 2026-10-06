@@ -421,8 +421,8 @@ public partial class FlightController : Node3D
     public Func<bool>? KeyboardHeld;
 
     /// <summary>Where the HUD <see cref="CanvasLayer"/> is parented. Null (single player) keeps it
-    /// a child of this node, i.e. the main viewport; splitscreen sets the player's SubViewport so
-    /// the dials/compass draw in that player's pane only.</summary>
+    /// a child of this node, i.e. the main viewport. Splitscreen sets the player's SubViewport so
+    /// the dials/compass draw in that player's pane only. A headset sets the HUD panel's surface.</summary>
     public Node? HudParent;
 
     /// <summary>Whether P / gamepad-Start reads on this rig at all. True for every human rig,

@@ -47,7 +47,7 @@ public static class HudMetrics
         // The root Window's height is the real screen height even for a control living inside a
         // SubViewport (the panes are children of the same window). No stretch/content scaling is
         // configured in project.godot, so window pixels and viewport pixels are the same unit.
-        float windowH = control.GetTree()?.Root?.Size.Y ?? 0f;
+        float windowH = WindowSize(control).Y;
         if (windowH < 1f || paneH < 1f)
             return 1f;
         return Mathf.Sqrt(Mathf.Clamp(paneH / windowH, 0.01f, 1f));
@@ -58,7 +58,7 @@ public static class HudMetrics
     /// Identical to plain <c>viewportHeight / reference</c> whenever there is one full view.</summary>
     public static float Scale(Control control, float reference = ReferenceHeight)
     {
-        float windowH = control.GetTree()?.Root?.Size.Y ?? 0f;
+        float windowH = WindowSize(control).Y;
         if (windowH < 1f)
             windowH = control.GetViewportRect().Size.Y;
         return windowH / reference * PaneFactor(control);
@@ -93,7 +93,13 @@ public static class HudMetrics
 
     /// <summary>This control's reading box, in its own local space.</summary>
     public static Rect2 ReadingBox(Control control) =>
-        ReadingBox(control.GetViewportRect().Size, control.IsInsideTree() ? control.GetTree().Root.Size : Vector2.Zero);
+        ReadingBox(control.GetViewportRect().Size, control.IsInsideTree() ? WindowSize(control) : Vector2.Zero);
+
+    /// <summary>The window a HUD control measures itself against: the cockpit-locked panel's surface
+    /// for a HUD drawn on it (<see cref="XrHudPanel"/>), else the root window. A stereo root's own
+    /// size is one eye's render target, which no HUD is drawn on.</summary>
+    public static Vector2 WindowSize(Control control) =>
+        control.GetViewport() is XrHudPanel.PanelSurface panel ? panel.Size : control.GetTree()?.Root?.Size ?? Vector2I.Zero;
 
     /// <summary>How far outward, in reference pixels, an edge-anchored column slides on a box this
     /// wide. <paramref name="referenceMargin"/> is the column's outer edge measured from the

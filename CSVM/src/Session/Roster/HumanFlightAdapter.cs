@@ -179,7 +179,7 @@ internal sealed class HumanFlightAdapter
                 AutoHeadTurn = _policy.AutoHeadTurn,
                 PinnedLook = _policy.PinnedLook,
             },
-            HudParent = remote ? null : rig.Viewport,
+            HudParent = remote ? null : rig.ChromeParent ?? rig.Viewport,
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {

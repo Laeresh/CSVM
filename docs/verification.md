@@ -281,6 +281,11 @@ member, and it does not go here.
   left all 19 shots hash-identical, `c5-city-night` included, whose camera stands 178 m up while
   the glow's authored fade closes it out by 150 m.
 
+- **GOLD-20**, **A stereo golden that moves a few levels where the new code draws nothing is not yet
+  the new code's defect; hide the new transparent and re-run before reading the move.** The HUD
+  panel's quad, every fragment discarded in Cockpit view, moved `c1-cockpit-xr-sim-aft` by at most 4
+  levels on the collimated reticle's lines alone, and hiding the quad restored the old hash.
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**

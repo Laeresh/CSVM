@@ -22,8 +22,8 @@ public sealed partial class HeadLockedQuads : Node3D
     /// flash, as the flat HUD is over the world overlay, and under the nearer HUD panel.</summary>
     public const int WorldMarkerPriority = 112;
 
-    /// <summary>Reserved for the cockpit-locked HUD panel: over the whiteout and the flash, under the
-    /// sun wash and the fade, the order <see cref="HudLayers"/> gives the flat HUD.</summary>
+    /// <summary>The cockpit-locked HUD panel (<c>Flight.Hud.XrHudPanel</c>). It draws over the whiteout
+    /// and the flash, under the sun wash and the fade: the flat HUD's order in <see cref="HudLayers"/>.</summary>
     public const int HudPanelPriority = 115;
 
     /// <summary>The off-view markers' ring on the head: over the HUD panel, as the flat edge markers

@@ -344,6 +344,23 @@ arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting t
 `MarksInWorld` stops their own drawing and the spyglass picture. Priorities: `UI/Boards/HeadLockedQuads.cs`;
 `Launch/GameSession.cs` builds it.
 
+## src/Flight/Hud/XrHudPanel.cs
+The cockpit-locked HUD panel of a stereo session: the flown pane's chrome (HUD, message stack, held
+scores, chat) is parented into its `PanelSurface` through `Camera/PlayerRig.cs`'s `ChromeParent`,
+and `HudMetrics.cs` takes that surface as the HUD's window, so the HUD lays out as on a 1440p
+screen. A quad in the XR origin's frame shows it, placed from `Launch/XrEyeFeed.cs` as the stereo
+cockpit is, so it rides the seat in Cockpit and Nose and the chase pose in Chase, never the head; it
+hides while no chrome layer draws. It draws at `UI/Boards/HeadLockedQuads.cs`' `HudPanelPriority`,
+mixed in gamma space as a canvas layer is. `Launch/GameSession.cs` builds it; geometry is `XrHudPanelLayout.cs`.
+
+## src/Flight/Hud/XrHudPanelLayout.cs
+The HUD panel's geometry, engine-free: the 2560x1440 surface (the HUD's reference frame), the pose 2 m
+ahead on the original's first-person axis (`PlaneBuilder.HeadPitchOffsetRad`, 4.7 degrees under the
+seat's), the flat Nose and Chase view's 46.8 degrees tall, about 31 surface rows per degree, so every
+surface pixel lands where the flat first-person view draws it. `Placement` gives the quad's transform
+with or without the eye feed. Defaults are TUNE at the headset; coverage is
+`CSVM.Tests/XrHudPanelLayoutTests.cs`, and the suite `xr-hud-panel` reads the live panel.
+
 ## src/Flight/Hud/XrMarkerLaw.cs
 The stereo markers' geometry, engine-free: the tangent one flat HUD reference pixel spans in a view
 of a given vertical angle, a point's place in the head's frame and its angle off the view axis, the
@@ -725,10 +742,10 @@ The one place the flight HUD decides how big it draws: `Scale(control, reference
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
 only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
-`ReadingBox` places: a full-screen view's box is the reference 16:9 at full height, centred, keeping
-ultrawide columns within reading width; a splitscreen pane, short of the window, is its own box.
-`ColumnOutdent` is the narrow half, a pane under that aspect giving its columns all but a minimal
-border back. One module.
+`ReadingBox`: a full-screen view's box is the reference 16:9 at full height, centred; a splitscreen
+pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a minimal border back.
+`WindowSize` is the window these measure against: the stereo HUD panel's surface
+(`XrHudPanel.cs`) for a HUD drawn on it, else the root window.
 
 ## src/Flight/Hud/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
@@ -1450,12 +1467,11 @@ paint pick stays an index pair rather than free RGB. Decode:
 ## src/Flight/Camera/PlayerRig.cs
 One rendered view's state bag: the player index, the camera and its optional `SubViewport`, the
 HUD parent, the visual layer, that player's `FlightController`, and the camera-anchored horizon,
-deck and whiteout copies, which re-anchor every frame and so need one set per pane. The ambient
-cloud field is deliberately not one of them, being world-anchored geometry every pane shares
-behind a cull mask. `CameraWeatherState` is a per-rig field rather than a shared one, since
-splitscreen panes can sit in different states at the same instant; `Session/WeatherRig.Tick`
-writes it each frame. `Xr` is the VR seat's `XrRig.cs` while the headset flies the pane, and
-`SkyAnchor` then centres the sky on the tracked head rather than the camera.
+deck and whiteout copies, which re-anchor every frame and so need one set per pane (the ambient
+cloud field is world-anchored and shared). `CameraWeatherState` is per rig, since splitscreen
+panes can sit in different states at once; `Session/WeatherRig.Tick` writes it each frame. `Xr` is the VR seat's `XrRig.cs` while the headset flies the pane, and
+`SkyAnchor` then centres the sky on the tracked head rather than the camera; `ChromeParent` is then
+the HUD panel's surface (`Hud/XrHudPanel.cs`), where the pane's flight chrome is parented.
 
 ## src/Flight/Camera/XrMount.cs
 Where a headset's tracking origin sits in the world each frame, engine-free, by the `XrAnchor` a

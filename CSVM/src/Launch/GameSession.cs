@@ -597,6 +597,12 @@ public partial class GameSession : Node3D
             // The flight markers in the world and on the head ring, read off the flown pane's HUD.
             _worldRoot!.AddChild(Flight.Hud.XrMarkers.Build(_xrRig));
             Log.Info("flight", $"stereo: flight markers drawn in the world, off-view ones on a ring on the head");
+            // The flown pane's chrome on a panel in the XR origin's frame. Built before any seat's
+            // HUD, so every chrome layer is parented there from the start.
+            var xrOrigin = _xrRig!.Origin;
+            var panel = Flight.Hud.XrHudPanel.Build(() => xrOrigin.GlobalTransform, Flight.Hud.XrCockpit.Live, GetViewport());
+            _worldRoot!.AddChild(panel);
+            _rigs[0].ChromeParent = panel.Surface;
         }
 
         // The smoke screens ride the same wash and read the roster through a closure, since the

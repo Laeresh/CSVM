@@ -39,6 +39,13 @@ public sealed class PlayerRig
     /// player's SubViewport in splitscreen, the session root in single player.</summary>
     public Node HudParent = null!;
 
+    /// <summary>Where this pane's flight chrome goes in place of its own parent: the HUD, its message
+    /// stack, the held scores and the chat. It is the cockpit-locked HUD panel's surface while a
+    /// headset flies the pane (<c>Flight/Hud/XrHudPanel.cs</c>), else null. The world overlays
+    /// (whiteout, flare, flash) stay on <see cref="HudParent"/>, since the headset draws them as
+    /// quads of their own.</summary>
+    public Node? ChromeParent;
+
     /// <summary>The visual layer carrying this player's private camera-anchored copies, or 0 in
     /// single player (everything stays on the default layer and no cull mask is narrowed).</summary>
     public uint VisualLayer;

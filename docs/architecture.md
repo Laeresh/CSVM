@@ -270,6 +270,8 @@ rows).
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
 - `src/Flight/Hud/XrMarkers.cs`, the flight markers in a stereo session: the flat HUD's drawings on cards at their world points, and off-view ones on a ring on the head.
 - `src/Flight/Hud/XrMarkerLaw.cs`, the stereo markers' geometry, engine-free: a reference pixel's angle, the ring's cone and bearing, a card's facing.
+- `src/Flight/Hud/XrHudPanel.cs`, the cockpit-locked HUD panel in a stereo session: the pane's flight chrome laid out on a 1440p surface, shown on a quad in the XR origin's frame.
+- `src/Flight/Hud/XrHudPanelLayout.cs`, the HUD panel's geometry, engine-free: its surface, pose on the first-person axis, size and placement.
 - `src/Flight/Hud/WorldMark.cs`, one marker a flat HUD draws at a world point, as data: what the flat pane projects and a stereo session places.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.

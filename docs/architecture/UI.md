@@ -606,7 +606,7 @@ A stereo session's full-view colour layers, which a stereo viewport cannot draw 
 cloud whiteout, the `ScreenFlash` wash, the sun wash and the mission-end fade, one quad each copying
 its flat layer's colour every frame, so the flat layers stay untouched. The shader places each quad in
 view space, locked to the head, composited in gamma space as the canvas is. Its render priorities are
-the stereo twin of `HudLayers`: a slot kept for the cockpit-locked HUD panel, the flight markers' world cards under it and their head ring over it (`Flight/Hud/XrMarkers.cs`). The whiteout alone
+the stereo twin of `HudLayers`: the cockpit-locked HUD panel's (`Flight/Hud/XrHudPanel.cs`), the flight markers' world cards under it and their head ring over it (`Flight/Hud/XrMarkers.cs`). The whiteout alone
 is depth-tested at the seat clearance, which keeps the in-world interior clear of it as the flat
 cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
 
@@ -625,7 +625,8 @@ Draws the root viewport's canvas layers of chosen numbers into a SubViewport thr
 `CanvasLayer.CustomViewport`, taking each as it enters the tree and handing it back to the root as it
 leaves, which keeps Godot's own signal bookkeeping paired. Only the drawing moves: the controls stay
 in the root's tree, lay out against its visible rect and take its input. `TheaterScreen.cs` uses it
-for the boards; the cockpit-locked HUD panel is the next user.
+for the boards. The HUD panel (`Flight/Hud/XrHudPanel.cs`) parents its layers instead, since the
+HUD must lay out on the panel's own 16:9 surface rather than the eye-size root.
 
 ## src/UI/Boards/TheaterLayout.cs
 The theater screen's seat, size and resolution, engine-free: where the quad stands in the XR origin's
