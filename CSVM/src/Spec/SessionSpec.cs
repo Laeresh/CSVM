@@ -885,6 +885,11 @@ public sealed record SessionSpec
     /// <c>--screenshot</c> of a race or a Dogfight then shows the scores table.</summary>
     public bool DebugScores { get; private set; }
 
+    /// <summary><c>--debug-race-ghost</c>: each local seat's own aircraft draws as a race ghost to
+    /// its own cameras, so one seat in Chase shows the ghost's dither. A capture aid; a race arms
+    /// the ghost only between its pilots.</summary>
+    public bool DebugRaceGhost { get; private set; }
+
     /// <summary><c>--debug-race-end=host|guest</c>: a split screen stunt race's board posed as a
     /// network host's (Restart, Lobby) or guest's (waiting, Leave). Player 2 is marked left once its
     /// first run counts. A capture aid; a network race keeps its own roles.</summary>
@@ -1297,6 +1302,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
             else if (arg == "--debug-scores") { s.DebugScores = true; }
+            else if (arg == "--debug-race-ghost") { s.DebugRaceGhost = true; }
             else if (arg.StartsWith("--debug-race-end=")) { string role = arg["--debug-race-end=".Length..]; s.DebugRaceEnd = role is "host" or "guest" ? role : null; }
             else if (arg == "--debug-pause") { s.DebugPauseFrame = DefaultDebugPauseFrame; }
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }

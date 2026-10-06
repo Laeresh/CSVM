@@ -61,6 +61,10 @@ internal sealed class FlightRosterPolicy
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
     public bool DebugScoreboard { get; init; }
+
+    /// <summary>Whether each local seat's aircraft draws as a race ghost to its own cameras
+    /// (<c>--debug-race-ghost</c>). A capture aid for the ghost's dither on one seat.</summary>
+    public bool DebugRaceGhost { get; init; }
     public bool EmptyStage { get; init; }
     public bool HudFontTest { get; init; }
     public bool InfiniteAmmo { get; init; }
@@ -118,6 +122,7 @@ internal sealed class FlightRosterPolicy
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,
         DebugScoreboard = spec.DebugScoreboard,
+        DebugRaceGhost = spec.DebugRaceGhost,
         EmptyStage = spec.EmptyStage,
         HudFontTest = spec.HudFontTest,
         InfiniteAmmo = spec.InfiniteAmmo,

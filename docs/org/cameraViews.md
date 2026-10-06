@@ -712,6 +712,17 @@ Lift over the sky beside the glass, Rec. 709 levels, on SHOT-45's left eye again
 `GunsightReticle.EnhancedGain` takes back what AgX compresses in the world and not in the flat pass's
 canvas: 2.5 read 16.6 / 29.5 / 36.3, 4.0 read 23.8 / 40.3 / 47.3.
 
+**Draw order.** The overlay shares the interior's blend priority (110) with the glass, and a lifted
+interior stands every geometry at the world origin, so their sort depths tie below float32's step at
+kilometres out. The renderer's order then moved whenever another transparent joined the frame: the
+HUD panel's fully discarded quad moved the reticle's lines by up to 4 levels on 272 pixels of
+`c1-cockpit-xr-sim-aft`. `GunsightReticle.SortAfterGlassM` gives the overlay a sorting offset of its
+own, which `XrCockpit` keeps on top of the lift's, so the reticle always draws after the glass and
+every other interior transparent. It is the nearest blended surface on its rays, so last is the
+right place. With the panel's quad drawn against left out of every camera, the reticle's region is
+now identical in both shots; 8 pixels on the gauge faces still differ by one level, a tie among the
+interior's other blended surfaces.
+
 ## Not resolved
 
 - **The non-selectable modes (`1`, `2`, `3`, `4`) still have no friendly name or

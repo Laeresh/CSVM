@@ -43,7 +43,9 @@ internal static class CampaignHudSuites
         "WAKEUP_SOUND_GROUP the mission authors starts a real " +
         "AudioStreamPlayer3D through WorldSounds (D31's existing routing, counted rather than " +
         "duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
-        "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483)")]
+        "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483); the readout " +
+        "draws on a board layer only while paused, so a headset's theater screen carries it with " +
+        "the pause board and it never raises that screen in flight on its own")]
     internal static void CampaignObjectivesHud(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -101,6 +103,7 @@ internal static class CampaignHudSuites
             ctx.Same(hud.BuildLines().Count, hud2.BuildLines().Count,
                 $"a second rig's own readout carries the same row count as the first");
             CheckNoBlankRowsDrawn(ctx, hud, report);
+            CheckDrawsOnlyPaused(ctx, hud, pause);
 
             if (sounds != null)
             {
@@ -344,6 +347,23 @@ internal static class CampaignHudSuites
         report.AppendLine($"{hud.BuildLines().Count} display rows, {drawn.Count} of them drawn");
         ctx.Check(!blank, $"no drawn objectives line is a mark against blank text");
         ctx.Check(drawn.Count > 0, $"the readout draws at least one keyed objectives line");
+    }
+
+    // The readout is part of the pause screen. A headset's theater screen hosts and raises board
+    // layers, so the readout must ride a board layer and hide whenever the pause board is down.
+    // Leaves the pause as it found it, held.
+    private static void CheckDrawsOnlyPaused(TestContext ctx, ObjectivesHud hud, CSVM.Flight.Modes.PauseState pause)
+    {
+        var layer = hud.GetNodeOrNull<CanvasLayer>("objectives_hud_layer");
+        ctx.Check(layer != null && UI.Boards.TheaterLayout.Hosts(layer.Layer) && layer.Visible,
+            $"paused, the readout shows on a layer the theater screen hosts ({layer?.Layer})");
+        pause.ForceResume();
+        hud._Process(0.0);
+        bool hiddenInFlight = layer is { Visible: false };
+        pause.TryToggle(0);
+        hud._Process(0.0);
+        ctx.Check(hiddenInFlight && layer!.Visible,
+            $"resumed it hides, so it never raises the theater screen without the pause board, and shows again on the next pause");
     }
 
     // Where the completion mark lands, which is the half of the readout no completion bit can show.

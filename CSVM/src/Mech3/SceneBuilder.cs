@@ -1922,7 +1922,7 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
     // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage,
-    // 262144 the race ghost, 524288 the stereo interior.
+    // 262144 the race ghost, 524288 the stereo interior. The ghost's stereo text is 1048576.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -1938,17 +1938,20 @@ void fragment() {
         bool debugClutter = DebugClutterFlag;
         bool noAlphaCoverage = NoAlphaCoverage;
         bool xrInterior = XrPreciseInterior;
+        // The stereo text sets the ghost's dither at the surface's depth; a launch's path never changes.
+        bool stereoGhost = raceGhost && StereoFacing.Live;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
-            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (xrInterior ? 524288 : 0);
+            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (xrInterior ? 524288 : 0)
+            | (stereoGhost ? 1048576 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, xrInterior), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost, xrInterior, stereoGhost), "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -1961,7 +1964,7 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool xrInterior)
+        bool xrInterior, bool stereoGhost)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2127,7 +2130,7 @@ void fragment() {{");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         if (raceGhost)
-            sb.AppendLine(RaceGhost.FragmentLine);
+            sb.AppendLine(stereoGhost ? RaceGhost.StereoFragmentLine : RaceGhost.FragmentLine);
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
         string vcol = sunLit ? "vec4(csky_srgb_to_linear(v_sun_lit), COLOR.a)"

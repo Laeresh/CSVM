@@ -28,7 +28,7 @@ internal static class XrRigSuites
     /// places, offsets, moves the head and recenters. Each step reads the head node, and the last
     /// the eyes the renderer would take.</summary>
     [Suite("xr-rig-seat",
-        "the VR seat's eye stands on the cockpit_camera marker through XrCockpit.EyeInAircraft, a per-plane eye offset moves the eye and not the interior, a recenter puts an offset head back on that eye with its tilt kept, and the sky follows the tracked head while the headset flies the pane")]
+        "the VR seat's eye stands on the cockpit_camera marker through XrCockpit.EyeInAircraft, a per-plane eye offset moves the eye and not the interior, a recenter puts an offset head back on that eye with its tilt kept, and the sky follows the tracked head while the headset flies the pane; lifted, the interior sorts the collimated reticle's overlay a fixed offset after its glass")]
     internal static void XrRigSeat(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -84,10 +84,17 @@ internal static class XrRigSuites
             owned.Add(origin);
             var rig = new XrRig(origin, head, flat, pilot => pilot.Dressing.Stereo);
 
+            // A stand-in for the collimated reticle's overlay, which carries its own sorting offset.
+            var reticle = new MeshInstance3D { Name = "xr-rig-reticle", SortingOffset = GunsightReticle.SortAfterGlassM };
+            interior.AddChild(reticle);
+            var glass = FirstOtherGeometry(interior, reticle);
             var seated = new XrCockpit(interior);
             ctx.Check(seated.EyeInAircraft.IsEqualApprox(builder.CockpitCameraOffset),
                 $"with no offset the eye in the aircraft is the cockpit_camera marker {seated.EyeInAircraft}");
             rig.Place(flat.GlobalTransform, aircraft, Attitude, seated);
+            ctx.Check(glass != null && glass.SortingOffset > 1000f
+                    && Mathf.IsEqualApprox(reticle.SortingOffset - glass.SortingOffset, GunsightReticle.SortAfterGlassM),
+                $"lifted, the interior sorts ahead of the world ({glass?.SortingOffset ?? 0f:0}) and the reticle's overlay {reticle.SortingOffset - (glass?.SortingOffset ?? 0f):0.##} m after the rest, its order against the glass pinned");
             ctx.Check(head.GlobalPosition.DistanceTo(marker) < EyeTol,
                 $"the seated head stands on the marker, {Mm(head.GlobalPosition.DistanceTo(marker))} off");
             ctx.Check(head.GlobalPosition.DistanceTo(flat.GlobalPosition) < EyeTol,
@@ -98,6 +105,8 @@ internal static class XrRigSuites
             // Hidden, the interior goes back to its mount, so a second XrCockpit captures that mount.
             interior.Visible = false;
             seated.Follow(origin.GlobalTransform, aircraft);
+            ctx.Check(Mathf.IsEqualApprox(reticle.SortingOffset, GunsightReticle.SortAfterGlassM) && glass?.SortingOffset == 0f,
+                $"lowered, each geometry keeps the offset it was built with ({reticle.SortingOffset:0.##}, {glass?.SortingOffset ?? -1f:0.##})");
             interior.Visible = true;
             var aft = new VrCockpit(1f, 0.06f).EyeOffsetInAircraft;
             var offset = new XrCockpit(interior, aft);
@@ -193,4 +202,23 @@ internal static class XrRigSuites
 
     private static string Mm(float metres) =>
         (metres * 1000f).ToString("0.###", CultureInfo.InvariantCulture) + " mm";
+
+    // The first geometry under the interior other than the stand-in, in tree order.
+    private static GeometryInstance3D? FirstOtherGeometry(Node node, Node except)
+    {
+        if (node is GeometryInstance3D geometry && node != except)
+        {
+            return geometry;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (FirstOtherGeometry(child, except) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
 }

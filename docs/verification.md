@@ -284,7 +284,9 @@ member, and it does not go here.
 - **GOLD-20**, **A stereo golden that moves a few levels where the new code draws nothing is not yet
   the new code's defect; hide the new transparent and re-run before reading the move.** The HUD
   panel's quad, every fragment discarded in Cockpit view, moved `c1-cockpit-xr-sim-aft` by at most 4
-  levels on the collimated reticle's lines alone, and hiding the quad restored the old hash.
+  levels on the collimated reticle's lines alone, and hiding the quad restored the old hash. The
+  cause was a sort tie the renderer broke differently with one more transparent in the frame
+  (`docs/org/cameraViews.md`, "Draw order"), which the reticle's own sorting offset now settles.
 
 ## DET, determinism and randomness
 

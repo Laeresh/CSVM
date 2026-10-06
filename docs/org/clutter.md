@@ -360,3 +360,41 @@ Everything here is a known, deliberate divergence, not a gap waiting to be close
 | **A 0.5 m² XZ-footprint floor per triangle** | Remake-only, and it does fire, 14 triangles in C5, 0 everywhere else |
 | **Sprites are not collidable; 3D decorations are** | Both user decisions. A billboard has no solid side to hit, its collider would be a phantom wall wherever the card happens to face, while a city block has real sides and does not turn. ⚠ Do **not** re-argue tree collision from the `spruce_destroy` anims: those two files live under `planes\`, define `g_engine*` / `prop_part` / `spin` / `snd_propstart`, and are the **Spruce Goose**. There is no tree-destruction animation of any kind in the install |
 | **A fixed placement seed distinct from the session master** | Matches the original's *property* (a chapter's forest is fixed) without pretending to match its stream |
+
+## The dither under a headset (remake-only)
+
+`csky_clutter_dither_keep` reads `FRAGCOORD`, so its 4x4 pattern is fixed to the display. In stereo
+the pattern then carries no disparity while the surface under it carries `IPD x f / d`, and the
+pattern reads at the display's depth, in front of the surface, by that many pixels.
+
+**The clutter fade keeps the screen-locked pattern.** At about 20 px per degree (1146 px/rad) the
+mismatch is 1.4 px at the nearest authored fade start (50 m) and 0.24 px at C1's firs at 300 m, and
+it shrinks with distance. A card's disparity is that of its position, which the stereo facing of the
+sprites does not move. Whether it reads as a screen door is the headset's to judge.
+
+**The race ghost takes a stereo text** (`RaceGhost.StereoFragmentLine`, chosen by
+`SceneBuilder` when `StereoFacing.Live`). A full ghost is a whole aircraft dithered at 35 % (55 %
+Enhanced) within 40 m, so the mismatch is 1.8 px at 40 m and 7 px at 10 m. The stereo text shifts
+each eye's pattern by the pixel a point on the view axis at the fragment's own depth projects to in
+that eye, floored. Every surface point then sits on the same pattern cell in both eyes, so the
+pattern carries the surface's own disparity within a pixel. It slips by one pixel along depth
+contours where the floored shift steps; across an aircraft at 15 m that is at most a line or two.
+The flat text is unchanged.
+
+Measured on the stand-in, C1 empty stage, Bloodhawk in the rigid chase, `--pos=0,300,0
+--direction=-0.743,0,-0.669 --view=chase --hold=0,0,0,0.6 --debug-race-ghost --det --frames=60`,
+1280x1280 per eye at 63 mm. A discarded pixel is one that differs from the same run without the
+flag. Over 16x16 blocks inside the silhouette, the aircraft's disparity is the block's registration
+between the eyes on the solid frame, and the pattern's shift is the cyclic shift that maps one eye's
+discards onto the other's:
+
+| eye FOV | aircraft disparity, median | screen-locked text | stereo text |
+|---|---|---|---|
+| 60° (21 px per degree) | -4.8 px | shift 0 in 86 of 87 blocks | within 1 px in 73 of 83 blocks, median 0.26 px |
+| 90° | -2.9 px | shift 0 in 23 of 25 blocks | within 1 px in 24 of 25, median 0.14 px |
+| 120° | -1.6 px | shift 0 in 5 of 5 clean fits | within 1 px in 7 of 7, median 0.61 px |
+
+⚠ Do not anchor the pattern to the instance origin's projected pixel. Each part's pattern then
+carries its origin's disparity, and in the chase the origins stand metres deeper than the rear
+surfaces the eye sees: at 60° that left a median 1.84 px off the surface's disparity, 11 of 56
+blocks within a pixel.

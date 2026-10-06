@@ -157,14 +157,17 @@ internal sealed class HumanFlightAdapter
         // The stereo interior's per-plane scale goes on the mount before XrCockpit captures it.
         bool xrInterior = _policy.XrInterior && !remote;
         var vrCockpit = xrInterior ? _policy.XrCockpits.For(planeName) : VrCockpit.Default;
+        bool ghostSelf = _policy.DebugRaceGhost && !remote;
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
-            raceGhost: _world.Racing, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
+            raceGhost: _world.Racing || ghostSelf, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
         var planeModel = planeBuilder.Build(planeName);
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
         // every camera keeps; the four-wide band then serves this machine's seats alone.
-        if (_world.Racing)
+        if (ghostSelf)
+            RaceGhost.Stamp(planeModel, SplitScreen.EveryCameraLayer);
+        else if (_world.Racing)
             RaceGhost.Stamp(planeModel, remote ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;

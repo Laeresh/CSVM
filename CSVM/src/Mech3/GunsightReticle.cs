@@ -30,6 +30,12 @@ public static class GunsightReticle
     /// An eye beside the head centre still finds every line the head centre sees.</summary>
     public const float EyeReachM = 0.05f;
 
+    /// <summary>The overlay's sorting offset, metres of sort depth over the glass's. The two share
+    /// a blend priority, and a lifted interior ties every geometry's sort depth. Without the offset
+    /// the renderer picks their order, and any other transparent can swap it. It must exceed the
+    /// interior's own depth extent.</summary>
+    public const float SortAfterGlassM = 10f;
+
     // The two names the one sight-glass texture ships under, the Warhawk's being crosshair.
     private static readonly string[] GlassTextures = { "cockpit6", "crosshair" };
 
@@ -196,6 +202,7 @@ public static class GunsightReticle
             Mesh = st.Commit(),
             MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            SortingOffset = SortAfterGlassM,
         };
     }
 

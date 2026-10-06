@@ -225,7 +225,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 15. ◐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
 16. ◐ D16 Comfort: fades, tunnel vignette, render-scale slider
-17. ☐ D17 Port the screen-space effects to multiview
+17. ◐ D17 Port the screen-space effects to multiview
 18. ☐ D18 Performance pass to the 90 Hz budget
 19. ☐ D19 Spyglass as a binocular quad
 
@@ -1792,6 +1792,21 @@ two tones.
 - Do not depth-test the screen: in flight it stands behind the dash and would be cut by it.
 - Pass colours to the screen and surround shaders as vectors (SHOT-47).
 
+**The objectives readout in a stereo flight (D17, C12's finding; confidence: traced to code and
+checked on the stand-in).** C12 feared `UI/Overlays/ObjectivesHud.cs`, on `HudLayers.Board`, would
+raise the screen over a dimmed world whenever it showed. It shows only while the session is paused:
+it is the Built-in pause screen's objectives list (`_Process` sets its layer visible from
+`PauseState.Paused`; the Original pause sheet carries its own and the readout is not built beside
+it). So in flat play it is part of a board, not a HUD readout, and on the theater it rides the pause
+board, which raises the screen anyway. On the stand-in (`--xr-sim --profiles=<scratch copy>
+--campaign=X1:6 --plane=player_bhawk --force-builtin --det --mute --log=ui:debug`, frame 150) a
+flight logs `theater: hidden in flight` with the readout's layer among the five hosted; with
+`--debug-pause=60` it logs `theater: over flight, raised by pause_board`, and the capture shows the
+objectives panel at the screen's top right beside the pause board in both eyes. No code moved; the
+suite `campaign-objectives-hud` now checks that the readout's layer is one the theater hosts and that
+it hides on resume and shows again on the next pause. Its text size on the screen is part of check
+(5) above.
+
 **Verified.** The complete battery on the merged tree with B8, C10 and the head-locked quads' tint
 fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with clean engine errors,
 goldens 29/29 hash-identical. The headset checks named above are still owed.
@@ -2392,6 +2407,26 @@ both eyes; (5) the red index mark reads pink, being added light; say if it shoul
 - `GunsightReticle.EnhancedGain` sends the lines' linear value past 1 over a dark ground, so
   Enhanced's glow catches them slightly.
 
+**The overlay's order against the glass (D17, C12's finding; confidence: measured on the stand-in,
+the mechanism traced to code).** The overlay and the interior's blended surfaces share priority 110,
+and `XrCockpit` lifts every interior geometry to the world origin with one `SortingOffset`, so their
+sort depths tie (kilometres from the eye, below float32's step), and the renderer's order moved with
+any other transparent in the frame. Before: `c1-cockpit-xr-sim-aft` with the HUD panel's quad drawn
+against the same run with that quad on no camera's layer differed on 272 pixels, up to 4 levels, on
+the reticle's lines; `c1-cockpit-xr-sim` likewise. Now the overlay carries
+`GunsightReticle.SortAfterGlassM` (10 m) as its own sorting offset, which `XrCockpit` keeps under the
+lift (each geometry's lifted offset is `SortAhead` plus the one it was built with), so it draws after
+the glass and every other interior transparent: the nearest blended surface on its rays, drawn last.
+After: `c1-cockpit-xr-sim` is one hash with the panel and without (`93318a4a`, three runs); in
+`-aft` the reticle's region is identical with and without, and 8 pixels on the gauge faces still
+differ by one level, a tie among the interior's other blended surfaces (a lead for B8, not the
+reticle's). Re-pinned: `c1-cockpit-xr-sim` `a97a9349` to `93318a4a` (692 pixels, up to 7 levels, the
+reticle's lines now after the glass) and `c1-cockpit-xr-sim-aft` `e0ddd07f` to `4f298667` (264
+pixels, up to 4 levels, the same lines), each one hash over three or more runs.
+`c1-cockpit-xr-sim-far` and `stage-gunsight-xr-sim` are unmoved, and the same with the panel hidden.
+Suite `xr-rig-seat` pins the offset arithmetic (a lifted stand-in overlay sorts `SortAfterGlassM`
+after the interior's geometry, and lowered keeps its own).
+
 **Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
 re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
 skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
@@ -2860,12 +2895,66 @@ no more than a frame's hitch; a campaign mission's end keeps its 2 s fade. The v
 
 **Verified.** <pending orchestrator run>
 
-## D17 ☐ Port the screen-space effects to multiview
+## D17 ◐ Port the screen-space effects to multiview
+
+**Outcome: the race ghost's dither ported and measured on the stand-in; its look at the headset is
+owed.** A stereo process draws the ghost with a text whose dither pattern sits at each fragment's own
+depth (`RaceGhost.StereoFragmentLine`), so the pattern carries the aircraft's disparity within a
+pixel where it carried none. The four effects A4 found correct need no port, and the clutter fade
+keeps its screen-locked dither. `--debug-race-ghost` makes the ghost capturable on one seat, and the
+new golden `stage-race-ghost-xr-sim` pins it. The flat text is unchanged; no flat golden moved.
 
 **Goal.** Soft particles, the fog-volume fade and heat shimmer render correctly in both eyes; the
 clutter dither stays if A4 found it reads fine per eye.
 
-**Evidence (confidence: traced to code and measured per eye, A4).** Soft particles, the
+**Evidence, D17 (confidence: traced to code and measured per eye on the stand-in for the disparity;
+the look of a dither in the headset is the author's).** Tools and captures in `.scratch/D17/`
+(`D17_shot.ps1`, `D17_gold.ps1`, `D17_blocks.py`, `D17_phase.py`, `D17_diff.py`).
+- **A capturable ghost on one seat.** A4 could not capture the ghost: it arms only between race
+  pilots, and VR refuses a second local seat. `--debug-race-ghost` builds each local seat's airframe
+  with the ghost's shaders and stamps it with `SplitScreen.EveryCameraLayer`, so the seat's own chase
+  camera draws it as a full ghost (14.9 to 25.9 m, inside the 40 m floor). It works flat and under
+  `--xr-sim`, makes no race and changes nothing else.
+- **The instrument.** Pose `--stage=empty --plane=player_bhawk --pos=0,300,0
+  --direction=-0.743,0,-0.669 --view=chase --hold=0,0,0,0.6 --det --mute --frames=60`, 1280x1280 per
+  eye at 63 mm, with and without the flag. A discarded pixel differs from the run without the flag.
+  Over 16x16 blocks inside the silhouette, the aircraft's disparity is the block's registration
+  between the eyes on the solid frame, and the pattern's shift is the cyclic shift mapping one eye's
+  discards onto the other's (`D17_blocks.py`, absolute pixel phase).
+- **Before and after** (same pose, the stereo text switched off by a scratch edit for "before"):
+
+  | eye FOV | aircraft disparity, median | screen-locked text | stereo text |
+  |---|---|---|---|
+  | 60° (21 px per degree, headset density) | -4.8 px | shift 0 in 86 of 87 blocks | within 1 px of the surface in 73 of 83 blocks, median 0.26 px |
+  | 90° | -2.9 px | shift 0 in 23 of 25 | within 1 px in 24 of 25, median 0.14 px |
+  | 120° | -1.6 px | shift 0 in 5 of 5 clean fits | within 1 px in 7 of 7, median 0.61 px |
+
+  Before, the pattern sat on the display 4.8 px in front of the aircraft at headset density; after,
+  it sits on the aircraft. The pattern repeats every 4 px, so a disparity near a multiple of 4 aliases
+  (the 60° row's screen-locked blocks read "within 1 px" modulo 4 for that reason); the 90° and 120°
+  rows are the unambiguous ones.
+- **The plan's anchor was measured and rejected.** A flat varying holding the instance origin's
+  projected pixel (one projection in `vertex()`) puts each part's pattern at its origin's depth. In
+  the chase the parts' origins stand metres deeper than the rear surfaces the eye sees: at 60° the
+  pattern sat a median 1.84 px off the surface, 11 of 56 blocks within a pixel. The landed text needs
+  no varying: in `fragment()` it projects the view-axis point at `VERTEX.z` through the eye's own
+  `PROJECTION_MATRIX` and shifts `FRAGCOORD` by that pixel, floored, modulo 4. Two eyes then put each
+  surface point on the same pattern cell. With parallel eye axes it holds for asymmetric frusta too,
+  since every point at one depth then has one eye-to-eye pixel difference. The pattern slips one pixel
+  along depth contours where the floored shift steps, a line or two across an aircraft at 15 m.
+- **Compiles and holds.** Every stereo capture, Original and Enhanced, logs no shader error;
+  `stage-race-ghost-xr-sim` (`--debug-race-ghost --xr-sim`, chase, frame 60): `63839219` on four
+  runs, frame-sensitive 26.66 %.
+- **The clutter fade's verdict stands.** Neither `Mech3/Clutter.cs` nor
+  `shaders/csky_clutter_fade.gdshaderinc` has changed since A4 (`git log 76e1547d4..HEAD` on both is
+  empty), and B10 classed the clutter cards and glows "holds, correct as is": it changed which way a
+  sprite faces, never where it stands, and the dither's mismatch is a card's position's disparity
+  (1.4 px at the nearest authored fade start, 0.24 px at 300 m). If E21 finds it reads as a screen
+  door, the ghost's stereo line ports to `Clutter.cs`'s and `SceneBuilder`'s clutter keep as is.
+- The measurements and the rejected anchor are recorded in `docs/org/clutter.md`, "The dither under a
+  headset".
+
+**Evidence, A4 (confidence: traced to code and measured per eye, A4).** Soft particles, the
 gamma-space mix composite, the fog-volume soft fade and heat shimmer are already correct in both
 eyes: Godot 4.7's compiler turns every read of a `hint_screen_texture` or `hint_depth_texture`
 uniform into a read of the drawing eye's layer, and `INV_PROJECTION_MATRIX` is per eye while
@@ -2877,26 +2966,44 @@ port is the **race ghost's dither** (`Mech3/RaceGhost.cs`, `FragmentLine`), a 35
 screen-locked 4x4 pattern over an aircraft within 40 to 80 m, 1.8 to 7 px off its disparity: a
 screen-door fixed to the display.
 
-**Approach.** Under VR only, give the ghost's keep test a pattern anchored to the aircraft: a
-`varying flat vec2` set in `vertex()` to the pixel the instance origin projects to in this view
-(`PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX[3]`, scaled by `VIEWPORT_SIZE`, floored), and
-`csky_clutter_dither_keep(FRAGCOORD.xy - anchor, alpha)`, so the pattern carries the aircraft's
-disparity. VR is fixed for a launch (an Options apply relaunches), so the generator can read a
-launch-time flag beside `GraphicsMode.Enhanced` and emit the anchored text only then, leaving the
-flat text byte-identical. Alpha-to-coverage under the 4x MSAA is the alternative if the anchored
-pattern still reads as a mesh. The clutter dither keeps its text unless the author's headset pass
-(E21) finds it reads as a screen-door.
+**Approach (landed, VR only).** `Mech3/SceneBuilder.cs` keys the bias shader's stereo ghost
+(`raceGhost && StereoFacing.Live`, key bit 1048576) and writes `RaceGhost.StereoFragmentLine` in
+place of `FragmentLine`; the stereo path is fixed for a launch, so each key's twins carry one text in
+both graphics modes and the flat text is byte for byte what it was. `--debug-race-ghost`
+(`SessionSpec.DebugRaceGhost`, `FlightRosterPolicy.DebugRaceGhost`, `HumanFlightAdapter`) is the
+capture aid; `docs/cli.md` carries it. Alpha-to-coverage stays the alternative if the headset finds
+the dither still reads as a mesh.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Model recommendation.** Standard; the deciding fact (the per-part origin sits off the surface) came
+from measuring.
 
-**Verify.** Flat goldens unmoved. The race ghost cannot be captured on the `--xr-sim` stand-in
-(two local seats leave the root viewport without a 3D camera, A4 Traps), so the check is a suite
-that arms the stamp on a single-seat stereo session, or a networked stunt race in the headset, with
-the ghost's dither phase measured against the aircraft in each eye. A4's per-eye truth method
-(`ipd=20` with the head moved onto the eye) re-checks the four effects that need no port.
+**Verify.** Units: `SessionSpecTests.DebugRaceGhostIsItsOwnFlag`. Suites `race-ghost-fade`,
+`race-presence` and the `xr`, `cockpit` and `race` filters pass with clean engine errors. The
+before/after table re-runs with `.scratch/D17/D17_shot.ps1` and `D17_blocks.py` (the "before" needs
+the stereo text switched off). Goldens: the new `stage-race-ghost-xr-sim`; the flat shots cannot
+move (the flat text is unchanged and the flag is off in all of them). The four effects A4 found
+correct were not re-captured: their screen and depth reads are unchanged since A4, and B10's stereo
+texts changed only their basis, under its own suite.
 
-**⚠ Traps.** The shaders are generated in C# (`Mech3/ShaderTwins.cs` pairs per graphics mode); a
-port touches both twins.
+Owed at the headset (the author's), VDXR at 90 Hz, Original then Enhanced:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase --debug-race-ghost
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase --debug-race-ghost --graphics=enhanced
+```
+Look for: (1) the aircraft ahead reads as a see-through aircraft at its own depth, its dots on its
+skin, not as a mesh standing on the lenses in front of it; (2) as you turn your head the dots move
+over the skin, as the flat ghost's do whenever the view moves: say whether that swim bothers you in
+the headset; (3) say whether the ghost reads well enough or wants alpha-to-coverage.
+
+**⚠ Traps.**
+- The shaders are generated in C# (`Mech3/ShaderTwins.cs` pairs per graphics mode); a port touches
+  both twins.
+- Do not anchor the pattern to the instance origin: a part's origin is not on the surface the eye
+  sees (Evidence).
+- Measure a dither's shift in absolute pixel coordinates, and pick a disparity away from a multiple
+  of 4: the pattern's period aliases a 4 px disparity to none.
+
+**Verified.** <pending orchestrator run>
 
 ## D18 ☐ Performance pass to the 90 Hz budget
 

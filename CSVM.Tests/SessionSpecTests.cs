@@ -1207,5 +1207,17 @@ public class SessionSpecTests
         Assert.Empty(s.LogSpecs);
     }
 
+    /// <summary>`--debug-race-ghost` is a capture aid of its own: it makes no race and flies the
+    /// default mode.</summary>
+    [Fact]
+    public void DebugRaceGhostIsItsOwnFlag()
+    {
+        Assert.False(S().DebugRaceGhost);
+        var s = S("--stage=empty", "--debug-race-ghost");
+        Assert.True(s.DebugRaceGhost);
+        Assert.False(s.Stunt);
+        Assert.Equal(SessionMode.Fly, s.Mode);
+    }
+
     private static SessionSpec S(params string[] args) => SessionSpec.Parse(args);
 }

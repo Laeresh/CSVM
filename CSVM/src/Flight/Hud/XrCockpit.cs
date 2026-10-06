@@ -28,7 +28,8 @@ public sealed class XrCockpit : IXrInterior
 
     private readonly Node3D _interior;
     private readonly Transform3D _mount;
-    private readonly List<GeometryInstance3D> _geometry = new();
+    // Each geometry with the sorting offset it was built with, which lifting adds to.
+    private readonly List<(GeometryInstance3D Geometry, float Own)> _geometry = new();
     private bool _lifted;
 
     /// <summary>Follows <paramref name="interior"/>, as the plane builder mounted it under the
@@ -106,11 +107,11 @@ public sealed class XrCockpit : IXrInterior
         _interior.Transform = new Transform3D(origin.Basis, Vector3.Zero) * InOrigin(held, EyeInAircraft);
     }
 
-    private static void Collect(Node node, List<GeometryInstance3D> into)
+    private static void Collect(Node node, List<(GeometryInstance3D, float)> into)
     {
         if (node is GeometryInstance3D geometry)
         {
-            into.Add(geometry);
+            into.Add((geometry, geometry.SortingOffset));
         }
 
         foreach (var child in node.GetChildren())
@@ -147,12 +148,12 @@ public sealed class XrCockpit : IXrInterior
         _lifted = true;
         _interior.TopLevel = true;
         var everywhere = Everywhere(_mount.Basis.Scale);
-        foreach (var geometry in _geometry)
+        foreach (var (geometry, own) in _geometry)
         {
             if (GodotObject.IsInstanceValid(geometry))
             {
                 geometry.CustomAabb = everywhere;
-                geometry.SortingOffset = SortAhead;
+                geometry.SortingOffset = SortAhead + own;
             }
         }
     }
@@ -167,12 +168,12 @@ public sealed class XrCockpit : IXrInterior
         _lifted = false;
         _interior.TopLevel = false;
         _interior.Transform = _mount;
-        foreach (var geometry in _geometry)
+        foreach (var (geometry, own) in _geometry)
         {
             if (GodotObject.IsInstanceValid(geometry))
             {
                 geometry.CustomAabb = default;
-                geometry.SortingOffset = 0f;
+                geometry.SortingOffset = own;
             }
         }
     }

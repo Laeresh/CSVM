@@ -321,7 +321,7 @@ The cockpit interior under the stereo path, drawn in the main world the cockpit 
 shows it is top level at the world origin, turned to the XR origin's axes and offset from that
 origin as the airframe holds it (`InOrigin`, engine-free), so every transform Godot composes for it
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
-its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it. Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
+its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it, and a sorting offset that puts it after the world's transparents on top of the one it was built with (the reticle overlay's). Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
 plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
 seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame.
 

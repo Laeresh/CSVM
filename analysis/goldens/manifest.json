@@ -183,22 +183,22 @@
     {
       "name": "c1-cockpit-xr-sim",
       "frame": 120,
-      "hash": "a97a9349c20a7268306b3f2a0895717a",
-      "exercises": "The --xr-sim stand-in headset: both eyes side by side through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1 terrain and sky, the pipper on its world card; frame-sensitive 19.82 %.",
+      "hash": "93318a4a6056b744fe1cadb823c0f612",
+      "exercises": "The --xr-sim stand-in headset: both eyes through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1, the reticle after its glass, the pipper card; frame-sensitive 19.82 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-far",
       "frame": 120,
-      "hash": "79eafacf60c50d8f521baf29f6eba987",
+      "hash": "3dd67ec910f44b669a519b0ed1295cb8",
       "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn by the render thread's eye feed, the pipper at its world point; frame-sensitive 11.92 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-aft",
       "frame": 120,
-      "hash": "e0ddd07f6f59622f06da4f80c1a10a7b",
-      "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out, the gauges on their faces and the pipper card in both eyes; frame-sensitive 8.37 %.",
+      "hash": "4f298667138fee44b9986d242f50afee",
+      "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out, the gauges, the reticle after its glass and the pipper card; frame-sensitive 8.38 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-9800,700,-8200", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=head=0/0/0.1", "--det", "--mute"]
     },
     {
@@ -249,6 +249,13 @@
       "hash": "23f8dde9b5f446efea47aa71c9322aed",
       "exercises": "The cockpit-locked HUD panel on the stand-in headset in the nose view: the flat HUD's dial columns and heading tape on a quad 2 m ahead in the XR origin's frame, in both eyes over the empty stage; frame-sensitive 31.06 %.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim=eye=640x720,fov=75", "--det", "--mute"]
+    },
+    {
+      "name": "stage-race-ghost-xr-sim",
+      "frame": 60,
+      "hash": "638392196117bb4e48c1e21480c0c88e",
+      "exercises": "The race ghost in stereo: the flown aircraft dithered as a full ghost in the rigid chase over the empty stage, each eye's pattern shifted to the surface's depth so it carries the aircraft's disparity; frame-sensitive 26.66 %.",
+      "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=chase", "--hold=0,0,0,0.6", "--debug-race-ghost", "--xr-sim", "--det", "--mute"]
     }
   ]
 }
