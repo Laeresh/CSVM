@@ -672,6 +672,43 @@ Every jump of the origin (a view change, a respawn, a new static spot, a new wat
 camera taken by another owner or handed back) raises `XrRig.Cut`, the place a comfort fade hangs on;
 today each is a hard cut.
 
+### The gunsight under a headset
+
+The sight is one glass polygon per interior, 0.33 m (Warhawk) to 0.51 m (Kestrel) from the eye at
+the 0.04 mount, wearing one 128x128 texture in every airframe (`cockpit6`, the Warhawk's
+`crosshair`, the same pixels). The texture holds the glass tint (alpha 38 of 255), the frame line on
+its outermost texels, the black sight body along its bottom edge and the reticle: the ring, the cross,
+the centre cross and the red index mark. Drawn at the glass's depth the reticle doubles when the eyes
+converge on a distant target, so a stereo interior lifts it off the glass (`Mech3/GunsightReticle.cs`)
+and draws it collimated, as a reflector sight shows its image: each eye's ray takes the texel the
+authored eye sees along that direction, so the reticle has no disparity and keeps the flat game's
+place and angular size. The tint, the frame line and the sight body stay on the glass at its depth.
+
+Which texels are reticle is read off the alpha: the texels off the tint by more than 6 levels group
+8-connected, and the reticle is the group at the centre plus every group clear of the second texel
+ring; the frame corners and the sight body reach that ring. On the shipped texture that is 902
+texels. The reticle shows where the head centre looks through the glass, one window for both eyes,
+so a lean out of the eye box loses it as a real sight does, and the opaque sight body covers it in
+each eye. It is added to the scene in linear light, an illuminated reticle: the glass's own blend
+lifts a grey line less than a level over a bright sky, where the flat cockpit pass's canvas composite
+lifts it about ten.
+
+Measured on the stand-in, C1 empty stage, Bloodhawk, pose `--direction=0,0.34,-0.94 --hold=0,0,0,0.6`,
+frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
+x 640.192 / 640.191 and y 321.24 in both eyes, the authored eye's projection of the centre cross being
+(640.15, 321.17); the sight body moves 81.5 px between the eyes, a point 0.44 m away. Every airframe
+puts the reticle in both eyes within 0.02 px of each other and within 0.35 px of its authored place.
+Lift over the sky beside the glass, Rec. 709 levels, on SHOT-45's left eye against the flat pass:
+
+| | flat pass | stereo, glass reticle | stereo, collimated |
+|---|---|---|---|
+| Original, reticle mean / 90th pct / max | -0.7 / 9.5 / 13.1 | -6.8 / -1.9 / -0.8 | 16.5 / 31.6 / 44.9 |
+| Enhanced (gain 6.0), the same | 24.7 / 44.8 / 58.6 | -3.2 / -0.1 / 0.0 | 31.3 / 49.3 / 58.2 |
+| glass tint mean, Original / Enhanced | 1.2 / 15.3 | -1.0 / -0.1 | unchanged |
+
+`GunsightReticle.EnhancedGain` takes back what AgX compresses in the world and not in the flat pass's
+canvas: 2.5 read 16.6 / 29.5 / 36.3, 4.0 read 23.8 / 40.3 / 47.3.
+
 ## Not resolved
 
 - **The non-selectable modes (`1`, `2`, `3`, `4`) still have no friendly name or

@@ -92,6 +92,8 @@ public sealed class PlaneBuilder
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
     private readonly List<Node3D> _cockpitDamagePanels = new();
+    // The stereo interior's sight glass textures split into their glass and reticle layers, by name.
+    private readonly Dictionary<string, GunsightReticle.Layers?> _gunsight = new();
     private PaintScheme? _scheme;
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
@@ -130,7 +132,8 @@ public sealed class PlaneBuilder
         {
             _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsInteriorBlendTexture,
                 cullBackfaces: true,
-                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
+                textureSubstitute: (name, tex) => InteriorTexture(name, _painter?.Substitute(name, tex) ?? tex, xrInterior),
+                sunVertexLit: true)
             {
                 DepthBiasScale = 1f / _interiorScale,
                 // The panel is a wall of soft-alpha decals over dark instruments, which is where
@@ -156,6 +159,10 @@ public sealed class PlaneBuilder
     /// <summary>The interior's polygons the build left out: the head plate's under the stereo path
     /// (<see cref="CockpitPlate"/>), none on every other build.</summary>
     public int InteriorOmittedPolygons => _interiorScene?.OmittedPolygonCount ?? 0;
+
+    /// <summary>The collimated reticle overlays the stereo interior carries (<see cref="GunsightReticle"/>),
+    /// one per sight glass; none on every other build.</summary>
+    public int GunsightReticles { get; private set; }
 
     /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned with an
     /// additive amber tint. A <c>Flight.Airframe.WingLightBlinker</c> flashes them in flight;
@@ -429,9 +436,46 @@ public sealed class PlaneBuilder
                 CockpitCameraOffset);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
+            if (_interiorScene.XrPreciseInterior)
+            {
+                AddGunsightReticles(n3d, node);
+            }
+
             built.AddChild(n3d);
             CockpitInterior = n3d;
             return;
+        }
+    }
+
+    // The stereo interior's sight glass wears its texture without the reticle, which an overlay
+    // draws collimated in its place (AddGunsightReticles). Every other texture and build is as given.
+    private ImageTexture? InteriorTexture(string name, ImageTexture? tex, bool xrInterior)
+    {
+        if (!xrInterior || tex == null || !GunsightReticle.IsGlass(name))
+        {
+            return tex;
+        }
+
+        if (!_gunsight.TryGetValue(name, out var layers))
+        {
+            _gunsight[name] = layers = GunsightReticle.SplitTexture(tex);
+        }
+
+        return layers?.Glass ?? tex;
+    }
+
+    // One collimated reticle overlay per sight glass the build split a texture for.
+    // It takes the glass's own depth bias, so it hides behind whatever hides the glass.
+    private void AddGunsightReticles(Node3D interior, GameZNode root)
+    {
+        foreach (var glass in GunsightReticle.Find(_gamez, root))
+        {
+            if (_gunsight.GetValueOrDefault(glass.TextureName) is { } layers
+                && GunsightReticle.Overlay(glass, layers, GunsightReticle.EyeReachM / _interiorScale, _interiorScene!.PriorityBias(glass.Priority)) is { } overlay)
+            {
+                interior.AddChild(overlay);
+                GunsightReticles++;
+            }
         }
     }
 

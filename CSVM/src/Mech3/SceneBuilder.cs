@@ -843,6 +843,11 @@ void fragment() {
         return Math.Min(rank, ConflictRankCap) * ConflictRankBias * DepthBiasScale;
     }
 
+    /// <summary>The depth bias this builder gives a rank-0 surface of <paramref name="priority"/>,
+    /// for geometry built beside it that must hide wherever that surface hides.</summary>
+    internal float PriorityBias(int priority) =>
+        Mathf.Clamp(Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) * DepthBiasScale, -MaxScaledBias, MaxScaledBias);
+
     /// <summary>Whether <paramref name="material"/> is one of this builder's depth-biased world
     /// materials drawn in the opaque pass, so its surfaces may share one draw (<see cref="WorldMerge"/>).
     /// A billboard spins about its own instance's origin and a blend sorts per instance, so neither is.

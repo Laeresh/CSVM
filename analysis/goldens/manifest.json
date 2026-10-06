@@ -183,23 +183,30 @@
     {
       "name": "c1-cockpit-xr-sim",
       "frame": 120,
-      "hash": "f7ba79211ab0d68772266a75c7c83c38",
+      "hash": "0205e7fbaf507c0dd2b12107f0d829c4",
       "exercises": "The --xr-sim stand-in headset: both eyes side by side through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1 terrain, sky and clutter; no HUD in stereo; frame-sensitive 19.82 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-far",
       "frame": 120,
-      "hash": "a35c19adfa5f4beedc2671a39af2765e",
+      "hash": "05b1be1db7cb215ee5f7ae4cd75dbedc",
       "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn from the XR origin's frame by the render thread's eye feed; frame-sensitive 11.92 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-aft",
       "frame": 120,
-      "hash": "cb417b9a142d9f574110bbe494365114",
+      "hash": "ac2ce712aa7fb2cb4cd00b7f7b3e81d5",
       "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out of the build, the gauges on their faces in both eyes; frame-sensitive 8.37 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-9800,700,-8200", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=head=0/0/0.1", "--det", "--mute"]
+    },
+    {
+      "name": "stage-gunsight-xr-sim",
+      "frame": 120,
+      "hash": "0bd86d62643db34d5ebb167c6f30c70c",
+      "exercises": "The stereo interior's gunsight reticle drawn at infinity over the empty stage's sky: both eyes put it on the same eye-local pixel while the glass and the sight body keep their 0.45 m disparity; frame-sensitive 7.70 %.",
+      "args": ["--stage=empty", "--plane=player_bhawk", "--direction=0,0.34,-0.94", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=pitch=-4.70001", "--det", "--mute"]
     },
     {
       "name": "c3-flare-xr-sim",

@@ -217,7 +217,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ◐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
 12. ☐ C12 The cockpit-locked HUD panel
 13. ☐ C13 World-tied markers and the edge-marker ring
-   ☐ C13b The gunsight reticle collimated at infinity in VR
+   ◐ C13b The gunsight reticle collimated at infinity in VR
 14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 ### Wave D, cutscenes, comfort and performance
@@ -1866,33 +1866,130 @@ scaled with distance to hold an angular size; the edge ring hangs on the XR came
 
 **⚠ Traps.** <TODO: none known yet.>
 
-## C13b ☐ The gunsight reticle collimated at infinity in VR
+## C13b ◐ The gunsight reticle collimated at infinity in VR
+
+**Outcome: built and measured on the stand-in; the headset check is owed.** A stereo session lifts
+the reticle off the sight glass and draws it collimated (`Mech3/GunsightReticle.cs`): both eyes put
+every reticle line on the same eye-local pixel, the flat game's place from the authored eye, while
+the glass tint, its frame line and the sight body stay at the glass's 0.33-0.51 m. It is added in
+linear light, an illuminated reticle, and reads over the sky above the flat pass in both looks. All
+eleven airframes carry it. The flat game builds none of it; its 24 flat goldens are unmoved.
 
 **Goal.** In VR the gunsight's reticle on the reflector glass reads at infinity, as a real
 collimated reflector sight does: both eyes see it in the same direction relative to the aircraft,
 so it overlays a distant target without a double image, and it reads at least as clearly as in the
 flat game.
 
-**Evidence (confidence: the symptom is the author's at the headset; the mechanism is
-direction-sound).** At the headset the author reported, verbatim: "fainter and looking at a point in
-the distance i have a crosseyed feeling. Cant really use it to target." The reticle is a texture on
-the cockpit interior's gunsight glass, drawn at its true depth (about 0.4-0.5 m at the 0.04 mount),
-so focusing on a far target doubles it. B8 measured the glass at +0.7 levels over the sky in VR
-Original against +4.7 in the flat pass (+3.2 against +21 in Enhanced): the pass composites the
-glass's soft alpha in the canvas, the in-world shader's alpha correction is exact only over black.
+**Evidence (confidence: traced to the data for the glass and the reticle's texels; measured on the
+stand-in for the disparity, the placement and the levels; the look and the comfort are the author's
+at the headset).** At the headset the author reported, verbatim: "fainter and looking at a point in
+the distance i have a crosseyed feeling. Cant really use it to target." Tools and captures are in
+`.scratch/C13b/` (`C13b_sight.py`, `C13b_classify.py`, `C13b_shot.ps1`, `C13b_levels.py`,
+`C13b_disparity.py`, `C13b_planes.py`, `C13b_gold.ps1`).
+- **The reticle is baked into the glass texture, not a polygon set.** Each `cockpit1` carries exactly
+  one sight glass polygon (`C13b_sight.py`; a quad on ten airframes, a six-corner strip on the
+  Hoplite), 0.33 m (Warhawk) to 0.51 m (Kestrel) ahead, wearing `cockpit6` or, on the Warhawk,
+  `crosshair`, which is the same 128x128 picture (identical md5). Its alpha is the tint (38 of 255 on
+  12852 texels), the frame line on the outermost texels, the black sight body along the bottom edge
+  (alpha 255) and the reticle: ring, cross, centre cross and the red index mark. The Kestrel's and
+  the Peacemaker's glasses also stand on a post drawn as ordinary opaque geometry, which stays at its
+  depth.
+- **The split.** Texels off the tint by more than 6 alpha levels, the outermost ring excluded, group
+  8-connected; the reticle is the group nearest the centre plus every group clear of the second ring
+  (the frame corners and the sight body reach it). 902 texels on the shipped texture
+  (`C13b_classify.py`, the same rule as `GunsightReticle.ReticleMask`). The glass keeps every other
+  texel and paints the reticle's texels with the nearest tint colour at the tint's alpha, through
+  the interior builder's texture substitute (VR only).
+- **The collimated overlay.** A quad in the glass's plane, 5 cm wider each way (half of a 100 mm IPD
+  at the mount scale), a direct child of the interior's root at the glass's own depth bias, drawn
+  at the interior's blend priority (110) with A3b's eye-feed placement. Per fragment each eye's ray
+  takes the texel the authored eye sees along the same direction (`GunsightReticle.Look`, the glass's
+  plane and UV map in the interior's frame), so the reticle has the authored eye's angular size and
+  place in both eyes. It shows where the head centre looks through the glass along that ray (one
+  window for both eyes, so leaning out of the eye box loses it as a real sight does), and the opaque
+  sight body at the fragment's own place on the glass covers it in each eye. Being depth-tested at
+  the glass's depth, it hides behind whatever hides the glass (the coaming, the canopy) and draws
+  over the world and anything beyond the glass, the nose spinner included.
+- **Why at the glass and not at the far plane.** A vertex pushed to the far plane is depth-tested
+  behind the whole world; drawn with the depth test off it would show through the panel. Looking the
+  texel up per fragment on the glass's own quad gives the far plane's directions with the glass's
+  own occlusion, and needs no stencil and no new priority. The order against the glass does not
+  matter for an additive layer (the glass's corrected tint alpha is 0.02).
+- **Disparity, measured** (`C13b_disparity.py`, C1 empty stage, Bloodhawk, `--direction=0,0.34,-0.94
+  --view=cockpit --hold=0,0,0,0.6`, frame 60, `--xr-sim=eye=1280x720,fov=96.4268,pitch=-4.70001,
+  shot=both`, 63 mm): the reticle's vertical line at x 640.192 / 640.191 and the horizontal at y
+  321.241 / 321.242 in the left / right eye, 0.001 px apart; the sight body's centroid moves 81.5 px
+  between the eyes, a point 0.44 m away (0.063 x 572.08 / 81.5). The stand-in's eye axes are
+  parallel (C14's sun core: 0.02 px), so a world point at infinity has zero disparity too. Before
+  the change the reticle moved with the glass, 80.8 px. Every airframe (`C13b_planes.py`, same pose
+  per plane): reticle disparity 0.000-0.020 px, Kestrel the largest.
+- **Placement, measured.** The authored eye's projection of the centre cross's texel centroid is
+  (640.15, 321.17) on SHOT-45's left eye (`--xr-sim=eye=1280x720,fov=96.4268,ipd=20,head=0.01/0/0,
+  shot=left,pitch=-4.70001`); the stereo lines measure (640.19, 321.23). On all eleven airframes the
+  lines sit within 0.35 px of the authored place, the flat game's.
+- **Contrast, measured** (`C13b_levels.py`: every glass pixel mapped through the authored eye to its
+  texel; lift in Rec. 709 levels over the sky 12-40 px beside the glass on the same row; the flat HUD
+  pipper's disc left out of both). Same pose, frame 60, SHOT-45's left eye against the flat pass:
 
-**Approach.** Under VR, draw the reticle's polygons (not the glass frame) collimated: each eye
-places each reticle vertex along the direction from the authored eye through it, at the far plane
-or a large fixed distance, through A3b's eye feed so the direction holds per eye; keep the
-authored angular size. Raise its contrast under VR to at least the flat pass's reading. The flat
-game is unchanged.
+  | | flat pass | stereo before | stereo after |
+  |---|---|---|---|
+  | Original reticle mean / p90 / max | -0.7 / 9.5 / 13.1 | -6.8 / -1.9 / -0.8 | 16.5 / 31.6 / 44.9 |
+  | Enhanced reticle mean / p90 / max | 24.7 / 44.8 / 58.6 | -3.2 / -0.1 / 0.0 | 31.3 / 49.3 / 58.2 |
+  | Glass tint mean, Original / Enhanced | 1.2 / 15.3 | -1.0 / -0.1 | -1.0 / -0.1 |
 
-**Verify.** Under `--xr-sim`, the reticle's per-eye disparity equals that of a world point at
-infinity (zero) while the glass frame keeps its own; the reticle's level over the sky at least the
-flat pass's. Headset: the author can overlay a distant target with no double image.
+  B8's +0.7 / +4.7 (+3.2 / +21) were the glass over a different sky with another estimator; this
+  table's flat column is the target the reticle now passes, in both looks. Under Enhanced the add
+  takes `EnhancedGain` 6.0 (2.5 read 16.6 / 29.5 / 36.3, 4.0 read 23.8 / 40.3 / 47.3); AgX holds
+  the brightest pixel at 58.2 against the flat pass's 58.6. No other blended surface changed, so
+  stacked decals are untouched (B8's failed gamma mix is not reopened).
+- **Goldens.** `c1-cockpit-xr-sim`, `-far` and `-aft` moved (the reticle now draws collimated and
+  bright in both eyes); the new `stage-gunsight-xr-sim` pins the reticle over the empty stage's sky,
+  one hash over three runs. The 24 flat shots, `c3-flare-xr-sim` and `menu-original-xr-sim` are
+  unmoved, 30 of 30 on the last stage run. In an earlier run with another session's Godots running,
+  `empty-stage` and `c1-cloud-deck-enhanced` flipped; `empty-stage` rendered its pinned hash 3 of 3
+  alone, and
+  `c1-cloud-deck-enhanced` flips between the same two hashes alone too (1 of 3), the flip this plan
+  already records under B9 and C11. Neither path builds anything this item adds.
 
-**⚠ Traps.** Only the reticle collimates; the glass frame and the sight body stay at their true
-depth. The reticle must not be occluded by the panel or canopy in either eye at its new depth.
+**Approach (landed, VR only).** `PlaneBuilder` hands the stereo interior's builder the split glass
+texture through its texture substitute and, after the build, adds one `GunsightReticle.Overlay` per
+glass under the interior's root (`GunsightReticles` counts them; the stereo cockpit's log line
+reports it). `SceneBuilder.PriorityBias` gives the overlay the glass's own depth bias. The flat
+interior's builder takes neither, so a flat build is byte-identical.
+
+**Model recommendation.** Standard; the deciding facts (the reticle baked in the glass texture, the
+contrast numbers) came from measuring.
+
+**Verify.** Units: `GunsightReticleTests` (each of the eleven glasses found once and its UVs
+reproduced by the look, the shipped texture's split, the grouping rule, the look's parallax). Suites:
+`-Filter cockpit`, `-Filter xr`, `head-locked-quads`. Goldens: 30 of 30 hash-identical with the
+three re-pins and `stage-gunsight-xr-sim`. The disparity and the levels re-run with the commands
+above.
+
+Owed at the headset (the author's), VDXR at 90 Hz, Original then Enhanced:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --graphics=enhanced
+```
+Look for: (1) eyes on a distant hill or cloud, the ring and cross lie on it as one image, no
+crossed-eye feeling; (2) the reticle reads clearly against sky and ground, at least as well as the
+flat game's; (3) the glass's frame and the black sight body under it stay at the glass, in front of
+the reticle; (4) leaning sideways or back, the reticle is cut at the glass's edge the same way for
+both eyes; (5) the red index mark reads pink, being added light; say if it should stay red.
+
+**⚠ Traps.**
+- Do not push the reticle to the far plane: depth-tested there the world hides it, untested the panel
+  cannot. The lookup per fragment on the glass's quad gives both at once.
+- Do not clip the reticle per eye at the glass's outline: the authored ring nearly fills the glass, so
+  each eye kept a different half (seen on the stand-in). The window is the head centre's.
+- Do not split the glass texture by a fixed rectangle; the reticle's group touches the frame line at
+  the index mark, which is why the outermost ring is excluded before grouping.
+- An additive reticle vanishes on a fully white picture (a whiteout at full opacity), where the flat
+  pass's grey lines stay visible; partial whiteout at the C1 band reads.
+- `GunsightReticle.EnhancedGain` sends the lines' linear value past 1 over a dark ground, so
+  Enhanced's glow catches them slightly.
+
+**Verified.** <pending orchestrator run>
 
 ## C14 ◐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 

@@ -49,6 +49,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
 - `src/Mech3/CockpitPlate.cs`, the head-and-shoulders plate behind the cockpit eye, selected by polygon, which the stereo interior leaves out.
+- `src/Mech3/GunsightReticle.cs`, the stereo interior's gunsight reticle lifted off the sight glass and drawn collimated at infinity.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.

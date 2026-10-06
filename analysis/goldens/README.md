@@ -100,6 +100,9 @@ Canvas layers draw nothing in stereo (SHOT-44), so the shot has no HUD. A stereo
 builds the cockpit pass and draws the interior in the main world whatever the flag says;
 `c1-cockpit-xr-sim-aft` flies without `--no-cockpit-pass`, with the stand-in head 10 cm aft of the
 eye, where the head plate the stereo interior leaves out would otherwise fill both eyes.
+`stage-gunsight-xr-sim` holds the sight glass over the empty stage's sky, where the collimated
+reticle sits on the same eye-local pixel in both eyes and the glass and the sight body keep their own
+disparity.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of clock
 (`viewer-bhawk` 30, `c1-crash` 20, `c1-stunt-marker` 90, `c1-flight-kill` 280, `c1-debris-rest`
