@@ -548,6 +548,11 @@ public partial class FlightController : Node3D
     private readonly PadRumble _rumble;
     private int _turretShots;
 
+    // The unsplit respawn control's press: set once it has respawned, cleared when it reads up.
+    // ⚠ Never a level read. A held press would place the aeroplane again on every step it stays
+    // down, each a fresh pick of the dogfight's rotation.
+    private bool _respawnPressTaken;
+
     // The stick half _stickAxes last polled. The lever reads its bindings from it one by one, since a
     // resolved row cannot tell a centred stick from an unplugged one.
     private IDeviceState _stickSide;
@@ -2207,9 +2212,13 @@ public partial class FlightController : Node3D
             }
             // A remote wreck flies again when its owner's spawn says so, never on a button or a
             // timer here.
+            bool pressed = !RemoteOwned && RespawnPressed();
             if (!RemoteOwned
-                && (RespawnPressed() || _lifecycle.TickAutoRespawn(dt, _holdSegments != null, FirePressed)))
+                && (pressed || _lifecycle.TickAutoRespawn(dt, _holdSegments != null, FirePressed)))
             {
+                // The press that skips the crash camera is spent here, so its hold does not respawn
+                // the aeroplane it places again in flight.
+                _respawnPressTaken |= pressed;
                 // In a match the placement is granted, not taken: the ask goes out and the
                 // aeroplane stays down until the answer places it.
                 if (RespawnRequest is { } ask)
@@ -4243,11 +4252,18 @@ public partial class FlightController : Node3D
         }
         else
         {
-            if (AllowLiveRespawn && _padActions.Held(InputAction.Respawn))
+            // One respawn per press, on either half. A press the pin refused is not spent, so the
+            // gate below stays the pin's alone.
+            bool down = _padActions.Held(InputAction.Respawn) || _keyActions.Held(InputAction.Respawn);
+            if (!down)
+            {
+                _respawnPressTaken = false;
+            }
+            else if (AllowLiveRespawn && !_respawnPressTaken)
+            {
+                _respawnPressTaken = true;
                 Respawn();
-
-            if (AllowLiveRespawn && _keyActions.Held(InputAction.Respawn))
-                Respawn();
+            }
         }
 
         // The commanded lever, as FUN_00487460 writes it. The up and down keys move it at 0.5/s,
