@@ -652,7 +652,8 @@ every reader of it agrees with the headset. No flat pane takes any of this.
 | Crash cut | The authored spot, facing the impact on a level heading. |
 | Death camera, flyby | The authored spot, holding the level heading that faces the nearest point of the aircraft's track ahead (`XrMount.Watch`), so a passing aircraft crosses the view and swings at most about 90° round. A new spot is a cut. |
 | A spent pilot watching another aircraft | The VR chase on the watched aircraft. |
-| A camera another owner drives: a presenting cutscene, the spectator and photo-mode cameras, the weapon lab's orbit | That camera's eye with its heading only. |
+| A presenting cutscene | Not around the seat: the theater screen plays it as a stereo pair over a dark surround (`UI/Boards/StereoPair.cs`). The origin stands at the cutscene camera's eye, so the sky centres where the pair is drawn from, on the level heading it held as the cutscene took the camera. A shot change inside the cutscene is no cut. |
+| A camera another owner drives: the spectator and photo-mode cameras, the weapon lab's orbit | That camera's eye with its heading only. |
 
 Nothing in this table rolls or pitches the player's horizon except the aircraft the player flies:
 Cockpit, Nose and Chase ride its attitude, and every other camera is level. A static camera holds its

@@ -13,8 +13,8 @@ namespace CSVM.UI.Boards;
 /// moves every layer <see cref="TheaterLayout.Hosts"/> accepts into the quad's <see cref="Surface"/>.
 /// Their controls stay the root's, so the pad and the keyboard drive them exactly as in flat play.
 /// With no flight live the screen stands in a dark surround, and the camera's plain environment keeps
-/// any tonemap off the boards. In flight a board brings the screen up over a dimmed world. Module
-/// entry: docs/architecture/UI.md.
+/// any tonemap off the boards. In flight a board brings the screen up over a dimmed world, a
+/// presenting cutscene in the full surround as a <see cref="StereoPair"/> (docs/architecture/UI.md).
 /// </summary>
 public sealed partial class TheaterScreen : Node3D
 {
@@ -48,12 +48,17 @@ public sealed partial class TheaterScreen : Node3D
     private static readonly Vector3 Floor = new(0.075f, 0.075f, 0.08f);
     private static readonly Vector3 Ceiling = new(0.015f, 0.015f, 0.018f);
 
+    private readonly SubViewport[] _eyes = new SubViewport[2];
+    private readonly Camera3D[] _eyeCameras = new Camera3D[2];
     private Viewport _root = null!;
     private Camera3D? _camera;
     private Func<Transform3D> _origin = null!;
     private Func<bool> _flightLive = null!;
+    private Func<TheaterCutscene?> _cutscene = () => null;
+    private Func<float> _interocular = () => StereoPair.DefaultInterocularM;
     private bool _eyeFeed;
     private CanvasRehost _rehost = null!;
+    private ShaderMaterial _screenMaterial = null!;
     private MeshInstance3D _screen = null!;
     private QuadMesh _quad = null!;
     private MeshInstance3D _surround = null!;
@@ -89,12 +94,23 @@ public sealed partial class TheaterScreen : Node3D
     /// <summary>The canvas layers drawing on the screen now.</summary>
     public IReadOnlyCollection<CanvasLayer> Hosted => _rehost.Layers;
 
+    /// <summary>Whether a cutscene played on the screen at the last <see cref="Refresh"/>.</summary>
+    public bool PlaysCutscene { get; private set; }
+
+    /// <summary>The cutscene's two renders, left eye first, updating only while one plays.</summary>
+    public IReadOnlyList<SubViewport> CutsceneEyes => _eyes;
+
+    /// <summary>The cameras of <see cref="CutsceneEyes"/>, posed by <see cref="StereoPair"/>.</summary>
+    public IReadOnlyList<Camera3D> CutsceneCameras => _eyeCameras;
+
     /// <summary>Builds the screen over the 2D of <paramref name="root"/>. The XR origin's pose comes
-    /// from <paramref name="origin"/>, and whether a flight is on view from <paramref name="flightLive"/>.
-    /// The <paramref name="camera"/> takes the plain environment while none is. With
-    /// <paramref name="eyeFeed"/> the quad is placed from the eye feed's declared globals. The caller
-    /// adds the node to the tree.</summary>
-    public static TheaterScreen Build(Viewport root, Camera3D? camera, Func<Transform3D> origin, Func<bool> flightLive, bool eyeFeed)
+    /// from <paramref name="origin"/>, whether a flight is on view from <paramref name="flightLive"/>,
+    /// and a presenting cutscene from <paramref name="cutscene"/>, its pair <paramref name="interocular"/>
+    /// metres apart. The <paramref name="camera"/> takes the plain environment while no flight is on view
+    /// or a cutscene plays. With <paramref name="eyeFeed"/> the quad is placed from the eye feed's
+    /// globals. The caller adds the node to the tree.</summary>
+    public static TheaterScreen Build(Viewport root, Camera3D? camera, Func<Transform3D> origin, Func<bool> flightLive, bool eyeFeed,
+        Func<TheaterCutscene?>? cutscene = null, Func<float>? interocular = null)
     {
         var theater = new TheaterScreen
         {
@@ -107,6 +123,16 @@ public sealed partial class TheaterScreen : Node3D
             _eyeFeed = eyeFeed,
             _plain = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = Colors.Black },
         };
+        if (cutscene != null)
+        {
+            theater._cutscene = cutscene;
+        }
+
+        if (interocular != null)
+        {
+            theater._interocular = interocular;
+        }
+
         theater.Surface = new SubViewport
         {
             Name = "theater_surface",
@@ -130,9 +156,11 @@ public sealed partial class TheaterScreen : Node3D
             RenderPriority = ScreenPriority,
         };
         screenMaterial.SetShaderParameter("screen_tex", theater.Surface.GetTexture());
+        theater._screenMaterial = screenMaterial;
         theater._quad = new QuadMesh { Size = Vector2.One };
         theater._screen = Geometry("screen_quad", theater._quad, screenMaterial);
         theater.AddChild(theater._screen);
+        theater.BuildEyes(root);
 
         theater._surroundMaterial = new ShaderMaterial
         {
@@ -172,8 +200,9 @@ public sealed partial class TheaterScreen : Node3D
 
     public override void _Process(double delta) => Refresh();
 
-    /// <summary>Follows the root's layout size, shows or hides the screen and its surround, swaps the
-    /// camera's environment and places both for this frame. <see cref="_Process"/>'s body.</summary>
+    /// <summary>Follows the root's layout size and shows or hides the screen and its surround. Then
+    /// it swaps the camera's environment, places both and poses a cutscene's pair for this frame.
+    /// <see cref="_Process"/>'s body.</summary>
     public void Refresh()
     {
         Vector2 layout = _root.GetVisibleRect().Size;
@@ -184,8 +213,11 @@ public sealed partial class TheaterScreen : Node3D
 
         bool live = _flightLive();
         var raiser = live ? _rehost.Showing(TheaterLayout.Raises) : null;
-        bool shown = !live || raiser != null;
-        SurroundOpacity = !live ? 1f : raiser != null ? DimOpacity : 0f;
+        var cutscene = live && _cutscene() is { } playing && IsInstanceValid(playing.Camera) ? playing : (TheaterCutscene?)null;
+        bool shown = !live || raiser != null || cutscene != null;
+        // A cutscene takes the full surround. Its camera flies through the world the seat stands in,
+        // and that world showing round the window would move against the picture.
+        SurroundOpacity = !live || cutscene != null ? 1f : raiser != null ? DimOpacity : 0f;
         if (_screen.Visible != shown)
         {
             _screen.Visible = shown;
@@ -199,10 +231,14 @@ public sealed partial class TheaterScreen : Node3D
             _surroundMaterial.SetShaderParameter("opacity", SurroundOpacity);
         }
 
-        Plain(!live);
+        // A cutscene's picture is already tonemapped by its own cameras, so the screen takes none.
+        Plain(!live || cutscene != null);
         Place(_origin());
+        Pose(cutscene);
 
-        string state = !live ? "no flight" : raiser != null ? $"over flight, raised by {raiser.Name}" : "hidden in flight";
+        string state = !live ? "no flight"
+            : cutscene != null ? $"a cutscene in stereo{(raiser != null ? $" under {raiser.Name}" : "")}"
+            : raiser != null ? $"over flight, raised by {raiser.Name}" : "hidden in flight";
         if (state != _state)
         {
             _state = state;
@@ -216,6 +252,9 @@ public sealed partial class TheaterScreen : Node3D
         Mesh = mesh,
         MaterialOverride = material,
         CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        // ⚠ Keep it off every picture camera's layers. The cutscene pair would otherwise draw the
+        // screen into its own picture, and the surround over all of it.
+        Layers = SplitScreen.HeadsetLayer,
         // The shaders place it from the eye, so its own bounds mean nothing. Big enough that no
         // camera anywhere culls it.
         CustomAabb = new Aabb(new Vector3(-1e7f, -1e7f, -1e7f), new Vector3(2e7f, 2e7f, 2e7f)),
@@ -223,7 +262,7 @@ public sealed partial class TheaterScreen : Node3D
 
     // The surface on the quad, composited as the canvas would be: its premultiplied sRGB taken to
     // linear. Four taps across each pixel's footprint stand in for the mipmaps a viewport texture
-    // lacks.
+    // lacks. A playing cutscene fills its rect under the boards, each eye its own picture.
     private static string ScreenShader(bool eyeFeed) => $$"""
         shader_type spatial;
         render_mode blend_premul_alpha, unshaded, cull_disabled, depth_draw_never, depth_test_disabled, shadows_disabled, fog_disabled{{(eyeFeed ? ", skip_vertex_transform" : "")}};
@@ -231,6 +270,15 @@ public sealed partial class TheaterScreen : Node3D
         {{(eyeFeed ? SceneBuilder.XrInteriorGlobals : "")}}
 
         uniform sampler2D screen_tex : filter_linear, repeat_disable;
+        uniform sampler2D cutscene_left : filter_linear, repeat_disable;
+        uniform sampler2D cutscene_right : filter_linear, repeat_disable;
+        uniform float cutscene_on = 0.0;
+        uniform vec4 cutscene_rect = vec4(0.0, 0.0, 1.0, 1.0);
+
+        vec4 four_taps(sampler2D tex, vec2 uv, vec2 dx, vec2 dy) {
+            return 0.25 * (texture(tex, uv - dx - dy) + texture(tex, uv + dx - dy)
+                + texture(tex, uv - dx + dy) + texture(tex, uv + dx + dy));
+        }
 
         void vertex() {
         {{(eyeFeed ? EyeFeedVertex : "")}}
@@ -239,11 +287,18 @@ public sealed partial class TheaterScreen : Node3D
         void fragment() {
             vec2 dx = dFdx(UV) * 0.25;
             vec2 dy = dFdy(UV) * 0.25;
-            vec4 c = 0.25 * (texture(screen_tex, UV - dx - dy) + texture(screen_tex, UV + dx - dy)
-                + texture(screen_tex, UV - dx + dy) + texture(screen_tex, UV + dx + dy));
+            vec4 c = four_taps(screen_tex, UV, dx, dy);
             vec3 straight = c.a > 0.0 ? c.rgb / c.a : vec3(0.0);
-            ALBEDO = csky_srgb_to_linear(straight) * c.a;
-            ALPHA = c.a;
+            vec3 board = csky_srgb_to_linear(straight) * c.a;
+            vec2 at = (UV - cutscene_rect.xy) / cutscene_rect.zw;
+            vec2 adx = dx / cutscene_rect.zw;
+            vec2 ady = dy / cutscene_rect.zw;
+            vec3 left = four_taps(cutscene_left, at, adx, ady).rgb;
+            vec3 right = four_taps(cutscene_right, at, adx, ady).rgb;
+            vec3 picture = csky_srgb_to_linear(VIEW_INDEX == 0 ? left : right);
+            float inside = cutscene_on * step(0.0, at.x) * step(at.x, 1.0) * step(0.0, at.y) * step(at.y, 1.0);
+            ALBEDO = board + (picture * inside * (1.0 - c.a));
+            ALPHA = max(c.a, inside);
         }
         """;
 
@@ -280,6 +335,84 @@ public sealed partial class TheaterScreen : Node3D
         _surround.GlobalTransform = axes;
     }
 
+    // The cutscene's two renders, drawing the root's world. Each camera's frustum is shifted, so its
+    // own framing comes from StereoPair rather than from a field of view.
+    private void BuildEyes(Viewport root)
+    {
+        for (int view = 0; view < _eyes.Length; view++)
+        {
+            string side = view == 0 ? "left" : "right";
+            var eye = new SubViewport
+            {
+                Name = $"cutscene_{side}",
+                Size = TheaterLayout.CutsceneSize,
+                GuiDisableInput = true,
+                Msaa3D = root.Msaa3D,
+                ScreenSpaceAA = root.ScreenSpaceAA,
+                RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+            };
+            var camera = new Camera3D
+            {
+                Name = $"cutscene_camera_{side}",
+                Projection = Camera3D.ProjectionType.Frustum,
+                KeepAspect = Camera3D.KeepAspectEnum.Height,
+                Current = true,
+            };
+            eye.AddChild(camera);
+            AddChild(eye);
+            _eyes[view] = eye;
+            _eyeCameras[view] = camera;
+            _screenMaterial.SetShaderParameter($"cutscene_{side}", eye.GetTexture());
+        }
+    }
+
+    // Stands the pair on the cutscene's camera for this frame, or stops both renders with none.
+    // Each eye takes the camera's framing, planes, layers and look, less the headset's own layer.
+    private void Pose(TheaterCutscene? cutscene)
+    {
+        bool on = cutscene != null;
+        bool started = on && !PlaysCutscene;
+        if (on != PlaysCutscene)
+        {
+            PlaysCutscene = on;
+            foreach (var eye in _eyes)
+            {
+                eye.RenderTargetUpdateMode = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+            }
+
+            _screenMaterial.SetShaderParameter("cutscene_on", on ? 1f : 0f);
+        }
+
+        if (cutscene is not { } shot)
+        {
+            return;
+        }
+
+        var source = shot.Camera;
+        var pose = source.GlobalTransform.Orthonormalized();
+        float ipd = _interocular();
+        // The look the world gives the flat camera: the one it wore before the plain swap took it.
+        var look = source == _camera && _plainOn ? _cameraEnv : source.Environment;
+        for (int view = 0; view < _eyeCameras.Length; view++)
+        {
+            var camera = _eyeCameras[view];
+            camera.Transform = StereoPair.Eye(pose, view, ipd);
+            camera.Near = source.Near;
+            camera.Far = source.Far;
+            camera.Size = StereoPair.FrustumHeightM(source.Fov, source.Near);
+            camera.FrustumOffset = new Vector2(StereoPair.FrustumOffsetM(view, ipd, source.Near, shot.ConvergenceM), 0f);
+            camera.CullMask = source.CullMask & ~SplitScreen.HeadsetLayer;
+            camera.Environment = look;
+            camera.Attributes = source.Attributes;
+        }
+
+        if (started)
+        {
+            var inv = CultureInfo.InvariantCulture;
+            Log.Info("ui", $"theater: cutscene pair {TheaterLayout.CutsceneSize.X}x{TheaterLayout.CutsceneSize.Y} per eye, {(ipd * 1000f).ToString("0.#", inv)} mm apart, converged at {shot.ConvergenceM.ToString("0.##", inv)} m, framed at {source.Fov.ToString("0.##", inv)} deg");
+        }
+    }
+
     private void Resize(Vector2 layout)
     {
         if (LayoutSize == Vector2.Zero)
@@ -294,6 +427,8 @@ public sealed partial class TheaterScreen : Node3D
         // Text on a hosted layer is rasterised at the root's oversampling, not the surface's.
         _root.OversamplingOverride = TheaterLayout.SurfaceScale(layout);
         _quad.Size = Layout.SizeM(layout);
+        var rect = TheaterLayout.CutsceneRect(layout);
+        _screenMaterial.SetShaderParameter("cutscene_rect", new Vector4(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y));
         var inv = CultureInfo.InvariantCulture;
         Log.Info("ui", $"theater: layout {size2d.X}x{size2d.Y} drawn at {Surface.Size.X}x{Surface.Size.Y}, screen {_quad.Size.X.ToString("0.###", inv)}x{_quad.Size.Y.ToString("0.###", inv)} m, board {Layout.VerticalDeg.ToString("0.#", inv)} deg at {Layout.RowsPerDegree().ToString("0.#", inv)} rows per degree");
     }

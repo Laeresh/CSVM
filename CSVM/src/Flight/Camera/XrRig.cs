@@ -41,6 +41,9 @@ public sealed class XrRig
     // What the last placed frame stood on, so a change in any of it is a cut.
     private (FlightController? Pilot, bool Owns, int Shot, XrAnchor Anchor) _shot;
 
+    // The level heading the origin keeps while a cutscene plays on the theater screen.
+    private Basis _screenHeading = Basis.Identity;
+
     /// <summary>The rig over <paramref name="origin"/> and its child <paramref name="head"/>. The
     /// origin stands at <paramref name="fallback"/>, the persistent flat camera, while no pane is
     /// bound; <paramref name="interiorOf"/> finds a pilot's stereo interior, or null.</summary>
@@ -69,6 +72,17 @@ public sealed class XrRig
     /// <summary>How the origin took the pane's camera on the last <see cref="Place()"/>.</summary>
     public XrAnchor Anchor { get; private set; } = XrAnchor.Level;
 
+    /// <summary>Whether the bound pane's camera now frames a presenting cutscene, which the theater
+    /// screen plays as a stereo pair rather than around the seat. Set by the composition; unset
+    /// reads false.</summary>
+    public Func<bool>? CutscenePlays { get; set; }
+
+    /// <summary>Whether the last <see cref="Place()"/> stood the origin for a cutscene on the theater
+    /// screen. It stands at the cutscene camera's eye, on the level heading held since the cutscene
+    /// took the camera. The world behind the surround then never turns about the seat, and the sky
+    /// still centres on the eye the pair is drawn from.</summary>
+    public bool Screening { get; private set; }
+
     /// <summary>Makes <paramref name="pane"/> the one the headset flies.</summary>
     public void Bind(PlayerRig pane)
     {
@@ -95,15 +109,22 @@ public sealed class XrRig
 
     /// <summary>Places the origin for this frame at the bound pane's eye, or at the persistent
     /// camera with none, and the pane's stereo interior with it. A camera the pilot's own controller
-    /// wrote is taken as that write asks (<see cref="XrAnchor"/>); one another owner drives, by its
-    /// heading. A frame nothing wrote keeps the last anchor, levelled once the aircraft is down.
-    /// Returns the origin's pose.</summary>
+    /// wrote is taken as that write asks (<see cref="XrAnchor"/>). One another owner drives is taken
+    /// by its heading, or for a cutscene as <see cref="Screening"/> says. A frame nothing wrote keeps
+    /// the last anchor, levelled once the aircraft is down. Returns the origin's pose.</summary>
     public Transform3D Place()
     {
         var pane = _pane;
         var camera = pane != null && GodotObject.IsInstanceValid(pane.Camera) ? pane.Camera : _fallback;
         var pilot = pane?.Controller is { } controller && GodotObject.IsInstanceValid(controller) ? controller : null;
         var views = pilot is { CameraOwned: false } ? pilot.CameraControl : null;
+        bool screening = pilot is { CameraOwned: true } && CutscenePlays?.Invoke() == true;
+        if (screening && !Screening)
+        {
+            _screenHeading = XrMount.Level(Origin.GlobalTransform.Basis);
+        }
+
+        Screening = screening;
         XrAnchor anchor;
         if (views == null)
         {
@@ -125,8 +146,10 @@ public sealed class XrRig
         }
 
         var interior = pilot != null ? _interiorOf(pilot) : null;
-        var mount = XrMount.For(camera.GlobalTransform, anchor, pilot?.GlobalTransform.Basis ?? Basis.Identity,
-            interior?.EyeOffset ?? Vector3.Zero);
+        var mount = screening
+            ? XrMount.Screened(camera.GlobalTransform.Origin, _screenHeading)
+            : XrMount.For(camera.GlobalTransform, anchor, pilot?.GlobalTransform.Basis ?? Basis.Identity,
+                interior?.EyeOffset ?? Vector3.Zero);
         NoteCut(pilot, views, anchor, mount);
         Origin.GlobalTransform = mount;
         if (pilot != null && interior != null)

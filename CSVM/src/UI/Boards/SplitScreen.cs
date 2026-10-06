@@ -13,7 +13,8 @@ namespace CSVM.UI.Boards;
 /// camera-anchored singletons like the skydome, which <see cref="PlayerCullMask"/> keeps private.
 /// Every pane is a 3D audio listener (docs/architecture.md), or a splitscreen session has no
 /// listener at all. The zone-gate, <see cref="OwnAirframeLayer"/> and
-/// <see cref="FirstPersonLayer"/> bands are separate allocations of the same 20 layers.
+/// <see cref="FirstPersonLayer"/> bands and <see cref="HeadsetLayer"/> are separate allocations of
+/// the same 20 layers.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -34,6 +35,11 @@ public sealed partial class SplitScreen : CanvasLayer
     /// ghost of a seat flown on another machine names it as its owner's layer. No camera here then
     /// takes that aeroplane for its own, however many seats the race has.</summary>
     public const uint EveryCameraLayer = 1u;
+
+    /// <summary>The layer of what a headset draws in front of the seat: the theater screen, its
+    /// surround and the laser. Every pane camera draws it, the headset's render included. A
+    /// camera standing in the world for a picture drops it, as the stereo cutscene's two do.</summary>
+    public const uint HeadsetLayer = 1u << 8;
 
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle

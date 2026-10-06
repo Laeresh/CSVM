@@ -223,7 +223,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, cutscenes, comfort and performance
 
-15. ☐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
+15. ◐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
 16. ☐ D16 Comfort: fades, tunnel vignette, render-scale slider
 17. ☐ D17 Port the screen-space effects to multiview
 18. ☐ D18 Performance pass to the 90 Hz budget
@@ -2417,25 +2417,140 @@ hash-identical. The headset checks named above are still owed.
 
 # Wave D, cutscenes, comfort and performance
 
-## D15 ☐ Cutscenes as a stereo 3D-cinema pair on the theater screen
+## D15 ◐ Cutscenes as a stereo 3D-cinema pair on the theater screen
+
+**Outcome: built and pinned on the stand-in; the window feel, the comfort of the depth and the
+letterbox are owed at the headset.** A presenting cutscene under VR plays on the theater screen in
+the full dark surround: two cameras on the authored camera, the runtime's IPD apart, each eye's
+picture picked by `VIEW_INDEX` in the board's 4:3 rect, converged on the letterbox card so the bars
+stand on the screen plane. The XR origin no longer takes the cutscene camera's heading (B9's arm);
+it stands at the camera's eye on a held level heading. MPEG cinemas stay mono on the same screen.
 
 **Goal.** In VR an in-engine cutscene plays on the theater screen with depth: two cameras on the
 authored camera, one IPD apart, each eye's image picked by `VIEW_INDEX`, the authored framing and the
 letterbox exactly as in the flat game.
 
-**Evidence (confidence: lead-only).** Cutscene cameras and the letterbox card are in
-`Session/World/CutsceneController.cs:18-48, 144, 328, 1360-1370`; the card is stretched to the pane
-aspect, which becomes the screen quad's aspect.
+**Evidence (confidence: traced to code and measured on the stand-in for the raise and hand-back,
+the pair's placement, its convergence and the per-eye parallax; direction sound, magnitude TUNE for
+the convergence and the 4:3 frame; lead-only for comfort until the author's run).** Reports
+`.scratch/test-theater-cutscene.txt`, `.scratch/test-xr-view-cutscene.txt`; captures and
+instruments `.scratch/D15/` (`D15_parallax.py`, `D15_disparity.py`, `D15_hashes.ps1`).
+- **The condition.** A presenting cutscene is `CutsceneController` `Playing && Presenting`: code 2
+  sets it with `CameraOwned` on every pilot, the handoff and the skip clear both. `MirrorCamera` (at
+  priority 1000) puts `camera1`'s pose on the pane camera and `FrameBars` its framing, 55.76°
+  vertical. The Launcher composes `XrRig.CutscenePlays` from `GameSession.Cutscene`, and the
+  theater's cutscene source from `XrRig.Screening` and the pane camera; nothing flat reads either.
+- **The seat** (`xr-view-cutscene`, C1 Bloodhawk in a banked turn, the stand-in live): with the
+  cutscene presenting, the origin stands on the authored camera's eye (0 mm) on the seat's level
+  heading (0.0000°) through three shots turned up to 2.8 rad apart, with one cut (`another owner took
+  the camera`) and none on the shots. Control: the same owned camera with no cutscene is taken by its
+  own heading (B9's arm, kept for the spectator, photo mode and the weapon lab). The hand-back
+  returns the seat.
+- **The pair** (`theater-cutscene`, a rotated camera at -6120, 412, -3980, IPD 64 mm): the eyes stand
+  64.0 mm apart along the camera's right with its orientation; a point on the 7.5 m convergence plane
+  lands at (996.61, 720.98) left, (996.59, 720.96) right and (996.60, 720.97) on a flat 4:3 perspective
+  camera on the authored pose, so each eye frames exactly the flat picture there; a point 3 km out
+  shows 9.654 px of disparity, the parallax law's 9.654 px, with no vertical disparity.
+- **Per eye, captured** (frame 120 of `--campaign=csvm-golden:0 --plane=player_bhawk --det --mute`,
+  `generic_intro` presenting): `--xr-sim=eye=1600x1200,fov=46,head=0/-0.1/0,shot=left` and
+  `shot=right`, the screen square-on and filling each eye, against the flat 1280x720 frame's centre 4:3
+  crop resampled to the screen's size. Far haze and horizon: left -4.59 px, right +4.63 px from the flat
+  picture, mean +0.02 px, vertical under 0.12 px; the law's infinity is ±4.58 px. The zeppelin's mean
+  is +0.04 px and the cloud's -0.30 px. Left against right over the same band: -38.33 px, exactly the
+  screen plane's geometric -47.49 px plus the law's 9.16 px. (The screen's own rendered edges read
+  47.92 px apart, 0.43 px over geometry; that is the edge's coverage, so the picture is measured
+  against geometry.)
+- **Why the full surround, not the dimmed world.** The origin has to stand at the cutscene camera: the
+  dome, the deck and the fog take their eye from the head, so an origin held at the seat's old place
+  would centre the sky kilometres from the camera the pair draws from. The world round the seat is then
+  the cutscene camera's own surroundings, sliding past as it flies, which moves against the picture.
+  The dark surround makes the screen a window in a dark room, Decision 8's phrase. The headset camera
+  takes the plain environment as at the menu, since the pair's picture is already tonemapped by its own
+  cameras (SHOT-46's double tonemap otherwise).
+- **Why 4:3.** It is the frame the card was authored for and the board's rect, where the boards and the
+  MPEG cinemas already play. Under VR `FrameBars` measures the eye-size root (0.89 wide on the
+  stand-in), so `BarsWidthScale` is 1 and the card covers a 4:3 frame with 1.36 m to spare at 7.5 m
+  (half widths 6.65 m against 5.29 m), far past the 32 mm an eye shifts. The flat game widens the same
+  vertical picture to the window; a 16:9 pair would need `FrameBars` to stretch the card for the pair's
+  aspect, a change to the flat path's code. TUNE (`TheaterLayout.CutsceneSize`).
+- **Layers.** Bit 8 was free; `SplitScreen.HeadsetLayer` now carries the screen, the surround and the
+  laser. Every pane camera's mask keeps it, so nothing the headset draws moved; the pair's cameras drop
+  it, or they would draw the screen into its own picture and the surround over all of it. The
+  head-locked quads stay on layer 1, so a mission-end fade over a held film darkens the picture itself.
+- **Flat unchanged.** The theater is built only under XR and `CutscenePlays` is unset in a flat
+  launch. Probe hashes: `menu-original-xr-sim` 9f763799, `c1-cockpit-xr-sim` 8610b367 and the flat
+  `campaign-intro-fill` 280023fa, all their manifest values. The new golden `campaign-intro-xr-sim`
+  hashed cf30179c on three runs; frame 121 moves 0.50 % of pixels.
 
-**Approach.** Two SubViewports with cameras following the active cutscene camera at plus and minus
-half the runtime's IPD; the screen quad's shader samples by `VIEW_INDEX`. <TODO: the convergence
-distance (where the screen plane sits in depth).>
+**Resolved TODOs.**
+- **The convergence: the letterbox card's depth, 7.5 m** (`StereoPair.ConvergenceOfCard` = 1, TUNE).
+  3D-cinema practice keeps the frame at zero parallax with the scene behind it (the floating-window
+  rule), and here the bars are the frame: converged on the card they stand on the screen plane. On the
+  default seat (1.53 m tall at 2.5 m, framed at 55.76°) infinity lies 12.1 mm behind the screen, 0.6 % of
+  its width, inside the 1-2 % a cinema allows, and appears 3.1 m away; scene 30 m out appears at
+  2.92 m, 3 m out stands in front at 1.94 m. The depth is shallow and nothing diverges. The other
+  candidate, converging at the screen's undistorted-window distance (1.45 m, where the screen would
+  span the 55.76°), puts infinity at infinity but its far parallax equals the IPD (the eyes parallel,
+  the divergence limit) and sinks the bars 13 m behind the screen, cutting nearer scene they stand
+  behind. The interaxial is the runtime's IPD (Decision 8), read on the render thread from the eye
+  poses (`XrEyeFeed.InterocularM`).
+- Model recommendation: Standard.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Approach (landed, VR only).**
+- `UI/Boards/StereoPair.cs`: `TheaterCutscene` (the camera and the convergence) and the engine-free
+  law: `Eye`, `FrustumOffsetM`, `FrustumHeightM`, `ConvergenceM`, `ParallaxM`, `ApparentDistanceM`.
+- `UI/Boards/TheaterScreen.cs`: two 1600x1200 `SubViewport`s with frustum cameras sharing the root's
+  world, posed each frame after the origin from the source camera (frame, planes, mask less
+  `HeadsetLayer`, the pre-swap environment, attributes) and updating only while a cutscene plays; the
+  screen shader samples both and picks by `VIEW_INDEX` inside `TheaterLayout.CutsceneRect`, under the
+  boards; a cutscene takes the full surround and the plain environment. `Build` takes the source and
+  the interocular as optional arguments.
+- `Flight/Camera/XrRig.cs` `CutscenePlays`, `Screening` and `XrMount.Screened`;
+  `Launch/XrEyeFeed.cs` `InterocularM`; `Launch/Launcher.cs` wires both.
+- `UI/Boards/SplitScreen.cs` `HeadsetLayer`; `TheaterPointer.cs` puts its beam and dot on it.
 
-**Verify.** <TODO: an `--xr-sim` capture of a known intro cutscene frame, per eye.>
+**Verify.** Units: `CSVM.Tests/StereoPairTests.cs` (the eyes, the converging frusta, the card's
+convergence, the default seat's depth, the law against a projection worked by hand),
+`TheaterLayoutTests.ACutscenePlaysOnTheBoardsOwnRect`. Suites: `theater-cutscene`,
+`xr-view-cutscene`; every `xr` suite, `theater-screen` and the `campaign-cutscene` set pass with clean
+engine errors. Golden: `campaign-intro-xr-sim`. The rules that bite (docs/verification.md): SHOT-44,
+each eye read through `shot=`; SHOT-48, disparity by a subpixel shift, never centroids; GOLD-17, the
+golden names its missing-profile assumption; GOLD-3, the screen shader changed, so the whole golden
+set is swept on the merged tree, not only the three probed here.
 
-**⚠ Traps.** <TODO: none known yet.>
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --campaign=csvm-vr:0 --plane=player_bhawk
+.\RunGame.ps1 -EngineArgs '--xr-mode','on'
+```
+The first plays sequence 0's intro straight away (C3/M01, `generic_intro`; a profile name that does
+not exist is fine, and an `--xr-sim --no-det` run of it logged the pair); the second goes through the
+menu to a campaign mission, whose intro is the real path. Look for: (1) the
+intro opens on the screen in the dark room and reads as a window: the scene behind the glass, the
+black bars on the glass itself; the log has `theater: cutscene pair 1600x1200 per eye, <n> mm apart,
+converged at 7.5 m`; (2) the depth is comfortable through the whole intro, no doubled image on the
+far sky and nothing straining on near aircraft, and it reads as 3D at all; (3) turning or leaning the
+head changes nothing inside the frame; (4) the framing and the bars match the flat intro; (5) Esc
+raises the pause board over the playing cutscene; (6) the hand-back to the cockpit is one cut. The
+values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and sinks the bars),
+`TheaterLayout.CutsceneSize` and the surround. Frame pacing during the cutscene is in the
+`xr frames` lines of the run's log: three world renders a frame.
+
+**⚠ Traps.**
+- Do not take the cutscene camera's heading for the origin, and do not hold the origin's position
+  either: the sky centres on the head, so a held origin draws the pair's sky off-centre.
+- Do not leave the theater's geometry on layer 1: the pair would draw the screen into its own picture
+  and the opaque surround over all of it.
+- Do not copy the pane camera's `Environment` into the pair while the plain swap holds it; take the
+  one the swap saved.
+- Converge with the frustum offset, not by sliding the picture on the quad, which crops an eye's edge.
+- Scene nearer than 7.5 m at the left or right edge stands in front of the screen and is cut by the
+  screen's edge (a window violation); no floating-window mask is drawn.
+- The pair reads the pane camera's `Fov` as vertical (`KeepAspect.Height`, Godot's default).
+- The headset still renders the world behind the opaque surround, so a cutscene costs three world
+  renders a frame (D18).
+
+**Verified.** <pending orchestrator run>
 
 ## D16 ☐ Comfort: fades, tunnel vignette, render-scale slider
 

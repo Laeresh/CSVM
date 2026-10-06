@@ -1463,9 +1463,9 @@ camera write names: `Seat`, the flat eye at a live aircraft's attitude plus the 
 (the flat view's head pitch left out); `Camera`, the flat camera's pose as a headset write left it;
 `Level`, the flat eye with its heading only, for a camera another owner drives. `Chase` is the VR
 chase, a fixed offset in the aircraft's frame (`XrChase.Rigid`) or its heading's (`XrChase.Level`),
-and `Watch` the level heading a static camera holds, facing the aircraft's track. `XrRig.cs`
-applies it; `CameraController.cs` writes the poses; the per-view choices are in
-[../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".
+and `Watch` the level heading a static camera holds, facing the aircraft's track. `Screened` is the
+origin under a cutscene on the theater screen: the camera's eye on a held level heading. `XrRig.cs`
+applies it; `CameraController.cs` writes the poses; the per-view choices are in [../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".
 
 ## src/Flight/Camera/XrRig.cs
 The VR flavour of `PlayerRig.cs`: the one VR seat's `XROrigin3D` and tracked `XRCamera3D` (`Head`),
@@ -1473,9 +1473,9 @@ and the pane bound to them (`Bind`, `Release`). `Launch/XrSession.cs` builds it 
 `Place` each frame after every camera writer: the origin where the pilot's camera write asks
 (`CameraController.TakeXrWrite`, through `XrMount.cs`), by heading for a camera another owner drives,
 then the stereo interior through `IXrInterior` (`Flight/Hud/XrCockpit.cs`; this namespace names
-nothing in Flight but the airframe). `Cut` fires where the view jumps, the seam a comfort fade hangs
-on. `Recenter` is `XRServer.CenterOnHmd` keeping the tilt, not the height. The sky follows `Head`
-through `PlayerRig.SkyAnchor`; `LauncherContext.Xr` hands the rig to a session.
+nothing in Flight but the airframe). While `CutscenePlays` (the launcher's composition) it is
+`Screening`: at the cutscene camera's eye on the heading held from the cut, the theater screen playing the pair.
+`Cut` fires where the view jumps, the seam a comfort fade hangs on. `Recenter` is `XRServer.CenterOnHmd` keeping the tilt, not the height. The sky follows `Head` through `PlayerRig.SkyAnchor`; `LauncherContext.Xr` hands the rig to a session.
 
 ## src/Flight/Camera/XrSimEyes.cs
 The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch, a roll about

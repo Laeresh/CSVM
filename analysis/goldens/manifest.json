@@ -230,6 +230,13 @@
       "args": ["--menu", "--presentation=original", "--xr-sim", "--det", "--mute"]
     },
     {
+      "name": "campaign-intro-xr-sim",
+      "frame": 120,
+      "hash": "cf30179c3e2c3df120ebccc01168f1b9",
+      "exercises": "A campaign intro on the stand-in headset's theater screen: each eye its own 4:3 picture of the letterboxed shot, converged on the card, in the full surround; assumes no csvm-golden profile in user://; frame-sensitive 0.50 %.",
+      "args": ["--xr-sim", "--campaign=csvm-golden:0", "--plane=player_bhawk", "--det", "--mute"]
+    },
+    {
       "name": "stage-markers-xr-sim",
       "frame": 45,
       "hash": "0c881ee1762815f3c2626ecd302075f3",

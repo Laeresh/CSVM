@@ -152,6 +152,8 @@ public sealed partial class TheaterPointer : Node3D
             MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
+            // Off the cutscene pair's pictures, as the screen it points at is.
+            Layers = SplitScreen.HeadsetLayer,
             // Placed by its shader from the eye, as the screen is, so its own bounds mean nothing.
             CustomAabb = new Aabb(new Vector3(-1e7f, -1e7f, -1e7f), new Vector3(2e7f, 2e7f, 2e7f)),
         };

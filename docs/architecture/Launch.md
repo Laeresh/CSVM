@@ -158,7 +158,8 @@ A tracking-only `XRInterfaceExtension`, never primary, that hands the stereo coc
 eyes its frame is drawn with. Godot runs every initialised interface's pre-render on the render
 thread after the headset's own has located the eye poses, so this one reads them there and writes
 each eye's offset from the XR origin, and the origin's world position, into the global shader
-uniforms `Mech3/SceneBuilder.cs` names; Godot uploads them before it culls that frame. Added by
+uniforms `Mech3/SceneBuilder.cs` names; Godot uploads them before it culls that frame. The eyes'
+distance apart is `InterocularM`, the stereo cutscene pair's separation. Added by
 `XrSession.cs` after the headset's interface; `Flight/Hud/XrCockpit.cs` declares the uniforms.
 
 ## src/Launch/XrFrameWindow.cs

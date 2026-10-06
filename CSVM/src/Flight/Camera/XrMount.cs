@@ -85,6 +85,11 @@ public static class XrMount
         return new Transform3D(axes, planePos + (axes * offset));
     }
 
+    /// <summary>The origin while a cutscene plays on the theater screen. It stands at the cutscene
+    /// camera's <paramref name="eye"/>, so the sky centres where the stereo pair is drawn from. It
+    /// faces the level <paramref name="heldHeading"/> taken as the cutscene took the camera.</summary>
+    public static Transform3D Screened(Vector3 eye, Basis heldHeading) => new(heldHeading, eye);
+
     /// <summary>The level heading a static camera at <paramref name="eye"/> holds under a headset:
     /// toward the nearest point of the aircraft's track ahead, from <paramref name="aircraft"/> along
     /// the unit <paramref name="along"/>. A passing aircraft then crosses the view from one side to the

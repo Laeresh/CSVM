@@ -19,6 +19,12 @@ public readonly record struct TheaterLayout(float DistanceM, float HeightM, floa
     /// headset shows 20 to 25 pixels per degree.</summary>
     public const int AuthoredScale = 2;
 
+    /// <summary>Each eye's render of a cutscene: the authored board's 4:3 at <see cref="AuthoredScale"/>,
+    /// the shape the letterbox card was authored for. It plays where a board stands, as finely drawn.
+    /// TUNE: the flat game widens the same picture to a wider window.</summary>
+    public static readonly Vector2I CutsceneSize =
+        new(BoardFit.AuthoredWidth * AuthoredScale, BoardFit.AuthoredHeight * AuthoredScale);
+
     /// <summary>The proposed seat: the board 2.5 m ahead and 1.53 m tall (34 degrees), its centre
     /// 0.1 m under the eye. That is about 18 authored pixels per degree. TUNE at the headset.</summary>
     public static readonly TheaterLayout Default = new(2.5f, 1.53f, 0.1f);
@@ -54,6 +60,20 @@ public readonly record struct TheaterLayout(float DistanceM, float HeightM, floa
     /// whole layout, at the scale that makes its inscribed board <see cref="HeightM"/> tall.</summary>
     public Vector2 SizeM(Vector2 layout) =>
         layout * (HeightM / (BoardFit.AuthoredHeight * BoardFit.For(layout.X, layout.Y).Scale));
+
+    /// <summary>Where a cutscene plays on a screen showing <paramref name="layout"/>, in its (0, 0)
+    /// to (1, 1) points: the 800x600 board <see cref="BoardFit"/> inscribes in that layout.</summary>
+    public static Rect2 CutsceneRect(Vector2 layout)
+    {
+        if (layout.X < 1f || layout.Y < 1f)
+        {
+            return new Rect2(0f, 0f, 1f, 1f);
+        }
+
+        var fit = BoardFit.For(layout.X, layout.Y);
+        return new Rect2(fit.OriginX / layout.X, fit.OriginY / layout.Y,
+            BoardFit.AuthoredWidth * fit.Scale / layout.X, BoardFit.AuthoredHeight * fit.Scale / layout.Y);
+    }
 
     /// <summary>Surface rows per degree of view on the board.</summary>
     public float RowsPerDegree() => BoardFit.AuthoredHeight * AuthoredScale / VerticalDeg;

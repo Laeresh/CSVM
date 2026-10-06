@@ -209,6 +209,71 @@ internal static class XrViewSuites
         ctx.WriteArtifact("test-xr-view-static.txt", report.ToString());
     }
 
+    /// <summary>A presenting cutscene under a headset. The origin rides the authored camera's eye on
+    /// a held level heading, since the cutscene plays on the theater screen.</summary>
+    [Suite("xr-view-cutscene",
+        "under a headset a presenting cutscene's camera stands the origin at its eye on the level heading the seat had as the cutscene took the camera, held to 0.01 degree while the authored camera turns and travels through three shots, with one cut as it takes the camera and none on the cutscene's own shots; another owner's camera with no cutscene is still taken by its heading, the control; and the hand-back returns the seat")]
+    internal static void XrViewCutscene(TestContext ctx)
+    {
+        var report = new StringBuilder();
+        bool flown = WithHeadsetFlight(ctx, PilotViewMode.Cockpit, TurnHold, XrChase.Rigid, (clock, plane, rig, _) =>
+        {
+            var cuts = new List<string>();
+            void OnCut(string why) => cuts.Add(why);
+            bool cutscene = true;
+            rig.CutscenePlays = () => cutscene;
+            rig.Cut += OnCut;
+            try
+            {
+                Settle(clock, plane, rig);
+                cuts.Clear();
+                var seatHeading = XrMount.Level(rig.Origin.GlobalBasis);
+                var shots = new[]
+                {
+                    new Transform3D(new Basis(Vector3.Up, 0.9f) * new Basis(Vector3.Right, -0.5f) * new Basis(Vector3.Back, 0.4f), new Vector3(40f, 15f, -30f)),
+                    new Transform3D(new Basis(Vector3.Up, -1.7f) * new Basis(Vector3.Right, 0.3f), new Vector3(-60f, 5f, 20f)),
+                    new Transform3D(new Basis(Vector3.Up, 2.8f) * new Basis(Vector3.Back, -0.7f), new Vector3(10f, 60f, 90f)),
+                };
+                plane.CameraOwned = true;
+                float worstDeg = 0f, worstM = 0f;
+                foreach (var shot in shots)
+                {
+                    var pose = new Transform3D(shot.Basis, plane.GlobalPosition + shot.Origin);
+                    ctx.Camera.GlobalTransform = pose;
+                    Step(clock, plane, rig);
+                    worstDeg = Mathf.Max(worstDeg, TurnDeg(seatHeading, rig.Origin.GlobalBasis));
+                    worstM = Mathf.Max(worstM, rig.Origin.GlobalPosition.DistanceTo(pose.Origin));
+                }
+
+                report.AppendLine($"cutscene: screening={rig.Screening}, heading off the seat's by {worstDeg:0.####} deg, eye off the camera by {worstM * 1000f:0.###} mm, cuts {string.Join("; ", cuts)}");
+                ctx.Check(rig.Screening, $"the origin stands for the theater screen while the cutscene presents");
+                ctx.Check(worstDeg < PoseTolDeg && worstM < PoseTolM,
+                    $"at the authored camera's eye on the seat's level heading through every shot ({worstM * 1000f:0.###} mm, {worstDeg:0.####}° worst)");
+                ctx.Check(cuts.Count == 1, $"with one cut as the cutscene takes the camera and none on its shots ({string.Join("; ", cuts)})");
+
+                cutscene = false;
+                var owned = new Transform3D(shots[1].Basis, plane.GlobalPosition + shots[1].Origin);
+                ctx.Camera.GlobalTransform = owned;
+                Step(clock, plane, rig);
+                bool heading = rig.Origin.GlobalBasis.IsEqualApprox(XrMount.Level(owned.Basis));
+                report.AppendLine($"control: screening={rig.Screening}, taken by its heading={heading}");
+                ctx.Check(!rig.Screening && heading, $"control: another owner's camera with no cutscene is taken by its own heading");
+
+                plane.CameraOwned = false;
+                Step(clock, plane, rig);
+                ctx.Check(!rig.Screening && rig.Anchor == XrAnchor.Seat, $"the hand-back returns the seat (read {rig.Anchor})");
+            }
+            finally
+            {
+                plane.CameraOwned = false;
+                rig.Cut -= OnCut;
+                rig.CutscenePlays = null;
+            }
+        });
+        ctx.Check(flown, $"the cockpit view builds an aircraft to fly");
+        ctx.WriteArtifact("test-xr-view-cutscene.txt", report.ToString());
+    }
+
     // The cycle key three times from Cockpit: Nose, Chase, Cockpit, each press one cut.
     private static void CycleSortie(TestContext ctx, GameClock clock, FlightController plane, XrRig rig,
         StringBuilder report)
@@ -294,7 +359,7 @@ internal static class XrViewSuites
         }
     }
 
-    // A camera another owner drives (a cutscene, the spectator) is taken by its heading alone.
+    // A camera another owner drives (the spectator, photo mode) is taken by its heading alone.
     private static void OwnedSortie(TestContext ctx, GameClock clock, FlightController plane, XrRig rig,
         StringBuilder report)
     {

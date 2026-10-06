@@ -136,6 +136,26 @@ public class TheaterLayoutTests
         Assert.Equal(target.Y, hit.Value.Y, 4);
     }
 
+    // A cutscene plays where the 800x600 board stands, the seat's height and 4:3 on every layout.
+    // Each eye's render draws it at the boards' two texels per authored pixel.
+    [Fact]
+    public void ACutscenePlaysOnTheBoardsOwnRect()
+    {
+        var seat = TheaterLayout.Default;
+        foreach (var layout in new[] { SimEye, HeadsetEye, Window })
+        {
+            var rect = TheaterLayout.CutsceneRect(layout);
+            var size = seat.SizeM(layout);
+            Assert.Equal(seat.HeightM, rect.Size.Y * size.Y, 4);
+            Assert.Equal(4f / 3f, rect.Size.X * size.X / (rect.Size.Y * size.Y), 4);
+            Assert.Equal(0.5f, rect.Position.X + (rect.Size.X * 0.5f), 4);
+            Assert.Equal(0.5f, rect.Position.Y + (rect.Size.Y * 0.5f), 4);
+        }
+
+        Assert.Equal(new Vector2I(1600, 1200), TheaterLayout.CutsceneSize);
+        Assert.Equal(new Rect2(0f, 0f, 1f, 1f), TheaterLayout.CutsceneRect(Vector2.Zero));
+    }
+
     [Fact]
     public void ARayAwayFromOrBesideTheScreenLandsNowhere()
     {

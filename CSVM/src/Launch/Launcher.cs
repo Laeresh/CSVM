@@ -876,10 +876,16 @@ public partial class Launcher : Node3D
             // A stereo root draws no canvas layer, so every board, menu and cinema built from here
             // on draws on the screen instead. A flight is on view once its first frame is ready.
             var rig = _xr.Rig;
+            // A presenting cutscene plays on the screen as a stereo pair, converged on its letterbox.
+            rig.CutscenePlays = () => _session?.Cutscene is { Playing: true, Presenting: true };
             _theater = UI.Boards.TheaterScreen.Build(
                 GetViewport(), _camera, () => rig.Origin.GlobalTransform,
                 () => rig.Pane != null && _session is { InSession: true, FirstFrameReady: true },
-                eyeFeed: true);
+                eyeFeed: true,
+                cutscene: () => rig is { Screening: true, Pane: { } pane } && _session?.Cutscene is { } film
+                    ? new UI.Boards.TheaterCutscene(pane.Camera, UI.Boards.StereoPair.ConvergenceM(Mathf.Abs(film.CardBox.GetCenter().Z)))
+                    : null,
+                interocular: () => XrEyeFeed.InterocularM);
             AddChild(_theater);
             // The hand controllers' laser pointer on it, since the desktop mouse cannot reach the
             // eye-size layout a stereo root lays its 2D out in.

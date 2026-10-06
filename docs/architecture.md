@@ -382,9 +382,10 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/Boards/HeadLockedQuads.cs`, a stereo session's whiteout, flash, sun wash and mission-end fade as head-locked quads copying the flat layers' colours.
-- `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards and cinemas on a quad ahead of the seated eye, in a dark surround or over a dimmed flight.
+- `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards, cinemas and cutscenes on a quad ahead of the seated eye, in a dark surround or over a dimmed flight.
 - `src/UI/Boards/CanvasRehost.cs`, the root's canvas layers of chosen numbers drawn into a SubViewport, their controls left in the root's tree.
-- `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers and pointer hit, engine-free.
+- `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers, cutscene rect and pointer hit, engine-free.
+- `src/UI/Boards/StereoPair.cs`, the 3D-cinema pair a cutscene plays as on the theater screen: eye cameras, converging frusta and the parallax law, engine-free.
 - `src/UI/Boards/TheaterPointer.cs`, the hand controllers' laser on the theater screen: beam, dot, trigger clicks pushed into the root, and the override of the one pointer source.
 - `src/UI/Boards/ScreenPointer.cs`, the one pointer the polled readers take: the desktop mouse, or the laser while it stands in.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.

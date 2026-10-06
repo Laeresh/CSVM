@@ -580,7 +580,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
 skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
-by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names. `HeadsetLayer` carries the theater screen and laser, which a picture camera (the stereo cutscene's) leaves out.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -611,14 +611,14 @@ is depth-tested at the seat clearance, which keeps the in-world interior clear o
 cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
 
 ## src/UI/Boards/TheaterScreen.cs
-A stereo session's theater screen: the menus, boards, load screens and cinemas on a quad ahead of the
+A stereo session's theater screen: the menus, boards, load screens, cinemas and cutscenes on a quad ahead of the
 seated eye, in the XR origin's frame and placed from `Launch/XrEyeFeed.cs` as the stereo cockpit is.
 `CanvasRehost.cs` moves every root canvas layer from `HudLayers.Board` up into its SubViewport, while
 the controls keep the root's layout and input. Its geometry and resolution are `TheaterLayout.cs`.
 With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
-or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %.
-Its render priorities sit over `HeadLockedQuads`' fade. `Launch/Launcher.cs` builds it beside
-`XrSession`; the hand controllers' laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
+or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board. The world behind that surround is still drawn.
+Its geometry stands on `SplitScreen.HeadsetLayer`, which the pair leaves out, so it never draws into its own picture. Its render priorities sit over `HeadLockedQuads`'
+fade. `Launch/Launcher.cs` builds it beside `XrSession`; the laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
 
 ## src/UI/Boards/CanvasRehost.cs
 Draws the root viewport's canvas layers of chosen numbers into a SubViewport through
@@ -631,9 +631,19 @@ for the boards; the cockpit-locked HUD panel is the next user.
 The theater screen's seat, size and resolution, engine-free: where the quad stands in the XR origin's
 frame, how big it is for a given 2D layout (the board `BoardFit` inscribes is the seat's height),
 the surface size at two texels per authored board pixel, which canvas layers it shows and which raise
-it in flight, where a pointer ray meets it and where a screen point stands (`PointAt`). Under a
-stereo root the layout is one eye's render target, sized by the runtime. Pinned by
-`CSVM.Tests/TheaterLayoutTests.cs`.
+it in flight, where a pointer ray meets it and where a screen point stands (`PointAt`). A cutscene
+plays in the inscribed board's rect (`CutsceneRect`), each eye drawn at `CutsceneSize`, the board's
+4:3 at the same two texels. Under a stereo root the layout is one eye's render target, sized by the
+runtime. Pinned by `CSVM.Tests/TheaterLayoutTests.cs`.
+
+## src/UI/Boards/StereoPair.cs
+The 3D-cinema pair a cutscene plays as on the theater screen, engine-free, and `TheaterCutscene`, the
+camera and convergence the session hands the screen. Two cameras stand on the authored one, the
+runtime's interocular distance apart along its right axis, frusta shifted to meet the authored camera's at the
+convergence, so that depth lands on the screen plane. It converges on the letterbox card (7.5 m): the bars frame the window
+on the screen plane and the scene recedes behind it. On the default seat, framed at 55.76°, infinity lies 12.1 mm behind
+(0.6 % of the width) and appears 3.1 m away; a point 3 m from the camera stands out at 1.9 m. Converging at 1.45 m
+instead makes the screen an undistorted window but sinks the bars 13 m deep. `ConvergenceOfCard` is the knob.
 
 ## src/UI/Boards/TheaterPointer.cs
 The hand controllers' laser on the theater screen: a ray from one hand's aim pose
