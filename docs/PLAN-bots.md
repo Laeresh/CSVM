@@ -891,7 +891,7 @@ skipped (`AiRearmOrderTests` 11), engine 11 passed / 0 failed (every `net-bot-*`
 every run. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1`, `CheckEncoding.ps1` and `CheckItemIds.ps1`
 clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the plan tree (aa70eec5, with the respawn fixes 84bad29a, 193e0c74 and 932d4d3b): build, units 6370 passed / 0 failed / 3 skipped, engine 543 passed / 0 failed / 0 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** Never put the guns back into the trigger: the user flies back only for rockets. A pylon
 built with no capacity carries nothing; counting it as empty would send a bot whose real pylons are
@@ -983,7 +983,7 @@ the local bot in all four cells. Able-to-fail: with the two lines removed from `
 skipped, engine 8 passed / 0 failed; engine errors clean on every run. `CheckCommentCaps.ps1`,
 `CheckDocEntries.ps1`, `CheckEncoding.ps1` and `CheckItemIds.ps1` clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the plan tree (aa70eec5, with the respawn fixes 84bad29a, 193e0c74 and 932d4d3b): build, units 6370 passed / 0 failed / 3 skipped, engine 543 passed / 0 failed / 0 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** Never set the override or the wingman rule in `PreparePilot`: Instant Action and the
 campaign fly the decoded single-player gate, the roll. Keep drawing the dice under the override, or
