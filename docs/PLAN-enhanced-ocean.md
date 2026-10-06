@@ -53,7 +53,7 @@ capture agree through `csky_time`.
 | # | The wrong claim | How it died |
 |---|---|---|
 | 1 | The ocean reads darker than the flat sea because its colour pipeline differs (vertex colour or texture linearisation). | With waves, foam and detail mix neutralised and roughness at the sheet's 0.25, the ocean matched the flat sea to 0.65/255 mean luminance over the sea region. The darkening came from low roughness (0.07) and a 35 % texture mix. |
-| 2 | The low-pass frame cost is the grid's vertex count or the wave arithmetic. | With `--no-ssr` the low pass costs 7.8 ms against the flat sea's 6.5 ms; with SSR on it is 18.4/20.5 ms against 13.4 ms. Screen-space reflection over the wavy surface is most of it. |
+| 2 | Screen-space reflection over the wavy surface is most of the ocean's low-pass cost (the prototype read 18.4/20.5 ms against the flat sea's 13.4 ms, and 7.8 against 6.5 ms with `--no-ssr`). | Those runs measured the crash splash and a shared GPU: the low-pass pose with no input flies into the sea at about sim frame 280, inside the windows read from frame 240. Held at about 22 m (`--hold=0.04,0,0,0.7`) on an idle GPU, the ocean adds 1.09 to 1.15 ms with SSR and 1.06 to 1.12 ms without (B11). |
 
 ## Ground rules
 
@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, cost
 
-11. ☐ Bring the low-altitude SSR cost within budget
+11. ☑ Bring the low-altitude SSR cost within budget
 12. ☑ Measure and budget the Deck
 13. ☑ Cache or speed up the mask bake
 14. ☐ No secondary viewport draws the ocean grid it does not need
@@ -261,7 +261,36 @@ judgement at the controls is still owed.
 
 # Wave B, cost
 
-## B11 ☐ Bring the low-altitude SSR cost within budget
+## B11 ☑ Bring the low-altitude SSR cost within budget
+
+**Landed.** No code change: the ocean's low-pass cost is already inside Decision 11's 1.5 ms, and
+SSR is not where it goes. The low-pass pose with no input flies into the sea at about sim frame
+280, so windows read from frame 240 measured the crash splash (draws fall from about 1,370 to 30-57
+and `gpu_ms` reaches 9-13 ms). The prototype's and C23's low-pass numbers carry that, and the
+prototype's also ran on a shared GPU. With `--hold=0.04,0,0,0.7` the plane holds about 22 m.
+`gpu_ms` at 1920x1080 with `--perf --frames=600 --no-vsync` and `--screenshot` (so `--det`), mean
+over windows from sim frame 240, ocean minus `--no-ocean` in the same round, arm order rotated each
+round. Every round counted ran with no other Godot or cargo process and the GPU under 12 % busy
+before and after each run:
+
+| Pose | Quiet rounds | SSR on | `--no-ssr` |
+|---|---|---|---|
+| Low pass, held | 4 | +1.09, +1.09, +1.10, +1.15 ms | +0.68, +1.06, +1.12, +1.11 ms |
+| Cruise | 3 (2 with `--no-ssr`) | +0.87, +0.44, +0.47 ms | +0.54, +0.44 ms |
+| C3 coast (`--pos=-10700,250,-5800 --direction=1,0,0 --look=0,-0.3`) | 3 | +0.54, +0.50, +0.56 ms | +0.55, +0.49, +0.44 ms |
+
+The held low pass reads 2.78-2.86 ms with the ocean against 1.69-1.72 ms without. The ocean costs
+the same with SSR off, so reflection rays over the wavy normals are not the cost. One bisect round
+on the held low pass: the fragment wave loops off saves about 0.15 ms and the vertex wave loop off
+nothing measurable, so most of the 1.1 ms is the grid itself (about 267k triangles, drawn in the
+depth prepass and again in the colour pass). Under `--det` the frame loop holds 120 fps with
+`--no-vsync` too, so every arm used it; a single pane draws no spyglass disc (no `[perf] spyglass`
+line), and prims read 280k with the ocean against 12k without. Run-to-run noise on one arm is about
+0.3 ms, so a single round does not settle a delta near the budget.
+
+**Verified.** Measurement only; `Ocean.cs` is byte-identical to the plan branch. Every counted round passed the quiet gate before and after each run (no other godot, cargo or rustc process, GPU under 12 % busy). Rounds during the user's game and during another session's test batches were discarded; the two remaining bisect arms (sea-state field off, 192-segment grid) were skipped for that reason.
+
+**Original approach (kept for reference).**
 
 **Goal.** The ocean's low-pass cost over the flat sea is at most 1.5 ms (Decision 11), with no visible loss the user objects to.
 
