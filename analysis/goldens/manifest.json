@@ -193,6 +193,13 @@
       "hash": "a35c19adfa5f4beedc2671a39af2765e",
       "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn from the XR origin's frame by the render thread's eye feed; frame-sensitive 11.92 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
+    },
+    {
+      "name": "c3-flare-xr-sim",
+      "frame": 120,
+      "hash": "1c9646e4e8c092c2e95714682f3431ab",
+      "exercises": "The world flare in stereo from the nose view: the core and all three rings at sky depth in both eyes, the sun wash on its head-locked quad over the C3 sky and sea; frame-sensitive 15.38 %.",
+      "args": ["--chapter=C3", "--plane=player_bhawk", "--pos=0,1200,0", "--direction=0.765,0.469,-0.441", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     }
   ]
 }

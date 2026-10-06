@@ -212,6 +212,12 @@ member, and it does not go here.
   on the flat camera; the stereo interior registered within 0.04 px of the flat frame in every
   region at 0 and 20 km, while the earlier stereo path differed by 0.1 px through its depth bias.
 
+- **SHOT-46**, **A canvas layer composites after the tonemap and a world quad before it, so compare a
+  canvas effect with its world twin in the Original look, where the tonemap is linear; under
+  Enhanced the A/B measures AgX, not the port.** The world flare matched the screen rig on C3 to 0.22 %
+  of pixels over 2 levels in Original, while under Enhanced its rings read 4 to 9 levels over the sky
+  against the screen rig's 6 to 21.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the

@@ -600,6 +600,15 @@ envelope without dropping what is displayed. The envelope is attack, sustain and
 fractions of the duration, stepped on sim time, with a hard cut at the end. `Composite` is the
 paint-time rule `ScreenFlash` applies. Decode: [../org/ordnanceTypes.md](../org/ordnanceTypes.md).
 
+## src/UI/Boards/HeadLockedQuads.cs
+A stereo session's full-view colour layers, which a stereo viewport cannot draw as canvas layers: the
+cloud whiteout, the `ScreenFlash` wash, the sun wash and the mission-end fade, one quad each copying
+its flat layer's colour every frame, so the flat layers stay untouched. The shader places each quad in
+view space, locked to the head, composited in gamma space as the canvas is. Its render priorities are
+the stereo twin of `HudLayers`, with a slot kept for the cockpit-locked HUD panel. The whiteout alone
+is depth-tested at the seat clearance, which keeps the in-world interior clear of it as the flat
+cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
+
 ## src/UI/Overlays/ObjectivesHud.cs
 The flown campaign mission's objectives readout, drawn on the pause screen and nowhere else: the
 original keeps its objectives on the pause parchment and leaves the flight HUD to the gauges. Reads

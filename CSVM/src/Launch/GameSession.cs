@@ -108,6 +108,9 @@ public partial class GameSession : Node3D
     private readonly Camera3D _camera;
     private readonly DirectionalLight3D _sun;
     private readonly Godot.Environment? _env;
+    // The stereo path's tracked head, null in a flat launch. A session given one draws its lens
+    // flare and full-view colour layers in the world, since a stereo viewport draws no canvas layer.
+    private readonly Node3D? _xrHead;
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
     // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
     private readonly OrbitCamera _orbit;
@@ -194,6 +197,8 @@ public partial class GameSession : Node3D
     // The FBFX_COLOR_FROM_TO wash, one ramp per rendered view, painted into the pane(s) the burst
     // was near.
     private UI.Boards.ScreenFlash? _screenFlash;
+    // The stereo session's full-view colour layers (_xrHead), null in a flat session.
+    private UI.Boards.HeadLockedQuads? _headQuads;
     // The active smoke screens (D18): laid by the SMOKE_SCREEN fire path, walked over every rig
     // and AI plane each sim step, washing humans through _screenFlash and stunning AI pilots.
     private SmokeScreens? _smokeScreens;
@@ -348,6 +353,7 @@ public partial class GameSession : Node3D
             TraceSteps = _spec.DebugNetTrace,
         };
         _camera = ctx.Camera;
+        _xrHead = ctx.XrHead;
         _orbit = ctx.Orbit;
         _sun = ctx.Sun;
         _env = ctx.Env;
@@ -412,6 +418,14 @@ public partial class GameSession : Node3D
     /// <summary>The spyglass discs' shadowless copy of the sun, null outside an Enhanced flight.
     /// Read by the suite.</summary>
     internal Flight.Camera.SpyglassSun? SpyglassSun => _spyglassSun;
+
+    /// <summary>The stereo session's head-locked colour quads, null in a flat session. Read by the
+    /// suites.</summary>
+    internal UI.Boards.HeadLockedQuads? HeadQuads => _headQuads;
+
+    /// <summary>The world flare rig, null where the session drew the screen rig or no flare. Read by
+    /// the suites.</summary>
+    internal WorldFlareRig? WorldFlare => _sky?.WorldFlare;
 
     /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _wire.Seats;
@@ -530,7 +544,7 @@ public partial class GameSession : Node3D
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
             _ambience, PlayerPositionsSnapshot, AnyPilotFirstPerson);
         _probes = new SessionProbes(_spec, _probeRunner, _worldRoot, code => GetTree().Quit(code));
-        _sky = new SkyStage(_spec, _worldRoot, _camera, _sun, _env, _ambience, _viewers, _rigs, GatedObjects);
+        _sky = new SkyStage(_spec, _worldRoot, _camera, _sun, _env, _ambience, _viewers, _rigs, GatedObjects, _xrHead);
         _labs = new InspectionLabs(new InspectionLabs.Inputs
         {
             Spec = _spec,
@@ -575,6 +589,11 @@ public partial class GameSession : Node3D
         _screenFlash = UI.Boards.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
         _worldRoot!.AddChild(_screenFlash);
         _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
+        if (_xrHead != null)
+        {
+            BuildHeadQuads();
+        }
+
         // The smoke screens ride the same wash and read the roster through a closure, since the
         // rigs and the AI planes are both built later than this. player.json missing falls back
         // to the static image's tunables with a warning rather than aborting the launch.
@@ -1043,6 +1062,7 @@ public partial class GameSession : Node3D
         // After the weather tick: that is where each rig's dome is re-centred on its camera, and
         // the flare reads the sun node inside it.
         _sky?.Flare?.Tick(delta);
+        _sky?.WorldFlare?.Tick(delta);
 
         // One mirrored-tile window serves every pane (the union of the rings around each player),
         // so two players at opposite edges both get continued terrain. A no-op until one of them
@@ -2735,6 +2755,24 @@ public partial class GameSession : Node3D
             });
         }
         Log.Info("flight", $"splitscreen: {count} panes sharing one world ({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
+    }
+
+    // The stereo session's full-view colour layers, each a head-locked quad copying its flat
+    // layer's colour off the first pane, since stereo flies one seat. Read through closures, as the
+    // whiteout, the flare and the director are all built later than this.
+    private void BuildHeadQuads()
+    {
+        var quads = UI.Boards.HeadLockedQuads.Build();
+        _worldRoot!.AddChild(quads);
+        var clear = new Color(0f, 0f, 0f, 0f);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.Whiteout,
+            () => _rigs.Count > 0 ? UI.Boards.HeadLockedQuads.CanvasColour(_rigs[0].Whiteout) : clear);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.Flash, () => _screenFlash?.CurrentFor(0) ?? clear);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.SunWash, () => _sky?.WorldFlare?.WashFor(0) ?? clear);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.MissionEndFade,
+            () => new Color(0f, 0f, 0f, _campaign?.LeavingFade ?? 0f));
+        _headQuads = quads;
+        Log.Info("flight", $"stereo: whiteout, flash, sun wash and mission-end fade drawn as head-locked quads");
     }
 
     // The shadow level's fallback follows the pane count (ShadowQualitySetting.ResolveForPanes). An

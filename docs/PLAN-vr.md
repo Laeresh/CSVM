@@ -217,7 +217,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
 12. ☐ C12 The cockpit-locked HUD panel
 13. ☐ C13 World-tied markers and the edge-marker ring
-14. ☐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
+14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 ### Wave D, cutscenes, comfort and performance
 
@@ -1279,7 +1279,7 @@ scaled with distance to hold an angular size; the edge ring hangs on the XR came
 
 **⚠ Traps.** <TODO: none known yet.>
 
-## C14 ☐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
+## C14 ◐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 **Goal.** Two parts. (1) The sun's lens flare is computed in angles and drawn in the world: the core
 and the three ghost rings as billboards at sky-dome distance along the line from the sun direction
@@ -1288,7 +1288,72 @@ adopts it once the author has judged it against the current rig; Original keeps 
 rig unchanged. (2) The remaining full-pane canvas effects (the cloud whiteout, `ScreenFlash`, the
 mission-end fade) get a VR form as head-locked quads near the eye.
 
-**Evidence (confidence: lead-only).** `Session/World/LensFlareRig.cs` draws four additive
+**Outcome: built; the Enhanced adoption and the VR ring default are the author's.** The world rig
+(`Session/World/WorldFlareRig.cs`) draws every stereo session's flare and, behind `--world-flare`,
+a flat Enhanced one; flat Enhanced and Original stay on `LensFlareRig` by default, which is
+unchanged. The whiteout, `ScreenFlash`, the sun wash and the mission-end fade have head-locked
+stereo quads (`UI/Boards/HeadLockedQuads.cs`). The montage is in `.scratch/C14/` (below).
+
+**Evidence (confidence: traced to code and measured for placement, size, depth and the stereo
+quads; the look is the author's judgement).**
+- **Placement is the screen rig's law in angles.** An element at fraction f sits at
+  `(1 − f) × t` in the view's tangent plane, t being the sun's tangent point, which is the great
+  circle from the sun to the view axis; the shader places it in view space at 95 % of the sun's
+  depth, so it needs no CPU basis and rides the head with no lag. The suite `world-flare-pixels`
+  projects all four elements through a live `Camera3D` on a rotated view at 20 km at the chase
+  (46.8° V) and the cockpit (64.37° V) angle: worst offset from the screen rig's pixel 0.0001 px,
+  worst width error 0.0001 px; a 0.2 % size perturbation fails it at 0.33 px.
+- **Sizing: flat from the live FOV, VR from the reference mapping.** A flat pane reads
+  `tan(Fov/2)` off the camera (KeepHeight, or converted under KeepWidth), so the original's pixel
+  size holds in Cockpit and Chase alike, the Enhanced speed widen included. VR takes the external
+  base `CameraController.ExternalFovDeg` (46.8° V) and a 16:9 frame for its in-view gate and wash
+  falloff, so the stereo flare shows over the cone a flat chase pane shows it.
+- **Compositing.** The canvas adds in gamma space after the tonemap, so each element adds its
+  texture bytes to the opaque picture in gamma space and hands the linear blend the difference.
+  With the switch forced on in Original (a scratch edit, removed), the world rig matched the screen
+  rig on the C3 off-centre chase pose to 0.22 % of pixels over 2 levels, 0.06 % over 8 (the
+  residual is the core's depth-tested edge). Under Enhanced the AgX tonemap acts on the world rig
+  and not on the canvas: on the same pose the rings read 4.2 / 9.1 / 3.9 levels over the sky
+  against the screen rig's 11.0 / 20.8 / 6.1, and the core rolls off below 255 with a glow halo
+  (verification SHOT-46). That difference is the look the montage puts to the author.
+- **Occlusion.** The core is depth-tested, so the own airframe in chase and the C3 crater rim cut it
+  partway (montage rows 2 and 6). The rings keep the screen rig's one ray to the sun's centre for
+  on/off, skip depth testing, and discard pixels whose scene depth is nearer than 1.4 m (the seat
+  clearance) so an in-world interior covers them as the flat cockpit pass does.
+- **Stereo depth.** C3 cockpit pose under `--xr-sim=pitch=-6,eye=960x960,fov=70`
+  (`--direction=0.5,0.707,-0.5 --view=cockpit --no-cockpit-pass`, frame 60): the core's plateau
+  centroid sits at eye-local x 477.87 in the left eye and 477.85 in the right, 0.02 px of
+  disparity at 685 px/rad, so it reads at sky depth, on the dome's own sun disc (2 px of plateau
+  noise), against about 100 px for the gunsight in front of it. No sprite floats at the face.
+- **The pane quads.** Each quad copies its flat layer's colour (`CanvasColour` honours a lowered
+  canvas layer, so a presenting cutscene hides the stereo whiteout and flare too) and is placed in
+  view space, 8 × its distance across, past any eye's frustum. Order is the flat one: flare
+  100-103 < whiteout 110 < flash 111 < HUD panel 115 (kept for C12) < sun wash 120 < fade 121.
+  Whiteout on C1 inside the band (`--pos=-6144,1000,-6144 --direction=0,0,-1 --view=cockpit
+  --no-cockpit-pass --xr-sim`, frame 30) against the same run with `--no-fog`: 80 % of each eye's
+  window region moved and 0.7 % of the panel box, in both eyes (`xr-c1-whiteout-diffmask.png`;
+  `--no-fog` also lifts the world fog, which the interior never takes either).
+  `--debug-wash=1` paints the flash quad full red in both eyes (`xr-c1-flash.png`). The fade quad
+  shares the flash quad's shader and is checked by the suite `head-locked-quads`; no scripted
+  mission end exists to photograph it.
+- **The whiteout keeps the interior clear by depth, not by layer order.** Its quad alone is
+  depth-tested, at the 1.4 m seat clearance: interior geometry nearer along the view axis stays
+  clear, the world beyond whitens. The interior's own wings, where a plane's interior has them,
+  reach past 1.4 m and whiten with the world; a stencil mark on the interior would be exact (B8).
+- Flat goldens unmoved (25 of 25); the new `c3-flare-xr-sim` golden is hash-stable over 12 runs.
+
+**Montage for the author** (`.scratch/C14/`, Enhanced, frame 60, screen rig left, world rig right,
+1:1 crops around the sun under each frame): `montage-C14-overview.png` (all six, half size), and
+`montage-m1-chase-centred.png`, `montage-m2-chase-occluded-by-plane.png`,
+`montage-m3-chase-offcentre.png`, `montage-m4-cockpit-centred.png`,
+`montage-m5-cockpit-offcentre.png`, `montage-m6-freecam-ridge-occluded.png`. Poses:
+`--chapter=C3 --plane=player_bhawk --pos=0,1200,0 --hold=0,0,0,0.6` with `--direction=` 0.586,0.559,
+-0.586 / 0.509,0.695,-0.509 / 0.785,0.423,-0.453, and with `--view=cockpit` 0.5,0.707,-0.5 /
+0.765,0.469,-0.441; the ridge pose is `--freecam --chapter=C3 --pos=-4484,390,-6310
+--direction=0.586,0.559,-0.586`. Each pair re-runs with `.scratch/C14/C14_shot.ps1` and
+`C14_montage.py`.
+
+**Background (the survey).** `Session/World/LensFlareRig.cs` draws four additive
 `TextureRect` sprites on `HudLayers.FlareSprites` at fractions 0, 0.5, 0.9 and 2.0 of the
 sun-to-screen-centre vector (`:46-60`), sized in pixels against a 720 px reference height (`:30`),
 plus a white `ColorRect` wash on `HudLayers.SunWash` above the HUD whose opacity falls off linearly
@@ -1306,15 +1371,26 @@ building in their direction must not hide. Size the elements from the live camer
 so the original's fixed pixel size holds in Cockpit (80° H) as well as in chase; in VR size them from
 the reference external FOV mapping. Gate selection on graphics mode and VR, leaving the Original path
 on `LensFlareRig` as it is. (2) One head-locked near-quad host for the whiteout, flash and fade,
-nearer than the HUD panel (C12). <TODO: whether the VR flare shows the ghost rings by default, or
-the core and wash only with the ghosts as an option; the author decides at the headset (E21).>
+nearer than the HUD panel (C12).
+
+**Approach (landed).** `Launch/SkyStage.cs` builds `WorldFlareRig` in place of `LensFlareRig` when
+`UsesWorldFlare` holds: a stereo session (the launcher hands `GameSession` the XR head through
+`LauncherContext.XrHead`, read-only from `XrSession.Head`), or `--world-flare` in a flat Enhanced
+session, chosen at the build. A stereo session places the flare for the head's pose and builds
+`HeadLockedQuads`, which follows the whiteout rectangle, `ScreenFlash.CurrentFor(0)`, the world
+rig's wash and the director's `LeavingFade`; the flat canvas layers are untouched. Adopting the world
+rig in flat Enhanced is one line in `UsesWorldFlare` once the author has judged the montage.
+**Owed to the author:** the montage judgement (Decision 16), and at the headset (E21) whether the VR
+flare keeps the rings, which it shows by default now, or shows the core and wash only.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** Original-mode goldens and any C2/C3 flare capture unmoved. For Enhanced adoption, a
-side-by-side montage of the current and the world rig on C3 in Chase and in Cockpit, put to the
-author before the world rig replaces the screen rig in Enhanced. <TODO: an `--xr-sim` per-eye capture
-of the flare on C3; the whiteout and fade checks in VR.>
+**Verify.** Original-mode goldens and every existing golden unmoved (25 of 25 hash-identical). The
+montage above for the Enhanced adoption. `world-flare-pixels` and `head-locked-quads` (engine
+suites) and `CSVM.Tests/WorldFlareTests.cs` (the law, the selection rule, the flag, and the spec
+pinned to `LensFlareRig`'s private copy by reflection). The golden `c3-flare-xr-sim` (C3, nose view,
+`--xr-sim`, frame 120, frame-sensitive 15.38 %, 86 % of its pixels move over 8 levels without the
+flare): the core, the three rings and the wash quad in both eyes.
 
 **⚠ Traps.** Do not change `LensFlareRig` itself: it is the Original path and carries the footage
 calibration. An angle-sized rig drawn at a fixed angle shrinks in Cockpit view against the original's
@@ -1322,7 +1398,15 @@ fixed pixel size; size from the live FOV. A depth-tested ghost is wrong, only th
 occluded. The whiteout sits under the cockpit pass so the interior stays clear
 (`docs/architecture/Session.md`); in VR the interior is in the main world (B8), so that ordering has
 to be rebuilt another way. Enhanced adoption is a look judgement and needs the montage, never a
-luminance distance alone.
+luminance distance alone. Compare the two rigs' compositing in the Original look: under Enhanced
+the A/B measures AgX (SHOT-46). ⚠ Do not pin a stereo flare golden in Cockpit view: with the
+flare drawn, three gauge-face pixels of the in-world interior flip by one level between runs (a
+third of runs, render thread safe or separate; nine runs without the flare never flipped), which
+the nose-view golden avoids and B8 inherits. A C3 `--xr-sim` probe exits with an access violation
+or a C# finalizer fatal after saving its shot in about half the runs, with the flare or without it
+and with this item's code switched off; on `--render-thread safe` it exited 0 in 28 of 28.
+
+**Verified.** <pending orchestrator run>
 
 # Wave D, cutscenes, comfort and performance
 

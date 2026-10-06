@@ -373,6 +373,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/ChromeSize.cs`, the rungs of that ladder, largest first, from a board's page heading down to an in-flight marker label.
 - `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
+- `src/UI/Boards/HeadLockedQuads.cs`, a stereo session's whiteout, flash, sun wash and mission-end fade as head-locked quads copying the flat layers' colours.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
@@ -662,7 +663,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
-- `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.
+- `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare (screen rig or world rig).
 - `src/Launch/SessionProbes.cs`, the build's scripted probes that report and quit, and the `--destroy=`/`--debug-objective=` build-time forces.
 - `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, flight labs and debug overlays.
 - `src/Launch/SessionBoards.cs`, the whole-window boards over a flight: the pause board and options leaf, the results boards, the menu readers and photo mode.
@@ -744,6 +745,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
+- `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core; every stereo session, and flat Enhanced under `--world-flare`.
 - `src/Session/World/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/World/CutsceneController.cs`, the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.
 - `src/Session/World/ScriptedPathVehicles.cs`, one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.

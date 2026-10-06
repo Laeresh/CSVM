@@ -603,3 +603,12 @@ per-rig block, one instance per pane. The per-pane state lives here rather than 
 because an instance is several nodes plus fade state. `--no-flare` suppresses the effect so a
 capture stays usable for unrelated comparisons. The spec is measured from capture footage; method
 and calibration: `git show analysis-archive:analysis/bl-165-lens-flare/FINDINGS.md`.
+
+## src/Session/World/WorldFlareRig.cs
+The same flare drawn in the world: the core and the three rings as quads the shader places in view
+space at sky depth, along the great circle from the sun to the view axis, so in a flat pane each
+lands on the screen rig's pixel at its pixel size whatever the field of view. The core is
+depth-tested, so terrain or a hull covers it gradually; the rings skip the seat. Each element adds in
+gamma space over the opaque picture, as the canvas does. A stereo session always builds it in place
+of `LensFlareRig`, placing it for the tracked head and handing its wash to `UI/Boards/HeadLockedQuads`;
+flat Enhanced builds it only under `--world-flare` (`Launch/SkyStage.cs` chooses at the build).

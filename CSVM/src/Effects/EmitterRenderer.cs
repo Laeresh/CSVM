@@ -47,6 +47,24 @@ public interface IEmitterRenderer
 /// </summary>
 public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 {
+    // The original's DX7 device mixes framebuffer bytes. This alpha makes Godot's linear mix land
+    // on that byte over the opaque background. ⚠ Do not drop it for the raw alpha: a linear-space
+    // mix draws a near-black plume at about half the original's darkening. Keep it a convex mix:
+    // an additive form blows a stack of light sprites out to white. See docs/org/puffer.md.
+    // Internal so the head-locked colour quads composite the same way (UI.Boards.HeadLockedQuads).
+    internal const string GammaMixComposite = """
+            vec3 src_g = csky_linear_to_srgb(clamp(ALBEDO, 0.0, 1.0));
+            vec3 dst_l = clamp(texture(screen_texture, SCREEN_UV).rgb, 0.0, 1.0);
+            vec3 dst_g = csky_linear_to_srgb(dst_l);
+            vec3 out_g = src_g * ALPHA + dst_g * (1.0 - ALPHA);
+            vec3 src_l = csky_srgb_to_linear(src_g);
+            vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+            float span = dot(src_l - dst_l, luma);
+            float moved = dot(csky_srgb_to_linear(out_g) - dst_l, luma);
+            ALBEDO = src_l;
+            ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
+""";
+
     private const string ShaderCode = """
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -140,23 +158,6 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // already reach 1.0 (docs/org/textures.md). A lift without this would cross the glow threshold
     // EnhancedLook.ApplyEnvironment reserves for the fire flipbook.
     private const float EnhancedSmokeCeiling = 0.98f;
-
-    // The original's DX7 device mixes framebuffer bytes. This alpha makes Godot's linear mix land
-    // on that byte over the opaque background. ⚠ Do not drop it for the raw alpha: a linear-space
-    // mix draws a near-black plume at about half the original's darkening. Keep it a convex mix:
-    // an additive form blows a stack of light sprites out to white. See docs/org/puffer.md.
-    private const string GammaMixComposite = """
-            vec3 src_g = csky_linear_to_srgb(clamp(ALBEDO, 0.0, 1.0));
-            vec3 dst_l = clamp(texture(screen_texture, SCREEN_UV).rgb, 0.0, 1.0);
-            vec3 dst_g = csky_linear_to_srgb(dst_l);
-            vec3 out_g = src_g * ALPHA + dst_g * (1.0 - ALPHA);
-            vec3 src_l = csky_srgb_to_linear(src_g);
-            vec3 luma = vec3(0.2126, 0.7152, 0.0722);
-            float span = dot(src_l - dst_l, luma);
-            float moved = dot(csky_srgb_to_linear(out_g) - dst_l, luma);
-            ALBEDO = src_l;
-            ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
-""";
 
     // Enhanced only: the composite clamps ALBEDO to 1.0, which would cut the fire gain's glow,
     // since every puffer sprite alpha-mixes. The overshoot is carried past the clamp and added back.

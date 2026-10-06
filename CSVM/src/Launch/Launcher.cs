@@ -2093,6 +2093,7 @@ public partial class Launcher : Node3D
             CaptureDirector = _captureDirector,
             MasterSeed = _masterSeed,
             Camera = _camera,
+            XrHead = _xr?.Head,
             Orbit = _orbit,
             Sun = _sun,
             Env = _env,
@@ -3651,6 +3652,11 @@ public sealed class LauncherContext
     public required Tooling.CaptureDirector CaptureDirector { get; init; }
     public required ulong MasterSeed { get; init; }
     public required Camera3D Camera { get; init; }
+
+    /// <summary>The stereo path's tracked head (<see cref="XrSession.Head"/>), null in a flat launch.
+    /// A session given one draws its lens flare and full-view colour layers in the world.</summary>
+    public Node3D? XrHead { get; init; }
+
     public required OrbitCamera Orbit { get; init; }
     public required DirectionalLight3D Sun { get; init; }
     public required Godot.Environment? Env { get; init; }
