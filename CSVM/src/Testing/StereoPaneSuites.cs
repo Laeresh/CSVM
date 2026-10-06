@@ -86,8 +86,10 @@ internal static class StereoPaneSuites
             ctx.Check(quads.QuadOf(HeadLockedQuads.Tier.Whiteout).Visible
                 && quads.ColourOf(HeadLockedQuads.Tier.Whiteout) == rect.Color,
                 $"the whiteout quad shows the canvas colour {quads.ColourOf(HeadLockedQuads.Tier.Whiteout)}");
-            var tint = ((ShaderMaterial)quads.QuadOf(HeadLockedQuads.Tier.Whiteout).MaterialOverride).GetShaderParameter("tint").AsColor();
-            ctx.Check(tint == rect.Color, $"and hands it to the shader as the tint ({tint})");
+            var tint = ((ShaderMaterial)quads.QuadOf(HeadLockedQuads.Tier.Whiteout).MaterialOverride).GetShaderParameter("tint");
+            var want = new Vector4(rect.Color.R, rect.Color.G, rect.Color.B, rect.Color.A);
+            ctx.Check(tint.VariantType == Variant.Type.Vector4 && tint.AsVector4() == want,
+                $"and hands it to the shader as the tint, a Vector4 so it is linearised once ({tint})");
             ctx.Check(!quads.QuadOf(HeadLockedQuads.Tier.Flash).Visible
                 && !quads.QuadOf(HeadLockedQuads.Tier.SunWash).Visible
                 && !quads.QuadOf(HeadLockedQuads.Tier.MissionEndFade).Visible,

@@ -1365,7 +1365,9 @@ stay clear while the world whitens, with the glass over the white.
 - Do not select the plate by node: it shares its node with canopy structure.
 - Godot accepts a stencil read only on a material in the alpha pass; keep reads on the quads.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with B8, C10 and the head-locked quads' tint
+fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with clean engine errors,
+goldens 29/29 hash-identical. The headset checks named above are still owed.
 
 ## B9 ☐ Views in VR: rigid chase, nose, head tracking in place of head look
 
@@ -1546,7 +1548,9 @@ two tones.
 - Do not depth-test the screen: in flight it stands behind the dash and would be cut by it.
 - Pass colours to the screen and surround shaders as vectors (SHOT-47).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with B8, C10 and the head-locked quads' tint
+fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with clean engine errors,
+goldens 29/29 hash-identical. The headset checks named above are still owed.
 
 ## C11 ☐ `DeviceKind.Xr`, XR actions and the screen pointer
 

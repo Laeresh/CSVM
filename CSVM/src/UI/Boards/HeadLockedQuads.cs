@@ -141,7 +141,9 @@ public sealed partial class HeadLockedQuads : Node3D
             quad.Mesh.Visible = shows;
             if (shows && c != quad.Shown)
             {
-                quad.Material.SetShaderParameter("tint", c);
+                // A Vector4, not the Color: Godot linearises a Color on a 3D material before the
+                // shader's own sRGB conversion would run a second time (SHOT-47).
+                quad.Material.SetShaderParameter("tint", new Vector4(c.R, c.G, c.B, c.A));
             }
 
             quad.Shown = c;
