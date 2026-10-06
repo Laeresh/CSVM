@@ -95,11 +95,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ The other chapters with a sea at y = 0
 22. ☑ Ship calm zones for every hull and wake
-23. ◐ Swell regularity from altitude
+23. ☑ Swell regularity from altitude
 24. ☐ An Enhanced ocean golden
 25. ☑ The ocean matches the flat sheet at the shore and in fog
-26. ◐ No hole where a mission shows a node hidden at the bake
-27. ◐ Calm zones for mission-animated boats with no wake sheet
+26. ☑ No hole where a mission shows a node hidden at the bake
+27. ☑ Calm zones for mission-animated boats with no wake sheet
 
 ## Dependency and parallelism notes
 
@@ -483,7 +483,7 @@ patrol-boat shot once one is active.
 **⚠ Traps.** M03's intro cutscene holds the camera for the first 40 s of any M03 session, campaign
 or free flight.
 
-## C23 ◐ Swell regularity from altitude
+## C23 ☑ Swell regularity from altitude
 
 **Landed.** The cross-hatch was the four long swell waves (140, 91, 59 and 38 m): a shot with only
 those reproduces it at the C2 350 m pose, one with only the short swell does not, and the chop is
@@ -510,7 +510,19 @@ before, after at C2 350 m, C1B cruise, C1B low pass, C3 coast) and `montage-c23-
 three Enhanced goldens C21 moved move again (`c1-lake-enhanced`, `c5-city-night-enhanced`,
 `c1-rocket-hit-enhanced`); every Original golden holds.
 
-**Verified.** <pending orchestrator run>
+C3's remaining fine diagonal grain had two sources. In mid-distance it was the short swell (26 to
+7.3 m), whose crests the 130 m phase octave left straight; a fine field (`sea_fine`, 40 m grouping
+and 28 m phase, weighted fully from 10 m down and not at all from 40 m up) now bends them. Near the
+plane it was the chop drawn at 2.5 to 4 pixels per wavelength, which aliases into a straight grating;
+the fragment's footprint fade now runs from 4 to 9 pixels instead of 1.5 to 4, and the chop also reads
+a 9 m micro field (`sea_micro`, fragment only). The fragment sums stop at the first faded wave (the
+tables run longest first; `EmitWaves` throws otherwise), pixel-identical. Height statistics hold
+(standard deviation 1.24 m, 99th percentile 2.81 m). `gpu_ms` over `--no-ocean` in the two quiet
+rounds of four: cruise +0.45 to +0.47 ms against +0.43 to +0.44 before, low pass +1.45 to +1.46 ms
+against +1.39 to +1.40, at Decision 11's 1.5 ms edge. The sun glint reads broader and smoother, as
+fewer near-pixel normals break it. Montage `.scratch\c23\montage-c23-grain.png`.
+
+**Verified.** The complete battery on the plan tree with C23 (and its grain follow-up), C26 and C27 merged: units 6337 passed, 3 skipped; engine 529 passed, 2 skipped, errors clean; goldens: the three Enhanced shots the ocean moves (re-pinned at C24), and `c1-cockpit-enhanced` flipped once to `f73c18a2...` straight after the engine stage, then held its pinned hash on two re-runs (C24 owns the flip). The user approved the swell montage and the grain follow-up (low pass +1.45 ms over `--no-ocean`, inside Decision 11's budget).
 
 **Original approach (kept for reference).**
 
@@ -609,7 +621,7 @@ approved (its md5 may move; send the montage).
 **⚠ Traps.** The C1 coast montage at 250 m did not show the seam; the golden's low lake pose did.
 Judge the edge where an opaque coast tile meets the open-sea tile, close and low.
 
-## C26 ◐ No hole where a mission shows a node hidden at the bake
+## C26 ☑ No hole where a mission shows a node hidden at the bake
 
 **Landed.** The base sheet's hide (`csky_ocean_hides_sea` in `csky_ocean.gdshaderinc`) takes the
 fragment's world position and steps aside only where the ocean draws. It reads three globals that
@@ -636,7 +648,7 @@ Evidence, montages in the C26 tree's `.scratch\c26w\` (flat / ocean before / oce
   distance from flat 4.23 to 0.84 levels; C5's zone seam 0.60 to 0.05): slivers past the ocean's edge
   where the sheet hid and no ocean drew now show the sheet.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the plan tree with C23 (and its grain follow-up), C26 and C27 merged: units 6337 passed, 3 skipped; engine 529 passed, 2 skipped, errors clean; goldens: the three Enhanced shots the ocean moves (re-pinned at C24), and `c1-cockpit-enhanced` flipped once to `f73c18a2...` straight after the engine stage, then held its pinned hash on two re-runs (C24 owns the flip). The C3 crater floor after the floodgate drain draws as the flat sheet, where it showed a grey hole.
 
 **Original approach (kept for reference).**
 
@@ -666,7 +678,7 @@ per C3 mission), and re-baking when a node is shown (a full bake mid-flight, cos
 **Verify.** C3 at the crater: shoot the floodgate (or force the def) and capture the floor after the
 drain, with and without `--no-ocean`; no hole. C1B cruise unchanged; `graphics-ocean-switch` green.
 
-## C27 ◐ Calm zones for mission-animated boats with no wake sheet
+## C27 ☑ Calm zones for mission-animated boats with no wake sheet
 
 **Landed.** The hulls come from the bound program, not a name list (`OceanMovers`). A mover is the
 target of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an
@@ -701,7 +713,7 @@ the quay, whose shore fade already calms the water, so the patch the old bake le
 cruise shot stays `3D0FD8B6...`. Goldens: the same three Enhanced shots move as on the tree before this
 item, to the same hashes. Tests: `OceanMoversTests` (event rule, waterline band, sea test, ranking).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the plan tree with C23 (and its grain follow-up), C26 and C27 merged: units 6337 passed, 3 skipped; engine 529 passed, 2 skipped, errors clean; goldens: the three Enhanced shots the ocean moves (re-pinned at C24), and `c1-cockpit-enhanced` flipped once to `f73c18a2...` straight after the engine stage, then held its pinned hash on two re-runs (C24 owns the flip). The user accepted the boats montage (C2 sailboat3, tugandbarge01).
 
 **Original approach (kept for reference).**
 
