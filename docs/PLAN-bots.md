@@ -116,8 +116,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, presentation and measurement
 
 31. ☑ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
-32. ☐ Crowded free-for-all playtest at the controls
-33. ☑ Host cost of fifteen bots, measured (the Deck reading owed)
+32. ☑ Crowded free-for-all playtest at the controls
+33. ☑ Host cost of fifteen bots, measured
 
 ## Dependency and parallelism notes
 
@@ -1306,7 +1306,7 @@ bot off screen in the spyglass, its name line "Black Swan").
 results board names a person's seat by `Pn`, a network person's too; naming people by callsign
 there is #141's open question, not this item's.
 
-## D32 ☐ Crowded free-for-all playtest at the controls
+## D32 ☑ Crowded free-for-all playtest at the controls
 
 **Goal.** The user flies a full-field Deathmatch against bots and judges whether the bots fight
 convincingly in a crowded arena, rearm sensibly and do not pile into terrain.
@@ -1328,21 +1328,33 @@ The watch-list the landed items left for this sortie:
 - **`--hold=` (B14, INSTR-101):** a hold script outranks the AI pilot, so a scripted run with bots
   and `--hold=` flies the bots on the script. Not a play issue; a probe trap.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** None; the user's sortie and an orchestrator log read.
 
 **Verify.** The user's verdict at the controls.
+
+**Verdict.** Two sorties, local MP1 with fifteen bots. The first lost a bot to the AI ram rule two
+seconds in, which became B15 and B16. On the second (the B15/B16 build) the user's verdict is that
+the Dogfight is good; it was too chaotic to judge the watch-list at the controls, so the log was read
+for it (`vs-20261006-193354.log`, about 3.7 minutes). Every one of the ten deaths was gunfire: no
+bot flew into terrain or a structure, no `AI ram` death, four harmless grazes. The rearm order fired
+eighteen times, every one on hull (health 0.02 to 0.34) and never on ammunition (the guns read 0.91
+to 1.00 each time); all eighteen chose the same of MP1's two bases; three ended in a restore after
+46, 59 and 71 s away, and the rest were shot down en route or still flying at the log's end. Those
+two observations (the ammunition threshold never trips, and every trip goes to one base) stay
+TUNE for a later playtest; the lay-off assist logs nothing, so it was not read. The sortie also
+showed a held Respawn control placing the user's plane six times after a crash, an older defect
+fixed on this branch (84bad29a) and not a bot one.
 
 **⚠ Traps.** Check which build is running before reading a symptom as a bot defect.
 
 ## D33 ☑ Host cost of fifteen bots, measured
 
-Measured on the user's rig. Left: the Deck reading, owed by the user (the last line of Verify).
+Measured on the user's rig and on the Steam Deck.
 
 **Goal.** A number for the host's step cost with fifteen bots, and a judgement whether it holds on
 the host machines that matter (the user's rig, the Steam Deck).
 
-**Evidence (confidence: traced-to-code for where each cost lands; direction-sound-magnitude-TUNE
-for the Deck, which is projected, not measured).** A bot's whole flight step runs in the
+**Evidence (confidence: traced-to-code for where each cost lands; the Deck measured).** A bot's whole flight step runs in the
 `HumanAircraft` phase (`GameSession`'s `StepHumanAircraft` walks every seat rig, then
 `BroadcastAircraftState`), its rearm order in `Versus` (`RearmPlay.Step`), its rounds in
 `Projectiles`, and its rig's animation runtime in `AnimAdvance`. A bot is never in
@@ -1400,18 +1412,22 @@ spread in `phys_tick_ms`.
 with none (2.0 ms at the local `phys_tick_ms` medians; 1.3 ms locally and 2.1 ms on the network
 host at the thread-clock medians), 0.09 to 0.14 ms a bot, against the 16.7 ms tick, so the tick
 stays near a quarter of its budget and the sim never fell behind wall time. It holds with room to
-spare, local or network. No threshold is warranted on the rig. **On the Deck, projected:** CM24's
-22-AI tick read 2.85 to 3.16 ms on the author's machine and 3.71 ms on the Deck (commit 41668677a),
-a ratio of 1.2 to 1.3 for a tick of the same kind; PERF-42 puts managed phases at 1.2 to 1.4 times
-and engine-native terms at 5 to 7 times. About 40 per cent of a bot's step is the native pose write.
-Fifteen bots then cost a Deck host 2 to 3 ms a tick at the CM24 ratio and up to about 6 ms if the
-pose write grows as the native terms did there. Both keep the 60 Hz sim inside its budget, but on a
-Deck drawing 30 to 40 frames a second each frame carries 1.5 to 2 ticks, so fifteen bots add 3 to
-12 ms to its frame (and about 1.4 ms of presentation), which likely costs a Deck host its 60 fps in
-a full field while the sim keeps time. **Provisional Deck threshold:** if the Deck reading at
-fifteen bots shows `phys_hz` under 59 or `phys_tick_ms` over 8.3 ms (two ticks per 30 fps frame),
-a Deck host needs a lower Fill-to-N default or a cheaper pose write before a full field is offered
-there.
+spare, local or network. No threshold is warranted on the rig.
+
+**On the Steam Deck, measured** (the user's two runs of the Verify command on the `bots` build in
+`~/CSVM`, local MP1, `--perf --no-det --no-vsync --seed=1`, windows from sim frame 1200 on; the
+lighter run seated one bot rather than none):
+
+| Deck | `phys_tick_ms` mean (min to max) | `phys_hz` mean (lowest window) | fps mean | `frame_ms` | `gpu_ms` |
+|---|---|---|---|---|---|
+| 1 bot | 2.04 (1.73-2.66) | 59.99 (58.7) | 93.1 | 10.97 | 10.47 |
+| 15 bots | 4.69 (4.23-6.03) | 60.01 (58.5) | 92.2 | 11.10 | 9.31 |
+
+Fourteen more bots cost the Deck 2.65 ms a tick, about 0.19 ms a bot (1.4 times the rig's), inside
+the CM24 projection of 2 to 3 ms and far under the provisional 8.3 ms threshold; `phys_hz` keeps wall
+time and the frame rate does not move, because the Deck's frame is bound by its GPU (9 to 10 ms),
+not by the sim. The projection that a full field would cost a Deck host its 60 fps did not hold. A
+full field is fit to offer on a Deck host, and Fill-to-N keeps its default.
 
 **Hot spot, not fixed here.** The pose write is 40 to 50 per cent of a bot's step and scales with
 the rig's node count (about 1,195 nodes a bot), not with the field squared. Every aircraft rig pays
@@ -1428,16 +1444,15 @@ shared, loaded machine.
 --perf --no-det --no-vsync --seed=1 --vs-bots=<N> --screenshot=<png> --frames=3600` (no
 `--vs-bots` for the baseline); network, the host as the same plus `--net-host=127.0.0.1:47781`, and a guest started 6 s later with `--vs --mission=MP1 --mute --no-det
 --no-vsync --net-join=127.0.0.1:47781 --screenshot=<png> --frames=6600`, so it stays until the host
-quits. Read the `[perf] window` lines from sim frame 1200. **Owed, the Deck reading (the user):**
-with a build that carries the bots in `~/CSVM`, run in Desktop Mode or over ssh with `DISPLAY=:0`
-and `CSVM_DATA_ROOT=/home/deck/CSVM`:
+quits. Read the `[perf] window` lines from sim frame 1200. The Deck reading, with a build that
+carries the bots in `~/CSVM`, in Desktop Mode or over ssh with `DISPLAY=:0` and
+`CSVM_DATA_ROOT=/home/deck/CSVM`:
 `cd ~/CSVM && ./CSVM.x86_64 -- --vs --mission=MP1 --mute --perf --no-det --no-vsync --seed=1
 --vs-bots=15 --screenshot=/tmp/d33-15.png --frames=3600`, then the same without `--vs-bots=15`
 (the shot is blank without `--det`, which does not matter here). From the newest file in
-`~/CSVM/logs/`, report each run's `phys_tick_ms`, `phys_hz`, `sim_ms`'s `HumanAircraft` and
-`fps` from sim frame 1200 on, and whether the fifteen-bot fight felt smooth.
+`~/CSVM/logs/`, read each run's `phys_tick_ms`, `phys_hz` and `fps` from sim frame 1200 on.
 
-**Verified.** A measurement with no code change: the readings above are its verification, taken on the plan tree at da019b0d with the build at 0 warnings and 0 errors. The Steam Deck reading is owed by the user.
+**Verified.** A measurement with no code change: the readings above are its verification, the rig's taken on the plan tree at da019b0d with the build at 0 warnings and 0 errors, the Deck's on the `bots` build a6303e57 installed in `~/CSVM`.
 
 **⚠ Traps.** Read the sim-clock cadence (`phys_hz`), not `physics_ms`, on the user's rig. A guest
 given the host's frame count finishes first under `--no-vsync`, and with no bot the host's match
