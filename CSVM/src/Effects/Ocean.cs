@@ -33,6 +33,10 @@ public sealed partial class Ocean : Node3D
     private const float WindDeg = 20f;
     private const float Choppiness = 0.55f;
 
+    // TUNE. The fog amount by which the ocean shades wholly as the flat sheet. Low, so fog thick
+    // enough to see covers no wave the sheet would not show.
+    private const float FogSheetAt = 0.25f;
+
     private static readonly StringName ParamName = Param;
     private static readonly string[] Chapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" };
     private static readonly float[] BandEnds = { 700f, 2800f, 11000f, 45000f };
@@ -287,6 +291,7 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine("render_mode skip_vertex_transform, cull_disabled;");
         sb.AppendLine(SceneBuilder.TimeInclude);
         sb.AppendLine(SceneBuilder.AtmosphereInclude);
+        sb.AppendLine(SceneBuilder.MipBiasInclude);
         sb.AppendLine("uniform sampler2D mask_tex : filter_linear, repeat_disable;");
         sb.AppendLine("uniform vec4 mask_rect;");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
@@ -396,11 +401,16 @@ void fragment() {
         n.xz -= w.xy * (ka * cos(th));
         n.y -= CHOP_QW[i].x * ka * sin(th);
     }
-    n = normalize(n);
+    float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
+    // How fully this fragment shades as the flat sheet does. Wholly where the shore calms the
+    // waves, so no edge shows against a coplanar coast tile. Rising with the fog, so the far sea
+    // fogs as the sheet does instead of showing darker, wavier water through it.
+    float sheet = max(1.0 - m.g, smoothstep(0.0, " + F(FogSheetAt) + @", fog_amt));
+    n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
-    vec3 col = mix(base_color, texture(albedo_tex, p / tile_m).rgb, detail_mix) * tint;
+    vec3 col = mix(base_color, csky_sample_albedo(albedo_tex, p / tile_m).rgb, mix(detail_mix, 1.0, sheet)) * tint;
     // The swell's crest coincidences repeat on a lattice, so foam alone would print a pattern.
     // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
     vec2 drift = SWELL_DKA[0].xy * (csky_time * 1.5);
@@ -408,13 +418,13 @@ void fragment() {
     float breakup = foam_noise((p - drift * 2.0) / 9.0);
     float crest = smoothstep(0.5, 0.85, h / max(SWELL_SUM * wave_scale, 0.01) + (patches - 0.55) * 0.5);
     float foam = crest * smoothstep(0.55, 0.8, patches) * smoothstep(0.25, 0.85, breakup);
-    col = mix(col, vec3(0.6, 0.65, 0.68), foam * foam_strength);
+    col = mix(col, vec3(0.6, 0.65, 0.68), foam * foam_strength * (1.0 - sheet));
     ALBEDO = col;
     METALLIC = 0.0;
-    SPECULAR = 0.5;
+    SPECULAR = " + F(SceneBuilder.WaterSpecular) + @";
     // Lost slope detail turns into roughness, so the far sea keeps a glossy sheen, not a mirror.
-    ROUGHNESS = mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist));
-    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_amount(world, CAMERA_POSITION_WORLD));
+    ROUGHNESS = mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + F(SceneBuilder.WaterRoughness) + @", sheet);
+    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
 }");
         return sb.ToString();
     }

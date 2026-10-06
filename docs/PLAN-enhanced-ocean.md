@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ Ship calm zones for every hull and wake
 23. ☐ Swell regularity from altitude
 24. ☐ An Enhanced ocean golden
-25. ☐ The ocean matches the flat sheet at the shore and in fog
+25. ☑ The ocean matches the flat sheet at the shore and in fog
 26. ☐ No hole where a mission shows a node hidden at the bake
 
 ## Dependency and parallelism notes
@@ -479,7 +479,29 @@ keeps waves the grid cannot carry from crawling. Keep it for any new wave.
 **⚠ Traps.** A hash that flips under GPU load is a determinism defect, not noise. Pin the stable
 frame and track the flip separately. The `exercises` field is rewritten on a re-pin, never appended.
 
-## C25 ☐ The ocean matches the flat sheet at the shore and in fog
+## C25 ☑ The ocean matches the flat sheet at the shore and in fog
+
+**Landed.** The ocean's fragment blends toward the flat sheet's shading by one weight, `sheet =
+max(1 - shore amplitude, smoothstep(0, 0.25, fog amount))`: flat normals, the full texture
+(`detail_mix` toward 1), no foam, `SceneBuilder.WaterRoughness` and `WaterSpecular` (now internal
+constants the ocean reads). The ocean samples its texture through `csky_sample_albedo`, so C5's mip
+bias reaches it as it reaches the sheet. The shore blend alone left a thin bright line on the tile
+boundary: the mask's tint texture gave every texel off the base sheet the mean vertex colour, and
+the shader's linear filter lightened the sheet's last half texel toward it. `OceanMaskRaster` now
+gives an open texel its tinted neighbours' mean (`Dilate`, band-count independent; the test oracle
+does the same, plus `WaterBesideTheSheetTakesTheSheetsTint`). At `c1-lake-enhanced`'s pose the
+ocean-minus-sheet difference falls from mean 0.51 to 0.15 levels and pixels off by more than 4
+levels from 59,259 to 1,475; no edge shows at the tile boundary, and the waves fade in over the
+mask's 24-160 m ramp. Priority levels, zone groups and C5's level -11 are untouched (C5 coast shot
+renders with no errors). C1B's cruise md5 moves to `3D0FD8B6...`: open water is identical, the
+far band inside the fog ramp changed (waves no longer show through the fog there). Montages in
+the C25 worktree's `.scratch\c25\montage-*.png`, flat / before / after. `-Filter graphics` on
+this tree: 6 suites pass, units 6308 passed; of the goldens only C21's three Enhanced shots move
+(`c1-lake-enhanced`, `c5-city-night-enhanced`, `c1-rocket-hit-enhanced`), every Original golden holds.
+
+**Verified.** The lake pose: ocean minus flat falls from a mean of 0.51 to 0.15 levels, pixels off by more than 4 from 59,259 to 1,475; the hard edge is gone. C1C at 450 m and 60 m: the neutralised ocean matches the sheet to 0.1-0.6 levels on every row, so the fog term was never the gap; the open-water tone stays darker, which the user chose to keep. C1B cruise md5 moved to `3D0FD8B6...` in the far fog band only; open water byte-identical. The orchestrator battery runs on the merged tree with C22.
+
+**Original approach (kept for reference).**
 
 **Goal.** Where the waves calm to nothing, the ocean draws exactly as the flat sheet beside it, so no
 edge shows against an opaque coast tile; and in a fogged chapter the far ocean fogs as the flat sheet
@@ -492,6 +514,20 @@ With waves, foam and detail neutralised and roughness at the sheet's 0.25, the o
 sheet to 0.65/255 (the prototype's equivalence check), so the shading constants are what differ
 (roughness 0.2-0.3 vs 0.25, a 60 % texture mix vs 100 %). The C1C and C2B montages show the far ocean
 clearly less fogged than the flat sheet in rain; cause unknown. The user accepted C21 with both filed.
+
+**The fog cause (confidence: traced, measured at C1C 450 m and 60 m, luminance per row over a
+sea column).** The fog term is not it. The ocean's FOG equals the sheet's (`csky_fog_on` is 1, the
+same `csky_fog_amount` and per-view colour, both written to FOG the same way); SSR moves either surface
+by under 2 levels (`--no-ssr`). With waves, foam and detail neutralised and roughness 0.25, the ocean
+matches the sheet to 0.1-0.6 levels on every row, fog band included. Turning the ocean's fog off
+changes only rows past C1C's 1000 m fog start. Below it the sheet's haze toward the horizon is
+specular reflection of the overcast sky: with SPECULAR 0 the neutral ocean is a flat 70.5 on every
+row, with it 81 rising to 107. The gap is the ocean's own shading. `detail_mix` 0.6 toward
+`base_color` makes it 7-11 levels darker and greyer everywhere (near sea RGB 56/74/81 against the
+sheet's 62/86/94; at `detail_mix` 1 it is 63/86/94), and in the partly fogged band its wave normals
+show through. Roughness and foam move it by 1-2 levels. Lead, not verified: `base_color` is the CPU
+mean of the archive's level 0, while the sampler reads `Build`'s mip chain with the authored levels
+installed.
 
 **Approach.** Blend the ocean's look toward the flat sheet's by the same shore amplitude that calms
 the waves: at zero amplitude, flat normals, roughness 0.25, the full texture mix and no foam.

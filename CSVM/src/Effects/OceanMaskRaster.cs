@@ -76,6 +76,7 @@ internal static class OceanMaskRaster
                 (int)Math.Ceiling((Math.Max(t.A.Z, Math.Max(t.B.Z, t.C.Z)) - minZ) / Cell));
         }
         Parallel.For(0, count, b => Fill(tris, spans, grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mean, tint));
+        Parallel.For(0, count, b => Dilate(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, tint));
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
         Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -118,9 +119,48 @@ internal static class OceanMaskRaster
             var c = tintF[k];
             int o = 3 * ((r0 * w) + k);
             bool open = c.R < 0f;
+            g.Tinted[(r0 * w) + k] = !open;
             tint[o] = open ? mr : Channel(c.R);
             tint[o + 1] = open ? mg : Channel(c.G);
             tint[o + 2] = open ? mb : Channel(c.B);
+        }
+    }
+
+    // An open texel beside the base sheet takes its tinted neighbours' mean. The shader filters the
+    // tint linearly. Without this the sheet's last half texel blends toward the mean colour, a line
+    // where an opaque coast tile meets it. Reads only tinted texels, which no band writes here, so
+    // the bytes do not depend on the band count.
+    private static void Dilate(Grid g, int r0, int r1, byte[] tint)
+    {
+        int w = g.W;
+        for (int z = r0; z <= r1; z++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = (z * w) + x;
+                if (g.Tinted[i])
+                    continue;
+                int n = 0, sr = 0, sg = 0, sb = 0;
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, nz = z + dz;
+                        if (nx < 0 || nz < 0 || nx >= w || nz >= g.H || !g.Tinted[(nz * w) + nx])
+                            continue;
+                        int o = 3 * ((nz * w) + nx);
+                        sr += tint[o];
+                        sg += tint[o + 1];
+                        sb += tint[o + 2];
+                        n++;
+                    }
+                }
+                if (n == 0)
+                    continue;
+                tint[3 * i] = (byte)((sr + (n / 2)) / n);
+                tint[(3 * i) + 1] = (byte)((sg + (n / 2)) / n);
+                tint[(3 * i) + 2] = (byte)((sb + (n / 2)) / n);
+            }
         }
     }
 
@@ -313,6 +353,7 @@ internal static class OceanMaskRaster
             Sea = new byte[w * h];
             Solid = new bool[w * h];
             Zone = new byte[w * h];
+            Tinted = new bool[w * h];
         }
 
         public int W { get; }
@@ -330,5 +371,8 @@ internal static class OceanMaskRaster
 
         // The zone group of the base sheet a texel shows, AnyZone on surf-ring water.
         public byte[] Zone { get; }
+
+        // Texels a base triangle gave a tint; the rest start as the mean.
+        public bool[] Tinted { get; }
     }
 }

@@ -234,6 +234,15 @@ public sealed class SceneBuilder
     internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.0;\n"
         + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
 
+    // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
+    // the matte world values, so screen-space reflection has a glossy surface to march against.
+    // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
+    // of it survives at a glancing angle. Roughness is also what quiets a per-texel reflection
+    // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
+    // The wave ocean shades toward both where it calms (Effects/Ocean.cs).
+    internal const float WaterRoughness = 0.25f;
+    internal const float WaterSpecular = 0.5f;
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -359,13 +368,6 @@ void fragment() {
     // decides how far it spreads. ⚠ Only the light-source arms take it; the general `lighting:
     // false` population is not emissive (docs/org/vertexLighting.md).
     private const float EmissiveScale = 1.5f;
-    // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
-    // the matte world values, so screen-space reflection has a glossy surface to march against.
-    // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
-    // of it survives at a glancing angle. Roughness is also what quiets a per-texel reflection
-    // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
-    private const float WaterRoughness = 0.25f;
-    private const float WaterSpecular = 0.5f;
     // What an aircraft surface reflects under the scene lights, which only enhanced mode's aircraft
     // and a shaded builder without the per-vertex sun term draw under. The original has no
     // specular term at all (docs/org/vertexLighting.md), so any highlight here is ours. A TUNE

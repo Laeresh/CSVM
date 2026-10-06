@@ -83,6 +83,22 @@ public class OceanMaskRasterTests
         Assert.Equal(255, r.Mask[(2 * ((cz * r.Width) + cx + 40)) + 1]);
     }
 
+    // Coast-tile water beside the sheet takes the sheet's own tint, not the mean. The shader's
+    // linear filter then cannot lighten the sheet's edge against an opaque coast tile.
+    [Fact]
+    public void WaterBesideTheSheetTakesTheSheetsTint()
+    {
+        var tris = new List<Tri>();
+        var dark = new Color(0.1f, 0.1f, 0.1f);
+        AddQuad(tris, -1024f, -1024f, 1024f, Kind.Base, dark);
+        AddQuad(tris, 0f, -1024f, 1024f, Kind.Edge, Colors.White);
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 3);
+        int Tint(float x, float z) => r.Tint[3 * ((((int)((z - r.Origin.Y) / Cell)) * r.Width) + (int)((x - r.Origin.X) / Cell))];
+        Assert.Equal(26, Tint(-4f, -500f));
+        Assert.Equal(26, Tint(4f, -500f));
+        Assert.Equal(51, Tint(500f, -500f));
+    }
+
     // A sheet split over two zone layers, with surf-ring water on the seam. Each texel names the
     // group of the sheet it shows, the ring every group, and no band count moves either.
     [Fact]
@@ -203,7 +219,32 @@ public class OceanMaskRasterTests
             tintBytes[(3 * i) + 1] = (byte)Math.Clamp(Math.Round(c.G * 255f), 0, 255);
             tintBytes[(3 * i) + 2] = (byte)Math.Clamp(Math.Round(c.B * 255f), 0, 255);
         }
-        return (w, h, mask, tintBytes);
+        // An open texel takes the rounded mean of its tinted neighbours, read from the undilated bytes.
+        var dilated = (byte[])tintBytes.Clone();
+        for (int z = 0; z < h; z++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                if (tint[(z * w) + x].R >= 0f)
+                    continue;
+                var sum = new int[3];
+                int n = 0;
+                for (int nz = Math.Max(0, z - 1); nz <= Math.Min(h - 1, z + 1); nz++)
+                {
+                    for (int nx = Math.Max(0, x - 1); nx <= Math.Min(w - 1, x + 1); nx++)
+                    {
+                        if (tint[(nz * w) + nx].R < 0f)
+                            continue;
+                        for (int ch = 0; ch < 3; ch++)
+                            sum[ch] += tintBytes[(3 * ((nz * w) + nx)) + ch];
+                        n++;
+                    }
+                }
+                for (int ch = 0; n > 0 && ch < 3; ch++)
+                    dilated[(3 * ((z * w) + x)) + ch] = (byte)Math.Round(sum[ch] / (double)n, MidpointRounding.AwayFromZero);
+            }
+        }
+        return (w, h, mask, dilated);
     }
 
     private static void RasterReference(Tri t, float minX, float minZ, int w, int h, byte[] sea, bool[] solid, Color[] tint)
