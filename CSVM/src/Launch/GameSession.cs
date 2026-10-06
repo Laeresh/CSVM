@@ -2550,14 +2550,15 @@ public partial class GameSession : Node3D
             _plane.AddChild(_ocean);
     }
 
-    private IEnumerable<Vector3> OceanHulls()
+    // The roster hulls the ocean calms around, each over its own waterline.
+    private IEnumerable<Node3D> OceanHulls()
     {
         if (_surfaceVehicles == null)
             yield break;
         foreach (var v in _surfaceVehicles.Vessels)
         {
             if (GodotObject.IsInstanceValid(v.Body) && v.Body.IsVisibleInTree())
-                yield return v.Body.GlobalPosition;
+                yield return v.Body;
         }
     }
 

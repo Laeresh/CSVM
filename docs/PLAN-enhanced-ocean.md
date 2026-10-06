@@ -94,11 +94,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, coverage
 
 21. ☑ The other chapters with a sea at y = 0
-22. ☐ Ship calm zones for every hull and wake
+22. ☑ Ship calm zones for every hull and wake
 23. ☐ Swell regularity from altitude
 24. ☐ An Enhanced ocean golden
 25. ☑ The ocean matches the flat sheet at the shore and in fog
 26. ☐ No hole where a mission shows a node hidden at the bake
+27. ☐ Calm zones for mission-animated boats with no wake sheet
 
 ## Dependency and parallelism notes
 
@@ -423,7 +424,43 @@ regression from the ground rules.
 **⚠ Traps.** Coastlines are coplanar texture blends at y = 0. Waves must reach zero under them, or
 they z-fight or gap.
 
-## C22 ☐ Ship calm zones for every hull and wake
+## C22 ☑ Ship calm zones for every hull and wake
+
+**Landed.** The 16 round discs are 16 ship zones. A zone is a box on the water along the hull's
+heading (its local +Z), grown each frame over the hull's waterline (the union, in the hull's frame,
+of its meshes reaching within 2 m of its y = 0, measured once) and the world-space AABB of every
+visible wake sheet it trails, so the extent is the wake geometry's own: the freighter's
+`wakefront_left/right` are 54 x 23 m each and its `wakeback_*` 60 x 16 m. The waves are flat within
+6 m of the box and back to full height 50 m further (`OceanCalmZone`, the shader's `ship_calm`). A
+zone flattens only the geometry: the fragment normals keep the swell and chop, so the water around
+the hull shades like the open sea and the deck lamps' pool (lit on the flat sheet too) breaks into
+glints, where the disc showed as a smooth round patch. Sources: a visible `GameSession.OceanHulls` roster body, or the ship a wake
+sheet hangs off (the sheet's mesh under its node under the ship; a wake node under the root is its
+own hull), each only while its origin is within 3 m of sea level. `OceanMask`'s wake search now
+takes `wakeback*` too and only flat meshes (under 20 m tall): C1's rock zeppelin wears `wakefront1`
+over 180 m of its underside (`rock_zeppelin/underneath/g357`), which counted as a wake. A wake's
+ship now gives up its surfaces to the mask, as the walker's comment always claimed; before, only
+the wake node did, so the freighter's hull baked a 400 m calm blob at its bake pose (C1B/M03 and C1B
+free flight) and the Red Cross ship one in C1/M05. Census (gamez nodes, mission anims, rosters):
+- Wake sheets, C1B only in effect: the M03 freighter (`wakefront_left/right`, `wakeback_r1/r2/l1/l2`,
+  three strands in the shot) and the escape boat's `eb_wakefront` (hidden on the hoisted lifeboat).
+  C1/M05's Red Cross ship carries `redcross/wake` (230 x 52 m, flat), behind a generic intro over 40 s.
+- Roster hulls (`SurfaceVehicle`, campaign builds only): C1B/M03's four `patrolboat_1..4`
+  (deactivated and hidden until woken) and C2/M01's `eshipg31` generator launch. No wake sheets;
+  their wakes are particle emitters, so each gets a zone over its waterline.
+- World-animated hulls with no wake sheet and no roster block, which no source sees: C2/M01's
+  `tugandbarge01..04` (path anims), C2's `yacht1..4`, C3's `barracuda` sub (`sub_movement`) and
+  `leasure*` yachts, C5's `thugs` boats. The mask bakes each as solid at its build pose, so a moving
+  one leaves its calm patch behind and the waves cross its hull.
+Tests: `OceanCalmZoneTests` (heading box, mesh footprint under a turned transform, hull plus trailing
+wake, the fade). The A1 cruise shot is pixel-identical (decoded md5 `6E4CA61F...`); `--no-ocean`
+at the freighter pose is byte-identical before and after. Montages in the C22 tree's `.scratch\c22\`:
+`montage-c22.png` (flat left, ocean right: before, after, after from 300 m) and
+`montage-c22-closeup.png`.
+
+**Verified.** The complete battery on the plan tree with C22 and C25 merged: units 6319 passed, 3 skipped; engine 529 passed, 2 skipped, errors clean (another session's battery ran beside it); the same three Enhanced goldens moved by the ocean, re-pinned at C24 after C23 changes the swell. The user approved the freighter montage (zone over hull and wake sheets, geometry flattened, shading kept).
+
+**Original approach (kept for reference).**
 
 **Goal.** Every moving hull keeps its wake sheets on the water without a calm disc that reads as an
 artefact.
@@ -570,3 +607,25 @@ per C3 mission), and re-baking when a node is shown (a full bake mid-flight, cos
 
 **Verify.** C3 at the crater: shoot the floodgate (or force the def) and capture the floor after the
 drain, with and without `--no-ocean`; no hole. C1B cruise unchanged; `graphics-ocean-switch` green.
+
+## C27 ☐ Calm zones for mission-animated boats with no wake sheet
+
+**Goal.** A boat a mission animates across the sea keeps the waves out of its hull and leaves no calm
+patch where it stood at load, whether or not it carries a wake sheet.
+
+**Evidence (confidence: direction-sound).** C22's census: C2/M01's `tugandbarge01`-`04`, C2's
+`yacht1`-`4`, C3's `barracuda` sub and its `leasure*` yachts and C5's `thugs` boats move by
+mission animation, carry no wake sheet and have no roster entry. The mask bakes each as solid where it
+stands at load, so it leaves that calm patch behind, and the waves pass through its hull once it moves.
+Only hulls with wake sheets (C1B's freighter, C1/M05's Red Cross ship) and roster hulls get a zone today.
+
+**Approach.** <TODO: find these hulls from the data (an animated world node whose meshes reach the
+waterline), feed them to the ship zones as `OceanCalmZone` hulls, and leave them out of the mask
+bake as wakes' ships already are.>
+
+**Model recommendation.** medium.
+
+**Verify.** <TODO: a pose on one tug or yacht after it has moved, with and without `--no-ocean`.>
+
+**⚠ Traps.** C22: `--direction` turns the view the opposite way on x in this mode; a hull counts only
+while its origin is within 3 m of sea level.

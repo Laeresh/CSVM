@@ -72,7 +72,7 @@ internal sealed class OceanMask
     /// <summary>Which zone group each texel shows (R8), or null when the sheet is one group.</summary>
     public ImageTexture? ZoneTexture { get; private set; }
 
-    /// <summary>The wake sheets found in the world, whose positions the ocean calms around.</summary>
+    /// <summary>The wake sheets' meshes found in the world, whose ships the ocean calms around.</summary>
     public List<Node3D> Wakes { get; } = new();
 
     /// <summary>The bake's milliseconds per phase, for the build log line.</summary>
@@ -220,6 +220,9 @@ internal sealed class OceanMask
     // order. The triangles are read after it, once every hull subtree is known and dropped.
     private sealed class Walker
     {
+        // A wake sheet lies on the water; the freighter's bow wave climbs its hull about 10 m.
+        private const float WakeMaxHeight = 20f;
+
         private readonly Node3D _root;
         private readonly SceneBuilder _scene;
         private readonly Dictionary<Material, string> _names;
@@ -257,10 +260,15 @@ internal sealed class OceanMask
                 Read(s);
         }
 
-        // Whether the node is a wake sheet. Wakes are found everywhere, skipped subtrees included.
-        // A ship's hull, the wake's parent, gives up its surfaces, so an animated ship leaves no calm
-        // patch where it started. A subtree's surfaces are the tail it appended.
-        private bool Visit(Node node, Transform3D parent, bool collect)
+        private static bool IsWakeTexture(string tex) =>
+            tex.Contains("wakefront", StringComparison.OrdinalIgnoreCase)
+            || tex.Contains("wakeback", StringComparison.OrdinalIgnoreCase);
+
+        // How many levels up the ship of a wake below sits: a sheet's mesh is 2, under its own node
+        // (1), under the ship. Wakes are found everywhere, skipped subtrees included. The ship gives
+        // up its surfaces, so a moving hull leaves no calm patch where it started. A wake node right
+        // under the root gives up only its own. A subtree's surfaces are the tail it appended.
+        private int Visit(Node node, Transform3D parent, bool collect)
         {
             // A hidden subtree draws nothing: C3's unplaced swtr sheets over its crater floor, and
             // every unplaced vehicle parked at the origin.
@@ -274,12 +282,14 @@ internal sealed class OceanMask
             {
                 var arrayMesh = collect ? mesh as ArrayMesh : null;
                 int count = mesh.GetSurfaceCount();
+                // C1's rock zeppelin wears wakefront1 over 180 m of its underside; a sheet lies flat.
+                bool flat = mesh.GetAabb().Size.Y < WakeMaxHeight;
                 for (int s = 0; s < count; s++)
                 {
                     var mat = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
                     if (mat == null || !_names.TryGetValue(mat, out var tex))
                         continue;
-                    if (!wake && tex.Contains("wakefront", StringComparison.OrdinalIgnoreCase))
+                    if (!wake && flat && IsWakeTexture(tex))
                     {
                         wake = true;
                         _result.Wakes.Add(mi);
@@ -288,13 +298,13 @@ internal sealed class OceanMask
                         _surfaces.Add(new Surface(arrayMesh, s, tex, xf, mat, mi.Layers));
                 }
             }
-            bool hull = false;
+            int below = 0;
             int children = node.GetChildCount();
             for (int i = 0; i < children; i++)
-                hull |= Visit(node.GetChild(i), xf, collect);
-            if (hull && node != _root)
+                below = Math.Max(below, Visit(node.GetChild(i), xf, collect));
+            if (below > 0 && node != _root)
                 _surfaces.RemoveRange(start, _surfaces.Count - start);
-            return wake;
+            return wake ? 2 : Math.Max(below - 1, 0);
         }
 
         private void Read(Surface surface)

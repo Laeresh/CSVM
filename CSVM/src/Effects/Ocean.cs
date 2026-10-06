@@ -24,10 +24,17 @@ public sealed partial class Ocean : Node3D
     // The grid's angular resolution near the eye; it halves at each of BandEnds.
     private const int InnerSegments = 384;
 
-    // Waves fade out within this radius band around a ship, so its wake sheet stays on the water.
-    private const float ShipCalm = 140f;
-    private const float ShipFull = 320f;
+    // TUNE. The waves stay flat this far past a ship's zone, more than the swell's sideways sway,
+    // and reach full height over the fade beyond. Flat water keeps a wake sheet on the surface.
+    private const float CalmMargin = 6f;
+    private const float CalmFade = 50f;
     private const int MaxShips = 16;
+
+    // A hull is on the water while its origin sits this close to sea level; a hoisted lifeboat is not.
+    private const float HullWaterBand = 3f;
+
+    // The hull meshes that reach this close to the hull's own y = 0 make its waterline.
+    private const float WaterlineBand = 2f;
 
     // TUNE. The wind the swell runs with, degrees from +X toward +Z, and the crest sharpness.
     private const float WindDeg = 20f;
@@ -56,17 +63,23 @@ public sealed partial class Ocean : Node3D
         new(42f, 0.82f, 0.05f), new(-8f, 0.54f, 0.05f),
     };
 
-    private readonly Func<IEnumerable<Vector3>> _ships;
+    private readonly Func<IEnumerable<Node3D>> _ships;
     private readonly List<Node3D> _wakes;
+    private readonly Node3D _worldRoot;
     private readonly ShaderMaterial _material;
-    private readonly Vector4[] _shipData = new Vector4[MaxShips];
+    private readonly Vector4[] _calmAxes = new Vector4[MaxShips];
+    private readonly Vector4[] _calmSizes = new Vector4[MaxShips];
+    private readonly OceanCalmZone[] _zones = new OceanCalmZone[MaxShips];
+    private readonly Node3D?[] _zoneHulls = new Node3D?[MaxShips];
+    private readonly Dictionary<Node3D, Aabb?> _waterlines = new();
 
-    private Ocean(ShaderMaterial material, Func<IEnumerable<Vector3>> ships, List<Node3D> wakes)
+    private Ocean(ShaderMaterial material, Func<IEnumerable<Node3D>> ships, List<Node3D> wakes, Node3D worldRoot)
     {
         _wakes = wakes;
         Name = "Ocean";
         _material = material;
         _ships = ships;
+        _worldRoot = worldRoot;
     }
 
     /// <summary>Declares the global. Must run before the first shader that reads it is built.</summary>
@@ -81,7 +94,7 @@ public sealed partial class Ocean : Node3D
     /// that world has no sea-level base sheet to replace. A non-empty <paramref name="maskPng"/>
     /// receives the baked mask (<c>--dump-ocean-mask=</c>).</summary>
     public static Ocean? Create(Node3D worldRoot, SceneBuilder scene, TextureArchive textures,
-        Func<IEnumerable<Vector3>> ships, ISet<Node> skip, string maskPng)
+        Func<IEnumerable<Node3D>> ships, ISet<Node> skip, string maskPng)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
         var mask = OceanMask.Bake(worldRoot, scene, skip);
@@ -107,7 +120,7 @@ public sealed partial class Ocean : Node3D
         if (mask.ZoneTexture is { } zoneTex)
             material.SetShaderParameter("zone_tex", zoneTex);
 
-        var ocean = new Ocean(material, ships, mask.Wakes);
+        var ocean = new Ocean(material, ships, mask.Wakes, worldRoot);
         ocean.PublishShips();
         var mesh = BuildGrid();
         mesh.SurfaceSetMaterial(0, material);
@@ -133,10 +146,14 @@ public sealed partial class Ocean : Node3D
         Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} ms={ms:0} bake={bakeMs:0} ({mask.Timing})");
         foreach (var wake in mask.Wakes)
         {
-            if (wake.IsInsideTree())
+            if (wake.IsInsideTree() && wake is MeshInstance3D { Mesh: { } wakeMesh })
             {
                 var p = wake.GlobalPosition;
-                Log.Info("world", $"ocean: wake '{wake.GetParent()?.Name}/{wake.Name}' at ({p.X:0},{p.Y:0.0},{p.Z:0}) visible={wake.IsVisibleInTree()}");
+                var hull = ocean.HullOf(wake);
+                var zone = new OceanCalmZone(new Vector2(p.X, p.Z), Heading(hull));
+                zone.Add(wakeMesh.GetAabb(), wake.GlobalTransform);
+                var half = zone.HalfExtents;
+                Log.Info("world", $"ocean: wake '{wake.GetParent()?.Name}/{wake.Name}' of '{hull.Name}' at ({p.X:0},{p.Y:0.0},{p.Z:0}) sheet {2f * half.X:0}x{2f * half.Y:0}m visible={wake.IsVisibleInTree()}");
             }
         }
         if (maskPng.Length > 0)
@@ -304,7 +321,9 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine("uniform float detail_mix = 0.6;");
         sb.AppendLine("uniform float wave_scale = 1.0;");
         sb.AppendLine("uniform float foam_strength = 0.12;");
-        sb.AppendLine($"uniform vec4 ships[{MaxShips}];");
+        // Per ship zone: centre X/Z and heading axis, then the half length, half width, margin, fade.
+        sb.AppendLine($"uniform vec4 calm_axes[{MaxShips}];");
+        sb.AppendLine($"uniform vec4 calm_sizes[{MaxShips}];");
         // A sheet split over zone layers gets one grid per group, each keeping only its own texels.
         if (zoned)
         {
@@ -333,10 +352,15 @@ float foam_noise(vec2 p) {
         mix(foam_hash(c + vec2(0.0, 1.0)), foam_hash(c + vec2(1.0, 1.0)), f.x), f.y);
 }
 
+// OceanCalmZone.Distance and Calm, per ship: flat within the margin of the box, full height a fade
+// further out.
 float ship_calm(vec2 p) {
     float a = 1.0;
     for (int i = 0; i < " + MaxShips.ToString(CultureInfo.InvariantCulture) + @"; i++) {
-        a = min(a, smoothstep(ships[i].z, ships[i].w, distance(p, ships[i].xy)));
+        vec2 q = p - calm_axes[i].xy;
+        vec2 u = calm_axes[i].zw;
+        vec2 e = max(abs(vec2(dot(q, u), dot(q, vec2(-u.y, u.x)))) - calm_sizes[i].xy, vec2(0.0));
+        a = min(a, smoothstep(calm_sizes[i].z, calm_sizes[i].z + calm_sizes[i].w, length(e)));
     }
     return a;
 }
@@ -377,7 +401,9 @@ void fragment() {
     if (zone < " + F(OceanMaskRaster.AnyZone - 0.5f) + @" && abs(zone - zone_index) > 0.5) {
         discard;
     }" : "") + @"
-    float amp = m.g * ship_calm(p) * wave_scale;
+    // A ship's zone flattens only the geometry. Its normals keep the swell and the chop, so the
+    // water there shades like the open sea. A calm patch would read as an artefact.
+    float amp = m.g * wave_scale;
     vec2 fw = fwidth(p);
     float footprint = max(max(fw.x, fw.y), 0.001);
     vec3 n = vec3(0.0, 1.0, 0.0);
@@ -429,28 +455,114 @@ void fragment() {
         return sb.ToString();
     }
 
-    // Every live hull's position for the shader's calm discs; an unused slot sits far away.
+    // A ship's horizontal heading, its local +Z on the water.
+    private static Vector2 Heading(Node3D hull)
+    {
+        var z = hull.GlobalBasis.Z;
+        return new Vector2(z.X, z.Z);
+    }
+
+    // The hull a wake sheet trails: the sheet's mesh sits under its own node, which hangs off the
+    // ship. A wake node straight under the world root is its own hull.
+    private Node3D HullOf(Node3D wake)
+    {
+        var node = wake.GetParent() as Node3D ?? wake;
+        return node.GetParent() is Node3D ship && ship != _worldRoot ? ship : node;
+    }
+
+    // One zone per ship on the water, over its waterline and its visible wake sheets, each frame;
+    // an unused slot sits far away.
     private void PublishShips()
     {
         int n = 0;
-        foreach (var p in _ships())
-        {
-            if (n >= MaxShips)
-                break;
-            _shipData[n++] = new Vector4(p.X, p.Z, ShipCalm, ShipFull);
-        }
+        foreach (var hull in _ships())
+            n = AddHull(hull, n);
         foreach (var wake in _wakes)
         {
-            if (n >= MaxShips)
-                break;
-            if (!IsInstanceValid(wake) || !wake.IsInsideTree() || !wake.IsVisibleInTree())
+            if (!IsInstanceValid(wake) || !wake.IsInsideTree() || !wake.IsVisibleInTree() || wake is not MeshInstance3D { Mesh: { } mesh }
+                || Mathf.Abs(wake.GlobalPosition.Y) > HullWaterBand)
                 continue;
-            var p = wake.GlobalPosition;
-            _shipData[n++] = new Vector4(p.X, p.Z, ShipCalm, ShipFull);
+            var hull = HullOf(wake);
+            int z = Array.IndexOf(_zoneHulls, hull, 0, n);
+            if (z < 0)
+            {
+                if (n >= MaxShips)
+                    continue;
+                n = AddHull(hull, n);
+                z = Array.IndexOf(_zoneHulls, hull, 0, n);
+                if (z < 0)
+                {
+                    var o = hull.GlobalPosition;
+                    _zones[n] = new OceanCalmZone(new Vector2(o.X, o.Z), Heading(hull));
+                    _zoneHulls[n] = hull;
+                    z = n++;
+                }
+            }
+            _zones[z].Add(mesh.GetAabb(), wake.GlobalTransform);
         }
-        for (int i = n; i < MaxShips; i++)
-            _shipData[i] = new Vector4(1e9f, 1e9f, 0f, 1f);
-        _material.SetShaderParameter("ships", _shipData);
+        for (int i = 0; i < MaxShips; i++)
+        {
+            if (i < n)
+            {
+                var c = _zones[i].Center;
+                var axis = _zones[i].Axis;
+                var half = _zones[i].HalfExtents;
+                _calmAxes[i] = new Vector4(c.X, c.Y, axis.X, axis.Y);
+                _calmSizes[i] = new Vector4(half.X, half.Y, CalmMargin, CalmFade);
+            }
+            else
+            {
+                _calmAxes[i] = new Vector4(1e9f, 1e9f, 1f, 0f);
+                _calmSizes[i] = new Vector4(0f, 0f, 0f, 1f);
+            }
+            _zoneHulls[i] = null;
+        }
+        _material.SetShaderParameter("calm_axes", _calmAxes);
+        _material.SetShaderParameter("calm_sizes", _calmSizes);
+    }
+
+    // Opens a zone over a visible hull on the water and its waterline; returns the zones in use.
+    private int AddHull(Node3D hull, int n)
+    {
+        if (n >= MaxShips || !IsInstanceValid(hull) || !hull.IsInsideTree() || !hull.IsVisibleInTree()
+            || Array.IndexOf(_zoneHulls, hull, 0, n) >= 0)
+            return n;
+        var xf = hull.GlobalTransform;
+        if (Mathf.Abs(xf.Origin.Y) > HullWaterBand)
+            return n;
+        _zones[n] = new OceanCalmZone(new Vector2(xf.Origin.X, xf.Origin.Z), Heading(hull));
+        if (Waterline(hull) is { } line)
+            _zones[n].Add(line, xf);
+        else
+            _zones[n].Add(new Vector2(xf.Origin.X, xf.Origin.Z));
+        _zoneHulls[n] = hull;
+        return n + 1;
+    }
+
+    // The union of the hull's meshes that reach its waterline, in the hull's own frame, measured
+    // once. The wake sheets are left out; they move on their own and are added each frame.
+    private Aabb? Waterline(Node3D hull)
+    {
+        if (_waterlines.TryGetValue(hull, out var kept))
+            return kept;
+        Aabb? line = null;
+        var toHull = hull.GlobalTransform.AffineInverse();
+        var stack = new Stack<Node>();
+        stack.Push(hull);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            foreach (var child in node.GetChildren())
+                stack.Push(child);
+            if (node is not MeshInstance3D { Mesh: { } mesh } mi || !mi.IsVisibleInTree() || _wakes.Contains(mi))
+                continue;
+            var box = toHull * mi.GlobalTransform * mesh.GetAabb();
+            if (box.Position.Y > WaterlineBand || box.End.Y < -WaterlineBand)
+                continue;
+            line = line is { } l ? l.Merge(box) : box;
+        }
+        _waterlines[hull] = line;
+        return line;
     }
 
     // One Gerstner component: direction, wavelength in metres, steepness k*A.
