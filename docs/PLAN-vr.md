@@ -209,7 +209,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 6. ◐ B6 VR mode option, relaunch, fallback and mode gating
 7. ◐ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
 8. ◐ B8 The cockpit interior in the main world under VR
-9. ☐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
+9. ◐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
 
 ### Wave C, screen, HUD and input
 
@@ -1369,24 +1369,139 @@ stay clear while the world whitens, with the glass over the white.
 fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with clean engine errors,
 goldens 29/29 hash-identical. The headset checks named above are still owed.
 
-## B9 ☐ Views in VR: rigid chase, nose, head tracking in place of head look
+## B9 ◐ Views in VR: rigid chase, nose, head tracking in place of head look
+
+**Outcome: built and pinned on the stand-in; the comfort of the chase and the view cycle are owed
+at the headset.** A headset flight opens in Cockpit; Cockpit and Nose stand the origin on the seated
+eye with the aircraft's axes; the chase is a fixed offset in the aircraft's axes with no lag; head
+look is off; every other camera is level, and a static one holds its heading. Each cut raises
+`XrRig.Cut`, D16's seam. The per-camera table is in `docs/org/cameraViews.md`, "Views under a
+headset".
 
 **Goal.** Cockpit is the VR default; Nose works; Chase is attached rigidly to the plane with no spring
 lag, no speed FOV and no swing; head look's Snap, FreeLook and Padlock are inactive under VR and the
 headset owns the head.
 
-**Evidence (confidence: lead-only).** Views are `Flight/Camera/PilotViewMode.cs:12-26`; the chase is
-`CameraController.Chase` (`:610`); head look is `Flight/Camera/HeadLook.cs`; FOV is set from the view
-(`CameraController.cs:427-479`), which the headset overrides.
+**Evidence (confidence: traced to code and measured on the stand-in for every placement, the input
+gating, the opening view and the cuts; lead-only for comfort, which is the author's at the headset).**
+The suites' reports are `.scratch/test-xr-view-*.txt`, the captures `.scratch/B9/`.
+- **How the origin learns the view.** Every camera write in `CameraController` now names an
+  `XrAnchor` (`Seat` for first person, `Camera` for a pose a headset write already made the
+  origin's, `Level` otherwise), and `XrRig.Place` takes it once a frame (`TakeXrWrite`) after every
+  writer. A camera the pilot's controller does not own (`CameraOwned`: a presenting cutscene, the
+  spectator and photo-mode cameras, the weapon lab) is taken by its heading, B7's placeholder. A frame
+  nothing wrote (a halt) keeps the last anchor; once the aircraft is down it is levelled, so a crash
+  with no camera cut cannot hold a rolled horizon. The flat camera holds the same pose, so the
+  listener and every other reader of it agree with the headset. Gated on `FlightController.Headset`,
+  which `HumanFlightAdapter` sets only where the stereo interior is built (`XrCockpit.Live`, local
+  seat).
+- **The opening view.** `SessionSpec.WithHeadsetView` runs after the saved Default View in
+  `Launcher.LaunchSession` and sets Cockpit when a headset or the stand-in is live, unless `--view=`
+  names anything (a mode, a digit, `back`, `flyby`); it applies under `--det` too. An `--xr-sim`
+  C1 flight with no `--view=` logged `view n=cockpit` and `xr: cut (a new aircraft) anchor=Seat`
+  (`.scratch/B9/B9-open-default.png`). Under a headset the destroy callback's view reset returns
+  to the opening view rather than the chase view.
+- **Cockpit and Nose** (`xr-view-first-person`, C1 Bloodhawk at -6350,600,-4144 on a rotated
+  heading, roll then pull, 240 frames, the aircraft turning 139.2°): the origin stays on the
+  `cockpit_camera` marker with the aircraft's axes, worst 0.339 mm and 0.0000°, in both views; Nose
+  hides the interior. The cycle walks Cockpit, Nose, Chase, Cockpit with anchors Seat, Seat, Camera,
+  Seat and exactly three cuts.
+- **The rigid chase** (`xr-view-chase`, the same turn): worst 0.318 mm and 0.0000° off the fixed
+  offset, zero lag. Control (METHOD-9): the flat chase on the same turn leaves its settled pose by
+  5.778 m and 18.469°. The `level` variant keeps world up to 0.0000° and its height to 0.021 mm. The
+  offset is `CameraController.VrChaseOffset`, the settled authored rig at `dist` held to
+  `[dist_min, dist_max]`, the flat chase's cruise distance: per airframe 14.85 m (Kestrel) to
+  25.86 m (Balmoral) out, 7.57° below the level gaze (11.11° on the Balmoral, whose rig is
+  0.2/0.2), so the aircraft sits a little under the natural seated line of sight at the default
+  head pose. Captures: `.scratch/B9/B9-chase-rigid.png` and `B9-chase-level.png`, frame 50 of a
+  roll.
+- **Head look off** (`xr-view-head-look`): with a numpad snap, the look stick, free-look, smooth
+  mode, the centre key, look-behind and padlock all held for 90 frames, the origin moved 0 mm and
+  0° in Cockpit, Nose and Chase, the head stayed at 0/0 in snap mode. Control: the same inputs on the
+  flat rig turn its camera 179.9° (first person) and 180° (chase). `StepHead` reads no input,
+  `BackActive` is false, the chase takes no stick swing, no zoom and no speed widen.
+- **The other cameras** (`xr-view-static`): the flyby's origin holds its spot and its level heading
+  to 0 mm and 0.0000° between re-sites (3 spots, a cut each, over 600 frames). The held heading
+  faces the nearest point of the track ahead (`XrMount.Watch`), so the passing aircraft swings at
+  most 89.6° round from the gaze; facing the aircraft at the cut instead put it 176.9° round, behind
+  the seat, in the first run of the suite. The death camera holds a level heading over 60 frames of a
+  falling wreck where the flat one re-aims 16.1°; the crash cut faces the impact level. A camera
+  another owner drives is taken at its eye with its heading, with a cut as it is taken and one as it
+  is handed back.
+- **Flat unchanged.** Every new branch reads `Headset`, null on every flat seat. Units 6402 passed,
+  3 skipped; the camera suites (`chase-rig`, `chase-trail`, `death-camera`, `flyby-camera`,
+  `look-stick`, `look-stick-edge`, `options-view-launch`, `death-respawn-rest-pose`, the `cockpit`
+  set) and every `xr` suite pass with clean engine errors. Goldens: 29 of 29 hash-identical on the
+  second run; the first moved `c1-cloud-deck-enhanced` (a `--freecam` shot no flight camera
+  touches) and `c1-cockpit-enhanced` once, with another session's Godots running.
+- **The chase frame, decided: attitude-locked (`--xr-chase=rigid`), heading-only as the A/B
+  (`--xr-chase=level`).** Decision 3 says rigidly attached and Decision 12 has no horizon lock. The
+  attitude frame is the cockpit's own, so a view switch never changes how the world moves about the
+  player. A heading-only frame keeps the horizon level, which is the usual comfort argument (the rest
+  frame a cockpit gives is missing in a chase view), but its heading reverses through any vertical
+  flight: `XrViewsTests` pins a 180° turn of the whole view between 89° and 91° of climb, where the
+  rigid frame moves 2°. Every loop would carry that cut. Comfort confidence: lead-only.
 
-**Approach.** A VR branch in `CameraController` that places the XR origin per view and skips the
-chase spring, the speed widen and the head-look input; the view cycle stays a named action.
+**Resolved TODOs.**
+- `LookCenter` (`numpad 5`) and `LookBack` (`numpad 0`, right-stick click) are inert under VR, as are
+  the numpad cluster, MMB free-look, `K`/`L`/`J`, the look stick and the chase zoom. Proposal for
+  C11 (not rebound here): under VR both `LookCenter` and `LookBack` fire `RecenterHeadset`. The
+  centre key already means "look forward", and the right-stick click is the one recenter a standard
+  Xbox pad can reach, since it has neither the touchpad nor the back paddle B7 bound.
+- The view cycle stays `CycleCockpitViews` and already walks only Cockpit, Nose and Chase; the flyby
+  (`F7`) stays reachable and holds its spot.
+- Cutscenes: a presenting cutscene sets `CameraOwned`, so the origin follows the cutscene camera by
+  heading and nothing here writes the camera; D15 replaces that arm (`XrRig.Place`'s
+  `CameraOwned` branch) with the theater screen.
+- View switches are hard cuts. `XrRig.Cut` fires once per cut (a view change, a respawn, a new
+  static spot, a new watched aircraft, the camera changing hands, an anchor change that moves the
+  origin) with the cause, logged at Debug as `xr: cut (...)`. D16 hangs its fade on it.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Approach (landed, VR only).** `Flight/Camera/XrMount.cs`: `XrAnchor`, `XrChase`, `For(eye,
+anchor, attitude, eyeOffset)`, `Chase` and `Watch`. `CameraController.Headset`, `Shot`,
+`TakeXrWrite`, `VrChaseOffset`; the VR arms in `StepHead`, `BackActive`, `FirstPersonView`, `Chase`,
+`StepEnhancedCues`, `ResetToChase` and the static cuts. `FlightController.Headset` and
+`CameraControl`; `XrRig.Place` by anchor, `Anchor` and `Cut`. `--xr-chase=rigid|level`
+(`SessionSpec.XrChase`, `FlightRosterPolicy.XrChase`) and `SessionSpec.WithHeadsetView`.
 
-**Verify.** <TODO: an `--xr-sim` suite per view checking the origin pose against the plane.>
+**Model recommendation.** Standard.
 
-**⚠ Traps.** <TODO: none known yet.>
+**Verify.** Units: `CSVM.Tests/XrViewsTests.cs` (the chase offset and bounds, both frames over a
+sweep of attitudes including inverted and past vertical, the heading reversal, `Watch`, each
+anchor, the opening view, the flag). Suites: `xr-view-first-person`, `xr-view-chase`,
+`xr-view-head-look`, `xr-view-static`, each with its flat control. Goldens: none new, 29 unmoved.
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669"
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase --xr-chase=level
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=flyby
+.\RunGame.ps1 -EngineArgs '--xr-mode','on'
+```
+Look for: (1) the first flight opens in the cockpit with no `--view=`; `F8` (or the pad's D-pad down)
+walks Cockpit, Nose, Chase and back, each a hard cut, Nose with no interior; (2) in the chase the
+aircraft sits a little under your straight-ahead gaze at a comfortable distance, and banks, loops
+and rolls are tolerable with the world turning about you, and the offset reads right; (3) the second
+line flies the level chase: the same manoeuvres with the horizon level, and the half-circle turn at
+the top of a loop; say which should be the default; (4) the numpad, the right stick and its click,
+`numpad 0` and the middle mouse button change nothing; (5) the flyby (third line, or `F7`) holds a
+level view facing the flight path while the aircraft passes, and each new spot is a cut; (6) from
+the menu (fourth line) with the saved Default View on Exterior, an Instant Action flight still opens
+in the cockpit; (7) crash into the ground in each view: the crash cut faces the impact level, which
+leaves the wreck about 56° below the gaze at the authored 30 m back and 45 m up, to judge.
+
+**⚠ Traps.**
+- Do not re-aim a static camera's origin per frame under a headset: a flyby passing at 6 m yaws the
+  world at hundreds of degrees a second. Hold the heading from the cut.
+- Do not take the flat camera's basis in first person: it carries the flat head pitch. `Seat` takes
+  the aircraft's attitude, and the stereo interior is placed from exactly that pose.
+- A suite's held action stands on the key and the pad halves alike, so a held `CycleCockpitViews`
+  walks two stops in one frame; call `CycleCockpitViews()` directly. A suite also runs in one engine
+  frame, so a held action stays stored until released.
+- The suites step `FlightController.SimStep`, not `_PhysicsProcess` (the base no-op): without it
+  the aircraft never moves and a lag check passes vacuously.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C, screen, HUD and input
 

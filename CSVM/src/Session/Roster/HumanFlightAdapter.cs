@@ -201,6 +201,8 @@ internal sealed class HumanFlightAdapter
             Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons)");
         // The recenter action, for the seat the headset flies.
         controller.RecenterHeadset = remote ? null : _human.RecenterHeadset;
+        // The headset's own views, for the seat the headset flies.
+        controller.Headset = xrInterior ? _policy.XrChase : null;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
         // The graphics-mode action, for a seat somebody sits at here, like the pause key below.

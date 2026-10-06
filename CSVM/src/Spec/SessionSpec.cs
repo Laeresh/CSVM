@@ -778,6 +778,9 @@ public sealed record SessionSpec
     /// <c>Launch/XrSession.cs</c> boots it when no OpenXR runtime is live; docs/cli.md has the
     /// tokens and the launch it needs.</summary>
     public XrSimSpec? XrSim { get; private set; }
+    /// <summary>The frame a headset's chase view rides, <c>--xr-chase=rigid|level</c>: locked to the
+    /// aircraft's attitude (the default) or to its heading alone. A flat launch never reads it.</summary>
+    public Flight.Camera.XrChase XrChase { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -1797,6 +1800,19 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
                 }
             }
+            else if (arg.StartsWith("--xr-chase="))
+            {
+                string want = arg["--xr-chase=".Length..];
+                if (Enum.TryParse(want, ignoreCase: true, out Flight.Camera.XrChase chase)
+                    && Enum.IsDefined(chase) && !int.TryParse(want, out _))
+                {
+                    s.XrChase = chase;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--xr-chase={want} is not rigid or level, ignoring it"));
+                }
+            }
             else if (arg == "--xr-sim") { s.XrSim = XrSimSpec.Default; }
             else if (arg.StartsWith("--xr-sim="))
             {
@@ -1994,6 +2010,15 @@ public sealed record SessionSpec
 
         return this with { ViewMode = saved };
     }
+
+    /// <summary>A headset's opening view folded in: Cockpit, whatever the saved Default View says,
+    /// unless <c>--view=</c> names a view of its own. Applied after <see cref="WithSavedDefaultView"/>
+    /// and under <c>--det</c> too, since it is the mode's rule and not a saved option. Not folded
+    /// outside <see cref="Fly"/>, for that method's reason.</summary>
+    public SessionSpec WithHeadsetView(bool headset) =>
+        !headset || ViewModeExplicit || View != 0 || !Fly
+            ? this
+            : this with { ViewMode = Flight.Camera.PilotViewMode.Cockpit };
 
     /// <summary>The saved automatic head turn folded in, on
     /// <see cref="WithSavedNearestAfterKill"/>'s rules. Nothing on the command line names it, and

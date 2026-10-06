@@ -83,6 +83,11 @@ internal sealed class FlightRosterPolicy
     /// <see cref="XrInterior"/>. Every other session holds the defaults and opens no file.</summary>
     public VrCockpits XrCockpits { get; init; } = VrCockpits.Defaults;
 
+    /// <summary>The frame the headset's chase rides (<c>--xr-chase=</c>), handed to the seat the
+    /// headset flies (<see cref="FlightController.Headset"/>) and read only under
+    /// <see cref="XrInterior"/>.</summary>
+    public XrChase XrChase { get; init; }
+
     public static FlightRosterPolicy From(SessionSpec spec) => new()
     {
         HoldSets = spec.HoldSets,
@@ -126,6 +131,7 @@ internal sealed class FlightRosterPolicy
         // Read here for the same reason: the stereo path is the process's, booted before any session.
         XrInterior = XrCockpit.Live,
         XrCockpits = XrCockpit.Live ? VrCockpits.Load() : VrCockpits.Defaults,
+        XrChase = spec.XrChase,
     };
 }
 

@@ -36,7 +36,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--net-host` · `--net-join` · `--net-shape` · `--net-port-base` · `--master-server`
 
 **Placement, where the subject starts and which way it faces**
-`--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
+`--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--xr-chase` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
 
 **Capture, screenshots and the scripted-run workhorses**
 `--screenshot` · `--export-gltf` · `--frames` · `--shots` · `--jitter` · `--no-focus` · `--no-vsync` · `--xr-sim`
@@ -410,6 +410,7 @@ lines**.
 - `--fov=<degrees>` (the vertical field of view of the `--freecam`/`--anim-lab` camera, 1 to 179, instead of the decoded external base every world camera outside the cockpit interior draws at. F11 appends it when a cockpit view drew the frame, so the printed line frames what was on screen. Any other mode warns and ignores it; flight's views set their own angles)
 - `--lookat=x,y,z` (**the point form of `--direction`**. It stays a point, which matters in `--viewer`: the orbit camera **pivots** on it and takes its radius from eye to pivot, so a bare direction would spin the wheel and the drag about the eye. Elsewhere it converts to a direction losslessly, against `--pos` in flight. A `--viewer --direction` therefore synthesizes a pivot, the point on the aim ray nearest the subject's centre (min radius 1 m), announced on a `[core] orbit pivot from --direction` line; with no `--pos` the centre stays the pivot and the eye swings instead)
 - `--view=<1-9|back|flyby|chase|cockpit|nose>` (pin a flight camera, `--fly`/`--stunt` only, else it warns and leaves chase. A digit holds a numpad snap, swung to, not cut to, aiming the head in first person: `2` dead ahead, `4`/`6` the flanks, `8` the belly, `1`/`3`/`7`/`9` the corners below (`5` and out of range fall back). `back` is the look-behind, `flyby` the **F7** camera, re-entered on respawn, `chase`/`cockpit`/`nose` an **F8** view mode. Precedence: `flyby`, `back` (in first person a head snap astern, not a cut outside), a live numpad key, a pinned digit, then the saved Default View)
+- `--xr-chase=rigid|level` (**which frame a headset's chase view rides**, default `rigid`: a fixed offset behind and above the aircraft in its own axes, so the world banks and climbs about the player as it does from the cockpit. `level` keeps the offset on the aircraft's heading alone with the horizon level, and turns the whole view half a circle through any vertical flight, the top of a loop. The A/B door for the headset; a flat launch never reads it, and an unknown word is ignored with a note. `docs/org/cameraViews.md`, "Views under a headset")
 - `--look=x,y` (**hold a right-stick look deflection for the whole run**, the scripted twin of pushing the look stick and the only way a headless run aims it. Both components are clamped to `[−1, 1]`, `+x` right and `+y` up; a malformed pair warns and leaves the stick centred. It drives **both** halves of the look-around from one value: outside first person it swings the camera around the plane, and in `--view=cockpit`/`=nose` it aims the head, over one shared envelope (±150° round, ±60° up and down, see [`controls.md`](controls.md)). A live stick beats it while deflected)
 - `--campos=x,y,z` (**deprecated**, the pre-A5 camera-only spelling of `--pos`; logs `WARN [core] deprecated flag=--campos use=--pos` once per run, then behaves identically. It never placed the plane and still does not, so it is not simply a rename of `--pos` in `--fly`. Where both reach the same camera (`--freecam`, `--anim-lab`), `--pos` wins)
 - `--screenshot=<path>` (render a few frames, save a PNG, quit. Implies `--no-focus` and `--det`, so a bare `--screenshot` is reproducible with no other flags; `--no-det` opts out. The hidden window still renders, a minimized one does not (SHOT-16). Every capture prints `[core] shot pixmd5=<md5> size=<WxH> gpu=<adapter / api>`, the md5 of the raw pixel buffer rather than of the PNG (SHOT-6), which is what the golden tripwire compares; copying it into `analysis/goldens/manifest.json` turns the shot into a golden, see `analysis/goldens/README.md`)
@@ -491,7 +492,9 @@ leaves the flat game with a notice on the menu. A run that is `--det`, `--run-te
 `--headless`, `--xr-sim`, a dev mode, a lab, `--net-host`/`--net-join` or not on Windows never
 relaunches and never reads the saved choice (`Launch/XrRelaunch.cs`). Under a headset or `--xr-sim`
 the game flies one seat: `--players` above one is refused with a warning and the join boards close
-the other seats. A headset launch deletes the shader cache files it wrote as it ends, so the next flat
+the other seats. A headset flight opens in Cockpit unless `--view=` names a view, whatever the saved
+Default View, and its head look, look-behind and chase swing are off (`docs/org/cameraViews.md`,
+"Views under a headset"). A headset launch deletes the shader cache files it wrote as it ends, so the next flat
 launch reads none of them (`Launch/XrShaderCache.cs`).
 
 `--xr-sim` is a user argument, but what it needs is engine state: Godot compiles the multiview

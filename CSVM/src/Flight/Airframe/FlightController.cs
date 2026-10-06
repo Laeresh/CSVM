@@ -609,6 +609,7 @@ public partial class FlightController : Node3D
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
     private bool _graphicsTogglePrev;            // previous frame's ToggleGraphicsMode state (edge detection)
     private bool _recenterPrev;                  // previous frame's RecenterHeadset state (edge detection)
+    private XrChase? _headset;                   // Headset's backing field, handed to each camera Setup builds
     private ImmediateMesh? _probe;              // debug collision-probe line
     // The built parent, pose and visibility of every node the death defs play on, captured before
     // the first crash. That covers the airframe, the wreck and the adopted eject pilot. A
@@ -934,6 +935,26 @@ public partial class FlightController : Node3D
     /// the last placed frame handed it are what say which view's law ran.</summary>
     public HeadLook? Head => _cam?.Head;
 
+    /// <summary>This pilot's camera controller, or null on an AI rig. The VR seat reads what its
+    /// writes ask of the headset's origin (<see cref="CameraController.TakeXrWrite"/>).</summary>
+    public CameraController? CameraControl => _cam;
+
+    /// <summary>The VR chase this seat's headset flies, or null on a flat seat (the default). The
+    /// session sets it on the seat the headset flies, and the camera then takes the VR forms of the
+    /// views (<see cref="CameraController.Headset"/>).</summary>
+    public XrChase? Headset
+    {
+        get => _headset;
+        set
+        {
+            _headset = value;
+            if (_cam != null)
+            {
+                _cam.Headset = value;
+            }
+        }
+    }
+
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
     /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass. Null
@@ -1215,6 +1236,7 @@ public partial class FlightController : Node3D
         {
             _cam.Head.IdleAim = AutoheadTarget;
             _cam.Head.TargetOffset = PadlockOffset;
+            _cam.Headset = _headset;
         }
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
@@ -2614,7 +2636,10 @@ public partial class FlightController : Node3D
                 // and so does the stick in free-look. Otherwise the stick swings the finished chase
                 // pose absolutely (CameraController.PadSwing).
                 _cam.StepHead(simDt, Look.Read(Pause.SheetOverFlight, chase: true), HeadLook.ChaseElevationFloor);
-                var swing = Look.StepChase(simDt, Pause.SheetOverFlight, !_cam.Head.PadRates);
+                // A headset's chase takes no swing: the player's own head is the look-around.
+                var swing = _cam.Headset == null
+                    ? Look.StepChase(simDt, Pause.SheetOverFlight, !_cam.Head.PadRates)
+                    : default;
                 // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
                 // independent; fed the DRAWN pose, same rule as the rigid views above.
                 _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, swing.X, swing.Y);

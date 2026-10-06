@@ -256,7 +256,7 @@ holds the state and the camera, `StepViewKeys` takes the selection controls' pre
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
 The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair, turned by two aircraft frames `EaseFrame` eases at the `*_catch_up` rates times `CatchUpScale`, frames the look-behind shares; `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
-authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
 The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death
@@ -1434,21 +1434,24 @@ writes it each frame. `Xr` is the VR seat's `XrRig.cs` while the headset flies t
 `SkyAnchor` then centres the sky on the tracked head rather than the camera.
 
 ## src/Flight/Camera/XrMount.cs
-Where a headset's tracking origin sits in the world each frame, engine-free: in a first-person view
-of a live aircraft, the flat camera's eye at the aircraft's attitude (the flat view's fixed head
-pitch left out, since the headset supplies the look); in every other view, the flat camera's eye
-with its heading only, so a chase swing or a tumbling wreck never rolls the player's horizon. A
-first-person origin also moves by the plane's seated eye offset. `XrRig.cs` is the one caller.
+Where a headset's tracking origin sits in the world each frame, engine-free, by the `XrAnchor` a
+camera write names: `Seat`, the flat eye at a live aircraft's attitude plus the seated eye offset
+(the flat view's head pitch left out); `Camera`, the flat camera's pose as a headset write left it;
+`Level`, the flat eye with its heading only, for a camera another owner drives. `Chase` is the VR
+chase, a fixed offset in the aircraft's frame (`XrChase.Rigid`) or its heading's (`XrChase.Level`),
+and `Watch` the level heading a static camera holds, facing the aircraft's track. `XrRig.cs`
+applies it; `CameraController.cs` writes the poses; the per-view choices are in
+[../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".
 
 ## src/Flight/Camera/XrRig.cs
 The VR flavour of `PlayerRig.cs`: the one VR seat's `XROrigin3D` and tracked `XRCamera3D` (`Head`),
 and the pane bound to them (`Bind`, `Release`). `Launch/XrSession.cs` builds it at boot and calls
-`Place` each frame after every camera writer: the origin to the pane's eye by `XrMount.cs`, the
-persistent camera with no pane, then the pilot's stereo interior through `IXrInterior`, which
-`Flight/Hud/XrCockpit.cs` implements, since this namespace names nothing in Flight but the airframe.
-`Recenter` is `XRServer.CenterOnHmd` keeping the head's tilt and not its height. The pane's dome and
-deck follow `Head` through `PlayerRig.SkyAnchor`. `Launch/Launcher.cs`'s `LauncherContext.Xr` hands
-it to a session, which binds its first pane.
+`Place` each frame after every camera writer: the origin where the pilot's camera write asks
+(`CameraController.TakeXrWrite`, through `XrMount.cs`), by heading for a camera another owner drives,
+then the stereo interior through `IXrInterior` (`Flight/Hud/XrCockpit.cs`; this namespace names
+nothing in Flight but the airframe). `Cut` fires where the view jumps, the seam a comfort fade hangs
+on. `Recenter` is `XRServer.CenterOnHmd` keeping the tilt, not the height. The sky follows `Head`
+through `PlayerRig.SkyAnchor`; `LauncherContext.Xr` hands the rig to a session.
 
 ## src/Flight/Camera/XrSimEyes.cs
 The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch and an offset

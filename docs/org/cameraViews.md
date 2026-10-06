@@ -634,6 +634,44 @@ one cue that the original has no counterpart for, TUNE and living in
 the offset and 21.7° on the aim after a one-second 90°/s roll), and a faster lag in its place reads
 stiffer than the faithful camera, while one stacked on it lags the camera twice.
 
+## Views under a headset (remake-only)
+
+A headset turns the view with the player's own head, so a stereo session (`--xr-mode on` or
+`--xr-sim`) gives the seat the headset flies a VR form of each camera (`FlightController.Headset`,
+`CameraController.Headset`). `Flight/Camera/XrRig.cs` places the XR origin from the pose each camera
+write leaves and the `XrAnchor` it names (`XrMount.cs`). The flat camera holds that same pose, so
+every reader of it agrees with the headset. No flat pane takes any of this.
+
+| Camera | Under a headset |
+|---|---|
+| Cockpit, Nose | The eye at the `cockpit_camera` marker plus the plane's seated eye offset, in the aircraft's own axes, without the flat view's head pitch. Nose hides the interior as the flat view does. |
+| Chase | A fixed offset behind and above the aircraft in its own axes (`XrChase.Rigid`): the settled authored rig at `dist` held to `[dist_min, dist_max]`, so 14.9 to 25.9 m out and 7.57° below the level gaze, 11.1° on the Balmoral. No eased frames, no swing, no zoom, no speed in the distance and no speed FOV. |
+| Snap, free-look, padlock, the centre key, the look stick, look-behind, zoom | Inert. The head stays level and forward and reads no input. |
+| Opening view | Cockpit, unless `--view=` names a view, whatever the saved Default View says. |
+| The destroy callback's view reset | Back to the opening view, where the flat game returns to the chase view. |
+| Crash cut | The authored spot, facing the impact on a level heading. |
+| Death camera, flyby | The authored spot, holding the level heading that faces the nearest point of the aircraft's track ahead (`XrMount.Watch`), so a passing aircraft crosses the view and swings at most about 90° round. A new spot is a cut. |
+| A spent pilot watching another aircraft | The VR chase on the watched aircraft. |
+| A camera another owner drives: a presenting cutscene, the spectator and photo-mode cameras, the weapon lab's orbit | That camera's eye with its heading only. |
+
+Nothing in this table rolls or pitches the player's horizon except the aircraft the player flies:
+Cockpit, Nose and Chase ride its attitude, and every other camera is level. A static camera holds its
+heading instead of re-aiming, because a turning origin is a turn the seated body never made; a flyby
+passing at 6 m would otherwise yaw the world at hundreds of degrees a second.
+
+**Why the chase rides the attitude.** The VR chase is specified as rigidly attached to the aircraft,
+with no spring lag, no speed FOV and no swing, and the comfort aids include no horizon lock. Riding the
+attitude keeps the chase in the cockpit's frame, so a view switch never changes how the world moves
+about the player, and it has no singular pose. A heading-only chase keeps the horizon level, the
+usual comfort argument against rolling the world, but its heading reverses through any vertical
+flight, so the top of every loop turns the whole view half a circle in one frame; in this game's
+stunt flying that is a cut the player did not ask for. `--xr-chase=level` flies the heading-only
+form for a side-by-side judgement at the headset.
+
+Every jump of the origin (a view change, a respawn, a new static spot, a new watched aircraft, a
+camera taken by another owner or handed back) raises `XrRig.Cut`, the place a comfort fade hangs on;
+today each is a hard cut.
+
 ## Not resolved
 
 - **The non-selectable modes (`1`, `2`, `3`, `4`) still have no friendly name or
