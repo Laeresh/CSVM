@@ -23,12 +23,34 @@ internal sealed class OceanMask
     /// <summary>The texel edge in metres.</summary>
     public const float Cell = OceanMaskRaster.Cell;
 
+    /// <summary>The filtered sea coverage below which the ocean discards a fragment. The base sheet's
+    /// hide (<c>csky_ocean.gdshaderinc</c>) steps aside only at or above it, so every texel has one
+    /// owner. Both shaders spell it as a literal.</summary>
+    public const float SeaThreshold = 0.02f;
+
+    /// <summary>The zone byte of a texel on a seam between two zone groups, which no grid draws.</summary>
+    public const byte SeamZone = OceanMaskRaster.AnyZone - 1;
+
+    // The globals csky_ocean.gdshaderinc declares: the live mask, its zone groups and its world rect.
+    private static readonly StringName MaskParam = "csky_ocean_mask";
+    private static readonly StringName ZoneParam = "csky_ocean_zone";
+    private static readonly StringName RectParam = "csky_ocean_rect";
+
     // One bake per built world, held only as long as its builder lives.
     private static readonly ConditionalWeakTable<SceneBuilder, Memo> Baked = new();
+
+    // What the globals hold with no ocean live: no sea, and a zone every grid draws. The hide then
+    // steps aside nowhere, whatever csky_ocean_on reads.
+    private static ImageTexture? _noSea;
+    private static ImageTexture? _anyZone;
 
     private OceanMask()
     {
     }
+
+    /// <summary>The mask the base sheet's hide reads now, null while the defaults stand. Read by the
+    /// suites, since the server's getter for a global errors outside the editor.</summary>
+    public static OceanMask? Live { get; private set; }
 
     public ImageTexture Texture { get; private set; } = null!;
 
@@ -78,6 +100,29 @@ internal sealed class OceanMask
     /// <summary>The bake's milliseconds per phase, for the build log line.</summary>
     public string Timing { get; private set; } = "";
 
+    /// <summary>Declares the mask globals with their defaults. Must run before the first shader that
+    /// reads them is built, as <see cref="Ocean.RegisterGlobal"/> does.</summary>
+    public static void RegisterGlobals()
+    {
+        _noSea ??= TextureUpload.Create(1, 1, Image.Format.Rg8, new byte[] { 0, 0 });
+        _anyZone ??= TextureUpload.Create(1, 1, Image.Format.R8, new[] { OceanMaskRaster.AnyZone });
+        RenderingServer.GlobalShaderParameterAdd(MaskParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _noSea);
+        RenderingServer.GlobalShaderParameterAdd(ZoneParam, RenderingServer.GlobalShaderParameterType.Sampler2D, _anyZone);
+        RenderingServer.GlobalShaderParameterAdd(RectParam, RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 0f, 1f, 1f));
+    }
+
+    /// <summary>Puts the defaults back, so the base sheet's hide steps aside nowhere.</summary>
+    public static void Withdraw()
+    {
+        Live = null;
+        if (_noSea == null || _anyZone == null)
+            return;
+        RenderingServer.GlobalShaderParameterSet(MaskParam, _noSea);
+        RenderingServer.GlobalShaderParameterSet(ZoneParam, _anyZone);
+        RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(0f, 0f, 1f, 1f));
+    }
+
+
     /// <summary>Bakes the mask over the world under <paramref name="root"/>, skipping the subtrees in
     /// <paramref name="skip"/>; null when that world has no sea-level base sheet. The surfaces are
     /// read through <paramref name="scene"/>, which holds the arrays it committed.</summary>
@@ -103,6 +148,18 @@ internal sealed class OceanMask
                 $" gc={System.Diagnostics.Stopwatch.GetElapsedTime(gcStart).TotalMilliseconds:0}");
         Baked.AddOrUpdate(scene, new Memo(root, mask));
         return mask;
+    }
+
+    /// <summary>Hands this mask to the base sheet's hide, which then steps aside exactly where the
+    /// ocean draws. A sheet shown after the bake lies off the sea coverage and keeps drawing.</summary>
+    public void Publish()
+    {
+        if (_anyZone == null)
+            return;
+        Live = this;
+        RenderingServer.GlobalShaderParameterSet(MaskParam, Texture);
+        RenderingServer.GlobalShaderParameterSet(ZoneParam, ZoneTexture ?? _anyZone);
+        RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
     }
 
     private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip)

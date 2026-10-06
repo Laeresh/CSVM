@@ -37,6 +37,9 @@ internal static class GraphicsSwitchSuites
     // The base sheet's vertex-stage call. The include line alone never matches it.
     private const string HideCall = "csky_ocean_hides_sea(";
 
+    // Where the hide and its mask globals are declared.
+    private const string OceanIncludePath = "res://shaders/csky_ocean.gdshaderinc";
+
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
@@ -350,8 +353,10 @@ internal static class GraphicsSwitchSuites
 
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
-        + "stands one ocean and every sea-level base sheet material carries the hide; "
-        + "switched to Original the ocean leaves the tree and the sheet carries a fresh Original "
+        + "stands one ocean and every sea-level base sheet material carries the hide, which reads "
+        + "that ocean's mask and steps aside only at the coverage the ocean discards below; "
+        + "switched to Original the ocean leaves the tree, the mask globals return to their no-sea "
+        + "defaults and the sheet carries a fresh Original "
         + "build's text, with no hide; back to Enhanced exactly one ocean stands and the sheet "
         + "carries a fresh Enhanced build's text; an Original build switched to Enhanced builds the "
         + "ocean; a closed session leaves no ocean in the tree, and a following Enhanced C2B session "
@@ -407,6 +412,7 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.OceanBuilt && freshEnhanced.Materials > 0
                         && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
+                HideReadsTheMask(ctx, builtFresh);
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,
@@ -419,6 +425,8 @@ internal static class GraphicsSwitchSuites
                     $"switched to Original the ocean leaves the tree ({switchedOriginal}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(switchedOriginal.Hidden == 0 && switchedOriginal.Census == freshOriginal.Census,
                     $"and the base sheet carries a fresh Original build's text, with no hide ({switchedOriginal.Hidden} hiding)");
+                ctx.Check(Effects.OceanMask.Live == null,
+                    $"and the hide's mask globals hold their no-sea defaults again");
 
                 Switch(enhanced, true);
                 var roundTrip = Sea(enhanced);
@@ -427,6 +435,8 @@ internal static class GraphicsSwitchSuites
                     $"back to Enhanced the ocean is built again, exactly once ({roundTrip}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(roundTrip.Hidden == roundTrip.Materials && roundTrip.Census == freshEnhanced.Census,
                     $"and the base sheet carries a fresh Enhanced build's text, hidden again ({roundTrip.Hidden} of {roundTrip.Materials} collapsing)");
+                ctx.Check(Effects.OceanMask.Live != null,
+                    $"and the rebuilt ocean hands its mask to the hide again");
                 report.AppendLine($"fresh enhanced\n{freshEnhanced.Print()}\nswitched original\n{switchedOriginal.Print()}\nround trip\n{roundTrip.Print()}");
                 builtFresh = rebuilt;
             }
@@ -435,6 +445,8 @@ internal static class GraphicsSwitchSuites
                 enhanced.Close();
             }
             Left(ctx, builtFresh, "the round-tripped Enhanced session");
+            ctx.Check(Effects.OceanMask.Live == null,
+                $"and with the ocean gone the hide's mask globals hold their no-sea defaults");
 
             WaterQualitySetting.Resolve(WaterQualitySetting.Flat, null, null);
             var uncovered = Open(ctx, enhanced: true, chapter: UncoveredSeaChapter);
@@ -974,6 +986,23 @@ internal static class GraphicsSwitchSuites
         bool gone = ocean == null || !GodotObject.IsInstanceValid(ocean) || !ocean.IsInsideTree();
         ctx.Check(ocean != null && gone && OceansUnder(ctx.Host) == 0,
             $"closing {what} leaves no ocean in the tree (held ocean {(ocean == null ? "never built" : gone ? "gone" : "still in the tree")}, {OceansUnder(ctx.Host)} under the host)");
+    }
+
+    // The sheet's hide steps aside only where this ocean draws. Its mask is the one the hide reads,
+    // and the include gates on the coverage below which the ocean's own fragment discards.
+    private static void HideReadsTheMask(TestContext ctx, Effects.Ocean? ocean)
+    {
+        string threshold = Effects.OceanMask.SeaThreshold.ToString("0.0#", CultureInfo.InvariantCulture);
+        string include = ResourceLoader.Load<ShaderInclude>(OceanIncludePath)?.Code ?? "";
+        string grid = ocean?.GetNodeOrNull<MeshInstance3D>("OceanGrid")?.Mesh?.SurfaceGetMaterial(0) is ShaderMaterial { Shader: { } shader }
+            ? shader.Code : "";
+        ctx.Check(ocean != null && Effects.OceanMask.Live != null,
+            $"the standing ocean hands its mask to the sheet's hide");
+        ctx.Check(include.Contains($"csky_ocean_sea(world.xz) < {threshold}", StringComparison.Ordinal)
+                && grid.Contains($"m.r < {threshold}", StringComparison.Ordinal),
+            $"the sheet's hide steps aside at the coverage the ocean discards below, {threshold} (include {(include.Length > 0 ? "read" : "missing")}, grid shader {(grid.Length > 0 ? "read" : "missing")})");
+        ctx.Check(include.Contains($"abs(zone - {Effects.OceanMask.SeamZone}.0)", StringComparison.Ordinal),
+            $"and leaves a zone seam texel, which no grid draws, to the sheet");
     }
 
     // The base sheet's materials as the world builder named them, by texture and shader text. Also

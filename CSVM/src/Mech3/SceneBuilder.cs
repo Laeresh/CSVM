@@ -1978,7 +1978,7 @@ void fragment() {
         if (oceanHide)
         {
             sb.AppendLine(OceanInclude);
-            sb.AppendLine("varying float v_ocean_y;");
+            sb.AppendLine("varying vec3 v_ocean_pos;");
         }
         if (textured)
         {
@@ -2033,9 +2033,10 @@ void fragment() {
             : "";
         string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
         // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
-        // would stretch to its model origin. The colliders stay flat.
+        // would stretch to its model origin. The colliders stay flat. The hide reads the ocean's mask
+        // at the fragment's world X/Z, so a sheet shown after the bake still draws.
         if (oceanHide)
-            ghostVertex += "    v_ocean_y = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;\n";
+            ghostVertex += "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2071,7 +2072,7 @@ void vertex() {{
 
 void fragment() {{");
         if (oceanHide)
-            sb.AppendLine("    if (csky_ocean_hides_sea(v_ocean_y)) { discard; }");
+            sb.AppendLine("    if (csky_ocean_hides_sea(v_ocean_pos)) { discard; }");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         if (raceGhost)

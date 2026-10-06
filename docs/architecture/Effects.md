@@ -55,7 +55,8 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 ## src/Effects/Ocean.cs
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred
 polar grid with a Gerstner swell in its vertex stage and chop in its fragment normals replaces the sea-level
-base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` while its colliders stay flat. It draws
+base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` only where the ocean draws, so a sheet
+shown after the mask bake draws flat instead of leaving a hole; its colliders stay flat. It draws
 a priority level below the lowest base sheet, one grid per zone-gate group. Owns the wave tables, the foam field
 and up to 16 ship calm zones (`OceanCalmZone.cs`, geometry only), all on `csky_time`. Where the shore calms the
 waves or the fog thickens, it shades as the flat sheet does, so no edge shows against a coplanar coast tile.
@@ -68,14 +69,14 @@ touched. `Distance` and `Calm` are the shader's `ship_calm` in C#: no waves with
 box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold the box and the fade.
 
 ## src/Effects/OceanMask.cs
-The wave ocean's shore mask at 8 m texels: sea coverage, the wave height left after a fade from every shore,
-surf texel and solid near sea level (overlay passes included), the base sheet's baked vertex colour and, where
-the sheet spans zone-gate layers, each texel's zone group. The same pass over the visible tree finds the wake
-sheets (flat `wakefront*`/`wakeback*` meshes), the tile size and the sheet's lowest priority. A wake's ship
-stays out of the mask, so a moving hull leaves no calm patch at its start. Surfaces are read through
-`SceneBuilder.SurfaceArrays`, never `SurfaceGetArrays`, whose read-back stalls on the render thread. One bake
-per built world (keyed on its `SceneBuilder`) serves every rebuild of the ocean over it. `--dump-ocean-mask=`
-writes the mask and the tint. Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
+The wave ocean's shore mask at 8 m texels: sea coverage, the wave height left after a fade from every shore, surf texel
+and solid near sea level (overlay passes included), the base sheet's baked vertex colour and, where the sheet spans
+zone-gate layers, each texel's zone group. The same pass over the visible tree finds the wake sheets (flat
+`wakefront*`/`wakeback*` meshes), the tile size and the sheet's lowest priority. A wake's ship stays out of the mask, so a
+moving hull leaves no calm patch at its start. Surfaces are read through `SceneBuilder.SurfaceArrays`, never
+`SurfaceGetArrays`, whose read-back stalls on the render thread. One bake per built world (keyed on its `SceneBuilder`)
+serves every rebuild of the ocean over it. `--dump-ocean-mask=` writes the mask and the tint. While an ocean stands, `Publish` hands the mask, zone texture and rect to the `csky_ocean_mask`/`_zone`/`_rect` globals; the sheet's hide steps aside at the ocean's own discard (`SeaThreshold`) off any zone seam, and `Withdraw` restores 1x1 no-sea defaults.
+Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
 
 ## src/Effects/OceanMaskRaster.cs
 The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint and R8 zone bytes out, with no

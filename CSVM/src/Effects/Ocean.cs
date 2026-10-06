@@ -72,19 +72,25 @@ public sealed partial class Ocean : Node3D
     private readonly OceanCalmZone[] _zones = new OceanCalmZone[MaxShips];
     private readonly Node3D?[] _zoneHulls = new Node3D?[MaxShips];
     private readonly Dictionary<Node3D, Aabb?> _waterlines = new();
+    private readonly OceanMask _mask;
 
-    private Ocean(ShaderMaterial material, Func<IEnumerable<Node3D>> ships, List<Node3D> wakes, Node3D worldRoot)
+    private Ocean(ShaderMaterial material, Func<IEnumerable<Node3D>> ships, OceanMask mask, Node3D worldRoot)
     {
-        _wakes = wakes;
+        _mask = mask;
+        _wakes = mask.Wakes;
         Name = "Ocean";
         _material = material;
         _ships = ships;
         _worldRoot = worldRoot;
     }
 
-    /// <summary>Declares the global. Must run before the first shader that reads it is built.</summary>
-    public static void RegisterGlobal() =>
+    /// <summary>Declares the switch and the mask globals the base sheet's hide reads. Must run before
+    /// the first shader that reads them is built.</summary>
+    public static void RegisterGlobal()
+    {
         RenderingServer.GlobalShaderParameterAdd(Param, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
+        OceanMask.RegisterGlobals();
+    }
 
     /// <summary>Whether a chapter's sea gets the ocean: every chapter with a sea at y = 0. C4 has
     /// only raised lakes, which keep the flat glossy water.</summary>
@@ -120,7 +126,7 @@ public sealed partial class Ocean : Node3D
         if (mask.ZoneTexture is { } zoneTex)
             material.SetShaderParameter("zone_tex", zoneTex);
 
-        var ocean = new Ocean(material, ships, mask.Wakes, worldRoot);
+        var ocean = new Ocean(material, ships, mask, worldRoot);
         ocean.PublishShips();
         var mesh = BuildGrid();
         mesh.SurfaceSetMaterial(0, material);
@@ -169,9 +175,18 @@ public sealed partial class Ocean : Node3D
         return ocean;
     }
 
-    public override void _EnterTree() => RenderingServer.GlobalShaderParameterSet(ParamName, 1.0f);
+    // The sheet hides only where this ocean's mask says it draws, so the mask goes live with it.
+    public override void _EnterTree()
+    {
+        _mask.Publish();
+        RenderingServer.GlobalShaderParameterSet(ParamName, 1.0f);
+    }
 
-    public override void _ExitTree() => RenderingServer.GlobalShaderParameterSet(ParamName, 0.0f);
+    public override void _ExitTree()
+    {
+        RenderingServer.GlobalShaderParameterSet(ParamName, 0.0f);
+        OceanMask.Withdraw();
+    }
 
     public override void _Process(double delta) => PublishShips();
 

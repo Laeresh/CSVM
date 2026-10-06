@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ Swell regularity from altitude
 24. ☐ An Enhanced ocean golden
 25. ☑ The ocean matches the flat sheet at the shore and in fog
-26. ☐ No hole where a mission shows a node hidden at the bake
+26. ◐ No hole where a mission shows a node hidden at the bake
 27. ☐ Calm zones for mission-animated boats with no wake sheet
 
 ## Dependency and parallelism notes
@@ -580,7 +580,36 @@ approved (its md5 may move; send the montage).
 **⚠ Traps.** The C1 coast montage at 250 m did not show the seam; the golden's low lake pose did.
 Judge the edge where an opaque coast tile meets the open-sea tile, close and low.
 
-## C26 ☐ No hole where a mission shows a node hidden at the bake
+## C26 ◐ No hole where a mission shows a node hidden at the bake
+
+**Landed.** The base sheet's hide (`csky_ocean_hides_sea` in `csky_ocean.gdshaderinc`) takes the
+fragment's world position and steps aside only where the ocean draws. It reads three globals that
+`OceanMask.Publish` sets as the ocean enters the tree and `OceanMask.Withdraw` resets as it leaves:
+`csky_ocean_mask` (the mask, sea coverage in R), `csky_ocean_zone` (the R8 zone groups) and
+`csky_ocean_rect` (origin, 1 / extent). Their defaults are 1x1 textures (no sea, any zone), so the
+hide is a no-op with no ocean live. Coverage is fetched texel by texel and filtered in the shader as the
+ocean's linear clamp-to-edge sampler reads it, so no sampler state on a global can change it, and the
+hide fires at `SeaThreshold` (0.02), the ocean's own `m.r < 0.02` discard. Zones: a seam texel
+(`SeamZone`, 254) is one no grid draws, so the sheet keeps it; elsewhere the grid of the texel's own
+group draws. The flat colliders and Original text are untouched (the hide lives in the Enhanced-only
+lit water arm). `graphics-ocean-switch` now also checks the standing ocean's mask is the live one, the
+include and the grid shader share the threshold, and the defaults return when the ocean leaves.
+Evidence, montages in the C26 tree's `.scratch\c26w\` (flat / ocean before / ocean after):
+- The crater (`--freecam --chapter=C3 --pos=-8773,220,-5100 --lookat=-8773,0,-4656
+  --debug-damage=node=floodgate_healthy,kill --frames=1200`): before, the drained floor was a grey
+  hole; after, the flat sheet draws there, as with `--no-ocean` (`montage-crater.png`). `--destroy=`
+  kills at build, before the bake, so it cannot reproduce the hole.
+- C1B cruise (`3D0FD8B6...`) and the `c1-lake-enhanced` args (`2D3CAB1E...`) are decoded-pixel identical,
+  and so are `c5-city-night-enhanced` and `c1-rocket-hit-enhanced` against the old rule; those three
+  goldens move on this tree by C21's ocean, not by C26.
+- At the shore (`montage-shore.png`: C2 harbour and beach, C3 coast and beach, C5 from 900 m) only
+  500-2,219 far shoreline and seam pixels move, and they move toward the flat sheet (C2 harbour: mean
+  distance from flat 4.23 to 0.84 levels; C5's zone seam 0.60 to 0.05): slivers past the ocean's edge
+  where the sheet hid and no ocean drew now show the sheet.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A node a mission shows after the mask bake does not leave the sea without water under it.
 
