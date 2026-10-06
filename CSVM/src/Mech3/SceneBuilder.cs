@@ -236,6 +236,17 @@ public sealed class SceneBuilder
     /// the world: the point lights and the sun's shadow pass.</summary>
     internal const string XrOriginGlobal = "csky_xr_origin";
 
+    /// <summary>The stencil value the stereo interior's opaque and cutout surfaces write. A
+    /// full-view layer drawn over the world reads it to leave the interior clear, wherever its
+    /// depth (<c>UI/Boards/HeadLockedQuads.cs</c>). Nothing else in the game writes the stencil.</summary>
+    internal const int XrInteriorStencil = 1;
+
+    /// <summary>The draw order of the stereo interior's blended surfaces, its glass and decals. They
+    /// draw after the world's transparents, the flare and the whiteout, and under the flash and the
+    /// fade. That is the flat cockpit pass's order. <c>UI/Boards/HeadLockedQuads.cs</c> keeps
+    /// its quads on either side.</summary>
+    internal const int XrInteriorBlendPriority = 110;
+
     /// <summary>The three global uniforms <see cref="XrPreciseInterior"/> reads, as declared.</summary>
     internal const string XrInteriorGlobals = "global uniform vec3 " + XrEyeLeftGlobal + ";\n"
         + "global uniform vec3 " + XrEyeRightGlobal + ";\n"
@@ -281,6 +292,12 @@ public sealed class SceneBuilder
     /// stereo path is live, since the shader reads <see cref="XrInteriorGlobals"/>. Set before
     /// building: it keys the shader.</summary>
     internal bool XrPreciseInterior;
+
+    /// <summary>Polygons this builder draws nothing for, by identity (<see cref="CockpitPlate"/>
+    /// on the stereo interior's builder). Each one's surface group is still formed, so every later
+    /// group keeps the rank, and so the depth bias, it builds with otherwise. Null omits nothing.
+    /// ⚠ Set before building: the meshes are cached.</summary>
+    internal IReadOnlySet<GameZPolygon>? OmittedPolygons;
 
     /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
     /// backdrop: the moon and the star field. Under Enhanced their materials take
@@ -580,6 +597,10 @@ void fragment() {
     /// 2 for a C3 world build (the skydome's two cloud cards) and 0 everywhere else, which is what
     /// makes this the tripwire if the rule ever starts eating a chapter that ships the texture.</summary>
     public int UndrawnPolygonCount { get; private set; }
+
+    /// <summary>Polygons this builder left out because the caller named them in
+    /// <see cref="OmittedPolygons"/>. Zero on every build that names none.</summary>
+    public int OmittedPolygonCount { get; private set; }
 
     /// <summary>Polygons this builder built that carry the <c>no_clutter</c> flag (raw bit
     /// <c>0x800</c>), and those that do not. Counted per BUILT MODEL, not per placement: a model
@@ -1407,6 +1428,11 @@ void fragment() {
                 groupIndex[key] = gi = groups.Count;
                 groups.Add((poly.MaterialIndex, poly.Priority, poly.NoClutter, doubleSided, 0, new List<GameZPolygon>()));
             }
+            if (OmittedPolygons?.Contains(poly) == true)
+            {
+                OmittedPolygonCount++;
+                continue;
+            }
             groups[gi].Polys.Add(poly);
             if (poly.NoClutter)
                 FlaggedPolygonCount++;
@@ -1451,6 +1477,8 @@ void fragment() {
                     groups.Add((key.Item1, poly.Priority, poly.NoClutter, doubleSided, pass, new List<GameZPolygon>()));
                     OverlayPassSurfaceCount++;
                 }
+                if (OmittedPolygons?.Contains(poly) == true)
+                    continue;
                 groups[gi].Polys.Add(poly);
             }
         }
@@ -1481,6 +1509,9 @@ void fragment() {
         for (int rank = 0; rank < groups.Count; rank++)
         {
             var (materialIndex, priority, noClutter, doubleSided, pass, polys) = groups[rank];
+            // A group whose every polygon was omitted holds its rank and builds nothing.
+            if (polys.Count == 0)
+                continue;
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
@@ -1853,6 +1884,8 @@ void fragment() {
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water));
         NoteAlpha(mat, blend, scissor);
+        if (XrPreciseInterior && blend)
+            mat.RenderPriority = XrInteriorBlendPriority;
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
             bias += NoClutterLayerBias;
@@ -1952,6 +1985,10 @@ void fragment() {
         if (coverage)
             sb.Append(CoverageMode);
         sb.AppendLine(";");
+        // The stereo interior marks what it covers, so the whiteout leaves even its far wings
+        // clear. A blended surface does not: the world behind the glass whitens.
+        if (xrInterior && !blend)
+            sb.AppendLine($"stencil_mode write, compare_always, {XrInteriorStencil};");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         if (xrInterior)
             sb.AppendLine(XrInteriorGlobals);
@@ -2012,8 +2049,7 @@ void fragment() {
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
         if (!shaded || sunLit || gammaBlend)
-            sb.AppendLine(SrgbInclude);
-        if (sunLit)
+            sb.AppendLine(SrgbInclude); if (sunLit)
         {
             sb.AppendLine("varying vec3 v_sun_lit;");
             // Where this frame's origin sits in the world, for a model drawn in a frame of its own

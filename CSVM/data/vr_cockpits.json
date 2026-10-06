@@ -8,7 +8,7 @@
     "player_warhawk": {
       "interiorScaleFactor": 1.0,
       "eyeOffsetZ": 0.0,
-      "_proposed": "eyeOffsetZ 0.06: the dials sit 0.32 m from the eye, under the 0.33 m reach floor; 6 cm aft gives 0.37 m and leaves 0.21 m to the seat back. No head plate in the way."
+      "_proposed": "eyeOffsetZ 0.06: the dials sit 0.32 m from the eye, under the 0.33 m reach floor; 6 cm aft gives 0.37 m and leaves 0.21 m to the head plate at 0.27 m behind the eye, which VR leaves out."
     },
     "player_autogyro": {
       "interiorScaleFactor": 1.0,

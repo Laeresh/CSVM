@@ -67,4 +67,16 @@ public class XrCockpitTests
         Assert.True(precise.DistanceTo(truth) < 2e-5f, $"precise error {precise.DistanceTo(truth)} m");
         Assert.True(naive.DistanceTo(truth) > 2e-4f, $"naive error {naive.DistanceTo(truth)} m, so the check can fail");
     }
+
+    // An eye 7.6 km from the chapter origin, facing away from it. The lifted interior's box, through
+    // the mount's scale, must still hold that eye, or the frustum test drops the whole interior.
+    [Fact]
+    public void TheLiftedInteriorsBoxReachesEveryEyeOnTheMapThroughTheMountScale()
+    {
+        var box = XrCockpit.Everywhere(Mount.Scale);
+        var world = new Transform3D(new Basis(Vector3.Up, -2.3f) * Mount, Vector3.Zero) * box;
+        var eye = new Vector3(-6350f, 300f, -4144f);
+        Assert.True(world.HasPoint(eye), $"world box {world.Position} size {world.Size}");
+        Assert.True(world.HasPoint(new Vector3(-16384f, 3000f, -16384f)), "the far corner of C3 and C5");
+    }
 }

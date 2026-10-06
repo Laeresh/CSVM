@@ -313,7 +313,7 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 `CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
-lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig`; `Sync` follows
+lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does; `Sync` follows
 the interior `Visible` and sets each material's `light_origin` to the eye for the point lights.
 
 ## src/Flight/Hud/XrCockpit.cs
@@ -321,8 +321,7 @@ The cockpit interior under the stereo path, drawn in the main world the cockpit 
 shows it is top level at the world origin, turned to the XR origin's axes and offset from that
 origin as the airframe holds it (`InOrigin`, engine-free), so every transform Godot composes for it
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
-its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. Hidden, it
-goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
+its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it. Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
 plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
 seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame.
 

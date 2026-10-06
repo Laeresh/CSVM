@@ -73,8 +73,9 @@ internal sealed class FlightRosterPolicy
     public bool MouseCaptureAllowed { get; init; }
 
     /// <summary>Whether a human rig builds its interior for the stereo path
-    /// (<see cref="CSVM.Flight.Hud.XrCockpit"/>). That path is live, and no cockpit pass takes the
-    /// interior out of the main world.</summary>
+    /// (<see cref="CSVM.Flight.Hud.XrCockpit"/>): that path is live. A stereo session builds no
+    /// cockpit pass (<see cref="CSVM.Flight.Hud.CockpitOverlay.InteriorInPass"/>), so the interior
+    /// stays in the main world whatever <c>--no-cockpit-pass</c> says.</summary>
     public bool XrInterior { get; init; }
 
     /// <summary>The per-plane VR cockpit data a stereo interior is built with
@@ -123,11 +124,9 @@ internal sealed class FlightRosterPolicy
         MouseCaptureAllowed = MouseCapture.Allowed(
             DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
         // Read here for the same reason: the stereo path is the process's, booted before any session.
-        XrInterior = StereoInterior(spec),
-        XrCockpits = StereoInterior(spec) ? VrCockpits.Load() : VrCockpits.Defaults,
+        XrInterior = XrCockpit.Live,
+        XrCockpits = XrCockpit.Live ? VrCockpits.Load() : VrCockpits.Defaults,
     };
-
-    private static bool StereoInterior(SessionSpec spec) => CSVM.Flight.Hud.XrCockpit.Live && !spec.CockpitPass;
 }
 
 internal sealed class AircraftAssemblyResources

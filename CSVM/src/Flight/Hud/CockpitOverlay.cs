@@ -6,13 +6,13 @@ using Godot;
 namespace CSVM.Flight.Hud;
 
 /// <summary>
-/// Draws the cockpit interior in a world of its own, with the camera and the interior both at the
-/// origin, and composites the result over the main view. The projection is the same one the main
-/// world uses: only the camera-relative half of <see cref="CameraController.FirstPersonPose"/>
-/// survives the move, because the plane position and the <c>cockpit_camera</c> offset cancel
-/// between the eye and the panel. What is left is small, so float32 rounds it far below a pixel,
-/// which the interior's world transform at chapter-scale coordinates does not.
-/// The shipped path; <c>--no-cockpit-pass</c> leaves the interior in the main world instead.
+/// Draws the cockpit interior in a world of its own, camera and interior both at the origin, over
+/// the main view. The projection is the main world's: only the camera-relative half of
+/// <see cref="CameraController.FirstPersonPose"/> survives, since the plane position and the
+/// <c>cockpit_camera</c> offset cancel between eye and panel. What is left is small, so float32
+/// rounds it far below a pixel, which the interior's chapter-scale world transform does not.
+/// The flat game's path; <c>--no-cockpit-pass</c> leaves the interior in the main world instead,
+/// as the stereo path always does (<see cref="InteriorInPass"/>).
 /// One per player, built on that player's own HUD parent (<see cref="PlayerRig.HudParent"/>).
 /// </summary>
 public sealed partial class CockpitOverlay : CanvasLayer
@@ -64,6 +64,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// <summary>This pass's own cloned Environment, for the same registration. Null when the
     /// caller passed no Environment.</summary>
     public Godot.Environment? Env => _view.World3D.Environment;
+
+    /// <summary>Whether a session draws its interiors through this pass: asked for
+    /// (<paramref name="asked"/>, which <c>--no-cockpit-pass</c> clears) and not on the stereo path.
+    /// A stereo viewport draws no canvas layer, so there the interior stays in the main world
+    /// (<see cref="XrCockpit"/>). Engine-free, so it unit-tests.</summary>
+    public static bool InteriorInPass(bool asked, bool stereo) => asked && !stereo;
 
     /// <summary>Moves <paramref name="interior"/> into a private world under
     /// <paramref name="parent"/> and returns the pass drawing it, or null when the node has no

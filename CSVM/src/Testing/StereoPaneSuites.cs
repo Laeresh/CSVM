@@ -68,7 +68,7 @@ internal static class StereoPaneSuites
     /// <summary>Drives the quads off scripted colours and reads what each draws and in what order.
     /// </summary>
     [Suite("head-locked-quads",
-        "the stereo session's head-locked quads copy their flat layer's colour, hide when it is clear or its canvas layer is lowered, keep the flat layer order, and only the whiteout is depth-tested at the seat clearance")]
+        "the stereo session's head-locked quads copy their flat layer's colour, hide when it is clear or its canvas layer is lowered, keep the flat layer order with the interior's glass between the whiteout and the flash, and only the whiteout is depth-tested at the seat clearance and skips the interior's stencil mark")]
     internal static void HeadLockedQuadsFollow(TestContext ctx)
     {
         var quads = HeadLockedQuads.Build();
@@ -106,9 +106,10 @@ internal static class StereoPaneSuites
             int hud = HeadLockedQuads.HudPanelPriority;
             int wash = HeadLockedQuads.PriorityOf(HeadLockedQuads.Tier.SunWash);
             int fade = HeadLockedQuads.PriorityOf(HeadLockedQuads.Tier.MissionEndFade);
-            ctx.Check(flare + 3 < whiteout && whiteout < flashP && flashP < hud && hud < wash && wash < fade
+            int glass = Mech3.SceneBuilder.XrInteriorBlendPriority;
+            ctx.Check(flare + 3 < whiteout && whiteout < glass && glass < flashP && flashP < hud && hud < wash && wash < fade
                 && fade <= RenderingServer.MaterialRenderPriorityMax,
-                $"the draw order is HudLayers' own: flare {flare} < whiteout {whiteout} < flash {flashP} < HUD panel {hud} < sun wash {wash} < fade {fade}");
+                $"the draw order is HudLayers' own: flare {flare} < whiteout {whiteout} < interior glass {glass} < flash {flashP} < HUD panel {hud} < sun wash {wash} < fade {fade}");
 
             foreach (HeadLockedQuads.Tier tier in System.Enum.GetValues<HeadLockedQuads.Tier>())
             {
@@ -118,6 +119,8 @@ internal static class StereoPaneSuites
                 bool seat = tier == HeadLockedQuads.Tier.Whiteout;
                 ctx.Check(tested == seat && (!seat || distance == HeadLockedQuads.SeatClearanceM),
                     $"{tier}: depth test {(tested ? "on" : "off")} at {distance} m");
+                bool stencil = material.Shader.Code.Contains("stencil_mode read, compare_not_equal");
+                ctx.Check(stencil == seat, $"{tier}: {(stencil ? "skips" : "ignores")} the interior's stencil mark");
                 ctx.Check(material.RenderPriority == HeadLockedQuads.PriorityOf(tier), $"{tier} carries its priority");
             }
         }

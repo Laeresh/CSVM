@@ -208,7 +208,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 6. ◐ B6 VR mode option, relaunch, fallback and mode gating
 7. ◐ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
-8. ☐ B8 The cockpit interior in the main world under VR
+8. ◐ B8 The cockpit interior in the main world under VR
 9. ☐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
 
 ### Wave C, screen, HUD and input
@@ -732,17 +732,18 @@ pose, both eyes) pins the precise path; the 24 flat shots are unmoved.
 
 Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
 ```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit
 ```
 The first pose is the C1 map centre (8.7 km from the origin), the second a far corner (16.3 km).
 Look for: (1) sitting still, the dials, needles and canopy frame hold steady with no shimmer at both
 poses; (2) on fast head turns and leans, the cockpit stays fixed against the world rather than
 swimming behind or ahead of it; (3) the needles and lamps sit on their dial faces at the panel's
 depth. An interior with no depth of its own (both eyes alike) would mean the eye feed never ran.
-The red plate behind the eye is still there (B8). The first flat run after a headset session
+B8 leaves the red plate behind the eye out and makes the stereo interior the default, so these runs
+need no `--no-cockpit-pass`; before B8 the interior was culled at both poses (B8's Evidence). The first flat run after a headset session
 prints one shader-cache error (B6 owns it).
 
 **⚠ Traps.**
@@ -1193,7 +1194,7 @@ defaults nothing they draw moves). A first goldens run flipped `c1-flight-kill` 
 
 Owed at the headset (the author's), runtime at 90 Hz, VDXR first:
 ```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
 ```
 Look for: (1) sitting off-centre when the game starts, the view still opens on the cockpit eye,
 gunsight ahead, and the log has `xr: recentered (session focused)`; (2) lean 20 cm to one side and
@@ -1215,22 +1216,29 @@ recentered)`; (4) leaning about, the moon and the horizon dome show no parallax.
 units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
 hash-identical. The headset checks named above are still owed.
 
-## B8 ☐ The cockpit interior in the main world under VR
+## B8 ◐ The cockpit interior in the main world under VR
+
+**Outcome: built and pinned on the stand-in; the headset look is owed.** A stereo session builds no
+cockpit pass and always draws `XrCockpit`'s interior, with or without `--no-cockpit-pass`. The
+stereo interior leaves the head plate out (`Mech3/CockpitPlate.cs`), marks itself in the stencil so
+the whiteout and the flare rings leave even its far wings clear, and draws its glass between the
+whiteout and the flash. On the way, a culling defect from A3b was found and fixed: the lifted
+interior's box shrank with the 0.04 mount, so any eye more than about 2 km from the chapter origin
+and facing away from it culled the whole interior.
 
 **Goal.** In VR, Cockpit view shows `cockpit1` in the main world, correctly lit and occluding the
 world per eye, with the gauges moving, and no cockpit pass is built.
 
-**Evidence (confidence: lead-only).** `--no-cockpit-pass` already leaves the interior in the main
-world (`Flight/Hud/CockpitOverlay.cs:15`). The pass also carries a cloned sun, the panel point-light
-term through `light_origin` (`CockpitOverlay.cs:20-33`) and the shake mount (`WobbledMount`).
+**Background.** `--no-cockpit-pass` leaves the interior in the main world. The pass carries a cloned
+sun, the panel point-light term through `light_origin` and the shake mount (`WobbledMount`).
 
 The first headset run (A1, VDXR, Bloodhawk, `--no-cockpit-pass`) showed two interior defects, both
 traced to the data and the code:
 
-- **A red "person cutout" straight ahead.** Ten interiors carry a flat head-and-shoulders plate on
-  one z plane 0.16-1.80 iu aft of the eye (Bloodhawk: polygons #48-54 of `cockpit1/structure/g366`
+- **A red "person cutout" straight ahead.** Every interior carries a flat head-and-shoulders plate
+  on one z plane behind the eye (Bloodhawk: polygons #48-54 of `cockpit1/structure/g366`
   at z +0.80 iu, 3.2 cm at 0.04 m/iu, Colored `rgb(215,43,0)`, priority 5, normal aft, no
-  `show_backface`; the Brigand's is grey, the Warhawk has none). From the authored eye it is behind
+  `show_backface`; the Brigand's is grey, the Warhawk's lies 6.80 iu aft). From the authored eye it is behind
   the camera and back-facing, so the flat game never draws it; a tracked head more than a few cm
   aft of the eye sees its front face between the eye and the panel. It shares its node with canopy
   structure, so it cannot be dropped by node name. Its role in the original is undecoded.
@@ -1250,25 +1258,114 @@ holds still far from the chapter origin, and its depth bias pulls toward the dra
 the "true position, depth only" fix in another form (the gauge-depth defect is gone on the
 stand-in). The
 wobble reaches it through `XrCockpit.InOrigin`, the point lights through `csky_xr_origin` in place
-of `light_origin`, and the gauge drive is untouched. Left for B8: make VR take the main-world
-interior without `--no-cockpit-pass` (today `FlightRosterPolicy.XrInterior` needs the flag), the
-plate filter, and a headset look at the lighting.
+of `light_origin`, and the gauge drive is untouched. Left for B8 were the main-world interior
+without `--no-cockpit-pass`, the plate filter, and a look at the lighting (all below).
 
-**Approach.** Under VR take the `--no-cockpit-pass` path, keep `light_origin`, the shake and the
-gauge drive working on the in-world interior. The precision is A3b's (above). Under VR
-only: leave the
-plate out of the interior build with a polygon filter (all vertices on one z plane with
-0 < z ≤ 2.5 iu, normal aft, Colored, priority 5; on the diagnosis scan this matches exactly the 5-7
-plate polygons per interior and nothing else). The depth-only bias landed with A3b as a pull toward
-the drawing eye, `EYE_OFFSET + (VERTEX - EYE_OFFSET) * (1.0 - bias)`, which keeps each eye's
-projected position exactly; the `POSITION` rewrite once proposed here is not needed. The world
-materials carry the same unscaled bias, negligible in stereo beyond a few metres.
+**Evidence (confidence: traced to code and measured on the stand-in for the default, the culling,
+the plate and the stencil; measured for the lighting comparison, whose remaining differences are
+look questions for the headset; direction sound for the flip's cause).** Instruments and captures
+are in `.scratch/B8/` (`B8_shot.ps1`, `B8_repeat.ps1`, `B8_cmp.py`, `B8_plates.py`, `B8_reach.py`).
+- **No pass under VR.** `FlightRosterPolicy.XrInterior` is `XrCockpit.Live`, and
+  `GameSession.BuildCockpitPasses` builds only where `CockpitOverlay.InteriorInPass(asked, stereo)`
+  (`asked && !stereo`) holds. An `--xr-sim` launch without the flag logs `stereo interior at 0.04 m
+  per unit ... head plate left out (7 polygons)` and no `interior drawn in its own pass` line. The
+  25 flat goldens are hash-identical.
+- **The culling defect (fixed).** `XrCockpit` gave each lifted geometry a 40 km custom AABB in the
+  geometry's own frame, which the 0.04 mount shrinks to 1.6 km about the world origin. The interior
+  showed at `--pos` 0,300,0, -2000,600,-2000, 5000,300,5000 and 20000,300,0 (heading
+  -0.743,0,-0.669, origin ahead or near) and was missing at -6350,300,-4144, -10000,700,-10000 and
+  -11500,300,-11500 (origin behind). A3b's `c1-cockpit-xr-sim` golden was pinned without an interior
+  for that reason, and A3b's and B7's owed headset poses would have shown none. `Everywhere(mountScale)`
+  now divides the reach by the scale; `XrCockpitTests` pins an eye 7.6 km out and C3's far corner.
+- **The plate filter.** `CockpitPlate.IsPlate`: every corner on one z plane (1e-3 iu), 0 < z ≤ 8 iu,
+  Newell normal aft, colour material, priority 5, read in `cockpit1`'s own frame. `B8_plates.py`
+  (the diagnosis walk with this predicate) selects 7 polygons on each airframe and 5 on the Balmoral,
+  75 in all, each plate on one node whose mesh no other node uses; no polygon in any interior meets
+  four of the five criteria. The plan's 2.5 iu bound missed the **Warhawk's plate at 6.80 iu**
+  (0.27 m, the same red seven polygons on `g150`), which A5 read as the seat back. The filter keeps
+  each surface group's rank, so the rest of the mesh builds exactly as before. Head 10 cm aft on the
+  C1 pose: without the filter the red silhouette fills both eyes, with it the panel shows
+  (`plate_off_on.png`). At the authored eye it changes no pixel in Original or Enhanced.
+  `CockpitPlateTests` pins the eleven counts.
+- **The whiteout and the far interior.** Every interior reaches past the 1.4 m seat clearance:
+  3.7 to 15.2 m, 19 to 186 polygons per plane (wings, nose, turrets, ailerons, rudders;
+  `B8_reach.py`). The interior's opaque and cutout surfaces now write stencil 1
+  (`SceneBuilder.XrInteriorStencil`); the whiteout quad, still depth-tested, and the stereo flare
+  rings skip it. Its blended surfaces draw at priority 110 between the whiteout (109) and the flash
+  (111), the flat pass's layer order, which keeps the gunsight glass over the whitened world. On
+  C1's cloud band (`--pos=-6144,1000,-6144 --direction=0,0,-1`, frame 30) at `yaw=70` the wing went
+  from whitened to clear (0.55 % of pixels by more than 32 levels). With the left eye on the flat
+  camera the stereo frame matches the flat pass to 0.43 % of pixels over 8 levels (the HUD pipper),
+  where flat `--no-cockpit-pass` whitens the whole interior (37.8 %).
+- **Near plane.** Godot projects each eye with the viewport camera's planes
+  (`get_projection_for_view(v, aspect, camera->znear, camera->zfar)` in `renderer_scene_cull.cpp`),
+  and the flat camera keeps Godot's default 0.05 m (the Launcher sets only `Far`). The quads at 0.25 m
+  and the nearest interior geometry once the plate is gone (canopy members 0.22 m and more) are clear.
+- **Lighting against the flat frames** (SHOT-45's eye, empty stage, frame 60). The stereo interior
+  matches flat `--no-cockpit-pass` to 0.16 % of pixels over 8 levels in Original (the HUD pipper and
+  edge AA), firing or not, and 1.04 % / 0.49 % in Enhanced: the sun, the Environment, the
+  `csky_xr_origin` point term and the wobble reach it as they reach the flat in-world interior.
+  Against the flat pass it differs by 0.44 % (Original) and 3.22 % (Enhanced), firing 3.91 % and
+  7.98 %, all of it the pass's own: (a) the pass composites its soft alpha in the canvas, so the
+  gunsight glass lifts 4.7 levels over the sky in Original and 21 in Enhanced, against 0.7 and 3.2 in
+  stereo (`GammaBlendAlpha` is exact only over black); (b) the pass turns the wobble about the eye,
+  the world about the airframe's pivot; (c) under Enhanced the pass's own sun shadow, clamped to its
+  100 m far, self-shadows the side rail that the world's cascades leave lit, and AgX tonemaps the
+  pass apart. A VR-only exact gamma mix through the screen texture was tried and dropped: it moved
+  Original's glass to -4.2 levels in blue and broke stacked decals by up to 223 levels, since the
+  screen texture holds no transparent layer. None is a stereo defect; the glass and the shadow are
+  for the author to judge at the headset.
+- **C14's gauge-face flips survive, and are not the interior's.** C3 cockpit flare pose
+  (`--pos=0,1200,0 --direction=0.5,0.707,-0.5 --view=cockpit --xr-sim`, frame 120): 3 of 9 runs
+  differ from the first by one level in 42-454 pixels, 1 of 6 under `--render-thread safe`, 0 of 6
+  with `--no-flare`. Every flipped pixel lies on the gunsight glass over the sun's core (223-255),
+  where the glass pulls the core below saturation; outside the glass the core clips at 255. The glass
+  writes no depth, so no z-tie is involved, and a distinct sorting offset per interior surface left
+  the flips in place (4 hashes over 9 runs; reverted). The cause is the core's own one-level
+  variation, which the glass makes visible. The C3 probe still exits with an access violation after
+  saving in about a third of runs (C14).
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Approach (landed, VR only).** `CockpitOverlay.InteriorInPass` and `FlightRosterPolicy.XrInterior`
+as above. `Mech3/CockpitPlate.cs` finds the plate; `PlaneBuilder` hands it to the interior
+builder's `SceneBuilder.OmittedPolygons` when `xrInterior` is set. The `XrPreciseInterior` shader
+variant writes the stencil on its opaque and cutout arms, and its blended materials take
+`XrInteriorBlendPriority`; `HeadLockedQuads`' whiteout reads the stencil and moves to 109, and
+`WorldFlareRig`'s rings read it in a stereo session only. `XrCockpit.Everywhere` sizes the lifted
+box through the mount scale. Flat shader text is unchanged.
 
-**Verify.** <TODO: an `--xr-sim` golden of the cockpit at a rotated heading far from the origin.>
+**Model recommendation.** Standard; the culling and the plate's Warhawk case were found by
+measuring, not by reading.
 
-**⚠ Traps.** The flat game keeps the pass (the boundary rule); the change is VR-only.
+**Verify.** Units: `CockpitPlateTests` (the eleven counts, the rule's halves, `InteriorInPass`),
+`XrCockpitTests` (the lifted box). Suites: the `cockpit` and `xr` filters, `head-locked-quads` (the
+order with the glass, the stencil read), `world-flare-pixels`. Goldens: 28 of 28;
+`c1-cockpit-xr-sim` re-pinned (it now draws the interior), the new `c1-cockpit-xr-sim-aft` (C1
+12.8 km out facing away from the origin, no flag, head 10 cm aft, stable over 5 runs) pins the
+default, the plate and the culling; `c1-cockpit-xr-sim-far` and `c3-flare-xr-sim` unmoved.
+
+Owed at the headset (the author's), VDXR at 90 Hz first, then SteamVR, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --graphics=enhanced
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_warhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,1000,-6144" "--direction=0,0,-1" --view=cockpit
+```
+Look for: (1) the cockpit is there at the C1 map centre facing away from the origin; (2) leaning back
+and looking ahead, no red silhouette (the Warhawk's sits about 27 cm back); (3) the interior lit as
+in the flat game from the same command without `-EngineArgs` (Original, then Enhanced): the
+gunsight glass reads fainter in VR than in the flat pass, and under Enhanced the side rails under the
+canopy frame are lit where the flat pass shades them, both to judge; (4) the needles and lamps on
+their dial faces; (5) in the cloud band, the panel, the canopy and the wings when you turn to them
+stay clear while the world whitens, with the glass over the white.
+
+**⚠ Traps.**
+- The flat game keeps the pass (the boundary rule); every change here is VR-only.
+- Do not size the lifted interior's box in world metres: it is in the geometry's frame and shrinks
+  with the mount.
+- Do not select the plate by node: it shares its node with canopy structure.
+- Godot accepts a stencil read only on a material in the alpha pass; keep reads on the quads.
+
+**Verified.** <pending orchestrator run>
 
 ## B9 ☐ Views in VR: rigid chase, nose, head tracking in place of head look
 

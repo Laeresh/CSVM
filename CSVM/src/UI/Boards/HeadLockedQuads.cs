@@ -24,7 +24,8 @@ public sealed partial class HeadLockedQuads : Node3D
 
     /// <summary>How far ahead of the eye the cockpit interior is taken to end, metres along the view
     /// axis. Nearer geometry is the seat: the whiteout and the flare rings stay off it, as the flat
-    /// cockpit pass keeps them off the interior. TUNE; the interior's own wings reach past it.</summary>
+    /// cockpit pass keeps them off the interior. TUNE. The interior's own wings reach past it, which
+    /// the whiteout's stencil test covers and the rings' depth test does not.</summary>
     public const float SeatClearanceM = 1.4f;
 
     // The quads with no depth test sit here, inside the seat and well clear of the near plane.
@@ -45,8 +46,8 @@ public sealed partial class HeadLockedQuads : Node3D
     /// <summary>The layers a stereo session draws over its world, bottom first.</summary>
     public enum Tier
     {
-        /// <summary>The cloud whiteout. Depth-tested at <see cref="SeatClearanceM"/>, so it covers
-        /// the world and leaves the seat clear.</summary>
+        /// <summary>The cloud whiteout. Depth-tested at <see cref="SeatClearanceM"/> and kept off the
+        /// interior's stencil mark, so it covers the world and leaves the whole interior clear.</summary>
         Whiteout,
 
         /// <summary>The burst ramp and the blend wash (<see cref="ScreenFlash"/>), over the seat.</summary>
@@ -93,10 +94,12 @@ public sealed partial class HeadLockedQuads : Node3D
         return host;
     }
 
-    /// <summary>The draw order of one tier, among the world's transparents.</summary>
+    /// <summary>The draw order of one tier, among the world's transparents. The stereo interior's
+    /// glass draws between the whiteout and the flash (<c>Mech3.SceneBuilder.XrInteriorBlendPriority</c>),
+    /// as the flat cockpit pass sits between their canvas layers.</summary>
     public static int PriorityOf(Tier tier) => tier switch
     {
-        Tier.Whiteout => 110,
+        Tier.Whiteout => 109,
         Tier.Flash => 111,
         Tier.SunWash => 120,
         _ => 121,
@@ -147,9 +150,10 @@ public sealed partial class HeadLockedQuads : Node3D
 
     // A colour quad in view space at distance_m, composited in gamma space like its canvas layer.
     // The alpha remap is the puffer mix's own (docs/org/puffer.md).
+    // The depth-tested quad also skips the stereo interior's stencil mark, which covers its wings.
     private static string QuadShader(bool depthTest) => $$"""
         shader_type spatial;
-        render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled{{(depthTest ? "" : ", depth_test_disabled")}};
+        render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled{{(depthTest ? $"; stencil_mode read, compare_not_equal, {Mech3.SceneBuilder.XrInteriorStencil}" : ", depth_test_disabled")}};
         #include "res://shaders/csky_srgb.gdshaderinc"
 
         uniform vec4 tint = vec4(0.0);

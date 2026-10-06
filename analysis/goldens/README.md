@@ -77,8 +77,8 @@ also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL line
 Each entry's `exercises` field says what that shot covers and carries its measured
 frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
-twice proves nothing, because most poses show nothing that moves). Nine shots move on a one-frame
-perturbation (`c1-flight-kill` 78.07 %, `c1-cockpit-xr-sim` 59.24 %, `campaign-4p-grid` 73.79 %, `c1-cockpit` 43.35 %,
+twice proves nothing, because most poses show nothing that moves). Ten shots move on a one-frame
+perturbation (`c1-flight-kill` 78.07 %, `c1-cockpit-xr-sim` 19.82 %, `c1-cockpit-xr-sim-aft` 8.37 %, `campaign-4p-grid` 73.79 %, `c1-cockpit` 43.35 %,
 `empty-stage` 12.21 %, `c4-snow` 3.74 %, `campaign-intro-fill` 3.89 %, `c1c-rain` 2.50 %,
 `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
@@ -96,8 +96,10 @@ under `--render-thread safe`.
 side by side at 640x720 each, so the shot keeps the manifest's 1280x720, through Godot's multiview
 shader variants and the XR origin a headset session uses. The runner needs nothing extra: its
 launch helper gives a shot whose args carry `--xr-sim` the feature tag those variants need.
-Canvas layers draw nothing in stereo (SHOT-44), so the shot has no HUD and flies
-`--no-cockpit-pass` to put the interior in both eyes.
+Canvas layers draw nothing in stereo (SHOT-44), so the shot has no HUD. A stereo session never
+builds the cockpit pass and draws the interior in the main world whatever the flag says;
+`c1-cockpit-xr-sim-aft` flies without `--no-cockpit-pass`, with the stand-in head 10 cm aft of the
+eye, where the head plate the stereo interior leaves out would otherwise fill both eyes.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of clock
 (`viewer-bhawk` 30, `c1-crash` 20, `c1-stunt-marker` 90, `c1-flight-kill` 280, `c1-debris-rest`

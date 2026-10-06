@@ -48,6 +48,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
+- `src/Mech3/CockpitPlate.cs`, the head-and-shoulders plate behind the cockpit eye, selected by polygon, which the stereo interior leaves out.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
@@ -262,7 +263,7 @@ rows).
 - `src/Flight/Hud/WeaponCursor.cs`, `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Hud/CockpitVisibility.cs`, the per-mode hiding of the pilot's OWN plane in first person, from that pilot's pane alone; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
 - `src/Flight/Hud/FirstPersonDressing.cs`, what a pilot's own aircraft wears in first person, frame by frame: the body hide, the interior pass and the panel needles.
-- `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.
+- `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out and a stereo session builds none.
 - `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.

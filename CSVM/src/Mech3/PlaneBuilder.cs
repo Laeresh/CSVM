@@ -153,6 +153,10 @@ public sealed class PlaneBuilder
 
     public int MeshInstanceCount => _scene.MeshInstanceCount + (_interiorScene?.MeshInstanceCount ?? 0);
 
+    /// <summary>The interior's polygons the build left out: the head plate's under the stereo path
+    /// (<see cref="CockpitPlate"/>), none on every other build.</summary>
+    public int InteriorOmittedPolygons => _interiorScene?.OmittedPolygonCount ?? 0;
+
     /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned with an
     /// additive amber tint. A <c>Flight.Airframe.WingLightBlinker</c> flashes them in flight;
     /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
@@ -409,6 +413,9 @@ public sealed class PlaneBuilder
             {
                 continue;
             }
+            // A tracked head can lean past the plate behind the eye, so the stereo interior drops it.
+            // The flat eye never sees its front, and the flat build keeps it untouched.
+            _interiorScene.OmittedPolygons = _interiorScene.XrPreciseInterior ? CockpitPlate.Find(_gamez, node) : null;
             // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
             // that the airframe pass never builds the interior, and it is the root here.
             if (_interiorScene.BuildSubtree(node, n => !ReferenceEquals(n, node) && Skip(n))

@@ -2859,13 +2859,13 @@ public partial class GameSession : Node3D
             () => _sky?.Weather?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
 
     // One interior render pass per rig, on that player's own HUD parent. Splitscreen therefore gets
-    // a pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the
-    // rigs, since the interior it moves is the plane build's and the sun and environment it copies
-    // are the session's. ⚠ An airframe swap rebuilds the interior and leaves this pass holding the
-    // old node. The prototype hides itself rather than drawing a freed one (CockpitOverlay.Sync).
+    // a pass per pane rather than one for the window (--no-cockpit-pass and the stereo path build
+    // none). Built after the rigs, since the interior it moves is the plane build's and the sun and
+    // environment it copies are the session's. ⚠ An airframe swap rebuilds the interior and leaves
+    // this pass holding the old node. It hides itself rather than drawing a freed one (Sync).
     private void BuildCockpitPasses()
     {
-        if (!_spec.CockpitPass)
+        if (!Flight.Hud.CockpitOverlay.InteriorInPass(_spec.CockpitPass, Flight.Hud.XrCockpit.Live))
         {
             return;
         }

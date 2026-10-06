@@ -20,10 +20,11 @@ public sealed class XrCockpit : IXrInterior
     // would sort the glass among world objects as far away as the chapter origin.
     private const float SortAhead = 100000f;
 
-    // The always-drawn effects' box (Effects/Precipitation.cs). Kept at the world origin, the
-    // interior's own bounds would be culled by any eye kilometres from it.
-    private static readonly Aabb Everywhere =
-        new(new Vector3(-40000f, -40000f, -40000f), new Vector3(80000f, 80000f, 80000f));
+    // The always-drawn effects' reach (Effects/Precipitation.cs), in world metres. Kept at the world
+    // origin, the interior's own bounds would be culled by any eye kilometres from it.
+    // ⚠ Divide it by the mount's scale. A custom AABB is in the geometry's own frame, so at 0.04 an
+    // unscaled box reaches 1.6 km. An eye past that, facing away from the origin, culls the interior.
+    private const float EverywhereM = 40000f;
 
     private readonly Node3D _interior;
     private readonly Transform3D _mount;
@@ -75,6 +76,15 @@ public sealed class XrCockpit : IXrInterior
     /// wherever the aircraft flies. Engine-free, so it unit-tests.</summary>
     public static Transform3D InOrigin(in Transform3D interiorInAircraft, Vector3 eyeInAircraft) =>
         new(interiorInAircraft.Basis, interiorInAircraft.Origin - eyeInAircraft);
+
+    /// <summary>The custom AABB each lifted interior geometry carries, in its own frame. The interior
+    /// is mounted at <paramref name="mountScale"/>, and the box still reaches 40 km once that scale
+    /// shrinks it. Engine-free, so it unit-tests.</summary>
+    public static Aabb Everywhere(Vector3 mountScale)
+    {
+        float reach = EverywhereM / Mathf.Min(mountScale.X, Mathf.Min(mountScale.Y, mountScale.Z));
+        return new Aabb(-reach * Vector3.One, 2f * reach * Vector3.One);
+    }
 
     /// <summary>Places the interior for this frame under the XR origin at <paramref name="origin"/>,
     /// which must stand at <see cref="EyeInAircraft"/> on <paramref name="aircraft"/> with its
@@ -136,11 +146,12 @@ public sealed class XrCockpit : IXrInterior
 
         _lifted = true;
         _interior.TopLevel = true;
+        var everywhere = Everywhere(_mount.Basis.Scale);
         foreach (var geometry in _geometry)
         {
             if (GodotObject.IsInstanceValid(geometry))
             {
-                geometry.CustomAabb = Everywhere;
+                geometry.CustomAabb = everywhere;
                 geometry.SortingOffset = SortAhead;
             }
         }

@@ -141,8 +141,8 @@ public sealed class WorldFlareRig
             return;
         }
 
-        var core = new Shader { Code = ElementShader(ring: false) };
-        var ring = new Shader { Code = ElementShader(ring: true) };
+        var core = new Shader { Code = ElementShader(ring: false, stereo: false) };
+        var ring = new Shader { Code = ElementShader(ring: true, stereo: Stereo) };
         foreach (var rig in rigs)
         {
             var sun = FindSun(rig.Horizon);
@@ -288,8 +288,9 @@ public sealed class WorldFlareRig
 
     // One element quad, in view space at depth_m. The canvas adds the texture's bytes to the
     // picture's. So the add is made in gamma space over the opaque picture, and the linear blend
-    // takes the difference it makes. Rings skip pixels nearer than the seat clearance.
-    private static string ElementShader(bool ring)
+    // takes the difference it makes. Rings skip pixels nearer than the seat clearance, and in stereo
+    // the interior's stencil mark too, which covers its wings past that clearance.
+    private static string ElementShader(bool ring, bool stereo)
     {
         var inv = CultureInfo.InvariantCulture;
         string seatUniforms = ring ? $$"""
@@ -305,7 +306,7 @@ public sealed class WorldFlareRig
             """ : "";
         return $$"""
             shader_type spatial;
-            render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled{{(ring ? ", depth_test_disabled" : "")}};
+            render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled{{(ring ? ", depth_test_disabled" : "")}};{{(ring && stereo ? $" stencil_mode read, compare_not_equal, {Mech3.SceneBuilder.XrInteriorStencil};" : "")}}
             #include "res://shaders/csky_srgb.gdshaderinc"
 
             uniform sampler2D flare_tex : filter_linear, repeat_disable;

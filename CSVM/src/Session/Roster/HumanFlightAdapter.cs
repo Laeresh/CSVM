@@ -198,7 +198,7 @@ internal sealed class HumanFlightAdapter
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         if (controller.Dressing.Stereo != null)
-            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft of the marker");
+            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons)");
         // The recenter action, for the seat the headset flies.
         controller.RecenterHeadset = remote ? null : _human.RecenterHeadset;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
