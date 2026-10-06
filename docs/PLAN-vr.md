@@ -1169,7 +1169,9 @@ for anything a headset shows until the author's run).**
   table) and on the pad's touchpad click and first back paddle, the only buttons no flight action
   holds; `FlightController` polls its edge beside the graphics switch and calls the session's
   recenter, null in flat play. The Original controls page lists it on Other after the graphics
-  switch, and docs/controls.md has its row. C11 adds the XR controller binding.
+  switch, and docs/controls.md has its row. C11 adds the XR controller binding. The row is visible
+  in flat play too, inert there, so a player can bind it before relaunching into VR; the author
+  accepted this flat-path change.
 
 **Contract for C10, C12 and D19.** Reach the seat through `LauncherContext.Xr` (or
 `GameSession`'s `_xrRig`): `Head` is the tracked head, `Origin` the tracking space, `Pane` the bound
