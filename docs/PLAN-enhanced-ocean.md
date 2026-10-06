@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ The other chapters with a sea at y = 0
 22. ☑ Ship calm zones for every hull and wake
-23. ☐ Swell regularity from altitude
+23. ◐ Swell regularity from altitude
 24. ☐ An Enhanced ocean golden
 25. ☑ The ocean matches the flat sheet at the shore and in fog
 26. ◐ No hole where a mission shows a node hidden at the bake
@@ -483,7 +483,36 @@ patrol-boat shot once one is active.
 **⚠ Traps.** M03's intro cutscene holds the camera for the first 40 s of any M03 session, campaign
 or free flight.
 
-## C23 ☐ Swell regularity from altitude
+## C23 ◐ Swell regularity from altitude
+
+**Landed.** The cross-hatch was the four long swell waves (140, 91, 59 and 38 m): a shot with only
+those reproduces it at the C2 350 m pose, one with only the short swell does not, and the chop is
+invisible there. Two waves of similar height crossing at a fixed angle print a diamond lattice, and
+the old lengths stepped by a near-constant 1.5. Two changes in `Effects/Ocean.cs`:
+- The swell is twelve waves instead of eight (152 to 7.3 m, lengths stepping by about 1.3 with no
+  common ratio, directions spread over plus or minus 71 degrees of the wind), with lower steepness
+  on the long waves so the height and slope variance stay where they were. Chop stays six waves.
+- A still world-space sea-state field (`sea_state`: three value-noise octaves of two channels, at
+  500, 400 and 130 m, a sine-free hash) groups each wave's height (factor `1 + 0.8 * dot`,
+  clamped 0 to 1.8) and shifts its phase (capped at 16 m of travel, 3 rad), each wave reading the
+  field along its own golden-angle direction (`SWELL_MOD`, `CHOP_MOD`). The vertex stage and the
+  fragment evaluate it at the same grid point; the normals leave its slope out. It has no time
+  term, so the `csky_time` wrap holds; the per-wave grid-spacing fade is unchanged.
+Wave counts per vertex 8 to 12, per fragment 14 to 18 (12 swell, 6 chop) plus the field. Foam keeps
+its patch field and now measures crests against 3.13 standard deviations of the swell height
+(`SWELL_CREST`), the old sum's ratio, so its share does not move with the wave count. Height over a
+4 km square: standard deviation 1.16 to 1.24 m, 90th percentile 1.52 to 1.62 m, 99th 2.52 to 2.78 m.
+`gpu_ms` at 1920x1080, ocean minus `--no-ocean` in the same round, four rounds after and two
+before: cruise +0.30 to +0.42 ms, low pass +0.95 to +1.30 ms (Decision 11's budget is 1.5). The
+same field passed as a varying from the vertex stage measured no cheaper within noise, so the
+fragment evaluates it exactly. Montages in the C23 tree's `.scratch\c23\`: `montage-c23.png` (flat,
+before, after at C2 350 m, C1B cruise, C1B low pass, C3 coast) and `montage-c23-detail.png`. The
+three Enhanced goldens C21 moved move again (`c1-lake-enhanced`, `c5-city-night-enhanced`,
+`c1-rocket-hit-enhanced`); every Original golden holds.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The swell shows no visible repeat from cruise altitude.
 

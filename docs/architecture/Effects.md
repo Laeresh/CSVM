@@ -55,11 +55,10 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 ## src/Effects/Ocean.cs
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred
 polar grid with a Gerstner swell in its vertex stage and chop in its fragment normals replaces the sea-level
-base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` only where the ocean draws, so a sheet
-shown after the mask bake draws flat instead of leaving a hole; its colliders stay flat. It draws
-a priority level below the lowest base sheet, one grid per zone-gate group. Owns the wave tables, the foam field
-and up to 16 ship calm zones (`OceanCalmZone.cs`, geometry only), all on `csky_time`. Where the shore calms the
-waves or the fog thickens, it shades as the flat sheet does, so no edge shows against a coplanar coast tile.
+base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders
+stay flat. It draws a priority level below the lowest base sheet, one grid per zone-gate group. Owns the wave
+tables, a still sea-state field that groups each wave so the swell shows no lattice, the foam field and up to 16
+ship calm zones (`OceanCalmZone.cs`), all on `csky_time`. At a calmed shore or in fog it shades as the flat sheet.
 `GameSession.FollowOcean` builds it at `waves`, drops it on Original or `flat`; shore calm is `OceanMask.cs`'s.
 
 ## src/Effects/OceanCalmZone.cs

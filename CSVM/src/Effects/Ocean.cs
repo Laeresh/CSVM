@@ -44,16 +44,33 @@ public sealed partial class Ocean : Node3D
     // enough to see covers no wave the sheet would not show.
     private const float FogSheetAt = 0.25f;
 
+    // TUNE. The sea-state field that keeps the fixed waves from meeting on a lattice. Each wave reads
+    // two noise fields along its own direction: one scales its height, one shifts its phase. The
+    // shift is capped at PhaseMetres of travel, so a long wave's crests bend only slightly.
+    // The field holds still in world space, so the csky_time wrap still lands on an identical frame.
+    private const float GroupScale = 500f;
+    private const float GroupGain = 0.8f;
+    private const float PhaseScaleCoarse = 400f;
+    private const float PhaseScaleFine = 130f;
+    private const float PhaseMetres = 16f;
+    private const float PhaseMaxRad = 3f;
+
+    // TUNE. Foam's crest reference in standard deviations of the swell height, so the share of
+    // whitecaps does not move with the wave count.
+    private const float CrestSigmas = 3.13f;
+
     private static readonly StringName ParamName = Param;
     private static readonly string[] Chapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" };
     private static readonly float[] BandEnds = { 700f, 2800f, 11000f, 45000f };
 
     // TUNE. The swell the vertex stage displaces: wavelengths of tens of metres, a crest of about
-    // 1-2 m where several meet. Angles are offsets from the wind.
+    // 1-2 m where several meet. Angles are offsets from the wind. The lengths step by about 1.3
+    // with no common ratio, so no two waves dominate and cross on a visible lattice.
     private static readonly Wave[] Swell =
     {
-        new(0f, 140f, 0.05f), new(24f, 91f, 0.06f), new(-31f, 59f, 0.07f), new(47f, 38f, 0.07f),
-        new(-14f, 25f, 0.07f), new(63f, 16f, 0.06f), new(-52f, 10.5f, 0.06f), new(9f, 6.8f, 0.05f),
+        new(0f, 152f, 0.04f), new(31f, 117f, 0.042f), new(-24f, 93f, 0.045f), new(55f, 71f, 0.047f),
+        new(-47f, 57f, 0.05f), new(14f, 44f, 0.052f), new(-71f, 34f, 0.052f), new(38f, 26f, 0.06f),
+        new(-9f, 19.5f, 0.06f), new(66f, 14.2f, 0.058f), new(-36f, 10.1f, 0.055f), new(21f, 7.3f, 0.05f),
     };
 
     // TUNE. The chop the fragment normals add on top: too small for any grid to carry.
@@ -289,12 +306,18 @@ public sealed partial class Ocean : Node3D
 
     // vec4(dir.x, dir.z, k, A) and vec2(Q, omega) per wave. Omega is rounded to a whole number of
     // cycles per csky_time wrap, so the hourly rollover lands on an identical frame.
-    private static void EmitWaves(StringBuilder sb, string name, Wave[] waves, int count)
+    // Also vec4 _MOD per wave: the height field's weights, then the phase field's. Each wave's weights
+    // turn a golden angle on from the last, so no two waves follow the field alike.
+    private static void EmitWaves(StringBuilder sb, string name, Wave[] waves, int count, int first)
     {
         var a = new List<string>();
         var b = new List<string>();
+        var m = new List<string>();
         foreach (var w in waves)
         {
+            float u = Mathf.DegToRad(137.50776f * (first + m.Count));
+            float rad = Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * PhaseMetres);
+            m.Add($"vec4({F(GroupGain * Mathf.Cos(u))}, {F(GroupGain * Mathf.Sin(u))}, {F(rad * Mathf.Sin(u + 1f))}, {F(rad * Mathf.Cos(u + 1f))})");
             float ang = Mathf.DegToRad(WindDeg + w.AngleDeg);
             float k = Mathf.Tau / w.Length;
             float amp = w.Steepness / k;
@@ -306,6 +329,7 @@ public sealed partial class Ocean : Node3D
         }
         sb.AppendLine($"const vec4 {name}_DKA[{waves.Length}] = vec4[{waves.Length}]({string.Join(", ", a)});");
         sb.AppendLine($"const vec2 {name}_QW[{waves.Length}] = vec2[{waves.Length}]({string.Join(", ", b)});");
+        sb.AppendLine($"const vec4 {name}_MOD[{waves.Length}] = vec4[{waves.Length}]({string.Join(", ", m)});");
     }
 
     // The view-space scale that draws the ocean at priority level, in the bias shader's own step
@@ -315,9 +339,11 @@ public sealed partial class Ocean : Node3D
 
     private static string ShaderCode(int level, bool zoned)
     {
-        float swellSum = 0f;
+        // The height foam measures a crest against.
+        float variance = 0f;
         foreach (var w in Swell)
-            swellSum += w.Steepness * w.Length / Mathf.Tau;
+            variance += 0.5f * Mathf.Pow(w.Steepness * w.Length / Mathf.Tau, 2f);
+        float crestRef = CrestSigmas * Mathf.Sqrt(variance);
         var sb = new StringBuilder();
         sb.AppendLine("shader_type spatial;");
         sb.AppendLine("render_mode skip_vertex_transform, cull_disabled;");
@@ -345,9 +371,9 @@ public sealed partial class Ocean : Node3D
             sb.AppendLine("uniform sampler2D zone_tex : filter_nearest, repeat_disable;");
             sb.AppendLine("instance uniform float zone_index = 0.0;");
         }
-        EmitWaves(sb, "SWELL", Swell, Swell.Length);
-        EmitWaves(sb, "CHOP", Chop, Chop.Length);
-        sb.AppendLine($"const float SWELL_SUM = {F(swellSum)};");
+        EmitWaves(sb, "SWELL", Swell, Swell.Length, 0);
+        EmitWaves(sb, "CHOP", Chop, Chop.Length, Swell.Length);
+        sb.AppendLine($"const float SWELL_CREST = {F(crestRef)};");
         sb.AppendLine("varying vec2 v_param;");
         sb.AppendLine(@"
 vec2 ocean_mask(vec2 p) {
@@ -365,6 +391,31 @@ float foam_noise(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(foam_hash(c), foam_hash(c + vec2(1.0, 0.0)), f.x),
         mix(foam_hash(c + vec2(0.0, 1.0)), foam_hash(c + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Two hashes in [0, 1] per integer cell, without sin, so it costs little per wave sum.
+vec2 sea_hash(vec2 c) {
+    vec3 p3 = fract(c.xyx * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// Two smooth value-noise channels in [-1, 1].
+vec2 sea_noise(vec2 p) {
+    vec2 c = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(sea_hash(c), sea_hash(c + vec2(1.0, 0.0)), f.x),
+        mix(sea_hash(c + vec2(0.0, 1.0)), sea_hash(c + vec2(1.0, 1.0)), f.x), f.y) * 2.0 - 1.0;
+}
+
+// The sea-state field at p: xy the grouping channels, zw the phase channels. Each octave is turned
+// off the grid's axes so the noise cells do not line up with each other.
+vec4 sea_state(vec2 p) {
+    vec2 g = sea_noise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * " + F(1f / GroupScale) + @");
+    vec2 c = sea_noise(mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p * " + F(1f / PhaseScaleCoarse) + @" + vec2(17.0, 5.0));
+    vec2 f = sea_noise(mat2(vec2(0.28, 0.96), vec2(-0.96, 0.28)) * p * " + F(1f / PhaseScaleFine) + @" + vec2(-9.0, 31.0));
+    return vec4(g, c * 0.6 + f * 0.4);
 }
 
 // OceanCalmZone.Distance and Calm, per ship: flat within the margin of the box, full height a fade
@@ -385,13 +436,14 @@ void vertex() {
     float spacing = max(UV.x, 0.01);
     float amp = ocean_mask(p).g * ship_calm(p) * wave_scale;
     vec3 disp = vec3(0.0);
+    vec4 sea = sea_state(p);
     for (int i = 0; i < SWELL_DKA.length(); i++) {
         vec4 w = SWELL_DKA[i];
         float len = 6.2831853 / w.z;
         // Full height at eight grid steps per wavelength, none at four: a wave the grid cannot
         // carry would crawl as the grid follows the eye.
-        float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0);
-        float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time;
+        float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * clamp(1.0 + dot(SWELL_MOD[i].xy, sea.xy), 0.0, 1.8);
+        float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + dot(SWELL_MOD[i].zw, sea.zw);
         disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
         disp.y += w.w * g * sin(th);
     }
@@ -425,10 +477,13 @@ void fragment() {
     // The full swell height here, independent of how much of it the grid displaced, so the
     // foam reads the same at every distance.
     float h = 0.0;
+    // The sea-state field's own slope is left out of the normals: it bends a crest by a few
+    // per cent at most.
+    vec4 sea = sea_state(p);
     for (int i = 0; i < SWELL_DKA.length(); i++) {
         vec4 w = SWELL_DKA[i];
-        float f = amp * smoothstep(1.5, 4.0, 6.2831853 / w.z / footprint);
-        float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time;
+        float f = amp * smoothstep(1.5, 4.0, 6.2831853 / w.z / footprint) * clamp(1.0 + dot(SWELL_MOD[i].xy, sea.xy), 0.0, 1.8);
+        float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + dot(SWELL_MOD[i].zw, sea.zw);
         float ka = w.z * w.w * f;
         n.xz -= w.xy * (ka * cos(th));
         n.y -= SWELL_QW[i].x * ka * sin(th);
@@ -436,8 +491,8 @@ void fragment() {
     }
     for (int i = 0; i < CHOP_DKA.length(); i++) {
         vec4 w = CHOP_DKA[i];
-        float f = amp * smoothstep(1.5, 4.0, 6.2831853 / w.z / footprint);
-        float th = w.z * dot(w.xy, p) - CHOP_QW[i].y * csky_time;
+        float f = amp * smoothstep(1.5, 4.0, 6.2831853 / w.z / footprint) * clamp(1.0 + dot(CHOP_MOD[i].xy, sea.xy), 0.0, 1.8);
+        float th = w.z * dot(w.xy, p) - CHOP_QW[i].y * csky_time + dot(CHOP_MOD[i].zw, sea.zw);
         float ka = w.z * w.w * f;
         n.xz -= w.xy * (ka * cos(th));
         n.y -= CHOP_QW[i].x * ka * sin(th);
@@ -452,12 +507,12 @@ void fragment() {
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
     vec3 col = mix(base_color, csky_sample_albedo(albedo_tex, p / tile_m).rgb, mix(detail_mix, 1.0, sheet)) * tint;
-    // The swell's crest coincidences repeat on a lattice, so foam alone would print a pattern.
-    // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
+    // Crest height alone spreads whitecaps too evenly. A drifting patch field decides where they
+    // can form and moves each crest's threshold.
     vec2 drift = SWELL_DKA[0].xy * (csky_time * 1.5);
     float patches = foam_noise((p - drift) / 230.0) * 0.65 + foam_noise((p - drift) / 71.0) * 0.35;
     float breakup = foam_noise((p - drift * 2.0) / 9.0);
-    float crest = smoothstep(0.5, 0.85, h / max(SWELL_SUM * wave_scale, 0.01) + (patches - 0.55) * 0.5);
+    float crest = smoothstep(0.5, 0.85, h / max(SWELL_CREST * wave_scale, 0.01) + (patches - 0.55) * 0.5);
     float foam = crest * smoothstep(0.55, 0.8, patches) * smoothstep(0.25, 0.85, breakup);
     col = mix(col, vec3(0.6, 0.65, 0.68), foam * foam_strength * (1.0 - sheet));
     ALBEDO = col;
