@@ -35,6 +35,12 @@ internal static class OriginalDropLists
     private const float FallbackArrowWidth = 15f;
     private const float FallbackArrowHeight = 14f;
 
+    // The multiplayer pages' open list: the cream box behind its rows, the picked item's darker
+    // shade and the focused row's lighter one.
+    private static readonly (byte R, byte G, byte B) OpenFill = (222, 207, 156);
+    private static readonly (byte R, byte G, byte B) OpenFocus = (209, 180, 120);
+    private static readonly (byte R, byte G, byte B) OpenPicked = (180, 147, 78);
+
     // The n-th art a row names as a strip; arrows and radios carry their frame count in the row,
     // the dropdown arrows are the same four-frame strips the page buttons draw.
     internal static BoardArt? StripArt(IReadOnlyList<string> art, int index, int frames = 4) =>
@@ -136,6 +142,56 @@ internal static class OriginalDropLists
             ListWindow.ThumbYFor(y + upSize.Height, trackHeight, thumbHeight, first, drop.LastTop),
             thumb.Width, thumbHeight,
             y + upSize.Height, trackHeight, drop.Count, drop.Window, first);
+    }
+
+    // A multiplayer page's open list as one panel over its visible rows. Item picked is shaded
+    // dark and row focus light. Each label takes face, else fallbackText's height, in ink's colour.
+    internal static BoardPanel ComposeOpen(IReadOnlyList<OriginalRow> rows, int focus, int picked,
+        LanguiFace? face, float fallbackText, Func<OriginalRow, BoardTint> ink)
+    {
+        var fills = new List<BoardFill>();
+        var lines = new List<BoardLine>();
+        float size = face?.Pixels ?? fallbackText;
+        float top = float.MaxValue, bottom = float.MinValue, left = 0f, width = 0f;
+        foreach (var row in rows)
+        {
+            if (row.Visible && row.Kind == OriginalRowKind.ListRow)
+            {
+                top = Math.Min(top, row.Y);
+                bottom = Math.Max(bottom, row.Y + row.Height);
+                left = row.X;
+                width = row.Width;
+            }
+        }
+
+        if (top < bottom)
+        {
+            fills.Add(new BoardFill(left, top, width, bottom - top, OpenFill.R, OpenFill.G, OpenFill.B));
+            fills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, Border: true));
+        }
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var item = rows[i];
+            if (!item.Visible || item.Kind != OriginalRowKind.ListRow)
+            {
+                continue;
+            }
+
+            if (IndexOf(item.Key) == picked)
+            {
+                fills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, OpenPicked.R, OpenPicked.G, OpenPicked.B));
+            }
+            else if (i == focus)
+            {
+                fills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, OpenFocus.R, OpenFocus.G, OpenFocus.B));
+            }
+
+            lines.Add(new BoardLine(item.Label, item.X + 8f, item.Y + ((item.Height - size) / 2f) - 1f, item.Width - 12f, size,
+                BoardInk.Row, i, Face: face, Colour: ink(item)));
+        }
+
+        return new BoardPanel(fills, Array.Empty<BoardPicture>(), lines);
     }
 
     // Puts an open list's window at top and answers where it landed; a focused item the move would

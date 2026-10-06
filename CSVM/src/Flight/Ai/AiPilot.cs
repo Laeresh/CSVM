@@ -317,7 +317,7 @@ public sealed class AiPilot
 
         Rocketeer?.Reset();
         Machine?.Reset("respawned");
-        RearmOrder?.Clear();
+        RearmOrder?.Reset();
         if (Gunner is { } freed)
         {
             freed.Disengaged = false;

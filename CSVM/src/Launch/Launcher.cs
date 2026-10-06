@@ -1392,10 +1392,7 @@ public partial class Launcher : Node3D
                 seatFits.Add(default);
             }
 
-            if (left > 0)
-            {
-                Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} lobby bot(s) left out, the people filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
-            }
+            WarnBotsLeftOut(left, "lobby bot(s)", "people");
         }
 
         Net.NetSeats.Validate(seats, wire.LocalPeer);
@@ -1579,15 +1576,8 @@ public partial class Launcher : Node3D
         int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messagesPath));
         Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
         var inv = System.Globalization.CultureInfo.InvariantCulture;
-        Log.Info("core", $"local roster of {seats.Count.ToString(inv)} seat(s), {(seats.Count - spec.Players).ToString(inv)} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
-        foreach (var bot in seats)
-        {
-            if (bot.IsBot)
-            {
-                Log.Info("core", $"local: bot seat {bot.SeatIndex.ToString(inv)} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
-            }
-        }
-
+        Log.Info("core", $"local roster of {seats.Count} seat(s), {seats.Count - spec.Players} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
+        LogBotSeats("local", seats);
         return seats.ToArray();
     }
 
@@ -1595,12 +1585,12 @@ public partial class Launcher : Node3D
     /// <paramref name="people"/>. The pilot names are read once from the message table, which
     /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
     /// a stream of their own, a function of the master seed alone.</summary>
-    internal static IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveBots(
+    internal static IReadOnlyList<Net.SeatedBot> ResolveBots(
         SessionSpec spec, IReadOnlyList<Net.NetSeat> people, string messagesPath)
     {
         if (spec.VsBots.Count == 0)
         {
-            return System.Array.Empty<(string, Net.NetBotSkill, int, string)>();
+            return System.Array.Empty<Net.SeatedBot>();
         }
 
         var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(messagesPath));
@@ -1614,6 +1604,27 @@ public partial class Launcher : Node3D
     // ⚠ Keep it internal rather than private. Nothing instantiates a Launcher headlessly, so the
     // launch-return suite pins this round trip on the live node or not at all.
     internal void LaunchedFrom(MenuExit exit) => ExitDestination = MenuReturnDestination.ForLaunch(exit);
+
+    // One line per bot seat of a roster just built, prefixed by where it was built.
+    private static void LogBotSeats(string where, IReadOnlyList<Net.NetSeat> seats)
+    {
+        foreach (var bot in seats)
+        {
+            if (bot.IsBot)
+            {
+                Log.Info("core", $"{where}: bot seat {bot.SeatIndex} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
+            }
+        }
+    }
+
+    // The warning for the bots a full field left out once the people named took their seats.
+    private static void WarnBotsLeftOut(int left, string bots, string people)
+    {
+        if (left > 0)
+        {
+            Log.Warn("core", $"net: {left} {bots} left out, the {people} filled the {Net.NetSeats.MaxPlayers}-seat field");
+        }
+    }
 
     // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame
     // callbacks are switched off until the quit, because _Ready returned before building what they read.
@@ -2957,25 +2968,15 @@ public partial class Launcher : Node3D
         // The command line's bots, after every guest. Random planes and callsigns are drawn here,
         // on the host alone. The roster carries real ones to every guest, which seats no bot.
         int left = Net.NetSeats.AddBots(seats, _netWire.LocalPeer, ResolveCliBots(seats));
-        if (left > 0)
-        {
-            Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} bot(s) left out, the guests filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
-        }
-
+        WarnBotsLeftOut(left, "bot(s)", "guests");
         Net.NetSeats.Validate(seats, _netWire.LocalPeer);
         _netRoster = seats.ToArray();
-        Log.Info("core", $"net: host roster of {seats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} seat(s), {System.Linq.Enumerable.Count(seats, s => s.IsBot).ToString(System.Globalization.CultureInfo.InvariantCulture)} of them bots");
-        foreach (var bot in seats)
-        {
-            if (bot.IsBot)
-            {
-                Log.Info("core", $"net: bot seat {bot.SeatIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
-            }
-        }
+        Log.Info("core", $"net: host roster of {seats.Count} seat(s), {System.Linq.Enumerable.Count(seats, s => s.IsBot)} of them bots");
+        LogBotSeats("net", seats);
     }
 
     // The command line's bots as this host seats them.
-    private IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveCliBots(
+    private IReadOnlyList<Net.SeatedBot> ResolveCliBots(
         IReadOnlyList<Net.NetSeat> people) => ResolveBots(_spec, people, _messagesPath);
 
     // The wire a menu launch carried, kept for the session build. A host also builds the match's

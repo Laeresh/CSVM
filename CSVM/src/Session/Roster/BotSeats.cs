@@ -65,6 +65,11 @@ public static class BotSeats
         return pool;
     }
 
+    /// <summary><see cref="CallsignPool(Messages)"/> over the message table extracted under
+    /// <paramref name="dataRoot"/>, the pool a menu page offers its bot rows.</summary>
+    public static IReadOnlyList<string> LoadCallsignPool(string dataRoot) =>
+        CallsignPool(Messages.Load(System.IO.Path.Combine(dataRoot, "extracted", "messages.json")));
+
     /// <summary>A pilot name brought within <see cref="CallsignLimit"/> by dropping whole words from
     /// the front. A long name keeps its surname: "Sir Charles Emmett Winthrop" is "Winthrop". A
     /// last word longer than the limit is cut to it, and a name that fits is returned trimmed.
@@ -93,7 +98,7 @@ public static class BotSeats
     /// bot with no callsign draws one from <paramref name="pool"/>, shuffled once. It never takes a
     /// name drawn before, named by another bot or held in <paramref name="taken"/>. An exhausted
     /// pool falls back to <see cref="SessionSpec.BotCallsign"/>.</summary>
-    public static IReadOnlyList<(string Plane, NetBotSkill Skill, int Team, string Callsign)> Resolve(
+    public static IReadOnlyList<SeatedBot> Resolve(
         IReadOnlyList<VsBotEntry> bots, IEnumerable<string> taken, IReadOnlyList<string> pool, Random rng)
     {
         ArgumentNullException.ThrowIfNull(bots);
@@ -122,7 +127,7 @@ public static class BotSeats
         }
 
         var nodes = StockAirframes.Nodes;
-        var seated = new (string, NetBotSkill, int, string)[bots.Count];
+        var seated = new SeatedBot[bots.Count];
         int next = 0;
         for (int i = 0; i < bots.Count; i++)
         {
@@ -139,7 +144,7 @@ public static class BotSeats
                 callsign = next < order.Count ? order[next++] : Fallback(i + 1, used);
             }
 
-            seated[i] = (plane, bot.Skill, bot.Team, callsign);
+            seated[i] = new SeatedBot(plane, bot.Skill, bot.Team, callsign);
         }
 
         return seated;

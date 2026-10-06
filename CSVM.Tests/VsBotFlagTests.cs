@@ -138,7 +138,7 @@ public sealed class VsBotFlagTests
         var roster = NetSeats.LocalPanes(2);
         int left = NetSeats.AddBots(roster, NetSeats.OfflinePeer, new[]
         {
-            ("player_fury", NetBotSkill.Ace, 0, "Red"),
+            new SeatedBot("player_fury", NetBotSkill.Ace, 0, "Red"),
         });
 
         Assert.Equal(0, left);
@@ -182,8 +182,8 @@ public sealed class VsBotFlagTests
         };
         int left = NetSeats.AddBots(roster, 0, new[]
         {
-            ("player_fury", NetBotSkill.Ace, 2, "Red"),
-            ("player_bhawk", NetBotSkill.Veteran, 0, "Bot 2"),
+            new SeatedBot("player_fury", NetBotSkill.Ace, 2, "Red"),
+            new SeatedBot("player_bhawk", NetBotSkill.Veteran, 0, "Bot 2"),
         });
 
         Assert.Equal(0, left);
@@ -203,7 +203,7 @@ public sealed class VsBotFlagTests
             roster.Add(new NetSeat { PeerId = peer, SeatIndex = roster.Count, Callsign = $"guest {peer}" });
         }
 
-        var bots = Enumerable.Range(1, 3).Select(i => ("player_bhawk", NetBotSkill.Veteran, 0, SessionSpec.BotCallsign(i)));
+        var bots = Enumerable.Range(1, 3).Select(i => new SeatedBot("player_bhawk", NetBotSkill.Veteran, 0, SessionSpec.BotCallsign(i)));
         Assert.Equal(2, NetSeats.AddBots(roster, 0, bots));
         Assert.Equal(NetSeats.MaxPlayers, roster.Count);
         Assert.Equal("Bot 1", roster[^1].Callsign);

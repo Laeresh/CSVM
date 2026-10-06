@@ -9,6 +9,8 @@ using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
+using static CSVM.Testing.BotSuiteHelper;
+
 namespace CSVM.Testing;
 
 /// <summary>A bot seat's world contacts take a person's rule. It grazes, bounces and spends the
@@ -177,8 +179,8 @@ internal static class BotContactSuites
                 $"ABLE-TO-FAIL CONTROL: world AI on the same trajectory is destroyed outright with its ledger unspent (crashed {ai.Crashed}, spent {ai.HullSpent:0.0})");
             ctx.Note($"floor graze: person e={ePerson:0.00}, bot e={eBot:0.00}, bot with ground blow e={blowBot.Restitution:0.00}, world AI crashed={ai.Crashed}");
 
-            // The mid-air the user's sortie ended in "embedded after a graze": a bot into a parked
-            // aeroplane's tail. It strikes an aeroplane, so the entity cut prices it and no doom applies.
+            // A bot into a parked aeroplane's tail. It strikes an aeroplane, so the entity cut prices
+            // it and no doom applies.
             Contact Ram(Pilot pilot)
             {
                 var parkAt = new Vector3(0f, 300f, 0f);
@@ -378,14 +380,6 @@ internal static class BotContactSuites
         return world.Ray(from, from + (Vector3.Down * 6000f), CollisionLayers.World, null, out var report)
             ? report
             : null;
-    }
-
-    // Put 500 m above where it flies, with a fresh collision window, as versus-local-bot's lift does.
-    private static void Lift(FlightController pilot)
-    {
-        var at = pilot.WorldPosition + (Vector3.Up * 500f);
-        pilot.RespawnAt(at, at + (Vector3.Right * 100f));
-        pilot.ArmSpawnTimers();
     }
 
     private readonly record struct Contact(float NormalIn, float NormalOut, bool Contacted, bool Crashed,

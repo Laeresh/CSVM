@@ -236,7 +236,7 @@ public sealed record SessionSpec
     public bool VsAutoRespawn { get; private set; } = true;
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
+    /// <summary>Resolved. The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
     /// the bot seats a <c>--net-host</c> Dogfight seats after its guests, or a local one after its
     /// panes. Empty without <see cref="Versus"/>, outside a Deathmatch and on a guest, and cut to the
     /// seats <see cref="Players"/> leaves.</summary>

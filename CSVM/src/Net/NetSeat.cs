@@ -25,6 +25,10 @@ public enum NetBotSkill : byte
     Ace = 2,
 }
 
+/// <summary>A bot as a host seats it. Its plane is resolved to a stock node and its callsign is
+/// drawn. <paramref name="Team"/> is a lobby team number, 0 for none.</summary>
+public readonly record struct SeatedBot(string Plane, NetBotSkill Skill, int Team, string Callsign);
+
 /// <summary>
 /// One pilot's place in a network match, shaped like the record the original allocates per player.
 /// The peer it is addressed by, its team, who flies it and where, and its callsign. Then the

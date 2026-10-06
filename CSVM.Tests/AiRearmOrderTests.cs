@@ -217,7 +217,7 @@ public sealed class AiRearmOrderTests
 
         order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, false, 0.2f, Node, restored: false);
         Assert.True(order.Flying);
-        order.Clear();
+        order.Reset();
         Assert.False(order.Flying);
         Assert.Equal(string.Empty, order.Reason);
     }

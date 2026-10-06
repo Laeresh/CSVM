@@ -17,6 +17,8 @@ using CSVM.UI.Overlays;
 using CSVM.Utils;
 using Godot;
 
+using static CSVM.Testing.BotSuiteHelper;
+
 namespace CSVM.Testing;
 
 /// <summary>A bot seat between whole sessions in one process. The host flies it with an AI pilot,
@@ -34,10 +36,6 @@ internal static class NetBotSuites
     private const int GuestSeat = 1;
     private const int BotSeat = 2;
     private const int SecondBotSeat = 3;
-
-    // How close to a table entry a placed aeroplane counts as standing on it, horizontally, in
-    // metres. Read on the step it is placed, before it has flown.
-    private const float EntryTolerance = 5f;
 
     // How long a check that something does NOT happen keeps watching, in sim steps. That is a
     // second past the quick crash camera and the grant that would follow it.
@@ -631,22 +629,6 @@ internal static class NetBotSuites
     private static string Endings(GameSession[] peers) =>
         string.Join(", ", peers.Select(p => p.Dogfight!.End));
 
-    // Which table entry a placed aeroplane stands on, horizontally, or -1.
-    private static int EntryAt(IReadOnlyList<SpawnPoint> table, FlightController placed)
-    {
-        var pos = placed.WorldPosition;
-        for (int i = 0; i < table.Count; i++)
-        {
-            var d = table[i].Position - pos;
-            if (Mathf.Abs(d.X) < EntryTolerance && Mathf.Abs(d.Z) < EntryTolerance)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
     // The board as one (score, kills, deaths) per seat, the host's count or a guest's mirror of it.
     private static (int Score, int Kills, int Deaths)[] Board(GameSession session)
     {
@@ -665,16 +647,6 @@ internal static class NetBotSuites
         after[victim] = (after[victim].Score, after[victim].Kills, after[victim].Deaths + 1);
         return after;
     }
-
-    // The ranked board as one line, which is what a results screen draws from.
-    private static string Scoreboard(GameSession session) =>
-        string.Join(" ", session.Dogfight!.Match.Standings()
-            .Select(s => $"#{s.Rank}P{s.PlayerIndex + 1}:{s.Score}/{s.Kills}K/{s.Deaths}D"));
-
-    private static string PaneLines(FlightController pilot) =>
-        pilot.MessageStack is { } stack
-            ? string.Join(" / ", Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt))
-            : "no stack";
 
     private static string Downs(GameSession[] peers) =>
         string.Join(" | ", peers.Select(p => string.Join(",", p.SeatRigs.Select(r =>
@@ -697,15 +669,6 @@ internal static class NetBotSuites
     // pristine airframe moves the armour alone.
     private static float Ledger(FlightController rig) =>
         rig.Damage!.WholeArmor + rig.Damage.WholeHealth;
-
-    // Put 500 m above where it flies, with a fresh collision window, by its owner's own respawn.
-    // A glide into the ground then never adds a death to a reading.
-    private static void Lift(FlightController pilot)
-    {
-        var at = pilot.WorldPosition + (Vector3.Up * 500f);
-        pilot.RespawnAt(at, at + (Vector3.Right * 100f));
-        pilot.ArmSpawnTimers();
-    }
 
     // Mean distance between the guest's shown path and the host's own, at the best whole-step lag.
     private static float Track(IReadOnlyList<Vector3> own, IReadOnlyList<Vector3> shown)

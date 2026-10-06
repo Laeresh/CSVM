@@ -88,7 +88,7 @@ public sealed class BotSeatsTests
 
         Assert.All(seated.Take(40), bot => Assert.Contains(bot.Plane, StockAirframes.Nodes));
         Assert.True(seated.Take(40).Select(bot => bot.Plane).Distinct().Count() > 5, "Random draws over the field, not one plane");
-        Assert.Equal(("player_fury", NetBotSkill.Ace, 3, "Red"), seated[^1]);
+        Assert.Equal(new SeatedBot("player_fury", NetBotSkill.Ace, 3, "Red"), seated[^1]);
     }
 
     [Fact]

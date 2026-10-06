@@ -207,7 +207,7 @@ public sealed class DogfightLobby
 
     /// <summary>How many more bots the field takes before it holds <see cref="NetSeats.MaxPlayers"/>
     /// pilots. None on a guest.</summary>
-    public int BotRoom => IsHost ? Math.Max(0, NetSeats.MaxPlayers - FieldSeats) : 0;
+    public int BotRoom => IsHost ? DogfightBots.Room(FieldSeats) : 0;
 
     /// <summary>Whether the host may add, edit or remove a bot row: on the host while it is not
     /// Ready, the gate its options have.</summary>

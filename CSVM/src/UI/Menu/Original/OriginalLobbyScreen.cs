@@ -1062,7 +1062,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     internal IReadOnlyList<string> BotNames() =>
         _botNames ??= _dataRoot == null
             ? Array.Empty<string>()
-            : BotSeats.CallsignPool(Messages.Load(System.IO.Path.Combine(_dataRoot, "extracted", "messages.json")));
+            : BotSeats.LoadCallsignPool(_dataRoot);
 
     private static bool IsBox(string key) =>
         key is ChatKey or TimeKey or ScoreKey or LivesKey or MinTeamsKey or MaxTeamsKey or FillCountKey or BotNameKey;
@@ -1080,9 +1080,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return false;
     }
 
-    // No langui row words a Random plane or a bot on no team, so these are the remake's own.
-    private static string RandomWord() => "Random";
-
+    // No langui row words a bot on no team, so that word is the remake's own.
     private static string TeamWord(DogfightLobby lobby, byte team)
     {
         foreach (var named in lobby.Teams)
@@ -1499,10 +1497,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private void BotRows(DogfightLobby lobby, DogfightBot bot, List<OriginalRow> rows)
     {
         bool live = lobby.EditsBots;
-        string plane = bot.RandomPlane ? RandomWord() : PlaneWord(bot.Airframe);
+        string plane = bot.RandomPlane ? MultiplayerBoardText.RandomPlaneWord : PlaneWord(bot.Airframe);
         rows.Add(Box(BotNameKey, BoxText(BotNameKey, lobby), PageX + 11f, PageY + 88f, 195f, 22f, live));
         rows.Add(Drop(BotPlaneKey, plane, PageX + 11f, PageY + 134f, 195f, 22f, live));
-        rows.Add(Drop(BotSkillKey, SkillWord(bot.Skill), PageX + 11f, PageY + 180f, 195f, 22f, live));
+        rows.Add(Drop(BotSkillKey, _text.SkillWord(bot.Skill), PageX + 11f, PageY + 180f, 195f, 22f, live));
         rows.Add(Drop(BotTeamKey, TeamWord(lobby, bot.Team), PageX + 11f, PageY + 226f, 195f, 22f, live));
         rows.Add(_text.Strip(RemoveBotKey, MediumArt, PageX + 11f, PageY + 262f, live, 1, 96f, 37f));
         rows.Add(_text.Strip(BotDoneKey, MediumArt, PageX + 110f, PageY + 262f, true, 1, 96f, 37f));
@@ -1590,20 +1588,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private string PlaneWord(int airframe) =>
         _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];
 
-    // IDS_IA_DIFFICULTY, Instant Action's own three words for the same tiers. They ship in lower
-    // case, so the first letter is raised for the box, as the lobby's other items read.
-    private string SkillWord(NetBotSkill skill)
-    {
-        string word = skill switch
-        {
-            NetBotSkill.Novice => _text.Word(3695, "novice"),
-            NetBotSkill.Ace => _text.Word(3697, "ace"),
-            _ => _text.Word(3696, "veteran"),
-        };
-
-        return word.Length > 0 ? char.ToUpperInvariant(word[0]) + word[1..] : word;
-    }
-
     // The bot's lists: Random then the eleven stock planes, the three tiers, no team then each
     // standing team. Null for any other key.
     private DropdownList? BotDropdown(DogfightLobby lobby, string key)
@@ -1618,7 +1602,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             case BotPlaneKey:
                 {
                     var items = new string[DogfightLobby.AirframeCount + 1];
-                    items[0] = RandomWord();
+                    items[0] = MultiplayerBoardText.RandomPlaneWord;
                     for (int i = 1; i < items.Length; i++)
                     {
                         items[i] = PlaneWord(i - 1);
@@ -1629,7 +1613,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 }
 
             case BotSkillKey:
-                return new DropdownList(new[] { SkillWord(NetBotSkill.Novice), SkillWord(NetBotSkill.Veteran), SkillWord(NetBotSkill.Ace) },
+                return new DropdownList(new[] { _text.SkillWord(NetBotSkill.Novice), _text.SkillWord(NetBotSkill.Veteran), _text.SkillWord(NetBotSkill.Ace) },
                     (int)bot.Skill, _ => true, i => lobby.SetBotSkill(bot.Id, (NetBotSkill)i));
             case BotTeamKey:
                 {
@@ -2258,7 +2242,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (bot.RandomPlane)
         {
             layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black,
-                text: _text.Word(10566, "Plane:") + " " + RandomWord(), faceId: BotFace));
+                text: _text.Word(10566, "Plane:") + " " + MultiplayerBoardText.RandomPlaneWord, faceId: BotFace));
             layers.Lines.Add(_text.Line(-1, "Drawn at launch", PageX + 225f, PageY + 90f, 220f, Black, faceId: BotFace));
             return;
         }
@@ -2352,51 +2336,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The open list over the finished page: its items on the box's own fill, the picked one marked.
     private void ComposeOpenList(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
-        var fills = new List<BoardFill>();
-        var lines = new List<BoardLine>();
         int picked = _open != null && DropdownFor(_open) is { } open ? open.Current : -1;
         var face = _text.Regular(_open is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144);
-        float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        float top = float.MaxValue, bottom = float.MinValue, left = 0f, width = 0f;
-        foreach (var row in rows)
-        {
-            if (row.Visible && row.Kind == OriginalRowKind.ListRow)
-            {
-                top = Math.Min(top, row.Y);
-                bottom = Math.Max(bottom, row.Y + row.Height);
-                left = row.X;
-                width = row.Width;
-            }
-        }
-
-        if (top < bottom)
-        {
-            fills.Add(new BoardFill(left, top, width, bottom - top, 222, 207, 156));
-            fills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, Border: true));
-        }
-
-        for (int i = 0; i < rows.Count; i++)
-        {
-            var item = rows[i];
-            if (!item.Visible || item.Kind != OriginalRowKind.ListRow)
-            {
-                continue;
-            }
-
-            if (OriginalDropLists.IndexOf(item.Key) == picked)
-            {
-                fills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 180, 147, 78));
-            }
-            else if (i == focus)
-            {
-                fills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 209, 180, 120));
-            }
-
-            lines.Add(new BoardLine(item.Label, item.X + 8f, item.Y + ((item.Height - size) / 2f) - 1f, item.Width - 12f, size,
-                BoardInk.Row, i, Face: face, Colour: item.Enabled ? Black : TabDisabled));
-        }
-
-        layers.Overlays.Add(new BoardPanel(fills, Array.Empty<BoardPicture>(), lines));
+        layers.Overlays.Add(OriginalDropLists.ComposeOpen(rows, focus, picked, face, MultiplayerBoardText.TextFallback,
+            item => item.Enabled ? Black : TabDisabled));
     }
 
     private readonly record struct ListEntry(byte Team, int Player, string Text);

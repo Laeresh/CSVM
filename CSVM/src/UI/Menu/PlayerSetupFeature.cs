@@ -495,7 +495,8 @@ public sealed class PlayerSetupFeature : IMenuFeature
     }
 
     // Every player tag a local roster can give a pane (Net.NetSeats.LocalPanes), joined or not. A bot
-    // then never holds the name of a seat that signs on later.
+    // then never holds the name of a seat that signs on later. Spelled here rather than through
+    // SplitScreen.PlayerTag, since the shared menu namespace references no presentation.
     private static string[] PaneNames()
     {
         var names = new string[MaxSeats];

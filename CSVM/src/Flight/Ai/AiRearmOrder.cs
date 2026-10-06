@@ -132,8 +132,9 @@ public sealed class AiRearmOrder
     }
 
     /// <summary>Bearing <paramref name="index"/> of <paramref name="count"/>, as a horizontal unit
-    /// vector: the nose of a heading of <c>index * 360 / count</c> degrees, the mission-data convention.</summary>
-    public static Vector3 BearingDir(int index, int count)
+    /// vector: the nose of a heading of <c>index * 360 / count</c> degrees, the mission-data convention.
+    /// A fractional index lies between two bearings.</summary>
+    public static Vector3 BearingDir(float index, int count)
     {
         float rad = Mathf.DegToRad(index * 360f / count);
         return new Vector3(-Mathf.Sin(rad), 0f, -Mathf.Cos(rad));
@@ -195,8 +196,7 @@ public sealed class AiRearmOrder
             return BearingDir(best, n);
         }
 
-        float rad = Mathf.DegToRad(middle * 360f / n);
-        return new Vector3(-Mathf.Sin(rad), 0f, -Mathf.Cos(rad));
+        return BearingDir(middle, n);
     }
 
     /// <summary>One step's decision, fed by the base runtime. The pilot stands at
@@ -249,7 +249,7 @@ public sealed class AiRearmOrder
     }
 
     /// <summary>Drops any run outright, the return to a fresh airframe.</summary>
-    public void Clear()
+    public void Reset()
     {
         Leg = AiRearmLeg.None;
         Reason = string.Empty;

@@ -99,7 +99,7 @@ a suite means adding a marked body to the module that already covers its domain,
 when none does, and registering nothing anywhere else. The membership itself is the catalog's
 output: `--run-tests` prints the table and writes `test-report.json`. They reach the harness only
 through `TestContext`, and shared fixtures are separate focused modules (`SuiteConstants.cs`,
-`BurstTimeline.cs`, `SuiteViewers.cs`, `EffectStageSuiteHelper.cs`, `MenuSuiteHost.cs`) rather than
+`BurstTimeline.cs`, `SuiteViewers.cs`, `EffectStageSuiteHelper.cs`, `BotSuiteHelper.cs`, `MenuSuiteHost.cs`) rather than
 an all-purpose helper. Per-suite traps live as comments on the suites themselves, in code.
 
 ## src/Testing/SuiteConstants.cs
@@ -114,6 +114,10 @@ Builds a test pane camera at a supplied world position for suites that exercise 
 
 ## src/Testing/EffectStageSuiteHelper.cs
 Builds and frees a production-shaped, pooled effect-template stage for mesh-visibility suites.
+
+## src/Testing/BotSuiteHelper.cs
+The readings the bot suites share: lifting a pilot clear of the ground, the spawn-table entry a
+placed aeroplane stands on, the Dogfight's ranked board as one line, and a pane's message stack.
 
 ## src/Testing/MenuSuiteHost.cs
 The launchscreen fixture a menu suite stands a `LaunchMenu` on. `Bare` builds a `MenuHost` over an

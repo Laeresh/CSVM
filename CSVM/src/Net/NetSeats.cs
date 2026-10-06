@@ -115,7 +115,7 @@ public static class NetSeats
     /// <see cref="MaxPlayers"/> is not seated, so a guest always outranks a bot. Answers how many
     /// were left out.</summary>
     public static int AddBots(List<NetSeat> roster,
-        int hostPeer, IEnumerable<(string Plane, NetBotSkill Skill, int Team, string Callsign)> bots)
+        int hostPeer, IEnumerable<SeatedBot> bots)
     {
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(bots);

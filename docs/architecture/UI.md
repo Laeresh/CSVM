@@ -1165,7 +1165,7 @@ window is the widget's authored `TotalDisplayed` clamped to the item count, so a
 chrome. Every item is a row keyed `<key>:<index>`, the ones outside the window built but hidden, since the rows are the hit-test surface and a
 dropped row would let a pointer hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right
 edge and hangs the thumb between them. The Instant Action module's two screens and the Game Options and VIDEO pages (through `OriginalOptionsChrome.cs`) come through here;
-`OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
+`OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. `ComposeOpen` draws the multiplayer pages' open list (the Lobby's and the bot panel's) in their cream box, with one face and one ink rule per page. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -1339,7 +1339,7 @@ screen graph, the rows at the rectangles the board draws them at, the pointer hi
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/MultiplayerBoardText.cs
-The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, and sizes a plaque strip by its art. Its static `Word` and `Regular` take a string table directly, for the race boards drawn in flight with no page host.
+The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, words a bot's tier and a Random plane, and sizes a plaque strip by its art. Its static `Word` and `Regular` take a string table directly, for the race boards drawn in flight with no page host.
 
 ## src/UI/Menu/Original/OriginalConnectionScreen.cs
 The original's Multiplayer Connection page and the LAN games list behind its Connect, one `IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline, so every corner is the scripts' own rather than the layout's.

@@ -10,6 +10,8 @@ using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
 
+using static CSVM.Testing.BotSuiteHelper;
+
 namespace CSVM.Testing;
 
 /// <summary>A bot's rearm run between whole sessions in one process, on the chapter's MP1, whose
@@ -301,14 +303,6 @@ internal static class NetBotRearmSuites
         var at = bot.WorldPosition + (bot.NoseDirection * LureAhead) + (Vector3.Up * LureAbove);
         quarry.RespawnAt(at, at + bot.NoseDirection);
         quarry.ArmSpawnTimers();
-    }
-
-    // Put 500 m above where it flies, with a fresh collision window, by its owner's own respawn.
-    private static void Lift(FlightController pilot)
-    {
-        var at = pilot.WorldPosition + (Vector3.Up * 500f);
-        pilot.RespawnAt(at, at + (Vector3.Right * 100f));
-        pilot.ArmSpawnTimers();
     }
 
     // Steps both sessions until the condition holds, and answers how many steps that took, or

@@ -12,6 +12,8 @@ using CSVM.UI.Overlays;
 using CSVM.Utils;
 using Godot;
 
+using static CSVM.Testing.BotSuiteHelper;
+
 namespace CSVM.Testing;
 
 /// <summary>A local Dogfight with bots: one pane and its bots on a seat roster with no wire. The
@@ -27,10 +29,6 @@ internal static class LocalBotSuites
     private const int PaneSeat = 0;
     private const int BotSeat = 1;
     private const int SecondBotSeat = 2;
-
-    // How close to a table entry a placed aeroplane counts as standing on it, horizontally, in
-    // metres. Read on the step it is placed, before it has flown.
-    private const float EntryTolerance = 5f;
 
     // How long a check that something does NOT happen keeps watching, in sim steps.
     private const int HeldSteps = 60;
@@ -354,22 +352,6 @@ internal static class LocalBotSuites
         return steps;
     }
 
-    // Which table entry a placed aeroplane stands on, horizontally, or -1.
-    private static int EntryAt(IReadOnlyList<SpawnPoint> table, FlightController placed)
-    {
-        var pos = placed.WorldPosition;
-        for (int i = 0; i < table.Count; i++)
-        {
-            var d = table[i].Position - pos;
-            if (Mathf.Abs(d.X) < EntryTolerance && Mathf.Abs(d.Z) < EntryTolerance)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
     private static (int Score, int Kills, int Deaths)[] Board(GameSession session)
     {
         var match = session.Dogfight!.Match;
@@ -388,29 +370,11 @@ internal static class LocalBotSuites
         return after;
     }
 
-    private static string Scoreboard(GameSession session) =>
-        string.Join(" ", session.Dogfight!.Match.Standings()
-            .Select(s => $"#{s.Rank}P{s.PlayerIndex + 1}:{s.Score}/{s.Kills}K/{s.Deaths}D"));
-
-    private static string PaneLines(FlightController pilot) =>
-        pilot.MessageStack is { } stack
-            ? string.Join(" / ", Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt))
-            : "no stack";
-
     private static string Downs(GameSession session) =>
         string.Join(",", session.SeatRigs.Select(r => r.Controller is { } c ? (c.Crashed ? "down" : "up") : "-"));
 
     private static string Seats(IReadOnlyList<NetSeat>? roster) =>
         roster == null ? "no roster" : string.Join(", ", roster.Select(s => $"{s.SeatIndex}:{s.Callsign}{(s.IsBot ? " bot" : "")}"));
-
-    // Put 500 m above where it flies, with a fresh collision window, so a glide into the ground
-    // never adds a death to a reading.
-    private static void Lift(FlightController pilot)
-    {
-        var at = pilot.WorldPosition + (Vector3.Up * 500f);
-        pilot.RespawnAt(at, at + (Vector3.Right * 100f));
-        pilot.ArmSpawnTimers();
-    }
 
     private static int StepUntil(Func<bool> done, GameSession session)
     {
