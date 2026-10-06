@@ -46,6 +46,7 @@ capture agree through `csky_time`.
 | 10 | Water Quality default | **Waves on the desktop, flat on the Deck and Linux.** B12's measurement confirms or revises it. |
 | 11 | B11 budget | **At most 1.5 ms over the flat sea** at the low-pass pose, desktop 1080p; about the ocean's cost with SSR off today. |
 | 12 | C21 chapter scope | **Every chapter with a sea at y = 0: C1, C1C, C2, C2B, C3, C5.** C4 keeps its flat lakes. C2's coplanar beaches, C3's shore sheets and C5's fog-gradient overlays are the item's to solve, not reasons to leave a chapter out. |
+| 13 | The ocean in the spyglass disc | **None: the disc shows the flat sea.** The user's ruling. The disc's camera carries a marker layer bit the ocean grid reads to step out before its wave math, and the sheet reads to keep drawing, through `CAMERA_VISIBLE_LAYERS`; the pane cameras do not carry it. |
 
 ## ⚠ Read this before implementing anything
 
@@ -812,9 +813,11 @@ waves at one pane, 1.1M at two and 2.2M at four, with draw calls unchanged. 4x a
 spyglass disc (its own viewport, `SpyglassView`) also drawing the 134k-vertex grid. Inferred from the
 counts, not from a per-viewport split. Split screen on the Deck costs +12 to +15 ms with waves.
 
-**Approach.** <TODO: confirm per viewport (`--perf`'s spyglass line, PERF-47), then keep the grid off
-the disc's cull mask or the disc's camera off the grid's layer, unless the disc is meant to show the
-sea; then re-measure the split-screen rows of B12's table.>
+**Approach.** Decision 13: confirm per viewport first (`--perf`'s spyglass line, PERF-47). Then give the
+spyglass disc camera a marker layer bit no geometry uses; the ocean grid's vertex stage collapses and
+returns before its wave math when `CAMERA_VISIBLE_LAYERS` carries it, and the base sheet's hide does not
+hide when it does, so the disc shows the flat sea and no hole. Re-measure B12's split-screen rows on the
+desktop (`frame_ms`).
 
 **Model recommendation.** medium.
 
