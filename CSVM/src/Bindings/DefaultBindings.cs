@@ -215,6 +215,13 @@ public static class DefaultBindings
         // common pad button is spent above. The pad gets the touchpad click and the first back paddle.
         b.Keys(InputAction.RecenterHeadset, Key.Home)
             .Buttons(InputAction.RecenterHeadset, JoyButton.Touchpad, JoyButton.Paddle1);
+
+        // The headset's hand controllers carry three flight actions, all on the left hand. Its menu
+        // button is the one app menu button Touch has; the right hand's system button never reaches
+        // the game. The right hand holds the screen pointer by default, which leaves the left free.
+        b.Xr(InputAction.Pause, XrButton.LeftMenu);
+        b.Xr(InputAction.RecenterHeadset, XrButton.LeftStickClick);
+        b.Xr(InputAction.CycleCockpitViews, XrButton.LeftUpperFace);
         return b;
     }
 
@@ -339,6 +346,15 @@ public static class DefaultBindings
         {
             Track(action);
             Map.Add(action, new Binding(DeviceId.Mouse, BindingControl.Mouse((int)button)));
+            return this;
+        }
+
+        // One hand-controller button, named after the action's keyboard and pad rows so it stands
+        // last. A screen hiding XR controls in flat play then hides a tail, not a middle.
+        public ContextBuilder Xr(InputAction action, XrButton button)
+        {
+            Track(action);
+            Map.Add(action, new Binding(DeviceId.Xr, BindingControl.Button((int)button)));
             return this;
         }
 

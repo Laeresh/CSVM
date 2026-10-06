@@ -29,19 +29,19 @@ public sealed partial class TheaterScreen : Node3D
     /// gives the board's translucent panels contrast against a bright sky. TUNE.</summary>
     public const float DimOpacity = 0.6f;
 
+    // The quad's vertex stage under the eye feed. Each eye places it from its own offset to it, the
+    // way the stereo cockpit interior is placed (Mech3/SceneBuilder.cs). The pointer's beam shares it.
+    internal const string EyeFeedVertex = $"""
+            vec3 csky_rel = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+            vec3 csky_eye = VIEW_INDEX == 0 ? {SceneBuilder.XrEyeLeftGlobal} : {SceneBuilder.XrEyeRightGlobal};
+            VERTEX = mat3(VIEW_MATRIX) * (csky_rel - csky_eye) + EYE_OFFSET;
+        """;
+
     // After the XR origin is placed (XrSession, 2000) and after every board's own _Process.
     private const int AfterXrOrigin = 2100;
 
     // Far enough that leaning in the seat shows no parallax on it, inside any camera's far plane.
     private const float SurroundRadiusM = 20f;
-
-    // The quad's vertex stage under the eye feed. Each eye places it from its own offset to it, the
-    // way the stereo cockpit interior is placed (Mech3/SceneBuilder.cs).
-    private const string EyeFeedVertex = $"""
-            vec3 csky_rel = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-            vec3 csky_eye = VIEW_INDEX == 0 ? {SceneBuilder.XrEyeLeftGlobal} : {SceneBuilder.XrEyeRightGlobal};
-            VERTEX = mat3(VIEW_MATRIX) * (csky_rel - csky_eye) + EYE_OFFSET;
-        """;
 
     // The surround's floor and ceiling, sRGB: a dark room with a horizon to sit level with. TUNE.
     // A Vector3, not a Color: Godot hands a Color to a shader already made linear.

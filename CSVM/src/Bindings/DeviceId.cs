@@ -1,13 +1,18 @@
 namespace CSVM.Bindings;
 
-/// <summary>What kind of hardware a <see cref="DeviceId"/> names. Keyboard, joypad and mouse are the
-/// three the game reads; <c>None</c> is the default-constructed value and names nothing.</summary>
+/// <summary>What kind of hardware a <see cref="DeviceId"/> names. Keyboard, joypad, mouse and a VR
+/// headset's two hand controllers are what the game reads; <c>None</c> is the default-constructed
+/// value and names nothing. ⚠ Append only: a value's position is its identity.</summary>
 public enum DeviceKind
 {
     None,
     Keyboard,
     Joypad,
     Mouse,
+
+    /// <summary>The headset's hand controllers, both hands one device (<see cref="XrControls"/>).
+    /// </summary>
+    Xr,
 }
 
 /// <summary>Which physical device a binding is on, as a value that survives a replug and a
@@ -33,6 +38,10 @@ public readonly record struct DeviceId
     /// a single pointer state, so there is nothing to distinguish a second identity by.</summary>
     public static DeviceId Mouse => new(DeviceKind.Mouse, string.Empty);
 
+    /// <summary>The headset's hand controllers. One identity for the pair: a runtime reports one
+    /// left and one right hand, and the control names which hand it is on.</summary>
+    public static DeviceId Xr => new(DeviceKind.Xr, string.Empty);
+
     public DeviceKind Kind { get; }
 
     /// <summary>The hardware string for a joypad, empty for every other kind.</summary>
@@ -56,6 +65,7 @@ public readonly record struct DeviceId
         DeviceKind.Keyboard => "keyboard",
         DeviceKind.Mouse => "mouse",
         DeviceKind.Joypad => $"pad:{Id}",
+        DeviceKind.Xr => "xr",
         _ => "none",
     };
 }

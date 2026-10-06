@@ -380,6 +380,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards and cinemas on a quad ahead of the seated eye, in a dark surround or over a dimmed flight.
 - `src/UI/Boards/CanvasRehost.cs`, the root's canvas layers of chosen numbers drawn into a SubViewport, their controls left in the root's tree.
 - `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers and pointer hit, engine-free.
+- `src/UI/Boards/TheaterPointer.cs`, the hand controllers' laser on the theater screen: beam, dot, trigger clicks pushed into the root, and the override of the one pointer source.
+- `src/UI/Boards/ScreenPointer.cs`, the one pointer the polled readers take: the desktop mouse, or the laser while it stands in.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
@@ -784,7 +786,9 @@ What a binding is, how one resolves against hardware, and the named actions a po
 for. The registry that turns a device identity into a live pad and the map that holds the actions
 both sit on top of these types.
 
-- `src/Bindings/DeviceId.cs`, which device a binding is on, as a value: the one keyboard, the one mouse, or a joypad named by its stable hardware string.
+- `src/Bindings/DeviceId.cs`, which device a binding is on, as a value: the one keyboard, the one mouse, a headset's hand controllers, or a joypad named by its stable hardware string.
+- `src/Bindings/XrControls.cs`, the hand controllers' buttons and axes by role, each one action of the OpenXR action map on one hand, with the Touch captions; engine-free.
+- `src/Bindings/XrControllers.cs`, the hand controllers as an `IDeviceState` and their aim poses, reading zero for an absent hand and with no stereo session.
 - `src/Bindings/BindingControl.cs`, the tagged control: a key, a button, a mouse button, one signed half of an axis past a deadzone, a whole axis over an action pair, or one hat direction.
 - `src/Bindings/AxisPairs.cs`, the four action pairs a full-axis binding drives and which member is the positive side, plus the absolute lever row, shared by the map, the store and capture.
 - `src/Bindings/LeverTakeover.cs`, when a bound throttle lever commands the throttle: only after it moves, until another command arrives while it is still.

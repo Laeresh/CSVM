@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Bindings;
 
 namespace CSVM.UI.Menu;
@@ -119,8 +120,14 @@ public sealed class ControlsFeature : IMenuFeature
     /// edits.</summary>
     public bool Dirty => _dirty.Count > 0;
 
+    /// <summary>Whether the screen lists the hand controllers' bindings: while a stereo session is
+    /// live (<see cref="XrControllers.SessionLive"/>) unless a test says otherwise. Every list this
+    /// screen hands out leaves them out when it does not, so flat play's rows read as they always did.
+    /// </summary>
+    public Func<bool> ShowsXr { get; set; } = () => XrControllers.SessionLive;
+
     /// <summary>The focused action's bindings, in the order the row prints them.</summary>
-    public IReadOnlyList<Binding> FocusedBindings => Map.Bindings(Focused);
+    public IReadOnlyList<Binding> FocusedBindings => Shown(Map.Bindings(Focused));
 
     /// <summary>Whether the seat being edited reads the keyboard at all. False for a pad-only
     /// splitscreen seat, which cannot capture a key or a mouse button.</summary>
@@ -218,17 +225,17 @@ public sealed class ControlsFeature : IMenuFeature
     public BindingProfile? ProfileOf(int player) => _seats.TryGetValue(player, out var seat) ? seat.Profile : null;
 
     /// <summary>That action's bindings on the seat being edited.</summary>
-    public IReadOnlyList<Binding> Bindings(InputAction action) => Map.Bindings(action);
+    public IReadOnlyList<Binding> Bindings(InputAction action) => Shown(Map.Bindings(action));
 
     /// <summary>That action's bindings in a context the cursor is not standing in, for a screen
     /// whose page lists rows from more than one keymap. A read, so it never moves
     /// <see cref="Context"/>: stepping the context resets the cursor and drops a capture in
     /// progress, which a screen drawing itself must not do.</summary>
     public IReadOnlyList<Binding> Bindings(InputContext context, InputAction action) =>
-        _seats[_player].Working[context].Bindings(action);
+        Shown(_seats[_player].Working[context].Bindings(action));
 
     /// <summary>One row's controls as text, hiding nothing without saying so.</summary>
-    public string RowText(InputAction action) => BindingLabels.Row(Map.Bindings(action), RowBindings);
+    public string RowText(InputAction action) => BindingLabels.Row(Bindings(action), RowBindings);
 
     /// <summary>Points the row cursor at one of <see cref="Actions"/>, clamped, and puts the slot
     /// cursor back on that row's first control. The screen owns the wrap, because its own list
@@ -530,6 +537,28 @@ public sealed class ControlsFeature : IMenuFeature
         _ => "Free camera",
     };
 
+    // A list with the hand controllers' bindings left out unless the screen shows them. They sit last
+    // on a shipped row, so the slots a flat screen shows keep their places in the full list.
+    private IReadOnlyList<Binding> Shown(IReadOnlyList<Binding> bindings)
+    {
+        if (ShowsXr())
+            return bindings;
+        List<Binding>? kept = null;
+        for (int i = 0; i < bindings.Count; i++)
+        {
+            if (bindings[i].Device.Kind == DeviceKind.Xr)
+            {
+                kept ??= new List<Binding>(bindings.Take(i));
+            }
+            else
+            {
+                kept?.Add(bindings[i]);
+            }
+        }
+
+        return kept ?? bindings;
+    }
+
     private void Commit(Binding binding)
     {
         // In place: a capture on Control A must leave Control B where it is.
@@ -539,7 +568,7 @@ public sealed class ControlsFeature : IMenuFeature
             Map.Unassign(Focused, bindings[_slot]);
 
         var stolen = Map.Assign(Focused, binding, at);
-        _slot = Math.Max(0, IndexOf(Map.Bindings(Focused), binding));
+        _slot = Math.Max(0, IndexOf(FocusedBindings, binding));
         MarkDirty();
         Status = stolen.Count == 0
             ? $"{BindingLabels.Name(Focused)} is now {BindingLabels.Describe(binding)}."

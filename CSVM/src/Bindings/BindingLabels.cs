@@ -52,8 +52,9 @@ public static class BindingLabels
         return text.ToString();
     }
 
-    /// <summary>One control's caption, device included, because two pads' identical buttons are two
-    /// different bindings and a row that hid the device would read as a duplicate.</summary>
+    /// <summary>One control's caption, device included. Two pads' identical buttons are two
+    /// different bindings, and a row that hid the device would read as a duplicate. A hand
+    /// controller's reads "VR " and its Touch caption.</summary>
     public static string Describe(Binding binding) => Describe(binding, StickName);
 
     /// <summary><see cref="Describe(Binding)"/> with the stick names taken from
@@ -61,6 +62,8 @@ public static class BindingLabels
     public static string Describe(Binding binding, Func<DeviceId, string?>? stickName)
     {
         var c = binding.Control;
+        if (binding.Device.Kind == DeviceKind.Xr)
+            return "VR " + XrControls.Caption(c);
         if (stickName?.Invoke(binding.Device) is { } stick)
             return stick + " " + StickControl(c);
         return c.Kind switch

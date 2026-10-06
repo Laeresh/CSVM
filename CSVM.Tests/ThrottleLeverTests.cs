@@ -142,7 +142,7 @@ public class ThrottleLeverTests
         string json = BindingStore.Serialize(1, profile);
         Assert.Contains("\"ThrottleLever\": [\n", json.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("\"pad:03005fcf1d2300000002000000000000/fullaxis:2-@0.0125\"", json, StringComparison.Ordinal);
-        Assert.Equal(3, BindingStore.Version);
+        Assert.Equal(4, BindingStore.Version);
 
         var loaded = BindingStore.Deserialize(json, default, readsKeyboard: true).Map(InputContext.Flight);
         Assert.Equal(new[] { lever }, loaded.Bindings(InputAction.ThrottleLever));

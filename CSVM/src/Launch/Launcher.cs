@@ -881,6 +881,9 @@ public partial class Launcher : Node3D
                 () => rig.Pane != null && _session is { InSession: true, FirstFrameReady: true },
                 eyeFeed: true);
             AddChild(_theater);
+            // The hand controllers' laser pointer on it, since the desktop mouse cannot reach the
+            // eye-size layout a stereo root lays its 2D out in.
+            AddChild(UI.Boards.TheaterPointer.Build(GetViewport(), _theater, () => rig.Origin.GlobalTransform, eyeFeed: true));
         }
 
         // VR is one local seat in every mode, so a command line asking for splitscreen flies one.
@@ -2562,18 +2565,17 @@ public partial class Launcher : Node3D
     }
 
     // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,
-    // which the Original presentation maps into its authored space.
-    private (float X, float Y)? MousePosition()
-    {
-        var at = GetViewport().GetMousePosition();
-        return (at.X, at.Y);
-    }
+    // which the Original presentation maps into its authored space. The theater screen's pointer
+    // stands in for it under a headset (ScreenPointer).
+    private (float X, float Y)? MousePosition() =>
+        UI.Boards.ScreenPointer.Read(GetViewport()) is { } pointer ? (pointer.At.X, pointer.At.Y) : null;
 
     // The primary button, the press half of seat 0's pointer. ⚠ Keep the stamp's check. Original
     // polls the button instead of taking GUI events, so a folder icon's click would also press the
     // plaque under it.
     private bool MenuPrimaryPressed() =>
-        Input.IsMouseButtonPressed(MouseButton.Left) && _buildStamp?.HoldsPointer(GetViewport().GetMousePosition()) != true;
+        UI.Boards.ScreenPointer.Read(GetViewport()) is { } pointer && pointer.Pressed
+        && _buildStamp?.HoldsPointer(pointer.At) != true;
 
     // The wheel steps counted since the last read, the wheel half of seat 0's pointer.
     private int TakeMenuWheel()

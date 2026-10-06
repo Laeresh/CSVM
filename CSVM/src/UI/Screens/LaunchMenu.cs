@@ -1548,7 +1548,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             return true;
         }
 
-        swallowed = film.Swallows(Input.IsMouseButtonPressed(MouseButton.Left));
+        swallowed = film.Swallows(ScreenPointer.Overrides(out var laser)
+            ? laser?.Pressed ?? false
+            : Input.IsMouseButtonPressed(MouseButton.Left));
         return swallowed;
     }
 

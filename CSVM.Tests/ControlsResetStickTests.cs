@@ -174,7 +174,10 @@ public sealed class ControlsResetStickTests : IDisposable
             var shipped = DefaultBindings.MapFor(context, DefaultBindings.AnyPad);
             foreach (var action in DefaultBindings.ActionsIn(context))
             {
-                Assert.Equal(shipped.Bindings(action), feature.Bindings(context, action).Where(b => !StickProfileResolver.IsStick(b)));
+                // With no stereo session the screen lists no hand controller rows.
+                Assert.Equal(
+                    shipped.Bindings(action).Where(b => b.Device.Kind != DeviceKind.Xr),
+                    feature.Bindings(context, action).Where(b => !StickProfileResolver.IsStick(b)));
             }
         }
 

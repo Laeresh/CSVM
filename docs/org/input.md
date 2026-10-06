@@ -269,7 +269,7 @@ default, so adding one needs no bump.
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "player": 1,
   "mouseFlying": false,
   "contexts": {
@@ -278,7 +278,8 @@ default, so adding one needs no bump.
       "PitchUp": ["pad:*/axis:LeftY+@0.25", "pad:03005fcf1d2300000002000000000000/fullaxis:1+@0.02"],
       "SelectGunGroup": ["pad:03005fcf1d2300000002000000000000/hat:0:Right"],
       "TargetPreviousEnemy": ["keyboard/key:Shift+E"],
-      "TargetNextAlly": []
+      "TargetNextAlly": [],
+      "Pause": ["keyboard/key:Escape", "pad:*/button:Start", "xr/button:LeftMenu"]
     },
     "menu": { },
     "camera": { }
@@ -289,8 +290,9 @@ default, so adding one needs no bump.
 A binding is one string, `device/control`, in words rather than numbers so a player can correct a
 row by hand.
 
-- The device is `keyboard`, `mouse`, or `pad:<hardware id>`. A shipped pad row is authored on the
-  placeholder id `*`, which the loader replaces with the seat's own pad.
+- The device is `keyboard`, `mouse`, `xr` (a VR headset's two hand controllers) or
+  `pad:<hardware id>`. A shipped pad row is authored on the placeholder id `*`, which the loader
+  replaces with the seat's own pad.
 - The control is `key:<name>`, `button:<name>`, `mouse:<name>`, `axis:<name><sign>@<deadzone>`,
   `fullaxis:<index><sign>@<deadzone>` or `hat:<index>:<direction>`. A name is the engine's own enum
   name, or `#<number>` for a code the engine does not name or names only as a range sentinel
@@ -308,6 +310,10 @@ row by hand.
 - A `hat:` direction is `Up`, `Right`, `Down` or `Left` in any case, on a joypad other than the
   placeholder `*`. Version 3 of the file adds the full-axis and hat tokens; an older file names
   neither and still loads whole.
+- An `xr` row is a `button:` or an `axis:` alone, named by the port's own `XrButton` and `XrAxis`
+  (`xr/button:LeftMenu`, `xr/axis:RightStickY+@0.5`), the role names `docs/controls.md` lists.
+  Version 4 of the file adds the device. A file older than that could not name one, so every row
+  it names keeps the shipped `xr` binding beside its own; a version 4 row is taken as written.
 - A key name may carry the original's own modifiers in front of it, `key:Shift+E`, `key:Ctrl+E`,
   any of `Shift`, `Ctrl` and `Alt` in any order and any case. That prefix is version 2 of the file;
   a version 1 file names no modifier, and since a bare key token means the same thing in both, such

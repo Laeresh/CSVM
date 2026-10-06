@@ -82,6 +82,14 @@ public readonly record struct TheaterLayout(float DistanceM, float HeightM, floa
         return u is >= 0f and <= 1f && v is >= 0f and <= 1f ? new Vector2(u, v) : null;
     }
 
+    /// <summary>Where a screen point <paramref name="uv"/> stands in the XR origin's frame, for a
+    /// layout <paramref name="layout"/> in size: the inverse of <see cref="Hit"/>.</summary>
+    public Vector3 PointAt(Vector2 uv, Vector2 layout)
+    {
+        var size = SizeM(layout);
+        return Pose.Origin + new Vector3((uv.X - 0.5f) * size.X, (0.5f - uv.Y) * size.Y, 0f);
+    }
+
     /// <summary>The point of the root's 2D layout a screen point <paramref name="uv"/> shows, for a
     /// layout <paramref name="layout"/> in size: what a pointer's mouse events carry.</summary>
     public static Vector2 LayoutPoint(Vector2 uv, Vector2 layout) => uv * layout;

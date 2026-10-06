@@ -1,3 +1,4 @@
+using CSVM.Bindings;
 using CSVM.Flight.Camera;
 using CSVM.Spec;
 using Godot;
@@ -16,12 +17,19 @@ public partial class XrSimInterface : XRInterfaceExtension
     /// <summary>The name the interface registers under with <see cref="XRServer"/>.</summary>
     public const string InterfaceName = "CSVM xr-sim";
 
+    /// <summary>The interaction profile the stand-in's hands report, Meta Touch's, the first profile
+    /// the action map serves.</summary>
+    public const string HandProfile = "/interaction_profiles/oculus/touch_controller";
+
     private readonly Vector2 _eyePx;
     private readonly float _ipdMm;
     private readonly float _fovDeg;
+
     // Swapped whole, never edited, so a render-thread read sees one pose or the other.
     private volatile Pinned _pinned;
     private XRPositionalTracker? _head;
+    private XRControllerTracker? _left;
+    private XRControllerTracker? _right;
     private bool _initialized;
 
     /// <summary>Required by Godot's script instancing; never used.</summary>
@@ -47,6 +55,31 @@ public partial class XrSimInterface : XRInterfaceExtension
     {
         _pinned = new Pinned(new XrSimEyes(yawDeg, pitchDeg, head, _ipdMm, _fovDeg));
         PublishHead();
+    }
+
+    /// <summary>Connects the two hand controllers a suite points and presses with, as trackers named
+    /// as OpenXR names them and bound to <see cref="HandProfile"/>. A launch has none, so nothing it
+    /// draws carries a pointer. Neither hand is aimed until <see cref="AimHand"/>.</summary>
+    public void ConnectHands()
+    {
+        _left ??= Hand(XrHand.Left);
+        _right ??= Hand(XrHand.Right);
+    }
+
+    /// <summary>Points one connected hand: its aim pose in tracking space, the ray along its -Z. The
+    /// pose reaches the XR origin's frame through the reference frame and world scale, as OpenXR's
+    /// does.</summary>
+    public void AimHand(XrHand hand, Transform3D aim) =>
+        HandTracker(hand)?.SetPose("aim", aim, Vector3.Zero, Vector3.Zero, XRPose.TrackingConfidenceEnum.High);
+
+    /// <summary>Sets one action map action on a connected hand, as the runtime reports it: a bool, a
+    /// float or a <see cref="Vector2"/> (<see cref="XrControls"/> names the actions).</summary>
+    public void SetHandInput(XrHand hand, string action, Variant value)
+    {
+        // The store OpenXR writes into, flagged by Godot 4.7 for a move its C# glue does not carry.
+#pragma warning disable CS0618
+        HandTracker(hand)?.SetInput(action, value);
+#pragma warning restore CS0618
     }
 
     public override StringName _GetName() => InterfaceName;
@@ -92,6 +125,17 @@ public partial class XrSimInterface : XRInterfaceExtension
             XRServer.RemoveTracker(_head);
             _head = null;
         }
+
+        foreach (var hand in new[] { _left, _right })
+        {
+            if (hand != null)
+            {
+                XRServer.RemoveTracker(hand);
+            }
+        }
+
+        _left = null;
+        _right = null;
 
         if (XRServer.PrimaryInterface == this)
         {
@@ -143,6 +187,23 @@ public partial class XrSimInterface : XRInterfaceExtension
         AddBlit(renderTarget, whole, new Rect2I(origin, half), true, 0, false, Vector2.Zero, 0.0, 0.0, 1.0, 1.0);
         AddBlit(renderTarget, whole, new Rect2I(origin + new Vector2I(half.X, 0), half), true, 1, false, Vector2.Zero, 0.0, 0.0, 1.0, 1.0);
     }
+
+    // One hand as OpenXR builds it: a controller tracker under its standard name, carrying a profile.
+    private static XRControllerTracker Hand(XrHand hand)
+    {
+        var tracker = new XRControllerTracker
+        {
+            Type = XRServer.TrackerType.Controller,
+            Name = hand == XrHand.Left ? "left_hand" : "right_hand",
+            Description = "xr-sim hand",
+            Hand = hand == XrHand.Left ? XRPositionalTracker.TrackerHand.Left : XRPositionalTracker.TrackerHand.Right,
+            Profile = HandProfile,
+        };
+        XRServer.AddTracker(tracker);
+        return tracker;
+    }
+
+    private XRControllerTracker? HandTracker(XrHand hand) => hand == XrHand.Left ? _left : _right;
 
     // The head tracker's pose, which XRCamera3D takes with the recenter frame applied.
     private void PublishHead() =>

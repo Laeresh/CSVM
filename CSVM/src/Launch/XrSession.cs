@@ -227,6 +227,8 @@ public partial class XrSession : Node
         feed.Initialize();
         XrCockpit.DeclareEyeFeed();
         root.UseXR = true;
+        // From here the hand controllers read, and the rebinding screens list them.
+        Bindings.XrControllers.SessionLive = true;
         return session;
     }
 

@@ -120,6 +120,22 @@ public class TheaterLayoutTests
         Assert.Equal(2774.4f, pixel.Y, 1);
     }
 
+    // PointAt is Hit's inverse: the screen point it names is where a ray from a hand lands, which is
+    // where the pointer's beam ends.
+    [Fact]
+    public void PointAtIsWhereAHandRayLands()
+    {
+        var seat = TheaterLayout.Default;
+        var hand = new Vector3(-0.2f, -0.3f, -0.1f);
+        var target = new Vector2(0.73f, 0.31f);
+        var onScreen = seat.PointAt(target, HeadsetEye);
+        Assert.Equal(seat.Pose.Origin.Z, onScreen.Z, 5);
+        var hit = seat.Hit(hand, (onScreen - hand).Normalized(), HeadsetEye);
+        Assert.NotNull(hit);
+        Assert.Equal(target.X, hit!.Value.X, 4);
+        Assert.Equal(target.Y, hit.Value.Y, 4);
+    }
+
     [Fact]
     public void ARayAwayFromOrBesideTheScreenLandsNowhere()
     {

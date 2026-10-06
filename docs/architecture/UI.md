@@ -194,10 +194,11 @@ nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind ev
 
 ## src/UI/Boards/AuthoredPointer.cs
 A keyboard seat's mouse on a board drawn in the authored 800x600 space: the viewport pointer
-mapped back through `BoardFit` into authored pixels, with the left button, and none for a pad seat
-or a board out of the tree. The Original race and pause boards (`Menu/Original/OriginalRaceBoard.cs`,
-`OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`. `PausePreferences` and the Built-in
-`PauseBoard` read their pointer their own way, raw and capture-aware.
+(`ScreenPointer.cs`) mapped back through `BoardFit` into authored pixels, with the left button, and
+none for a pad seat or a board out of the tree. The Original race and pause boards
+(`Menu/Original/OriginalRaceBoard.cs`, `OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`.
+`PausePreferences` and the Built-in `PauseBoard` read `ScreenPointer.cs` their own way, the second
+capture-aware.
 
 ## src/UI/Boards/ComposedBoard.cs
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
@@ -617,7 +618,7 @@ the controls keep the root's layout and input. Its geometry and resolution are `
 With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
 or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %.
 Its render priorities sit over `HeadLockedQuads`' fade. `Launch/Launcher.cs` builds it beside
-`XrSession`; the XR controller pointer reaches it through `Hit` and `LayoutPoint`.
+`XrSession`; the hand controllers' laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
 
 ## src/UI/Boards/CanvasRehost.cs
 Draws the root viewport's canvas layers of chosen numbers into a SubViewport through
@@ -630,8 +631,26 @@ for the boards; the cockpit-locked HUD panel is the next user.
 The theater screen's seat, size and resolution, engine-free: where the quad stands in the XR origin's
 frame, how big it is for a given 2D layout (the board `BoardFit` inscribes is the seat's height),
 the surface size at two texels per authored board pixel, which canvas layers it shows and which raise
-it in flight, and where a pointer ray meets it. Under a stereo root the layout is one eye's render
-target, sized by the runtime. Pinned by `CSVM.Tests/TheaterLayoutTests.cs`.
+it in flight, where a pointer ray meets it and where a screen point stands (`PointAt`). Under a
+stereo root the layout is one eye's render target, sized by the runtime. Pinned by
+`CSVM.Tests/TheaterLayoutTests.cs`.
+
+## src/UI/Boards/TheaterPointer.cs
+The hand controllers' laser on the theater screen: a ray from one hand's aim pose
+(`Bindings/XrControllers.cs`), drawn as a thin beam and a dot placed from the eye feed as the screen
+is, clicking with that hand's trigger. Godot controls and the event readers get its moves and clicks
+as mouse events pushed into the root at `TheaterScreen.LayoutPoint`; the polled readers get the same
+point through `ScreenPointer.cs`, which it overrides while a controller is present. The right hand
+points first, and a pull on the other trigger hands the laser over without a click. `Launch/Launcher.cs`
+builds it beside the screen; the `xr-pointer` suites drive it on the stand-in's hands.
+
+## src/UI/Boards/ScreenPointer.cs
+The one pointer every polled reader takes: the desktop mouse's viewport position and left button,
+or the reading of the pointer that overrides it (`TheaterPointer.cs` under a headset, whose layout is
+the eye's size where the desktop cursor cannot reach). With no override every read is the mouse's,
+call for call. Its readers are `AuthoredPointer.cs`, `Screens/PauseBoard.cs`,
+`Screens/PausePreferences.cs`, the campaign film's held press in `Screens/LaunchMenu.cs` and seat
+0's pointer in `Launch/Launcher.cs`, which the Original presentation reads.
 
 ## src/UI/Overlays/ObjectivesHud.cs
 The flown campaign mission's objectives readout, drawn on the pause screen and nowhere else: the
