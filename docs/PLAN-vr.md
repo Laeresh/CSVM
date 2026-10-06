@@ -1209,7 +1209,9 @@ recentered)`; (4) leaning about, the moon and the horizon dome show no parallax.
 - A second `XrCockpit` over a lifted interior captures the lifted transform; hide it and `Follow`
   once (which lowers it) before building another.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with B7 and the C14 follow-up: build PASS,
+units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
+hash-identical. The headset checks named above are still owed.
 
 ## B8 ☐ The cockpit interior in the main world under VR
 
@@ -1529,7 +1531,9 @@ and with this item's code switched off; on `--render-thread safe` it exited 0 in
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
 clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with B7 and the C14 follow-up: build PASS,
+units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
+hash-identical. The headset checks named above are still owed.
 
 # Wave D, cutscenes, comfort and performance
 
