@@ -43,6 +43,7 @@ public sealed partial class VersusHud : Control
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
+    private readonly List<WorldMark> _marks = new(); // rebuilt per draw
     private VersusMatch? _match;
     private Camera3D _camera = null!;
 
@@ -60,6 +61,10 @@ public sealed partial class VersusHud : Control
 
     /// <summary>Whether the status line draws this frame.</summary>
     public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
+
+    /// <summary>Whether a stereo session draws the opponent markers in the world
+    /// (<see cref="XrMarkers"/>). Set, this control draws the status line alone.</summary>
+    public bool MarksInWorld { get; set; }
 
     /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
     /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
@@ -108,9 +113,22 @@ public sealed partial class VersusHud : Control
         if (_match is { } match && StatusShown)
             DrawCentered(font, new Vector2(cx, RefStatusY * s), StatusLine(match), statusFont, HudBlue);
 
-        if (Rigs == null)
+        if (MarksInWorld)
             return;
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
+        _marks.Clear();
+        WorldMarks(_marks);
+        foreach (var mark in _marks)
+            DrawOpponent(font, mark.At, mark.Color, mark.Tag, s, markerFont);
+    }
+
+    /// <summary>One marker per living opponent, appended to <paramref name="into"/> in seat order:
+    /// what <see cref="_Draw"/> projects through this pane's camera, and what a stereo session
+    /// places in the world.</summary>
+    public void WorldMarks(List<WorldMark> into)
+    {
+        if (Rigs == null)
+            return;
         int? ownTeam = null;
         foreach (var rig in Rigs)
         {
@@ -122,9 +140,22 @@ public sealed partial class VersusHud : Control
         {
             if (opp.Index == PlayerIndex || opp.Controller is not { Crashed: false } c)
                 continue; // this pane's own seat, or an opponent out of the fight for now
-            DrawOpponent(font, c.GlobalPosition, MarkerColor(ownTeam, c.Team, opp.Index),
-                SplitScreen.PlayerTag(opp.Index), s, markerFont);
+            into.Add(new WorldMark(WorldMarkStyle.Versus, c.GlobalPosition, MarkerColor(ownTeam, c.Team, opp.Index),
+                SplitScreen.PlayerTag(opp.Index), default, false, 0));
         }
+    }
+
+    /// <summary>The opponent marker's edge arrow: a shadowed head with its tip at
+    /// <paramref name="tip"/>, pointing along <paramref name="dir"/>, at scale <paramref name="s"/>.</summary>
+    internal static void DrawArrow(CanvasItem into, Vector2 tip, Vector2 dir, float s, Color color)
+    {
+        float len = RefArrowLen * s, half = RefArrowHalf * s;
+        var perp = new Vector2(-dir.Y, dir.X);
+        var b1 = tip - dir * len + perp * half;
+        var b2 = tip - dir * len - perp * half;
+        var off = new Vector2(1.5f, 1.5f) * s;
+        into.DrawColoredPolygon(new[] { tip + off, b1 + off, b2 + off }, Shadow);
+        into.DrawColoredPolygon(new[] { tip, b1, b2 }, color);
     }
 
     private static string FormatTime(float seconds)
@@ -169,19 +200,9 @@ public sealed partial class VersusHud : Control
             DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
             return;
         }
-        DrawArrow(placed.Anchor, placed.Dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        DrawArrow(this, placed.Anchor, placed.Dir, s, color);
         DrawTag(font, placed.Anchor - placed.Dir * (RefArrowLen + RefTextGap) * s,
             $"{tag}  {EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock", color, fontSize);
-    }
-
-    private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s, Color color)
-    {
-        var perp = new Vector2(-dir.Y, dir.X);
-        var b1 = tip - dir * len + perp * half;
-        var b2 = tip - dir * len - perp * half;
-        var off = new Vector2(1.5f, 1.5f) * s;
-        DrawColoredPolygon(new[] { tip + off, b1 + off, b2 + off }, Shadow);
-        DrawColoredPolygon(new[] { tip, b1, b2 }, color);
     }
 
     private void DrawTag(Font font, Vector2 center, string text, Color color, int fontSize)

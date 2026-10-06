@@ -594,6 +594,9 @@ public partial class GameSession : Node3D
         if (_xrHead != null)
         {
             BuildHeadQuads();
+            // The flight markers in the world and on the head ring, read off the flown pane's HUD.
+            _worldRoot!.AddChild(Flight.Hud.XrMarkers.Build(_xrRig));
+            Log.Info("flight", $"stereo: flight markers drawn in the world, off-view ones on a ring on the head");
         }
 
         // The smoke screens ride the same wash and read the roster through a closure, since the

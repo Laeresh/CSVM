@@ -18,9 +18,17 @@ public sealed partial class HeadLockedQuads : Node3D
     /// quad below.</summary>
     public const int WorldFlarePriority = 100;
 
+    /// <summary>The flight markers' world cards (<c>Flight.Hud.XrMarkers</c>). They draw over the
+    /// flash, as the flat HUD is over the world overlay, and under the nearer HUD panel.</summary>
+    public const int WorldMarkerPriority = 112;
+
     /// <summary>Reserved for the cockpit-locked HUD panel: over the whiteout and the flash, under the
     /// sun wash and the fade, the order <see cref="HudLayers"/> gives the flat HUD.</summary>
     public const int HudPanelPriority = 115;
+
+    /// <summary>The off-view markers' ring on the head: over the HUD panel, as the flat edge markers
+    /// draw over the dials, and under the sun wash.</summary>
+    public const int MarkerRingPriority = 116;
 
     /// <summary>How far ahead of the eye the cockpit interior is taken to end, metres along the view
     /// axis. Nearer geometry is the seat: the whiteout and the flare rings stay off it, as the flat

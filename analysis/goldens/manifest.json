@@ -183,42 +183,42 @@
     {
       "name": "c1-cockpit-xr-sim",
       "frame": 120,
-      "hash": "2add3b4f81406882ff8f82aaa49305e9",
-      "exercises": "The --xr-sim stand-in headset: both eyes side by side through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1 terrain, sky and clutter; no HUD in stereo; frame-sensitive 19.82 %.",
+      "hash": "8610b367a164cf6c0249906aef148eb8",
+      "exercises": "The --xr-sim stand-in headset: both eyes side by side through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1 terrain and sky, the pipper on its world card; frame-sensitive 19.82 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-far",
       "frame": 120,
-      "hash": "e03fbffd26d96e810b00ead2903589c5",
-      "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn from the XR origin's frame by the render thread's eye feed; frame-sensitive 11.92 %.",
+      "hash": "79eafacf60c50d8f521baf29f6eba987",
+      "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn by the render thread's eye feed, the pipper at its world point; frame-sensitive 11.92 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-aft",
       "frame": 120,
-      "hash": "9e4075b0d214e04b8c0c9c71060cb8a6",
-      "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out of the build, the gauges on their faces in both eyes; frame-sensitive 8.37 %.",
+      "hash": "8d73bb3cab9a8452cc920b032f38c473",
+      "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out, the gauges on their faces and the pipper card in both eyes; frame-sensitive 8.37 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-9800,700,-8200", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=head=0/0/0.1", "--det", "--mute"]
     },
     {
       "name": "stage-gunsight-xr-sim",
       "frame": 120,
-      "hash": "0bd86d62643db34d5ebb167c6f30c70c",
-      "exercises": "The stereo interior's gunsight reticle drawn at infinity over the empty stage's sky: both eyes put it on the same eye-local pixel while the glass and the sight body keep their 0.45 m disparity; frame-sensitive 7.70 %.",
+      "hash": "edb69374432ac499d4a351a8f8456e7a",
+      "exercises": "The stereo interior's gunsight reticle drawn at infinity over the empty stage's sky: both eyes put it on the same eye-local pixel while the glass and sight body keep their 0.45 m disparity, the pipper card beside it; frame-sensitive 7.70 %.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--direction=0,0.34,-0.94", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=pitch=-4.70001", "--det", "--mute"]
     },
     {
       "name": "c3-flare-xr-sim",
       "frame": 120,
-      "hash": "0cc3ce1320eb32570c7bc76d7d4d38b3",
-      "exercises": "The world flare in stereo from the nose view: the core and all three rings at sky depth in both eyes, the sun wash on its head-locked quad over the C3 sky and sea; frame-sensitive 15.38 %.",
+      "hash": "b6d320c00a5885408cc27de59e491277",
+      "exercises": "The world flare in stereo from the nose view: the core and all three rings at sky depth in both eyes, the sun wash on its head-locked quad and the pipper card over the C3 sky and sea; frame-sensitive 15.38 %.",
       "args": ["--chapter=C3", "--plane=player_bhawk", "--pos=0,1200,0", "--direction=0.765,0.469,-0.441", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-moon-xr-sim",
       "frame": 120,
-      "hash": "473ffb50d95b7e2fdaf5fed1c25c28ff",
+      "hash": "2424a559805070adbeb0d0808955761e",
       "exercises": "A camera-facing sky sprite on the stand-in headset with the head turned 35 degrees off the C1 moon: the moon drawn as a disc facing the eye in both eyes, not lying in the head's view plane; frame-sensitive 11.52 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,1500,-6144", "--direction=-0.6,0,-0.8", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim=yaw=35,pitch=28", "--det", "--mute"]
     },
@@ -228,6 +228,13 @@
       "hash": "9f763799c1460d6f3e3f2c0b0ee48010",
       "exercises": "The Original top level on the stand-in headset's theater screen: the menu's layers drawn into the screen's surface, the CrimFlag movie playing, on a quad ahead of both eyes over the dark surround; frame-sensitive 7.89 %.",
       "args": ["--menu", "--presentation=original", "--xr-sim", "--det", "--mute"]
+    },
+    {
+      "name": "stage-markers-xr-sim",
+      "frame": 45,
+      "hash": "0c881ee1762815f3c2626ecd302075f3",
+      "exercises": "The stereo flight markers over the empty stage: the gun pipper, the selected Fury's box, label and debug tag on cards at their world depth in both eyes, and the off-view Kestrel's arrow and tag on the head ring at 3 o'clock; frame-sensitive 43.57 %.",
+      "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury:pos=-186/322/-167,player_kestrel:pos=200/300/-223", "--target=ai1_player_fury", "--debug-markers", "--hold=0,0,0,0.6", "--xr-sim=eye=640x720,fov=60", "--det", "--mute"]
     }
   ]
 }

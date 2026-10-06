@@ -217,7 +217,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 10. ◐ C10 The virtual theater screen for menus, boards and cinemas
 11. ◐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
 12. ☐ C12 The cockpit-locked HUD panel
-13. ☐ C13 World-tied markers and the edge-marker ring
+13. ◐ C13 World-tied markers and the edge-marker ring
    ◐ C13b The gunsight reticle collimated at infinity in VR
 14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
@@ -1955,23 +1955,159 @@ and angle; the author judges legibility.>
 **⚠ Traps.** The world-tied markers (C13) must leave the panel, otherwise they are drawn at panel
 depth.
 
-## C13 ☐ World-tied markers and the edge-marker ring
+## C13 ◐ World-tied markers and the edge-marker ring
 
-**Goal.** Target boxes, the impact reticle, the lead marker and the versus markers appear in the
-world at their real depth in both eyes; off-view targets are shown by a head-relative arrow ring.
+**Outcome: built and measured on the stand-in; the headset check is owed.** At the headset the
+author reported, verbatim: "Target marker is missing", and after C13b: "But can we have the floating
+reticle like in flat too? its better for gun targeting." A stereo session now draws the flat game's
+gun pipper, the selected target's box and label, and every flight tag (hostile fallback, race
+pilots, `--debug-markers`, dogfight opponents) on cards at their world points in both eyes, drawn by
+the flat HUD's own code. A marker more than 25° off the head's view axis becomes an arrow and its
+label on a ring hanging on the head. Flat play draws exactly what it drew: the five flat goldens
+that carry markers are hash-identical.
 
-**Evidence (confidence: lead-only).** The projection sites: `Flight/Hud/ImpactReticle.cs:74-78`,
-`Flight/Hud/TargetHud.cs:647-674, 788-789`, `Flight/Modes/VersusHud.cs:164`,
-`UI/Overlays/MarkerOverlay.cs:246`; `EdgeMarker` clamps to the pane edge.
+**Goal.** Target boxes, the impact reticle and the versus markers appear in the world at their real
+depth in both eyes; off-view targets are shown by a head-relative arrow ring.
 
-**Approach.** Under VR replace each `UnprojectPosition` draw with a billboard at the world point,
-scaled with distance to hold an angular size; the edge ring hangs on the XR camera.
+**Evidence (confidence: traced to code for what the flat HUD draws and where; measured on the
+stand-in for placement, size, disparity, precision and the ring; the look, the ring's radius and the
+draw-over-the-cockpit choice are the author's at the headset).** Tools and captures are in
+`.scratch/C13/` (`C13_register.py`, `C13_parts.py`, `C13_shift.py`, `C13_burst.py`,
+`C13_gold.ps1`).
+- **What the flat game draws.** `ImpactReticle` (the pipper at 0.5 s of the selected group's flight
+  along the nose), `TargetHud` (the selection's box and label block, the off-screen arrow, label and
+  spyglass disc, the hostile fallback, race tags, the debug overlay) and `VersusHud`'s opponent
+  markers. There is no lead marker in the flat game: the plan's "lead" was a lead-only guess, and
+  the pipper is the gun's aim point. `UI/Overlays/MarkerOverlay.cs` is `--viewer` only, a dev mode
+  that stays flat (Decision 15), and already draws 3D `Label3D`s.
+- **The pipper and box land where the flat game draws them** (SHOT-45's method, empty stage, nose
+  view, a Fury 250 m out selected, frame 60; the left eye on the flat camera with
+  `--xr-sim=eye=1280x720,fov=75.178179,ipd=20,head=0.01/0/0,shot=left,pitch=-4.70001`, the nose
+  view's 46.83° vertical). Centroids against the flat frame: pipper (-0.05, -0.04) px at 720 rows and
+  (+0.01, -0.13) px at 1421 rows (the flat window's real height at `-Resolution 2560x1440`); the box
+  (-0.05, +0.23) px at 1421 rows with the aircraft itself at (-0.14, -0.08). Size ratio 0.99-1.04.
+  The label sits 0.7 px (720) to 2.0 px (1421) lower than the flat one: its font is rasterised at
+  the card's 1.5x size, whose metrics do not scale exactly (the flat frame's own label-to-box gap
+  differs by 4 reference pixels between 720 and 1421 rows). Control: the stereo crop resampled half
+  a pixel reads +0.49 px.
+- **Disparity is the target's** (`--xr-sim=eye=2560x1440,fov=40,ipd=100,pitch=-4.70001`, both eyes,
+  3517 px/rad, least-squares subpixel shift of each crop between the eyes, `C13_shift.py`): the
+  Fury's spinner 2.52 px and wing 2.51 px (140 m), the box's brackets 2.49 px (141 m), the label
+  2.45 px, the pipper 0.76 px (463 m; it starts at 430 m and the range smoother walks it out). A
+  collimated marker reads 0. With the head turned (`yaw=8,pitch=4`, fov 50): aircraft 1.92 px, box
+  1.92 / 1.95 px, label 1.88 px, pipper 0.60 px (458 m), and the box and label keep their shape
+  (`c13_turn_zoom.png`). A thresholded centroid misread the pipper's disparity as 0.18 px
+  (verification SHOT-48).
+- **Placement precision: world space is enough.** Pipper burst on the empty stage, nose view,
+  `--xr-sim=eye=2732x2732,fov=100,shot=left --frames=60 --shots=6` (27 px per degree), worst
+  frame-to-frame step 0.12 px at 0 km (the range smoother's own drift) and 0.18 px at 20 km
+  (an alternation of ±0.08 px in x), at most 0.007°. The cards sit hundreds of metres out, where
+  2 mm of float32 rounding is 0.005 px, so A3b's eye-feed pieces are not needed for them. The ring
+  cards are placed in the head's frame by their shader and carry no world coordinate.
+- **The ring** (`--xr-sim=eye=1280x1440,fov=90`, a Kestrel at 3 o'clock): the arrow points right
+  on the ring with "Fury / 3 o'clock" inside it (`c13_ring_right_zoom.png`). The suite pins dead
+  astern pointing down, as the flat edge marker does.
+- **Facing, decided: toward the head's point, with the seat's up.** A card's normal points from its
+  point to the tracked head's position, so it never turns with the head's rotation (the suite turns
+  the head 0.12 / -0.15 / 0.4 rad in place and the card is unchanged), unlike Godot's billboard,
+  which copies the head's view basis (B10's finding). Its up is the XR origin's up: the aircraft's
+  in Cockpit, Nose and the rigid chase, world up in the level chase and static cameras. That is the
+  frame the flat screen is drawn in, so a box reads as it does on the monitor and stays square to
+  the cockpit when the head rolls. The suite fails (0.999641 against 0.999999) when the card takes
+  the head's up instead.
+- **Size: the flat pane's angle.** One reference pixel spans `2 tan(fov/2) / 1440` of the flat
+  camera's live vertical angle (64.37° in Cockpit, 46.83° in Nose and Chase; under a headset the
+  flat camera holds the view's angle with no speed widen, B9), times the distance. A card therefore
+  covers the angle the flat HUD's pixels cover at the view centre, whatever its depth.
+- **Depth test and order, decided: drawn over everything, as the flat HUD is.** The cards skip the
+  depth test, so a box behind a hill still shows, and they draw over the interior as the flat HUD
+  draws over the cockpit pass; a target under the nose keeps its box on the dash. Priorities
+  (`HeadLockedQuads`): flash 111 < world cards 112 < HUD panel 115 (C12) < ring 116 < sun wash 120.
+  The stencil alternative (hidden behind the interior's opaque parts, seen through the glass) is a
+  one-line change for the author to ask for.
+- **Compositing.** Each card is a transparent 2D `SubViewport` at 1.5 texels per reference pixel,
+  redrawn only when what it shows changes, sampled with four taps and mixed in gamma space with the
+  head-locked quads' `GammaMixComposite`, so Original matches the canvas. Under Enhanced the world
+  environment's AgX tonemaps the cards (SHOT-46), owed at the headset with C10's boards.
+- **Goldens.** With the cards switched off the five stereo goldens return to their old hashes; with
+  them on, each moves only in a 10-row band around the pipper in both eyes (0.006-0.017 % of pixels).
+  `c1-cockpit-xr-sim`, `-far`, `-aft`, `stage-gunsight-xr-sim` and `c3-flare-xr-sim` are re-pinned,
+  each stable over two runs; the new `stage-markers-xr-sim` (frame 45: pipper, the selected Fury's
+  box, label and debug tag, the Kestrel on the ring) is one hash over three runs. Flat
+  `c1-flight-kill`, `c1-stunt-marker`, `empty-stage`, `c1-cockpit`, `campaign-4p-grid` and
+  `menu-original-xr-sim` are hash-identical.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Approach (landed, VR only).** `Launch/GameSession.cs` builds `Flight/Hud/XrMarkers.cs` beside the
+head-locked quads when the launcher hands it an XR rig. Each frame (priority 2100, after the XR
+origin and every HUD feed) it reads the flown pane's `FlightHud`: the reticle's impact point,
+`TargetHud.WorldMarks` and `VersusHud.WorldMarks` (`Flight/Hud/WorldMark.cs`, the list the flat
+`_Draw` now projects too), each only while its control shows. It sets `MarksInWorld` on the three
+controls, which stops their own drawing and keeps the spyglass picture idle. Geometry is
+`Flight/Hud/XrMarkerLaw.cs`. The flat drawing helpers (`TargetHud.DrawInView`, `DrawBrackets`,
+`DrawLabelBlock`, `DrawArrow`, `EdgeLines`, `VersusHud.DrawArrow`) became static over a
+`CanvasItem`, which the cards draw into.
 
-**Verify.** <TODO: an `--xr-sim` capture with a target at a known depth, checking per-eye disparity.>
+**Resolved TODOs (proposed values, TUNE for the author).**
+- `XrMarkerLaw.RingDeg` 25°: the flat views' 5 % inset sits 29.5° above the cockpit view's centre
+  and 21.3° above the chase view's.
+- `XrMarkers.RingDistanceM` 2 m, about the headsets' focal distance and the HUD panel's.
+- The ring arrow's shaft is 72 reference pixels, the flat inset of a 1440-tall pane; its label sits
+  inside the ring on the arrow's bearing, since the ring has no pane bottom for the flat rule's flip.
+- `MaxDistanceM` 10 km: a farther marker keeps its bearing and angle there, inside the far plane.
+- The spyglass disc is not drawn in the headset; D19 owns a stereo spyglass.
 
-**⚠ Traps.** <TODO: none known yet.>
+**Contract for C12 (the HUD panel).** Rehost the HUD canvas layers as the theater does; the markers
+are already off them, because `XrMarkers` sets `MarksInWorld` on `ImpactReticle`, `TargetHud` and
+`VersusHud` (the dogfight status line stays on the panel). Draw the panel at `HudPanelPriority` 115,
+between the world cards (112) and the ring (116). The ring hangs 2 m ahead at 25° off the view
+axis, so a panel placed low may sit under its lower arrows, which then draw over it. The flat
+camera's `Fov` is what sizes the cards, so a panel that changes the flat camera's angle changes the
+markers too.
+
+**Model recommendation.** Standard; the deciding facts (no lead marker, world space precise
+enough) came from reading and measuring.
+
+**Verify.** Units: `CSVM.Tests/XrMarkerLawTests.cs` (the flat pipper's pixel size from a card at any
+distance, the ring cone, bearings, dead astern, the head frame, the facing and its fallback, the
+label's inward step). Suite `xr-markers` (world cards on their points, facing the head with the
+seat's up and the flat angle, the far clamp, three ring bearings, a turned head leaving a card
+unchanged, an empty frame hiding all). Suites `-Filter xr`, `target`, `marker`, `cockpit`,
+`head-locked`, `spyglass`, `versus`, `dogfight`, `race` pass. Goldens as above. The registration,
+disparity and burst re-run with the commands above and the `.scratch/C13/` tools.
+
+Owed at the headset (the author's), VDXR at 90 Hz, Original then Enhanced:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest --graphics=enhanced
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=3" --debug-markers
+.\RunGame.ps1 -EngineArgs '--xr-mode','on'
+```
+Look for: (1) the pipper floats ahead of the gunsight as in the flat game and is usable for
+gunnery: rounds fired with it on a target hit it, and it reads as one image with the target when
+your eyes are on the target; (2) the selected Fury carries its box (inside gun range) and its
+"Fury" label, on the aircraft at its depth, and the box stays square to the cockpit as you tilt
+your head; (3) a target turning out of view becomes an arrow on a ring about a quarter of the way
+out, pointing toward it with its name and clock bearing, and comes back to a box as you look at it;
+say whether the ring should be wider or narrower (`RingDeg`) or nearer (`RingDistanceM`); (4) a
+target below the nose shows its box over the dash: say if it should hide behind the panel instead;
+(5) the third line marks every aircraft at once, tags in the world and on the ring; (6) from the
+menu (fourth line) an Instant Action flight shows the same; (7) under Enhanced, the marker colours
+against the flat game.
+
+**⚠ Traps.**
+- Do not use Godot's billboard modes or a `Label3D` billboard for a stereo marker: they copy the
+  head's view basis, so the card turns and squashes as the head yaws (B10). Face the head's point.
+- Do not size a card by a fixed angle: the flat HUD's pixel spans a different angle in each view,
+  and the card must follow the flat camera's live angle.
+- Do not measure a stereo marker's disparity by thresholded centroids; shift the crop between the
+  eyes by least squares (SHOT-48).
+- A golden's size is the manifest's 1280x720: a stereo golden takes two 640-wide eyes or one
+  1280x720 eye, and `--resolution` on the hidden desktop is clamped to its height (1421 rows for
+  2560x1440), so a flat comparison frame needs a stand-in eye of that height.
+- `TextureUploadSourceTests` allows `ImageTexture.CreateFromImage` only in `Utils/TextureUpload.cs`;
+  a suite's texture goes through `TextureUpload.Create`.
+
+**Verified.** <pending orchestrator run>
 
 ## C13b ◐ The gunsight reticle collimated at infinity in VR
 

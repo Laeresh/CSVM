@@ -606,7 +606,7 @@ A stereo session's full-view colour layers, which a stereo viewport cannot draw 
 cloud whiteout, the `ScreenFlash` wash, the sun wash and the mission-end fade, one quad each copying
 its flat layer's colour every frame, so the flat layers stay untouched. The shader places each quad in
 view space, locked to the head, composited in gamma space as the canvas is. Its render priorities are
-the stereo twin of `HudLayers`, with a slot kept for the cockpit-locked HUD panel. The whiteout alone
+the stereo twin of `HudLayers`: a slot kept for the cockpit-locked HUD panel, the flight markers' world cards under it and their head ring over it (`Flight/Hud/XrMarkers.cs`). The whiteout alone
 is depth-tested at the seat clearance, which keeps the in-world interior clear of it as the flat
 cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
 

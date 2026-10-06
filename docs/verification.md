@@ -221,6 +221,10 @@ member, and it does not go here.
   the uniform's hint, so check a drawn colour in the capture, never in the parameter it was handed.**
   The theater surround's sRGB 0.075 floor, passed as a `Color` and linearised again in its shader,
   drew 2 of 255; passed as a `Vector3` it drew 19.
+- **SHOT-48**, **Measure a small marker's stereo disparity by a least-squares subpixel shift of its
+  crop between the eyes, never by thresholded centroids.** On one capture the pipper's centroids
+  read 0.18 px of disparity and a 0.43 px vertical offset; the shift search read 0.76 px and 0.00,
+  matching its 463 m range, and gave the box the aircraft's own 2.5 px.
 
 ## GOLD, golden images
 

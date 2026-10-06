@@ -268,6 +268,9 @@ rows).
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out and a stereo session builds none.
 - `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
+- `src/Flight/Hud/XrMarkers.cs`, the flight markers in a stereo session: the flat HUD's drawings on cards at their world points, and off-view ones on a ring on the head.
+- `src/Flight/Hud/XrMarkerLaw.cs`, the stereo markers' geometry, engine-free: a reference pixel's angle, the ring's cone and bearing, a card's facing.
+- `src/Flight/Hud/WorldMark.cs`, one marker a flat HUD draws at a world point, as data: what the flat pane projects and a stereo session places.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
 - `src/Flight/Hud/CanopyHoleCue.cs`, the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.

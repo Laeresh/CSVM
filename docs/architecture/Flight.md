@@ -334,6 +334,29 @@ starting `_` are notes. A plane or field left out takes the default. Read once p
 `Session/Roster/FlightRosterInputs.cs` only when the stereo path draws the interior; a missing or
 malformed file or entry warns and falls back. `Session/Roster/HumanFlightAdapter.cs` applies it.
 
+## src/Flight/Hud/XrMarkers.cs
+The flight markers of a stereo session, which draws no canvas layer: the pipper (`ImpactReticle`),
+`TargetHud`'s and the dogfight HUD's `WorldMark`s. Each is drawn by the flat HUD's own code into a
+small 2D surface, its card, at `CardScale` texels per reference pixel. A marker within
+`XrMarkerLaw.RingDeg` of the view axis stands at its world point (clamped to `MaxDistanceM`), facing
+the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
+arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
+`MarksInWorld` stops their own drawing and the spyglass picture. Priorities: `UI/Boards/HeadLockedQuads.cs`;
+`Launch/GameSession.cs` builds it.
+
+## src/Flight/Hud/XrMarkerLaw.cs
+The stereo markers' geometry, engine-free: the tangent one flat HUD reference pixel spans in a view
+of a given vertical angle, a point's place in the head's frame and its angle off the view axis, the
+`RingDeg` cone that sends a marker from the world to the ring, the ring's bearing (dead astern points
+down, as `EdgeMarker` does), a world card's facing axes and a label's inward step. Coverage is
+`CSVM.Tests/XrMarkerLawTests.cs`; `XrMarkers.cs` is the user.
+
+## src/Flight/Hud/WorldMark.cs
+One marker a flat HUD draws at a world point, as data: its style (`WorldMarkStyle`: the selection's
+box and label, a tag, a dogfight opponent's tag), point, colour, tag, the selection it labels, whether
+the gun's reach boxes it, and its edge stagger. `TargetHud.WorldMarks` and `Modes/VersusHud.cs`'s list
+them; the flat pane projects them through its camera, `XrMarkers.cs` places them in the world.
+
 ## src/Flight/Hud/CockpitGauges.cs
 The authored instrument panel inside the pilot's own `cockpit1` interior: five needle nodes take an
 absolute angle each frame, the artificial-horizon ball and the compass drum take the engine's own
@@ -726,7 +749,8 @@ The gun aiming reticle: a viewport-filling `Control` drawing the game's own `imp
 pipper at a world impact point `FlightController` feeds it each frame, projected through
 `Camera3D.UnprojectPosition` at draw time rather than cached. Fixed screen size scaled by
 `HudMetrics`, one per player pane. What the pipper follows, and why it is deliberately not the
-aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md).
+aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md). In a stereo session
+`XrMarkers.cs` draws it in the world instead (`MarksInWorld`).
 
 ## src/Flight/Hud/EdgeMarker.cs
 The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
@@ -874,7 +898,7 @@ on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitS
 a teammate's in `TargetHud`'s friendly green (`MarkerColor`). The status line steps aside while `StatusHiddenWhile` answers true (the seat's held scores); the markers stay.
 `Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
 and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `HudMessages`
-words and shows it, the one message element the original has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
+words and shows it, the one message element the original has. `WorldMarks` lists the opponent markers, which `Hud/XrMarkers.cs` places in a stereo session (`MarksInWorld`). The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
 provenance is in [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/Hud/HudMessages.cs
@@ -919,7 +943,7 @@ bracket box and label block and owns the colour table, the label layout, the sel
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`). Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries

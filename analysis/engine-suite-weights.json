@@ -498,6 +498,7 @@
     "world-sound-falloff": 0.05,
     "world-turrets": 3.756,
     "xr-fallback-notice": 0.06,
+    "xr-markers": 0.17,
     "xr-one-seat": 0.07,
     "xr-pointer": 0.2,
     "xr-pointer-original-menu": 0.21,
