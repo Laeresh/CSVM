@@ -97,7 +97,7 @@ internal static class NetDirectorSuites
         mesh[1].Disconnect(2);
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "control", PlaneNode = Airframes[1] },
         };

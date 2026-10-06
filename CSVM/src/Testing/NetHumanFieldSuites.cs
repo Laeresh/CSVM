@@ -102,7 +102,7 @@ internal static class NetHumanFieldSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2323));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         NetSeats.Validate(roster);
@@ -174,7 +174,7 @@ internal static class NetHumanFieldSuites
         var far = run.Guest.HumanField;
         ctx.Check(far.Count == 2 && far[0].RemoteOwned && !far[1].RemoteOwned,
             $"and the guest's field is the same two seats, the host's being the one flown elsewhere there");
-        ctx.Check(run.Host.NetSeats[0].IsLocal,
+        ctx.Check(run.Host.NetSeats[0].FlownHere,
             $"the scripted player is the host's seat 0, which a guest never holds");
         report.AppendLine($"field: host reads {field.Count} human(s), 1 pane; guest reads {far.Count}");
     }

@@ -218,6 +218,7 @@ rows).
 - `src/Flight/Ai/SurfaceVehicle.cs`, one built hull: the scripted-path follower over its patrol net, the wake and injure anims, and the pool a hit reaches.
 - `src/Flight/Ai/SurfaceGunner.cs`, a hull's own gun: the non-jet acquisition, the 20 s target hold, the mount, and the fire decision on the def's authored tuple.
 - `src/Flight/Ai/AiPilot.cs`, the non-player `FlightModel` driver: standing orders, patrol, gunner, escort and mode machine into one `FlightInput` per sim step.
+- `src/Flight/Ai/AiRearmOrder.cs`, a bot's rearm standing order: the rockets-out and hull trigger, the bay's open side, the gate and the final leg through a base, and the hand-back.
 - `src/Flight/Ai/AiControlLaw.cs`, the original's own AI steering law: an aim point, its velocity and one of four decoded tables into stick and throttle lever.
 - `src/Flight/Ai/AiEscort.cs`, the formation-escort law a netless `mode wingman` flies: leader and target snapshots into one station point and its velocity.
 - `src/Flight/Ai/AiModeMachine.cs`, the nine-mode AI state machine over the engine's own mode vocabulary, with the steady-hand and sixth-sense reaction rolls.
@@ -499,7 +500,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/DisplaySettingRows.cs`, the display settings as rows, shared by both Options screens: a label per store word, the two forgiving reads, the wrap.
 - `src/UI/Menu/MenuLayout.cs`, the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs`, the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
-- `src/UI/Menu/PlayerSetupFeature.cs`, the shared player setup: seats claimed by source identity, the roster, the two-stage pick, the gate.
+- `src/UI/Menu/PlayerSetupFeature.cs`, the shared player setup: seats claimed by source identity, the roster, the two-stage pick, a local Dogfight's bot rows, the gate.
 - `src/UI/Menu/HangarFeature.cs`, the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
 - `src/UI/Menu/HangarDescriptions.cs`, a construction tab's description box: the shipped figures string, the heading it ends with, and the component's own prose.
 - `src/UI/Menu/CampaignFeature.cs`, the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
@@ -515,7 +516,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/NetPlayerInfo.cs`, what the Game and Player Information boxes ask: the game's name, password and cap, the callsign and voice, the cap clamp and their remembered values.
 - `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar with each plane's holder, debrief result and shared film, each guest's words sent again only when they changed.
 - `src/UI/Menu/CoopGuestPick.cs`, a guest's own pick: airframe, fit, Ready and the walk-out mark, sent under the host's round.
-- `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list, picks and Ready, chat, and the launch gate.
+- `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list with the host's bot rows, picks and Ready, chat, and the launch gate.
+- `src/UI/Menu/DogfightBots.cs`, the bot rows a Dogfight host keeps and their rules, shared by the network lobby and the local join board: add, fill, rename, edit, the newest yielding, the launch entries.
 - `src/UI/Menu/CoopDoorText.cs`, the words the campaign's network door is drawn in: the host's band, the advertised session's name, the join and waiting boards' status lines.
 - `src/UI/Menu/NetDoorAid.cs`, the loopback multiplayer doors the screenshot aids stand on: no socket, no router, a campaign host already advertising.
 - `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, its three partials below, and the dialog and cheats it holds.
@@ -529,7 +531,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalOptionsScreen.cs`, the form behind the Options hub's doors: the frame, each page's ACCEPT and CANCEL plaques, the page switch and the one apply exit, over five page modules.
 - `src/UI/Menu/Original/KeysStickColumn.cs`, the KEYS AND BUTTONS page's split of a row's bindings between Control A/B and the port's Stick column.
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
-- `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, and the one place a pad signs onto a seat.
+- `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, the one place a pad signs onto a seat, and a Dogfight's bot rows.
+- `src/UI/Menu/Original/OriginalBotPanel.cs`, the join board's bot rows: the Bots block with Add Bot and Fill to, and the Edit Bot panel in the lobby's bot faces.
 - `src/UI/Menu/Original/OriginalSeats.cs`, the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs`, the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
 - `src/UI/Menu/Original/OriginalInstantActionScreen.cs`, the Instant Action screen and its Weapon Loadout as one standalone module: the contents list, dropdowns, enemy pages, the Build door, and the decoded ammo chrome over one aeroplane's fit.
@@ -541,7 +544,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalHangarScreen.cs`, the hangar as one standalone module: the name screen, the tabbed hub, the totals page, the inventory.
 - `src/UI/Menu/Original/OriginalCampaignScreen.cs`, the campaign as one standalone module: the ten decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Connection page and the LAN games list as one standalone module over the network door: the ways, the search, a join followed on a messagebox.
-- `src/UI/Menu/Original/OriginalLobbyScreen.cs`, the Multiplayer Lobby as one standalone module: its four tabs, the player list and Ready, chat, LAUNCH! and Leave Game.
+- `src/UI/Menu/Original/OriginalLobbyScreen.cs`, the Multiplayer Lobby as one standalone module: its four tabs, the player list and Ready, the bot controls, chat, LAUNCH! and Leave Game.
 - `src/UI/Menu/Original/OriginalOutlawList.cs`, the lobby's outlaw list pane behind Select..., and the map from its rows to the outlaw flags.
 - `src/UI/Menu/Original/OriginalTeamBox.cs`, the lobby's CREATE TEAM box behind Create Team.
 - `src/UI/Menu/Original/OriginalNetInfoBox.cs`, the GAME INFORMATION and PLAYER INFORMATION boxes the shell stands over a page before a host or a join.
@@ -712,8 +715,9 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 
 - `src/Session/Roster/FlightRoster.cs`, the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
 - `src/Session/Roster/FlightRosterInputs.cs`, the roster's grouped dependency contracts: aircraft resources, world bindings, human-session bindings and the policy.
-- `src/Session/Roster/HumanFlightAdapter.cs`, the roster's private human path: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
-- `src/Session/Roster/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation, model, controller, loadout, damage and crash runtime, and placement.
+- `src/Session/Roster/HumanFlightAdapter.cs`, the roster's private seat path, a person's or a network bot's: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
+- `src/Session/Roster/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation (a network bot seat's too), model, controller, loadout, damage and crash runtime, and placement.
+- `src/Session/Roster/BotSeats.cs`, a network bot seat as its host seats it: Random resolved to a stock plane, the pilot-name callsign draw, the rolled personality and the tier's offset.
 - `src/Session/Roster/AiAirframePool.cs`, the wave aeroplanes built in the loading screen and held out of the tree, so a launch binds one instead of building it.
 - `src/Session/Roster/CrashRigQueue.cs`, the queue of crash rigs for aeroplanes already flying, advanced one build step a frame so a launch costs less on its frame.
 - `src/Session/Roster/LiveryResolver.cs`, each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
@@ -926,8 +930,8 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetClockSlew.cs`, a guest's offset onto host time, walked to each fresh reading over a bounded window rather than written, with one-way readings read forward by half the measured round trip.
 - `src/Net/NetClockPing.cs`, the guest's question and the host's answer that measure the round trip, asked every ten seconds as the original's ping is.
 - `src/Net/NetHandshake.cs`, what a host hands a joining guest before either flies: the master seed every stream derives from, and the host's session clock at send.
-- `src/Net/NetSeat.cs`, one pilot's place in a match: peer, team, local flag, callsign, airframe, paint, seat index and signed score, with the seat index as the whole identity.
-- `src/Net/NetSeats.cs`, the roster's rules: eight pilots admitted behind sixteen-wide tables, the original's authored seat colours, and what makes a roster well formed.
+- `src/Net/NetSeat.cs`, one pilot's place in a match: peer, team, person or bot with a bot's skill, flown here and has a pane as two claims, callsign, airframe, paint, seat index and signed score, with the seat index as the whole identity.
+- `src/Net/NetSeats.cs`, the roster's rules: sixteen pilots admitted behind sixteen-wide tables, the original's authored seat colours, a host's bot seats, and what makes a roster well formed.
 - `src/Net/RemotePoseBuffer.cs`, one remote aircraft's received samples and the pose to draw it at now: placed by sequence on the sender's timeline, played out a fixed delay behind at the fitted sender clock rate, extrapolated along the newest velocity up to a cap, then held, with a tally of its reads and misses.
 - `src/Net/AircraftStateCadence.cs`, when an owner puts its own aeroplane on the wire, in simulation steps, and the per-seat sequence each sample carries.
 - `src/Net/MatchStateCadence.cs`, when a host repeats the match clock, in simulation steps: a second between ticks, and every change sent where it happens instead.

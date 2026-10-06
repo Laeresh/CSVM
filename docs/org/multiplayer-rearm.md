@@ -114,3 +114,52 @@ is the mission's own anim data, which the world runtime plays like any other ran
 The latch is one per seat, since a split-screen machine flies several, and it is released only
 outside every base that serves the seat. On the shipped maps that is the original's behaviour; on
 a map laying two serving bases apart it would still rearm once per entry where the original repeats.
+
+## Bots at a base
+
+The original has no computer pilots, so everything here is the remake's own
+(`Flight/Ai/AiRearmOrder.cs`). Evidence tag: measured, read in an engine suite on C1.
+
+A bot starts a run when every pylon it carries is empty, or its whole-vehicle health is at 35% or
+less. The guns are not read: a person flies back to rearm rockets, and a bot's guns last far longer
+than its rockets. Every pylon counts, whatever it carries, since every ordnance a pylon can hang
+(`wep_05` to `wep_15`, the torpedo, smoke and flare included) is a `ROCKET`. A plane with no loaded
+pylon, or one flying with infinite ammunition, never runs out. The health share is a tuning value
+with no original to match. It flies to the nearest base that serves it, and the base restores it by
+the rule above, pylons included, which a bot meets by flying through the radius.
+
+[Evidence: traced-to-code] A bot's rocketeer flies the original's wingman rule with a failed roll
+launching anyway ([aiPilot/aiWeapons.md](aiPilot/aiWeapons.md#what-aigunner-runs)), so it launches
+once per 20 s whenever its target sits in the 1 to 900 m band, the quick-draw cone and the 5° aim
+gate while it pursues, at most three rockets a minute at every tier. Each stock fit hangs two to
+eight high-explosive pylons of three rounds, so a bot needs at least 2 to 8 minutes in pursuit to
+run its racks dry, after which it breaks off on `rockets out`. [Evidence: measured] In a local
+15-bot free-for-all on MP1 with nobody flying the pane, bots launched 1.6 to 1.9 rockets a minute
+each; over six minutes the rocket trigger fired once and the hull trigger 22 times, since a death
+and a hull rearm both refill the racks.
+
+[Evidence: measured] C1's MP1 base is a fly-through bay. Level rays from the node meet `racmplx`'s
+walls 42 m and 47 m to either side on X, its roof 28 m above and its floor 16 m below, and the hall
+runs about 75 m along Z, open at both ends. Beyond the -Z end the valley floor rises to the node's
+height 490 m out and to 301 m at 800 m; beyond the +Z end the ground lies 15 to 40 m below the node.
+
+The run plans the open side once: on 24 bearings it casts a level line from the node out to 700 m
+(the bay) and a line from there up to the gate (the leg). It takes the bearing with a clear leg
+nearest the bot, moved to the middle of the bay's clear arc around it, which on MP1 is heading 180
+from every start. The gate stands 2500 m out and 120 m up. The final leg comes down to the node's
+height by 700 m out and is level after it, because the AI's avoid-crash lookahead (4.5 s, about
+500 m at cruise) reads any descent near the bay as the floor and climbs out. The bot aims 400 m
+ahead along the leg, since a point aim hunts in roll, and joins the leg only while its track lies
+within 60 degrees of inbound. Restored, it holds the node's height for 60 m, then climbs, and hands
+back to combat 150 m from the node.
+
+[Evidence: measured] From eight starts 3 km out at every 45 degrees, every run reached the base
+with no return, in 34 to 94 s. A 1500 m gate with a 600 m level probe failed four of the eight:
+two took a second arc up the -Z valley that the short probe read as clear and the climb out of it
+is not, and two joined the leg across it and missed the bay. With the long gate but no inbound
+test, a bot that crossed the leg outbound turned back short of the bay and missed.
+
+While a run stands the bot's gunner is disengaged, so it takes no quarry and does not return fire
+on the way; a stun, avoid crash and an evasive maneuver still come first. A bot shot down on the
+way comes back with no run (`AiPilot.ResetForSpawn`). The other chapters' MP1 bases, and C5's
+moved `rearm_node_2`, are planned by the same probe but have not been flown.

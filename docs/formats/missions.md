@@ -173,6 +173,14 @@ Look up by `key`. Relevant stunt values: `MSG_OBJ_DZ` = "Danger Zone", `MSG_OBJ_
 `MSG_BRF_IASF_OBJ2` = "Fly through all the Danger Zones to win!" (the stunt intro line).
 An unknown key resolves to itself (visible, not blank).
 
+**Character names, ids 13000–13036.** One `MSG_*_NAME` row per named pilot or flight the missions
+and Instant Action put on a readout (`MSG_JACK_NAME` "Jack", `MSG_SIRWINTHROP_NAME` "Sir Charles
+Emmett Winthrop"; `MSG_RVARGAS` "Roxanne Vargas" is the one key without the suffix). 13000 is the
+player's own "Zachary". Six rows name an aircraft or a role rather than a person: "Northwest Ace",
+"Getaway Plane", "British Ace", "Medusa Ace", "Stunt Plane" and "Bomber". The remaining 28 people
+are the pool a remake bot's callsign is drawn from (`Session/Roster/BotSeats.cs`), the original
+having no computer pilot of its own to name.
+
 `id` is the row's Win32 STRINGTABLE id, and it is how the **exe itself** addresses these strings:
 its message formatter `FUN_0059cd70` calls `LoadStringA(<messages module>, id, …)` and hands the
 result to `FormatMessageA`, so a hard-coded numeric message id anywhere in the image is a row of

@@ -8,6 +8,7 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Campaign;
+using CSVM.Session.Roster;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
@@ -164,6 +165,52 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// </summary>
     public const string CopyKey = "MPL_B_COPY";
 
+    /// <summary>Add Bot on Mission Options, the remake's own: one bot row (<see cref="DogfightLobby.AddBot"/>).
+    /// </summary>
+    public const string AddBotKey = "MPL_B_ADDBOT";
+
+    /// <summary>Fill to on Mission Options: bot rows until the field holds the count box's pilots.
+    /// </summary>
+    public const string FillKey = "MPL_B_FILL";
+
+    /// <summary>Fill to's count box, a total of pilots, people and bots together.</summary>
+    public const string FillCountKey = "MPL_E_FILL";
+
+    /// <summary>The prefix of the count box's arrows: <c>+</c> and <c>-</c> follow it.</summary>
+    public const string FillArrowPrefix = "MPL_B_FILL_";
+
+    /// <summary>A picked bot's Callsign box, standing on Select Plane in the pilot's own picker's
+    /// place.</summary>
+    public const string BotNameKey = "MPL_BOT_E_NAME";
+
+    /// <summary>A picked bot's plane box: Random, then the eleven stock airframes.</summary>
+    public const string BotPlaneKey = "MPL_BOT_D_PLANE";
+
+    /// <summary>A picked bot's skill box: novice, veteran, ace.</summary>
+    public const string BotSkillKey = "MPL_BOT_D_SKILL";
+
+    /// <summary>A picked bot's team box: no team, then every standing team.</summary>
+    public const string BotTeamKey = "MPL_BOT_D_TEAM";
+
+    /// <summary>Removes the picked bot's row.</summary>
+    public const string RemoveBotKey = "MPL_BOT_B_REMOVE";
+
+    /// <summary>Lets the picked bot go, back to the pilot's own plane.</summary>
+    public const string BotDoneKey = "MPL_BOT_B_DONE";
+
+    /// <summary>The line a LAUNCH! with bot rows outside a Deathmatch raises, the remake's own.
+    /// </summary>
+    public const string BotsDeathmatchOnly = "Bots fly Deathmatch only. Remove them to launch this mission type.";
+
+    /// <summary>The line pinned over a guest's chat while its host flies a match the guest joined
+    /// too late for. The remake's own: no langui line says what happens next.</summary>
+    public const string MatchInProgress = "The host's match is under way. You take a seat when it ends.";
+
+    /// <summary>The tag a bot's row carries in the player list's Ready column, where a person's
+    /// Ready mark stands, and beside its name on Game Scores. The remake's own: the original has no
+    /// bots.</summary>
+    public const string BotTag = "BOT";
+
     /// <summary>How many rows the player list shows.</summary>
     public const int VisiblePlayers = 11;
 
@@ -182,6 +229,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const string UpArt = "MP_B_SCROLLUP.PNG";
     private const string DownArt = "MP_B_SCROLLDOWN.PNG";
     private const float MemberIndent = 12f;
+
+    // The bot editor's faces: the Mission Options dropdowns' for its boxes and captions, and their
+    // titles' for its labels. The Select Plane script's typewriter face is the pilot's own page's.
+    private const int BotFace = 10558;
+    private const int BotLabelFace = 10096;
     private const string TabLargeArt = "MP_LOBBY_TABLARGE.PNG";
     private const string TabSmallArt = "MP_LOBBY_TABSMALL.PNG";
     private const string IconArt = "MP_PLANEICONSTOPFRONT.PNG";
@@ -198,6 +250,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const float ChatWidth = 735f;
     private const float ChatHeight = 165f;
     private const float ChatNameColumn = 100f;
+
+    // Mission Options' left column: the type's description, then the remake's Bots block, whose
+    // hint line ends just above LAUNCH!. The description is boxed to the gap between them, so a
+    // longer wrap steps its face down rather than running into the block.
+    // ⚠ Keep the pitch. Without it the view wraps with the engine's own breaker. That can wrap one
+    // line more than the box's fit counted, and the last line lands on the Bots heading.
+    private const float DescriptionY = PageY + 134f;
+    private const float DescriptionPitch = 16f;
+    private const float BotsY = PageY + 205f;
 
     // The lines' column in the chat pane, ending clear of the scroll bar the background paints at
     // its right. That bar's border starts 6 px inside the pane's right edge.
@@ -242,6 +303,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The remake's pinned internet line, in the picked sub-tab's dark red so it reads apart from chat.
     private static readonly BoardTint Pinned = Picked;
 
+    // The bot tag, a remake word too, in the same dark red so it reads apart from the names.
+    private static readonly BoardTint BotInk = Picked;
+
     // The picked row's fill, the script's KEA.NF on the player list (MULTIPLAYERLOBBY_READY.SCRIPT).
     private static readonly (byte R, byte G, byte B) PickedRow = (209, 180, 120);
 
@@ -254,6 +318,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private readonly Func<IReadOnlyList<CustomPlaneDef>> _customs;
     private readonly OriginalOutlawList _outlaw;
     private readonly OriginalTeamBox _teamBox;
+    private readonly string? _dataRoot;
     private string? _open;
 
     // The team row picked for Join Team, 0 for none. A pick is a team or a player, never both.
@@ -273,6 +338,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // when another guest leaves never boots the wrong pilot.
     private int _picked = -1;
 
+    // The bot whose row the host picked for editing, -1 for none, held by the bot's id as _picked
+    // is by peer. A pick is a peer, a bot or a team, never two of them.
+    private int _pickedBot = -1;
+    private int _fillTo = DogfightLobby.DefaultFillTo;
+    private IReadOnlyList<string>? _botNames;
+
     /// <summary>A lobby module over the door <paramref name="net"/> answers. Its words come from the
     /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. Seat
     /// 0's flight devices are <paramref name="pads"/>, and the pilot's name is
@@ -287,6 +358,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _net = net ?? throw new ArgumentNullException(nameof(net));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _text = new MultiplayerBoardText(_host, dataRoot);
+        _dataRoot = dataRoot;
         _outlaw = new OriginalOutlawList(_text);
         _teamBox = new OriginalTeamBox(_host, _text);
         _stock = stock ?? (() => null);
@@ -323,12 +395,23 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat box's line as typed so far.</summary>
     public string ChatDraft => _chat;
 
-    /// <summary>The rows pinned over the chat under <see cref="CoopDoorText.NoteName"/>
-    /// (<see cref="CoopDoorText.HostLobbyLines"/>). They hold a host's join code or its wait for one,
-    /// else its address and why there is no code. The copy hint follows the seat's device. Empty on
-    /// a guest.</summary>
+    /// <summary>The rows pinned over the chat under <see cref="PinnedName"/>. On a host they are
+    /// <see cref="CoopDoorText.HostLobbyLines"/>: its join code or its wait for one, else its address
+    /// and why there is no code. The copy hint follows the seat's device. A guest that joined while
+    /// its host flies a match reads <see cref="MatchInProgress"/>. Empty on any other guest.</summary>
     public IReadOnlyList<string> NetworkRows =>
-        _net() is { } net ? CoopDoorText.HostLobbyLines(net, _host.CopyWay) : Array.Empty<string>();
+        _net() is not { } net ? Array.Empty<string>()
+        : WaitsOnMatch ? new[] { MatchInProgress }
+        : CoopDoorText.HostLobbyLines(net, _host.CopyWay);
+
+    /// <summary>The name the first pinned row stands under, <see cref="CoopDoorText.NoteName"/>.
+    /// While a guest waits on its host's match it is langui 10090 "In Progress", the original's word
+    /// for a running game.</summary>
+    public string PinnedName => WaitsOnMatch ? _text.Word(10090, "In Progress") : CoopDoorText.NoteName;
+
+    /// <summary>Whether this lobby is a guest's, held while its host flies a match it joined too late
+    /// for (<see cref="DogfightLobby.WaitsOnMatch"/>).</summary>
+    public bool WaitsOnMatch => _net() is { } net && Lobby is { } lobby && lobby.WaitsOnMatch(net.Advert?.Status);
 
     /// <summary>The peer whose row the host picked for Boot, or -1 while none is picked or that
     /// guest has left.</summary>
@@ -340,6 +423,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The team row picked for Join Team, 0 while none is picked or that team is gone.
     /// </summary>
     public byte PickedTeam => Lobby is { } lobby && HasTeam(lobby, _pickedTeam) ? _pickedTeam : (byte)0;
+
+    /// <summary>The id of the bot whose row the host picked, which Select Plane then edits. It is
+    /// -1 while none is picked or that row is gone.</summary>
+    public int PickedBot => Lobby is { IsHost: true } lobby && lobby.BotById(_pickedBot) != null ? _pickedBot : -1;
+
+    /// <summary>The pilots Fill to fills the field to, its count box's value.</summary>
+    public int FillCount => _fillTo;
 
     /// <summary>Whether seat 0's typed characters feed one of the lobby's boxes. That holds while
     /// the lobby shows with a box focused and nothing over it, or the CREATE TEAM box's name.
@@ -412,6 +502,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             return;
         }
 
+        net.Dogfight.CallsignPool = BotNames();
         Enter();
     }
 
@@ -464,6 +555,17 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             _outlaw.Open(lobby);
             _outlaw.Show(page);
         }
+    }
+
+    /// <summary>Picks bot row <paramref name="id"/> and shows Select Plane on it, as a press on its
+    /// row does, the screenshot aids' door. Nothing is picked on a guest or for a row not there.
+    /// </summary>
+    public void ShowBot(int id)
+    {
+        ShowTab(LobbyTab.Plane);
+        _pickedBot = Lobby is { IsHost: true } lobby && lobby.BotById(id) != null ? id : -1;
+        _picked = -1;
+        _pickedTeam = 0;
     }
 
     /// <summary>Stands the CREATE TEAM box over the lobby, as the team button's Create Team does.
@@ -582,10 +684,26 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
         {
-            // A second press on the picked row lets it go, as the script's row mailbox does.
+            // A second press on the picked row lets it go, as the script's row mailbox does. A bot's
+            // row opens Select Plane on that bot.
+            _pickedTeam = 0;
+            if (lobby?.BotAt(listed) is int bot and >= 0)
+            {
+                _pickedBot = bot == _pickedBot ? -1 : bot;
+                _picked = -1;
+                Tab = _pickedBot >= 0 ? LobbyTab.Plane : Tab;
+                return null;
+            }
+
             int peer = lobby?.PeerAt(listed) ?? -1;
             _picked = peer == _picked ? -1 : peer;
-            _pickedTeam = 0;
+            _pickedBot = -1;
+            return null;
+        }
+
+        if (row.Key.StartsWith(FillArrowPrefix, StringComparison.Ordinal))
+        {
+            _fillTo = Math.Clamp(_fillTo + (row.Key.EndsWith('+') ? 1 : -1), 2, NetSeats.MaxPlayers);
             return null;
         }
 
@@ -593,6 +711,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         {
             _pickedTeam = team == _pickedTeam ? (byte)0 : (byte)team;
             _picked = -1;
+            _pickedBot = -1;
             return null;
         }
 
@@ -632,6 +751,23 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             case AmmoTabKey:
             case ScoresTabKey:
                 Tab = (LobbyTab)Array.IndexOf(TabKeys, row.Key);
+                _pickedBot = -1;
+                return null;
+            case AddBotKey:
+                lobby?.AddBot();
+                return null;
+            case FillKey:
+                lobby?.FillTo(_fillTo);
+                return null;
+            case RemoveBotKey:
+                if (lobby != null && lobby.RemoveBot(PickedBot))
+                {
+                    _pickedBot = -1;
+                }
+
+                return null;
+            case BotDoneKey:
+                _pickedBot = -1;
                 return null;
             case GunsTabKey:
                 Rockets = false;
@@ -691,6 +827,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 if (lobby is { CanLaunch: true } && lobby.LaunchRefusal is var refusal and not TeamLaunchRefusal.None)
                 {
                     RefuseLaunch(refusal);
+                    return null;
+                }
+
+                if (lobby is { CanLaunch: true, BotsGrounded: true })
+                {
+                    _host.RaiseDialog(BotsDeathmatchOnly, DialogIcon.Warning,
+                        new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), null));
                     return null;
                 }
 
@@ -872,10 +1015,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             return _chat != before;
         }
 
-        string draft = _typing == key ? _draft : BoxValue(key, lobby);
+        // The callsign box keeps what is typed as a draft. Emptied on the way to a new name, it
+        // leaves the bot its old one. Each name the lobby takes is set as it is typed.
+        bool named = key == BotNameKey;
+        string draft = _typing == key ? _draft : BoxText(key, lobby);
         foreach (char c in commands.Typed)
         {
-            if (char.IsAsciiDigit(c) && draft.Length < BoxWidth(key))
+            bool takes = named ? c is >= ' ' and < (char)127 : char.IsAsciiDigit(c);
+            if (takes && draft.Length < BoxWidth(key))
             {
                 draft += c;
             }
@@ -888,6 +1035,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         _typing = key;
         _draft = draft;
+        if (named)
+        {
+            lobby.SetBotCallsign(PickedBot, draft);
+            return true;
+        }
+
         if (int.TryParse(draft, NumberStyles.None, CultureInfo.InvariantCulture, out int value))
         {
             _ = key switch
@@ -896,6 +1049,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 ScoreKey => lobby.SetScore(value),
                 MinTeamsKey => lobby.SetMinTeams(value),
                 MaxTeamsKey => lobby.SetMaxTeams(value),
+                FillCountKey => SetFill(value),
                 _ => lobby.SetLives(value),
             };
         }
@@ -903,7 +1057,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return true;
     }
 
-    private static bool IsBox(string key) => key is ChatKey or TimeKey or ScoreKey or LivesKey or MinTeamsKey or MaxTeamsKey;
+    /// <summary>The shipped pilot names a new bot row draws its callsign from, read once from the
+    /// message table under the data root. A missing table leaves every bot "Bot n".</summary>
+    internal IReadOnlyList<string> BotNames() =>
+        _botNames ??= _dataRoot == null
+            ? Array.Empty<string>()
+            : BotSeats.CallsignPool(Messages.Load(System.IO.Path.Combine(_dataRoot, "extracted", "messages.json")));
+
+    private static bool IsBox(string key) =>
+        key is ChatKey or TimeKey or ScoreKey or LivesKey or MinTeamsKey or MaxTeamsKey or FillCountKey or BotNameKey;
 
     private static bool HasTeam(DogfightLobby lobby, byte team)
     {
@@ -916,6 +1078,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         return false;
+    }
+
+    // No langui row words a Random plane or a bot on no team, so these are the remake's own.
+    private static string RandomWord() => "Random";
+
+    private static string TeamWord(DogfightLobby lobby, byte team)
+    {
+        foreach (var named in lobby.Teams)
+        {
+            if (named.Number == team && team != 0)
+            {
+                return named.Name;
+            }
+        }
+
+        return "No team";
     }
 
     // A team count box's arrow, the script's BG and CG beside the box: 16 by 11, four frames.
@@ -979,15 +1157,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return -1;
     }
 
-    private static int BoxWidth(string key) => key == ScoreKey ? 3 : 2;
-
-    private static string BoxValue(string key, DogfightLobby lobby) => key switch
+    private static int BoxWidth(string key) => key switch
     {
-        TimeKey => lobby.Options.TimeMinutes.ToString(CultureInfo.InvariantCulture),
-        ScoreKey => lobby.Options.Score.ToString(CultureInfo.InvariantCulture),
-        MinTeamsKey => lobby.Options.MinTeams.ToString(CultureInfo.InvariantCulture),
-        MaxTeamsKey => lobby.Options.MaxTeams.ToString(CultureInfo.InvariantCulture),
-        _ => lobby.Options.Lives.ToString(CultureInfo.InvariantCulture),
+        ScoreKey => 3,
+        BotNameKey => BotSeats.CallsignLimit,
+        _ => 2,
     };
 
     private static int Hash(DogfightLobby? lobby)
@@ -1116,6 +1290,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private void Enter()
     {
         _picked = -1;
+        _pickedBot = -1;
         _pickedTeam = 0;
         _teamBox.Drop();
         _open = null;
@@ -1151,6 +1326,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private void Leave()
     {
         _picked = -1;
+        _pickedBot = -1;
         _pickedTeam = 0;
         _teamBox.Drop();
         _open = null;
@@ -1224,6 +1400,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             {
                 case LobbyTab.Mission:
                     MissionRows(lobby, rows);
+                    break;
+                case LobbyTab.Plane when lobby.BotById(PickedBot) is { } bot:
+                    BotRows(lobby, bot, rows);
                     break;
                 case LobbyTab.Plane:
                     PlaneRows(lobby, rows);
@@ -1304,6 +1483,29 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         // Live on either end while the tick stands and greyed while it is clear, a Ready host's
         // included. The mission script's refresh 1015 mails 2 or 1 to it on that alone.
         rows.Add(_text.Strip(SelectKey, MediumArt, PageX + 295f, PageY + 277f, lobby.Rules.Outlawing && !race, 1, 96f, 37f));
+
+        // The remake's bot controls, in the left column's free space under the type's description.
+        // A guest's draw greyed, as its options do.
+        bool bots = lobby.EditsBots && lobby.TakesBots;
+        rows.Add(_text.Strip(AddBotKey, SmallArt, PageX + 20f, BotsY + 20f, bots && lobby.BotRoom > 0, 1, 74f, 37f));
+        rows.Add(_text.Strip(FillKey, SmallArt, PageX + 98f, BotsY + 20f, bots && lobby.FieldSeats < _fillTo, 1, 74f, 37f));
+        rows.Add(Box(FillCountKey, BoxText(FillCountKey, lobby), PageX + 176f, BotsY + 27f, 28f, 22f, bots));
+        rows.Add(Arrow(FillArrowPrefix + "+", UpArt, PageX + 204f, BotsY + 27f, bots && _fillTo < NetSeats.MaxPlayers));
+        rows.Add(Arrow(FillArrowPrefix + "-", DownArt, PageX + 204f, BotsY + 38f, bots && _fillTo > 2));
+    }
+
+    // Select Plane on a picked bot: its callsign, plane, skill and team in the pilot's own picker's
+    // column, then Remove and Accept. The words beside them are ComposeBot's.
+    private void BotRows(DogfightLobby lobby, DogfightBot bot, List<OriginalRow> rows)
+    {
+        bool live = lobby.EditsBots;
+        string plane = bot.RandomPlane ? RandomWord() : PlaneWord(bot.Airframe);
+        rows.Add(Box(BotNameKey, BoxText(BotNameKey, lobby), PageX + 11f, PageY + 88f, 195f, 22f, live));
+        rows.Add(Drop(BotPlaneKey, plane, PageX + 11f, PageY + 134f, 195f, 22f, live));
+        rows.Add(Drop(BotSkillKey, SkillWord(bot.Skill), PageX + 11f, PageY + 180f, 195f, 22f, live));
+        rows.Add(Drop(BotTeamKey, TeamWord(lobby, bot.Team), PageX + 11f, PageY + 226f, 195f, 22f, live));
+        rows.Add(_text.Strip(RemoveBotKey, MediumArt, PageX + 11f, PageY + 262f, live, 1, 96f, 37f));
+        rows.Add(_text.Strip(BotDoneKey, MediumArt, PageX + 110f, PageY + 262f, true, 1, 96f, 37f));
     }
 
     private void PlaneRows(DogfightLobby lobby, List<OriginalRow> rows)
@@ -1358,6 +1560,24 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private string BoxText(string key, DogfightLobby lobby) => _typing == key ? _draft : BoxValue(key, lobby);
 
+    private string BoxValue(string key, DogfightLobby lobby) => key switch
+    {
+        TimeKey => lobby.Options.TimeMinutes.ToString(CultureInfo.InvariantCulture),
+        ScoreKey => lobby.Options.Score.ToString(CultureInfo.InvariantCulture),
+        MinTeamsKey => lobby.Options.MinTeams.ToString(CultureInfo.InvariantCulture),
+        MaxTeamsKey => lobby.Options.MaxTeams.ToString(CultureInfo.InvariantCulture),
+        FillCountKey => _fillTo.ToString(CultureInfo.InvariantCulture),
+        BotNameKey => lobby.BotById(PickedBot)?.Callsign ?? string.Empty,
+        _ => lobby.Options.Lives.ToString(CultureInfo.InvariantCulture),
+    };
+
+    // A typed count inside the field's range; a lower one is a step on the way to two digits.
+    private bool SetFill(int pilots)
+    {
+        _fillTo = Math.Clamp(pilots, 2, NetSeats.MaxPlayers);
+        return true;
+    }
+
     private string EnvironmentWord(int environment) => _text.Word(10558 + environment, DogfightLobby.EnvironmentName(environment));
 
     private string TypeWord(int type) => type switch
@@ -1369,6 +1589,67 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private string PlaneWord(int airframe) =>
         _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];
+
+    // IDS_IA_DIFFICULTY, Instant Action's own three words for the same tiers. They ship in lower
+    // case, so the first letter is raised for the box, as the lobby's other items read.
+    private string SkillWord(NetBotSkill skill)
+    {
+        string word = skill switch
+        {
+            NetBotSkill.Novice => _text.Word(3695, "novice"),
+            NetBotSkill.Ace => _text.Word(3697, "ace"),
+            _ => _text.Word(3696, "veteran"),
+        };
+
+        return word.Length > 0 ? char.ToUpperInvariant(word[0]) + word[1..] : word;
+    }
+
+    // The bot's lists: Random then the eleven stock planes, the three tiers, no team then each
+    // standing team. Null for any other key.
+    private DropdownList? BotDropdown(DogfightLobby lobby, string key)
+    {
+        if (lobby.BotById(PickedBot) is not { } bot)
+        {
+            return null;
+        }
+
+        switch (key)
+        {
+            case BotPlaneKey:
+                {
+                    var items = new string[DogfightLobby.AirframeCount + 1];
+                    items[0] = RandomWord();
+                    for (int i = 1; i < items.Length; i++)
+                    {
+                        items[i] = PlaneWord(i - 1);
+                    }
+
+                    return new DropdownList(items, bot.RandomPlane ? 0 : bot.Airframe + 1, _ => true,
+                        i => lobby.SetBotAirframe(bot.Id, i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1));
+                }
+
+            case BotSkillKey:
+                return new DropdownList(new[] { SkillWord(NetBotSkill.Novice), SkillWord(NetBotSkill.Veteran), SkillWord(NetBotSkill.Ace) },
+                    (int)bot.Skill, _ => true, i => lobby.SetBotSkill(bot.Id, (NetBotSkill)i));
+            case BotTeamKey:
+                {
+                    var teams = lobby.Teams;
+                    var items = new string[teams.Count + 1];
+                    items[0] = TeamWord(lobby, 0);
+                    int current = 0;
+                    for (int i = 0; i < teams.Count; i++)
+                    {
+                        items[i + 1] = teams[i].Name;
+                        current = teams[i].Number == bot.Team ? i + 1 : current;
+                    }
+
+                    return new DropdownList(items, current, _ => true,
+                        i => lobby.SetBotTeam(bot.Id, i == 0 ? (byte)0 : teams[i - 1].Number));
+                }
+        }
+
+        return null;
+    }
 
     // The fit the Select Ammo tab edits over: a custom plane's own guns and pylons, or the stock ones.
     private LoadoutDef? StockDef(int airframe)
@@ -1386,6 +1667,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (Lobby is not { } lobby)
         {
             return null;
+        }
+
+        if (key is BotPlaneKey or BotSkillKey or BotTeamKey)
+        {
+            return BotDropdown(lobby, key);
         }
 
         switch (key)
@@ -1532,10 +1818,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var lobby = Lobby;
         var players = lobby?.Players ?? Array.Empty<DogfightLobbySeat>();
         layers.Lines.Add(_text.Line(10046, "MULTIPLAYER LOBBY", 60f, 22f, 0f, Black));
-        int cap = _net()?.SessionCap ?? NetSeats.MaxPlayers;
-        string count = _text.Strings.Format(10048, players.Count, cap);
-        layers.Lines.Add(_text.Line(10048, string.Empty, 34f, 54f, 0f, Black,
-            text: count.Length > 0 ? count : $"Players ({players.Count} of {cap})"));
+        layers.Lines.Add(_text.Line(10048, string.Empty, 34f, 54f, 0f, Black, text: PlayersHeader()));
         layers.Lines.Add(_text.Line(10052, "Ready", 256f, 54f, 0f, Black));
         var face = _text.Regular(10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
@@ -1559,8 +1842,36 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             var colour = lobby != null && entry.Player == lobby.You ? OwnName : Black;
             layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f + indent, y + ((ListPitch - size) / 2f), NameWidth - 4f - indent, size,
                 BoardInk.Row, -1, Face: face, Colour: colour));
+
+            // A bot gives no consent to stand Ready, so its column carries the bot tag in place of
+            // a mark that would always read ticked.
+            if (players[entry.Player].IsBot)
+            {
+                layers.Lines.Add(_text.Line(10052, BotTag, ListX + NameWidth - 14f, y + ((ListPitch - size) / 2f), 40f, BotInk,
+                    BoardJustify.Center, text: BotTag));
+                continue;
+            }
+
             layers.Pictures.Add(new BoardPicture(mark, ListX + NameWidth, y + 6f, players[entry.Player].Ready ? 3 : 1));
         }
+    }
+
+    // The list's header: the people against the session's cap in langui 10048's words. The cap
+    // counts only people, so the bots follow it when there are any.
+    private string PlayersHeader()
+    {
+        var lobby = Lobby;
+        int people = lobby?.PeopleListed ?? 0;
+        int bots = lobby?.BotsListed ?? 0;
+        int cap = _net()?.SessionCap ?? NetSeats.MaxPlayers;
+        string count = _text.Strings.Format(10048, people, cap);
+        string header = count.Length > 0 ? count : $"Players ({people} of {cap})";
+        return bots switch
+        {
+            0 => header,
+            1 => $"{header} + 1 bot",
+            _ => $"{header} + {bots.ToString(CultureInfo.InvariantCulture)} bots",
+        };
     }
 
     private void ComposeChat(BoardLayers layers)
@@ -1583,7 +1894,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             float y = ChatY + (i * pitch);
             if (i == 0)
             {
-                layers.Lines.Add(new BoardLine(CoopDoorText.NoteName, ChatX + 4f, y, ChatNameColumn - 8f, size, BoardInk.Row, -1,
+                layers.Lines.Add(new BoardLine(PinnedName, ChatX + 4f, y, ChatNameColumn - 8f, size, BoardInk.Row, -1,
                     Face: face, Colour: Black));
             }
 
@@ -1614,7 +1925,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         // A player row's name is the list's own line, so the row draws only its pick and focus.
         if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
         {
-            if (Lobby is { } lobby && lobby.PeerAt(listed) is var peer and >= 0 && peer == _picked)
+            if (Lobby is { } lobby && ((lobby.PeerAt(listed) is var peer and >= 0 && peer == _picked)
+                || (lobby.BotAt(listed) is var bot and >= 0 && bot == PickedBot)))
             {
                 layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, PickedRow.R, PickedRow.G, PickedRow.B));
             }
@@ -1694,7 +2006,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             layers.Fills.Add(_host.FocusMark(row));
         }
 
-        int faceId = row.Key is EnvironmentKey or TypeKey ? 10558 : 10144;
+        int faceId = row.Key is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144;
         var face = _text.Regular(faceId);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         float textY = row.Key == PlaneKey ? row.Y + 5f : row.Y + ((row.Height - size) / 2f) - 1f;
@@ -1735,7 +2047,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private void ComposeBox(OriginalRow row, bool focused, BoardLayers layers)
     {
-        var face = _text.Regular(row.Key == ChatKey ? 10575 : 10105);
+        var face = _text.Regular(row.Key switch
+        {
+            ChatKey => 10575,
+            BotNameKey => BotFace,
+            _ => 10105,
+        });
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         if (row.Key == ChatKey)
         {
@@ -1826,6 +2143,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             } : (10056, "Create Team"),
             SendKey => (10061, "Send"),
             LeaveKey => (10062, "Leave Game"),
+            BotDoneKey => (10540, "Accept"),
+
+            // The bot plaques are the remake's own, so no langui row words them.
+            AddBotKey => (-1, "Add Bot"),
+            FillKey => (-1, "Fill to"),
+            RemoveBotKey => (-1, "Remove"),
             _ => (0, string.Empty),
         };
 
@@ -1848,7 +2171,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             tint = MultiplayerBoardText.LabelTint(row.Enabled, focused, pressed);
         }
 
-        var face = _text.Regular(id);
+        // An unworded plaque takes Boot's face, the small plaque's own.
+        var face = _text.Regular(id > 0 ? id : 10054);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         layers.Lines.Add(new BoardLine(_text.Word(id, word), row.X, row.Y + ((row.Height - size) / 2f) - 1f, row.Width, size,
             BoardInk.Row, -1, Justify: BoardJustify.Center, Face: face, Colour: tint));
@@ -1866,6 +2190,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         {
             case LobbyTab.Mission:
                 ComposeMission(lobby, layers);
+                break;
+            case LobbyTab.Plane when lobby.BotById(PickedBot) is { } bot:
+                ComposeBot(bot, layers);
                 break;
             case LobbyTab.Plane:
                 ComposePlane(lobby, layers);
@@ -1889,12 +2216,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (DogfightLobby.IsStuntRace(options))
         {
             // The remake's own line, in the face the string table's three are drawn in.
-            layers.Lines.Add(_text.Line(10123, string.Empty, PageX + 25f, PageY + 134f, 200f, Black, text: StuntRaceDescription));
+            layers.Lines.Add(_text.Line(10123, string.Empty, PageX + 25f, DescriptionY, 200f, Black, text: StuntRaceDescription)
+                with
+            { Leading = DescriptionPitch, Height = BotsY - DescriptionY - 4f });
         }
         else
         {
             int type = Math.Clamp((int)options.MissionType, 0, TypeDescriptions.Length - 1);
-            layers.Lines.Add(_text.Line(TypeDescriptions[type], string.Empty, PageX + 25f, PageY + 134f, 200f, Black));
+            layers.Lines.Add(_text.Line(TypeDescriptions[type], string.Empty, PageX + 25f, DescriptionY, 200f, Black)
+                with
+            { Leading = DescriptionPitch, Height = BotsY - DescriptionY - 4f });
         }
 
         layers.Lines.Add(_text.Line(10098, "Victory Conditions", PageX + 241f, PageY + 46f, 0f, Black));
@@ -1904,17 +2235,53 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         // The team count boxes are widgets; "to" stands between them, 20 left of the second.
         layers.Lines.Add(_text.Line(10109, "to", PageX + 367f, PageY + 154f, 0f, Black));
+
+        // The bot controls' heading in the section headings' face, and on the host how to edit one.
+        layers.Lines.Add(_text.Line(-1, "Bots", PageX + 25f, BotsY, 0f, Black, faceId: 10099));
+        if (lobby.IsHost)
+        {
+            layers.Lines.Add(_text.Line(-1, "Pick a bot's row to edit it.", PageX + 25f, BotsY + 60f, 200f, Black, faceId: 10123));
+        }
+    }
+
+    // Select Plane on a picked bot: its words beside BotRows' boxes. On the right stands its plane
+    // as the pilot's own page shows one, or a line saying a Random plane is drawn at launch.
+    private void ComposeBot(DogfightBot bot, BoardLayers layers)
+    {
+        layers.Lines.Add(_text.Line(-1, "Edit Bot", PageX + 11f, PageY + 43f, 0f, Black, faceId: 10114));
+        string[] labels = { "Callsign", "Plane", "Skill", "Team" };
+        for (int i = 0; i < labels.Length; i++)
+        {
+            layers.Lines.Add(_text.Line(-1, labels[i], PageX + 11f, PageY + 68f + (46f * i), 0f, Black, faceId: BotLabelFace));
+        }
+
+        if (bot.RandomPlane)
+        {
+            layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black,
+                text: _text.Word(10566, "Plane:") + " " + RandomWord(), faceId: BotFace));
+            layers.Lines.Add(_text.Line(-1, "Drawn at launch", PageX + 225f, PageY + 90f, 220f, Black, faceId: BotFace));
+            return;
+        }
+
+        // A bot flies the stock loadout, never the host's own custom plane.
+        ComposeAirframe(bot.Airframe, _stock()?.ForModel(StockAirframes.Node(bot.Airframe)), BotFace, layers);
     }
 
     private void ComposePlane(DogfightLobby lobby, BoardLayers layers)
     {
         layers.Lines.Add(_text.Line(10114, "Select Plane", PageX + 11f, PageY + 43f, 0f, Black));
-        int airframe = lobby.Airframe;
+        ComposeAirframe(lobby.Airframe, StockDef(lobby.Airframe), 10566, layers);
+    }
+
+    // A stock airframe's column on Select Plane: its name, its icon, its four ratings and its guns.
+    // The pilot's own page captions it in the script's typewriter face, a bot's page in BotFace.
+    private void ComposeAirframe(int airframe, LoadoutDef? def, int captionFace, BoardLayers layers)
+    {
         string plane = _text.Word(10566, "Plane:") + " " + _text.Word(10565, "Stock");
-        layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black, text: plane));
-        layers.Lines.Add(_text.Line(3000 + airframe, ShortNames[airframe], PageX + 225f, PageY + 90f, 220f, Black, faceId: 10566));
+        layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black, text: plane, faceId: captionFace));
+        layers.Lines.Add(_text.Line(3000 + airframe, ShortNames[airframe], PageX + 225f, PageY + 90f, 220f, Black, faceId: captionFace));
         layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, IconArt, IconFrames), PageX + 251f, PageY + 102f, airframe));
-        var fit = PlaneFit.For(airframe, null, StockDef(airframe));
+        var fit = PlaneFit.For(airframe, null, def);
         var ratings = PlaneRatings.For(fit);
         for (int i = 0; i < RatingLabels.Length; i++)
         {
@@ -1966,6 +2333,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             var line = scores[i];
             float indent = teams && !line.IsTeam ? 12f : 0f;
             layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f + indent, y, 150f - indent, Black, text: line.Name));
+            if (line.IsBot)
+            {
+                // At the name column's end, clear of its rule, since a callsign holds 12 characters.
+                layers.Lines.Add(_text.Line(10052, BotTag, PageX + 24f + indent, y, 144f - indent, BotInk, BoardJustify.Right,
+                    text: BotTag));
+            }
+
             int[] numbers = { line.Points, line.Kills, line.Deaths };
             for (int column = 0; column < numbers.Length; column++)
             {
@@ -1981,7 +2355,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var fills = new List<BoardFill>();
         var lines = new List<BoardLine>();
         int picked = _open != null && DropdownFor(_open) is { } open ? open.Current : -1;
-        var face = _text.Regular(_open is EnvironmentKey or TypeKey ? 10558 : 10144);
+        var face = _text.Regular(_open is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         float top = float.MaxValue, bottom = float.MinValue, left = 0f, width = 0f;
         foreach (var row in rows)

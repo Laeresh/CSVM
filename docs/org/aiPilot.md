@@ -623,6 +623,13 @@ the bare decoded hold with it, and the order is then the two biases' alone.
 `Flight/Ai/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
+The second departure is the Dogfight bot's. The original has no computer-flown Deathmatch pilot, so
+nothing decoded says whom one prefers, and a bot seat's gunner is armed with
+`AiGunner.PlayersPreferred` off: `AiTargetRanking.Score` then weighs a person at the base 1.0, and
+a person and a bot at equal geometry rank alike. Every other pilot keeps the 0.7. The switch gates
+the weight alone: `IsHumanPiloted` and the `"player"` role in `primary_target` and `rating_biases`
+read as before, and a bot seat's gunner carries neither field.
+
 The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
 candidate past the `attackRange` it is handed, and `GunnerAcquisition`, its
 re-scoring hold and the withdrawal's reach test all hand it

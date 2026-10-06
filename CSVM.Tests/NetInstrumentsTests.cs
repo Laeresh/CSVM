@@ -204,7 +204,7 @@ public sealed class NetInstrumentsTests
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(21));
         var seats = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "first", PlaneNode = Airframes[1] },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "second", PlaneNode = Airframes[0] },
         };
@@ -236,7 +236,7 @@ public sealed class NetInstrumentsTests
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(22));
         var seats = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         var host = NetSession.Host(mesh[0], seats, 1UL, null, Airframes);

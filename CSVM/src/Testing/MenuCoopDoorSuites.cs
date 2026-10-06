@@ -188,7 +188,7 @@ internal static class MenuCoopDoorSuites
 
         var guest = NetSession.Guest(guestLaunch.Transport);
         int guestPeer = guestLaunch.Transport.LocalPeer;
-        ctx.Check(guest.Joined && guest.LocalSeat == 1 && roster[1].PeerId == guestPeer && !roster[1].IsLocal,
+        ctx.Check(guest.Joined && guest.LocalSeat == 1 && roster[1].PeerId == guestPeer && !roster[1].FlownHere,
             $"the remote guest holds net seat 1 and its session knows it ({guest.Joined}, seat {guest.LocalSeat}, peer {roster[1].PeerId} vs {guestPeer})");
         ctx.Check(guest.DroppedUnknown == 0,
             $"and no payload reached the guest's session unrouted: the advert stays in the lobby ({guest.DroppedUnknown})");

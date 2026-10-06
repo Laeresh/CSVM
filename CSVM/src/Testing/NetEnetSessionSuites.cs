@@ -99,7 +99,7 @@ internal static class NetEnetSessionSuites
 
             var roster = new NetSeat[]
             {
-                new() { PeerId = hostWire.LocalPeer, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+                new() { PeerId = hostWire.LocalPeer, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
                 new() { PeerId = hostWire.Peers[0], SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
             };
             NetSeats.Validate(roster);
@@ -176,8 +176,8 @@ internal static class NetEnetSessionSuites
         int here = host.Wire.Link!.LocalSeat;
         int there = guest.Wire.Link!.LocalSeat;
         ctx.Check(here == 0 && there == 1
-                  && host.NetSeats[0].IsLocal && !host.NetSeats[1].IsLocal
-                  && !guest.NetSeats[0].IsLocal && guest.NetSeats[1].IsLocal,
+                  && host.NetSeats[0].FlownHere && !host.NetSeats[1].FlownHere
+                  && !guest.NetSeats[0].FlownHere && guest.NetSeats[1].FlownHere,
             $"and each end flies its own seat alone (host seat {here}, guest seat {there})");
     }
 

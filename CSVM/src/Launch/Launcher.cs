@@ -923,6 +923,7 @@ public partial class Launcher : Node3D
 
         // Before the build, because the session reads its wire in its own constructor.
         OpenCliNet();
+        _netRoster = _netWire == null ? LocalVersusField(_spec, _messagesPath) : _netRoster;
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -1128,7 +1129,7 @@ public partial class Launcher : Node3D
         }
 
         TickCoopFlight(delta);
-        TickVersusGuestFlight(delta);
+        TickVersusFlight(delta);
 
         // An Options apply, one frame after the exit that asked for it.
         if (_pendingApply is { } applied)
@@ -1327,7 +1328,8 @@ public partial class Launcher : Node3D
     /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
-        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null)
+        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null,
+        IReadOnlyList<VsBotEntry>? bots = null, IReadOnlyList<string>? callsignPool = null, System.Random? draws = null)
     {
         teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
@@ -1342,7 +1344,7 @@ public partial class Launcher : Node3D
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
                 TeamId = teamOf(wire.LocalPeer),
-                IsLocal = true,
+                FlownHere = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 Unnamed = i == 0 && hostName.Length == 0,
                 PlaneNode = planes[i],
@@ -1377,6 +1379,25 @@ public partial class Launcher : Node3D
             seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
         }
 
+        // The lobby's bots follow every guest on the stock fit. Random planes and missing callsigns
+        // are drawn here, on the host alone, so a guest reads a real plane off the roster.
+        if (bots is { Count: > 0 })
+        {
+            var resolved = Session.Roster.BotSeats.Resolve(bots, System.Linq.Enumerable.Select(seats, seat => seat.Callsign),
+                callsignPool ?? System.Array.Empty<string>(), draws ?? new System.Random(Rng.IntSeedFor(Rng.BotField)));
+            int people = seats.Count;
+            int left = Net.NetSeats.AddBots(seats, wire.LocalPeer, resolved);
+            for (int seat = people; seat < seats.Count; seat++)
+            {
+                seatFits.Add(default);
+            }
+
+            if (left > 0)
+            {
+                Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} lobby bot(s) left out, the people filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
+            }
+        }
+
         Net.NetSeats.Validate(seats, wire.LocalPeer);
         return (seats.ToArray(), seatFits.ToArray());
     }
@@ -1393,14 +1414,15 @@ public partial class Launcher : Node3D
         var picks = (wire as Net.NetLobby)?.PickBuilds;
         for (int seat = 0; seat < roster.Count; seat++)
         {
-            if (roster[seat].IsLocal)
+            if (roster[seat].HasPane)
             {
                 int menu = Net.NetSeats.LocalOrdinal(roster, seat);
                 builds[seat] = menu >= 0 && menu < customs.Count ? CustomPlaneWire.Build(customs[menu]) : null;
                 continue;
             }
 
-            if (rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot.
+            if (roster[seat].IsBot || rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
             {
                 continue;
             }
@@ -1430,7 +1452,7 @@ public partial class Launcher : Node3D
         var guests = door.CoopGuests;
         for (int seat = 0; seat < roster.Count; seat++)
         {
-            if (roster[seat].IsLocal)
+            if (roster[seat].FlownHere)
             {
                 continue;
             }
@@ -1465,11 +1487,14 @@ public partial class Launcher : Node3D
         return CustomPlaneWire.Def(build);
     }
 
-    /// <summary>Where a finished lobby Dogfight or stunt race lands: its lobby's Game Scores. A match
-    /// is named off the list at the launch, a race by its board's own table. Null for any other
-    /// flight, one left before its end, or a Built-in board.</summary>
+    /// <summary>Where a finished lobby Dogfight or stunt race lands: its lobby's Game Scores. A
+    /// match's seat is named by its callsign on <paramref name="seats"/>, the session's own roster,
+    /// and a bot's line is marked. It is read while the session lives, before the lobby can move a
+    /// seat. A launch with no roster names seats off the lobby's list at the launch. A race lands
+    /// its board's own table. Null for any other flight, one left before its end, or a Built-in
+    /// board.</summary>
     internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match,
-        Flight.Modes.StuntRace? race = null)
+        IReadOnlyList<Net.NetSeat>? seats = null, Flight.Modes.StuntRace? race = null)
     {
         if (!lobbyFlight || lobby is not { Shown: true })
         {
@@ -1478,7 +1503,9 @@ public partial class Launcher : Node3D
 
         if (match is { Completed: true })
         {
-            return new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames));
+            return new LobbyReturn(seats is { Count: > 0 }
+                ? UI.Menu.DogfightLobby.ScoresOf(match, seats)
+                : UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames));
         }
 
         return RaceLanding(race) is { } table ? new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>(), table) : null;
@@ -1536,6 +1563,50 @@ public partial class Launcher : Node3D
         {
             shut.Close();
         }
+    }
+
+    /// <summary>A local Dogfight's seat roster: its panes, then the spec's bots (the command line's or
+    /// the join board's), all flown here with no wire. Null without bots, so such a match keeps its
+    /// panes as its seats. Random planes and blank callsigns are drawn as a host draws them.</summary>
+    internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, string messagesPath)
+    {
+        if (!spec.Versus || spec.VsBots.Count == 0)
+        {
+            return null;
+        }
+
+        var seats = Net.NetSeats.LocalPanes(spec.Players);
+        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messagesPath));
+        Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        Log.Info("core", $"local roster of {seats.Count.ToString(inv)} seat(s), {(seats.Count - spec.Players).ToString(inv)} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
+        foreach (var bot in seats)
+        {
+            if (bot.IsBot)
+            {
+                Log.Info("core", $"local: bot seat {bot.SeatIndex.ToString(inv)} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
+            }
+        }
+
+        return seats.ToArray();
+    }
+
+    /// <summary>The spec's bots resolved for a field whose people are
+    /// <paramref name="people"/>. The pilot names are read once from the message table, which
+    /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
+    /// a stream of their own, a function of the master seed alone.</summary>
+    internal static IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveBots(
+        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, string messagesPath)
+    {
+        if (spec.VsBots.Count == 0)
+        {
+            return System.Array.Empty<(string, Net.NetBotSkill, int, string)>();
+        }
+
+        var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(messagesPath));
+        return Session.Roster.BotSeats.Resolve(spec.VsBots,
+            System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
+            new System.Random(Rng.IntSeedFor(Rng.BotField)));
     }
 
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
@@ -2757,11 +2828,14 @@ public partial class Launcher : Node3D
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
-            launch.Match?.FlagHomeToCapture == true);
+            launch.Match?.FlagHomeToCapture == true, launch.Bots);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
         StepSortieSeed();
+        // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
+        // one does. The roster outlives a Restart, and the next menu launch's TakeNetLaunch clears it.
+        _netRoster = _netWire == null ? LocalVersusField(_spec, _messagesPath) : _netRoster;
         BindMenuPads(pads);
         BeginLaunch();
     }
@@ -2856,7 +2930,7 @@ public partial class Launcher : Node3D
             {
                 PeerId = _netWire.LocalPeer,
                 SeatIndex = seats.Count,
-                IsLocal = true,
+                FlownHere = true,
                 Callsign = UI.Boards.SplitScreen.PlayerTag(i),
                 Unnamed = i == 0,
                 PlaneNode = i < _spec.PlaneNames.Count ? _spec.PlaneNames[i] : _spec.PlaneName,
@@ -2880,9 +2954,29 @@ public partial class Launcher : Node3D
             });
         }
 
+        // The command line's bots, after every guest. Random planes and callsigns are drawn here,
+        // on the host alone. The roster carries real ones to every guest, which seats no bot.
+        int left = Net.NetSeats.AddBots(seats, _netWire.LocalPeer, ResolveCliBots(seats));
+        if (left > 0)
+        {
+            Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} bot(s) left out, the guests filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
+        }
+
         Net.NetSeats.Validate(seats, _netWire.LocalPeer);
         _netRoster = seats.ToArray();
+        Log.Info("core", $"net: host roster of {seats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} seat(s), {System.Linq.Enumerable.Count(seats, s => s.IsBot).ToString(System.Globalization.CultureInfo.InvariantCulture)} of them bots");
+        foreach (var bot in seats)
+        {
+            if (bot.IsBot)
+            {
+                Log.Info("core", $"net: bot seat {bot.SeatIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
+            }
+        }
     }
+
+    // The command line's bots as this host seats them.
+    private IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveCliBots(
+        IReadOnlyList<Net.NetSeat> people) => ResolveBots(_spec, people, _messagesPath);
 
     // The wire a menu launch carried, kept for the session build. A host also builds the match's
     // roster here. The transport's peer list is the field, and the door is the only thing that
@@ -2905,7 +2999,10 @@ public partial class Launcher : Node3D
 
         var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
         System.Func<int, byte>? teamOf = _lobbyFlight ? _netDoor!.Dogfight!.TeamOfPeer : null;
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf);
+        var bots = _lobbyFlight ? _netDoor!.Dogfight!.LaunchBots : System.Array.Empty<VsBotEntry>();
+        var pool = bots.Count > 0 ? Session.Roster.BotSeats.CallsignPool(Messages.Load(_messagesPath)) : null;
+        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf,
+            bots, pool);
         _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
         if (_lobbyFlight)
         {
@@ -3106,7 +3203,8 @@ public partial class Launcher : Node3D
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match, _session.Race);
+            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match, _session.NetSeats,
+                _session.Race);
             _keepLobby = landing != null;
             ReturnToMenu(landing ?? _exitDestination);
             return;
@@ -3208,23 +3306,24 @@ public partial class Launcher : Node3D
         }
     }
 
-    // A lobby Dogfight or stunt race guest's upkeep. The session steps the wire, and the door only
-    // watches the host. A host that leaves ends the flight here, and the Connection page names why.
-    // A host that takes an ended race to the lobby takes this guest there, the race's table with it.
-    private void TickVersusGuestFlight(double delta)
+    // A lobby Dogfight's or stunt race's upkeep in flight. The session steps the wire, never the door.
+    // A host's door still advertises, so a player who joins mid-match finds the game and waits in the
+    // lobby. A guest's door watches its host, and a host that leaves ends the flight here. A host that
+    // takes an ended race to the lobby takes this guest there, the race's table with it.
+    private void TickVersusFlight(double delta)
     {
-        if (!_lobbyFlight || _netIsHost || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
+        if (!_lobbyFlight || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
         {
             return;
         }
 
         door.Step(delta);
-        if (VersusGuestFlightOver(door))
+        if (!_netIsHost && VersusGuestFlightOver(door))
         {
             Log.Info("core", $"net: versus flight over, the host left ({door.Fault})");
             ReturnToMenu(new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>()));
         }
-        else if (_session.Wire.Race is { LobbyCalled: true })
+        else if (!_netIsHost && _session.Wire.Race is { LobbyCalled: true })
         {
             Log.Info("core", $"net: the host took the race back to the lobby");
             ExitSession();
@@ -3531,8 +3630,8 @@ public sealed class LauncherContext
     public required int[][]? MenuPads { get; init; }
 
     /// <summary>The whole network match's seat roster, local panes and remote guests alike, or
-    /// null outside a network match. A seat here that is not <see cref="Net.NetSeat.IsLocal"/>
-    /// gets an aircraft, a spawn slot, a score row and a marker colour, and no pane.</summary>
+    /// null outside a network match. A seat here without <see cref="Net.NetSeat.HasPane"/> gets an
+    /// aircraft, a spawn slot, a score row and a marker colour, and no pane.</summary>
     public IReadOnlyList<Net.NetSeat>? NetSeats { get; init; }
 
     /// <summary>What the host handed this guest at join, or null on a host and outside a match.

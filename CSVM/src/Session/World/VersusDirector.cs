@@ -94,7 +94,15 @@ public sealed class VersusDirector
 
     /// <summary>Whether this machine is a network guest, whose rematch is its host's to call.
     /// </summary>
-    internal bool RematchIsTheHosts => _field.NetSeats.Count > 0 && _field.Net is not { IsHost: true };
+    internal bool RematchIsTheHosts => Guest;
+
+    // A match on a wire, where deaths are reported, returns granted and the host decides for its
+    // guests. A seat roster with no wire is a local match, which decides everything here itself.
+    // ⚠ Never read the roster's size for this: a local match with bots holds one.
+    private bool Wired => _field.Net != null && _field.NetSeats.Count > 0;
+
+    // A guest on a wire, which scores, rotates and rematches nothing of its own.
+    private bool Guest => Wired && _field.Net is not { IsHost: true };
 
     /// <summary>Each seat's lobby team in a team Dogfight, by seat, or null for any other flight.
     /// Every machine reads the same roster, so every machine puts the same seats on the same teams.
@@ -155,7 +163,7 @@ public sealed class VersusDirector
         var rotationRng = new Random(Rng.IntSeedFor(Rng.VersusSpawn));
 
         // ⚠ Never on a guest: a second rotation diverges on first blood.
-        _rotation = _field.NetSeats.Count > 0 && _field.Net is not { IsHost: true }
+        _rotation = Guest
             ? null
             : inputs.Spawns.SeatEntries is { } openings && inputs.Spawns.SeatBlocks is { } blocks
                 ? VersusSpawnRotation.ForBlocks(inputs.SpawnList, openings, blocks, SpawnTeams(_spec, _field.NetSeats)!, rotationRng)
@@ -171,12 +179,13 @@ public sealed class VersusDirector
             {
                 int seat = rig.Index;
                 // Crash cam, then back in, R skips. With the lobby's Auto Respawn off the same
-                // crash cam runs and then waits for Fire Guns, as the original's does.
+                // crash cam runs and then waits for Fire Guns, as the original's does. ⚠ Never on a
+                // bot seat, which has no Fire Guns to press and would stay down for the match.
                 pilot.AutoRespawnAfter = RespawnDelay;
-                pilot.RespawnOnFire = !_spec.VsAutoRespawn;
+                pilot.RespawnOnFire = !_spec.VsAutoRespawn && !IsBot(seat);
                 pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                 pilot.RestartMatch = Restart;
-                if (_field.NetSeats.Count > 0)
+                if (Wired)
                     pilot.RespawnRequest = () => AskSpawn(seat);
                 else if (_rotation != null)
                     pilot.RespawnPlacement = () => Respawn(seat, lastKiller[seat]);
@@ -186,12 +195,20 @@ public sealed class VersusDirector
                         lastKiller[victim] = killer;
                     // On the wire a death is a report, not a score. The seat's owner sends
                     // it and the host alone counts it.
-                    if (_field.NetSeats.Count > 0)
+                    if (Wired)
+                    {
                         reportDeath(victim, killer);
-                    else if (killer is int k && k >= 0 && k < match.PlayerCount)
-                        match.RegisterKill(k, victim);
+                        return;
+                    }
+
+                    int? scorer = killer is int k && k >= 0 && k < match.PlayerCount ? k : null;
+                    if (scorer is int charged)
+                        match.RegisterKill(charged, victim);
                     else
                         match.RegisterDeath(victim);
+                    // Every seat's death line, a bot's too, which no pane's own hook hears.
+                    if (victim >= 0 && victim < match.PlayerCount)
+                        PostSplitScreenDeath(victim, scorer);
                 };
             }
         match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}{string.Concat(match.TeamStandings().Select(t => $", team {t.Team} '{t.Name}' {t.Score}pts (#{t.Rank})"))}");
@@ -457,24 +474,10 @@ public sealed class VersusDirector
         }
     }
 
-    /// <summary>A seat's death as the HUD lines word it. True when the seat is in the match, whose
-    /// Dogfight death lines post on every death, crashes included. On the wire the host's notice
-    /// posts them, never this report.</summary>
-    internal bool TakeKillLine(int victimId, int? killer)
-    {
-        var m = Match;
-        if (victimId < 0 || victimId >= m.PlayerCount)
-        {
-            return false;
-        }
-
-        if (_field.NetSeats.Count == 0)
-        {
-            PostSplitScreenDeath(victimId, killer is int k && k >= 0 && k < m.PlayerCount ? k : null);
-        }
-
-        return true;
-    }
+    /// <summary>Whether a seat's death takes the match's death lines, which post on every death,
+    /// crashes included. They are posted here, never by the caller. On the wire the host's notice
+    /// posts them, and in a local match the Downed report that scored the death.</summary>
+    internal bool TakeKillLine(int victimId) => victimId >= 0 && victimId < Match.PlayerCount;
 
     /// <summary>A guest's seat that left the session mid-match. A drop is the other thing that can
     /// leave a match without an opponent (reason 4). The host's step sends that ending; a guest's
@@ -528,7 +531,7 @@ public sealed class VersusDirector
         // the last round's rotation had left each seat.
         _rotation?.Restart();
         var seatRigs = _field.SeatRigs;
-        if (_field.NetSeats.Count > 0)
+        if (Wired)
         {
             // ⚠ The running state goes out BEFORE the zeroed scores. A guest whose match still
             // reads completed drops every score. Both ride the one reliable ordered channel.
@@ -543,7 +546,8 @@ public sealed class VersusDirector
             return;
         }
 
-        foreach (var rig in _field.Panes)
+        // A local match puts back every seat it flies, a bot included, from its own rotation.
+        foreach (var rig in seatRigs)
             rig.Controller?.Respawn();
     }
 
@@ -579,10 +583,16 @@ public sealed class VersusDirector
     }
 
     private bool IsLocal(int seat) =>
-        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].IsLocal;
+        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].FlownHere;
 
-    // A splitscreen match's death in every pane, the seats named by their player tags. The match
-    // handler subscribed first, so the death is already counted for the lives line.
+    private bool HasPane(int seat) =>
+        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].HasPane;
+
+    private bool IsBot(int seat) =>
+        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].IsBot;
+
+    // A local match's death in every pane, a pane's seat named by its player tag and a bot's by
+    // its callsign. The death is already counted, which the lives line reads.
     private void PostSplitScreenDeath(int victim, int? killer)
     {
         PostLivesLines();
@@ -592,11 +602,14 @@ public sealed class VersusDirector
             {
                 HudMessages.PostMatchKill(stack, _field.Strings,
                     killer != null ? HudMessages.MatchDeath.Killer : HudMessages.MatchDeath.NoKiller,
-                    SplitScreen.PlayerTag(victim),
-                    killer is int k ? SplitScreen.PlayerTag(k) : null);
+                    LocalName(victim),
+                    killer is int k ? LocalName(k) : null);
             }
         }
     }
+
+    private string LocalName(int seat) =>
+        IsBot(seat) ? _field.NetSeats[seat].Callsign : SplitScreen.PlayerTag(seat);
 
     // A match death as the host decided it, posted into every local pane once: the host from its
     // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below. A
@@ -777,7 +790,7 @@ public sealed class VersusDirector
         int deaths = match.DeathsOf(seat);
         bool died = deaths > _livesSeen[seat];
         _livesSeen[seat] = deaths;
-        bool local = _field.NetSeats.Count == 0 || IsLocal(seat);
+        bool local = _field.NetSeats.Count == 0 || HasPane(seat);
         if (died && local && pilot.MessageStack is { } stack)
         {
             HudMessages.PostLivesLeft(stack, _field.Strings, match.Lives - deaths);
@@ -955,6 +968,8 @@ public sealed class VersusDirector
     {
         // This session's end of the wire, null outside a network match.
         public Net.NetSession? Net;
+        // The seat roster, a local match's with bots included, which has no wire. Empty in a local
+        // match of panes alone, whose seats are its panes.
         public IReadOnlyList<Net.NetSeat> NetSeats = Array.Empty<Net.NetSeat>();
         // One rig per seat, a seat flown elsewhere included, and the panes drawn here.
         public IReadOnlyList<PlayerRig> SeatRigs = null!;

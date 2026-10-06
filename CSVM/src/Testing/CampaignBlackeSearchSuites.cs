@@ -613,7 +613,7 @@ internal static class CampaignBlackeSearchSuites
             var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(WarpSeed));
             var seats = new NetSeat[]
             {
-                new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = "player_pfighter" },
+                new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = "player_pfighter" },
                 new() { PeerId = 1, SeatIndex = 1, Callsign = "early", PlaneNode = "player_fbrand" },
                 new() { PeerId = 2, SeatIndex = 2, Callsign = "late", PlaneNode = "player_fbrand" },
             };

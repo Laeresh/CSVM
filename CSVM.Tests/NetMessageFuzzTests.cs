@@ -204,7 +204,7 @@ public sealed class NetMessageFuzzTests
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(FuzzSeed));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host" },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host" },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "first" },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "second" },
         };

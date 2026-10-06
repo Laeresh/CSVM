@@ -401,6 +401,84 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-lobby-bots",
+        "The Multiplayer Lobby's bot rows over the loopback: the host's Add Bot lists a bot named "
+        + "from the shipped pilot names after the guest, on both ends, with the guest's bot controls "
+        + "greyed and its list holding no row it can pick. Fill to, its count stepped down to five, "
+        + "fills the field to five pilots and then greys. A press on a bot's row opens Select Plane "
+        + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, and "
+        + "Remove takes a row out. With the host, the guest and both bots on one team, LAUNCH! "
+        + "raises langui 10519 and hands nothing out. With no team standing it launches, the "
+        + "host's field seats the bots after the guest, the Random plane drawn on the host, and "
+        + "the guest joins that match reading both bots on real stock planes")]
+    internal static void TheLobbyBots(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(97));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-bots");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends))
+            {
+                return;
+            }
+
+            var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+            AddAndFillBots(ctx, host, guest, ends, pool);
+            EditTheBots(ctx, host, guest, ends);
+            LaunchWithBots(ctx, host, guest, ends, hostExits, guestExits);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     [Suite("menu-original-lobby-stunt-race",
         "The Multiplayer Lobby's Stunt Race over the loopback: the host's Type list offers Stunt Race as its "
         + "fourth row, and picking it on Above the Clouds moves the Environment off that greyed row onto "
@@ -2974,12 +3052,12 @@ internal static class MenuOriginalConnectionSuites
     {
         var names = host.Door.Dogfight!.LaunchNames;
         var race = FlownRace(names);
-        ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race) == null,
+        ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: race) == null,
             $"ABLE-TO-FAIL CONTROL: a race still running lands nowhere near the lobby");
         race.MarkLeft(1);
         race.Advance(421f);
-        var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race);
-        var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, null, race);
+        var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: race);
+        var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, null, race: race);
         ctx.Check(hostLanding is { Scores.Count: 0, Race.Count: 2 } && guestLanding is { Race.Count: 2 } && hostLanding.Race![0].Left,
             $"an ended race lands both ends on their lobby with its table, the guest who left first ({hostLanding?.Race?.Count} rows)");
 
@@ -2987,7 +3065,7 @@ internal static class MenuOriginalConnectionSuites
         var flown = FlownRace(names);
         flown.Advance(421f);
         bool marked = flown.MarkLeft(1);
-        var flownLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, flown);
+        var flownLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: flown);
         ctx.Check(!marked && flownLanding?.Race is { Count: 2 } table && !table[0].Left && !table[1].Left,
             $"a guest leaving after the end lands unflagged ({marked}, {string.Join(" | ", flownLanding?.Race?.Select(r => $"{r.Pilot} {r.Left}") ?? Array.Empty<string>())})");
         ctx.Check(host.Door.Reclaim() && guest.Door.Reclaim(), $"and both doors take their wire back");
@@ -3117,6 +3195,153 @@ internal static class MenuOriginalConnectionSuites
             host.Door.Dogfight!.TeamOfPeer);
         ctx.Check(roster.Length == 2 && roster[0].TeamId == team && roster[1].TeamId == theirs,
             $"the host's field carries each seat's team ({string.Join(", ", roster.Select(s => s.TeamId))})");
+    }
+
+    // Add Bot lists a bot named from the pilot names on both ends, the guest's controls greyed. Fill
+    // to, stepped down to five, fills the field to five pilots and then greys.
+    private static void AddAndFillBots(TestContext ctx, End host, End guest, List<End> ends, IReadOnlyList<string> pool)
+    {
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.AddBotKey) is { Enabled: false } && Row(guest.Shell, OriginalLobbyScreen.FillKey) is { Enabled: false }
+                  && Row(host.Shell, OriginalLobbyScreen.AddBotKey) is { Enabled: true },
+            $"ABLE-TO-FAIL CONTROL: Add Bot and Fill to are live on the host and greyed on the guest");
+        var before = host.Shell.Compose();
+        ctx.Check(!before.Lines.Any(line => line.Text == OriginalLobbyScreen.BotTag || line.Text.EndsWith(" bots", StringComparison.Ordinal)),
+            $"ABLE-TO-FAIL CONTROL: with no bot row the list draws no bot tag and its header names no bots");
+        ClickRow(ctx, host, OriginalLobbyScreen.AddBotKey);
+        SettleEnds(ends);
+        var lobby = host.Door.Dogfight!;
+        var heard = guest.Door.Dogfight!.Players;
+        string name = lobby.Bots.Count > 0 ? lobby.Bots[0].Callsign : string.Empty;
+        ctx.Check(lobby.Bots.Count == 1 && pool.Contains(name) && heard.Count == 3 && heard[2].IsBot && heard[2].Name == name
+                  && Draws(guest.Shell.Compose(), name),
+            $"Add Bot lists a bot named from the pilot names after the guest, on both ends ({name}, {string.Join(", ", heard.Select(r => r.Name))})");
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.PlayerKey(2)) == null && Row(host.Shell, OriginalLobbyScreen.PlayerKey(2)) != null,
+            $"and only the host's list offers the bot's row to pick");
+        for (int press = 0; press < DogfightLobby.DefaultFillTo - 5; press++)
+        {
+            ClickRow(ctx, host, OriginalLobbyScreen.FillArrowPrefix + "-");
+        }
+
+        ClickRow(ctx, host, OriginalLobbyScreen.FillKey);
+        SettleEnds(ends);
+        ctx.Check(host.Shell.Lobby.FillCount == 5 && lobby.FieldSeats == 5 && lobby.Bots.Count == 3 && guest.Door.Dogfight!.Players.Count == 5
+                  && Row(host.Shell, OriginalLobbyScreen.FillKey) is { Enabled: false },
+            $"Fill to with its count stepped to five fills the field to five pilots and greys ({host.Shell.Lobby.FillCount}, {lobby.FieldSeats}, {guest.Door.Dogfight!.Players.Count})");
+        foreach (var (end, who) in new[] { (host, "host"), (guest, "guest") })
+        {
+            var board = end.Shell.Compose();
+            int tags = board.Lines.Count(line => line.Text == OriginalLobbyScreen.BotTag);
+            string header = board.Lines.Select(line => line.Text).FirstOrDefault(text => text.StartsWith("Players (", StringComparison.Ordinal)) ?? "<none>";
+            ctx.Check(tags == 3 && header.StartsWith("Players (2 of ", StringComparison.Ordinal) && header.EndsWith(") + 3 bots", StringComparison.Ordinal),
+                $"the {who}'s list tags each of the three bots in its Ready column and its header counts the two people apart from them ({tags} tag(s), '{header}')");
+        }
+    }
+
+    // A press on the first bot's row opens Select Plane on it. Its boxes set the Fury, ace, a typed
+    // callsign and the host's team, which reach the guest. Remove takes the third row out.
+    private static void EditTheBots(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        int first = lobby.Bots[0].Id;
+        ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(2));
+        ctx.Check(host.Shell.Lobby is { Tab: LobbyTab.Plane } && host.Shell.Lobby.PickedBot == first
+                  && Row(host.Shell, OriginalLobbyScreen.BotPlaneKey) is { Enabled: true } && Row(host.Shell, OriginalLobbyScreen.PlaneKey) == null,
+            $"a press on the bot's row opens Select Plane on that bot ({host.Shell.Lobby.Tab}, {host.Shell.Lobby.PickedBot})");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey + ":8");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey + ":2");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotNameKey);
+        TypeInto(host, Erasing(CSVM.Session.Roster.BotSeats.CallsignLimit).Append(new MenuCommands { Typed = "Red Ace" }).ToArray());
+        ctx.Check(lobby.CreateTeam("Aces"), $"the host creates a team");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotTeamKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.BotTeamKey + ":1");
+        SettleEnds(ends);
+        var bot = lobby.BotById(first);
+        var row = guest.Door.Dogfight!.Players[2];
+        ctx.Check(bot is { Airframe: 7, Skill: NetBotSkill.Ace, Callsign: "Red Ace" } && bot.Value.Team == lobby.OwnTeam && lobby.OwnTeam != 0,
+            $"the boxes set the Fury, ace, the typed callsign and the host's team ({bot})");
+        ctx.Check(row is { IsBot: true, Airframe: 7, Skill: NetBotSkill.Ace, Name: "Red Ace" } && row.Team == lobby.OwnTeam,
+            $"and the guest's row reads them ({row})");
+        ctx.Check(lobby.Bots[1].Team == 0, $"ABLE-TO-FAIL CONTROL: a bot added before the team stood stays off it ({lobby.Bots[1].Team})");
+
+        int third = lobby.Bots[2].Id;
+        ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(4));
+        ClickRow(ctx, host, OriginalLobbyScreen.RemoveBotKey);
+        SettleEnds(ends);
+        ctx.Check(lobby.Bots.Count == 2 && lobby.BotById(third) == null && guest.Door.Dogfight!.Players.Count == 4 && host.Shell.Lobby.PickedBot == -1,
+            $"Remove takes the picked bot's row out on both ends ({lobby.Bots.Count}, {guest.Door.Dogfight!.Players.Count})");
+    }
+
+    // Every pilot on one team refuses LAUNCH! with langui 10519. With no team the launch goes, the
+    // host seats the bots after the guest, and the guest reads them off the match's roster.
+    private static void LaunchWithBots(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> hostExits, List<MenuExit> guestExits)
+    {
+        var lobby = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        ctx.Check(there.JoinTeam(lobby.OwnTeam), $"the guest asks to join the host's team");
+        SettleEnds(ends);
+        ctx.Check(lobby.SetBotTeam(lobby.Bots[1].Id, lobby.OwnTeam), $"and the host moves the second bot onto it");
+        ClickRow(ctx, host, OriginalLobbyScreen.MissionTabKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
+        ctx.Check(lobby.CanLaunch && lobby.Players.All(p => p.Team == lobby.OwnTeam) && lobby.LaunchRefusal == TeamLaunchRefusal.TooFewTeams,
+            $"with the host, the guest and both bots on one team the lobby refuses it as one team ({string.Join(",", lobby.Players.Select(p => p.Team))}, {lobby.LaunchRefusal})");
+        int before = hostExits.Count;
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        ctx.Check(hostExits.Count == before && host.Shell.Dialog?.Message == "Each player must be on one of two teams to play.",
+            $"and LAUNCH! raises the original's refusal and hands nothing out ({host.Shell.Dialog?.Message})");
+        ClickRow(ctx, host, OriginalShell.DialogOkKey);
+
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ctx.Check(lobby.LeaveTeam(), $"the host's leave disbands the team");
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
+        ctx.Check(!lobby.Teamed && lobby.Bots.All(b => b.Team == 0) && lobby.CanLaunch,
+            $"ABLE-TO-FAIL CONTROL: with no team standing the bots fly the free-for-all ({string.Join(",", lobby.Players.Select(p => p.Team))})");
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        var launch = hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(launch?.Net != null, $"and LAUNCH! hands out the launch ({launch?.Chapter})");
+        if (launch?.Net is not { } wire)
+        {
+            return;
+        }
+
+        var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
+        var fits = launch.Seats.Select(s => s.Fit).ToList();
+        var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+        var (roster, seatFits) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), lobby.Rules,
+            lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
+        string random = roster.Length == 4 ? roster[3].PlaneNode : string.Empty;
+        ctx.Check(roster.Length == 4 && seatFits.Length == 4 && !roster[1].IsBot && roster[2] is { IsBot: true, Skill: NetBotSkill.Ace, Callsign: "Red Ace" }
+                  && roster[2].PlaneNode == StockAirframes.Node(7) && roster[3].IsBot && StockAirframes.Nodes.Contains(random),
+            $"the host's field seats the bots after the guest, the Random plane drawn on a stock node ({string.Join(", ", roster.Select(s => $"{s.Callsign}:{s.PlaneNode}"))})");
+
+        int heard = guestExits.Count;
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, null, StockAirframes.Nodes);
+        for (int frame = 0; frame < 4 && guestExits.Count == heard; frame++)
+        {
+            Pump(guest);
+        }
+
+        var followed = guestExits.Skip(heard).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(followed?.Net != null, $"the guest follows the host's launch");
+        if (followed?.Net is not { } guestWire)
+        {
+            return;
+        }
+
+        var session = NetSession.Guest(guestWire.Transport, StockAirframes.Nodes);
+        for (int step = 0; step < 8 && !session.Joined; step++)
+        {
+            session.Step(Dt);
+        }
+
+        var seats = session.Seats;
+        ctx.Check(session.Joined && seats.Count == 4 && seats[2] is { IsBot: true, Skill: NetBotSkill.Ace, FlownHere: false } && seats[3].IsBot
+                  && seats[2].PlaneNode == StockAirframes.Node(7) && seats[3].PlaneNode == random,
+            $"and joins that match reading both bots on real stock planes ({string.Join(", ", seats.Select(s => $"{s.Callsign}:{s.PlaneNode}"))})");
     }
 
     private static void ReadyGuest(TestContext ctx, End host, End guest, List<End> ends, string when)

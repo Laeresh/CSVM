@@ -413,7 +413,8 @@ public partial class GameSession : Node3D
     /// Read by the suite.</summary>
     internal Flight.Camera.SpyglassSun? SpyglassSun => _spyglassSun;
 
-    /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
+    /// <summary>The whole match's roster in seat order: a network match's, or a local match's with
+    /// bots. Empty in any other session.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _wire.Seats;
 
     /// <summary>The Dogfight's director, null outside <c>--vs</c>: the match, its team modes and
@@ -1726,7 +1727,8 @@ public partial class GameSession : Node3D
 
     private void BuildFlightRigs(BuildState state)
     {
-        var voices = _voices = new SessionVoices(_spec, _zrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats);
+        var voices = _voices = new SessionVoices(_spec, _zrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
+            onWire: _wire.Link != null);
         long mark = StartupProfile.Mark();
         // On the empty stage the session gamez IS planes.zbd (there is no chapter world), so there
         // is nothing to load a second time. ⚠ Unless --zep= grafted a chapter node on: the session
@@ -2156,6 +2158,9 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
+        // No Dogfight seat and no network seat but a stunt racer's takes the respawn control in
+        // flight. After WireCombat, which hands the wire the match; every seat stands now.
+        _wire.WireLiveRespawn();
         AttachScores(race, weaponMessages);
 
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
@@ -2604,9 +2609,9 @@ public partial class GameSession : Node3D
         return positions;
     }
 
-    // The anim runtime's range reads: every seat's aeroplane, a guest's copy included. A range gate
-    // that starts a swap then counts a guest on every end. Outside a network session it is the
-    // panes' snapshot, which the per-viewer consumers keep in every session.
+    // The anim runtime's range reads: every seat's aeroplane, a guest's copy and a bot included. A
+    // range gate that starts a swap then counts a guest on every end. Without a seat roster it is
+    // the panes' snapshot, which the per-viewer consumers keep in every session.
     private IReadOnlyList<Vector3> FieldPositionsSnapshot()
     {
         if (_wire.Seats.Count == 0)

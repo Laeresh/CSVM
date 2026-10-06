@@ -68,7 +68,7 @@ internal static class NetZeppelinSuites
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(MeshSeed));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = "player_pfighter" },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = "player_pfighter" },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = "player_fbrand" },
         };
         NetSeats.Validate(roster);

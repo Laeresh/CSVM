@@ -468,12 +468,21 @@ straight leg the hull trails the target by the speed over the chase rate. Pinned
 ## src/Flight/Ai/AiPilot.cs
 The non-player `FlightModel` driver: standing orders in (heading, altitude, throttle, an optional
 `Patrol` net follower, an optional `Gunner` whose live target is chased at the decoded lead offset,
-an optional `Machine` and an optional `Escort`), one `FlightInput` per sim step out, read by a
+an optional `Machine`, an optional `Escort` and a bot's `RearmOrder`), one `FlightInput` per sim step out, read by a
 `FlightController` whose `Pilot` is set. A `Machine` is stepped first and picks this step's aim point
 and parameter table; an `Escort` whose leader is in play takes the dispatch away from every mode but
 stunned and avoid crash, which is the original's own wingman fork. `Stun` is the AI stun's entry,
-leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag.
+leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag. A standing rearm run disengages the gunner and replaces patrol in the dispatch. `ResetForSpawn` is a seat pilot's one reset on a return: the gunner's quarry, the machine, the launcher, a stun, a rearm run and a danger-zone run are dropped, and the new placement's course and lever taken, while the orders a mission or launch set stay. A standing order added later clears there too.
 Pure and seeded, so a fixed-dt run is deterministic. Decode: [../org/aiPilot.md](../org/aiPilot.md).
+
+## src/Flight/Ai/AiRearmOrder.cs
+A bot's rearm standing order, engine-free. `Update`, called by `Session/World/RearmRuntime.cs` each
+step, starts a run when `RocketsOut` reads every loaded pylon empty or the whole-vehicle health falls to
+its TUNE threshold (the guns are not read), plans the bay's open side with the world line probe the seat path hands it (`OpenBearing`), and walks
+the legs: the gate out on that side, the level final leg through the node, and clear of the base once
+restored. `AiPilot` flies `Aim` on the cruise table while the run stands. Approach and the measured
+bay: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md); units `AiRearmOrderTests.cs`, suite
+`net-bot-rearm`.
 
 ## src/Flight/Ai/AiControlLaw.cs
 The original's own AI steering law, documented in
@@ -502,7 +511,7 @@ Decoded and wired are the promotion into pursue on whatever quarry the selection
 the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
 and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
 weighted library draw it enters under the natural-touch, injector and predicted-end altitude culls (that last one vetoing a program whose predicted end falls under the floor and sweeping the predicted path below the ceiling, from the position and attitude `Update` was last handed), chaining a fresh maneuver until
-the pursuer's nose falls off, the sixth-sense roll and its stun, the `Stun` entry, the rubber-band `lay off` `--no-assist` disables, `avoid crash`'s bands, and `RollDaredevil` with the 5 s stamp every refusal re-arms, which is the danger-zone look's own roll. Engine-free, inventions marked where declared.
+the pursuer's nose falls off, the sixth-sense roll and its stun, the `Stun` entry, the rubber-band `lay off` `--no-assist` disables, `avoid crash`'s bands, and `RollDaredevil` with the 5 s stamp every refusal re-arms, which is the danger-zone look's own roll. `Reset` puts a respawned pilot's machine back to a fresh one's patrol with no wait, keeping its clock and maneuver history. Engine-free, inventions marked where declared.
 Decode: [../org/aiPilot.md](../org/aiPilot.md), [../org/aiControlLaw.md](../org/aiControlLaw.md).
 
 ## src/Flight/Ai/ManeuverExecutor.cs
@@ -522,7 +531,7 @@ line from that barrel to the intercept point so wing guns converge, perturbed in
 draw per shot. Gates in the engine's order: the quick-draw cone off the target's nose-tail axis, the separation inside
 the slot's authored engagement window, then the airframe's traverse clamp on the lead with the residual the clamp
 leaves gated in turn, so the employable cone is the traverse limit plus that gate. It also carries the standing target:
-`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`.
+`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`. `PlayersPreferred` is the pilot's own switch for the ranking's player weight: on for every campaign, Instant Action and `--ai=` pilot, off for a bot seat's, since a Dogfight ranks every pilot alike. `Disengaged`, set by the pilot each step while a rearm run stands, holds acquisition off.
 Engine-free; the live half is the `ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/Weapons/SurfaceGunMount.cs
@@ -543,7 +552,7 @@ raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pa
 the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the traverse
 clamp's residual against an aim-quality cosine tighter than the gun's. The lead is solved per pylon
 in the frame that round flies in, and each unlocked pass leaves a verdict behind, keyed without its
-numbers so a host logs a gate change. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
+numbers so a host logs a gate change. `Reset` clears both lockouts for a respawned pilot's fresh airframe. A bot seat's launcher takes `UseWingmanRule` (1 to 900 m and 20 s over every pylon's own numbers) and `FiresOnFailedRoll` (the original's `Network` override); every other AI keeps the roll. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/Ai/AiVoiceDispatcher.cs
 The combat-voice trigger dispatch, engine-free
@@ -557,7 +566,7 @@ session answers off the radio channel. Pinned by `AiVoiceDispatcherTests` and th
 ## src/Flight/Ai/AiTargetRanking.cs
 The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Target acquisition"): a
 rank built from a weight, the distance and the bias terms, and MINIMISED, with the player carrying
-a lower base weight than everyone else, a wingman a higher one, a gasbag a lower one, ±0.2 terms for
+a lower base weight than everyone else (unless the shooter passes `playersPreferred` false, which weighs a player as any other), a wingman a higher one, a gasbag a lower one, ±0.2 terms for
 ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
 beyond the scorer's own ATTACK radius, the volume both decoded scorers admit on (the activation volume is the engine's awake test alone and reaches admission nowhere). `AiScorer` names the engine's two implementations and is required
 because the wrong one is silent: `Other` drops those three geometry terms. Snapshots in, index and
@@ -567,9 +576,9 @@ score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `
 One AI aircraft's target acquisition, stepped from the sim step before the guns: the decoded hold
 that re-scores a standing target until it fails or expires, then the sweep over the whole
 VehicleList, the turrets and the structures, each candidate carrying its own class bias, handed with
-the machine's ATTACK radius to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
+the machine's ATTACK radius and the gunner's `PlayersPreferred` to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
 ordnance gate. `AcquiringShooter` is the shooter's view the host answers once per tick; `Step`
-leaves the pick on `AiGunner.Target`, and `RankedSources`/`ScannedStructureCount` expose the last
+leaves the pick on `AiGunner.Target`, or drops it for a `Disengaged` gunner, and `RankedSources`/`ScannedStructureCount` expose the last
 sweep. `FlightController` owns one as `Acquisition`. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/Ai/PursuitQuarry.cs
@@ -799,7 +808,7 @@ The multiplayer rearm's rules, engine-free: `RuleFor` serves any base in either 
 the pilot's own team's in Capture the Flag and Zeppelin vs Zeppelin, `NodeName` names base `n`'s
 node, and `ReadRadiusSquared` takes `player.zrd`'s `rearm_rad` squared or the executable's 625.
 `Enters` is one seat's step, true on the step it comes within the radius of a base serving it and
-latched until it is outside all of them. `Session/World/RearmRuntime.cs` runs it in a match and
+latched until it is outside all of them; `NearestServing` is the base a bot's rearm run flies to. `Session/World/RearmRuntime.cs` runs it in a match and
 `FlightController.Rearm` is the restore. Read `RearmBasesTests.cs` and
 `docs/org/multiplayer-rearm.md`.
 
@@ -896,7 +905,7 @@ pane's seat holds Display Scores (`UI/Overlays/ScoresOverlay.cs`).
 ## src/Flight/Hud/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (objective sites included), a nearest AI-hostile fallback where no
-selection exists, and the F16 / `--debug-markers` every-aircraft overlay. Draws the original's
+selection exists (a bot tagged by its callsign, `TrackedTag`), and the F16 / `--debug-markers` overlay. Draws the original's
 bracket box and label block and owns the colour table, the label layout, the selected gun's reach
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
@@ -1034,7 +1043,7 @@ with, so that ramp reads this step's own delivered lift. Translation is a clampe
 decoded Mach drag, thrust and gravity, the velocity direction rotating only through that lift and
 the ground-blow steer. `FarFieldPlant` is the original's LOD branch, re-decided each step off
 `FlightInput.NearestHumanDistSqM`; `Collide` is the decoded contact response, placement and
-human-only normal impulse, lifecycle left to `AircraftContactResolver`. `FlightInput.Boost`
+the normal impulse on a person's contact rule (a person or a bot seat, whose rates the impulse reads without the AI ground blow's share), lifecycle left to `AircraftContactResolver`. `FlightInput.Boost`
 replaces the thrust lever and scales drag. Decode and ledger: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Airframe/StickRamp.cs
@@ -1236,7 +1245,7 @@ the only knobs. `CockpitOverlay.WobbledMount` carries the rotation into the cock
 
 ## src/Flight/Airframe/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`: one resolved
-controller's pre-tree state from either flight adapter, which `Bind` consumes exactly once. `HoldSegments` (the scripted hold), `LeverSteps` (the `--lever=` presses) and `RemotePoses` ride it
+controller's pre-tree state from either flight adapter, which `Bind` consumes exactly once. `IsBotSeat` rides it beside `IsHumanPiloted`, set only by the seat path. `HoldSegments` (the scripted hold), `LeverSteps` (the `--lever=` presses) and `RemotePoses` ride it
 as `Pilot` does, so `FlightController` exposes a public field for none; `Bind` copies them before
 resolving the `IFlightInputSource`, beside the `IWorldQuery` seam. A seat whose pose arrives over the
 wire takes no stick arm at all: the buffer's presence IS the ownership, so no seat is half remote.
@@ -1266,7 +1275,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant, while `Respawned` runs after every return for what the seat's assembler owes a fresh airframe), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`). This node reads the devices, performs what each of those
@@ -1274,8 +1283,8 @@ reports, and holds the state the engine can only hold as state. Every physics qu
 one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
-damage are the player's path exactly. `Held`, `ControlHold` (`FlightControlHold`: the discrete commands are swallowed and no crash cam brings a hull back, with the stick either the pilot's or neutral over the lever they left), `Inert`, `Spectating`, `CrashIsFinal`, `CameraOwned` and
-`AllowLiveRespawn` are the flags a session or a lab pins it with, beside `Racing`, the session's race flag, which keeps the body off the aircraft layer so nothing rams it (`RespawnOffered`, read by both the crashed step and the HUD's respawn prompt, folds `Spectating`, `CrashIsFinal` and the hold into one answer), and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. A human seat also plays `Bindings/PadRumble.cs` at the sites that already carry a cue (gun fire, an ordnance launch, a round taken, a contact, the crash, the nitro, a turret shot and a dive past the rated maximum), on the pads `PadDevices` names and never another pane's. The once-per-death shutdown ends every flight system in one place, so the gun and engine loops, the carried turrets' voices, the `snd_propstop` cue and the propeller's own `stopprops` wind-down to the still disc leave together, and a respawn takes that wind-down off the slot before spinning the discs back up with the silent `spinprops`. A respawn also puts every node the death defs played on back on the parent, visibility and pose the rig snapshotted at its bind, re-posing only nodes the rig itself moved, so an eject cut short leaves no pilot standing on the seat. Going `Inert` stops the same positional loops, since an inert host takes no tick that could run a lease out. `TickIncomingFire` runs the shield and the canopy cue off one tick, and `OpenCanopyHole` puts an opened hole through the rig as its authored def, with `EnsureViewCameraProxy` supplying the rig-local `camera1` that def's exterior branch poses against. The keyboard arm also plays `LeverSteps`, the `--lever=` schedule of commanded-lever presses at their own sim-seconds, which is how a headless capture slams the throttle as the digit row does and leaves the exhaust smoke a real lever gap to charge from; a live digit beats it. `RemotePoses` is the third pose source: set, `RemoteOwned` reads the sim pose out of that `Net/RemotePoseBuffer.cs` sample stream instead of stepping `FlightModel` at all, and every rule that would move the aeroplane locally is off with it (the stick read, the ground-blow probe, the nearest-human fill, the nitro and model steps, the sweep and contact resolution, the fire-control tick, a carried turret's own gunner, the under-map backstop and the respawn button), while being hit, damage visuals, engine and weapon audio, HUD markers and the crash rig stay live, because a remote human is a pose that arrives late and never a stick that arrives late. `WeaponFired` announces every round this rig spawns, `HitRouter` offers a strike to whoever set it before the local damage runs, and `TakeRemoteDeath` ends the aeroplane on a death decided elsewhere, while `RemoteAutoLand` is the auto-land button that seat's own machine reports holding; unset, all three leave the single-machine path exactly as it was. Read `AircraftLifecycle.cs` next.
+damage are the player's path exactly. `TakesPersonsContactRule` (a person, or an AI-piloted `IsBotSeat`) picks the hull sweep and the bounce over the probe rays; nothing else on a bot leaves `IsHumanPiloted`'s AI side. `Held`, `ControlHold` (`FlightControlHold`: the discrete commands are swallowed and no crash cam brings a hull back, with the stick either the pilot's or neutral over the lever they left), `Inert`, `Spectating`, `CrashIsFinal`, `CameraOwned` and
+`AllowLiveRespawn` are the flags a session or a lab pins it with, beside `Racing`, the session's race flag, which keeps the body off the aircraft layer so nothing rams it (`RespawnOffered`, read by both the crashed step and the HUD's respawn prompt, folds `Spectating`, `CrashIsFinal` and the hold into one answer), and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. Outside a stunt run's tap and hold, the respawn control respawns once per press, the press that skips the crash camera included, so a held button never places the aeroplane again on every step. `AllowLiveRespawn` gates only the in-flight read: the crashed step's press, which skips the crash camera and asks `RespawnRequest` where a match grants returns, is never pinned. `SessionNet` pins it off on every seat of a Dogfight match, local or networked, and of every other network session except a stunt race, whose owner places its own seat on a tap or a hold. A human seat also plays `Bindings/PadRumble.cs` at the sites that already carry a cue (gun fire, an ordnance launch, a round taken, a contact, the crash, the nitro, a turret shot and a dive past the rated maximum), on the pads `PadDevices` names and never another pane's. The once-per-death shutdown ends every flight system in one place, so the gun and engine loops, the carried turrets' voices, the `snd_propstop` cue and the propeller's own `stopprops` wind-down to the still disc leave together, and a respawn takes that wind-down off the slot before spinning the discs back up with the silent `spinprops`. A respawn also puts every node the death defs played on back on the parent, visibility and pose the rig snapshotted at its bind, re-posing only nodes the rig itself moved, so an eject cut short leaves no pilot standing on the seat. Going `Inert` stops the same positional loops, since an inert host takes no tick that could run a lease out. `TickIncomingFire` runs the shield and the canopy cue off one tick, and `OpenCanopyHole` puts an opened hole through the rig as its authored def, with `EnsureViewCameraProxy` supplying the rig-local `camera1` that def's exterior branch poses against. The keyboard arm also plays `LeverSteps`, the `--lever=` schedule of commanded-lever presses at their own sim-seconds, which is how a headless capture slams the throttle as the digit row does and leaves the exhaust smoke a real lever gap to charge from; a live digit beats it. `RemotePoses` is the third pose source: set, `RemoteOwned` reads the sim pose out of that `Net/RemotePoseBuffer.cs` sample stream instead of stepping `FlightModel` at all, and every rule that would move the aeroplane locally is off with it (the stick read, the ground-blow probe, the nearest-human fill, the nitro and model steps, the sweep and contact resolution, the fire-control tick, a carried turret's own gunner, the under-map backstop and the respawn button), while being hit, damage visuals, engine and weapon audio, HUD markers and the crash rig stay live, because a remote human is a pose that arrives late and never a stick that arrives late. `WeaponFired` announces every round this rig spawns, `HitRouter` offers a strike to whoever set it before the local damage runs, and `TakeRemoteDeath` ends the aeroplane on a death decided elsewhere, while `RemoteAutoLand` is the auto-land button that seat's own machine reports holding; unset, all three leave the single-machine path exactly as it was. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/Airframe/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle
@@ -1469,7 +1478,7 @@ cannot un-embed), and the un-embed loop over the seam's overlap test. One call a
 with one `ContactOutcome` the caller performs. The engine effects it interleaves with, because
 each result is the next rule's premise, go through `IContactEffects`, which `FlightController`
 implements per contact. Every contact it is handed spends the pair; the alternate-step cadence is
-the sweep's, never a gate on the spend. `AircraftContactResolverTests` pins the rule table
+the sweep's, never a gate on the spend. The doom rule spares a person and a bot seat (`ContactConditions.TakesPersonsContactRule`); the entity cut and the shakes read `IsHumanPiloted` alone. `AircraftContactResolverTests` pins the rule table
 off-engine against a synthetic world query and a scriptable effects sink.
 
 ## src/Flight/Weapons/SweepCadence.cs

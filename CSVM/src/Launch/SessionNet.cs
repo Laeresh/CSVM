@@ -21,7 +21,7 @@ namespace CSVM.Launch;
 /// list, the aircraft-state relay, combat, chat, the shared clock and the start gate. It wires the
 /// director, world, positional-start and cutscene links. The session keeps the tick order.
 /// Each wire step takes what it binds as arguments, and does nothing while <see cref="Link"/> is
-/// null outside a network match.
+/// null outside a network match. <see cref="WireLiveRespawn"/> alone also pins a local match.
 /// Module entry: docs/architecture/Launch.md on src/Launch/SessionNet.cs.</summary>
 internal sealed class SessionNet
 {
@@ -110,8 +110,9 @@ internal sealed class SessionNet
     /// counters and its roster; a replication feature registers its handlers on it.</summary>
     public Net.NetSession? Link { get; }
 
-    /// <summary>The whole match's seat roster in seat order, empty outside a network match. A
-    /// guest's arrives over the wire, between construction and the build.</summary>
+    /// <summary>The whole match's seat roster in seat order. A local match with bots holds one
+    /// with no <see cref="Link"/>; any other session without a wire holds none. A guest's arrives
+    /// over the wire, between construction and the build.</summary>
     public IReadOnlyList<Net.NetSeat> Seats { get; private set; }
 
     /// <summary>Each seat's loadout and custom plane, from the lobby.</summary>
@@ -166,6 +167,10 @@ internal sealed class SessionNet
 
     /// <summary>Whether <see cref="TraceStep"/> writes, set by <c>--debug-net-trace</c>.</summary>
     public bool TraceSteps { get; init; }
+
+    // Where no seat respawns in flight: a Dogfight match, local or on a wire, and every other
+    // network session but a stunt race. ⚠ Read after WireCombat, which hands the match over.
+    private bool PinsLiveRespawn => Race == null && (_dogfight != null || (Link != null && Seats.Count > 0));
 
     /// <summary>Whether a guest's seat left the mission and is out of play.</summary>
     public bool HasLeft(int seat) => _seatsLeft.Contains(seat);
@@ -274,7 +279,7 @@ internal sealed class SessionNet
 
         var linked = net.Peers;
         StartGate = net.IsHost
-            ? Net.NetStartGate.Host(Seats.Where(s => !s.IsLocal && linked.Contains(s.PeerId))
+            ? Net.NetStartGate.Host(Seats.Where(s => !s.FlownHere && linked.Contains(s.PeerId))
                 .Select(s => s.PeerId).Distinct())
             : StartGate ?? Net.NetStartGate.Guest(net.HostPeer);
         net.On<Net.StartGateMessage>(TakeStartWord);
@@ -402,6 +407,27 @@ internal sealed class SessionNet
         Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
     }
 
+    /// <summary>The respawn control on a living aeroplane, pinned off on every seat. That holds in
+    /// a Dogfight match, split screen or wired, and in every other network session but a stunt
+    /// race. A pilot there flies again only from a crash, asked of the host where a wired match
+    /// grants returns. The one wire step that also acts with no link, since a local match counts
+    /// returns as a wired one does. Runs once every seat has its aeroplane.</summary>
+    public void WireLiveRespawn()
+    {
+        if (!PinsLiveRespawn)
+        {
+            return;
+        }
+
+        for (int i = 0; i < _seatRigs.Count; i++)
+        {
+            PinLiveRespawn(i);
+        }
+
+        string where = Link is { } net ? (net.IsHost ? "net host" : "net guest") : "local match";
+        Log.Info("core", $"live respawn: {where}, {_seatRigs.Count} seat(s), the respawn control returns a pilot from a crash only, never in flight");
+    }
+
     /// <summary>The stunt race over the wire, before the roster builds, since each local seat's run
     /// is fed through it. Each machine times its own seats; the host keeps the window, the board
     /// and the ending, and a guest's race replicates it. ⚠ Nothing is sent from here: the join stays
@@ -430,6 +456,10 @@ internal sealed class SessionNet
         }
 
         WireSeatChat(_seatRigs.IndexOf(owner));
+        if (PinsLiveRespawn)
+        {
+            PinLiveRespawn(_seatRigs.IndexOf(owner));
+        }
     }
 
     /// <summary>The campaign's objectives over the wire, once the graph is armed. The host's graph
@@ -469,7 +499,7 @@ internal sealed class SessionNet
         World = new NetWorldLink(net, new NetWorldSeats
         {
             SeatOfShooter = SeatOfShooter,
-            IsLocal = seat => seat >= 0 && seat < Seats.Count && Seats[seat].IsLocal,
+            IsLocal = seat => seat >= 0 && seat < Seats.Count && Seats[seat].FlownHere,
             ShooterOfSeat = seat => seat >= 0 && seat < _seatRigs.Count ? _seatRigs[seat].Controller?.PlayerIndex : null,
             WeaponIndex = weapon => _weaponWire.TryGetValue(weapon.Id, out int index) ? index : -1,
             WeaponAt = index => _weaponDefs is { } defs && index >= 0 && index < defs.All.Count ? defs.All[index] : null,
@@ -541,7 +571,7 @@ internal sealed class SessionNet
 
         for (int i = 0; i < Seats.Count && i < _seatRigs.Count; i++)
         {
-            if (!Seats[i].IsLocal || _seatRigs[i].Controller is not { } flown)
+            if (!Seats[i].FlownHere || _seatRigs[i].Controller is not { } flown)
             {
                 continue;
             }
@@ -595,7 +625,7 @@ internal sealed class SessionNet
             if (_seatRigs[i].Controller is { } plane)
             {
                 var p = plane.WorldPosition;
-                line.Append(inv, $" | seat {i} {(Seats[i].IsLocal ? "own" : "copy")} {p.X:0.000} {p.Y:0.000} {p.Z:0.000}");
+                line.Append(inv, $" | seat {i} {(Seats[i].FlownHere ? "own" : "copy")} {p.X:0.000} {p.Y:0.000} {p.Z:0.000}");
             }
         }
 
@@ -618,16 +648,16 @@ internal sealed class SessionNet
     /// reaches this through its wreck playing out locally, and reports nothing.</summary>
     public void ReportDeath(int seat, int? killer)
     {
-        if (Link is not { } net || seat < 0 || seat >= Seats.Count || !Seats[seat].IsLocal)
+        if (Link is not { } net || seat < 0 || seat >= Seats.Count || !Seats[seat].FlownHere)
         {
             return;
         }
 
         int killerSeat = killer is int shooter ? SeatOfShooter(shooter) : -1;
         int hull = killer is int fired ? ZeppelinVersus.HullOfShooter(fired) : -1;
-        // Cause 2 covers every death with no seat to charge, an AI's kill included. The decode
-        // has no last-damager memory and no third party to credit, so the pilot pays for it.
-        // Cause 3 is a hull's broadside round, named by the hull's placement index.
+        // Cause 2 is every death with no seat to charge, a roster AI's kill included; a bot is a
+        // seat and is charged. The decode credits no last damager, so the pilot pays. Cause 3 is
+        // a hull's broadside round, named by the hull's placement index.
         var death = new Net.DeathMessage(
             (byte)seat, killerSeat >= 0 ? (byte)killerSeat : Net.NetMessage.NoSeat,
             killerSeat >= 0 ? Net.NetDeathCause.Killer
@@ -686,7 +716,7 @@ internal sealed class SessionNet
 
     // The seat list the roster, the spawn walk and the versus board are sized by. A pane-less rig
     // carries no camera and parents nothing into a pane, which is what makes HumanFlightAdapter
-    // skip every view, device and listener for it.
+    // skip every view, device and listener for it. A bot seat flown here takes one too.
     private void FillSeatRigs(Node3D worldRoot)
     {
         _seatRigs.Clear();
@@ -703,7 +733,7 @@ internal sealed class SessionNet
             // ⚠ A pane takes its SEAT's index, not its pane position. Seat index is the identity
             // the whole field agrees on, and a guest's own pane is rarely seat 0. Leaving the pane
             // number here would mark the wrong opponent and key the wrong score row.
-            var rig = seat.IsLocal && locals < _rigs.Count
+            var rig = seat.HasPane && locals < _rigs.Count
                 ? _rigs[locals++]
                 : new PlayerRig { Camera = null!, HudParent = worldRoot, VisualLayer = 0 };
             rig.Index = seat.SeatIndex;
@@ -743,7 +773,7 @@ internal sealed class SessionNet
         }
 
         rig.HitRouter = hit => RouteHit(seat, hit);
-        if (!Seats[seat].IsLocal)
+        if (!Seats[seat].FlownHere)
         {
             return;
         }
@@ -755,6 +785,16 @@ internal sealed class SessionNet
         if (_dogfight == null)
         {
             rig.Downed += (_, killer) => ReportDeath(seat, killer);
+        }
+    }
+
+    // ⚠ Off only, never back on, so a director's own pin stands. An in-flight respawn is a free
+    // repair, restock and refuel the match never counts, and on a wire one the host never grants.
+    private void PinLiveRespawn(int seat)
+    {
+        if (seat >= 0 && seat < _seatRigs.Count && _seatRigs[seat].Controller is { } pilot)
+        {
+            pilot.AllowLiveRespawn = false;
         }
     }
 
@@ -828,14 +868,14 @@ internal sealed class SessionNet
         // Whoever owns the shooter decides, and the host stands in for every round no seat
         // fired (an AI, a world emplacement). Exactly one machine ever claims a hit.
         bool decidesHere = shooterSeat >= 0 && shooterSeat < Seats.Count
-            ? Seats[shooterSeat].IsLocal
+            ? Seats[shooterSeat].FlownHere
             : net.IsHost;
         if (!decidesHere)
         {
             return true;
         }
 
-        if (Seats[victimSeat].IsLocal)
+        if (Seats[victimSeat].FlownHere)
         {
             return false;
         }
@@ -861,7 +901,7 @@ internal sealed class SessionNet
     private void TakeHit(in Net.HitMessage hit)
     {
         if (_weaponDefs is not { } defs || hit.VictimSeat >= _seatRigs.Count
-            || hit.Weapon >= defs.All.Count || !Seats[hit.VictimSeat].IsLocal
+            || hit.Weapon >= defs.All.Count || !Seats[hit.VictimSeat].FlownHere
             || _seatRigs[hit.VictimSeat].Controller is not { } victim)
         {
             return;
@@ -887,7 +927,7 @@ internal sealed class SessionNet
 
         for (int seat = 0; seat < _seatRigs.Count && seat < Seats.Count; seat++)
         {
-            if (Seats[seat].IsLocal && _seatRigs[seat].Controller is { Damage: { } damage } && damage.TakeChanged())
+            if (Seats[seat].FlownHere && _seatRigs[seat].Controller is { Damage: { } damage } && damage.TakeChanged())
             {
                 net.Broadcast(new Net.DamageMessage((byte)seat, PoolsOf(damage)), Net.NetChannels.Events);
             }
@@ -1020,12 +1060,12 @@ internal sealed class SessionNet
     }
 
     // A guest's link dropped on the host. Each seat it flew leaves the mission, here and on every
-    // other guest, and the mission goes on without it.
+    // other guest, and the mission goes on without it. A bot seat never leaves with a guest.
     private void OnPeerLeft(int peer)
     {
-        for (int seat = 0; seat < Seats.Count; seat++)
+        foreach (int seat in Net.NetSeats.LeavingWith(Seats, peer))
         {
-            if (!Seats[seat].IsLocal && Seats[seat].PeerId == peer && TakeSeatLeft(seat))
+            if (TakeSeatLeft(seat))
             {
                 World?.SendSeatLeft(seat);
             }
@@ -1036,7 +1076,7 @@ internal sealed class SessionNet
     // race keeps its record, marked left; the inert aeroplane takes its ghost and label with it.
     private bool TakeSeatLeft(int seat)
     {
-        if (seat < 0 || seat >= Seats.Count || Seats[seat].IsLocal || !_seatsLeft.Add(seat))
+        if (seat < 0 || seat >= Seats.Count || !Net.NetSeats.LeavesWithPeer(Seats[seat]) || !_seatsLeft.Add(seat))
         {
             return false;
         }

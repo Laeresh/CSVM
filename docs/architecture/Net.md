@@ -391,12 +391,12 @@ wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
 `DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3), `DogfightRosterMessage`
-the whole player list with each row's team and the reading guest's own row marked, and
-`LobbyChatMessage` one typed line, which the host relays. `LobbyTeamActionMessage` is a guest's
-team action to its host and `LobbyTeamsMessage` the host's team names. A guest's plane and Ready
-ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask
-of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's placed return is
-`NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+the whole player list with each row's team, a bot row's tier and Random plane, and the reading
+guest's own row marked, and `LobbyChatMessage` one typed line, which the host relays.
+`LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
+team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
+session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.
+Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetRaceMessages.cs
 A network stunt race's four session messages, all reliable. `RaceCallMessage` (`NetRaceCall`) is the window's end one machine decides for the rest: the host's rerun and return to the lobby, a guest's leaving. `RaceRunMessage` is one event of a
@@ -478,17 +478,19 @@ that carry it are the message vocabulary's.
 
 ## src/Net/NetSeat.cs
 One pilot's place in a match, shaped like the record the original allocates per player: the peer it
-is addressed by, its team, whether this machine flies it, its callsign, its airframe and paint, its
-pilot voice in the pick's form, its seat index and its signed score. The roster carries the voice to every machine. `Color` reads the seat's own entry in `NetSeats`. The seat index is
-the whole identity: a remote pilot indexes spawns, scores, markers and colours exactly as a
-splitscreen pane does, which is why the session orders its rigs by it. Read
-`docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an aeroplane
-without a pane.
+is addressed by, its team, its callsign, airframe, paint, voice, seat index and signed score, and
+who flies it where. `Pilot` says a person or a host's bot (`NetPilot`), with a bot's `Skill` tier
+(`NetBotSkill`). `FlownHere` (this machine simulates and reports it) and `HasPane` (a person sits
+at it here) are two claims: a bot is flown on its host with no pane. The seat index is the whole
+identity, so a remote pilot or a bot indexes spawns, scores, markers and colours as a splitscreen
+pane does. Read `docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an
+aeroplane without a pane.
 
 ## src/Net/NetSeats.cs
 The roster's rules: `MaxPlayers = 16` pilots admitted, the count the original's lobby shows and
 its data holds, every seat-indexed table built `SeatCapacity = 16` wide, each seat's identity
-colour, and `Validate`, which requires seats numbered from zero with no gap and at least one flown here. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick.
+colour, and `Validate`: seats numbered from zero with no gap, at least one with a pane here, a
+person at seat 0, and every bot owned and flown where seat 0 is. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick. `Bot` makes a host's bot seat and `AddBots` appends several after the guests, leaving out any past the field, `LocalPanes` opens a local match's roster with its panes on `OfflinePeer`, `LocalOrdinal` a seat's pane ordinal, and `LeavingWith` the seats a dropped guest takes with it, never a bot.
 Seats 0 to 7 take the original's authored dwords at `00628eb4` in order, low byte red as the
 original's one reader takes them (the remake's index is 0-based where the original's was 1-based
 and its eighth pilot read past the table); seats 8 to 15 take the channel-wise complement of seat
@@ -538,7 +540,7 @@ peer with the handshake (which names its first seat and the run after it, `Local
 and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
 addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
 `RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to
-its sender; `FliesOnTeam` answers a team line's addressing. A suite reads the counters (`Sent`,
+its sender; `FliesOnTeam` answers a team line's addressing by the persons a machine seats, never its bots. A suite reads the counters (`Sent`,
 `Received`, `Relayed`, `DroppedUnknown`, `Malformed`) and `Instruments`, fed before any handler.
 
 ## src/Net/NetInstruments.cs

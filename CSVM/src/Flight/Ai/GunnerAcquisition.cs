@@ -68,10 +68,18 @@ public sealed class GunnerAcquisition
 
     /// <summary>One gunner tick: keep the standing target while the hold holds it, else re-acquire
     /// through the ranking when <see cref="AiGunner.AutoTarget"/> allows, leaving the pick on
-    /// <see cref="AiGunner.Target"/>. True with the target's sim geometry when one is live.</summary>
+    /// <see cref="AiGunner.Target"/>. True with the target's sim geometry when one is live. A
+    /// <see cref="AiGunner.Disengaged"/> gunner drops its target and takes none.</summary>
     public bool Step(AiGunner gunner, out Vector3 position, out Vector3 velocity, out Vector3 forward)
     {
         ArgumentNullException.ThrowIfNull(gunner);
+        if (gunner.Disengaged)
+        {
+            gunner.Target = null;
+            position = velocity = forward = Vector3.Zero;
+            return false;
+        }
+
         var shooter = _shooter();
         if (Holds(gunner, shooter, out position, out velocity, out forward))
             return true;
@@ -292,7 +300,8 @@ public sealed class GunnerAcquisition
             // Log the assigned pick with its own rank inputs (informational, rank not consulted).
             int idx = _sources.IndexOf(primary);
             if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet, _candidates[idx]);
+                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet, _candidates[idx],
+                    gunner.PlayersPreferred);
             how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
         }
@@ -300,7 +309,7 @@ public sealed class GunnerAcquisition
         // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode.
         // Deriving it would change what a mode plane or heli targets, a claim wanting its own evidence.
         int best = AiTargetRanking.SelectBest(ownPos, ownFwd, attack, AiScorer.Jet,
-            AiTargetRanking.AircraftFirst, _candidates, out score);
+            AiTargetRanking.AircraftFirst, _candidates, out score, gunner.PlayersPreferred);
         if (best < 0)
             return null;
         // Only the ranked arm stamps the hold. An assigned primary_target wins outright at every

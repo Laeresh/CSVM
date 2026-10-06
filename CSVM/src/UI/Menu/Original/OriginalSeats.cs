@@ -9,15 +9,13 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original shell's two sortie screens, Free Flight and the remake-only Dogfight, over the
-/// shared player setup: the chapter column, the aircraft column as a window onto the shared roster
-/// (the stock airframes, then the saved customs), the seat strip, the join hint, BACK and FLY. Seat 0
-/// alone drives the screen: the focus, the pointer, the chapter, its aircraft and FLY. Once seat 0 has
-/// picked, each joined seat picks in turn on the per-seat screen (<c>OriginalSeatPlane.cs</c>); on the
-/// sortie screen itself a later seat can only leave with Back. FLY is seat 0's confirmation and the
-/// launch in one press, so it stands only once every other seat has confirmed and, for Dogfight, a
-/// second seat has joined; the walk's last confirm takes that press for it. Also the joining rule the
-/// presentation reads (<see cref="JoiningOpen"/>) and the same seat strip over the campaign boards
-/// and the Instant Action screen once a second seat has joined. Nothing here is decoded.
+/// shared player setup; nothing here is decoded. Each has the chapter column, the aircraft window
+/// onto the shared roster, the seat strip, the join hint, BACK and FLY. Seat 0 alone drives the
+/// screen; each other joined seat picks on the per-seat screen (<c>OriginalSeatPlane.cs</c>) and can
+/// only leave here. FLY is seat 0's confirmation and the launch in one press, standing once every
+/// other seat has confirmed. A Dogfight also needs a second pilot, a seat or a join board bot, and
+/// the walk's last confirm takes that press for it. Also here: the joining rule
+/// (<see cref="JoiningOpen"/>), and the strip over the campaign boards and Instant Action.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -129,6 +127,10 @@ public sealed partial class OriginalShell
 
     /// <summary>The row key of the roster's aircraft at <paramref name="index"/>.</summary>
     public static string AirframeKey(int index) => AirframeKeyPrefix + index;
+
+    /// <summary>The Dogfight strip's line for the join board's bot rows.</summary>
+    public static string BotStripLine(int bots) =>
+        $"+ {bots.ToString(System.Globalization.CultureInfo.InvariantCulture)} {(bots == 1 ? "bot" : "bots")} from the JOIN BOARD";
 
     /// <summary>Applies one frame of one seat's commands. A seat drives its walk's screens while it
     /// is the one picking, the per-seat aircraft screen and the Weapon Loadout opened from it, and
@@ -381,7 +383,7 @@ public sealed partial class OriginalShell
         }
 
         var seats = _setup.Seats;
-        if (seats.Count < PlayerSetupFeature.MinimumSeats(SortieMode))
+        if (_setup.Pilots(SortieMode) < PlayerSetupFeature.MinimumSeats(SortieMode))
         {
             return false;
         }
@@ -488,9 +490,9 @@ public sealed partial class OriginalShell
             return noMap ? "Pick a map, then an aircraft" : "Pick an aircraft";
         }
 
-        if (seats.Count < PlayerSetupFeature.MinimumSeats(SortieMode))
+        if (_setup.Pilots(SortieMode) < PlayerSetupFeature.MinimumSeats(SortieMode))
         {
-            return "Dogfight needs a second seat: sign one on at the JOIN BOARD";
+            return "Dogfight needs a second seat or a bot, from the JOIN BOARD";
         }
 
         for (int i = 1; i < seats.Count; i++)
@@ -545,6 +547,13 @@ public sealed partial class OriginalShell
             lines.Add(new BoardLine($"P{i + 1}  {seats[i].Source.DeviceLabel}   {SeatStatus(seats[i], roster)}",
                 LeftColumnX, SeatStripY + (i * SeatStripPitch), SeatStripWidth, SeatFont,
                 seats[i].Locked ? BoardInk.RowFocused : BoardInk.Detail));
+        }
+
+        // The join board's bots fly a Dogfight alone, so only its strip names them, under the seats.
+        if (_screen == OriginalScreen.Dogfight && _setup.Bots.Count > 0)
+        {
+            lines.Add(new BoardLine(BotStripLine(_setup.Bots.Count), LeftColumnX, SeatStripY + (seats.Count * SeatStripPitch),
+                SeatStripWidth, SeatFont, BoardInk.RowFocused));
         }
 
         float markX = RightColumnX + ListWidth - 20f;

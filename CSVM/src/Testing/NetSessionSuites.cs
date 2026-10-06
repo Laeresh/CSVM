@@ -88,7 +88,7 @@ internal static class NetSessionSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(6571));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         NetSeats.Validate(roster);
@@ -168,7 +168,7 @@ internal static class NetSessionSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(9311));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         NetSeats.Validate(roster);
@@ -226,7 +226,7 @@ internal static class NetSessionSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(4127));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         NetSeats.Validate(roster);
@@ -549,8 +549,8 @@ internal static class NetSessionSuites
         int here = host.Wire.Link!.LocalSeat;
         int there = guest.Wire.Link!.LocalSeat;
         ctx.Check(here == 0 && there == 1
-                  && host.NetSeats[0].IsLocal && !host.NetSeats[1].IsLocal
-                  && !guest.NetSeats[0].IsLocal && guest.NetSeats[1].IsLocal,
+                  && host.NetSeats[0].FlownHere && !host.NetSeats[1].FlownHere
+                  && !guest.NetSeats[0].FlownHere && guest.NetSeats[1].FlownHere,
             $"and each end flies its own seat alone (host seat {here}, guest seat {there})");
     }
 
