@@ -82,6 +82,8 @@ public partial class XrSession : Node
     private long _lastStamp;
     private double _gpuSumMs;
     private int _gpuFrames;
+    // The seat's position at the last frames line, null before the first.
+    private Vector3? _lastPos;
 
     /// <summary>The one VR seat: the origin, the tracked head and the pane it flies.</summary>
     public XrRig Rig { get; private set; } = null!;
@@ -146,9 +148,15 @@ public partial class XrSession : Node
             && _window.Add((stamp - _lastStamp) * 1000.0 / Stopwatch.Frequency))
         {
             var s = _window.Last;
+            // The seat's place and speed put a reported stereo symptom against the map edge. A high
+            // main_max_ms with a low gpu_ms is a main-thread stall.
+            var pos = Rig.Origin.GlobalPosition;
+            double mps = _lastPos is { } was ? pos.DistanceTo(was) * 1000.0 / Math.Max(1.0, s.Frames * s.MeanMs) : 0.0;
+            _lastPos = pos;
+            double mainMaxMs = 1000.0 * Performance.GetMonitor(Performance.Monitor.TimeProcess);
             // ⚠ Keep this at Debug: a console line costs about 2 ms on the frame path. That would
             // be a late frame of its own every second (docs/verification.md PERF-35).
-            Log.Debug("perf", $"xr frames n={s.Frames} mean_ms={s.MeanMs:0.00} max_ms={s.MaxMs:0.00} late={s.Late} missed={s.Missed} refresh_hz={s.RefreshHz:0.#} gpu_ms={_gpuSumMs / Math.Max(1, _gpuFrames):0.00} render_thread={_thread}");
+            Log.Debug("perf", $"xr frames n={s.Frames} mean_ms={s.MeanMs:0.00} max_ms={s.MaxMs:0.00} late={s.Late} missed={s.Missed} refresh_hz={s.RefreshHz:0.#} gpu_ms={_gpuSumMs / Math.Max(1, _gpuFrames):0.00} main_max_ms={mainMaxMs:0.0} render_thread={_thread} pos=({pos.X:0},{pos.Y:0},{pos.Z:0}) mps={mps:0}");
             _gpuSumMs = 0.0;
             _gpuFrames = 0;
             if (_xr is OpenXRInterface openXr)

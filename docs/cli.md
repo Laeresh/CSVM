@@ -478,7 +478,8 @@ after it. `RunGame.ps1 -EngineArgs '<arg>','<value>'` and `RunProbe.ps1 -EngineA
   and with it the multiview shader variants `project.godot` keeps off. `Launch/XrSession.cs` then
   sends the main viewport to the headset and logs `xr: OpenXR live runtime=...`, or a warning and a
   flat flight if the runtime did not start. Its `xr frames` Debug line in the log file reports the
-  headset's frame pacing once a wall second. `off` and `default` (the project setting) leave it flat.
+  headset's frame pacing once a wall second, with the seat's `pos=` in chapter metres, its ground
+  speed `mps=` and `main_max_ms=`, the worst main-loop step of that second. `off` and `default` (the project setting) leave it flat.
 * `--render-thread safe|separate` overrides `project.godot`'s separate render thread for one launch;
   `safe` renders on the main thread.
 

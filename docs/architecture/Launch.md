@@ -124,7 +124,7 @@ its feature tag; otherwise `Boot` logs why not and builds nothing. It turns the 
 and builds the VR seat's `Flight/Camera/XrRig.cs` (`Rig`), which it has place itself each frame. It
 recenters on the head's first tracked pose after the session gains focus and after the runtime's
 own recenter. It logs the boot, the session states and an `xr frames` Debug line per wall second
-(`XrFrameWindow.cs`); `XrLaunch` reads `--xr-mode`. Its boot sets `Bindings/XrControllers.cs`'s `SessionLive`.
+(`XrFrameWindow.cs`) with the seat's position and speed; `XrLaunch` reads `--xr-mode`. Its boot sets `Bindings/XrControllers.cs`'s `SessionLive`.
 
 ## src/Launch/XrRelaunch.cs
 VR mode's relaunch rules, engine-free. OpenXR starts only with the engine, so the saved option

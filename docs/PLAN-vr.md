@@ -2154,11 +2154,33 @@ at most half of the 11 ms frame.
 view distance; C1) ran GPU-bound at 20.4-23.8 ms mean GPU time (p90 25.9-28.6 ms) against the
 8.3 ms period, about 41-49 fps, with 80-98 % of frames late, in both render-thread modes; the author
 saw it as "performance problems". The runtime was at 120 Hz, not Decision 10's 90; the per-second
-`xr frames` lines in each `fly-*.log` are the instrument. A fourth run at 90 Hz with the runtime's
+`xr frames` lines in each `fly-*.log` are the instrument; they carry the seat's `pos=`, ground
+speed `mps=` and `main_max_ms=`. A fourth run at 90 Hz with the runtime's
 resolution lowered to 2112x2304 per eye (same options) averaged 10.8 ms GPU time (p90 12.6 ms)
 against the 11.1 ms period, about 74 fps, 9 % late: at the budget, still twice Decision 10's half
-frame. TAA in stereo is also a lead for the
-"one eye lagged behind" double image the author saw past the map edge.
+frame.
+
+**The "one eye lagged behind" double image past the map edge (diagnosis, confidence: measured on
+the stand-in; the runtime's share is the headset's to decide).**
+- **No per-eye lag in the engine.** Flown `--xr-sim` bursts (`--frames=240 --shots=4`, nose view at
+  600 m, C1 in-map and at -40000, TAA against AA off) hold the L-to-R shift constant within 0.01 px
+  and both eyes' frame-to-frame world motion equal within 0.01 px. Each eye's TAA frame registers on
+  its AA-off frame within 0.02 px. Cockpit bursts at -50000 skimming terrain at frame 480 register
+  noisily (near parallax), equally with TAA and without, and TAA against AA off stays within
+  0.08 px. TAA keeps a history and a velocity slice
+  per view (`taa.cpp` `TAA::process`). World-scale eye rounding is A3's millimetre, which is
+  sub-pixel past a few metres.
+- **The failing run is the only one that collapsed to 11-12 fps.** `fly-...195216` (120 Hz,
+  3072x3264, `--render-thread safe`) ends with about 45 s at 11-12 frames a second, with 80-100 ms
+  main-loop steps against a GPU time of 6-20 ms and about 217 draws. The other three runs have no
+  such stretch. `main.cpp` counts `RenderingServer::draw` in the process time, so under the safe
+  thread the stall can be the runtime's swapchain or end-frame wait as well as game code.
+- **Past the map edge, Enhanced's soft sun shadow costs more than twice as much.** At 2112x2304 per
+  eye in cockpit view at 5000 m, GPU time was 8.8 ms at -6000 and 20.1 ms at -40000. With
+  `--no-soft-shadows` it was 2.8 ms, and with `--shadow-quality=off` 2.7 ms. Along -x/-z at
+  2000 m it was 13.0 ms at -11500, 14.5 ms at -13000, 17.7 ms at -20000 and 18.5 ms at -50000.
+  This item owns that cost.
+
 
 **Approach.** Time the worst chapters in VR, then cut by render scale defaults, per-eye costs (MSAA,
 SSAO, shadows) and the effects with the largest stereo cost. <TODO: the instrument; `--perf` is the
