@@ -208,7 +208,7 @@ public partial class XrSession : Node
         var session = Build(root, eye, renderTime, xr);
         var inv = CultureInfo.InvariantCulture;
         string head = string.Format(inv, "{0:0.###}/{1:0.###}/{2:0.###}", sim.Head.X, sim.Head.Y, sim.Head.Z);
-        Log.Info("core", $"xr: sim live eye_px={sim.EyePx.X}x{sim.EyePx.Y} fov_deg={sim.FovDeg.ToString("0.##", inv)} ipd_mm={sim.IpdMm.ToString("0.##", inv)} yaw_deg={sim.YawDeg.ToString("0.##", inv)} pitch_deg={sim.PitchDeg.ToString("0.##", inv)} head_m={head} shot={sim.Shot.ToString().ToLowerInvariant()} render_thread={session._thread}");
+        Log.Info("core", $"xr: sim live eye_px={sim.EyePx.X}x{sim.EyePx.Y} fov_deg={sim.FovDeg.ToString("0.##", inv)} ipd_mm={sim.IpdMm.ToString("0.##", inv)} yaw_deg={sim.YawDeg.ToString("0.##", inv)} pitch_deg={sim.PitchDeg.ToString("0.##", inv)} roll_deg={sim.RollDeg.ToString("0.##", inv)} head_m={head} shot={sim.Shot.ToString().ToLowerInvariant()} render_thread={session._thread}");
         return session;
     }
 
@@ -234,6 +234,7 @@ public partial class XrSession : Node
         XRServer.AddInterface(feed);
         feed.Initialize();
         XrCockpit.DeclareEyeFeed();
+        Mech3.StereoFacing.Declare();
         root.UseXR = true;
         // From here the hand controllers read, and the rebinding screens list them.
         Bindings.XrControllers.SessionLive = true;

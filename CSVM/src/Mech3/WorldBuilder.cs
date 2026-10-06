@@ -1225,20 +1225,35 @@ public sealed class WorldBuilder
         var tex = _textures.Find("moon1.tif");
         if (tex == null)
             return;
-        var mat = new StandardMaterial3D
+        moonNode.AddChild(new MeshInstance3D
+        {
+            Mesh = new QuadMesh { Size = new Vector2(side, side), Material = MoonMaterial(SceneBuilder.ColorKeyed(tex), StereoFacing.Live) },
+            Position = (min + max) * 0.5f,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Name = "mesh",
+        });
+    }
+
+    // The moon is a SphericalY facade in the data, which the original turns toward the eye with no
+    // roll. Flat, it keeps Godot's billboard mode, the camera's basis, which the flat goldens pin.
+    // ⚠ Never that mode under a headset, where the basis is the head's. The disc then lies in the
+    // head's view plane and is seen turning edge-on as the head looks away from it (StereoFacing).
+    private Material MoonMaterial(Texture2D keyed, bool stereo)
+    {
+        if (stereo)
+        {
+            var sprite = new ShaderMaterial { Shader = new Shader { Code = StereoFacing.SpriteShaderCode() } };
+            sprite.SetShaderParameter("albedo_tex", keyed);
+            return sprite;
+        }
+
+        return new StandardMaterial3D
         {
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
             BillboardKeepScale = true, // billboards ignore inherited scale (the 2.5× dome anchor) without this
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            AlbedoTexture = SceneBuilder.ColorKeyed(tex),
+            AlbedoTexture = keyed,
         };
-        moonNode.AddChild(new MeshInstance3D
-        {
-            Mesh = new QuadMesh { Size = new Vector2(side, side), Material = mat },
-            Position = (min + max) * 0.5f,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            Name = "mesh",
-        });
     }
 }

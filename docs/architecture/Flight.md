@@ -1454,8 +1454,8 @@ on. `Recenter` is `XRServer.CenterOnHmd` keeping the tilt, not the height. The s
 through `PlayerRig.SkyAnchor`; `LauncherContext.Xr` hands the rig to a session.
 
 ## src/Flight/Camera/XrSimEyes.cs
-The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch and an offset
-from the seated eye, each eye's world transform composed as Godot's OpenXR interface composes it
+The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch, a roll about
+its own line of sight and an offset from the seated eye, each eye's world transform composed as Godot's OpenXR interface composes it
 (the XR origin, the recenter frame, then head and eye in world-scaled metres), and each eye's
 symmetric projection at a horizontal field of view. `Launch/XrSimInterface.cs` answers the
 renderer through it, and `Spec/XrSimSpec.cs` holds the values it is built from.

@@ -43,7 +43,7 @@ public partial class XrSimInterface : XRInterfaceExtension
     {
         _ipdMm = spec.IpdMm;
         _fovDeg = spec.FovDeg;
-        _pinned = new Pinned(new XrSimEyes(spec.YawDeg, spec.PitchDeg, spec.Head, spec.IpdMm, spec.FovDeg));
+        _pinned = new Pinned(new XrSimEyes(spec.YawDeg, spec.PitchDeg, spec.Head, spec.IpdMm, spec.FovDeg, spec.RollDeg));
         _eyePx = spec.EyePx;
     }
 
@@ -51,9 +51,9 @@ public partial class XrSimInterface : XRInterfaceExtension
 
     /// <summary>Moves the pinned head as a player shifting in the seat would, for a suite: a launch's
     /// head stays where its flag put it. The tracker reports the new pose at once.</summary>
-    public void MoveHead(float yawDeg, float pitchDeg, Vector3 head)
+    public void MoveHead(float yawDeg, float pitchDeg, Vector3 head, float rollDeg = 0f)
     {
-        _pinned = new Pinned(new XrSimEyes(yawDeg, pitchDeg, head, _ipdMm, _fovDeg));
+        _pinned = new Pinned(new XrSimEyes(yawDeg, pitchDeg, head, _ipdMm, _fovDeg, rollDeg));
         PublishHead();
     }
 

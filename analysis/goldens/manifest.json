@@ -183,21 +183,21 @@
     {
       "name": "c1-cockpit-xr-sim",
       "frame": 120,
-      "hash": "0205e7fbaf507c0dd2b12107f0d829c4",
+      "hash": "2add3b4f81406882ff8f82aaa49305e9",
       "exercises": "The --xr-sim stand-in headset: both eyes side by side through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1 terrain, sky and clutter; no HUD in stereo; frame-sensitive 19.82 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-far",
       "frame": 120,
-      "hash": "05b1be1db7cb215ee5f7ae4cd75dbedc",
+      "hash": "e03fbffd26d96e810b00ead2903589c5",
       "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn from the XR origin's frame by the render thread's eye feed; frame-sensitive 11.92 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-aft",
       "frame": 120,
-      "hash": "ac2ce712aa7fb2cb4cd00b7f7b3e81d5",
+      "hash": "9e4075b0d214e04b8c0c9c71060cb8a6",
       "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out of the build, the gauges on their faces in both eyes; frame-sensitive 8.37 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-9800,700,-8200", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=head=0/0/0.1", "--det", "--mute"]
     },
@@ -211,9 +211,16 @@
     {
       "name": "c3-flare-xr-sim",
       "frame": 120,
-      "hash": "1c9646e4e8c092c2e95714682f3431ab",
+      "hash": "0cc3ce1320eb32570c7bc76d7d4d38b3",
       "exercises": "The world flare in stereo from the nose view: the core and all three rings at sky depth in both eyes, the sun wash on its head-locked quad over the C3 sky and sea; frame-sensitive 15.38 %.",
       "args": ["--chapter=C3", "--plane=player_bhawk", "--pos=0,1200,0", "--direction=0.765,0.469,-0.441", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
+    },
+    {
+      "name": "c1-moon-xr-sim",
+      "frame": 120,
+      "hash": "473ffb50d95b7e2fdaf5fed1c25c28ff",
+      "exercises": "A camera-facing sky sprite on the stand-in headset with the head turned 35 degrees off the C1 moon: the moon drawn as a disc facing the eye in both eyes, not lying in the head's view plane; frame-sensitive 11.52 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,1500,-6144", "--direction=-0.6,0,-0.8", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim=yaw=35,pitch=28", "--det", "--mute"]
     },
     {
       "name": "menu-original-xr-sim",

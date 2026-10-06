@@ -16,11 +16,15 @@ public readonly struct XrSimEyes
 
     /// <summary>A head turned <paramref name="yawDeg"/> right and <paramref name="pitchDeg"/> up,
     /// offset <paramref name="head"/> metres from the seated eye, eyes <paramref name="ipdMm"/>
-    /// apart, each <paramref name="fovDeg"/> wide.</summary>
-    public XrSimEyes(float yawDeg, float pitchDeg, Vector3 head, float ipdMm, float fovDeg)
+    /// apart, each <paramref name="fovDeg"/> wide, and tilted <paramref name="rollDeg"/> toward the
+    /// right shoulder.</summary>
+    public XrSimEyes(float yawDeg, float pitchDeg, Vector3 head, float ipdMm, float fovDeg, float rollDeg = 0f)
     {
-        // Yaw about world up first, then pitch about the turned head's own right axis.
-        var basis = new Basis(Vector3.Up, Mathf.DegToRad(-yawDeg)) * new Basis(Vector3.Right, Mathf.DegToRad(pitchDeg));
+        // Yaw about world up first, then pitch about the turned head's own right axis, then roll
+        // about its own line of sight. A tilt to the right turns +x down, so the angle about +z
+        // (which points back out of the face) is negative.
+        var basis = new Basis(Vector3.Up, Mathf.DegToRad(-yawDeg)) * new Basis(Vector3.Right, Mathf.DegToRad(pitchDeg))
+            * new Basis(Vector3.Back, Mathf.DegToRad(-rollDeg));
         Head = new Transform3D(basis, head);
         _halfIpdM = ipdMm * 0.0005f;
         _fovDeg = fovDeg;

@@ -210,6 +210,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 7. ☑ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
 8. ☑ B8 The cockpit interior in the main world under VR
 9. ◐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
+   ◐ B10 Billboards and sky sprites face the eye and hold the world's up as the head turns
 
 ### Wave C, screen, HUD and input
 
@@ -1521,6 +1522,112 @@ leaves the wreck about 56° below the gaze at the authored 30 m back and 45 m up
 passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 28/29 with
 `c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
 hash-identical on two goldens re-runs (#114's pattern). The headset checks named above are still owed.
+
+## B10 ◐ Billboards and sky sprites face the eye and hold the world's up as the head turns
+
+**Outcome: fixed on the stand-in, VR only; the look at the headset is owed.** The author, at the
+headset: "I found another bug in VR. The moon in C1 is turing with the head. Could happen to other
+billboard sprites too." Then: "It did not roll but rotate when i moved my head left to right or up
+down". Every stereo sprite whose quad copied the view's basis now faces the eye with world up.
+
+**Goal.** A sprite in the world keeps its world direction and its shape as the head turns, pitches
+or rolls: a sky body faces the eye with the horizon's up, a spherical particle faces the eye, a
+cylindrical card keeps world up. The flat game is unchanged.
+
+**Evidence (confidence: traced to code and measured on the stand-in, before and after, for the
+moon; traced to code for the other classes, whose stereo texts the suite reads).**
+- **The mechanism is rotation, not position.** `WorldBuilder.BillboardMoon` drew the moon with
+  Godot's `BILLBOARD_ENABLED`, which builds the quad from the main camera's basis. Under the stereo
+  path that basis is the head's combined view, so the disc lay in the head's view plane. Turned
+  away from it by an angle a, the eye sees the disc a off its normal: squashed radially by cos a,
+  which reads as the disc turning on its centre as the head moves. It also stayed upright to the
+  eyes under a head roll. Its position was right throughout: the moon's direction rotated with the
+  sky (19.80° on screen for a 20° roll), because the dome follows the head's position only. The
+  flat camera is not the source: the copied basis followed the head's roll, which no flat camera
+  carries.
+- **Measured before** (`.scratch/B10/b10_capture.ps1`: `RunProbe.ps1 --chapter=C1
+  --plane=player_bhawk --pos=-6144,1500,-6144 --direction=-0.6,0,-0.8 --view=nose --hold=0,0,0,0.6
+  --xr-sim=<pose>,eye=1200x1200,fov=100,ipd=63,shot=left --det --mute --frames=120`, read by
+  `.scratch/B10/b10_shape.py` and `b10_roll.py`). A disc facing the eye draws radial/tangential
+  1/cos a in a rectilinear eye; one in the view plane draws 1.000. At yaw 25, -25, 40, -40 and pitch
+  -5, the gaze 22 to 39° off the moon: 0.994, 0.991, 0.996, 0.991 and 1.007 against 1.08 to 1.30 for a
+  facing disc. Roll 20: the moon sprite turned 0.0° while the sky turned 19.80°.
+- **Measured after:** 1.076, 1.070, 1.208, 1.200 and 1.310 against 1.083, 1.080, 1.220, 1.214 and
+  1.299 predicted; roll 20: the sprite turned 19.5° with the sky's 20.04°.
+- **The data agrees with the fix.** C1's `moon` is model 770, `Facade`/`SphericalY` (C1C, C5
+  the same; C4's moon is the same class and already took `SceneBuilder`'s facade shader). The
+  original's SphericalY tracker sees only the eye's position, never its basis
+  (`docs/org/cloudCards.md`), so a world-up look-at toward the eye is its rule, flat or stereo.
+- **A4's billboard row** ("Billboards facing the eye: correct as is") checked the two eyes'
+  disparity, which is right; it did not check the basis under head motion.
+
+| Class | Code | Basis before | Under head turn and roll in VR | Verdict |
+|---|---|---|---|---|
+| Moon (C1, C1C, C5) | `Mech3/WorldBuilder.cs` `BillboardMoon` | Godot billboard, the view's basis | turned edge-on and rolled with the head | fixed: `StereoFacing.SpriteShaderCode` |
+| Moon (C4), facade flares (`refinery_flare`, `gen_flare_yellow`, `docklight_flare`, `litehsflare`, `flare_red`/`flare_green`), cloud sprites, placed puffs | `Mech3/SceneBuilder.cs` billboard shader | `csky_facade_spherical`, world up toward the eye | holds | correct as is |
+| CylindricalY facades and sails, CylindricalX flames | `SceneBuilder.cs` cylindrical shader | yaw about the world or model axis toward the eye | holds | correct as is |
+| Clutter cards and glows | `Mech3/Clutter.cs` `FaceBasisLines` | facade or cylindrical | holds | correct as is |
+| Cloud field cards | `Effects/FogVolumeClutter.cs` | facade | holds; the Enhanced grade read its gaze and sun offset off the view, so the rim and tint swung with the head | grade fixed under stereo |
+| Puffer sprites (smoke, fire, splashes) | `Effects/EmitterRenderer.cs` | `INV_VIEW_MATRIX` columns | turned and rolled with the head; the smoke grade too | fixed under stereo |
+| Heat shimmer column | `Effects/HeatShimmer.cs` | `INV_VIEW_MATRIX` right and up | the column tilted and turned with the head | fixed under stereo |
+| Snow flakes | `Effects/Precipitation.cs` | `INV_VIEW_MATRIX` right and up | round flakes, invisible, made consistent | fixed under stereo |
+| Rain streaks, wind streaks | `Precipitation.cs`, `Effects/WindStreaks.cs` | fall or stream axis, thin side to the eye | holds (the view basis only in the degenerate end-on case) | correct as is |
+| Nav and wing lights | `Mech3/PlaneBuilder.cs` flare shader | facade | holds | correct as is |
+| Point-sprite lights, stars | `SceneBuilder.cs` `LightShaderCode` | `POINT_SIZE` screen square | a radial glow, so no turn shows; off-axis it draws cos² a narrower in angle, 3 to 30 px | left; minor |
+| Projectile tips, muzzle flashes, impacts, tracers | `Flight/Weapons/Projectile.cs` | world bases (velocity, muzzle, surface) | holds | correct as is |
+| World flare rig | `Session/World/WorldFlareRig.cs` | the tracked head's view, by design | a lens artifact belongs to the eye | correct as is |
+| Head-locked near quads | `UI/Boards/HeadLockedQuads.cs` | the head, by design | | correct as is |
+| `Label3D` overlays (`NodeLabels`, `AiNetsOverlay`, `MarkerOverlay`) | `UI/Overlays/` | Godot billboard | dev overlays, flat only | not this item's |
+| C2 `moonbackdrop`/`moonsurface`, C5 `star1` | world geometry | `Default` models, no facing | holds | correct as is |
+
+**Approach (landed, VR only).** `Mech3/StereoFacing.cs`: `Live`, set by `XrSession.Build` before any
+world, the stereo `PoseLines` and `SpriteShaderCode`. Each sprite chooses its text once from it:
+`WorldBuilder.MoonMaterial`, `MultiMeshEmitterRenderer.VariantCode(..., stereo)` (the key gains
+`Stereo`), `HeatShimmer.CodeFor`, `Precipitation.CodeFor`, `FogVolumeClutter.ShaderCodeFor`. A
+stereo text is the flat text with the view-basis lines swapped, so every flat text is byte for byte
+what it was and no flat golden can move. The stand-in gains `roll=` (`XrSimSpec.RollDeg`,
+`XrSimEyes` applies it last about the head's own line of sight; `docs/cli.md`).
+
+**Model recommendation.** Standard.
+
+**Verify.** Units `XrSimTests` (the roll token and law), 73 passed with the emitter and fog-volume
+filters. Suite `xr-sprite-facing`: 15 stereo texts pose by the facade look-at, read no view column
+and compile, and their flat texts keep the view basis; the camera, puffer, cloud, clutter and `xr-`
+suites, 35 in all, pass with clean engine errors. Golden `c1-moon-xr-sim` (yaw 35, pitch 28; the
+moon 30-odd degrees off the gaze): `473ffb50d95b7e2fdaf5fed1c25c28ff` on 16 runs, and
+`99cc878e211bf70523e5640afa1587c9` on 6 runs with the stereo pose switched off, so it goes red on
+this bug. The stereo goldens re-pinned, each probe reproducing the old pin exactly with the switch
+off: `c1-cockpit-xr-sim` `7dd5c505e1d4ac51a1dd4eac449eb3b6`, `-far`
+`946b6b075c9340a589a79bc6b212cf6a`, `-aft` `2c7733e18689218ea104a29770db34ff` (at most 3 levels on
+one pixel), `c3-flare-xr-sim` `0cc3ce1320eb32570c7bc76d7d4d38b3` (218 pixels, up to 29 levels, all
+on faint puffs); `menu-original-xr-sim` unmoved.
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,1500,-6144" "--direction=-0.6,0,-0.8" --view=nose
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,1500,-6144" "--direction=-0.6,0,-0.8" --view=nose --graphics=enhanced
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6104,300,-4420" "--direction=0,-0.33,0.94" --view=nose --graphics=enhanced
+```
+Look for: (1) the moon stands straight ahead, about 28° up, above the cloud deck; look left and right,
+up and down, and tilt your head: it stays a round disc facing you, upright to the horizon, at the
+same place in the sky; (2) the second line, Enhanced: the cloud field's bright sun-side rims stay
+put on each cloud as you turn and tilt; (3) the third line, Enhanced, low over the ground: fire
+rockets at the ground and look around the explosion, its smoke and the shimmer above it as you
+turn and tilt; nothing pivots or leans with the head.
+
+**⚠ Traps.**
+- Do not give a stereo sprite Godot's billboard mode or a basis from `INV_VIEW_MATRIX` or
+  `MAIN_CAM_INV_VIEW_MATRIX`: under the stereo path both are the head's view. Take `StereoFacing`.
+- Do not change the flat texts to match. The flat moon copying the camera's roll contradicts the
+  original's SphericalY rule (its tracker never sees the camera's roll), but correcting it moves
+  the flat goldens: its own item, if anyone wants it.
+- A stand-in probe sometimes exits 0xC0000005 or 0xC000001D after its capture, with
+  `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"` and thousands of
+  leaked references in the teardown. Interleaved at the moon pose it was 1 of 12 with the stereo pose
+  off and 2 of 12 with it on, and its rate rose with the other Godots running. The golden stage reads
+  the PNG and the log, not the exit code.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C, screen, HUD and input
 

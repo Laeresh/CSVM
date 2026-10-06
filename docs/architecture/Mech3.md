@@ -50,6 +50,15 @@ text changed. `WarmOtherMode` compiles the other mode ahead. Before an Enhanced 
 (`EnhancedDrawn`), a first switch to Enhanced rewrites in place and keeps a material on each shader
 it rewrites (LOG-26). `Pooled` serves per-instance constant texts too. Read `Launch/EnhancedLook.cs`.
 
+## src/Mech3/StereoFacing.cs
+How a camera-facing sprite takes its basis under the stereo path. A quad that copies the view's
+basis lies in the head's view plane there, so it is seen turning edge-on as the head looks away
+and rolls with every tilt. `Live` is set by `Launch/XrSession.cs` before any world is built, and
+each sprite then emits a stereo text posed by `csky_facade_spherical` toward the eye: the moon
+(`WorldBuilder.MoonMaterial`, `SpriteShaderCode`), the puffer sprites (`EmitterRenderer`), the heat
+shimmer, the snow flakes and the Enhanced cloud-field grade. The flat texts are untouched. Suite
+`xr-sprite-facing`; golden `c1-moon-xr-sim`.
+
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
 with the zone set `{0, camera weather state}`; the walk draws a node iff its gamez `zone_id` is

@@ -100,7 +100,7 @@ a menu value that a spelled-out flag beats says so in an `*Explicit` field (`Sce
 
 ## src/Spec/XrSimSpec.cs
 The stand-in headset a `--xr-sim[=spec]` launch asks for, as one engine-free value parsed from the
-flag's tokens ([../cli.md](../cli.md)): the pinned head's yaw, pitch and offset, the IPD, each
+flag's tokens ([../cli.md](../cli.md)): the pinned head's yaw, pitch, roll and offset, the IPD, each
 eye's pixel size and field of view, and whether a screenshot saves both eyes side by side or one.
 A token that does not parse keeps its default and becomes a spec warning. `SessionSpec.XrSim`
 carries it; `Launch/XrSimInterface.cs` draws through it and `Tooling/CaptureDirector.cs` reads its

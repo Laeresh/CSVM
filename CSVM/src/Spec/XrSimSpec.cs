@@ -16,14 +16,14 @@ public enum XrSimShot
 
 /// <summary>
 /// The stand-in headset a <c>--xr-sim[=spec]</c> launch flies with, parsed from the flag's
-/// comma-separated <c>key=value</c> tokens. A yaw and pitch in degrees (+ right, + up) pin the head
-/// for the whole run. Its offset from the seated eye is in metres (+x right, +y up, +z back). Each
+/// comma-separated <c>key=value</c> tokens. A yaw, pitch and roll in degrees (+ right, + up, + toward
+/// the right shoulder) pin the head for the whole run. Its offset from the seated eye is in metres (+x right, +y up, +z back). Each
 /// eye is a symmetric frustum of a horizontal field of view, <see cref="IpdMm"/> apart. The default
 /// head sits at the mount looking ahead, and two default eyes side by side make a 1280x720 shot, the
 /// golden size. Engine-free, so it unit-tests.
 /// </summary>
 public sealed record XrSimSpec(float YawDeg, float PitchDeg, Vector3 Head, float IpdMm, Vector2I EyePx,
-    float FovDeg, XrSimShot Shot)
+    float FovDeg, XrSimShot Shot, float RollDeg = 0f)
 {
     /// <summary>A bare <c>--xr-sim</c>.</summary>
     public static readonly XrSimSpec Default = new(0f, 0f, Vector3.Zero, 63f, new Vector2I(640, 720), 90f, XrSimShot.Both);
@@ -46,6 +46,7 @@ public sealed record XrSimSpec(float YawDeg, float PitchDeg, Vector3 Head, float
             {
                 "yaw" => Float(value, -180f, 180f) is { } yaw ? spec with { YawDeg = yaw } : null,
                 "pitch" => Float(value, -90f, 90f) is { } pitch ? spec with { PitchDeg = pitch } : null,
+                "roll" => Float(value, -90f, 90f) is { } roll ? spec with { RollDeg = roll } : null,
                 "head" => Slashed(value) is { } head ? spec with { Head = head } : null,
                 "ipd" => Float(value, 0f, 100f) is { } ipd ? spec with { IpdMm = ipd } : null,
                 "eye" => Size(value) is { } eye ? spec with { EyePx = eye } : null,
@@ -55,7 +56,7 @@ public sealed record XrSimSpec(float YawDeg, float PitchDeg, Vector3 Head, float
             };
             if (next == null)
             {
-                problems.Add($"--xr-sim token '{raw}' is not yaw=, pitch=, head=x/y/z, ipd=, eye=WxH, fov= or shot=both|left|right in range, keeping the default");
+                problems.Add($"--xr-sim token '{raw}' is not yaw=, pitch=, roll=, head=x/y/z, ipd=, eye=WxH, fov= or shot=both|left|right in range, keeping the default");
                 continue;
             }
 

@@ -111,6 +111,13 @@ public sealed partial class HeatShimmer : Node3D
         }
         """;
 
+    // The flat column stands in the camera's basis, which under a headset is the head's, so it would
+    // pivot and tilt as the head turns. The stereo text stands it in the facade basis toward the eye.
+    private const string FlatAxes = """
+            vec3 right = INV_VIEW_MATRIX[0].xyz;
+            vec3 up = INV_VIEW_MATRIX[1].xyz;
+        """;
+
     private readonly Slot[] _slots = new Slot[PoolCap];
     private ShaderMaterial _mat = null!;
     private MultiMeshInstance3D _mmi = null!;
@@ -178,6 +185,14 @@ public sealed partial class HeatShimmer : Node3D
             Step(clock.Time);
     }
 
+    /// <summary>The shader text: the flat one, or under <paramref name="stereo"/> the same text with the
+    /// quad's axes taken from <see cref="Mech3.StereoFacing"/>'s basis toward the eye.</summary>
+    internal static string CodeFor(bool stereo) => !stereo ? ShaderCode : ShaderCode
+        .Replace("#include \"res://shaders/csky_time.gdshaderinc\"",
+            "#include \"res://shaders/csky_time.gdshaderinc\"\n" + Mech3.StereoFacing.Include)
+        .Replace(FlatAxes, "    mat3 face = csky_facade_spherical(center, CAMERA_POSITION_WORLD);\n"
+            + "    vec3 right = face[0];\n    vec3 up = face[1];");
+
     /// <summary>Ages every live quad on the sim clock and writes this frame's instance data. Called
     /// once per rendered frame; <paramref name="simTime"/> is the session clock's time, never the
     /// wall clock, so a halted or fixed-step run shimmers by frame count.</summary>
@@ -244,7 +259,7 @@ public sealed partial class HeatShimmer : Node3D
         Name = "heat_shimmer";
         _mat = new ShaderMaterial
         {
-            Shader = new Shader { Code = ShaderCode },
+            Shader = new Shader { Code = CodeFor(Mech3.StereoFacing.Live) },
             // Drawn BEFORE the other transparents, the fireball and its smoke included. The screen
             // copy below holds none of them, so a quad drawn last would paint the bare opaque world
             // over whatever flame or smoke it covers; drawn first, they composite over it instead.

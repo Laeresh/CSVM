@@ -39,10 +39,11 @@ public class XrSimTests
     public void EveryTokenParsesOverTheDefault()
     {
         var problems = new List<string>();
-        var spec = XrSimSpec.Parse("yaw=-30.5, pitch=10,head=0.1/-0.05/0.2,ipd=70,eye=1920x1080,fov=100,shot=right", problems);
+        var spec = XrSimSpec.Parse("yaw=-30.5, pitch=10,roll=-20,head=0.1/-0.05/0.2,ipd=70,eye=1920x1080,fov=100,shot=right", problems);
         Assert.Empty(problems);
         Assert.Equal(-30.5f, spec.YawDeg);
         Assert.Equal(10f, spec.PitchDeg);
+        Assert.Equal(-20f, spec.RollDeg);
         Assert.Equal(new Vector3(0.1f, -0.05f, 0.2f), spec.Head);
         Assert.Equal(70f, spec.IpdMm);
         Assert.Equal(new Vector2I(1920, 1080), spec.EyePx);
@@ -54,7 +55,7 @@ public class XrSimTests
     [Fact]
     public void ABadTokenKeepsItsDefaultAndIsReported()
     {
-        var parsed = SessionSpec.Parse(new[] { "--fly", "--xr-sim=yaw=400,fov=wide,eye=10x10,roll=5,shot=left" });
+        var parsed = SessionSpec.Parse(new[] { "--fly", "--xr-sim=yaw=400,fov=wide,eye=10x10,tilt=5,shot=left" });
         Assert.Equal(XrSimSpec.Default with { Shot = XrSimShot.Left }, parsed.XrSim);
         Assert.Equal(4, parsed.Warnings.Count);
     }
@@ -69,6 +70,20 @@ public class XrSimTests
         // Yaw first, about world up: a turned and raised head keeps its right axis level.
         var both = new XrSimEyes(45f, 20f, Vector3.Zero, 63f, 90f).Head.Basis;
         Assert.Equal(0f, both.X.Y, 5);
+    }
+
+    [Fact]
+    public void RollTiltsTheHeadAboutItsOwnLineOfSight()
+    {
+        // A tilt toward the right shoulder takes the head's right axis down and leaves the gaze.
+        var tilted = new XrSimEyes(0f, 0f, Vector3.Zero, 63f, 90f, rollDeg: 30f).Head.Basis;
+        Assert.True((-tilted.Z).IsEqualApprox(Vector3.Forward));
+        Assert.True(tilted.X.IsEqualApprox(new Vector3(Mathf.Sqrt(3f) / 2f, -0.5f, 0f)));
+        // Applied last: a turned, raised and tilted head looks where the untilted one does.
+        var level = new XrSimEyes(40f, 25f, Vector3.Zero, 63f, 90f).Head.Basis;
+        var rolled = new XrSimEyes(40f, 25f, Vector3.Zero, 63f, 90f, rollDeg: -15f).Head.Basis;
+        Assert.True(rolled.Z.IsEqualApprox(level.Z));
+        Assert.Equal(15f, Mathf.RadToDeg(rolled.X.AngleTo(level.X)), 3);
     }
 
     [Fact]
