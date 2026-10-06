@@ -1294,6 +1294,13 @@ a flat Enhanced one; flat Enhanced and Original stay on `LensFlareRig` by defaul
 unchanged. The whiteout, `ScreenFlash`, the sun wash and the mission-end fade have head-locked
 stereo quads (`UI/Boards/HeadLockedQuads.cs`). The montage is in `.scratch/C14/` (below).
 
+**Ruling on the montage: adopt the world rig in flat Enhanced, with a ring gain under Enhanced** so
+the ghost rings read about as strongly as the screen rig's (the montage measured 4.2/9.1/3.9 levels
+over the sky against 11.0/20.8/6.1, since AgX tonemaps the world rig and not the canvas). Open
+follow-up in this item: `SkyStage.UsesWorldFlare` to `stereo || enhanced`, the Enhanced ring gain
+tuned against the screen rig's levels, the C2/C3 Enhanced goldens re-pinned, and `--world-flare`
+retired or kept as a comparison switch. The VR ring default is still the author's at the headset.
+
 **Evidence (confidence: traced to code and measured for placement, size, depth and the stereo
 quads; the look is the author's judgement).**
 - **Placement is the screen rig's law in angles.** An element at fraction f sits at
