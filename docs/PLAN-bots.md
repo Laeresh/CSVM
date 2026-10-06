@@ -722,7 +722,7 @@ passed / 0 failed; `-Filter 'net-,versus-' -Shards 4 -SkipUnits -SkipGoldens -Sk
 0 failed (every `net-bot-*`, `versus-local-bot`, `versus-local-bot-graze`); engine errors clean on
 every run. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the plan tree (837c345d, B15 and B16 with the profile-sweep fix): build, engine 538 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; units 6356 passed / 1 failed / 3 skipped, the one `MasterServerLinkTests` relay test timing out at 15 s with another session's probes on the machine, then green alone (2/2 in 10 ms) and in a re-run of the unit stage, 6357 passed / 0 failed / 3 skipped.
 
 **⚠ Traps.** `graze-bounce` pins the decoded AI rule for world AI; it must stay green unchanged. Never
 widen the question to `IsHumanPiloted` itself: that flag also picks the force path, the aim assist
@@ -802,7 +802,7 @@ rates keeps the rotation term and rebounds harder), which fails with the fix rev
 6357 passed / 0 failed / 3 skipped; engine errors clean on every run.
 `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the plan tree (837c345d, B15 and B16 with the profile-sweep fix): build, engine 538 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; units 6356 passed / 1 failed / 3 skipped, the one `MasterServerLinkTests` relay test timing out at 15 s with another session's probes on the machine, then green alone (2/2 in 10 ms) and in a re-run of the unit stage, 6357 passed / 0 failed / 3 skipped.
 
 **⚠ Traps.** B15's trap holds: a piloted bot near the ground moves its normal speed by up to 0.8 m/s
 a step, so read restitution over the contact, not off one step. Never zero the bot's whole rotation
