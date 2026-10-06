@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Bring the low-altitude SSR cost within budget
 12. ☑ Measure and budget the Deck
 13. ☑ Cache or speed up the mask bake
-14. ☐ No secondary viewport draws the ocean grid it does not need
+14. ☑ No secondary viewport draws the ocean grid it does not need
 
 ### Wave C, coverage
 
@@ -340,6 +340,11 @@ after sim frame 240, except the low pass (see the traps):
 The last three rows are the low pass held airborne over all 600 frames (`--hold=0.04,0,0,0.7`, near
 22 m), measured later in the Deck's Desktop Mode, where the window came up at 1280x720 under KWin
 instead of 1280x800 under gamescope. They compare with each other, not with the rows above.
+
+The split-screen rows read high twice over: each pane's spyglass disc also drew the full grid
+(fixed in B14, the disc now shows the flat sea), and the `--perf` spyglass census then read
+`GetRenderInfo` on the main thread, forcing a render-thread sync on every frame a disc rendered
+(B14 moved it to the render thread). They are not a measure of the Deck's split-screen cost today.
 
 Draw calls do not move (under 10 more). Single-player waves run at 64 fps at cruise and at 57 to 58 fps
 at the low pass and the C3 coast, against 101 to 114 fps flat. With two panes they run at 39 to 45 fps,
@@ -832,7 +837,68 @@ bake as wakes' ships already are.>
 **⚠ Traps.** C22: `--direction` turns the view the opposite way on x in this mode; a hull counts only
 while its origin is within 3 m of sea level.
 
-## B14 ☐ No secondary viewport draws the ocean grid it does not need
+## B14 ☑ No secondary viewport draws the ocean grid it does not need
+
+**Landed.** Per viewport first. In split screen the root viewport draws no 3D (`SplitScreen` sets
+`Disable3D`), so the world goes through each pane camera and each pane's spyglass disc. The census
+now counts disc primitives: at the 2-pane C1B cruise the two discs submit 542k of the frame's 1.11M
+prims with the ocean (6.9k with `--no-ocean`), and at four panes 1.09M of 2.23M, so every disc drew
+the whole grid, as B12 inferred. No other viewport shares the world on every frame: the cockpit pass
+(`CockpitOverlay`) and the load warm-up viewport (`EnhancedLook.WarmAdvancedVariants`) own empty
+worlds, and the Danger Zone photograph renders one frame per latch through the pane's own mask and
+keeps the waves, since it is a picture of the pane's sea. The race ghost is a shader, not a viewport.
+
+The disc's camera now carries `SplitScreen.FlatSeaLayer` (bit 5, layer 6; no geometry or light uses
+it) under Enhanced (`SpyglassView.DiscMask`), and `PlayerCullMask`/`PaneCullMask` drop it.
+`SceneBuilder.FlatSeaEye` is the shader test, `(CAMERA_VISIBLE_LAYERS & (FlatSea | Sun)) == FlatSea`:
+the sun's bit keeps a mask with every bit set (a fresh camera, maybe a shadow pass) from reading as
+a disc, and the Enhanced disc is the only camera without the sun's layer. The grid's vertex stage
+puts every vertex behind the eye before any wave math; the sheet's discard reads
+`!FlatSeaEye && csky_ocean_hides_sea(...)`. `CAMERA_VISIBLE_LAYERS` compiles in both stages under
+Godot 4.7 (no shader error, and the disc draws the sheet). The `--perf` spyglass line gains
+`disc_prims` and `disc_gpu_ms` and is now read on the render thread: its `GetRenderInfo` calls from
+the main thread had waited on the render thread on every frame a disc rendered (4,752 Godot
+sync warnings in one 600-frame 2-pane run), which held split-screen `--perf` frames at 27 to 49 ms
+on a shared machine. `prims` and `disc_prims` do not move with the fix, since the disc still submits
+the grid and collapses it; the cost is in `disc_gpu_ms`.
+
+Desktop RTX 5080, 1920x1080, `--det --perf --no-vsync --frames=600`, C1B cruise pose, means over
+windows from sim frame 240. "Before" is this tree with the marker left off the disc (same census),
+"after" the fix. Every row is two rounds with arm order rotated, each run passing the quiet gate
+before and after (no other godot, cargo or rustc process, GPU under 12 %); five runs that failed
+it were discarded and re-run:
+
+| Panes | Arm | `frame_ms` | `disc_gpu_ms` (all discs) | prims / disc prims |
+|---|---|---|---|---|
+| 2 | before, ocean | 9.24, 8.33 | 0.407, 0.406 | 1.11M / 542k |
+| 2 | after, ocean | 9.23, 8.43 | 0.267, 0.268 | 1.11M / 542k |
+| 2 | before, `--no-ocean` | 9.41, 9.40 | 0.266, 0.259 | 40k / 6.9k |
+| 2 | after, `--no-ocean` | 9.37, 9.58 | 0.255, 0.257 | 40k / 6.9k |
+| 4 | before, ocean | 8.34, 8.36 | 0.810, 0.806 | 2.23M / 1.09M |
+| 4 | after, ocean | 8.36, 8.36 | 0.539, 0.537 | 2.23M / 1.09M |
+| 4 | before, `--no-ocean` | 8.33, 8.34 | 0.481, 0.478 | 85k / 23k |
+| 4 | after, `--no-ocean` | 8.33, 8.34 | 0.481, 0.480 | 85k / 23k |
+
+The discs' ocean cost falls from +0.15 to +0.01 ms at two panes and from +0.33 to +0.06 ms at four
+(the residue is the collapsed vertex stage over 134k vertices, twice per disc). `frame_ms` does not
+resolve it: under `--det` the frame loop holds 120 fps, and every desktop split-screen arm sits at
+or near that 8.33 ms floor, with the 2-pane arms scattering by 1 ms between runs either way. The
+Deck, where B12 measured +12 to +15 ms for waves in split screen, was not re-measured.
+
+Evidence in this tree's `.scratch\b14\`: `montage-disc-low.png` (2-pane held low pass at 2560x1440,
+each pane's disc before, after and `--no-ocean`, 3x crops) and `montage-disc-cruise.png` (the cruise
+pose). Both discs after the fix are pixel-identical to `--no-ocean` inside the disc (0 of 2,121 pixels
+differ at the low pass; before, 1,101 to 1,169 differ by about 9 levels), and the before/after frames
+differ only inside the two discs (3,653 pixels, none outside), so the panes keep the waves.
+Identity: the single-pane C1B cruise shot decodes to `6C876AAE...` on the plan branch build and on
+this tree, and the Original cruise shot to `86BD180F...` on both. Tests: `spyglass-sun` checks each
+disc carries the marker under Enhanced and no pane does; `graphics-ocean-switch` checks the grid and
+the sheet read `FlatSeaEye`; `SpyglassTests.TheSunLayersAreTheirOwnAndOnlyTheDiscDrawsTheCopy` pins the
+bit against every reserved band.
+
+**Verified.** The complete battery on the plan tree with B14 merged: units 6337 passed, 3 skipped; engine 529 passed, 2 skipped, errors clean; goldens: the three ocean shots C24 re-pins, at the same hashes as before B14, and `c1-cockpit-enhanced` held. Inside each disc the frame matches `--no-ocean` pixel for pixel, the panes keep their waves, and the single-pane cruise shot is unchanged.
+
+**Original approach (kept for reference).**
 
 **Goal.** The ocean grid draws once per pane camera, not again in each pane's spyglass disc or any
 other secondary viewport that does not show the sea.

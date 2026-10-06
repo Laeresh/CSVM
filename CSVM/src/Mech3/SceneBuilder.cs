@@ -243,6 +243,14 @@ public sealed class SceneBuilder
     internal const float WaterRoughness = 0.25f;
     internal const float WaterSpecular = 0.5f;
 
+    /// <summary>The shader condition that the drawing camera is a spyglass disc's, which shows the
+    /// flat sea: it carries <see cref="UI.Boards.SplitScreen.FlatSeaLayer"/> and not the world sun's
+    /// layer. Read in both stages. The wave ocean's grid collapses on it and the base sheet's hide
+    /// steps back. ⚠ Keep the sun's bit in the test. A pass reporting every layer (a fresh camera,
+    /// possibly a shadow pass) would otherwise read as the disc.</summary>
+    internal static readonly string FlatSeaEye = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"((CAMERA_VISIBLE_LAYERS & {UI.Boards.SplitScreen.FlatSeaLayer | UI.Boards.SplitScreen.SunLayer}u) == {UI.Boards.SplitScreen.FlatSeaLayer}u)");
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -2071,8 +2079,9 @@ void vertex() {{
 }}
 
 void fragment() {{");
+        // A spyglass disc draws no ocean (FlatSeaEye), so the sheet stays whole there.
         if (oceanHide)
-            sb.AppendLine("    if (csky_ocean_hides_sea(v_ocean_pos)) { discard; }");
+            sb.AppendLine($"    if (!{FlatSeaEye} && csky_ocean_hides_sea(v_ocean_pos)) {{ discard; }}");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         if (raceGhost)

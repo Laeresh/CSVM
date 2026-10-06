@@ -30,6 +30,13 @@ public sealed partial class SplitScreen : CanvasLayer
     /// carries it (<see cref="PaneCullMask"/>), or a pane would be lit twice.</summary>
     public const uint SpyglassSunLayer = 1u << 6;
 
+    /// <summary>The spyglass disc's flat-sea marker under Enhanced Graphics. No geometry or light is
+    /// drawn on it, and only the disc's camera carries it
+    /// (<see cref="Flight.Camera.SpyglassView.DiscMask"/>); no pane's cull mask does. A camera
+    /// carrying it without <see cref="SunLayer"/> sees the flat sea: the wave ocean's grid collapses
+    /// and the base sheet keeps drawing (<c>Mech3.SceneBuilder.FlatSeaEye</c>).</summary>
+    public const uint FlatSeaLayer = 1u << 5;
+
     /// <summary>The world's layer 1, which every pane, spyglass and photograph camera draws. A race
     /// ghost of a seat flown on another machine names it as its owner's layer. No camera here then
     /// takes that aeroplane for its own, however many seats the race has.</summary>
@@ -151,14 +158,16 @@ public sealed partial class SplitScreen : CanvasLayer
     public static string PlayerTag(int index) => $"P{index + 1}";
 
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
-    /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
+    /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.
+    /// The spyglass disc's two layers are left out.</summary>
     public static uint PlayerCullMask(int index) =>
-        (AllLayers & ~PlayerBand & ~SpyglassSunLayer) | PlayerVisualLayer(index);
+        (AllLayers & ~PlayerBand & ~SpyglassSunLayer & ~FlatSeaLayer) | PlayerVisualLayer(index);
 
-    /// <summary><paramref name="mask"/> less <see cref="SpyglassSunLayer"/>, with every
-    /// <see cref="FirstPersonLayer"/> back, for a pane camera <see cref="PlayerCullMask"/> did not
-    /// build. That is the main camera, which outlives a session whose pilot dropped a bit.</summary>
-    public static uint PaneCullMask(uint mask) => OutsideCullMask(mask) & ~SpyglassSunLayer;
+    /// <summary><paramref name="mask"/> less <see cref="SpyglassSunLayer"/> and
+    /// <see cref="FlatSeaLayer"/>, with every <see cref="FirstPersonLayer"/> back, for a pane camera
+    /// <see cref="PlayerCullMask"/> did not build. That is the main camera, which outlives a session
+    /// whose pilot dropped a bit.</summary>
+    public static uint PaneCullMask(uint mask) => OutsideCullMask(mask) & ~SpyglassSunLayer & ~FlatSeaLayer;
 
     /// <summary>The visual layer player <paramref name="index"/>'s own airframe groups move onto
     /// while that pilot looks out of the aeroplane (<see cref="Flight.Hud.CockpitVisibility"/>).

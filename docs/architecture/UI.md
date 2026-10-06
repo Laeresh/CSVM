@@ -579,7 +579,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
 skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
-by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer` or carries `FlatSeaLayer` (no geometry, the disc's flat-sea marker), the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp

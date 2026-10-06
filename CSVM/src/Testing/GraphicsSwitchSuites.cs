@@ -135,7 +135,8 @@ internal static class GraphicsSwitchSuites
     [Suite("spyglass-sun",
         "under Enhanced the world sun sits on the layer every pane camera draws and the spyglass disc's "
         + "camera leaves out, and one shadowless copy on the disc's own layer, which no pane draws, "
-        + "matches the sun's bearing, colour and energy: in a two-pane flight with one disc per pane, "
+        + "matches the sun's bearing, colour and energy; each disc, and no pane, carries the flat-sea "
+        + "marker: in a two-pane flight with one disc per pane, "
         + "at every Shadow Quality level including Off, across a zone crossing the weather rig lights, "
         + "and after a live switch to Original (copy freed, sun back on layer 1, each disc the pane's "
         + "view less its own airframe) and back; a fresh Original flight builds no copy and moves no layer")]
@@ -354,7 +355,8 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
         + "stands one ocean and every sea-level base sheet material carries the hide, which reads "
-        + "that ocean's mask and steps aside only at the coverage the ocean discards below; "
+        + "that ocean's mask and steps aside only at the coverage the ocean discards below, and neither "
+        + "the grid nor the hide acts for a spyglass disc's camera; "
         + "switched to Original the ocean leaves the tree, the mask globals return to their no-sea "
         + "defaults and the sheet carries a fresh Original "
         + "build's text, with no hide; back to Enhanced exactly one ocean stands and the sheet "
@@ -412,7 +414,7 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.OceanBuilt && freshEnhanced.Materials > 0
                         && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
-                HideReadsTheMask(ctx, builtFresh);
+                HideReadsTheMask(ctx, enhanced, builtFresh);
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,
@@ -856,6 +858,8 @@ internal static class GraphicsSwitchSuites
             uint mask = pane.Camera.CullMask;
             ctx.Check((mask & UI.Boards.SplitScreen.SpyglassSunLayer) == 0 && (mask & UI.Boards.SplitScreen.SunLayer) != 0,
                 $"{label}: pane {pane.Index + 1} draws the sun's layer and not the copy's (0x{mask:X5})");
+            ctx.Check((mask & UI.Boards.SplitScreen.FlatSeaLayer) == 0,
+                $"{label}: pane {pane.Index + 1} does not carry the flat-sea marker, so it draws the wave ocean (0x{mask:X5})");
         }
         foreach (var view in views)
         {
@@ -866,8 +870,9 @@ internal static class GraphicsSwitchSuites
                 disc == SpyglassView.DiscMask(p.Camera.CullMask, UI.Boards.SplitScreen.OwnAirframeLayer(p.Index), enhanced));
             bool sun = (disc & UI.Boards.SplitScreen.SunLayer) != 0;
             bool copy = (disc & UI.Boards.SplitScreen.SpyglassSunLayer) != 0;
-            ctx.Check(fromPane && sun != enhanced && copy == enhanced,
-                $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun" : "the sun itself")} (0x{disc:X5}: sun {sun}, copy {copy})");
+            bool flat = (disc & UI.Boards.SplitScreen.FlatSeaLayer) != 0;
+            ctx.Check(fromPane && sun != enhanced && copy == enhanced && flat == enhanced,
+                $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun and the flat-sea marker" : "the sun itself and no flat-sea marker")} (0x{disc:X5}: sun {sun}, copy {copy}, flat sea {flat})");
         }
     }
 
@@ -989,9 +994,20 @@ internal static class GraphicsSwitchSuites
     }
 
     // The sheet's hide steps aside only where this ocean draws. Its mask is the one the hide reads,
-    // and the include gates on the coverage below which the ocean's own fragment discards.
-    private static void HideReadsTheMask(TestContext ctx, Effects.Ocean? ocean)
+    // and the include gates on the coverage below which the ocean's own fragment discards. Neither
+    // the grid nor the hide acts for a spyglass disc's camera.
+    private static void HideReadsTheMask(TestContext ctx, Rig rig, Effects.Ocean? ocean)
     {
+        string sheet = "";
+        foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            if (Mech3.SceneBuilder.IsOceanBaseTexture(texture) && material.Shader?.Code is { } code
+                && code.Contains(HideCall, StringComparison.Ordinal))
+            {
+                sheet = code;
+                break;
+            }
+        }
         string threshold = Effects.OceanMask.SeaThreshold.ToString("0.0#", CultureInfo.InvariantCulture);
         string include = ResourceLoader.Load<ShaderInclude>(OceanIncludePath)?.Code ?? "";
         string grid = ocean?.GetNodeOrNull<MeshInstance3D>("OceanGrid")?.Mesh?.SurfaceGetMaterial(0) is ShaderMaterial { Shader: { } shader }
@@ -1003,6 +1019,9 @@ internal static class GraphicsSwitchSuites
             $"the sheet's hide steps aside at the coverage the ocean discards below, {threshold} (include {(include.Length > 0 ? "read" : "missing")}, grid shader {(grid.Length > 0 ? "read" : "missing")})");
         ctx.Check(include.Contains($"abs(zone - {Effects.OceanMask.SeamZone}.0)", StringComparison.Ordinal),
             $"and leaves a zone seam texel, which no grid draws, to the sheet");
+        ctx.Check(grid.Contains($"if ({Mech3.SceneBuilder.FlatSeaEye}) {{", StringComparison.Ordinal)
+                && sheet.Length > 0 && sheet.Contains($"!{Mech3.SceneBuilder.FlatSeaEye} && {HideCall}", StringComparison.Ordinal),
+            $"a spyglass disc's camera collapses the grid before its wave sum and keeps the sheet whole ({Mech3.SceneBuilder.FlatSeaEye}; sheet {(sheet.Length > 0 ? "read" : "missing")})");
     }
 
     // The base sheet's materials as the world builder named them, by texture and shader text. Also

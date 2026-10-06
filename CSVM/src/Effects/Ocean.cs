@@ -505,30 +505,37 @@ float ship_calm(vec2 p) {
 }
 
 void vertex() {
-    vec2 p = VERTEX.xz + CAMERA_POSITION_WORLD.xz;
-    float spacing = max(UV.x, 0.01);
-    float amp = ocean_mask(p).g * ship_calm(p) * wave_scale;
-    vec3 disp = vec3(0.0);
-    vec4 sea = sea_state(p);
-    vec4 fine = sea_fine(p);
-    for (int i = 0; i < SWELL_DKA.length(); i++) {
-        vec4 w = SWELL_DKA[i];
-        float len = 6.2831853 / w.z;
-        vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], sea, fine);
-        // Full height at eight grid steps per wavelength, none at four: a wave the grid cannot
-        // carry would crawl as the grid follows the eye.
-        float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
-        float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
-        disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
-        disp.y += w.w * g * sin(th);
+    // A spyglass disc shows the flat sea. Every vertex goes to one point behind the eye, so the
+    // clipper drops each triangle before a fragment and no wave is summed.
+    if (" + SceneBuilder.FlatSeaEye + @") {
+        VERTEX = vec3(0.0, 0.0, 1.0);
+        v_param = vec2(0.0);
+    } else {
+        vec2 p = VERTEX.xz + CAMERA_POSITION_WORLD.xz;
+        float spacing = max(UV.x, 0.01);
+        float amp = ocean_mask(p).g * ship_calm(p) * wave_scale;
+        vec3 disp = vec3(0.0);
+        vec4 sea = sea_state(p);
+        vec4 fine = sea_fine(p);
+        for (int i = 0; i < SWELL_DKA.length(); i++) {
+            vec4 w = SWELL_DKA[i];
+            float len = 6.2831853 / w.z;
+            vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], sea, fine);
+            // Full height at eight grid steps per wavelength, none at four: a wave the grid cannot
+            // carry would crawl as the grid follows the eye.
+            float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
+            float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
+            disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
+            disp.y += w.w * g * sin(th);
+        }
+        v_param = p;
+        vec3 world = vec3(p.x + disp.x, disp.y, p.y + disp.z);
+        VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
+        // A priority level below the lowest base sheet. Every coplanar layer over or beside it
+        // stays on top, the surf ring and C5's fog-gradient passes included.
+        VERTEX *= " + DepthScale(level) + @";
+        NORMAL = (VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
     }
-    v_param = p;
-    vec3 world = vec3(p.x + disp.x, disp.y, p.y + disp.z);
-    VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
-    // A priority level below the lowest base sheet. Every coplanar layer over or beside it stays
-    // on top, the surf ring and C5's fog-gradient passes included.
-    VERTEX *= " + DepthScale(level) + @";
-    NORMAL = (VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
 }
 
 void fragment() {

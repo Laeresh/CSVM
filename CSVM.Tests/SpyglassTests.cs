@@ -231,8 +231,10 @@ public class SpyglassTests
         {
             Assert.Equal(0u, band & SplitScreen.SunLayer);
             Assert.Equal(0u, band & SplitScreen.SpyglassSunLayer);
+            Assert.Equal(0u, band & SplitScreen.FlatSeaLayer);
         }
         Assert.NotEqual(SplitScreen.SunLayer, SplitScreen.SpyglassSunLayer);
+        Assert.Equal(0u, SplitScreen.FlatSeaLayer & (SplitScreen.SunLayer | SplitScreen.SpyglassSunLayer));
 
         for (int i = 0; i < SplitScreen.MaxPlayers; i++)
         {
@@ -243,12 +245,16 @@ public class SpyglassTests
             Assert.Equal(0u, pane & SplitScreen.SpyglassSunLayer);
             Assert.Equal(0u, disc & SplitScreen.SunLayer);
             Assert.NotEqual(0u, disc & SplitScreen.SpyglassSunLayer);
+            // The flat-sea marker: the disc carries it, the pane does not.
+            Assert.Equal(0u, pane & SplitScreen.FlatSeaLayer);
+            Assert.NotEqual(0u, disc & SplitScreen.FlatSeaLayer);
             // Nothing else moves: the world, the zone gate and every other airframe stay as the pane has them.
-            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer, disc & ~SplitScreen.SpyglassSunLayer);
+            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer, disc & ~SplitScreen.SpyglassSunLayer & ~SplitScreen.FlatSeaLayer);
         }
 
         // The single-player camera, whose mask the launcher's fresh camera starts at all 20 layers.
         Assert.Equal(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.SpyglassSunLayer);
+        Assert.Equal(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.FlatSeaLayer);
         Assert.NotEqual(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.SunLayer);
     }
 
