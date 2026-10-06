@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Launch;
 using CSVM.Net;
@@ -15,7 +16,8 @@ namespace CSVM.Testing;
 /// <summary>A Dogfight seat's return from a crash that no round caused: flown into the ground or
 /// into a structure. It comes back once, on the crash camera time a shot-down seat waits, or at
 /// once on the respawn control, which skips that camera. A press held over several steps is still
-/// one press, so it places the seat once rather than on every step the button stays down.</summary>
+/// one press, so it places the seat once rather than on every step the button stays down. In
+/// flight the same control places nothing, in a local match as on a wire.</summary>
 internal static class CrashRespawnSuites
 {
     private const ulong Seed = 0xC2A5B0B0UL;
@@ -24,6 +26,9 @@ internal static class CrashRespawnSuites
     private const int GuestSeat = 1;
     private const int BotSeat = 1;
     private const int NetBotSeat = 2;
+
+    // The chapter whose Stunt Race course the split screen race flies.
+    private const string RaceChapter = "C1";
 
     // How high over the struck surface a dive starts, and how fast it flies straight in.
     private const float DiveHeight = 40f;
@@ -49,13 +54,21 @@ internal static class CrashRespawnSuites
         + "input comes back once, on the crash camera time a shot-down seat waits; flown into the "
         + "rearm hall on the step after a rearm it comes back once on the same time; with the "
         + "respawn control held over the steps after a crash it comes back once, at once, not once "
-        + "per step held (control: a fresh press in flight still respawns); the bot's own crash "
-        + "comes back once on the same time; and two panes with no bots return once from a held "
-        + "press as well")]
+        + "per step held; in flight the match pins the control off and a held press places nothing "
+        + "(control: with the pin lifted it places the pane once); the bot's own crash comes back "
+        + "once on the same time; two panes with no bots return once from a held press as well and "
+        + "are pinned the same in flight; and a split screen stunt race and a split screen free "
+        + "flight leave every pane's in-flight respawn live")]
     internal static void ALocalCrashReturnsOnce(TestContext ctx)
     {
         var bots = NetCombatSuites.MatchSpec(ctx, out _, "--vs-bots=1");
         var panes = NetCombatSuites.MatchSpec(ctx, out _, "--players=2");
+        string raceZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(raceZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
+        var race = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), RaceChapter, Airframes,
+            MenuMode.Stunt, missionType: DogfightMissionType.StuntRace);
+        var free = SessionSpec.Parse(new[] { "--fly", $"--chapter={ctx.Chapter}", $"--mission={panes.Mission}", "--players=2", "--mute", "--no-pads" });
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
@@ -68,13 +81,22 @@ internal static class CrashRespawnSuites
 
             Session(ctx, panes, transport: null, roster: null, "panes alone", session =>
             {
+                const string cell = "panes alone";
+                var peers = new[] { session };
                 var pane = session.Rigs[0].Controller!;
                 var other = session.Rigs[1].Controller!;
                 ctx.Check(session.NetSeats.Count == 0 && session.Rigs.Count == 2,
-                    $"[panes alone] two panes and no roster ({session.NetSeats.Count} seat(s), {session.Rigs.Count} pane(s))");
-                Settle(new[] { session }, pane, other);
-                Pressed(ctx, "panes alone", new[] { session }, pane, () => Dive(pane, pane.WorldPosition, out _));
+                    $"[{cell}] two panes and no roster ({session.NetSeats.Count} seat(s), {session.Rigs.Count} pane(s))");
+                Settle(peers, pane, other);
+                Pressed(ctx, cell, peers, pane, () => Dive(pane, pane.WorldPosition, out _));
+                ctx.Check(!other.AllowLiveRespawn, $"[{cell}] the match pins the second pane's in-flight respawn off too ({other.AllowLiveRespawn})");
+                Settle(peers, pane, other);
+                InFlightPinned(ctx, cell, peers, pane);
             });
+
+            // The rule's other side: a mode that is not a Dogfight keeps the control live.
+            Live(ctx, race, "split screen stunt race", session => session.Rigs.All(r => r.Controller?.Race != null));
+            Live(ctx, free, "split screen free flight", session => session.Dogfight == null && session.Rigs.All(r => r.Controller?.Race == null));
         }
         finally
         {
@@ -166,7 +188,7 @@ internal static class CrashRespawnSuites
     }
 
     // The local match with a bot. The pane crashes into the ground, then into the rearm hall just
-    // after a rearm, then with a held press. Then a press in flight, and the bot's own crash.
+    // after a rearm, then with a held press. Then a press in flight, refused, and the bot's crash.
     private static void PaneAndBot(TestContext ctx, GameSession session)
     {
         const string cell = "pane and bot";
@@ -205,15 +227,9 @@ internal static class CrashRespawnSuites
         Settle(peers, pane, bot);
         Pressed(ctx, "ground", peers, pane, () => Dive(pane, pane.WorldPosition, out _));
 
-        // ABLE-TO-FAIL CONTROL. A fresh press in flight is still the dogfight's "put me back at the
-        // spawn". The held reading above is then a press counted once, not a dead control.
+        // In flight the match pins the control off, as a wired one does.
         Settle(peers, pane, bot);
-        int before = pane.RespawnCount;
-        pane.HoldActionForTest(InputAction.Respawn, true);
-        Step(1, peers);
-        pane.HoldActionForTest(InputAction.Respawn, false);
-        ctx.Check(!pane.Crashed && pane.RespawnCount == before + 1,
-            $"ABLE-TO-FAIL CONTROL: [in flight] a fresh press respawns the flying pane once ({pane.RespawnCount - before} placement(s))");
+        InFlightPinned(ctx, cell, peers, pane);
 
         Settle(peers, pane, bot);
         Unpressed(ctx, "bot", peers, bot, () =>
@@ -248,6 +264,29 @@ internal static class CrashRespawnSuites
         var (placements, first) = Watch(peers, plane, PressSteps + AfterSteps, held: PressSteps);
         ctx.Check(placements == 1 && !plane.Crashed && first >= 1 && first <= PressSteps,
             $"[{cell}] with the respawn control held over {PressSteps} steps after the crash it comes back once ({placements} placement(s), the first {first} step(s) after the crash)");
+    }
+
+    // A local match's pane in flight: pinned, so a held press places nothing. Then the same press
+    // with the pin lifted places it once, so the zero is the pin's and not a press never read.
+    private static void InFlightPinned(TestContext ctx, string cell, GameSession[] peers, FlightController pane)
+    {
+        ctx.Check(!pane.AllowLiveRespawn, $"[{cell}] the match pins the pane's in-flight respawn off ({pane.AllowLiveRespawn})");
+        InFlight(ctx, $"{cell}, in flight", peers, pane, expected: 0);
+        pane.AllowLiveRespawn = true;
+        InFlight(ctx, $"ABLE-TO-FAIL CONTROL: {cell}, pin lifted", peers, pane, expected: 1);
+        pane.AllowLiveRespawn = false;
+    }
+
+    // A local session of a mode that is not a Dogfight: every pane keeps its in-flight respawn.
+    private static void Live(TestContext ctx, SessionSpec spec, string cell, Func<GameSession, bool> isMode)
+    {
+        Session(ctx, spec, transport: null, roster: null, cell, session =>
+        {
+            ctx.Check(session.Rigs.Count == 2 && isMode(session),
+                $"[{cell}] two panes in the mode ({session.Rigs.Count} pane(s), dogfight {session.Dogfight != null})");
+            ctx.Check(session.Rigs.All(r => r.Controller is { AllowLiveRespawn: true }),
+                $"[{cell}] every pane's in-flight respawn stays live ({string.Join(", ", session.Rigs.Select(r => r.Controller?.AllowLiveRespawn.ToString() ?? "-"))})");
+        });
     }
 
     // The respawn control held over steps of level flight. It places the aeroplane `expected` times.

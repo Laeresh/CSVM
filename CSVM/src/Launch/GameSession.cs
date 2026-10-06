@@ -2158,7 +2158,8 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
-        // On a wire only a stunt race takes the respawn control in flight; every seat stands now.
+        // No Dogfight seat and no network seat but a stunt racer's takes the respawn control in
+        // flight. After WireCombat, which hands the wire the match; every seat stands now.
         _wire.WireLiveRespawn();
         AttachScores(race, weaponMessages);
 

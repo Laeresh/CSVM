@@ -467,10 +467,11 @@ public partial class FlightController : Node3D
     public FlightController? Watching;
 
     /// <summary>Whether R and pad Y respawn a LIVE aircraft. False where that would be a free
-    /// repair, restock and refuel: a campaign mission, Instant Action, and every network session
-    /// but a race. There the button is read only from <see cref="Crashed"/>. True in free
-    /// flight, the stunt runs and a local dogfight, where R means "put me back at the spawn".
-    /// Pinned by the session's own director or its wire, never from here.</summary>
+    /// repair, restock and refuel. That is a campaign mission, Instant Action, a Dogfight match
+    /// and every other network session but a race. There the button is read only from
+    /// <see cref="Crashed"/>. True in free flight and the stunt runs, races
+    /// included, where R means "put me back at the spawn". Pinned by the session's own director
+    /// or its wire, never from here.</summary>
     public bool AllowLiveRespawn = true;
 
     /// <summary>How far this seat's controls are held back while the world flies on, see

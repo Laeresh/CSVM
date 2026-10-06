@@ -108,10 +108,10 @@ internal static class FlightInputHandoffSuites
     }
 
     [Suite("flight-live-respawn-gate",
-        "the respawn button on a living aeroplane: pinned the way a campaign mission and Instant "
-        + "Action pin it, a held respawn leaves a half-empty tank half empty rather than topping "
-        + "it up, the same hold on the same rig unpinned (free flight, the stunt runs, the "
-        + "dogfight) respawns and fills it, and the pin leaves the crashed read alone -- a crashed "
+        "the respawn button on a living aeroplane: pinned the way a campaign mission, Instant "
+        + "Action and a Dogfight pin it, a held respawn leaves a half-empty tank half empty rather "
+        + "than topping it up, the same hold on the same rig unpinned (free flight, the stunt "
+        + "runs) respawns and fills it, and the pin leaves the crashed read alone -- a crashed "
         + "pilot holding the button flies again with a full tank")]
     internal static void FlightLiveRespawnGate(TestContext ctx)
     {
@@ -136,7 +136,7 @@ internal static class FlightInputHandoffSuites
             ctx.Check(!pilot.Crashed && Mathf.Abs(pilot.Fuel.Remaining - tank) < 0.01f,
                 $"{ctx.PlaneName} spawns flying on a full tank ({tank:0.#} units), which a respawn tops up");
 
-            // Pinned, the way a campaign mission and Instant Action pin it.
+            // Pinned, the way a campaign mission, Instant Action and a Dogfight pin it.
             pilot.AllowLiveRespawn = false;
             BurnHalf(pilot);
             float burned = pilot.Fuel.Remaining;
