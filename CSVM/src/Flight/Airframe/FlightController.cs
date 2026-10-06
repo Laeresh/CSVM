@@ -466,11 +466,11 @@ public partial class FlightController : Node3D
     /// to hold the crash camera. Picked by the session (<see cref="VersusMatch.NextWatched"/>).</summary>
     public FlightController? Watching;
 
-    /// <summary>Whether R and pad Y respawn a LIVE aircraft. False wherever the mission counts: in
-    /// a campaign mission and in Instant Action a respawn taken while flying is a free repair,
-    /// restock and refuel, so those two pin it and the button is read only from
-    /// <see cref="Crashed"/>. True in free flight, the stunt runs and the dogfight, where R means
-    /// "put me back at the spawn". Pinned by the session's own director, never from here.</summary>
+    /// <summary>Whether R and pad Y respawn a LIVE aircraft. False where that would be a free
+    /// repair, restock and refuel: a campaign mission, Instant Action, and every network session
+    /// but a race. There the button is read only from <see cref="Crashed"/>. True in free
+    /// flight, the stunt runs and a local dogfight, where R means "put me back at the spawn".
+    /// Pinned by the session's own director or its wire, never from here.</summary>
     public bool AllowLiveRespawn = true;
 
     /// <summary>How far this seat's controls are held back while the world flies on, see

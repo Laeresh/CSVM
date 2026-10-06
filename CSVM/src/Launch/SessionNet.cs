@@ -168,6 +168,9 @@ internal sealed class SessionNet
     /// <summary>Whether <see cref="TraceStep"/> writes, set by <c>--debug-net-trace</c>.</summary>
     public bool TraceSteps { get; init; }
 
+    // A network session that is not a stunt race, where no seat respawns in flight.
+    private bool PinsLiveRespawn => Link != null && Seats.Count > 0 && Race == null;
+
     /// <summary>Whether a guest's seat left the mission and is out of play.</summary>
     public bool HasLeft(int seat) => _seatsLeft.Contains(seat);
 
@@ -403,6 +406,25 @@ internal sealed class SessionNet
         Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
     }
 
+    /// <summary>The respawn control on a living aeroplane over the wire, a stunt race's alone.
+    /// There each owner times its runs and places its own seat on a tap or a hold. Every other
+    /// network session pins it off on every seat. A pilot then flies again only from a crash, asked
+    /// of the host where a match grants returns. Runs once every seat has its aeroplane.</summary>
+    public void WireLiveRespawn()
+    {
+        if (!PinsLiveRespawn)
+        {
+            return;
+        }
+
+        for (int i = 0; i < _seatRigs.Count; i++)
+        {
+            PinLiveRespawn(i);
+        }
+
+        Log.Info("core", $"net respawn: {(Link!.IsHost ? "host" : "guest")}, the respawn control returns a pilot from a crash only, never in flight");
+    }
+
     /// <summary>The stunt race over the wire, before the roster builds, since each local seat's run
     /// is fed through it. Each machine times its own seats; the host keeps the window, the board
     /// and the ending, and a guest's race replicates it. ⚠ Nothing is sent from here: the join stays
@@ -431,6 +453,10 @@ internal sealed class SessionNet
         }
 
         WireSeatChat(_seatRigs.IndexOf(owner));
+        if (PinsLiveRespawn)
+        {
+            PinLiveRespawn(_seatRigs.IndexOf(owner));
+        }
     }
 
     /// <summary>The campaign's objectives over the wire, once the graph is armed. The host's graph
@@ -756,6 +782,16 @@ internal sealed class SessionNet
         if (_dogfight == null)
         {
             rig.Downed += (_, killer) => ReportDeath(seat, killer);
+        }
+    }
+
+    // ⚠ Off only, never back on, so a director's own pin stands. On a wire the in-flight respawn
+    // places the aeroplane with no grant from the host, a free repair the match never hears of.
+    private void PinLiveRespawn(int seat)
+    {
+        if (seat >= 0 && seat < _seatRigs.Count && _seatRigs[seat].Controller is { } pilot)
+        {
+            pilot.AllowLiveRespawn = false;
         }
     }
 

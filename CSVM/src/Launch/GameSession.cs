@@ -2158,6 +2158,8 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
+        // On a wire only a stunt race takes the respawn control in flight; every seat stands now.
+        _wire.WireLiveRespawn();
         AttachScores(race, weaponMessages);
 
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both

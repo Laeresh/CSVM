@@ -87,7 +87,9 @@ internal static class CrashRespawnSuites
         + "into the ground with the respawn control held over the steps after the crash comes back "
         + "once on its granted entry, not once per step held, and so does the guest's own pane "
         + "crashed with the control held, asking the host once and placed once on both machines; "
-        + "the host's pane crashed with no input comes back once on the crash camera time")]
+        + "the host's pane crashed with no input comes back once on the crash camera time; and in "
+        + "flight the same control places neither pane (control: with the pin lifted the host's "
+        + "pane respawns once)")]
     internal static void ANetCrashReturnsOnce(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _);
@@ -133,13 +135,27 @@ internal static class CrashRespawnSuites
             // The guest's return is the host's grant, so its copy on the host is placed with it.
             Settle(peers, hostPane, guestPane);
             int copyBefore = guestCopy.RespawnCount;
+            int grantsBefore = guest.Session.Dogfight!.SpawnsTaken;
             Pressed(ctx, "guest pane", peers, guestPane, () =>
             {
                 guestPane.DebugForceCrash();
                 return guestPane.Crashed;
             });
-            ctx.Check(guestCopy.RespawnCount - copyBefore == 1,
-                $"[guest pane] and the host places its copy of the guest once ({guestCopy.RespawnCount - copyBefore} placement(s))");
+            ctx.Check(guestCopy.RespawnCount - copyBefore == 1 && guest.Session.Dogfight.SpawnsTaken - grantsBefore == 1,
+                $"[guest pane] placed from the host's grant, which places its copy of the guest once too ({guest.Session.Dogfight.SpawnsTaken - grantsBefore} grant(s) taken, {guestCopy.RespawnCount - copyBefore} placement(s) of the copy)");
+
+            // In flight the control places nothing on a wire, on either machine's own pane.
+            ctx.Check(!hostPane.AllowLiveRespawn && !guestPane.AllowLiveRespawn,
+                $"the wire pins both panes' in-flight respawn off (host {hostPane.AllowLiveRespawn}, guest {guestPane.AllowLiveRespawn})");
+            Settle(peers, hostPane, guestPane);
+            InFlight(ctx, "host pane in flight", peers, hostPane, expected: 0);
+            InFlight(ctx, "guest pane in flight", peers, guestPane, expected: 0);
+
+            // ABLE-TO-FAIL CONTROL. The same press with the pin lifted respawns the host's pane. The
+            // two readings above are then the pin's, not a press that never reached the seat.
+            hostPane.AllowLiveRespawn = true;
+            InFlight(ctx, "ABLE-TO-FAIL CONTROL: host pane, pin lifted", peers, hostPane, expected: 1);
+            hostPane.AllowLiveRespawn = false;
         }
         finally
         {
@@ -232,6 +248,14 @@ internal static class CrashRespawnSuites
         var (placements, first) = Watch(peers, plane, PressSteps + AfterSteps, held: PressSteps);
         ctx.Check(placements == 1 && !plane.Crashed && first >= 1 && first <= PressSteps,
             $"[{cell}] with the respawn control held over {PressSteps} steps after the crash it comes back once ({placements} placement(s), the first {first} step(s) after the crash)");
+    }
+
+    // The respawn control held over steps of level flight. It places the aeroplane `expected` times.
+    private static void InFlight(TestContext ctx, string cell, GameSession[] peers, FlightController plane, int expected)
+    {
+        var (placements, _) = Watch(peers, plane, PressSteps + AfterSteps, held: PressSteps);
+        ctx.Check(!plane.Crashed && placements == expected,
+            $"[{cell}] the respawn control held over {PressSteps} steps of flight places the aeroplane {expected} time(s) ({placements}, crashed={plane.Crashed})");
     }
 
     private static bool Crashes(TestContext ctx, string cell, GameSession[] peers, FlightController plane, Func<bool> crash)
