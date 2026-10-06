@@ -104,6 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
 15. ☑ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
+16. ☐ A bot's world bounce matches a person's in the same plane
 
 ### Wave C, lobby and local setup
 
@@ -727,6 +728,37 @@ every run. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1`
 widen the question to `IsHumanPiloted` itself: that flag also picks the force path, the aim assist
 and the shakes. A piloted bot near the ground cannot be read with a 0.5 m/s rebound test, since its
 own pull-up moves the normal speed by up to 0.8 m/s a step.
+
+**The user's ruling on the mid-air cut:** a bot keeps the AI's 0.2 entity cut, so it deals and takes
+a fifth of a person's ram damage; a person's full rule would make bot-on-bot mid-airs in a crowd kill
+both too often.
+
+## B16 ☐ A bot's world bounce matches a person's in the same plane
+
+**Goal.** A bot that grazes the world rebounds as a person in the same plane on the same contact
+would, never faster than it came in. The user's ruling on B15's finding.
+
+**Evidence (confidence: traced-to-code, from B15).** In the MP1 staging (Fury, 25 degrees down at
+80 m/s) the pane's restitution read 0.56 to 0.76 across runs and the bot's 1.07 to 1.36; one
+random-plane staging went from 31.7 m/s down to 124 m/s up. The decoded impulse
+(`FlightModel.Collide`, docs/org/flightModel.md "Only the player bounces") uses the velocity at the
+contact point, rotation included, and during the contact a bot's pilot and the AI ground blow pitch
+it up, adding rotation that the impulse turns into rebound.
+
+**Approach.** `<TODO: pick between holding the bot's AI pitch-up (and the AI ground blow) out of the
+step that resolves a world contact, so the impulse sees a person's state, and capping a bot's
+rebound normal speed at the person's restitution for that contact; prefer the one that changes no
+person's or world AI's bounce and keeps the decoded impulse untouched for a person>`.
+
+**Model recommendation.** Opus.
+
+**Verify.** `graze-bounce-bot` gains a check that the bot's restitution on the floor trajectory is
+within a person's band (at most 1, and within a stated tolerance of the pane's on the same
+contact), with an able-to-fail control; `versus-local-bot-graze` gains the same reading on MP1;
+`graze-bounce` stays unchanged.
+
+**⚠ Traps.** B15's trap holds: a piloted bot near the ground moves its normal speed by up to 0.8 m/s
+a step, so read restitution over the contact, not off one step.
 
 # Wave C, lobby and local setup
 
