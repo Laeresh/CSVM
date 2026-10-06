@@ -1099,7 +1099,9 @@ The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratc
 - Sweep the cache before `OS.CreateProcess`, never after: the child's renderer reads
   `user://shader_cache` before any of its game code runs, and the parent's exit is too late.
 - A flat launch running *during* a headset session can still misread a file the session writes;
-  the sweep covers only the launches after it.
+  the sweep covers only the launches after it. The reverse holds too: a headset launch that starts
+  while flat launches are writing reads their files and logs one `br != variant_size` (seen when a
+  battery ran during the author's headset session); Godot treats it as a cache miss and recompiles.
 - `RunGame.ps1` waits for the process it started, so its console returns at a relaunch while the
   child plays on with no console of its own; the child's log is the next `menu-*.log`.
 - The boot relaunch shows the first window for a moment: Godot creates it before any game code.
@@ -1515,7 +1517,10 @@ leaves the wreck about 56° below the gaze at the authored 30 m back and 45 m up
 - The suites step `FlightController.SimStep`, not `_PhysicsProcess` (the base no-op): without it
   the aircraft never moves and a lag check passes vacuously.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with B9 and C11: build PASS, units 6417
+passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 28/29 with
+`c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
+hash-identical on two goldens re-runs (#114's pattern). The headset checks named above are still owed.
 
 # Wave C, screen, HUD and input
 
@@ -1818,7 +1823,10 @@ behaves as C10 left it.
 - The plan worktree holds A1's untracked `CSVM/openxr_action_map.tres`, which this item's tracked
   file collides with on merge; remove the untracked copy first.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with B9 and C11: build PASS, units 6417
+passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 28/29 with
+`c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
+hash-identical on two goldens re-runs (#114's pattern). The headset checks named above are still owed.
 
 ## C12 ☐ The cockpit-locked HUD panel
 
@@ -2146,7 +2154,10 @@ at most half of the 11 ms frame.
 view distance; C1) ran GPU-bound at 20.4-23.8 ms mean GPU time (p90 25.9-28.6 ms) against the
 8.3 ms period, about 41-49 fps, with 80-98 % of frames late, in both render-thread modes; the author
 saw it as "performance problems". The runtime was at 120 Hz, not Decision 10's 90; the per-second
-`xr frames` lines in each `fly-*.log` are the instrument. TAA in stereo is also a lead for the
+`xr frames` lines in each `fly-*.log` are the instrument. A fourth run at 90 Hz with the runtime's
+resolution lowered to 2112x2304 per eye (same options) averaged 10.8 ms GPU time (p90 12.6 ms)
+against the 11.1 ms period, about 74 fps, 9 % late: at the budget, still twice Decision 10's half
+frame. TAA in stereo is also a lead for the
 "one eye lagged behind" double image the author saw past the map edge.
 
 **Approach.** Time the worst chapters in VR, then cut by render scale defaults, per-eye costs (MSAA,
