@@ -1627,7 +1627,10 @@ turn and tilt; nothing pivots or leans with the head.
   off and 2 of 12 with it on, and its rate rose with the other Godots running. The golden stage reads
   the PNG and the log, not the exit code.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
+re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
+skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
+still owed.
 
 # Wave C, screen, HUD and input
 
@@ -2107,7 +2110,10 @@ against the flat game.
 - `TextureUploadSourceTests` allows `ImageTexture.CreateFromImage` only in `Utils/TextureUpload.cs`;
   a suite's texture goes through `TextureUpload.Create`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
+re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
+skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
+still owed.
 
 ## C13b ◐ The gunsight reticle collimated at infinity in VR
 
@@ -2232,7 +2238,10 @@ both eyes; (5) the red index mark reads pink, being added light; say if it shoul
 - `GunsightReticle.EnhancedGain` sends the lines' linear value past 1 over a dark ground, so
   Enhanced's glow catches them slightly.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
+re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
+skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
+still owed.
 
 ## C14 ◐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
