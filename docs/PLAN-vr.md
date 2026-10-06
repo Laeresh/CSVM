@@ -1620,7 +1620,7 @@ turn and tilt; nothing pivots or leans with the head.
   `MAIN_CAM_INV_VIEW_MATRIX`: under the stereo path both are the head's view. Take `StereoFacing`.
 - Do not change the flat texts to match. The flat moon copying the camera's roll contradicts the
   original's SphericalY rule (its tracker never sees the camera's roll), but correcting it moves
-  the flat goldens: its own item, if anyone wants it.
+  the flat goldens, so it is its own item: #150.
 - A stand-in probe sometimes exits 0xC0000005 or 0xC000001D after its capture, with
   `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"` and thousands of
   leaked references in the teardown. Interleaved at the moon pose it was 1 of 12 with the stereo pose
