@@ -207,6 +207,13 @@
       "hash": "1c9646e4e8c092c2e95714682f3431ab",
       "exercises": "The world flare in stereo from the nose view: the core and all three rings at sky depth in both eyes, the sun wash on its head-locked quad over the C3 sky and sea; frame-sensitive 15.38 %.",
       "args": ["--chapter=C3", "--plane=player_bhawk", "--pos=0,1200,0", "--direction=0.765,0.469,-0.441", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
+    },
+    {
+      "name": "menu-original-xr-sim",
+      "frame": 120,
+      "hash": "9f763799c1460d6f3e3f2c0b0ee48010",
+      "exercises": "The Original top level on the stand-in headset's theater screen: the menu's layers drawn into the screen's surface, the CrimFlag movie playing, on a quad ahead of both eyes over the dark surround; frame-sensitive 7.89 %.",
+      "args": ["--menu", "--presentation=original", "--xr-sim", "--det", "--mute"]
     }
   ]
 }

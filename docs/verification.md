@@ -217,6 +217,10 @@ member, and it does not go here.
   Enhanced the A/B measures AgX, not the port.** The world flare matched the screen rig on C3 to 0.22 %
   of pixels over 2 levels in Original, while under Enhanced its rings read 4 to 9 levels over the sky
   against the screen rig's 6 to 21.
+- **SHOT-47**, **A `Color` set on a 3D material's uniform reaches the shader already linear, whatever
+  the uniform's hint, so check a drawn colour in the capture, never in the parameter it was handed.**
+  The theater surround's sRGB 0.075 floor, passed as a `Color` and linearised again in its shader,
+  drew 2 of 255; passed as a `Vector3` it drew 19.
 
 ## GOLD, golden images
 

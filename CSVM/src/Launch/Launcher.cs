@@ -129,6 +129,8 @@ public partial class Launcher : Node3D
     private OrbitCamera _orbit = null!;
     // The headset path, null on every flat launch. Built once in _Ready, like the camera it follows.
     private XrSession? _xr;
+    // The headset's theater screen, where the boards and menus draw under the stereo path.
+    private UI.Boards.TheaterScreen? _theater;
     // Whether this launch asked Godot for OpenXR (--xr-mode on), which compiles the stereo shader
     // variants whether or not a runtime then starts.
     private bool _xrRequested;
@@ -871,6 +873,14 @@ public partial class Launcher : Node3D
         if (_xr != null)
         {
             AddChild(_xr);
+            // A stereo root draws no canvas layer, so every board, menu and cinema built from here
+            // on draws on the screen instead. A flight is on view once its first frame is ready.
+            var rig = _xr.Rig;
+            _theater = UI.Boards.TheaterScreen.Build(
+                GetViewport(), _camera, () => rig.Origin.GlobalTransform,
+                () => rig.Pane != null && _session is { InSession: true, FirstFrameReady: true },
+                eyeFeed: true);
+            AddChild(_theater);
         }
 
         // VR is one local seat in every mode, so a command line asking for splitscreen flies one.

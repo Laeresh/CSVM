@@ -609,6 +609,30 @@ the stereo twin of `HudLayers`, with a slot kept for the cockpit-locked HUD pane
 is depth-tested at the seat clearance, which keeps the in-world interior clear of it as the flat
 cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
 
+## src/UI/Boards/TheaterScreen.cs
+A stereo session's theater screen: the menus, boards, load screens and cinemas on a quad ahead of the
+seated eye, in the XR origin's frame and placed from `Launch/XrEyeFeed.cs` as the stereo cockpit is.
+`CanvasRehost.cs` moves every root canvas layer from `HudLayers.Board` up into its SubViewport, while
+the controls keep the root's layout and input. Its geometry and resolution are `TheaterLayout.cs`.
+With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
+or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %.
+Its render priorities sit over `HeadLockedQuads`' fade. `Launch/Launcher.cs` builds it beside
+`XrSession`; the XR controller pointer reaches it through `Hit` and `LayoutPoint`.
+
+## src/UI/Boards/CanvasRehost.cs
+Draws the root viewport's canvas layers of chosen numbers into a SubViewport through
+`CanvasLayer.CustomViewport`, taking each as it enters the tree and handing it back to the root as it
+leaves, which keeps Godot's own signal bookkeeping paired. Only the drawing moves: the controls stay
+in the root's tree, lay out against its visible rect and take its input. `TheaterScreen.cs` uses it
+for the boards; the cockpit-locked HUD panel is the next user.
+
+## src/UI/Boards/TheaterLayout.cs
+The theater screen's seat, size and resolution, engine-free: where the quad stands in the XR origin's
+frame, how big it is for a given 2D layout (the board `BoardFit` inscribes is the seat's height),
+the surface size at two texels per authored board pixel, which canvas layers it shows and which raise
+it in flight, and where a pointer ray meets it. Under a stereo root the layout is one eye's render
+target, sized by the runtime. Pinned by `CSVM.Tests/TheaterLayoutTests.cs`.
+
 ## src/UI/Overlays/ObjectivesHud.cs
 The flown campaign mission's objectives readout, drawn on the pause screen and nowhere else: the
 original keeps its objectives on the pause parchment and leaves the flight HUD to the gauges. Reads

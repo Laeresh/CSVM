@@ -377,6 +377,9 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/Boards/HeadLockedQuads.cs`, a stereo session's whiteout, flash, sun wash and mission-end fade as head-locked quads copying the flat layers' colours.
+- `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards and cinemas on a quad ahead of the seated eye, in a dark surround or over a dimmed flight.
+- `src/UI/Boards/CanvasRehost.cs`, the root's canvas layers of chosen numbers drawn into a SubViewport, their controls left in the root's tree.
+- `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers and pointer hit, engine-free.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.

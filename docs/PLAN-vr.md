@@ -213,7 +213,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, screen, HUD and input
 
-10. ☐ C10 The virtual theater screen for menus, boards and cinemas
+10. ◐ C10 The virtual theater screen for menus, boards and cinemas
 11. ☐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
 12. ☐ C12 The cockpit-locked HUD panel
 13. ☐ C13 World-tied markers and the edge-marker ring
@@ -1388,25 +1388,165 @@ chase spring, the speed widen and the head-look input; the view cycle stays a na
 
 # Wave C, screen, HUD and input
 
-## C10 ☐ The virtual theater screen for menus, boards and cinemas
+## C10 ◐ The virtual theater screen for menus, boards and cinemas
+
+**Outcome: built and pinned on the stand-in; readability, size, distance, the surround, the pause
+board in flight and a cinema are owed at the headset.** Every root canvas layer from
+`HudLayers.Board` up (menus of both presentations, campaign boards and briefings, hangar, pause and
+results boards, load and boot screens, cinemas, B6's notice) draws into the theater screen's
+SubViewport, shown on a quad 2.5 m ahead of the seated eye. The controls never leave the root's
+tree, so the one UI codebase serves both (Decision 2) and pad and keyboard input are the flat
+game's.
 
 **Goal.** In VR every 2D screen (launch menu, campaign boards, briefings, hangar, pause, results, load
 and boot screens, MPEG cinemas) is drawn on a floating quad in front of the seated player, at a
 readable size, and works with pad and keyboard focus as today.
 
-**Evidence (confidence: lead-only).** Boards fit an 800x600 space (`UI/Boards/BoardFit.cs:8-30`);
-cinemas are a `TextureRect` on a CanvasLayer (`UI/Screens/CinemaScreen.cs:45-118`). Canvas layers on
-the main viewport are not shown in the headset. <TODO: confirm that fact in Godot 4.7.>
+**Evidence (confidence: traced to the Godot 4.7-stable source for the seam, the stereo root's
+layout size and the colour conversion; measured on the stand-in for the hosting, the input, the
+placement precision and the golden; lead-only for readability and comfort until the author's run).**
+The fetched sources are in `.scratch/C10-src`, the captures and instruments in `.scratch/C10`.
+- **No 2D under a stereo root, confirmed.** `RendererViewport::_draw_viewport` sets `can_draw_2d` only
+  for a view count of one (`renderer_viewport.cpp`), A2's SHOT-44.
+- **The seam is `CanvasLayer.custom_viewport`.** `set_custom_viewport` re-attaches only the layer's
+  canvas to another viewport's RID (`canvas_layer.cpp`). A control registers as a GUI root with
+  `get_viewport()`, the tree's viewport (`control.cpp`, `NOTIFICATION_ENTER_CANVAS`), anchors to
+  `get_viewport()->get_visible_rect()` (`get_parent_anchorable_rect`), and is picked through its
+  layer's own transform (`Viewport::gui_find_control`). So a hosted control keeps the root's layout,
+  focus and mouse picking, and the board menus poll `Input` through `MenuInput` regardless. One
+  engine detail binds: entry connects the parent's `child_order_changed` to the root and exit
+  disconnects from the current viewport, so a layer is pointed back at the root on `tree_exiting`,
+  which Godot emits before `NOTIFICATION_EXIT_TREE` (`CanvasRehost.Return`).
+- **A stereo root's 2D layout is one eye's render target, not the window.**
+  `Viewport::_check_xr_size` sets the root's size to the interface's `get_render_target_size()` every
+  internal process, and `Window::_update_viewport_size` returns early under XR, so content scale is
+  ignored. The stand-in's layout is 640x720; the author's VDXR run reported 3072x3264 per eye (A1).
+  Every board lays out against that rect: `BoardFit` letterboxes the 800x600 board top and bottom in
+  the 0.89-0.94 aspect, and Built-in fills it. The screen therefore shows the whole layout, sized so
+  the inscribed board is the seat's height, and drawn at two texels per authored board pixel
+  (1600x1800 on the stand-in, 1600x1700 for the VDXR eye). Hosted text rasterises at the root's
+  oversampling (`canvas_item.cpp`), so the root's `oversampling_override` follows the surface scale.
+- **The golden.** `menu-original-xr-sim` (`--menu --presentation=original --xr-sim`, frame 120):
+  `9f763799` on three probe runs and the goldens stage; frame 121 moves 7.89 % of pixels, all inside
+  the screen. With the theater built, `menu-original-flag` (flat) and `c1-cockpit-xr-sim` stay
+  hash-identical (the screen logs `hidden in flight`); the goldens stage was 28 of 28.
+- **Placement precision in flight.** The quad takes A3b's two pieces: a node at the world origin in
+  the XR origin's axes, and the cockpit's eye-feed vertex stage. A scratch test card on the screen in
+  a flown C1 burst (`--view=cockpit --no-cockpit-pass --hold=0,0,0,0.6
+  --xr-sim=eye=1366x1366,fov=100,shot=left --frames=60 --shots=6`, card edges located subpixel,
+  `.scratch/C10/C10_jitter.py`), worst frame-to-frame edge step:
 
-**Approach.** Render the board and cinema canvas layers into a SubViewport that a quad in the XR world
-displays; a dark or neutral surround while no flight is live. <TODO: the surround, the screen size
-and distance.>
+  | Placement | 0 km | 20 km |
+  |---|---|---|
+  | eye feed (landed) | 0.000 px | 0.000 px |
+  | Godot's own transform (control) | 0.053 px | 0.725 px |
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+  The control is about 1.2 px at 20 px per degree, so the instrument can fail (METHOD-9).
+- **A `Color` handed to a 3D shader uniform arrives linear** (verification SHOT-47): the surround's
+  sRGB 0.075 floor drew 2 of 255 when its shader linearised it again, 19 as a `Vector3`. C14's
+  `HeadLockedQuads` hands its tint as a `Color` and linearises it again (finding recorded under C14).
+- **Input, in the suite `theater-screen`.** A real Built-in pause board on a board layer moves its
+  cursor on a keyboard Down and fires the row on Enter, delivered through `Input.ParseInputEvent`. A
+  pointer ray from a hand off the eye through each row's middle lands on that row through
+  `Hit`/`LayoutPoint`, and a Godot `Button` on the screen takes a click pushed into the root at the
+  seam's point. With `CanvasRehost`'s hand-over removed the suite fails.
+- **The desktop window and mouse.** OpenXR's `post_draw_viewport` blits the left eye to the window,
+  Godot's default, kept: it shows the screen in its surround (the stand-in shows both eyes). The
+  desktop mouse lands at window pixels on the eye-size layout from its top left (the root's final
+  transform is identity under XR), so it reaches part of the layout and not where the mirror shows
+  the screen. It is not a supported VR input; C11's pointer is.
+- **Colour.** With no flight live the camera takes a plain environment (Linear, no glow), so board
+  colours are exact under either look. In flight the world's environment still applies to the
+  screen: under Enhanced the pause and results boards are tonemapped by AgX (SHOT-46), owed at the
+  headset.
 
-**Verify.** <TODO: an `--xr-sim` golden of the launch menu on the screen.>
+**Approach (landed, VR only).** Built by `Launch/Launcher.cs` right after `XrSession.Boot`, never in a
+flat launch or under `--run-tests`.
+- `UI/Boards/CanvasRehost.cs` takes every root canvas layer whose number a predicate accepts, as it
+  enters the tree (`SceneTree.NodeAdded`) and by a sweep at attach, and hands it back on
+  `tree_exiting` and at detach. Layers under another viewport (splitscreen panes, the cockpit pass)
+  are left alone.
+- `UI/Boards/TheaterLayout.cs`, engine-free: `Hosts` (from `HudLayers.Board` up), `Raises` (a board
+  or a cinema raises the screen in flight; the readouts at 11 and 13 ride along), the seat, the quad
+  size, the surface size, `Hit` and `LayoutPoint`.
+- `UI/Boards/TheaterScreen.cs`, a `Node3D` at process priority 2100 (after `XrRig.Place`): the
+  transparent SubViewport `Surface` (no 3D, no GUI input, the root's canvas filter and snap copied),
+  the screen quad (premultiplied sRGB taken to linear, four taps over each pixel's footprint since a
+  viewport texture has no mipmaps, no depth test, priority 126) and the surround sphere (priority
+  125, centred on the eye in view space, the origin's axes). Flight is live once the rig has a pane
+  and the session's first frame is ready; until then the screen shows in a full surround and the
+  camera wears the plain environment. In flight a showing board or cinema raises the screen over the
+  world dimmed to 60 %; otherwise neither draws and the surface stops updating. Its state changes log
+  `theater: ...` at Debug.
 
-**⚠ Traps.** <TODO: none known yet.>
+**Resolved TODOs (proposed values, TUNE for the author).**
+- Size and distance: the board 1.53 m tall at 2.5 m (34 degrees), its centre 0.1 m under the eye.
+  An authored pixel then spans about 1/18 degree, a little over one headset pixel at 20 to 25 px
+  per degree; the surface draws 35 rows per degree, so the headset minifies it about 1.4x.
+- Surround: a dark two-tone room, floor sRGB 0.075 under a 0.015 ceiling with a soft horizon at eye
+  level, opaque and drawn over the world whenever no flight is live, so no world frame (the last
+  session's or one still loading) ever shows behind the menus.
+- In flight: the world dims behind a board, to 60 % surround opacity, since a halt or a results
+  board leaves nothing in the world to watch and the dim eases the stereo conflict of a screen at
+  2.5 m drawn over a dash at 0.5 m.
+
+**Contracts for C11, C12 and D15.**
+- C11 (pointer): express the controller's ray in the XR origin's frame (an `XRController3D` under the
+  rig's `Origin` has it as its `Transform`) and call `TheaterScreen.Hit(from, dir)`; `LayoutPoint(uv)`
+  is the hosted controls' own coordinate. Push `InputEventMouseMotion`/`InputEventMouseButton`
+  carrying it as `Position` and `GlobalPosition` through the root's `PushInput(event, true)`: Godot
+  controls and the event readers (`LaunchMenu`'s rows) take it, as the suite shows. The polled
+  readers (`AuthoredPointer`, `PauseBoard.SeatPointer`, `PausePreferences`) read the OS cursor through
+  `GetMousePosition`, which cannot reach an eye-size layout; give them one pointer source that the
+  XR pointer overrides. `PauseBoard.PointerSource` and Original's `DebugPointer` are the existing
+  doors. The Launcher holds the screen as `_theater`; hand it to `LauncherContext` when a session
+  needs it.
+- C12 (HUD panel): reuse `CanvasRehost` with the panel's own SubViewport and a predicate over the
+  HUD layers, place the quad with the same eye-feed vertex stage, and draw at the reserved priority
+  115, under the theater's 125/126. The HUD lays out against the same eye-size root rect
+  (`HudMetrics` reads its height). The root's `oversampling_override` is one value per process and
+  the theater sets it to its surface scale; the panel shares it.
+- D15 (stereo cutscenes): the screen's shader is the place to pick a left and a right texture by
+  `VIEW_INDEX`; the screen plane at 2.5 m is the pair's zero-parallax plane. A presenting cutscene is
+  not a canvas layer, so it needs its own condition beside `Raises` to bring the screen up in flight.
+
+**Model recommendation.** Standard; the one finding that needed the source read was the stereo
+root's eye-size layout.
+
+**Verify.** Units: `CSVM.Tests/TheaterLayoutTests.cs` (hosting and raising by layer, two texels per
+authored pixel on four layouts, the seat's 34 degrees, the inscribed board's height, the hit law and
+its misses). Suite `theater-screen`. The golden `menu-original-xr-sim`; the 27 existing goldens
+unmoved.
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on'
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --force-builtin
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --movie=zipper
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --graphics=enhanced --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+```
+Look for: (1) at the Original menu and a campaign board, the smallest text reads without leaning in,
+and the board fits the view without turning the head; the log carries `theater: layout ...` with the
+runtime's eye size; (2) the surround reads as a dark room with a floor, not a void, and no sky or
+world shows behind the menus; (3) Built-in's menus read at the same size; (4) the `zipper` cinema
+plays on the screen at its own aspect with sound; (5) in flight, Esc raises the pause board over a
+dimmed world and Down/Enter or the pad drive it, and the board drawn over the dash is comfortable to
+read, with Resume taking the screen away; (6) under Enhanced the pause board's colours against (5).
+The values to tune are `TheaterLayout.Default` and `TheaterScreen.DimOpacity`, and the surround's
+two tones.
+
+**⚠ Traps.**
+- Do not size the screen or the surface from the window: under XR the root's layout is the eye's
+  render target, and Godot ignores the window's content scale.
+- Do not hand a hosted layer back to the root after it has left the tree, or set its custom viewport
+  before it enters; either breaks Godot's signal pairing and prints an engine error on exit.
+- A canvas layer added under `HudLayers.Board` that should show in the headset is invisible there;
+  either give it a board layer or a stereo form of its own.
+- Do not depth-test the screen: in flight it stands behind the dash and would be cut by it.
+- Pass colours to the screen and surround shaders as vectors (SHOT-47).
+
+**Verified.** <pending orchestrator run>
 
 ## C11 ☐ `DeviceKind.Xr`, XR actions and the screen pointer
 
@@ -1625,6 +1765,11 @@ third of runs, render thread safe or separate; nine runs without the flare never
 the nose-view golden avoids and B8 inherits. A C3 `--xr-sim` probe exits with an access violation
 or a C# finalizer fatal after saving its shot in about half the runs, with the flare or without it
 and with this item's code switched off; on `--render-thread safe` it exited 0 in 28 of 28.
+⚠ `HeadLockedQuads` hands its `tint` as a `Color`, which Godot already makes linear for a 3D
+material, and its shader linearises it again (verification SHOT-47, measured by C10 on its own
+surround). Black, white and pure primaries are unchanged; by the conversion, the whiteout's 0.9 grey
+composites as about 200 of 255 where the flat layer shows 230. Pass a `Vector4`, or drop the shader's
+conversion, and check the drawn colour in a capture.
 
 **Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
