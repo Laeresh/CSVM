@@ -65,7 +65,7 @@ judgement.
 | 14 | Release | **Lands on main behind the off-by-default option and ships in v0.4.0 as "VR (experimental)"** with a known-issues list; the label drops in a later release once the playtests and community reports are clean. |
 | 15 | Dev modes, spyglass, photograph (defaults proposed in the grilling, not objected to) | **`--viewer`, `--freecam`, `--anim-lab` and the labs stay flat-only; the spyglass is a mono zoom picture on a binocular-style quad; the Danger Zone photograph and the screenshot capture keep reading a mono camera.** |
 | 16 | The lens flare and full-pane effects in VR | **One angle-based world flare rig, used by VR always and by flat Enhanced once the author has judged a C3 montage in Chase and Cockpit; Original keeps the calibrated screen-space `LensFlareRig`.** Whiteout, flash and fade become head-locked near quads in VR. The Enhanced adoption is the one deliberate exception to the boundary rule, argued on its own merits: partial occlusion of the core and HDR glow. |
-| 17 | float32 precision near the eye, after A3 found no render-only fix | **Accept the shimmer and continue on the stock single-precision engine.** The cockpit interior and the HUD panel shimmer 5-8 px per eye at 10-20 km from the chapter origin at headset density; rigid chase is unaffected. It ships as a known issue of the experimental release. The double-precision build and a game-wide floating origin stay open as later work (A3's write-up), not items of this plan. Note: A3b draws the interior from the XR origin's frame with the render thread's own eyes and measures 0.04 px per eye at 20 km on the stand-in; the author's headset judgement is owed before the known issue is dropped. |
+| 17 | float32 precision near the eye, after A3 found no render-only fix | **Accept the shimmer and continue on the stock single-precision engine.** The cockpit interior and the HUD panel shimmer 5-8 px per eye at 10-20 km from the chapter origin at headset density; rigid chase is unaffected. It ships as a known issue of the experimental release. The double-precision build and a game-wide floating origin stay open as later work (A3's write-up), not items of this plan. Note: A3b draws the interior from the XR origin's frame with the render thread's own eyes and measures 0.04 px per eye at 20 km on the stand-in; the author's headset judgement is owed before the known issue is dropped. **Superseded for the cockpit by A3b:** at the headset the interior held steady at the C1 map centre and a far corner, in both render-thread modes, with no swim on head turns, so the cockpit shimmer is no known issue. The HUD panel (C12) and the near quads are to use A3b's pieces too. |
 
 ## ⚠ Read this before implementing anything
 
@@ -200,15 +200,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☑ A2 The `--xr-sim` stand-in interface
 3. ❌ A3 Precision near the eye: render-only floating origin, double-precision fallback
-   ◐ A3b A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
+   ☑ A3b A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
 4. ☑ A4 Screen-space effects under multiview
 5. ☑ A5 Cockpit scale per plane
 
 ### Wave B, the VR rig
 
 6. ◐ B6 VR mode option, relaunch, fallback and mode gating
-7. ◐ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
-8. ◐ B8 The cockpit interior in the main world under VR
+7. ☑ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
+8. ☑ B8 The cockpit interior in the main world under VR
 9. ◐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
 
 ### Wave C, screen, HUD and input
@@ -217,6 +217,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ◐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
 12. ☐ C12 The cockpit-locked HUD panel
 13. ☐ C13 World-tied markers and the edge-marker ring
+   ☐ C13b The gunsight reticle collimated at infinity in VR
 14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 ### Wave D, cutscenes, comfort and performance
@@ -594,9 +595,13 @@ first flat run after the author's headset session; the engine stage re-run was c
 shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
 stereo variants reach them all once (B6 owns the fix).
 
-## A3b ◐ A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
+## A3b ☑ A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
 
-**Outcome: candidate (i) works on the stand-in; the headset judgement is owed.** The interior is
+**At the headset (VDXR, Quest 3, the author):** at the C1 map centre and near a far corner, in both
+render-thread modes, the gauges and canopy frame do not shimmer, the cockpit stays fixed against
+the world on fast head turns and leans, and the needles sit on their dials.
+
+**Outcome: candidate (i) works on the stand-in and at the headset.** The interior is
 drawn in the main world from the XR origin's frame, as the flat pass draws it from the eye, and
 each eye places it from the eye poses the render thread located for that same frame. A3's
 instrument reads 0.04 px or less per eye at 0, 10 and 20 km, against A3's 5-8 px. Candidate (ii),
@@ -1104,7 +1109,11 @@ The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratc
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
 clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
 
-## B7 ◐ The XR rig in `PlayerRig`, recenter and per-plane scale data
+## B7 ☑ The XR rig in `PlayerRig`, recenter and per-plane scale data
+
+**At the headset (VDXR, the author):** recentering with the action returns the seated eye to the
+cockpit eye ("rehoming works"). The runtime's own recenter and the dome's parallax were not
+reported separately; E21 carries them.
 
 **Outcome: built and pinned on the stand-in; the recenter at the headset is owed.** The VR seat is
 `Flight/Camera/XrRig.cs`, bound to the session's first `PlayerRig`; the sky follows the tracked
@@ -1216,7 +1225,12 @@ recentered)`; (4) leaning about, the moon and the horizon dome show no parallax.
 units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
 hash-identical. The headset checks named above are still owed.
 
-## B8 ◐ The cockpit interior in the main world under VR
+## B8 ☑ The cockpit interior in the main world under VR
+
+**At the headset (VDXR, the author):** no red silhouette, the needles sit on their dials, and the
+cockpit stays clear in the cloud band. The gunsight glass reads fainter than in the flat pass and its
+reticle doubles when the eyes converge on a distant target; that moves to C13b. The target markers
+are absent, as expected until C12 and C13.
 
 **Outcome: built and pinned on the stand-in; the headset look is owed.** A stereo session builds no
 cockpit pass and always draws `XrCockpit`'s interior, with or without `--no-cockpit-pass`. The
@@ -1844,6 +1858,34 @@ scaled with distance to hold an angular size; the edge ring hangs on the XR came
 
 **⚠ Traps.** <TODO: none known yet.>
 
+## C13b ☐ The gunsight reticle collimated at infinity in VR
+
+**Goal.** In VR the gunsight's reticle on the reflector glass reads at infinity, as a real
+collimated reflector sight does: both eyes see it in the same direction relative to the aircraft,
+so it overlays a distant target without a double image, and it reads at least as clearly as in the
+flat game.
+
+**Evidence (confidence: the symptom is the author's at the headset; the mechanism is
+direction-sound).** At the headset the author reported, verbatim: "fainter and looking at a point in
+the distance i have a crosseyed feeling. Cant really use it to target." The reticle is a texture on
+the cockpit interior's gunsight glass, drawn at its true depth (about 0.4-0.5 m at the 0.04 mount),
+so focusing on a far target doubles it. B8 measured the glass at +0.7 levels over the sky in VR
+Original against +4.7 in the flat pass (+3.2 against +21 in Enhanced): the pass composites the
+glass's soft alpha in the canvas, the in-world shader's alpha correction is exact only over black.
+
+**Approach.** Under VR, draw the reticle's polygons (not the glass frame) collimated: each eye
+places each reticle vertex along the direction from the authored eye through it, at the far plane
+or a large fixed distance, through A3b's eye feed so the direction holds per eye; keep the
+authored angular size. Raise its contrast under VR to at least the flat pass's reading. The flat
+game is unchanged.
+
+**Verify.** Under `--xr-sim`, the reticle's per-eye disparity equals that of a world point at
+infinity (zero) while the glass frame keeps its own; the reticle's level over the sky at least the
+flat pass's. Headset: the author can overlay a distant target with no double image.
+
+**⚠ Traps.** Only the reticle collimates; the glass frame and the sight body stay at their true
+depth. The reticle must not be occluded by the panel or canopy in either eye at its new depth.
+
 ## C14 ◐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 **Goal.** Two parts. (1) The sun's lens flare is computed in angles and drawn in the world: the core
@@ -2099,7 +2141,13 @@ port touches both twins.
 **Goal.** A VR flight on the 5080 at the runtime's 1.0 resolution with Enhanced on holds 90 Hz using
 at most half of the 11 ms frame.
 
-**Evidence (confidence: lead-only).** Decision 10. No VR frame has been timed.
+**Evidence (confidence: measured, three runs).** Decision 10. The author's first cockpit batch
+(VDXR, Quest 3, 3072x3264 per eye at 120 Hz, the saved options: Enhanced, TAA, ultra shadows, far
+view distance; C1) ran GPU-bound at 20.4-23.8 ms mean GPU time (p90 25.9-28.6 ms) against the
+8.3 ms period, about 41-49 fps, with 80-98 % of frames late, in both render-thread modes; the author
+saw it as "performance problems". The runtime was at 120 Hz, not Decision 10's 90; the per-second
+`xr frames` lines in each `fly-*.log` are the instrument. TAA in stereo is also a lead for the
+"one eye lagged behind" double image the author saw past the map edge.
 
 **Approach.** Time the worst chapters in VR, then cut by render scale defaults, per-eye costs (MSAA,
 SSAO, shadows) and the effects with the largest stereo cost. <TODO: the instrument; `--perf` is the
