@@ -31,9 +31,9 @@ A3 can redirect the whole plan to a custom engine build.
   pointer or the pad; campaign cutscenes play on that screen as a stereo 3D-cinema pair.
 - The HUD reads in the headset: flat chrome on a cockpit-locked panel, world-tied markers at their
   real depth.
-- The rigid chase plane is free of float32 shimmer at 20 km from the chapter origin. The cockpit and
-  the HUD panel shimmer far from the chapter origin (A3: 5-8 px per eye at 10-20 km at headset
-  density), accepted as a known issue of the experimental release (Decision 17).
+- The rigid chase plane, the cockpit interior and the HUD panel are free of float32 shimmer far from
+  the chapter origin: the chase plane by A2, the interior by A3b's eye feed, the panel by C12
+  (0.010 px at 0 and 20 km). Decision 17's accepted shimmer no longer applies to either.
 - 90 Hz on the reference rig, comfort basics (recenter, fades, optional vignette, render scale), and
   a headless `--xr-sim` stand-in that keeps the VR path inside the automated battery.
 - No headset, no runtime, or the option off: the game is exactly the flat game it is today, goldens
@@ -233,7 +233,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 20. ☐ E20 Per-plane scale and eye-offset tuning at the headset
 21. ☐ E21 At-the-headset playtests on both runtimes
-22. ☐ E22 Experimental release: docs, shortcut, known issues
+22. ◐ E22 Experimental release: docs, shortcut, known issues
 
 ## Dependency and parallelism notes
 
@@ -3354,22 +3354,110 @@ controller binding, the theater screen, the HUD and the cutscene window.
 
 **⚠ Traps.** <TODO: none known yet.>
 
-## E22 ☐ Experimental release: docs, shortcut, known issues
+## E22 ◐ Experimental release: docs, shortcut, known issues
+
+**Outcome: the docs, the launcher and the draft notes are written; publishing waits for E21 and the
+author.** The zip gains `CSVM-VR.cmd`, a one-line launcher that runs `CSVM.exe --xr-mode on`;
+`packaging/README.md` has a "VR (experimental)" section; `docs/release-notes-v0.4.0.md` drafts the
+VR part of the notes and a provisional known-issues list. No game code changed.
 
 **Goal.** v0.4.0 ships VR labelled experimental, with the VR shortcut in the archive, the option and
 flags documented, and a known-issues list.
 
-**Evidence (confidence: lead-only).** Decision 14. The release runs through `PublishRelease.ps1`.
-The known-issues list carries at least the cockpit and HUD-panel shimmer far from the chapter origin
-(Decision 17, A3's measurements).
+**Evidence (confidence: traced to code and the scripts for the launcher, the flags and the
+bindings; measured with a stand-in exe for the launcher's command line; lead-only for the
+known-issues list, which E21 settles).**
+- **The version.** `CSVM/project.godot` says `0.3.0`, the newest tag is `v0.3.0`, and
+  `docs/tooling.md`'s rule makes a release that adds a feature a minor bump, so Decision 14's v0.4.0
+  holds. The bump is a release-time commit, as `65f9deba9` was for 0.3.0: `config/version`, the two
+  READMEs' archive names, and a re-pin of `menu-original-flag`, whose corner stamp shows the
+  version. Main also carries PLAN-bots since v0.3.0, so the notes' other sections are written then.
+- **The release notes convention.** `docs/release-notes-v<version>.md`, passed to
+  `PublishRelease.ps1 -NotesFile`, which appends the verification and provenance sections itself and
+  refuses a file that states a checksum.
+- **The shimmer is no known issue.** This item's earlier evidence named the cockpit and HUD-panel
+  shimmer far from the chapter origin. A3b drew the interior from the XR origin's frame and the author
+  saw it hold steady at the headset (Decision 17's last sentence); C12 measured the HUD panel at
+  0.010 px at 0 and 20 km, the instrument's own drift. The Milestone goal's fourth bullet still
+  states the old expectation.
+- **The engine argument in an exported build.** Godot reads `--xr-mode` ahead of `--` in the release
+  template too: `windows_release_x86_64.exe` (4.7 stable mono) carries the argument and its help
+  text ("Select XR (Extended Reality) mode"), found by a byte search, nothing run. B6's relaunch
+  already builds the same command line from the process's own arguments (`Launch/XrRelaunch.cs`).
+- **Why a `.cmd` and not a shortcut.** A `.lnk` stores an absolute target, which an unzipped folder
+  cannot know. The batch file runs `start "" /d "%~dp0." "%~dp0CSVM.exe" --xr-mode on %*`: its own
+  folder as the working directory (as a double-click of `CSVM.exe` has), and whatever it is given
+  after the engine argument. `start` is needed because cmd waits for a GUI program started from a
+  script.
+- **The launcher's command line, measured.** A stand-in `CSVM.exe` compiled with `Add-Type
+  -OutputType WindowsApplication` (no window) that writes its own command line, beside a copy of the
+  launcher in `.scratch/E22-launcher/`, run from `%TEMP%`: `CSVM.exe --xr-mode on`, working
+  directory the launcher's folder. With `-- --xr-quality=flat --chapter=C1` (from cmd, and from
+  PowerShell 5.1, which passes the `--` through): `CSVM.exe --xr-mode on -- --xr-quality=flat
+  --chapter=C1`. From a folder named `with space (x86)`: the same, quoted correctly.
+- **The docs audit.** Every XR flag the parser reads (`--xr-sim`, `--xr-chase`,
+  `--xr-render-scale`, `--xr-vignette`, `--xr-quality`, `--xr-foveation`, `--msaa`,
+  `--anti-aliasing`, `--shadow-quality`, `--no-soft-shadows`; the engine's `--xr-mode` and
+  `--render-thread`) has its index entry and bullet in `docs/cli.md`, and their words and defaults
+  match `Utils/VrQuality.cs`, `VrRenderScaleSetting.cs` and `VrVignetteSetting.cs`. `--xr-sim` has
+  no keys, only spec tokens. `docs/controls.md`'s XR table and Recenter row match
+  `Bindings/DefaultBindings.cs` (left menu, left stick click, Y; `Home`, touchpad, paddle 1),
+  `Bindings/XrControls.cs` and the action map's four profiles. Two lines were stale: the `--xr-sim`
+  bullet's "Canvas layers draw nothing in stereo" (the theater screen and the HUD panel take them
+  now), and the `--xr-mode` bullet said nothing of an exported build.
 
-**Approach.** `docs/cli.md` (`--xr-sim`, `--xr-mode`), `docs/controls.md` (XR bindings), the README
-and the release notes; the shortcut through `ExportRelease.ps1`'s packaging. <TODO: the known-issues
-list comes from E21.>
+**Approach (landed).**
+- `packaging/CSVM-VR.cmd`, the launcher; a `$ReleaseFiles` row in `ExportRelease.ps1`; a
+  `packaging/MANIFEST.md` row, and its "no script" sentence and Linux paragraph corrected (the
+  tarball leaves the launcher out); `.gitattributes` checks `packaging/*.cmd` out CRLF.
+- `packaging/README.md`: "VR (experimental)" (runtimes, 90 Hz, starting, playing, recentering, the
+  quality profile and `--xr-quality=flat`, the comfort rows, going back to flat) and the launcher in
+  the file list. `README.md`: a Status bullet pointing there. `docs/tooling.md`: the launcher and
+  how to prove it without the real exe.
+- `docs/cli.md`: the two stale lines above. `docs/controls.md` needed nothing.
+- `docs/release-notes-v0.4.0.md`: a draft holding the VR feature section, the Enhanced flare change
+  (C14, the one flat change of this plan) and the provisional VR known issues, read off every item's
+  Outcome, Evidence and Traps: one runtime and one headset tried; the card it was sized on; hard
+  shadows in VR (D18, the Godot 4.7.0 soft-shadow cost); Enhanced's second tonemap on the HUD panel,
+  the cards, the spyglass picture and the boards (SHOT-46); one cockpit scale for every plane (E20);
+  no recenter on an Xbox pad (B7, B9); the flat window's flash on a saved-on start (B6); the desktop
+  mouse under a headset (C10); the cutscene window's shallow depth and edge cut (D15); Windows only.
+  An HTML comment at its top says what is still to write and that the list is provisional.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Model recommendation.** Standard: documentation and packaging, no engine code.
 
-**Verify.** <TODO: the release zip checked in `RunSandbox.ps1` with VR off, to show the flat game is
-untouched.>
+**Verify.** `CheckDocEntries.ps1` and `CheckCommentCaps.ps1` clean; the complete battery on the item's
+tree (nothing under `CSVM/` changed, so it shows the tree is green, not this item). The launcher by
+the stand-in exe above.
 
-**⚠ Traps.** <TODO: none known yet.>
+At release time (the author's; the sandbox opens a window, so no agent runs it):
+1. Bump the version as above, finish the notes, and delete their opening comment.
+2. `.\ExportRelease.ps1`, then the clean-machine run with VR off, which follows
+   `packaging/README.md` on the zip with the mark of the web:
+   `.\RunSandbox.ps1 -Driver sandbox\PublicRelease.ps1 -MapReadOnly <retail install> -KeepOpen`.
+   The flat game must extract, reach the menu and fly C1 as in v0.3.0's run. With `-KeepOpen`,
+   double-click `CSVM-VR.cmd` in the folder the driver unzipped to
+   (`Downloads\CSVM-v0.4.0-win64\` in the sandbox), noting whether Windows asks first, as it does
+   for `CSVM.exe` with the mark of the web. The sandbox has no OpenXR runtime, so the game must
+   start flat with the notice "VR mode is on, but no headset started" on the menu, and its log must
+   show the OpenXR warning. This runs the real launcher against the real exe with no headset in
+   reach.
+3. At the headset, B6's owed exported-build line: with VDXR running, double-click
+   `.scratch\export\CSVM-VR.cmd`; the newest file in `.scratch\export\logs\` must carry
+   `xr: OpenXR live runtime=` and `[world] vr quality: profile=vr`. Then turn VR Mode on in Options,
+   quit, double-click `CSVM.exe`, and the game must restart into the headset.
+4. `.\PublishRelease.ps1 -NotesFile docs\release-notes-v0.4.0.md -DryRun`, then the publish.
+
+**⚠ Traps.**
+- Do not prove the launcher by running it next to the real `CSVM.exe` on this machine: it starts
+  OpenXR on the attached headset. The stand-in exe or the sandbox are the two safe ways.
+- Do not give the launcher a `.lnk` form or a hard-coded path: the folder is wherever the player
+  unzipped it.
+- Do not drop `start`: a batch file waits for the GUI program it runs, which leaves a console
+  window open for the whole session.
+- Do not list the cockpit or HUD-panel shimmer as a known issue on the strength of A3; A3b and C12
+  superseded it. Settle the rest of the list from E21's verdicts, not from this draft.
+- The release notes are published verbatim: an unremoved draft comment does not render, but the
+  "provisional" list does.
+
+**Verified.** <pending orchestrator run>

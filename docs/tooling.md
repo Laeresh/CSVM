@@ -319,6 +319,16 @@ greys a game of another major.minor.
 The payload is `packaging/MANIFEST.md`'s table, copied from its repo sources on every export, which
 keeps it byte-identical (the tarball's text files as git stores them, LF; see below).
 
+**`packaging/CSVM-VR.cmd` is the zip's VR launcher**, and its one script: `start` runs `CSVM.exe`
+from the launcher's own folder with `--xr-mode on` ahead of the arguments it was given, so the
+engine argument stands before any `--` (`docs/cli.md`, "Godot engine arguments"). A `.cmd` rather
+than a Windows shortcut because a `.lnk` stores an absolute target, which an unzipped folder cannot
+know. `.gitattributes` checks it out CRLF on every OS, which is what cmd reads. The tarball leaves it
+out, since VR is the Windows build's alone. ⚠ Proving it never means running it against the real
+exe: that starts OpenXR on whatever headset is attached. A stand-in `CSVM.exe` that writes its own
+command line (compiled with `Add-Type -OutputType WindowsApplication`, so no window opens) beside a
+copy of the launcher shows the arguments and the working directory it gets.
+
 **`packaging/README.md` is the whole of what a downloader is told**, written for someone who found
 the zip on the releases page and knows nothing else about the project: where the download comes
 from and how to check its SHA-256 against the release page, the requirements including the renderer

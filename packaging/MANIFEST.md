@@ -2,7 +2,8 @@
 
 The release zip holds these pieces. Everything sits at the zip root except `tools\unzbd.exe`;
 the recipient unzips and double-clicks `CSVM.exe`, which extracts the game data from inside the
-engine on first start. The zip carries no script.
+engine on first start. The zip's one script is `CSVM-VR.cmd`, which starts `CSVM.exe` in VR; nothing
+in the setup needs it.
 
 `ExportRelease.ps1` assembles it: it exports into `.scratch\export\`, copies the rows below in
 beside the export output, and zips that folder to `.scratch\CSVM-v<version>-win64.zip`, the version
@@ -26,6 +27,7 @@ notices file is assembled from; their Zip path column names them as no zip row a
 | `libwebrtc_native.windows.template_release.x86_64.dll` | the Godot release export output, from `CSVM/addons/webrtc_native/` | webrtc-native 1.2.2, the transport internet play runs over (`docs/tooling.md`, "The WebRTC library and the master server"). The export runs `InstallWebRtc.ps1` into the exported tree first, so the pinned, hash-checked release is always the one shipped, and throws if the export left the library out |
 | `LICENSE-webrtc\LICENSE.*` | `CSVM/addons/webrtc_native/LICENSE.*` | The seven licence files the webrtc-native release carries: its own (MIT), libdatachannel and libjuice (MPL-2.0), libsrtp, usrsctp (BSD), mbedtls (Apache-2.0) and plog (MIT). `BUILD-INFO.txt` names the release tag, which is where the MPL-2.0 source is |
 | `README.md` | `packaging/README.md` | The one document a downloader reads: the releases page and the zip's SHA-256, the requirements including the renderer floor, the extraction and first flight, the log and save locations, what the other files here are, and where to report a problem. Author-reviewed before any hand-off or release (standing rule: the author owns outward communication) |
+| `CSVM-VR.cmd` | `packaging/CSVM-VR.cmd` | The VR launcher: `start` runs `CSVM.exe` beside it, in its own folder, with the engine argument `--xr-mode on` ahead of whatever it is given, so `CSVM-VR.cmd -- <flags>` reaches the game's own arguments. `.gitattributes` checks it out CRLF on every OS. Windows only: Linux VR is not supported, so the tarball has no launcher |
 | `LICENSE` | `packaging/LICENSE` | GPL-3, byte-identical to repo root `LICENSE` |
 | `LICENSE-unzbd` | `packaging/LICENSE-unzbd` | EUPL-1.2, byte-identical to `tools/mech3ax/LICENSE` |
 | `LICENSE-thirdparty.txt` | `packaging/LICENSE-thirdparty.txt` | The notices the two binaries' contents oblige the zip to carry: the Godot engine, its own third-party components, the self-contained .NET runtime, and the Rust crates and the Rust standard library in `unzbd.exe` (section 9, read from the pinned toolchain's `share/doc/rust/COPYRIGHT-library.html` and `licenses/`), plus one notice for source rather than payload, `pl_mpeg`, which CSVM's managed MPEG-1 decoder is ported from, and the SIL Open Font License for PromptFont, the font packed into the export that the pad glyphs are drawn from. Assembled by `packaging/BuildThirdPartyNotices.ps1` from the shipped artefacts themselves; its header names the three payload versions it speaks for, plus the `win-x64` runtime pack and the `x86_64-pc-windows-msvc` crate target, and the export refuses to ship it against any other |
@@ -39,7 +41,7 @@ notices file is assembled from; their Zip path column names them as no zip row a
 packs it inside WSL (Debian) as `.scratch\CSVM-v<version>-linux-x64.tar.gz`, entries at the
 archive root like the zip's. It is the zip's payload with the Linux README, the Linux notices and
 the Linux unzbd in place of the Windows ones, its text files staged LF (the bytes git stores; the
-zip keeps the checkout's CRLF), and without the three SDL2 rows: the Linux build reads flight sticks
+zip keeps the checkout's CRLF), without the VR launcher, and without the three SDL2 rows: the Linux build reads flight sticks
 through the system's `libSDL2-2.0.so.0` (on SteamOS, sdl2-compat over SDL3), found through the
 system loader, and runs without sticks when it is absent. The tarball ships no SDL2, so its
 `BUILD-INFO.txt` has no SDL block (`docs/tooling.md`, "SDL2 for flight sticks"). Modes are set in the archive, root-owned: `0755` for the two executables and every
