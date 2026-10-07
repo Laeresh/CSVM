@@ -47,7 +47,8 @@ capture agree through `csky_time`.
 | 11 | B11 budget | **At most 1.5 ms over the flat sea** at the low-pass pose, desktop 1080p; about the ocean's cost with SSR off today. |
 | 12 | C21 chapter scope | **Every chapter with a sea at y = 0: C1, C1C, C2, C2B, C3, C5.** C4 keeps its flat lakes. C2's coplanar beaches, C3's shore sheets and C5's fog-gradient overlays are the item's to solve, not reasons to leave a chapter out. |
 | 13 | The ocean in the spyglass disc | **None: the disc shows the flat sea.** The user's ruling. The disc's camera carries a marker layer bit the ocean grid reads to step out before its wave math, and the sheet reads to keep drawing, through `CAMERA_VISIBLE_LAYERS`; the pane cameras do not carry it. |
-| 14 | A sea state per region | **A follow-up after landing, not this plan.** The user's ruling. The closing commit files it in `backlog.md` (id from `New-ItemId.ps1`): a table per region setting wave height (`wave_scale`), swell length, chop, foam (`foam_strength`) and wind direction, starting from Northwest (C1, C1B, C1C) rough open Pacific, Hollywood (C2, C2B) moderate, Hawaii (C3) a long gentle swell with little foam, Manhattan (C5) calm harbour chop; judged from a montage of each region, today against proposed. Height alone folds the crests by about 1.8x, sooner where the sea-state field raises a group (the horizontal displacement sums to `Choppiness` times the scale times that field's gain), so a rougher sea also lengthens the swell. Re-pins `c1b-ocean-enhanced` if C1B changes. |
+| 14 | A sea state per region | **A follow-up after landing, not this plan.** The user's ruling. The closing commit files it as a GitHub issue (label `backlog`): a table per region setting wave height (`wave_scale`), swell length, chop, foam (`foam_strength`) and wind direction, starting from Northwest (C1, C1B, C1C) rough open Pacific, Hollywood (C2, C2B) moderate, Hawaii (C3) a long gentle swell with little foam, Manhattan (C5) calm harbour chop; judged from a montage of each region, today against proposed. Height alone folds the crests by about 1.8x, sooner where the sea-state field raises a group (the horizontal displacement sums to `Choppiness` times the scale times that field's gain), so a rougher sea also lengthens the swell. Re-pins `c1b-ocean-enhanced` if C1B changes. |
+| 15 | A3's look findings | **Fixed in this plan, then a re-check at the controls before landing.** The user's ruling: the swell's wave lattice (D31), the foam up close (D32) and the hard cut to flat water at the coast (D33). Procedural ship wakes are issue #160, not this plan. If D33 cannot make the coast gradual, a GitHub issue takes waves to the coast with procedural shore foam in place of the coast foam textures, linked to #160. |
 
 ## ⚠ Read this before implementing anything
 
@@ -85,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Port the prototype to a production module on C1B
 2. ☑ Water Quality setting (flat or waves), live switch included
-3. ☐ Verify the live graphics switch and the motion look
+3. ☑ Verify the live graphics switch and the motion look
 
 ### Wave B, cost
 
@@ -103,6 +104,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 25. ☑ The ocean matches the flat sheet at the shore and in fog
 26. ☑ No hole where a mission shows a node hidden at the bake
 27. ☑ Calm zones for mission-animated boats with no wake sheet
+
+### Wave D, A3's look findings
+
+31. ☐ Break up the swell's wave lattice
+32. ☐ Foam that reads as foam up close
+33. ☐ A gradual fade to flat water at the coast
 
 ## Dependency and parallelism notes
 
@@ -225,7 +232,7 @@ and one at `flat` matches the `--no-ocean` shot.
 `RenderingServer.GlobalShaderParameterGet` errors outside the editor, so a suite cannot read
 `csky_ocean_on` back; it reads the ocean node's tree membership, which is what sets it.
 
-## A3 ☐ Verify the live graphics switch and the motion look
+## A3 ☑ Verify the live graphics switch and the motion look
 
 **Goal.** A live Original↔Enhanced switch on C1B adds and removes the ocean with no flat-sheet hole
 and no double draw, and the ocean in motion shows no objectionable shimmer, crawl or SSR flicker.
@@ -257,8 +264,14 @@ ocean with the same sheet text; each closed session leaves no ocean in the tree,
 switch is back at 0; and a following Enhanced C2B session at flat water quality (a whole-map
 `wtr00000` sheet that carries the hide, which a switch left on would hole) builds none. A network session's refusal
 is already `net-pause-overlay`'s, and it returns before the session follows anything. Mutating
-`FollowOcean` to forget the dropped ocean fails the leave and exactly-once checks. The motion
-judgement at the controls is still owed.
+`FollowOcean` to forget the dropped ocean fails the leave and exactly-once checks.
+
+**Verified.** The user's flight on the plan branch: "Switch between original and enhanced works
+good." "Water overall looks good but can we reduce/breakup the grid pattern it still very visible
+perhaps through a noise map? the foam in c1b looks good from a distance but not really like foam if
+near it (kinda glitchy)". "the cut to costal flat water is really strong. especially on holywood in
+the harbour where only a small stripe of waves is present." The pattern is the wave lattice (the
+user's answer). The three look findings are D31, D32 and D33 (Decision 15).
 
 # Wave B, cost
 
@@ -952,3 +965,98 @@ desktop (`frame_ms`).
 **Verify.** <TODO: the per-viewport prim counts before and after, and B12's 2- and 4-pane rows.>
 
 **⚠ Traps.** In split screen `gpu_ms` measures the root viewport alone (PERF-39): read `frame_ms`.
+
+---
+
+# Wave D, A3's look findings
+
+D31 and D32 both edit the fragment stage of `Effects/Ocean.cs`'s generated shader and run in
+sequence. D33 edits the shore ramp (`Effects/OceanMaskRaster.cs`) and the shore weight in the same
+shader, so it runs after D32 or in its own tree with a hand-merged shader. Each comes back as a
+montage for the user; C24's four Enhanced goldens move and are re-pinned once, after the last.
+
+## D31 ☐ Break up the swell's wave lattice
+
+**Goal.** The swell shows no regular crossing pattern at the user's flight altitudes; the crests read
+as an irregular sea.
+
+**Evidence (confidence: the user's eyes).** A3: "can we reduce/breakup the grid pattern it still very
+visible perhaps through a noise map?", and the pattern is the wave lattice (the user's answer). C23
+already moved to twelve swell waves with no common length ratio and a still sea-state field that
+groups each wave's height and shifts its phase (capped at 16 m and 3 rad) along its own direction,
+plus the fine field for the short swell. The crests still run straight between those modulations,
+so two long waves crossing still print diamonds wherever the field is near neutral.
+
+**Approach.** Find which waves print it at C1B cruise and the low pass, as C23 did (shots with
+subsets of the swell). Then bend the crests rather than only regroup them: a world-space domain warp
+of the position the long waves read (a still, low-frequency noise displacement of tens of metres,
+the "noise map"), stronger phase modulation, or direction jitter per region. Keep the field still
+(no time term) so the `csky_time` wrap holds, and the vertex stage and the fragment on the same
+evaluation.
+
+**Model recommendation.** high: a look change judged by eye.
+
+**Verify.** A montage, before and after, at C1B cruise, C1B low pass (`--hold=0.04,0,0,0.7`) and
+C2 at 350 m, judged by the user. `gpu_ms` over `--no-ocean` inside Decision 11's 1.5 ms at the low pass
+(C23 left it at +1.45 to +1.46). Height statistics over a 4 km square near C23's.
+
+**⚠ Traps.** The vertex-stage fade (full at eight grid steps per wavelength, none at four) keeps the
+grid from crawling; a warp changes the effective wavelength locally, so keep the fade on the warped
+length. A warp evaluated differently in the vertex and fragment stages swims the normals against
+the surface.
+
+## D32 ☐ Foam that reads as foam up close
+
+**Goal.** Close to the water the foam reads as foam (broken, streaky whitecaps on the crests) and
+does not flicker or pop; from a distance it keeps the look the user approved.
+
+**Evidence (confidence: the user's eyes, cause lead-only).** A3: "the foam in c1b looks good from a
+distance but not really like foam if near it (kinda glitchy)". The foam today (`Ocean.cs`, about
+line 611) is a flat grey `mix` toward (0.6, 0.65, 0.68) at strength 0.12, gated by three bilinear
+value-noise fields (230 m and 71 m patches drifting, a 9 m breakup) and a smoothstep of the crest
+height. Leads, not verified: bilinear value noise shows square cells up close; the hard smoothstep
+on the crest height pops as a crest crosses it; there is no detail below 9 m at all.
+
+**Approach.** First find what "glitchy" is, in motion, at the low-pass hold: a frame strip with foam
+alone, `--no-ssr`, and the breakup field off. Then give the foam a near-field look: small-scale
+structure (a cellular or streaked noise along the wave direction, fading in with proximity as the
+chop's footprint fade does), a softer crest gate, and coverage that holds still relative to the
+crest it rides. Far foam unchanged.
+
+**Model recommendation.** high: a look change judged by eye.
+
+**Verify.** A montage at the low-pass hold and closer (about 10 m), before and after, with a frame
+strip showing the motion; the C1B cruise pose unchanged to the eye. `gpu_ms` at the low pass.
+
+**⚠ Traps.** Stills cannot show flicker: judge with consecutive frames. Foam is on `csky_time`, never
+`TIME`.
+
+## D33 ☐ A gradual fade to flat water at the coast
+
+**Goal.** The waves calm toward the coast gradually, with no visible cut, and a narrow harbour keeps
+waves across most of its width rather than a thin stripe.
+
+**Evidence (confidence: the user's eyes, cause traced).** A3: "the cut to costal flat water is
+really strong. especially on holywood in the harbour where only a small stripe of waves is
+present." The mask's wave height is 0 within `ShoreCalm` (24 m) of any shore or surf texel and full
+at `ShoreFull` (160 m) (`OceanMaskRaster.cs`), so water narrower than about 320 m never reaches full
+height. C25 then blends the whole look toward the flat sheet by the same amount (`sheet = max(1 -
+m.g, ...)`, about `Ocean.cs:602`): normals, chop, foam and texture mix go flat together with the
+height, which makes the band read as a cut.
+
+**Approach.** Separate what must be flat at the shore from what need not be. The C25 seam only needs
+the look to match the sheet where an opaque coast tile or the surf ring meets the ocean, which is a
+short distance; the swell height needs a ramp long enough that displaced waves do not cut through
+the shore. Candidates: a short look ramp and a separate height ramp; a shore ramp scaled to the
+local water width (distance to the farther shore), so a harbour channel reaches its own peak; chop
+and foam surviving closer in than the swell. Measure C25's tile-boundary edge at `c1-lake-enhanced`'s
+pose again after the change.
+
+**Model recommendation.** high: a look change judged by eye, with C25's seam to keep.
+
+**Verify.** A montage, before and after, of C2's harbour (low and at about 150 m), a C1B coast and
+C3's shore, judged by the user; `c1-lake-enhanced`'s pose shows no edge at the coast tile boundary.
+
+**⚠ Traps.** If the coast cannot be made gradual without the C25 seam or waves cutting through the
+shore, stop and report: Decision 15 then files the procedural-coast issue rather than this item
+forcing it.
