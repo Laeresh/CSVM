@@ -1023,6 +1023,14 @@ structure (a cellular or streaked noise along the wave direction, fading in with
 chop's footprint fade does), a softer crest gate, and coverage that holds still relative to the
 crest it rides. Far foam unchanged.
 
+The reference is the inspiration's foam (emilje/godot-water-shader, `foam_calc.gdshader`; frames of
+the author's latest video in `Z:\CSVM\.scratch\ocean-proto\reference\`): foam where the waves bunch
+up, from the displacement's Jacobian, broken by a foam texture at two scales and noise. Our Gerstner
+sum gives the Jacobian analytically per fragment. The user's ruling: the foam does not need to be as
+finely structured as the reference's lace; coarser patches that read as foam up close are enough.
+Lingering foam (the reference's history buffer, decayed on wall time over a fixed 10 m patch) does
+not carry to a camera-centred ocean on the sim clock and is not this item's.
+
 **Model recommendation.** high: a look change judged by eye.
 
 **Verify.** A montage at the low-pass hold and closer (about 10 m), before and after, with a frame
@@ -1061,7 +1069,7 @@ with no Godot running). The change adds one smoothstep per vertex and per fragme
 wave loops' lengths as they were (they end on the footprint fade, not the amplitude). Montage, flat / before / after: C2 harbour at 30 m and 150 m, C1B coast, C3 shore at 120 m
 and 250 m, C1 lake, in the D33 worktree's `.scratch\d33\montage-d33.png`.
 
-**Verified.** The user accepted the montage; the motion judgement comes at the Wave D re-check flight. In the D33 tree: units 6337 passed, 3 skipped; `graphics-ocean-switch` and `graphics-water-quality` pass, engine errors clean. Owed on the merged tree: `gpu_ms` at the low-pass hold and the complete battery with the Wave D re-pins.
+**Verified.** The user accepted the montage; the motion judgement comes at the Wave D re-check flight. In the D33 tree: units 6337 passed, 3 skipped; `graphics-ocean-switch` and `graphics-water-quality` pass, engine errors clean. `gpu_ms` at the low-pass hold, 1920x1080, ocean minus `--no-ocean` in the same round, two quiet-gated rounds alternating the trees: before D33 +0.59 / +0.63 ms, after +0.56 / +0.55 ms, so the second ramp costs nothing measurable. Owed: the complete battery with the Wave D re-pins.
 
 **Original approach (kept for reference).**
 
