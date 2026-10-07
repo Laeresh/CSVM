@@ -269,7 +269,8 @@ rows).
 - `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
 - `src/Flight/Hud/XrMarkers.cs`, the flight markers in a stereo session: the flat HUD's drawings on cards at their world points, and off-view ones on a ring on the head.
-- `src/Flight/Hud/XrMarkerLaw.cs`, the stereo markers' geometry, engine-free: a reference pixel's angle, the ring's cone and bearing, a card's facing.
+- `src/Flight/Hud/XrMarkerLaw.cs`, the stereo markers' geometry, engine-free: a reference pixel's angle, the ring's cone and bearing, a card's facing, the ring's spyglass disc.
+- `src/Flight/Hud/XrSpyglassDisc.cs`, the spyglass picture in a stereo session: one mono picture on a disc on the head ring inside the selection's arrow.
 - `src/Flight/Hud/XrHudPanel.cs`, the cockpit-locked HUD panel in a stereo session: the pane's flight chrome laid out on a 1440p surface, shown on a quad in the XR origin's frame.
 - `src/Flight/Hud/XrHudPanelLayout.cs`, the HUD panel's geometry, engine-free: its surface, pose on the first-person axis, size and placement.
 - `src/Flight/Hud/WorldMark.cs`, one marker a flat HUD draws at a world point, as data: what the flat pane projects and a stereo session places.

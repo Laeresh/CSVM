@@ -16,7 +16,8 @@ namespace CSVM.Flight.Hud;
 /// viewport draws no canvas layer, so the flat HUD's own code draws each listed
 /// <see cref="WorldMark"/> into a small surface. A card shows it at its world point, facing the head
 /// with the seat's up, at the angle the flat pane gives it. A marker far off the view axis hangs on
-/// a ring on the head instead. Module entry: docs/architecture/Flight.md.
+/// a ring on the head instead, and the selection there carries the spyglass picture
+/// (<see cref="XrSpyglassDisc"/>). Module entry: docs/architecture/Flight.md.
 /// </summary>
 public sealed partial class XrMarkers : Node3D
 {
@@ -33,6 +34,9 @@ public sealed partial class XrMarkers : Node3D
     /// beyond it keeps its direction and angle at this distance. Its disparity there is already
     /// zero to a hundredth of a pixel.</summary>
     public const float MaxDistanceM = 10000f;
+
+    /// <summary>The <see cref="Placed.Key"/> of the spyglass picture's disc.</summary>
+    public const string SpyglassKey = "spyglass";
 
     // The ring arrow's shaft in reference pixels: the flat edge marker's 5 percent inset of a pane
     // 1440 tall. That is the shaft of an arrow leaving the top or bottom edge.
@@ -57,12 +61,17 @@ public sealed partial class XrMarkers : Node3D
     private XrRig? _rig;
     private Shader _worldShader = null!;
     private Shader _ringShader = null!;
+    private XrSpyglassDisc _disc = null!;
     private Viewport? _filterSource;
     private int _shownWorld = -1;
     private int _shownRing = -1;
+    private bool _shownDisc;
 
     /// <summary>What the last <see cref="Place"/> drew, in placing order. Read by the suite.</summary>
     public IReadOnlyList<Placed> Shown => _placed;
+
+    /// <summary>The spyglass picture's disc on the ring. Read by the suite.</summary>
+    public XrSpyglassDisc Disc => _disc;
 
     /// <summary>Builds the markers for the seat <paramref name="rig"/> flies. The caller adds the node
     /// to the session's world; with no rig it draws only what a caller hands <see cref="Place"/>.</summary>
@@ -71,7 +80,34 @@ public sealed partial class XrMarkers : Node3D
         var markers = new XrMarkers { Name = "xr_markers", ProcessPriority = AfterXrOrigin, _rig = rig };
         markers._worldShader = new Shader { Code = CardShader(ring: false) };
         markers._ringShader = new Shader { Code = CardShader(ring: true) };
+        markers._disc = XrSpyglassDisc.Build();
+        markers.AddChild(markers._disc);
         return markers;
+    }
+
+    /// <summary>The spyglass's gates for <paramref name="targets"/>' selection, answered off the
+    /// head's view. The picture is up while the selection hangs on the ring, armed and inside the
+    /// range gate. Returns the picture to show, or null with it down.</summary>
+    public static Texture2D? AnswerSpyglass(TargetHud targets, bool shows, IReadOnlyList<WorldMark> marks,
+        in Transform3D head)
+    {
+        if (shows)
+        {
+            foreach (var mark in marks)
+            {
+                if (mark.Style != WorldMarkStyle.Selected)
+                {
+                    continue;
+                }
+
+                bool offView = !XrMarkerLaw.OnView(XrMarkerLaw.InHead(head.Basis, mark.At - head.Origin));
+                return targets.UpdateSpyglass(mark.Target, mark.At, offView, XrMarkerLaw.SpyglassSide)
+                    && targets.Picture is { } picture ? picture.GetTexture() : null;
+            }
+        }
+
+        targets.ReleaseSpyglass();
+        return null;
     }
 
     public override void _EnterTree() => _filterSource = GetTree().Root;
@@ -92,8 +128,10 @@ public sealed partial class XrMarkers : Node3D
         }
 
         var hud = pilot.PilotHud;
+        var head = _rig.Head.GlobalTransform;
         _marks.Clear();
         Pipper? pipper = null;
+        Texture2D? spyglass = null;
         Font? font = null;
         Vector3 planePos = Vector3.Zero;
         float heading = 0f;
@@ -111,10 +149,13 @@ public sealed partial class XrMarkers : Node3D
             targets.MarksInWorld = true;
             font = ChromeType.Face(targets);
             (planePos, heading) = (targets.PlanePos, targets.HeadingDeg);
-            if (Shows(targets))
+            bool shows = Shows(targets);
+            if (shows)
             {
                 targets.WorldMarks(_marks);
             }
+
+            spyglass = AnswerSpyglass(targets, shows, _marks, head);
         }
 
         if (pilot.VersusHud is { } versus && IsInstanceValid(versus))
@@ -127,21 +168,23 @@ public sealed partial class XrMarkers : Node3D
             }
         }
 
-        Place(_rig.Head.GlobalTransform, _rig.Origin.GlobalTransform.Basis.Y, pane.Camera.Fov,
-            font ?? ThemeDB.FallbackFont, planePos, heading, pipper, _marks);
+        Place(head, _rig.Origin.GlobalTransform.Basis.Y, pane.Camera.Fov,
+            font ?? ThemeDB.FallbackFont, planePos, heading, pipper, _marks, spyglass);
     }
 
     /// <summary>Places this frame's cards for a head at <paramref name="head"/> in a seat whose up is
     /// <paramref name="seatUp"/>, sized for the flat view <paramref name="fovDeg"/> tall. The clock
     /// bearing of a ring label reads off <paramref name="planePos"/> and
-    /// <paramref name="headingDeg"/>, as the flat edge marker's does. Unused cards hide.</summary>
+    /// <paramref name="headingDeg"/>, as the flat edge marker's does. A selection on the ring shows
+    /// <paramref name="spyglass"/> inside its arrow. Unused cards hide.</summary>
     public void Place(in Transform3D head, Vector3 seatUp, float fovDeg, Font font, Vector3 planePos,
-        float headingDeg, Pipper? pipper, IReadOnlyList<WorldMark> marks)
+        float headingDeg, Pipper? pipper, IReadOnlyList<WorldMark> marks, Texture2D? spyglass = null)
     {
         _placed.Clear();
         float perRef = XrMarkerLaw.TangentPerReferencePixel(fovDeg);
         int fontSize = TargetHud.MarkerFontSize(CardScale);
         int world = 0, ring = 0;
+        bool disc = false;
         if (pipper is { } p)
         {
             var card = Take(_world, world++, ring: false);
@@ -171,19 +214,33 @@ public sealed partial class XrMarkers : Node3D
             var label = Take(_ring, ring++, ring: true);
             PaintLabel(label, mark, EdgeMarker.ClockHour(planePos, headingDeg, mark.At), font, fontSize);
             PlaceRing(arrow, dir, dir, Vector2.Zero, perRef);
-            var inward = (RingLabelGapRef + XrMarkerLaw.Reach(dir, label.SizeRef * 0.5f)) * -dir;
+            // The selection's picture stands inside its arrow, and its label steps past the picture.
+            bool picture = !disc && spyglass != null && mark.Style == WorldMarkStyle.Selected;
+            float clear = picture ? 2f * XrMarkerLaw.SpyglassRadiusRef : 0f;
+            var inward = (RingLabelGapRef + clear + XrMarkerLaw.Reach(dir, label.SizeRef * 0.5f)) * -dir;
             var along = new Vector2(-dir.Y, dir.X) * (mark.Stagger * TargetHud.StaggerStepRef);
             PlaceRing(label, dir, Vector2.Right, inward + along, perRef);
+            if (picture)
+            {
+                PlaceDisc(dir, perRef, spyglass!, mark.Color);
+                disc = true;
+            }
         }
 
         Hide(_world, world);
         Hide(_ring, ring);
-        if (world != _shownWorld || ring != _shownRing)
+        if (!disc)
+        {
+            _disc.Hide();
+        }
+
+        if (world != _shownWorld || ring != _shownRing || disc != _shownDisc)
         {
             _shownWorld = world;
             _shownRing = ring;
+            _shownDisc = disc;
             string pipped = pipper is { } shown ? $", pipper at {head.Origin.DistanceTo(shown.At).ToString("0", CultureInfo.InvariantCulture)} m" : "";
-            Log.Debug("flight", $"xr markers: {world} card(s) in the world, {ring} on the ring{pipped}");
+            Log.Debug("flight", $"xr markers: {world} card(s) in the world, {ring} on the ring{pipped}{(disc ? ", the spyglass up" : "")}");
         }
     }
 
@@ -237,6 +294,13 @@ public sealed partial class XrMarkers : Node3D
 
     private static string Html(Color c) => c.ToHtml(true);
 
+    // A point in the head's frame on the ring at `dir`, shifted by `offsetRef` reference pixels.
+    private static Vector3 RingCentre(Vector2 dir, Vector2 offsetRef, float metresPerRef)
+    {
+        var onRing = dir * (Mathf.Tan(Mathf.DegToRad(XrMarkerLaw.RingDeg)) * RingDistanceM);
+        return new Vector3(onRing.X + (offsetRef.X * metresPerRef), onRing.Y + (offsetRef.Y * metresPerRef), -RingDistanceM);
+    }
+
     // The card at `index`, built on first use: a transparent 2D surface, the control the flat code
     // draws into, and the quad that shows it.
     private Card Take(List<Card> cards, int index, bool ring)
@@ -276,6 +340,8 @@ public sealed partial class XrMarkers : Node3D
             Mesh = mesh,
             MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // Off layer 1, which the spyglass picture draws; the flat disc shows no marker.
+            Layers = SplitScreen.HeadOverlayLayer,
             Visible = false,
         };
         if (ring)
@@ -422,13 +488,23 @@ public sealed partial class XrMarkers : Node3D
     private void PlaceRing(Card card, Vector2 dir, Vector2 axis, Vector2 offsetRef, float perRef)
     {
         float metresPerRef = perRef * RingDistanceM;
-        var onRing = dir * (Mathf.Tan(Mathf.DegToRad(XrMarkerLaw.RingDeg)) * RingDistanceM);
-        var centre = new Vector3(onRing.X + (offsetRef.X * metresPerRef), onRing.Y + (offsetRef.Y * metresPerRef), -RingDistanceM);
+        var centre = RingCentre(dir, offsetRef, metresPerRef);
         card.Material.SetShaderParameter("view_centre", centre);
         card.Material.SetShaderParameter("axis", axis);
         card.Material.SetShaderParameter("units", metresPerRef);
         card.Quad.Visible = true;
         _placed.Add(new Placed(card.Key, true, Transform3D.Identity, centre, axis, metresPerRef, card.SizeRef));
+    }
+
+    // The spyglass picture on the ring at `dir`, upright in the head's frame like a ring label.
+    private void PlaceDisc(Vector2 dir, float perRef, Texture2D picture, Color rim)
+    {
+        float metresPerRef = perRef * RingDistanceM;
+        float radius = XrMarkerLaw.SpyglassRadiusRef;
+        var centre = RingCentre(dir, XrMarkerLaw.SpyglassOffsetRef(dir), metresPerRef);
+        _disc.Show(centre, metresPerRef, radius, picture, rim);
+        _placed.Add(new Placed(SpyglassKey, true, Transform3D.Identity, centre, Vector2.Right, metresPerRef,
+            new Vector2(2f * radius, 2f * radius)));
     }
 
     /// <summary>The pipper a frame draws: the impact point and the pipper picture.</summary>

@@ -30,6 +30,11 @@ public sealed partial class HeadLockedQuads : Node3D
     /// draw over the dials, and under the sun wash.</summary>
     public const int MarkerRingPriority = 116;
 
+    /// <summary>The spyglass picture on the ring (<c>Flight.Hud.XrSpyglassDisc</c>). It draws over the
+    /// ring's arrows and labels, which never overlap it. It draws under the sun wash and the fade, as
+    /// the flat disc sits in the HUD layer under them.</summary>
+    public const int SpyglassPriority = 117;
+
     /// <summary>How far ahead of the eye the cockpit interior is taken to end, metres along the view
     /// axis. Nearer geometry is the seat: the whiteout and the flare rings stay off it, as the flat
     /// cockpit pass keeps them off the interior. TUNE. The interior's own wings reach past it, which
@@ -93,6 +98,8 @@ public sealed partial class HeadLockedQuads : Node3D
                 // The shader moves the quad onto the eye, so the node's own bounds mean nothing.
                 // They are made big enough that no camera anywhere culls it.
                 CustomAabb = new Aabb(new Vector3(-1e7f, -1e7f, -1e7f), new Vector3(2e7f, 2e7f, 2e7f)),
+                // Off layer 1, which the spyglass picture draws; a quad there would wash its picture.
+                Layers = SplitScreen.HeadOverlayLayer,
                 Visible = false,
             };
             host.AddChild(mesh);

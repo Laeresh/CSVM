@@ -108,6 +108,38 @@ public class XrMarkerLawTests
         Assert.Equal((0.6f * 60f) + (0.8f * 10f), XrMarkerLaw.Reach(new Vector2(0.6f, -0.8f), half), 4);
     }
 
+    [Fact]
+    public void TheRingsSpyglassIsTheFlatDiscWidenedAndRenderedFinerThanShown()
+    {
+        Assert.Equal(48f * XrMarkerLaw.SpyglassScale, XrMarkerLaw.SpyglassRadiusRef, 4);
+        Assert.Equal(288, XrMarkerLaw.SpyglassSide);
+
+        // At the author's 21 headset pixels per degree it spans 104 pixels in Nose and 151 in Cockpit,
+        // against a 1440p screen's 96. The picture keeps at least 1.9 texels a pixel.
+        Assert.Equal(4.96f, XrMarkerLaw.SpyglassDeg(46.8264f), 2);
+        Assert.Equal(7.20f, XrMarkerLaw.SpyglassDeg(64.3698f), 2);
+        foreach (float fovDeg in new[] { 46.8264f, 64.3698f })
+        {
+            float headsetPixels = XrMarkerLaw.SpyglassDeg(fovDeg) * 21f;
+            Assert.True(XrMarkerLaw.SpyglassSide / headsetPixels >= 1.9f, $"{fovDeg}: {headsetPixels:0} headset pixels");
+        }
+    }
+
+    [Theory]
+    [InlineData(1f, 0f)]
+    [InlineData(0f, -1f)]
+    [InlineData(-0.6f, 0.8f)]
+    public void TheRingsSpyglassStandsInsideItsArrowWithItsRimOnTheTail(float x, float y)
+    {
+        // The arrow's tail is the ring's point, the offset's origin. The disc's outer rim meets it and
+        // its centre lies a radius inward, toward the view axis, as the flat anchor moves in.
+        var dir = new Vector2(x, y);
+        var centre = XrMarkerLaw.SpyglassOffsetRef(dir);
+        Assert.Equal(XrMarkerLaw.SpyglassRadiusRef, centre.Length(), 3);
+        Assert.Equal(-1f, centre.Normalized().Dot(dir), 5);
+        Assert.Equal(0f, (centre + (dir * XrMarkerLaw.SpyglassRadiusRef)).Length(), 3);
+    }
+
     // A point `deg` off the head's view axis at `distance`, in the head's frame.
     private static Vector3 Off(float deg, float distance)
     {

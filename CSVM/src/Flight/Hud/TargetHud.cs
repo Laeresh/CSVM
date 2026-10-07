@@ -148,6 +148,7 @@ public sealed partial class TargetHud : Control
     private bool _bracketed;   // last frame's gate answer, for the hysteresis
     private object? _heldSubject;  // what the spyglass is holding, the clone at +0x20c
     private float _heldRadius;     // that subject's framing radius, measured once per hold
+    private bool _marksInWorld;
 
     /// <summary>This pane's own world pose, fed every frame by FlightController, the tracked
     /// hostile's clock bearing reads off it, exactly like VersusHud's PlanePos/HeadingDeg.</summary>
@@ -170,9 +171,20 @@ public sealed partial class TargetHud : Control
     public bool SpyglassOn { get; set; } = Spyglass.DefaultOn;
 
     /// <summary>Whether a stereo session draws this pane's markers in the world
-    /// (<see cref="XrMarkers"/>). Set, this control draws none and the spyglass picture stays
-    /// idle, since nothing shows it; the gates and the hostile tracker still run.</summary>
-    public bool MarksInWorld { get; set; }
+    /// (<see cref="XrMarkers"/>). Set, this control draws none, and the hostile tracker still runs.
+    /// The stereo host then answers the spyglass's gates and shows its picture on the head ring.</summary>
+    public bool MarksInWorld
+    {
+        get => _marksInWorld;
+        set
+        {
+            _marksInWorld = value;
+            if (_spyglass != null)
+            {
+                _spyglass.Headset = value;
+            }
+        }
+    }
 
     /// <summary>Whether the round picture is up this frame, which is also what moves the anchor,
     /// the shaft's start and the label. Answered by <see cref="UpdateSpyglass"/>.</summary>
@@ -518,12 +530,12 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>Re-answers whether the round picture is up for <paramref name="target"/> at
-    /// <paramref name="at"/>, and aims it when it is: armed, off screen, and inside
-    /// <see cref="Spyglass.RangeGate"/> for this pane's fog band, the wider gate while this same
-    /// subject is already held. The framing radius is measured once per hold, a mesh box being
-    /// fixed. Called every <see cref="_Process"/>; public so the suite drives it without pumping
-    /// frames.</summary>
-    public bool UpdateSpyglass(in TargetRef target, Vector3 at, bool offScreen)
+    /// <paramref name="at"/>, and aims it when it is. It is up while armed, off screen, and inside
+    /// <see cref="Spyglass.RangeGate"/> for this pane's fog band, wider while the subject is held.
+    /// The framing radius is measured once per hold. The picture renders
+    /// <paramref name="side"/> texels square, or the disc's size on this pane with none given.
+    /// Public so the suite and the stereo host drive it.</summary>
+    public bool UpdateSpyglass(in TargetRef target, Vector3 at, bool offScreen, int side = 0)
     {
         bool held = _heldSubject != null && ReferenceEquals(_heldSubject, target.Source);
         float gate = Spyglass.RangeGate(FogRange?.Invoke() ?? Vector2.Zero, held);
@@ -540,8 +552,13 @@ public sealed partial class TargetHud : Control
         }
 
         DiscShown = true;
-        float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
-        if (_spyglass != null && s > 0f)
+        if (side <= 0)
+        {
+            float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
+            side = s > 0f ? Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)) : 0;
+        }
+
+        if (_spyglass != null && side > 0)
         {
             // The eye stands on the DRAWN pose, never the sim one the gates above read: an eye
             // quantised to the physics tick shakes against the frame around it. The roll is the
@@ -550,7 +567,7 @@ public sealed partial class TargetHud : Control
                 Spyglass.Pose(RenderPose.Origin, at, RenderPose.Basis,
                     target.Source is FlightController),
                 Spyglass.FovDeg(_heldRadius, PlanePos.DistanceTo(at)),
-                Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)));
+                side);
         }
 
         return true;
@@ -792,7 +809,14 @@ public sealed partial class TargetHud : Control
     // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing.
     private void StepSpyglass()
     {
-        if (!Visible || MarksInWorld || Selected is not { Source: not null } sel
+        // ⚠ Do not release here under a headset: the stereo host answers the gate later in the
+        // frame. A release each frame would drop the held subject and its wider gate.
+        if (MarksInWorld)
+        {
+            return;
+        }
+
+        if (!Visible || Selected is not { Source: not null } sel
             || !GodotObject.IsInstanceValid(_camera))
         {
             ReleaseSpyglass();

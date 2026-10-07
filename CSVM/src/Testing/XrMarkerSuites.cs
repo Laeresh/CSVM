@@ -113,6 +113,117 @@ internal static class XrMarkerSuites
         }
     }
 
+    /// <summary>A real targeting HUD's spyglass answered by the stereo host for a head 20 km out, a
+    /// selection 300 m to its right. Each gate carries its control.</summary>
+    [Suite("xr-spyglass",
+        "a stereo session's spyglass: the selection on the head ring brings the picture up, rendered once at the ring's size on a disc inside its arrow with the label stepped past it; the disc stays put in the head's frame as the head turns, a held subject survives the HUD's own frame step, the picture's camera leaves out the headset's layers that the panes keep, and looking at the target, disarming it or hiding the HUD takes it down")]
+    internal static void XrSpyglass(TestContext ctx)
+    {
+        var markers = XrMarkers.Build(null);
+        ctx.Host.AddChild(markers);
+        var subject = new Node3D { Name = "xr-spyglass-subject" };
+        ctx.Host.AddChild(subject);
+        var hud = TargetHud.Build(0, ctx.Camera, null!);
+        ctx.Host.AddChild(hud);
+        try
+        {
+            var seat = Basis.FromEuler(new Vector3(0.05f, -2.3f, 0.1f));
+            var head = new Transform3D(seat, new Vector3(20000f, 310f, -4144f));
+            var at = head.Origin + (seat.X * 300f) + (-seat.Z * 2f);
+            subject.GlobalPosition = at;
+            hud.Size = new Vector2(2560f, 1440f);
+            hud.PlanePos = head.Origin;
+            hud.RenderPose = head;
+            var target = TargetRef.ForAircraft(new AimCandidate { Live = true, Source = subject, Position = at },
+                TargetClass.Enemy, subject.Name, "Fury");
+            var marks = new List<WorldMark> { new(WorldMarkStyle.Selected, at, TargetHud.HudRed, "", target, false, 0) };
+            hud.MarksInWorld = true;
+
+            // Up: the selection hangs on the ring, armed and 300 m out, inside the 1750 m engage gate.
+            var picture = XrMarkers.AnswerSpyglass(hud, true, marks, head);
+            ctx.Check(picture != null && hud.PictureLive && hud.Picture is { } view
+                    && view.Size == new Vector2I(XrMarkerLaw.SpyglassSide, XrMarkerLaw.SpyglassSide),
+                $"a selection 89.6 degrees off the view brings the picture up at the ring's {XrMarkerLaw.SpyglassSide} texels square ({hud.Picture?.Size})");
+            if (picture == null)
+            {
+                return;
+            }
+
+            uint pane = ctx.Camera.CullMask;
+            uint mask = hud.Picture!.DiscCullMask;
+            uint headset = SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer;
+            ctx.Check((pane & headset) == headset && (mask & headset) == 0
+                    && mask == (Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), Utils.GraphicsMode.Enhanced) & ~headset),
+                $"the picture's camera leaves out the headset's two layers the pane draws (0x{mask:X5} against 0x{pane:X5}) and nothing else");
+            ctx.Check(Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), false) == (pane & ~SplitScreen.OwnAirframeLayer(0)),
+                $"CONTROL: the flat picture's mask is the pane's less the own airframe, as before");
+
+            // The HUD's own frame step leaves a stereo host's held subject alone.
+            hud._Process(0.0);
+            ctx.Check(hud.PictureLive && hud.DiscShown, $"the targeting HUD's frame step keeps the picture the stereo host answered");
+            hud.MarksInWorld = false;
+            hud._Process(0.0);
+            ctx.Check(!hud.PictureLive, $"CONTROL: the flat frame step answers the gate itself, and with no selection of its own drops it");
+            hud.MarksInWorld = true;
+            picture = XrMarkers.AnswerSpyglass(hud, true, marks, head);
+
+            float perRef = XrMarkerLaw.TangentPerReferencePixel(CockpitFovDeg);
+            markers.Place(head, seat.Y, CockpitFovDeg, ThemeDB.FallbackFont, head.Origin, 0f, null, marks, picture);
+            var shown = markers.Shown;
+            ctx.Check(shown.Count == 3 && shown[2].Key == XrMarkers.SpyglassKey && markers.Disc.Visible
+                    && ReferenceEquals(markers.Disc.Showing, picture),
+                $"the ring holds the arrow, the label and the picture's disc ({shown.Count} placed, disc {markers.Disc.Visible})");
+            if (shown.Count != 3)
+            {
+                return;
+            }
+
+            var bearing = new Vector2(1f, 0f);
+            float radius = XrMarkerLaw.SpyglassRadiusRef;
+            float metresPerRef = perRef * XrMarkers.RingDistanceM;
+            var tail = shown[0].ViewCentre;
+            var want = tail + new Vector3(-radius * metresPerRef, 0f, 0f);
+            var disc = shown[2];
+            ctx.Check(disc.ViewCentre.DistanceTo(want) < 1e-5f && Mathf.Abs(disc.MetresPerRef - metresPerRef) < 1e-9f
+                    && Mathf.Abs(disc.SizeRef.X - (2f * radius)) < 1e-4f,
+                $"the disc sits one radius inside the arrow's tail on the 3 o'clock bearing, {Mm(disc.ViewCentre.DistanceTo(want))} off, {XrMarkerLaw.SpyglassDeg(CockpitFovDeg):0.00} degrees across");
+            float labelIn = (tail - shown[1].ViewCentre).Dot(new Vector3(bearing.X, bearing.Y, 0f)) / metresPerRef;
+            ctx.Check(labelIn > (2f * radius) + (shown[1].SizeRef.X * 0.5f),
+                $"the label steps past the picture's inner rim ({labelIn:0.0} reference pixels in, the disc {2f * radius:0.0} across)");
+
+            // Head-locked: a head turned 10 degrees away and leaning keeps the disc in its frame.
+            var turned = new Transform3D(seat * new Basis(Vector3.Up, Mathf.DegToRad(10f)), head.Origin + (seat.X * 0.08f));
+            markers.Place(turned, seat.Y, CockpitFovDeg, ThemeDB.FallbackFont, head.Origin, 0f, null, marks,
+                XrMarkers.AnswerSpyglass(hud, true, marks, turned));
+            ctx.Check(markers.Shown.Count == 3 && markers.Shown[2].ViewCentre.DistanceTo(disc.ViewCentre) < 1e-4f,
+                $"a head turned 10 degrees and leaning 80 mm keeps the disc at its place in the head's frame, so it turns with the head ({Mm(markers.Shown.Count == 3 ? markers.Shown[2].ViewCentre.DistanceTo(disc.ViewCentre) : -1f)})");
+
+            // Down: looking at the target, disarmed, or the HUD hidden.
+            var facing = new Transform3D(seat * new Basis(Vector3.Up, Mathf.DegToRad(-85f)), head.Origin);
+            var looked = XrMarkers.AnswerSpyglass(hud, true, marks, facing);
+            markers.Place(facing, seat.Y, CockpitFovDeg, ThemeDB.FallbackFont, head.Origin, 0f, null, marks, looked);
+            ctx.Check(looked == null && !hud.PictureLive && !markers.Disc.Visible,
+                $"the head turned onto the target puts its box in the world and takes the picture down");
+            hud.SpyglassOn = false;
+            ctx.Check(XrMarkers.AnswerSpyglass(hud, true, marks, head) == null && !hud.PictureLive,
+                $"disarmed, the selection on the ring shows no picture");
+            hud.SpyglassOn = true;
+            ctx.Check(XrMarkers.AnswerSpyglass(hud, true, marks, head) != null && hud.PictureLive,
+                $"CONTROL: re-armed, it comes back on the same pose");
+            ctx.Check(XrMarkers.AnswerSpyglass(hud, false, marks, head) == null && !hud.PictureLive,
+                $"a hidden targeting HUD releases the picture");
+            markers.Place(head, seat.Y, CockpitFovDeg, ThemeDB.FallbackFont, head.Origin, 0f, null, marks, null);
+            ctx.Check(!markers.Disc.Visible && markers.Shown.Count == 2,
+                $"with no picture the ring keeps the arrow and the label and hides the disc");
+        }
+        finally
+        {
+            hud.QueueFree();
+            subject.QueueFree();
+            markers.QueueFree();
+        }
+    }
+
     // A world card centred on `at` with its z toward the head. Its y is the seat's up as near as the
     // facing allows, and a reference pixel spans the flat view's angle at its distance.
     private static void WorldCard(TestContext ctx, string what, in XrMarkers.Placed card, Vector3 at,

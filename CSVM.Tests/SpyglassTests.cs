@@ -215,6 +215,38 @@ public class SpyglassTests
     }
 
     [Fact]
+    public void UnderAHeadsetTheDiscAlsoDropsTheHeadsetsTwoLayersAndNothingElse()
+    {
+        uint headset = SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer;
+        uint[] taken =
+        {
+            1u, ZoneGate.LayerBand, SplitScreen.SunLayer, SplitScreen.SpyglassSunLayer,
+            SplitScreen.FirstPersonLayer(0) | SplitScreen.FirstPersonLayer(1)
+                | SplitScreen.FirstPersonLayer(2) | SplitScreen.FirstPersonLayer(3),
+            SplitScreen.OwnAirframeLayer(0) | SplitScreen.OwnAirframeLayer(1)
+                | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
+            SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)
+                | SplitScreen.PlayerVisualLayer(2) | SplitScreen.PlayerVisualLayer(3),
+        };
+        foreach (uint band in taken)
+        {
+            Assert.Equal(0u, band & headset);
+        }
+
+        Assert.NotEqual(SplitScreen.HeadsetLayer, SplitScreen.HeadOverlayLayer);
+        uint own = SplitScreen.OwnAirframeLayer(0);
+        foreach (bool enhanced in new[] { false, true })
+        {
+            uint pane = SplitScreen.PaneCullMask(0xFFFFFu);
+            uint flat = SpyglassView.DiscMask(pane, own, enhanced);
+            uint worn = SpyglassView.DiscMask(pane, own, enhanced, headset: true);
+            Assert.Equal(headset, pane & headset);       // the control: the pane draws both
+            Assert.Equal(headset, flat & headset);       // and so does the flat picture
+            Assert.Equal(flat & ~headset, worn);
+        }
+    }
+
+    [Fact]
     public void TheSunLayersAreTheirOwnAndOnlyTheDiscDrawsTheCopy()
     {
         uint[] taken =

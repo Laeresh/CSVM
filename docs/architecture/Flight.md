@@ -341,8 +341,16 @@ small 2D surface, its card, at `CardScale` texels per reference pixel. A marker 
 `XrMarkerLaw.RingDeg` of the view axis stands at its world point (clamped to `MaxDistanceM`), facing
 the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
 arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
-`MarksInWorld` stops their own drawing and the spyglass picture. Priorities: `UI/Boards/HeadLockedQuads.cs`;
-`Launch/GameSession.cs` builds it.
+`MarksInWorld` stops their own drawing; `AnswerSpyglass` then answers `TargetHud`'s spyglass gates off the
+head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
+
+## src/Flight/Hud/XrSpyglassDisc.cs
+The spyglass picture in a stereo session: `Camera/SpyglassView.cs`'s texture, rendered once at
+`XrMarkerLaw.SpyglassSide` texels, on one quad on the head ring one radius inside the selection's arrow,
+placed in the head's frame by its shader as the ring cards are, so both eyes see one mono picture at the
+ring's 2 m. The shader masks it to a circle and draws the flat disc's rim and drop shadow, mixed in gamma
+space as the canvas is. It stands on `UI.Boards.SplitScreen.HeadOverlayLayer`, which the picture's own
+camera leaves out, at `HeadLockedQuads.SpyglassPriority`. `XrMarkers.cs` builds and places it.
 
 ## src/Flight/Hud/XrHudPanel.cs
 The cockpit-locked HUD panel of a stereo session: the flown pane's chrome (HUD, message stack, held
@@ -365,7 +373,8 @@ with or without the eye feed. Defaults are TUNE at the headset; coverage is
 The stereo markers' geometry, engine-free: the tangent one flat HUD reference pixel spans in a view
 of a given vertical angle, a point's place in the head's frame and its angle off the view axis, the
 `RingDeg` cone that sends a marker from the world to the ring, the ring's bearing (dead astern points
-down, as `EdgeMarker` does), a world card's facing axes and a label's inward step. Coverage is
+down, as `EdgeMarker` does), a world card's facing axes and a label's inward step, and the ring's
+spyglass disc: `SpyglassScale` times the flat disc, its texel side and its place inside the arrow. Coverage is
 `CSVM.Tests/XrMarkerLawTests.cs`; `XrMarkers.cs` is the user.
 
 ## src/Flight/Hud/WorldMark.cs
@@ -797,7 +806,7 @@ planes and cull mask and starts it rendering; `Idle` stops it. The world is inhe
 owned, so the target is the one in play and wears the flown zone's fog. `DiscMask` departs from the
 pane's view: the pilot's own aeroplane's layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by
 `Session/HumanFlightAdapter`) is dropped, and under Enhanced the sun is traded for `SpyglassSun.cs`.
-`Census` is the `--perf` spyglass line. `TargetHud.DrawDisc` masks it to a circle.
+Under a headset (`Headset`) it also drops the headset's two layers. `Census` is the `--perf` spyglass line. `TargetHud.DrawDisc` masks it to a circle; a headset shows it through `Hud/XrSpyglassDisc.cs`.
 
 ## src/Flight/Camera/SpyglassSun.cs
 The spyglass discs' own sun under Enhanced: a shadowless `DirectionalLight3D` on
@@ -960,7 +969,7 @@ bracket box and label block and owns the colour table, the label layout, the sel
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`). Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries

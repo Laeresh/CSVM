@@ -580,7 +580,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
 skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
-by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names. `HeadsetLayer` carries the theater screen and laser, which a picture camera (the stereo cutscene's) leaves out.
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names. `HeadsetLayer` carries the theater screen and laser, which a picture camera (the stereo cutscene's) leaves out. `HeadOverlayLayer` carries the head-locked quads and the flight markers, which the cutscene pair draws and the spyglass picture leaves out with `HeadsetLayer`.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -606,7 +606,7 @@ A stereo session's full-view colour layers, which a stereo viewport cannot draw 
 cloud whiteout, the `ScreenFlash` wash, the sun wash and the mission-end fade, one quad each copying
 its flat layer's colour every frame, so the flat layers stay untouched. The shader places each quad in
 view space, locked to the head, composited in gamma space as the canvas is. Its render priorities are
-the stereo twin of `HudLayers`: the cockpit-locked HUD panel's (`Flight/Hud/XrHudPanel.cs`), the flight markers' world cards under it and their head ring over it (`Flight/Hud/XrMarkers.cs`). The whiteout alone
+the stereo twin of `HudLayers`: the cockpit-locked HUD panel's (`Flight/Hud/XrHudPanel.cs`), the flight markers' world cards under it and their head ring over it (`Flight/Hud/XrMarkers.cs`), then the ring's spyglass picture (`SpyglassPriority`). The quads stand on `SplitScreen.HeadOverlayLayer`, off the spyglass picture. The whiteout alone
 is depth-tested at the seat clearance, which keeps the in-world interior clear of it as the flat
 cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
 

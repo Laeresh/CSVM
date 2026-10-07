@@ -13,8 +13,8 @@ namespace CSVM.UI.Boards;
 /// camera-anchored singletons like the skydome, which <see cref="PlayerCullMask"/> keeps private.
 /// Every pane is a 3D audio listener (docs/architecture.md), or a splitscreen session has no
 /// listener at all. The zone-gate, <see cref="OwnAirframeLayer"/> and
-/// <see cref="FirstPersonLayer"/> bands and <see cref="HeadsetLayer"/> are separate allocations of
-/// the same 20 layers.
+/// <see cref="FirstPersonLayer"/> bands, <see cref="HeadsetLayer"/> and <see cref="HeadOverlayLayer"/>
+/// are separate allocations of the same 20 layers.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -40,6 +40,12 @@ public sealed partial class SplitScreen : CanvasLayer
     /// surround and the laser. Every pane camera draws it, the headset's render included. A
     /// camera standing in the world for a picture drops it, as the stereo cutscene's two do.</summary>
     public const uint HeadsetLayer = 1u << 8;
+
+    /// <summary>The layer of a stereo session's overlays on the flown view: the head-locked colour
+    /// quads and the flight markers' cards. Every pane camera draws it, the cutscene pair too, so a
+    /// mission-end fade still darkens a held film. The spyglass picture drops it, as the flat disc
+    /// shows the world alone.</summary>
+    public const uint HeadOverlayLayer = 1u << 5;
 
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle

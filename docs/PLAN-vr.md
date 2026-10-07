@@ -227,7 +227,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 16. ◐ D16 Comfort: fades, tunnel vignette, render-scale slider
 17. ◐ D17 Port the screen-space effects to multiview
 18. ☐ D18 Performance pass to the 90 Hz budget
-19. ☐ D19 Spyglass as a binocular quad
+19. ◐ D19 Spyglass as a binocular quad
 
 ### Wave E, headset pass and release
 
@@ -3063,21 +3063,131 @@ flat profiler stand-in.>
 **⚠ Traps.** Read `docs/verification.md` on performance measurement before timing; the author's rig
 runs the sim clock behind wall time in late chapters.
 
-## D19 ☐ Spyglass as a binocular quad
+## D19 ◐ Spyglass as a binocular quad
+
+**Outcome: built and measured on the stand-in; the size, the place and the look are owed at the
+headset.** The plan's premise was a zoom that narrows the field of view, and the flat spyglass is no
+such thing: it is the picture of the selected target while the target is off screen, drawn in a disc
+at the edge marker (`docs/org/spyglass.md`). A stereo session now shows that same picture, rendered
+once for both eyes, on a disc on the head ring inside the selection's ring arrow, with the flat rim
+and drop shadow. It follows the head, as the ring does. Flat play builds none of it; flat goldens
+are untouched by construction (below).
 
 **Goal.** In VR the spyglass zoom shows as a mono picture on a binocular-style quad instead of
 narrowing the stereo FOV.
 
-**Evidence (confidence: lead-only).** The spyglass has its own camera (`Flight/Camera/SpyglassView.cs:62`)
-and its own viewport in `ViewportQuality`.
+**Evidence (confidence: traced to code and the decode for what the picture is and where it aims;
+measured on the stand-in for placement, mono-ness, disparity and size; the size and place are a
+judgement, TUNE for the author).** Captures and instruments are in `.scratch/D19/` (`d19_mono.py`,
+`d19_ring.py`, `d19_rim.py`, `d19_gold.py`).
+- **What the flat spyglass aims along: the target, from the aircraft.** `Spyglass.Pose` stands the
+  camera on the aircraft's drawn pose and looks at the target's drawn point, rolling with the
+  aircraft for an aircraft target; the field of view frames the target (`2 atan(1.1 R / d)`). It
+  never narrows the main view and never reads the nose or the head. The disc shows only while the
+  target is off screen, armed (Shift+S toggles, on at load) and inside the fog-derived range gate.
+- **VR aims the same way, not along the gaze.** The decode makes the picture, the arrow and the
+  clock tag one object driven by the selection (`docs/org/spyglass.md`, "The headline"). A picture
+  along the head's gaze would show what the headset already shows in stereo at full resolution, and
+  would be a new feature the original lacks. The head decides only whether the picture is up (the
+  target past C13's 25-degree ring cone, the stereo meaning of "off screen") and where it hangs (the
+  target's bearing on the ring).
+- **Where it hangs.** On the head ring at the ring's 2 m, its centre one radius inside the ring
+  point, so its outer rim meets the arrow's tail, as the flat anchor moves half a window in for the
+  disc. The label steps inward past the picture. Placed in view space by its shader, it rides the
+  head with no lag and carries no world coordinate, C14's head-locked approach (A3b's eye feed is not
+  needed for a head-locked quad). It faces the eye by construction, so no `StereoFacing` is involved
+  (B10); like the ring labels it stays upright in the head's frame.
+- **Size (TUNE).** `XrMarkerLaw.SpyglassScale` 1.5 times the flat disc's angle at the flat view's
+  scale (C13's rule for every ring card): 4.96 degrees across in Nose and Chase, 7.20 in Cockpit.
+  At the author's 21 headset pixels per degree that is 104 and 151 pixels, against 69 and 101 at the
+  flat angle and 96 on a 1440p screen. The picture renders at `SpyglassSide` 288 texels square
+  (`SpyglassTexelsPerRef` 2), at least 1.9 texels per headset pixel, filtered by four taps. The
+  binocular shape is the flat disc's circle and rim: no `sgwin` art ships, and the flat port draws a
+  circle.
+- **Mono and its disparity, measured** (`--chapter=C1 --plane=player_bhawk --pos=-6144,600,-6144
+  --direction=-0.743,0,-0.669 --view=nose --ai=player_fury --target=ai1_player_fury
+  --hold=0,0,0,0.6 --det --mute --frames=60 --xr-sim=yaw=-70,eye=1600x1600,fov=60,shot=left|right`).
+  A least-squares shift of the disc's interior between the eyes (SHOT-48) reads 44.60 px horizontal
+  and 0.00 vertical, residual 0.80 levels RMS over 10289 px; unshifted the residual is 19.1 and a
+  pixel off it is 2.3 (controls). The ring's own label and arrow read 44.60 and 44.50 px, so the
+  disc carries exactly the ring's 2 m disparity; the nominal `f·b/z` is 43.65 px, and the 2.2 % over
+  it is common to every ring card and to the disc's radius (61.4 px against 60.0 from the flat
+  angle), a stand-in projection factor rather than the disc's.
+- **The picture is the flat one.** The same pose with `--view=back` in flat play shows the flat
+  disc's picture: the same Fury, sky band and cloud (`D19-flat-disc-crop.png` against
+  `D19-xr-big-crops.png`).
+- **Layers: a picture camera must not draw what rides the head.** The head-locked quads, the ring
+  cards and the HUD panel place themselves in view space or from the eye feed for whatever camera
+  draws them, and the spyglass camera draws the pane's mask. On layer 1 the whiteout, flash, sun
+  wash and fade would wash the picture and the disc would sample itself. The two pieces:
+  `SplitScreen.HeadsetLayer` (D15's finding; panel, theater, comfort quads), and a new
+  `SplitScreen.HeadOverlayLayer` (bit 5, free) for the head-locked quads, the marker cards and the
+  disc, which every pane camera and the cutscene pair still draw (D15's fade over a held film
+  stands). `SpyglassView.DiscMask(..., headset: true)` drops both while `TargetHud.MarksInWorld`
+  holds; flat play keeps the old mask bit for bit, and nothing flat stands on either layer.
+- **The gate under a headset.** `TargetHud.StepSpyglass` no longer releases under `MarksInWorld`
+  (C13 made it, which left the picture idle); `XrMarkers.AnswerSpyglass` answers it once a frame
+  at priority 2100 off the tracked head, so the held subject keeps its wider release gate.
 
-**Approach.** Show the spyglass viewport's texture on a head-locked quad while it is up.
+**Resolved TODOs.**
+- C13's contract "the spyglass disc is not drawn in the headset, and `MarksInWorld` keeps the
+  spyglass viewport idle under XR": the picture shows, and `MarksInWorld` now hands its gates to the
+  stereo host. The spyglass's own markers (box, tags, pipper) stay out of the picture, as the flat
+  disc shows none.
+- D15's finding: the picture's mask drops `HeadsetLayer`, and `HeadOverlayLayer` with it.
+- Priority: `HeadLockedQuads.SpyglassPriority` 117, over the ring (116), under the sun wash (120),
+  the fade (121) and the vignette (122), as the flat disc sits in the HUD layer under the wash.
+- The input stays `InputAction.ToggleSpyglass` (Shift+S, the pad's Misc1); nothing new is bound.
+- Model recommendation: Standard.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Approach (landed, VR only).** `Flight/Hud/XrSpyglassDisc.cs` (the quad and its shader);
+`XrMarkers.AnswerSpyglass`, `Place(..., spyglass)`, `Disc`, `SpyglassKey`; `XrMarkerLaw`
+`SpyglassScale`, `SpyglassTexelsPerRef`, `SpyglassRadiusRef`, `SpyglassSide`, `SpyglassOffsetRef`,
+`SpyglassDeg`; `TargetHud.MarksInWorld` (sets the picture's `Headset`), `UpdateSpyglass(..., side)`,
+`StepSpyglass`; `SpyglassView.Headset`, `DiscMask(..., headset)`; `SplitScreen.HeadOverlayLayer`;
+`HeadLockedQuads.SpyglassPriority` and its quads' layer; the marker cards' layer.
 
-**Verify.** <TODO>
+**Verify.** Units: `XrMarkerLawTests` (the disc's radius, side, angles and texel density, its
+place inside the arrow), `SpyglassTests.UnderAHeadsetTheDiscAlsoDropsTheHeadsetsTwoLayersAndNothingElse`.
+Suite `xr-spyglass` (a real `TargetHud` and `SpyglassView`: up on the ring at 288 texels, the mask,
+the HUD's own frame step keeping the held picture, the disc inside the arrow with the label past it,
+a head turned 10 degrees and leaning 80 mm leaving the disc at its place in the head's frame,
+looking at the target, disarming and a hidden HUD each taking it down, each with a control); with
+`StepSpyglass` releasing under a headset again it fails on the frame-step check (METHOD-9). Golden
+`c1-spyglass-xr-sim` (the probe above at `eye=640x720,fov=70`): `e439ac87510fac5b420a722a57bc7088`
+on three runs, frame-sensitive 39.14 %.
 
-**⚠ Traps.** <TODO: none known yet.>
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, Original then Enhanced:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=nose --ai=player_fury --target=ai1_player_fury
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest --graphics=enhanced
+```
+Look for: (1) first line: the Fury sits 250 m ahead; turn your head about 30 degrees or more away
+from it and a round picture of it appears on the ring inside its arrow, the name and clock tag
+beside it; turn back and it closes as the box returns; say whether the picture should be larger or
+smaller (`SpyglassScale` 1.5) and whether it reads sharp; (2) the picture is one flat image at the
+ring's depth, not doubled, and moves with your head as the ring does; (3) Shift+S (pad: Misc1, the
+Share or Capture button) turns it off and on, armed at load; (4) the second line, a dogfight in
+Cockpit: the picture follows a Fury past your shoulder, shows no box, tag or whiteout inside it, and
+whether the place inside the ring arrow works or it should stand elsewhere; (5) under Enhanced (third
+line), the picture's contrast against the world: the headset's AgX tonemaps the already tonemapped
+picture once more (SHOT-46).
+
+**⚠ Traps.**
+- Do not aim the stereo picture along the head's gaze: the spyglass is the selection's picture, and
+  the head only gates it and places it.
+- Do not put a head-locked or eye-fed quad on layer 1: every picture camera draws that layer, and a
+  view-space quad lands in its picture. `HeadOverlayLayer` for what the cutscene pair should keep,
+  `HeadsetLayer` for what it should not.
+- Do not release the picture in `TargetHud`'s own frame step under a headset; the stereo host
+  answers the gate after it, and a release each frame resets the held subject's wider gate.
+- Under Enhanced the picture is tonemapped twice, its own viewport's and the headset's (SHOT-46),
+  as the HUD panel and the cards are.
+- The flat camera's Fov sizes the disc through the ring's scale, so a change to the view's angle
+  under a headset resizes it too.
+
+**Verified.** <pending orchestrator run>
 
 # Wave E, headset pass and release
 

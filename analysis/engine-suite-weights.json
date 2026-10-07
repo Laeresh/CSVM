@@ -510,6 +510,7 @@
     "xr-render-scale": 0.01,
     "xr-rig-seat": 0.49,
     "xr-sprite-facing": 0.24,
+    "xr-spyglass": 0.07,
     "xr-view-chase": 1.66,
     "xr-view-cutscene": 1.43,
     "xr-view-first-person": 0.84,

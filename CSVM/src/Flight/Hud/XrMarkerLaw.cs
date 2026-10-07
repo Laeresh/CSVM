@@ -15,6 +15,32 @@ public static class XrMarkerLaw
     /// 29.5 degrees above the cockpit view's centre and 21.3 above the chase view's.</summary>
     public const float RingDeg = 25f;
 
+    /// <summary>How much wider than the flat disc the ring's spyglass picture is drawn. TUNE: at 21
+    /// headset pixels per degree it spans 104 pixels in Nose and 151 in Cockpit. The flat angle gives
+    /// 69 and 101, against a 1440p screen's 96.</summary>
+    public const float SpyglassScale = 1.5f;
+
+    /// <summary>Picture texels per reference pixel of the ring's spyglass disc. That is about twice a
+    /// headset's pixels in Cockpit, so the picture is filtered down. TUNE.</summary>
+    public const float SpyglassTexelsPerRef = 2f;
+
+    /// <summary>The ring's spyglass picture's radius, reference pixels: the flat disc's
+    /// (<see cref="Camera.Spyglass.RefRadius"/>) times <see cref="SpyglassScale"/>.</summary>
+    public static float SpyglassRadiusRef => Camera.Spyglass.RefRadius * SpyglassScale;
+
+    /// <summary>The side, in texels, the picture renders at for the ring.</summary>
+    public static int SpyglassSide => Mathf.CeilToInt(2f * SpyglassRadiusRef * SpyglassTexelsPerRef);
+
+    /// <summary>The ring's spyglass picture's centre, reference pixels from the ring's point on
+    /// <paramref name="dir"/>. It sits one radius inward, so its rim meets the arrow's tail. The flat
+    /// anchor moves half a window in alike (docs/org/spyglass.md "Where the anchor is").</summary>
+    public static Vector2 SpyglassOffsetRef(Vector2 dir) => -dir * SpyglassRadiusRef;
+
+    /// <summary>The angle the ring's spyglass picture spans, degrees, at the centre of a view
+    /// <paramref name="fovVerticalDeg"/> tall.</summary>
+    public static float SpyglassDeg(float fovVerticalDeg) =>
+        Mathf.RadToDeg(2f * Mathf.Atan(SpyglassRadiusRef * TangentPerReferencePixel(fovVerticalDeg)));
+
     /// <summary>The tangent one flat HUD reference pixel spans at the centre of a view
     /// <paramref name="fovVerticalDeg"/> tall. The reference frame's height covers the whole angle,
     /// as in the flat game.</summary>

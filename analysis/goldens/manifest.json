@@ -256,6 +256,13 @@
       "hash": "638392196117bb4e48c1e21480c0c88e",
       "exercises": "The race ghost in stereo: the flown aircraft dithered as a full ghost in the rigid chase over the empty stage, each eye's pattern shifted to the surface's depth so it carries the aircraft's disparity; frame-sensitive 26.66 %.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=chase", "--hold=0,0,0,0.6", "--debug-race-ghost", "--xr-sim", "--det", "--mute"]
+    },
+    {
+      "name": "c1-spyglass-xr-sim",
+      "frame": 60,
+      "hash": "e439ac87510fac5b420a722a57bc7088",
+      "exercises": "The spyglass on the stand-in headset, the head turned 70 degrees off a Fury ahead: one mono picture of it on a disc on the head ring, inside its arrow and label, in both eyes over C1; frame-sensitive 39.14 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,600,-6144", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury", "--target=ai1_player_fury", "--hold=0,0,0,0.6", "--xr-sim=yaw=-70,eye=640x720,fov=70", "--det", "--mute"]
     }
   ]
 }
