@@ -3185,7 +3185,9 @@ double image. Pick from the trades above if the first lines miss 5.5 ms.
 - The author's rig runs the sim clock behind wall time in late chapters; the stand-in rows are
   `--det`, so their `frame_ms` is not the headset's.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with D18: build PASS, units 6490 passed 3
+skipped, engine 550 passed 2 skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
+The headset check named above is still owed.
 
 ## D19 ◐ Spyglass as a binocular quad
 
