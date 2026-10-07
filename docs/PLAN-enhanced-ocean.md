@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ The other chapters with a sea at y = 0
 22. ☑ Ship calm zones for every hull and wake
 23. ☑ Swell regularity from altitude
-24. ☐ An Enhanced ocean golden
+24. ☑ An Enhanced ocean golden
 25. ☑ The ocean matches the flat sheet at the shore and in fog
 26. ☑ No hole where a mission shows a node hidden at the bake
 27. ☑ Calm zones for mission-animated boats with no wake sheet
@@ -641,7 +641,39 @@ field.>
 **⚠ Traps.** The vertex-stage fade (full at eight grid steps per wavelength, none at four) is what
 keeps waves the grid cannot carry from crawling. Keep it for any new wave.
 
-## C24 ☐ An Enhanced ocean golden
+## C24 ☑ An Enhanced ocean golden
+
+**Landed.** `c1b-ocean-enhanced` pins the wave ocean at frame 120: `--freecam --chapter=C1B
+--pos=-5900,120,-8350 --direction=0,-0.3,1 --det --mute --graphics=enhanced --water-quality=waves`,
+hash `a1d94a8a...`. The pose looks across C1B's night islands, with open-sea swell and chop in the
+foreground, the waves calming toward each shore, and the surf ring round the near island.
+`--water-quality=waves` is explicit, so a change to the water-quality ladder cannot turn the
+subject off. A freecam pose replaced the `--fly` placement the approach named, because the chase
+camera's aircraft covered the near water. The ocean owns the frame: 67.9 % of pixels differ from
+the same pose at `--water-quality=flat` (SHOT-29). Frame 120 against 121 differs in 15.68 % of
+pixels, at a mean of 0.07 levels. The three Enhanced shots the ocean moves are re-pinned and their
+`exercises` rewritten to name the ocean: `c1-lake-enhanced` `60cafb7f...`, `c5-city-night-enhanced`
+`cbbd3e40...` and `c1-rocket-hit-enhanced` `a6fa3739...`. Their frame sensitivity was re-measured
+(lake 23.60 %, rocket 89.65 %, city unchanged at 24.69 %). In the night city the ocean owns 425
+pixels on the far waterline, and the shot with `--no-ocean` renders the old pinned hash.
+`analysis/goldens/README.md` counts six Enhanced shots. Stability: the new hash held on all 14 of
+this tree's goldens runs, each behind the quiet gate (no other godot, cargo or rustc process, GPU
+under 12 % for 45 s). Four of those runs had no other session's Godot at any point, three ran
+straight after an engine stage, and seven overlapped another session's battery that started
+mid-run. Those seven count as the plan's external-load check.
+
+`c1-cockpit-enhanced`'s single flip to `f73c18a2...` is one pixel at (1214, 675), one red level
+off, in the haze beside the canopy frame. Its log matches a normal run's line for line. The shot
+builds the ocean (C1's `water1` strip) though no sea is in view. The flip was not reproduced in 33
+renders: this tree 14 goldens runs (3 after an engine stage), main's tree 13 (3 after an engine
+stage), and 6 probes with a private, empty shader and pipeline cache (`APPDATA` redirected), 4 of
+them beside a concurrent engine stage. The shared pipeline cache was last rewritten at the battery
+that saw the flip, the first run after C23 changed the ocean shader. A cold compile is therefore
+the likeliest cause, but a cold cache alone does not reproduce it.
+
+**Verified.** A quiet goldens run on the merged plan tree: all 25 shots hash-identical to the manifest, the three re-pins and `c1b-ocean-enhanced` included. The cockpit flip did not reproduce in 27 quiet-gated runs across this tree and main (six of them with an empty shader and pipeline cache); the one flip frame differs from the pin by one pixel by one level, in the first battery after C23 changed the ocean shader.
+
+**Original approach (kept for reference).**
 
 **Goal.** A pinned `--det` shot shows the ocean, so a later change to it is caught.
 
