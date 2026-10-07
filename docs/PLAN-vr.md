@@ -3187,7 +3187,12 @@ picture once more (SHOT-46).
 - The flat camera's Fov sizes the disc through the ring's scale, so a change to the view's angle
   under a headset resizes it too.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the item's tree (the plan branch plus D19): build PASS, units
+6481 passed 3 skipped, engine 550 passed 2 skipped with clean engine errors, goldens 36/36
+hash-identical. D19 found that the Danger Zone photograph's camera (`OutsideCullMask` of the pane's
+mask) would draw the head-locked quads, marker cards and HUD panel into the photo under VR; its mask
+now drops `HeadsetLayer` and `HeadOverlayLayer` (Decision 15: the photograph reads a mono camera).
+The headset check named above is still owed.
 
 # Wave E, headset pass and release
 

@@ -180,7 +180,9 @@ public sealed partial class DangerZonePhotograph : SubViewport
         _camera.Environment = _pane.Environment;
         _camera.Attributes = _pane.Attributes;
         // Outside every aeroplane, so it draws the airframe a first-person pilot hides from the pane.
-        _camera.CullMask = SplitScreen.OutsideCullMask(_pane.CullMask);
+        // Never the headset's own layers: they place themselves for whichever camera draws them.
+        _camera.CullMask = SplitScreen.OutsideCullMask(_pane.CullMask)
+            & ~(SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer);
         Fill(_camera.Transform.Origin);
         RenderTargetUpdateMode = UpdateMode.Once;
         _drawing = true;
