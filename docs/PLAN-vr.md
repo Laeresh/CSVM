@@ -1116,6 +1116,9 @@ The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratc
 **Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
 clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
+With the review fixes (the flare's own layers, the headset boot's recovery, the start-failure notice): the
+complete battery on the merged tree, build PASS, units 6531 passed 3 skipped, engine 552 passed 2
+skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
 
 ## B7 ☑ The XR rig in `PlayerRig`, recenter and per-plane scale data
 
@@ -2615,6 +2618,9 @@ clean engine errors, goldens 27/27 hash-identical. The headset checks named abov
 **Verified.** The complete battery on the merged tree with B7 and the C14 follow-up: build PASS,
 units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
 hash-identical. The headset checks named above are still owed.
+With the review fixes (the flare's own layers, the headset boot's recovery, the start-failure notice): the
+complete battery on the merged tree, build PASS, units 6531 passed 3 skipped, engine 552 passed 2
+skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
 
 # Wave D, cutscenes, comfort and performance
 
