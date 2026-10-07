@@ -47,6 +47,7 @@ capture agree through `csky_time`.
 | 11 | B11 budget | **At most 1.5 ms over the flat sea** at the low-pass pose, desktop 1080p; about the ocean's cost with SSR off today. |
 | 12 | C21 chapter scope | **Every chapter with a sea at y = 0: C1, C1C, C2, C2B, C3, C5.** C4 keeps its flat lakes. C2's coplanar beaches, C3's shore sheets and C5's fog-gradient overlays are the item's to solve, not reasons to leave a chapter out. |
 | 13 | The ocean in the spyglass disc | **None: the disc shows the flat sea.** The user's ruling. The disc's camera carries a marker layer bit the ocean grid reads to step out before its wave math, and the sheet reads to keep drawing, through `CAMERA_VISIBLE_LAYERS`; the pane cameras do not carry it. |
+| 14 | A sea state per region | **A follow-up after landing, not this plan.** The user's ruling. The closing commit files it in `backlog.md` (id from `New-ItemId.ps1`): a table per region setting wave height (`wave_scale`), swell length, chop, foam (`foam_strength`) and wind direction, starting from Northwest (C1, C1B, C1C) rough open Pacific, Hollywood (C2, C2B) moderate, Hawaii (C3) a long gentle swell with little foam, Manhattan (C5) calm harbour chop; judged from a montage of each region, today against proposed. Height alone folds the crests by about 1.8x, sooner where the sea-state field raises a group (the horizontal displacement sums to `Choppiness` times the scale times that field's gain), so a rougher sea also lengthens the swell. Re-pins `c1b-ocean-enhanced` if C1B changes. |
 
 ## ⚠ Read this before implementing anything
 
