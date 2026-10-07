@@ -77,17 +77,10 @@ internal static class OceanMovers
         return !(neg && pos);
     }
 
-    /// <summary>The indices of the <paramref name="keep"/> points nearest <paramref name="eye"/>,
-    /// in their original order; all of them when there are no more than that.</summary>
-    public static List<int> Nearest(IReadOnlyList<Vector3> points, Vector3 eye, int keep)
-    {
-        var order = new List<int>(points.Count);
-        Nearest(points, eye, keep, order);
-        return order;
-    }
-
-    /// <summary><see cref="Nearest(IReadOnlyList{Vector3}, Vector3, int)"/> into a list the caller
-    /// keeps, so the frame path allocates nothing while the slots suffice.</summary>
+    /// <summary>Fills <paramref name="order"/> with the indices of the <paramref name="keep"/> points
+    /// nearest <paramref name="eye"/>, in their original order; all of them when there are no more
+    /// than that. The caller keeps the list, so the frame path allocates nothing while the slots
+    /// suffice.</summary>
     public static void Nearest(IReadOnlyList<Vector3> points, Vector3 eye, int keep, List<int> order)
     {
         order.Clear();

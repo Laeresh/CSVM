@@ -955,18 +955,11 @@ internal static class GraphicsSwitchSuites
 
     // The ocean nodes standing in the session's tree. Entering and leaving the tree sets the sheet's
     // switch. The server's getter for that errors outside the editor, so the tree is read instead.
-    private static string OceanState(Rig rig)
-    {
-        int inTree = 0;
-        Walk(rig.Session, node =>
-        {
-            if (node is Effects.Ocean { } ocean && ocean.IsInsideTree())
-                inTree++;
-        });
-        return string.Create(CultureInfo.InvariantCulture, $"{inTree} in tree");
-    }
+    private static string OceanState(Rig rig) =>
+        string.Create(CultureInfo.InvariantCulture, $"{OceansUnder(rig.Session)} in tree");
 
-    // The ocean nodes standing anywhere under the host, so one parented outside the session counts.
+    // The ocean nodes standing in the tree under root. Read under the host, it also counts one
+    // parented outside the session.
     private static int OceansUnder(Node root)
     {
         int count = 0;
@@ -1045,13 +1038,7 @@ internal static class GraphicsSwitchSuites
             if (node is GeometryInstance3D geometry && geometry.IsVisibleInTree())
                 drawn += Materials(geometry).Count(sheet.Contains);
         });
-        int oceans = 0;
-        Walk(rig.Session, node =>
-        {
-            if (node is Effects.Ocean { } ocean && ocean.IsInsideTree())
-                oceans++;
-        });
-        return new SeaReading(oceans, sheet.Count, hidden, drawn, Print(census));
+        return new SeaReading(OceansUnder(rig.Session), sheet.Count, hidden, drawn, Print(census));
     }
 
     // The switch as the launcher makes it, then the steps a reading waits for.

@@ -102,15 +102,20 @@ public class OceanMoversTests
         {
             new(1000f, 0f, 0f), new(10f, 0f, 0f), new(500f, 0f, 0f), new(20f, 0f, 0f), new(30f, 0f, 0f),
         };
-        Assert.Equal(new[] { 1, 3, 4 }, OceanMovers.Nearest(hulls, Vector3.Zero, 3));
-        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, OceanMovers.Nearest(hulls, Vector3.Zero, 16));
+        var order = new List<int>();
+        OceanMovers.Nearest(hulls, Vector3.Zero, 3, order);
+        Assert.Equal(new[] { 1, 3, 4 }, order);
+        OceanMovers.Nearest(hulls, Vector3.Zero, 16, order);
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, order);
     }
 
     [Fact]
     public void EquidistantHullsKeepTheEarlierListed()
     {
         var hulls = new List<Vector3> { new(0f, 0f, 50f), new(50f, 0f, 0f), new(0f, 0f, -50f) };
-        Assert.Equal(new[] { 0, 1 }, OceanMovers.Nearest(hulls, Vector3.Zero, 2));
+        var order = new List<int>();
+        OceanMovers.Nearest(hulls, Vector3.Zero, 2, order);
+        Assert.Equal(new[] { 0, 1 }, order);
     }
 
     private static AnimEvent Event(string kind, params (string Key, object? Value)[] data) => new()

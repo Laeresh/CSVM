@@ -25,7 +25,8 @@ internal sealed class OceanMask
 
     /// <summary>The filtered sea coverage below which the ocean discards a fragment. The base sheet's
     /// hide (<c>csky_ocean.gdshaderinc</c>) steps aside only at or above it, so every texel has one
-    /// owner. Both shaders spell it as a literal.</summary>
+    /// owner. The grid shader is written from it; the include spells it as a literal, which the
+    /// graphics-ocean-switch suite holds to it.</summary>
     public const float SeaThreshold = 0.02f;
 
     /// <summary>The zone byte of a texel on a seam between two zone groups, which no grid draws.</summary>

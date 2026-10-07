@@ -339,7 +339,7 @@ public sealed partial class Ocean : Node3D
         }
     }
 
-    private static string F(float v) => v.ToString("0.0#####", CultureInfo.InvariantCulture);
+    private static string Literal(float v) => v.ToString("0.0#####", CultureInfo.InvariantCulture);
 
     // vec4(dir.x, dir.z, k, A) and vec2(Q, omega) per wave. Omega is rounded to a whole number of
     // cycles per csky_time wrap, so the hourly rollover lands on an identical frame.
@@ -363,21 +363,21 @@ public sealed partial class Ocean : Node3D
         {
             float u = Mathf.DegToRad(137.50776f * (first + m.Count));
             float rad = Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * PhaseMetres);
-            m.Add($"vec4({F(GroupGain * Mathf.Cos(u))}, {F(GroupGain * Mathf.Sin(u))}, {F(rad * Mathf.Sin(u + 1f))}, {F(rad * Mathf.Cos(u + 1f))})");
+            m.Add($"vec4({Literal(GroupGain * Mathf.Cos(u))}, {Literal(GroupGain * Mathf.Sin(u))}, {Literal(rad * Mathf.Sin(u + 1f))}, {Literal(rad * Mathf.Cos(u + 1f))})");
             float s = Mathf.Clamp((FineFrom - w.Length) / (FineFrom - FineFull), 0f, 1f);
             float fineRad = s * Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * FineMetres);
             float v = u + 2f;
-            fine.Add($"vec4({F(s * FineGain * Mathf.Cos(v))}, {F(s * FineGain * Mathf.Sin(v))}, {F(fineRad * Mathf.Sin(v + 1f))}, {F(fineRad * Mathf.Cos(v + 1f))})");
+            fine.Add($"vec4({Literal(s * FineGain * Mathf.Cos(v))}, {Literal(s * FineGain * Mathf.Sin(v))}, {Literal(fineRad * Mathf.Sin(v + 1f))}, {Literal(fineRad * Mathf.Cos(v + 1f))})");
             float microRad = Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * MicroMetres);
-            mic.Add($"vec2({F(MicroGain * Mathf.Cos(v + 2f))}, {F(microRad * Mathf.Sin(v + 2f))})");
+            mic.Add($"vec2({Literal(MicroGain * Mathf.Cos(v + 2f))}, {Literal(microRad * Mathf.Sin(v + 2f))})");
             float ang = Mathf.DegToRad(WindDeg + w.AngleDeg);
             float k = Mathf.Tau / w.Length;
             float amp = w.Steepness / k;
             float omega = Mathf.Sqrt(9.81f * k);
             omega = Mathf.Tau * Mathf.Round(omega * (float)ShaderTime.RolloverSecs / Mathf.Tau) / (float)ShaderTime.RolloverSecs;
             float q = Choppiness / (k * amp * count);
-            a.Add($"vec4({F(Mathf.Cos(ang))}, {F(Mathf.Sin(ang))}, {F(k)}, {F(amp)})");
-            b.Add($"vec2({F(q)}, {F(omega)})");
+            a.Add($"vec4({Literal(Mathf.Cos(ang))}, {Literal(Mathf.Sin(ang))}, {Literal(k)}, {Literal(amp)})");
+            b.Add($"vec2({Literal(q)}, {Literal(omega)})");
         }
         sb.AppendLine($"const vec4 {name}_DKA[{waves.Length}] = vec4[{waves.Length}]({string.Join(", ", a)});");
         sb.AppendLine($"const vec2 {name}_QW[{waves.Length}] = vec2[{waves.Length}]({string.Join(", ", b)});");
@@ -428,7 +428,7 @@ public sealed partial class Ocean : Node3D
         }
         EmitWaves(sb, "SWELL", Swell, Swell.Length, 0, false);
         EmitWaves(sb, "CHOP", Chop, Chop.Length, Swell.Length, true);
-        sb.AppendLine($"const float SWELL_CREST = {F(crestRef)};");
+        sb.AppendLine($"const float SWELL_CREST = {Literal(crestRef)};");
         sb.AppendLine("varying vec2 v_param;");
         sb.AppendLine(@"
 vec2 ocean_mask(vec2 p) {
@@ -467,22 +467,22 @@ vec2 sea_noise(vec2 p) {
 // The sea-state field at p: xy the grouping channels, zw the phase channels. Each octave is turned
 // off the grid's axes so the noise cells do not line up with each other.
 vec4 sea_state(vec2 p) {
-    vec2 g = sea_noise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * " + F(1f / GroupScale) + @");
-    vec2 c = sea_noise(mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p * " + F(1f / PhaseScaleCoarse) + @" + vec2(17.0, 5.0));
-    vec2 f = sea_noise(mat2(vec2(0.28, 0.96), vec2(-0.96, 0.28)) * p * " + F(1f / PhaseScaleFine) + @" + vec2(-9.0, 31.0));
+    vec2 g = sea_noise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * " + Literal(1f / GroupScale) + @");
+    vec2 c = sea_noise(mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p * " + Literal(1f / PhaseScaleCoarse) + @" + vec2(17.0, 5.0));
+    vec2 f = sea_noise(mat2(vec2(0.28, 0.96), vec2(-0.96, 0.28)) * p * " + Literal(1f / PhaseScaleFine) + @" + vec2(-9.0, 31.0));
     return vec4(g, c * 0.6 + f * 0.4);
 }
 
 // The fine field at p, laid out as sea_state's.
 vec4 sea_fine(vec2 p) {
-    vec2 g = sea_noise(mat2(vec2(0.96, -0.28), vec2(0.28, 0.96)) * p * " + F(1f / FineGroupScale) + @" + vec2(41.0, -23.0));
-    vec2 f = sea_noise(mat2(vec2(-0.6, 0.8), vec2(-0.8, -0.6)) * p * " + F(1f / FinePhaseScale) + @" + vec2(-57.0, 13.0));
+    vec2 g = sea_noise(mat2(vec2(0.96, -0.28), vec2(0.28, 0.96)) * p * " + Literal(1f / FineGroupScale) + @" + vec2(41.0, -23.0));
+    vec2 f = sea_noise(mat2(vec2(-0.6, 0.8), vec2(-0.8, -0.6)) * p * " + Literal(1f / FinePhaseScale) + @" + vec2(-57.0, 13.0));
     return vec4(g, f);
 }
 
 // The chop's micro field at p: x height, y phase.
 vec2 sea_micro(vec2 p) {
-    return sea_noise(mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * p * " + F(1f / MicroScale) + @" + vec2(7.0, 61.0));
+    return sea_noise(mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * p * " + Literal(1f / MicroScale) + @" + vec2(7.0, 61.0));
 }
 
 // One wave's height factor and phase shift from its weights on both fields.
@@ -543,11 +543,11 @@ void fragment() {
     vec2 m = ocean_mask(p);
     vec3 world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     // One-sided like the sheet it replaces: an eye below the surface sees through it.
-    if (m.r < 0.02 || CAMERA_POSITION_WORLD.y < world.y) {
+    if (m.r < " + Literal(OceanMask.SeaThreshold) + @" || CAMERA_POSITION_WORLD.y < world.y) {
         discard;
     }" + (zoned ? @"
     float zone = textureLod(zone_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * 255.0;
-    if (zone < " + F(OceanMaskRaster.AnyZone - 0.5f) + @" && abs(zone - zone_index) > 0.5) {
+    if (zone < " + Literal(OceanMaskRaster.AnyZone - 0.5f) + @" && abs(zone - zone_index) > 0.5) {
         discard;
     }" : "") + @"
     // A ship's zone flattens only the geometry. Its normals keep the swell and the chop, so the
@@ -567,7 +567,7 @@ void fragment() {
     // ends the sum: every wave after it is shorter still.
     for (int i = 0; i < SWELL_DKA.length(); i++) {
         vec4 w = SWELL_DKA[i];
-        float fade = smoothstep(" + F(FootprintFadeFrom) + @", " + F(FootprintFadeFull) + @", 6.2831853 / w.z / footprint);
+        float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", 6.2831853 / w.z / footprint);
         if (fade <= 0.0) {
             break;
         }
@@ -579,11 +579,11 @@ void fragment() {
         n.y -= SWELL_QW[i].x * ka * sin(th);
         h += w.w * f * sin(th);
     }
-    if (6.2831853 / CHOP_DKA[0].z / footprint > " + F(FootprintFadeFrom) + @") {
+    if (6.2831853 / CHOP_DKA[0].z / footprint > " + Literal(FootprintFadeFrom) + @") {
         vec2 micro = sea_micro(p);
         for (int i = 0; i < CHOP_DKA.length(); i++) {
             vec4 w = CHOP_DKA[i];
-            float fade = smoothstep(" + F(FootprintFadeFrom) + @", " + F(FootprintFadeFull) + @", 6.2831853 / w.z / footprint);
+            float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", 6.2831853 / w.z / footprint);
             if (fade <= 0.0) {
                 break;
             }
@@ -599,7 +599,7 @@ void fragment() {
     // How fully this fragment shades as the flat sheet does. Wholly where the shore calms the
     // waves, so no edge shows against a coplanar coast tile. Rising with the fog, so the far sea
     // fogs as the sheet does instead of showing darker, wavier water through it.
-    float sheet = max(1.0 - m.g, smoothstep(0.0, " + F(FogSheetAt) + @", fog_amt));
+    float sheet = max(1.0 - m.g, smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt));
     n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
@@ -615,9 +615,9 @@ void fragment() {
     col = mix(col, vec3(0.6, 0.65, 0.68), foam * foam_strength * (1.0 - sheet));
     ALBEDO = col;
     METALLIC = 0.0;
-    SPECULAR = " + F(SceneBuilder.WaterSpecular) + @";
+    SPECULAR = " + Literal(SceneBuilder.WaterSpecular) + @";
     // Lost slope detail turns into roughness, so the far sea keeps a glossy sheen, not a mirror.
-    ROUGHNESS = mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + F(SceneBuilder.WaterRoughness) + @", sheet);
+    ROUGHNESS = mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + Literal(SceneBuilder.WaterRoughness) + @", sheet);
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
 }");
         return sb.ToString();
