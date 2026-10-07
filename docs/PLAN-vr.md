@@ -1625,7 +1625,8 @@ turn and tilt; nothing pivots or leans with the head.
   `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"` and thousands of
   leaked references in the teardown. Interleaved at the moon pose it was 1 of 12 with the stereo pose
   off and 2 of 12 with it on, and its rate rose with the other Godots running. The golden stage reads
-  the PNG and the log, not the exit code.
+  the PNG and the log, not the exit code. The cause was a .NET finalizer racing Godot's teardown,
+  in flat runs too, and `Launcher.SettleFinalizers` removes it (verification LOG-27).
 
 **Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
 re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
@@ -2589,7 +2590,9 @@ flare drawn, three gauge-face pixels of the in-world interior flip by one level 
 third of runs, render thread safe or separate; nine runs without the flare never flipped), which
 the nose-view golden avoids and B8 inherits. A C3 `--xr-sim` probe exits with an access violation
 or a C# finalizer fatal after saving its shot in about half the runs, with the flare or without it
-and with this item's code switched off; on `--render-thread safe` it exited 0 in 28 of 28.
+and with this item's code switched off; on `--render-thread safe` it exited 0 in 28 of 28. The
+render thread was not the cause: a .NET finalizer racing Godot's teardown was, on either thread, and
+`Launcher.SettleFinalizers` removes it (verification LOG-27).
 ⚠ `HeadLockedQuads` hands its `tint` as a `Color`, which Godot already makes linear for a 3D
 material, and its shader linearises it again (verification SHOT-47, measured by C10 on its own
 surround). Black, white and pure primaries are unchanged; by the conversion, the whiteout's 0.9 grey

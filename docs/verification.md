@@ -548,6 +548,18 @@ member, and it does not go here.
   Every later material on it then prints `Uniform buffer supplied (binding: 0) size (128) is smaller
   than size of shader uniform: (144)`. Which rewritten shaders had lost their last material varied
   from run to run, so the same ordered suites failed 1 to 3 of 6 concurrent processes.
+- **LOG-27**, **A process that crashes after its report or shot (`0xC0000005`, `0xC000001D`, a
+  `FATAL ... script_bindings` or `!rc_owner` line) died of a .NET finalizer racing Godot's
+  teardown, not of the work it reported.** A garbage collection still running at the quit, usually a
+  background one, finishes inside `CSharpLanguage::finalize` and queues Godot wrappers whose
+  `GodotObject.Finalize` then runs beside the engine freeing them (`GC.RunFinalizers` or
+  `DisposablesTracker.OnGodotShuttingDown` on the crash stack). The tell is `Leaked unsafe reference`
+  lines in the `.err` file: they count the queued wrappers, and every crash had them. Neither the
+  render thread nor the XR code is the cause: shard 2 of the VR branch crashed 11 of 36 times on the
+  separate thread and 7 of 12 on `--render-thread safe`, and branches without XR code crashed the
+  same way. The rate rises with other Godots running and with the unreferenced wrappers a run
+  leaves; that shard without its five stereo suites crashed 0 of 12. `Launcher.SettleFinalizers` drains the queue and forbids collection for the rest of the
+  quit; a new exit path must run it too.
 
 ## WORLD, world data and runtime traps
 
