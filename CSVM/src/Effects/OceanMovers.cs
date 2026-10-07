@@ -22,47 +22,30 @@ internal static class OceanMovers
     /// <summary>A hull's meshes reach within this many metres of sea level.</summary>
     public const float WaterlineBand = 2f;
 
-    /// <summary>The node names the definition's played sequences move, each once, in event order.
-    /// A scoped name gives its last path element.</summary>
-    public static List<string> MovedNames(AnimDefinition def)
+    /// <summary>The events of the definition's played sequences that move a node, in event order,
+    /// for <see cref="AnimRuntime.TargetsOf"/> to resolve. Its reset state is not played.</summary>
+    public static List<AnimEvent> MovingEvents(AnimDefinition def)
     {
-        var names = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var events = new List<AnimEvent>();
         foreach (var seq in def.Sequences)
         {
             foreach (var ev in seq.Events)
             {
-                foreach (var name in MovedNames(ev))
-                {
-                    if (seen.Add(name))
-                        names.Add(name);
-                }
+                if (Moves(ev))
+                    events.Add(ev);
             }
         }
-        return names;
+        return events;
     }
 
-    /// <summary>The node names one event moves; empty for an event that leaves every node where it
-    /// stands.</summary>
-    public static IEnumerable<string> MovedNames(AnimEvent ev)
+    /// <summary>Whether an event changes where its target stands. An ALL_NAMES SI script does, for
+    /// each of its records.</summary>
+    public static bool Moves(AnimEvent ev) => ev.Kind switch
     {
-        switch (ev.Kind)
-        {
-            case "ObjectMotionFromTo" when ev.Data.Has("translate") || ev.Data.Has("translate_delta"):
-            case "ObjectMotionSiScript":
-            case "ObjectTranslateState":
-                if (Target(ev.Data) is { } name)
-                    yield return name;
-                break;
-            case AnimDefinition.AllNamesKind:
-                foreach (var motion in ev.Data.Objects("motions"))
-                {
-                    if (Target(motion) is { } one)
-                        yield return one;
-                }
-                break;
-        }
-    }
+        "ObjectMotionFromTo" => ev.Data.Has("translate") || ev.Data.Has("translate_delta"),
+        "ObjectMotionSiScript" or "ObjectTranslateState" or AnimDefinition.AllNamesKind => true,
+        _ => false,
+    };
 
     /// <summary>Whether a triangle under a mover reaches the waterline.</summary>
     public static bool ReachesWaterline(Vector3 a, Vector3 b, Vector3 c) =>
@@ -95,13 +78,6 @@ internal static class OceanMovers
         });
         order.RemoveRange(keep, order.Count - keep);
         order.Sort();
-    }
-
-    private static string? Target(AnimData data)
-    {
-        if (data.List("node_path") is { Count: > 0 } path && path[^1] is string leaf)
-            return leaf;
-        return data.Str("node") ?? data.Str("name");
     }
 
     private static float Cross(Vector3 a, Vector3 b, Vector2 p) =>

@@ -2548,15 +2548,14 @@ public partial class GameSession : Node3D
             foreach (var v in _surfaceVehicles.Vessels)
                 hulls.Add(v.Body);
         }
-        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, OceanMovers(hulls), _spec.OceanMaskPath);
+        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _spec.OceanMaskPath);
         if (_ocean != null)
             _plane.AddChild(_ocean);
     }
 
-    // The world nodes the bound program's played motions carry. Each resolves as the dispatch binds
-    // it: the definition's symbol table first, else a name match under each of its anchors. The
+    // The world nodes the bound program's played motions carry, as the runtime resolves them. The
     // roster hulls are left out; they have their own source.
-    private List<Node3D> OceanMovers(HashSet<Node> roster)
+    private List<Node3D> AnimatedMovers(HashSet<Node> roster)
     {
         var movers = new List<Node3D>();
         if (_oceanRuntime is not { } runtime || _plane == null)
@@ -2564,27 +2563,17 @@ public partial class GameSession : Node3D
         var seen = new HashSet<Node3D>();
         foreach (var def in runtime.ProgramDefs)
         {
-            foreach (var name in Effects.OceanMovers.MovedNames(def))
+            var moving = Effects.OceanMovers.MovingEvents(def);
+            if (moving.Count == 0)
+                continue;
+            foreach (var node in runtime.TargetsOf(def, moving))
             {
-                IEnumerable<Node3D> found;
-                if (def.NodeRefs.TryGetValue(name, out int index))
-                {
-                    found = runtime.FindNodeByIndex(index) is { } bound ? new[] { bound } : Array.Empty<Node3D>();
-                }
-                else
-                {
-                    var hits = new List<Node3D>();
-                    foreach (var anchor in runtime.AnchorsOf(def))
-                        hits.AddRange(runtime.FindNodes(name, anchor));
-                    found = hits;
-                }
-                foreach (var node in found)
-                {
-                    if (node != _plane && GodotObject.IsInstanceValid(node) && !InRoster(node) && seen.Add(node))
-                        movers.Add(node);
-                }
+                if (node != _plane && GodotObject.IsInstanceValid(node) && !InRoster(node) && seen.Add(node))
+                    movers.Add(node);
             }
         }
+        var names = movers.Select(m => m.Name.ToString()).OrderBy(n => n, StringComparer.Ordinal);
+        Log.Debug("world", $"ocean: movers resolved [{string.Join(", ", names)}]");
         return movers;
 
         bool InRoster(Node node)

@@ -409,28 +409,19 @@ public sealed class NameResolver<TNode>
     /// compose it differently. Callers must treat the result as read-only.</summary>
     public List<TNode> ResolveScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
     {
-        if (anchor == null || !_isLive(anchor))
+        var found = ScopedTiers(path, def, anchor, out bool refused);
+        if (refused)
         {
-            return AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, null);
-        }
-        var found = AdmissibleStaging(ResolvePath(path, anchor, localOnly: true), def, anchor);
-        if (found.Count == 0)
-        {
-            found = ResolveInOwnRoot(path, def, anchor);
-        }
-        if (found.Count == 0 && !def.LocalNodesOnly)
-        {
-            if (RefusesGlobalTier(def, path))
-            {
-                GlobalTierRefused++;
-            }
-            else
-            {
-                found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
-            }
+            GlobalTierRefused++;
         }
         return found;
     }
+
+    /// <summary><see cref="ResolveScoped"/> for a read-only query: the same tiers in the same order,
+    /// without the <see cref="GlobalTierRefused"/> tally. Callers must treat the result as
+    /// read-only.</summary>
+    public List<TNode> PeekScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor) =>
+        ScopedTiers(path, def, anchor, out _);
 
     /// <summary>Whether <see cref="ResolveScoped"/> refuses this write the global tier. It does when
     /// the world holds several instances of the definition and the name carries no wildcard. Several
@@ -680,6 +671,33 @@ public sealed class NameResolver<TNode>
         }
         _byIndex.Remove(index);
         return null;
+    }
+
+    // The tier chain both scoped forms share; refused reports a global tier RefusesGlobalTier denied.
+    private List<TNode> ScopedTiers(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor, out bool refused)
+    {
+        refused = false;
+        if (anchor == null || !_isLive(anchor))
+        {
+            return AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, null);
+        }
+        var found = AdmissibleStaging(ResolvePath(path, anchor, localOnly: true), def, anchor);
+        if (found.Count == 0)
+        {
+            found = ResolveInOwnRoot(path, def, anchor);
+        }
+        if (found.Count == 0 && !def.LocalNodesOnly)
+        {
+            if (RefusesGlobalTier(def, path))
+            {
+                refused = true;
+            }
+            else
+            {
+                found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
+            }
+        }
+        return found;
     }
 
     // A parent->child NAME path: the first element within scope (falling back to the whole index

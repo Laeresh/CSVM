@@ -17,57 +17,68 @@ public class OceanMoversTests
     [Fact]
     public void ATranslatingMotionMovesItsTarget()
     {
-        var ev = Event("ObjectMotionFromTo", ("name", "yacht1"), ("translate", new Dictionary<string, object?>()));
-        Assert.Equal(new[] { "yacht1" }, OceanMovers.MovedNames(ev));
+        Assert.True(OceanMovers.Moves(Event("ObjectMotionFromTo", ("name", "yacht1"), ("translate", new Dictionary<string, object?>()))));
+        Assert.True(OceanMovers.Moves(Event("ObjectMotionFromTo", ("name", "yacht1"), ("translate_delta", new Dictionary<string, object?>()))));
     }
 
     [Fact]
     public void ARotationOnlyMotionLeavesItsTargetInPlace()
     {
         var ev = Event("ObjectMotionFromTo", ("name", "sinker"), ("translate", null), ("rotate", new Dictionary<string, object?>()));
-        Assert.Empty(OceanMovers.MovedNames(ev));
+        Assert.False(OceanMovers.Moves(ev));
     }
 
     [Fact]
     public void AnSiScriptAndAPlayedTranslateStateMoveTheirTargets()
     {
-        Assert.Equal(new[] { "tugandbarge01" }, OceanMovers.MovedNames(Event("ObjectMotionSiScript", ("name", "tugandbarge01"), ("index", 0))));
-        Assert.Equal(new[] { "barracuda" }, OceanMovers.MovedNames(Event("ObjectTranslateState", ("node", "barracuda"))));
+        Assert.True(OceanMovers.Moves(Event("ObjectMotionSiScript", ("name", "tugandbarge01"), ("index", 0))));
+        Assert.True(OceanMovers.Moves(Event("ObjectTranslateState", ("node", "barracuda"))));
     }
 
     [Fact]
-    public void BallisticDebrisAndSpinsAreNotMovers()
+    public void BallisticDebrisSpinsAndRotationsAreNotMovers()
     {
         var debris = Event("ObjectMotion", ("node", "part1"), ("translation_range", new Dictionary<string, object?>()));
         var spin = Event("ObjectMotion", ("node", "prop"), ("xyz_rotation", new Dictionary<string, object?>()));
-        Assert.Empty(OceanMovers.MovedNames(debris));
-        Assert.Empty(OceanMovers.MovedNames(spin));
+        Assert.False(OceanMovers.Moves(debris));
+        Assert.False(OceanMovers.Moves(spin));
+        Assert.False(OceanMovers.Moves(Event("ObjectRotateState", ("node", "turret"))));
     }
 
     [Fact]
-    public void TheAllNamesFormMovesEachRecordAndAScopedNameGivesItsLeaf()
+    public void TheAllNamesFormPlaysEachRecordAsItsOwnSiScript()
     {
         var motions = new List<object?>
         {
-            new Dictionary<string, object?> { ["name"] = "walker1" },
+            new Dictionary<string, object?> { ["name"] = "walker1", ["index"] = 2 },
             new Dictionary<string, object?> { ["node_path"] = new List<object?> { "ship", "lifeboat" } },
         };
         var ev = Event(AnimDefinition.AllNamesKind, ("motions", motions));
-        Assert.Equal(new[] { "walker1", "lifeboat" }, OceanMovers.MovedNames(ev));
+        ev.StartOffset = "Sequence";
+        ev.StartTime = 1.5f;
+
+        var records = ev.AllNamesMotions().ToList();
+
+        Assert.True(OceanMovers.Moves(ev));
+        Assert.All(records, r => Assert.Equal(("ObjectMotionSiScript", "Sequence", 1.5f), (r.Kind, r.StartOffset, r.StartTime)));
+        Assert.Equal("walker1", records[0].Data.Str("name"));
+        Assert.Equal(new object?[] { "ship", "lifeboat" }, records[1].Data.List("node_path"));
+        Assert.Empty(Event("ObjectMotionSiScript", ("name", "walker1")).AllNamesMotions());
     }
 
     [Fact]
-    public void ADefinitionNamesEachMoverOnceAndIgnoresItsResetState()
+    public void ADefinitionHandsBackItsPlayedMovingEventsInOrderAndIgnoresItsResetState()
     {
         var def = new AnimDefinition();
         var seq = new AnimSequence();
-        seq.Events.Add(Event("ObjectMotionFromTo", ("name", "sailboat3"), ("translate", new Dictionary<string, object?>())));
-        seq.Events.Add(Event("ObjectMotionFromTo", ("name", "SAILBOAT3"), ("translate", new Dictionary<string, object?>())));
-        seq.Events.Add(Event("ObjectActiveState", ("node", "sail_emit1"), ("state", true)));
+        var sail = Event("ObjectMotionFromTo", ("name", "sailboat3"), ("translate", new Dictionary<string, object?>()));
+        var emitter = Event("ObjectActiveState", ("node", "sail_emit1"), ("state", true));
+        var again = Event("ObjectMotionFromTo", ("name", "SAILBOAT3"), ("translate", new Dictionary<string, object?>()));
+        seq.Events.AddRange(new[] { sail, emitter, again });
         def.Sequences.Add(seq);
         def.ResetState = new AnimSequence();
         def.ResetState.Events.Add(Event("ObjectTranslateState", ("node", "placed_once")));
-        Assert.Equal(new[] { "sailboat3" }, OceanMovers.MovedNames(def));
+        Assert.Equal(new[] { sail, again }, OceanMovers.MovingEvents(def));
     }
 
     [Theory]

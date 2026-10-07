@@ -828,8 +828,8 @@ drain, with and without `--no-ocean`; no hole. C1B cruise unchanged; `graphics-o
 
 **Landed.** The hulls come from the bound program, not a name list (`OceanMovers`). A mover is the
 target of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an
-OBJECT_TRANSLATE_STATE in a sequence, resolved as the dispatch binds it (`GameSession.OceanMovers`:
-the def's symbol table, else a name match per anchor). Reset states, spins and ballistic debris are not
+OBJECT_TRANSLATE_STATE in a sequence, resolved as the dispatch binds it (`GameSession.AnimatedMovers`
+asks `AnimRuntime.TargetsOf`, the dispatch's own rule). Reset states, spins and ballistic debris are not
 movers. The mask walk judges each one it reaches visible: a hull has its origin within 3 m of sea level
 over the world's own sea-level water (base sheet or surf-ring triangles that no mover carries) and a
 triangle within 2 m of y = 0, and carries no base-sheet water. A hull's triangles and its nested movers'

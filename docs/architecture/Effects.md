@@ -88,8 +88,8 @@ hold the banded bytes to a plain single pass.
 ## src/Effects/OceanMovers.cs
 The rule for the boats an animation carries across the sea, with no engine object touched. A mover is the target
 of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an OBJECT_TRANSLATE_STATE; reset
-states, spins and ballistic debris are not. `GameSession.OceanMovers` resolves the names as the dispatch binds them
-(symbol table, else a name match per anchor). `OceanMask`'s walk judges each: a hull has its origin within 3 m of
+states, spins and ballistic debris are not. `GameSession.AnimatedMovers` asks `AnimRuntime.TargetsOf` for the
+nodes `MovingEvents` moves, resolved by the dispatch's own rule. `OceanMask`'s walk judges each: a hull has its origin within 3 m of
 sea level over the world's own sea-level water and meshes within 2 m of it; one hidden at the bake is judged by
 `Ocean` once it shows. `Nearest` picks the zones when more hulls float than there are slots. `OceanMoversTests`.
 
