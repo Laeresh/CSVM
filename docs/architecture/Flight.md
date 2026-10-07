@@ -323,16 +323,31 @@ origin as the airframe holds it (`InOrigin`, engine-free), so every transform Go
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
 its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it, and a sorting offset that puts it after the world's transparents on top of the one it was built with (the reticle overlay's). Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
 plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
-seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame.
+seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset` and `SetMountScale` live.
 
 ## src/Flight/Hud/VrCockpits.cs
 The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
 headset: under `planes`, keyed by plane node name (`player_bhawk`), `interiorScaleFactor` multiplies
-the `cockpit1` mount's `Mech3/PlaneBuilder.cs` `InteriorScale` (0.25 to 4, default 1) and `eyeOffsetZ`
-moves the seated eye in metres along the mount's tilted Z, positive aft (at most 1 m, default 0); keys
-starting `_` are notes. A plane or field left out takes the default. Read once per session by
-`Session/Roster/FlightRosterInputs.cs` only when the stereo path draws the interior; a missing or
-malformed file or entry warns and falls back. `Session/Roster/HumanFlightAdapter.cs` applies it.
+the `cockpit1` mount's `Mech3/PlaneBuilder.cs` `InteriorScale` (0.25 to 4, default 1), `eyeOffsetZ`
+moves the seated eye in metres along the mount's tilted Z, positive aft, and `eyeOffsetY` along its Y,
+positive up (each at most 1 m, default 0); keys starting `_` are notes. A plane or field left out
+takes the default. Read once per session by `Session/Roster/FlightRosterInputs.cs` only when the
+stereo path draws the interior; a missing or malformed file or entry warns and falls back.
+`Session/Roster/HumanFlightAdapter.cs` applies it; `XrCockpitTuner.cs` writes it.
+
+## src/Flight/Hud/XrCockpitTuner.cs
+The `--xr-tune` lab: in a stereo session, live nudges of the flown plane's interior scale and seated
+eye offset from the right hand controller with its grip held (F22 to F24 on the keyboard), a readout
+on `XrHudPanel.cs`' surface, a save of the plane's values into `vr_cockpits.json` on disk, a reset to
+the file, and a step to the next plane through the mission airframe swap. `Launch/GameSession.cs`
+builds it and hands it the seat (`XrTuneSeat`) and the swap; it acts through `XrCockpit.cs`.
+Arithmetic and writer: `VrCockpitTuning.cs`. Controls: docs/controls.md.
+
+## src/Flight/Hud/VrCockpitTuning.cs
+The tuning lab's engine-free parts: a step of each field on the file's grid and range, the plane
+order, the readout text, the held input's repeat (`VrTuneRepeat`), and `TryRewrite`, which writes one
+plane's numbers into the file's own bytes, adding a field or an entry where missing, and refuses a
+rewrite that would not read back with every other entry unchanged.
 
 ## src/Flight/Hud/XrMarkers.cs
 The flight markers of a stereo session, which draws no canvas layer: the pipper (`ImpactReticle`),

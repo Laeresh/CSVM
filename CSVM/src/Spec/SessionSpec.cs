@@ -781,6 +781,10 @@ public sealed record SessionSpec
     /// <summary>The frame a headset's chase view rides, <c>--xr-chase=rigid|level</c>: locked to the
     /// aircraft's attitude (the default) or to its heading alone. A flat launch never reads it.</summary>
     public Flight.Camera.XrChase XrChase { get; private set; }
+    /// <summary><c>--xr-tune</c>: the VR cockpit tuning lab, live nudges of the flown plane's interior
+    /// scale and eye offset with a save into <c>data/vr_cockpits.json</c>. Read only by a stereo
+    /// session; a flat launch ignores it.</summary>
+    public bool XrTune { get; private set; }
     /// <summary><c>--xr-render-scale=50..125</c>, the headset's eye size as a percentage of the
     /// runtime's recommendation, one of <see cref="VrRenderScaleSetting.Words"/>. Null
     /// when not given, and for an unknown word with a note. Beats the saved option.</summary>
@@ -1831,6 +1835,10 @@ public sealed record SessionSpec
                 {
                     notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
                 }
+            }
+            else if (arg == "--xr-tune")
+            {
+                s.XrTune = true;
             }
             else if (arg.StartsWith("--xr-chase="))
             {

@@ -27,9 +27,10 @@ public sealed class XrCockpit : IXrInterior
     private const float EverywhereM = 40000f;
 
     private readonly Node3D _interior;
-    private readonly Transform3D _mount;
     // Each geometry with the sorting offset it was built with, which lifting adds to.
     private readonly List<(GeometryInstance3D Geometry, float Own)> _geometry = new();
+    // The airframe's mount, rescaled only by the tuning lab (SetMountScale).
+    private Transform3D _mount;
     private bool _lifted;
 
     /// <summary>Follows <paramref name="interior"/>, as the plane builder mounted it under the
@@ -52,12 +53,16 @@ public sealed class XrCockpit : IXrInterior
     public Node3D Interior => _interior;
 
     /// <summary>The seated eye's offset from the interior's own origin, in the aircraft's frame. The
-    /// XR origin's placement adds the same offset, so the eye and this point move together.</summary>
-    public Vector3 EyeOffset { get; }
+    /// XR origin's placement adds the same offset, so the eye and this point move together. The
+    /// tuning lab (<see cref="XrCockpitTuner"/>) sets it live; the next placement takes it.</summary>
+    public Vector3 EyeOffset { get; set; }
 
     /// <summary>The aircraft-frame point the XR origin stands at: the interior's own origin, mounted
     /// at the <c>cockpit_camera</c> marker where the flat eye is, plus <see cref="EyeOffset"/>.</summary>
     public Vector3 EyeInAircraft => _mount.Origin + EyeOffset;
+
+    /// <summary>The mount's scale in metres per interior unit, as built or as last set.</summary>
+    public float MountScale => _mount.Basis.Scale.X;
 
     /// <summary>Declares the global uniforms the stereo interior's shader reads. Once per process,
     /// before any plane is built, only when the stereo path is live.</summary>
@@ -105,6 +110,40 @@ public sealed class XrCockpit : IXrInterior
 
         Lift();
         _interior.Transform = new Transform3D(origin.Basis, Vector3.Zero) * InOrigin(held, EyeInAircraft);
+    }
+
+    /// <summary>Rescales the mount about the interior's origin, the authored eye, to
+    /// <paramref name="metresPerUnit"/>: the tuning lab's live scale. The next <see cref="Follow"/>
+    /// places it. ⚠ The depth bias stays the one the build baked (SceneBuilder's
+    /// <c>DepthBiasScale</c>); only a rebuild at the new scale is exact.</summary>
+    public void SetMountScale(float metresPerUnit)
+    {
+        if (!(metresPerUnit > 0f) || Mathf.IsEqualApprox(metresPerUnit, MountScale))
+        {
+            return;
+        }
+
+        _mount = new Transform3D(_mount.Basis.Orthonormalized().Scaled(Vector3.One * metresPerUnit), _mount.Origin);
+        if (!GodotObject.IsInstanceValid(_interior))
+        {
+            return;
+        }
+
+        if (_lifted)
+        {
+            var everywhere = Everywhere(_mount.Basis.Scale);
+            foreach (var (geometry, _) in _geometry)
+            {
+                if (GodotObject.IsInstanceValid(geometry))
+                {
+                    geometry.CustomAabb = everywhere;
+                }
+            }
+        }
+        else
+        {
+            _interior.Transform = _mount;
+        }
     }
 
     private static void Collect(Node node, List<(GeometryInstance3D, float)> into)

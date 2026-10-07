@@ -10,12 +10,13 @@ namespace CSVM.Flight.Hud;
 
 /// <summary>
 /// One plane's VR cockpit data: a factor on the <c>cockpit1</c> mount's scale, and the seated eye's
-/// offset in metres along the mount's Z, positive aft. Both stay on the interior, never on
-/// <c>XRServer.WorldScale</c>, which would resize the sky and every other aircraft with it. The offset
-/// stays on that one axis because a lateral or vertical one puts parallax between the gunsight and
-/// the guns. Engine-free.
+/// offset in metres. The offset runs along the mount's Z (positive aft) and its Y (positive up). All
+/// of it stays on the interior, never on <c>XRServer.WorldScale</c>, which would resize the sky and
+/// every other aircraft with it. No lateral offset exists: the authored eye is where the tub puts it.
+/// The collimated reticle (<c>Mech3/GunsightReticle.cs</c>) stays on the guns from any eye, and a
+/// vertical offset only moves where the glass frames it; engine-free.
 /// </summary>
-public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffsetZ)
+public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffsetZ, float EyeOffsetY = 0f)
 {
     /// <summary>The shipped values for a plane nobody has judged at the headset: the flat mount, no
     /// offset.</summary>
@@ -24,10 +25,10 @@ public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffs
     /// <summary>The interior's mount scale in metres per interior unit.</summary>
     public float InteriorScale => PlaneBuilder.InteriorScale * InteriorScaleFactor;
 
-    /// <summary>The eye offset in the aircraft's frame: along the mount's Z, which the fixed head
-    /// pitch tilts.</summary>
+    /// <summary>The eye offset in the aircraft's frame: along the mount's Y and Z, which the fixed
+    /// head pitch tilts.</summary>
     public Vector3 EyeOffsetInAircraft =>
-        new Basis(Vector3.Right, PlaneBuilder.HeadPitchOffsetRad) * new Vector3(0f, 0f, EyeOffsetZ);
+        new Basis(Vector3.Right, PlaneBuilder.HeadPitchOffsetRad) * new Vector3(0f, EyeOffsetY, EyeOffsetZ);
 }
 
 /// <summary>
@@ -40,17 +41,32 @@ public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffs
 public sealed class VrCockpits
 {
     /// <summary>Every plane at <see cref="VrCockpit.Default"/>.</summary>
-    public static readonly VrCockpits Defaults = new(new Dictionary<string, VrCockpit>());
+    public static readonly VrCockpits Defaults = new(new Dictionary<string, VrCockpit>(), new List<string>());
 
     // The sane range of an entry. A factor outside it is a typo, not a cockpit: at a tenth the panel
     // is a toy, at four times it is a hangar. An eye a metre off the authored point has left the tub.
-    private const float MinScaleFactor = 0.25f;
-    private const float MaxScaleFactor = 4f;
-    private const float MaxEyeOffsetM = 1f;
+    // The tuning lab clamps to the same range, so every value it saves reads back.
+    internal const float MinScaleFactor = 0.25f;
+    internal const float MaxScaleFactor = 4f;
+    internal const float MaxEyeOffsetM = 1f;
+
+    /// <summary>The scale factor's field name, which the tuning lab's writer also uses.</summary>
+    internal const string ScaleField = "interiorScaleFactor";
+
+    /// <summary>The fore and aft offset's field name.</summary>
+    internal const string EyeZField = "eyeOffsetZ";
+
+    /// <summary>The up and down offset's field name.</summary>
+    internal const string EyeYField = "eyeOffsetY";
 
     private readonly Dictionary<string, VrCockpit> _planes;
+    private readonly List<string> _names;
 
-    private VrCockpits(Dictionary<string, VrCockpit> planes) => _planes = planes;
+    private VrCockpits(Dictionary<string, VrCockpit> planes, List<string> names)
+    {
+        _planes = planes;
+        _names = names;
+    }
 
     /// <summary>The committed file's location, read through Godot's file access since an exported
     /// build keeps it in the pck.</summary>
@@ -58,6 +74,10 @@ public sealed class VrCockpits
 
     /// <summary>The planes the file names, as read.</summary>
     public IReadOnlyDictionary<string, VrCockpit> Planes => _planes;
+
+    /// <summary>Every plane name the file lists, malformed entries included, in the file's order:
+    /// the order the tuning lab steps through.</summary>
+    public IReadOnlyList<string> Names => _names;
 
     /// <summary>Loads the table (defaults to <see cref="DefaultPath"/>). Never throws: a missing or
     /// unreadable file warns and yields <see cref="Defaults"/>.</summary>
@@ -95,18 +115,22 @@ public sealed class VrCockpits
     /// plane takes the default, and named in <paramref name="problems"/>.</summary>
     public static VrCockpits Parse(byte[] json, List<string> problems)
     {
-        using var doc = JsonDocument.Parse(json);
+        // An editor may save the file with a byte order mark, which the JSON reader refuses.
+        int bom = json.Length >= 3 && json[0] == 0xEF && json[1] == 0xBB && json[2] == 0xBF ? 3 : 0;
+        using var doc = JsonDocument.Parse(json.AsMemory(bom));
         var planes = new Dictionary<string, VrCockpit>(StringComparer.OrdinalIgnoreCase);
+        var names = new List<string>();
         if (doc.RootElement.ValueKind != JsonValueKind.Object
             || !doc.RootElement.TryGetProperty("planes", out var list)
             || list.ValueKind != JsonValueKind.Object)
         {
             problems.Add("no \"planes\" object, every plane takes the defaults");
-            return new VrCockpits(planes);
+            return new VrCockpits(planes, names);
         }
 
         foreach (var plane in list.EnumerateObject())
         {
+            names.Add(plane.Name);
             if (ReadEntry(plane.Value) is { } entry)
             {
                 planes[plane.Name] = entry;
@@ -117,7 +141,7 @@ public sealed class VrCockpits
             }
         }
 
-        return new VrCockpits(planes);
+        return new VrCockpits(planes, names);
     }
 
     /// <summary>The plane's entry, or the default for a plane the file leaves out.</summary>
@@ -132,30 +156,35 @@ public sealed class VrCockpits
             return null;
         }
 
-        float factor = VrCockpit.Default.InteriorScaleFactor;
-        float offset = VrCockpit.Default.EyeOffsetZ;
-        if (e.TryGetProperty("interiorScaleFactor", out var f))
+        if (!TryNumber(e, ScaleField, VrCockpit.Default.InteriorScaleFactor, out float factor)
+            || !TryNumber(e, EyeZField, VrCockpit.Default.EyeOffsetZ, out float z)
+            || !TryNumber(e, EyeYField, VrCockpit.Default.EyeOffsetY, out float y))
         {
-            if (f.ValueKind != JsonValueKind.Number)
-            {
-                return null;
-            }
-
-            factor = f.GetSingle();
-        }
-
-        if (e.TryGetProperty("eyeOffsetZ", out var z))
-        {
-            if (z.ValueKind != JsonValueKind.Number)
-            {
-                return null;
-            }
-
-            offset = z.GetSingle();
+            return null;
         }
 
         bool inRange = float.IsFinite(factor) && factor >= MinScaleFactor && factor <= MaxScaleFactor
-            && float.IsFinite(offset) && Math.Abs(offset) <= MaxEyeOffsetM;
-        return inRange ? new VrCockpit(factor, offset) : null;
+            && InOffsetRange(z) && InOffsetRange(y);
+        return inRange ? new VrCockpit(factor, z, y) : null;
+    }
+
+    private static bool InOffsetRange(float metres) => float.IsFinite(metres) && Math.Abs(metres) <= MaxEyeOffsetM;
+
+    // A field left out reads the fallback; one present must be a number.
+    private static bool TryNumber(JsonElement entry, string field, float fallback, out float value)
+    {
+        value = fallback;
+        if (!entry.TryGetProperty(field, out var element))
+        {
+            return true;
+        }
+
+        if (element.ValueKind != JsonValueKind.Number)
+        {
+            return false;
+        }
+
+        value = element.GetSingle();
+        return true;
     }
 }

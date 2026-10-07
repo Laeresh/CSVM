@@ -201,7 +201,7 @@ internal sealed class HumanFlightAdapter
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         if (controller.Dressing.Stereo != null)
-            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");
+            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");
         // The recenter action, for the seat the headset flies.
         controller.RecenterHeadset = remote ? null : _human.RecenterHeadset;
         // The headset's own views, for the seat the headset flies.

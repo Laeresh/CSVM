@@ -24,7 +24,7 @@ anything the file does not carry (`Bindings/LaunchBindings.cs`). A `--det` or
 committed tree and not of whoever ran it.
 
 Not every row here is a bindable action. The debug overlays and the lab panels
-(`F10` through `F21`, and the viewer and weapon-lab keys) are
+(`F10` through `F24`, and the viewer and weapon-lab keys) are
 development instruments and sit deliberately outside the action set, so no
 rebinding screen offers them and no player can break their own diagnostics on
 them. The few gameplay controls in the same position say so in their own row.
@@ -138,6 +138,28 @@ laser confirms the row being rebound. Without a headset the pages hide the `xr`
 rows, so flat play's pages read as they always did, and the rows resolve to nothing.
 A keymap saved before the `xr` device existed (file version 3 or older) keeps the
 shipped `xr` row on every action it names.
+
+### The cockpit tuning lab (`--xr-tune`)
+
+A development lab, off unless `--xr-tune` is on the command line of a headset or
+`--xr-sim` flight (`docs/cli.md`). Every control reads only while the **right grip**
+is held, so with the grip up the right hand does what the table above says and
+nothing else. The controls are raw instruments, not keymap actions, and no Controls
+page lists them. A pause or the photo mode holds them. The readout stands at the top
+left of the HUD panel: one line with the grip up, the full card with it held.
+
+| Right grip held, then | Does |
+|---|---|
+| right stick left / right | the flown plane's interior scale down / up by 0.025 (1 mm per interior unit), repeating while held |
+| right stick forward / back | the seated eye forward / aft by 1 cm along the sight line, repeating while held |
+| B / A | the seated eye up / down by 1 cm |
+| right trigger | save the flown plane's values into `CSVM/data/vr_cockpits.json` of the tree the game runs from |
+| right stick click | reset the flown plane to the file's values |
+| left stick left / right | swap to the previous / next plane in the file's order, once per push, at the pose being flown |
+
+The keyboard's twin, in the debug block from `F13`: `F24` marks the next row of the
+card (plane, scale, aft, up), `F22` / `F23` step the marked row down / up (repeating
+while held), Shift+`F24` saves and Ctrl+`F24` resets.
 
 ## Flying with the mouse
 

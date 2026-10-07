@@ -603,6 +603,14 @@ public partial class GameSession : Node3D
             var panel = Flight.Hud.XrHudPanel.Build(() => xrOrigin.GlobalTransform, Flight.Hud.XrCockpit.Live, GetViewport());
             _worldRoot!.AddChild(panel);
             _rigs[0].ChromeParent = panel.Surface;
+            if (_spec.XrTune)
+            {
+                _worldRoot!.AddChild(Flight.Hud.XrCockpitTuner.Build(panel.Surface, TunedSeat, SwapTunedAirframe));
+            }
+        }
+        else if (_spec.XrTune)
+        {
+            Log.Warn("flight", $"xr tune: --xr-tune needs a headset or --xr-sim, ignoring it");
         }
 
         // The smoke screens ride the same wash and read the roster through a closure, since the
@@ -3041,6 +3049,34 @@ public partial class GameSession : Node3D
         {
             GD.PushWarning($"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return default;
+        }
+    }
+
+    // --xr-tune's seat: the headset's pane's stereo interior and the airframe the roster built it as.
+    private Flight.Hud.XrTuneSeat? TunedSeat() =>
+        _rigs.Count > 0 && _rigs[0].Controller is { } pilot && IsInstanceValid(pilot)
+            && pilot.Dressing.Stereo is { } stereo && _flightRoster?.FlyingAirframeOf(0)?.PlaneNode is { } plane
+            ? new Flight.Hud.XrTuneSeat(stereo, plane, pilot.Pause.Silenced || pilot.Pause.SheetOverFlight)
+            : null;
+
+    // --xr-tune's plane step: the mission swap's rebuild of the flown seat on another airframe. It
+    // keeps the pose it was flying and the pilot's own paint, and hands nothing over.
+    private void SwapTunedAirframe(string planeNode)
+    {
+        if (_flightRoster == null || _rigs.Count == 0 || _rigs[0].Controller == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var order = new AirframeSwapOrder(new AirframeSwapCode(0, string.Empty, planeNode), null, _rigs[0]);
+            _flightRoster.RunSwap(_rigs[0], order, handsOver: false);
+            _wire.RewireSeat(_rigs[0], SkipSwapRewire);
+        }
+        catch (Exception e)
+        {
+            Log.Warn("flight", $"xr tune: swap to '{planeNode}' failed: {e.Message}");
         }
     }
 

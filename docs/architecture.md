@@ -268,6 +268,8 @@ rows).
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out and a stereo session builds none.
 - `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
+- `src/Flight/Hud/XrCockpitTuner.cs`, the `--xr-tune` lab: live nudges of the flown plane's VR interior scale and eye offset, a readout on the HUD panel, a save into `vr_cockpits.json`.
+- `src/Flight/Hud/VrCockpitTuning.cs`, the tuning lab's engine-free step arithmetic, readout text and `vr_cockpits.json` writer.
 - `src/Flight/Hud/XrMarkers.cs`, the flight markers in a stereo session: the flat HUD's drawings on cards at their world points, and off-view ones on a ring on the head.
 - `src/Flight/Hud/XrMarkerLaw.cs`, the stereo markers' geometry, engine-free: a reference pixel's angle, the ring's cone and bearing, a card's facing, the ring's spyglass disc.
 - `src/Flight/Hud/XrSpyglassDisc.cs`, the spyglass picture in a stereo session: one mono picture on a disc on the head ring inside the selection's arrow.

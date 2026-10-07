@@ -13,9 +13,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The per-plane VR cockpit data (<c>CSVM/data/vr_cockpits.json</c>, <see cref="VrCockpits"/>).
-/// The committed file ships the defaults for all eleven planes. A missing or malformed file or entry
-/// falls back to them. The offset is a move along the mount's tilted Z, which the XR origin's
-/// placement (<see cref="XrMount"/>) applies in first person alone.
+/// The committed file names all eleven planes, each in range. A missing or malformed file or entry
+/// falls back to the defaults. The offset is a move along the mount's tilted Z and Y, which the XR
+/// origin's placement (<see cref="XrMount"/>) applies in first person alone.
 /// </summary>
 public class VrCockpitsTests
 {
@@ -29,17 +29,17 @@ public class VrCockpitsTests
     };
 
     [Fact]
-    public void TheCommittedFileShipsTheDefaultsForAllElevenPlanes()
+    public void TheCommittedFileNamesAllElevenPlanesEachReadableInRange()
     {
         var problems = new List<string>();
         var table = VrCockpits.Parse(File.ReadAllBytes(Shipped), problems);
 
         Assert.Empty(problems);
         Assert.Equal(Planes.Length, table.Planes.Count);
+        Assert.Equal(Planes, table.Names);
         foreach (var plane in Planes)
         {
             Assert.True(table.Planes.ContainsKey(plane), plane);
-            Assert.Equal(VrCockpit.Default, table.For(plane));
         }
     }
 
@@ -50,7 +50,24 @@ public class VrCockpitsTests
 
         Assert.Empty(problems);
         Assert.Equal(new VrCockpit(1f, -0.1f), table.For("player_fury"));
+        Assert.Equal(0f, table.For("player_fury").EyeOffsetY);
         Assert.Equal(VrCockpit.Default, table.For("player_bhawk"));
+    }
+
+    [Fact]
+    public void TheUpOffsetReadsInTheSameRangeAndRunsAlongTheMountsTiltedY()
+    {
+        var table = Parse("""{ "planes": { "player_fury": { "eyeOffsetY": 0.03 }, "player_bhawk": { "eyeOffsetY": -1.5 } } }""", out var problems);
+        var up = table.For("player_fury").EyeOffsetInAircraft;
+        float tilt = PlaneBuilder.HeadPitchOffsetRad;
+
+        Assert.Single(problems);
+        Assert.Contains("player_bhawk", problems[0]);
+        Assert.Equal(new VrCockpit(1f, 0f, 0.03f), table.For("player_fury"));
+        Assert.Equal(0f, up.X);
+        Assert.Equal(0.03f * Mathf.Cos(tilt), up.Y, 6);
+        Assert.Equal(0.03f * Mathf.Sin(tilt), up.Z, 6);
+        Assert.Equal(new[] { "player_fury", "player_bhawk" }, table.Names);
     }
 
     [Fact]

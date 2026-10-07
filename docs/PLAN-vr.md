@@ -231,7 +231,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E, headset pass and release
 
-20. ☐ E20 Per-plane scale and eye-offset tuning at the headset
+20. ◐ E20 Per-plane scale and eye-offset tuning at the headset
 21. ☐ E21 At-the-headset playtests on both runtimes
 22. ◐ E22 Experimental release: docs, shortcut, known issues
 
@@ -3322,21 +3322,121 @@ The headset check named above is still owed.
 
 # Wave E, headset pass and release
 
-## E20 ☐ Per-plane scale and eye-offset tuning at the headset
+## E20 ◐ Per-plane scale and eye-offset tuning at the headset
 
-**Goal.** Each of the 11 planes has a world scale and eye offset in `data/vr_cockpits.json` that the
-author has judged right at the headset.
+**Outcome: the lab is built and pinned on the stand-in; the author's per-plane judgement is owed at
+the headset.** `--xr-tune` turns on live nudges of the flown plane's interior scale and seated eye
+offset (fore and aft, up and down) from the right hand controller with its grip held, a readout on
+the HUD panel, a save into `vr_cockpits.json` in the tree the game runs from, a reset to the file,
+and a step to the next plane by the mission airframe swap, so one headset session covers all eleven.
+Off by default; a normal VR launch and flat play build none of it.
 
-**Evidence (confidence: lead-only).** A5's proposals; Decision 13.
+**Goal.** Each of the 11 planes has an interior scale and eye offset in `data/vr_cockpits.json`
+that the author has judged right at the headset. (Decision 13's "world scale" is the interior
+mount's factor: the world and the hulls are metres, and `XRServer.WorldScale` stays 1.0, A5.)
 
-**Approach.** A dev key or lab to nudge the scale and offset live and write the file. <TODO: whether
-that lab is worth building or the author edits the JSON between runs.>
+**Evidence (confidence: traced to code for the live levers, the swap and the writer; measured on the
+stand-in for the nudges reaching the eye and the interior; the values themselves are the author's).**
+Captures are in `.scratch/E20/`.
+- **The lab over editing between runs.** A relaunch per value costs a boot and a flight to the spot
+  each time, eleven planes over; the mission's airframe swap (`FlightRoster.RunSwap`, codes 965-967)
+  already rebuilds the flown seat on another airframe at the pose it was flying, so a plane step
+  needs no relaunch. The lab sends it an order with code 0 (no captured paint, no award build) and
+  `handsOver: false`, then rewires the seat as the mission path does. On the stand-in
+  (`--chapter=C1 --plane=player_bhawk --view=cockpit --xr-tune --xr-sim`, a scratch hook stepping
+  the plane at frame 30, not in the tree) the log reads `xr tune: swapping player_bhawk for
+  player_pfighter`, a new stereo interior for `player_pfighter` (collimated reticle, head plate left
+  out), `xr: cut (a new aircraft)`, and the frame shows the Devastator's cockpit with one HUD on the
+  panel (`E20-swap-left.png`).
+- **The scale is live without a rebuild.** `XrCockpit.SetMountScale` rescales the captured mount
+  about the interior's origin, the authored eye, and the next `Follow` places it; a lifted interior
+  also takes the new `Everywhere` box. The depth bias stays the build's (`SceneBuilder.DepthBiasScale`,
+  baked into the materials), a fraction of view distance, so a priority level's separation scales
+  with the factor in the lab and is exact again on the next launch with the saved value.
+- **The eye offset is live**: `XrCockpit.EyeOffset` is read by `XrRig.Place` every frame.
+- **Up and down is offered; lateral is not.** A5's trap (a vertical offset puts parallax between the
+  sight and the guns) predates C13b. The collimated overlay takes, per fragment, the texel the
+  authored eye sees along each eye's ray (`GunsightReticle.cs`'s shader), so the reticle stays on the
+  guns from any eye and only the window the glass gives on it follows the head centre (`seen`). The
+  file gains an optional `eyeOffsetY` along the mount's tilted Y, positive up, read in the same ±1 m
+  range; no plane carries one until the author saves one. A lateral offset stays out: the authored
+  eye is where each tub puts it (A5 on the Kestrel and the Peacemaker).
+- **The save keeps the file.** `VrCockpitTuning.TryRewrite` edits the plane's number tokens in the
+  file's own bytes, adds a missing field after the last present one on the entry's own layout (or a
+  missing plane after the last), keeps the line endings and a byte order mark, and refuses a rewrite
+  that does not read back with every other entry unchanged. Rewriting each of the eleven committed
+  entries with its own values leaves the file byte-identical; a Warhawk save of (0.875, 0.06) changes
+  exactly its two numbers (`VrCockpitTuningTests`). The disk path is `res://data/vr_cockpits.json`
+  globalized, so a `RunGame.ps1` launch writes into its own tree; an exported build keeps the file
+  in the pck and refuses the save with a readout line. The reader now skips a byte order mark, which
+  `JsonDocument` refuses (a file saved by an editor that adds one used to fall back to the defaults).
+- **Suite `xr-cockpit-tune`** (the Bloodhawk's interior over a rig on a live stand-in interface,
+  scripted controllers, a copy of the committed file): with the grip up the stick and B move nothing;
+  grip and stick forward move the head 10 mm along the tilted sight line, held past 0.45 s it repeats;
+  B raises it 10 mm; the interior stays on the airframe (within 2 mm, 7 km out on a rotated
+  attitude); stick right scales the lifted interior 0.04 to 0.041 m per unit about the authored eye
+  (still on the marker) with the reach box following; the trigger writes the plane and leaves the
+  other ten entries and the notes; the stick click resets; the left stick asks for the next plane
+  once per push; a plane flown again takes its saved values and another its unsaved nudge; a pause
+  holds every control; F22 to F24 drive the same. Control (METHOD-9): with the live apply removed the
+  suite fails 8 checks (the eye, the repeat, B, the scale, the reach box, the reset, both re-flown
+  planes).
+- **The readout** sits at the top left of the panel surface (28 px text, about a degree tall at its
+  31 rows per degree), one line with the grip up, the full card (values, steps, the file's values,
+  the controls) with it held, clear of the gunsight on the Warhawk's tall glass
+  (`E20-idle-left.png`, `E20-card-left.png`). Every change logs `xr tune: <plane> scale ... aft ... up ...`.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Resolved TODOs.** The lab is built rather than editing the JSON between runs (above). Model
+recommendation: Standard.
 
-**Verify.** The author's sign-off per plane.
+**Approach (landed, VR only).** `Flight/Hud/XrCockpitTuner.cs` (the node, the controller reading, the
+readout, the save) and `Flight/Hud/VrCockpitTuning.cs` (engine-free: `Step`, `NextPlane`, `Format`,
+`Readout`, `Summary`, `TryRewrite`, `VrTuneRepeat`); `XrCockpit.EyeOffset` settable and
+`SetMountScale`; `VrCockpit.EyeOffsetY` and `VrCockpits.Names`; `SessionSpec.XrTune`;
+`GameSession` builds the lab beside the HUD panel when the flag is set (`TunedSeat`,
+`SwapTunedAirframe`). Controls: docs/controls.md, "The cockpit tuning lab"; flag: docs/cli.md.
 
-**⚠ Traps.** Look judgements are the author's; a measured scale does not override them.
+**Model recommendation.** Standard.
+
+**Verify.** Units: `VrCockpitTuningTests` (the steps on the grid, the clamps, the format, the plane
+order, the repeat, the byte-identical rewrite of every committed entry, a field and an entry added on
+the file's layout, a byte order mark and non-ASCII notes kept, the refusals, the readout, the flag),
+`VrCockpitsTests` (all eleven planes named in range, `eyeOffsetY` read and its tilted axis, the file's
+order). Suite `xr-cockpit-tune` (weight 0.42 s in `analysis/engine-suite-weights.json`). No golden:
+the readout shows only under `--xr-tune`; on the item's tree the goldens stage was 37/37
+hash-identical.
+
+Owed at the headset (the author's), VDXR at 90 Hz: the per-plane sign-off. One session covers all
+eleven through the plane step; the per-plane lines are the fallback if a swap misbehaves:
+```
+$env:CSVM_DATA_ROOT='Z:\CSVM'; & 'Z:\CSVM\.claude\worktrees\vr\RunGame.ps1' -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --xr-tune
+```
+Planes in the file's order: `player_bhawk` (Bloodhawk), `player_pfighter` (Devastator),
+`player_fury`, `player_warhawk`, `player_autogyro` (Hoplite), `player_avenger` (Hellhound),
+`player_balmoral`, `player_brigand`, `player_fbrand` (Firebrand), `player_kestrel`,
+`player_peacemaker`. A5's starting points to try (the file's `_proposed` notes): Warhawk aft 0.06;
+Hoplite, Hellhound and Balmoral scale 0.875. A5's forward move for the head plate is moot, since the
+stereo interior leaves the plate out (B8, the `head plate left out` log line). Per plane: judge the
+panel's distance and size and the tub's width with the grip up, nudge, save with the trigger, then
+the left stick to the next plane; `xr tune: saved ...` in the log is the record.
+
+**⚠ Traps.**
+- Look judgements are the author's; a measured scale does not override them.
+- The lab's live scale keeps the depth bias the launch built; judge a decal's z-order at the value
+  only after a relaunch with it saved.
+- A saved Bloodhawk scale moves the five stereo cockpit goldens (`c1-cockpit-xr-sim`, `-enhanced`,
+  `-far`, `-aft`, `stage-gunsight-xr-sim`); a Bloodhawk eye offset also moves the first-person
+  Nose ones (`c3-flare-xr-sim`, `c1-moon-xr-sim`, `stage-markers-xr-sim`, `stage-hud-panel-xr-sim`,
+  `c1-spyglass-xr-sim`), since the offset applies in every first-person view. Re-pin them in the
+  commit that lands the values.
+- The save writes the tree the game runs from (`vr` for the line above); the values reach main only
+  through that tree's commit.
+- A vertical offset moves the window the glass gives on the collimated reticle: a few centimetres
+  start cutting the ring at the glass's edge, as leaning does.
+- Grip and trigger also click a theater screen that is up; the lab is silent under a pause and the
+  photo mode, but another board raised in flight would take the click.
+
+**Verified.** <pending orchestrator run>
 
 ## E21 ☐ At-the-headset playtests on both runtimes
 

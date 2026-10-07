@@ -498,6 +498,7 @@
     "world-query-reuse": 0.005,
     "world-sound-falloff": 0.05,
     "world-turrets": 3.756,
+    "xr-cockpit-tune": 0.42,
     "xr-comfort-fade": 1.1,
     "xr-comfort-vignette": 1.4,
     "xr-fallback-notice": 0.06,
