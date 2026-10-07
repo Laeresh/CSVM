@@ -59,8 +59,8 @@ base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` only whe
 stay flat. It draws a priority level below the lowest base sheet, one grid per zone-gate group, and a spyglass
 disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet instead. Owns the wave tables, a still sea-state field so
 the swell shows no lattice, the foam field and up to 16 ship calm zones (`OceanCalmZone.cs`) over roster hulls,
-wake ships and animated hulls (`OceanMovers.cs`), nearest the eye first, all on `csky_time`. At a calmed shore or
-in fog it shades as the flat sheet. `GameSession.FollowOcean` builds and drops it; shore calm is `OceanMask.cs`'s.
+wake ships and animated hulls (`OceanMovers.cs`), nearest the eye first, all on `csky_time`. Off the mask's shore
+distance the swell fades on a long ramp, the look on a short one (flat sheet at the shore and in fog). `GameSession.FollowOcean` builds and drops it.
 
 ## src/Effects/OceanCalmZone.cs
 One ship's calm zone on the wave ocean: a box on the water along the hull's heading, grown over
@@ -70,7 +70,7 @@ box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold t
 
 ## src/Effects/OceanMask.cs
 The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`) and reused by
-every rebuild of the ocean over it. Owns sea coverage, the wave height left after the shore fade, the base sheet's
+every rebuild of the ocean over it. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the base sheet's
 baked tint and, where the sheet spans zone-gate layers, each texel's zone group. The same walk finds the wake
 sheets, the tile size and the sheet's lowest priority. A wake's ship and every mover judged a hull
 (`OceanMovers.cs`) stay out of the mask. While an ocean stands, `Publish` hands the mask, zone texture and rect to
@@ -80,7 +80,7 @@ the `csky_ocean_mask`/`_zone`/`_rect` globals the sheet's hide reads, which step
 
 ## src/Effects/OceanMaskRaster.cs
 The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint and R8 zone bytes out, with no engine
-object touched. Owns the triangle fill, the distance pass behind the shore fade and the off-sheet tint, and runs
+object touched. Owns the triangle fill, the shore distance pass and the off-sheet tint, and runs
 in row bands on the thread pool. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
 not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
 hold the banded bytes to a plain single pass.

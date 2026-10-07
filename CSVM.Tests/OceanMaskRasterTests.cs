@@ -68,8 +68,10 @@ public class OceanMaskRasterTests
         }
     }
 
+    // G is the distance from the shore over ShoreReach, saturating past it. It is not a wave
+    // height: the shader fades the swell and the look over ramps of their own.
     [Fact]
-    public void ASolidCornerCalmsTheSeaAroundIt()
+    public void TheShoreChannelIsTheDistanceFromASolidCorner()
     {
         var tris = new List<Tri>();
         AddQuad(tris, -2048f, -2048f, 4096f, Kind.Base, Colors.White);
@@ -80,6 +82,7 @@ public class OceanMaskRasterTests
         int cx = (int)((p.X - r.Origin.X) / Cell), cz = (int)((p.Z - r.Origin.Y) / Cell);
         Assert.Equal(255, r.Mask[2 * ((cz * r.Width) + cx)]);
         Assert.Equal(0, r.Mask[(2 * ((cz * r.Width) + cx)) + 1]);
+        Assert.Equal(128, r.Mask[(2 * ((cz * r.Width) + cx + (int)(OceanMaskRaster.ShoreReach / Cell / 2f))) + 1]);
         Assert.Equal(255, r.Mask[(2 * ((cz * r.Width) + cx + 40)) + 1]);
     }
 
@@ -213,7 +216,7 @@ public class OceanMaskRasterTests
         for (int i = 0; i < w * h; i++)
         {
             mask[2 * i] = sea[i] != 0 ? (byte)255 : (byte)0;
-            mask[(2 * i) + 1] = (byte)Math.Round(Mathf.SmoothStep(24f, 160f, dist[i]) * 255f);
+            mask[(2 * i) + 1] = (byte)Math.Round(Math.Min(dist[i], OceanMaskRaster.ShoreReach) / OceanMaskRaster.ShoreReach * 255f);
             var c = tint[i].R < 0f ? mean : tint[i];
             tintBytes[3 * i] = (byte)Math.Clamp(Math.Round(c.R * 255f), 0, 255);
             tintBytes[(3 * i) + 1] = (byte)Math.Clamp(Math.Round(c.G * 255f), 0, 255);

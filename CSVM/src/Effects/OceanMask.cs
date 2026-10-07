@@ -13,8 +13,8 @@ namespace CSVM.Effects;
 
 /// <summary>
 /// The wave ocean's shore mask, baked once from a built world's mesh instances. Its red channel is
-/// sea coverage. Its green channel is the wave height left after a fade from every shore, surf
-/// texel and solid object near sea level. The tint texture carries the base sheet's baked vertex
+/// sea coverage. Its green channel is the distance to the nearest shore, surf texel or solid object
+/// near sea level. The ocean's shader fades the waves from it. The tint texture carries the base sheet's baked vertex
 /// colour, which darkens the water around the islands. The bake also finds the wake sheets and the
 /// base texture's tile size. <see cref="OceanMaskRaster"/> turns the triangles into texels.
 /// </summary>

@@ -30,6 +30,16 @@ public sealed partial class Ocean : Node3D
     private const float CalmFade = 50f;
     private const int MaxShips = 16;
 
+    // TUNE. Metres from the nearest shore, surf or solid texel (the mask's G). The swell's height
+    // fades in over the long ramp, so a displaced crest never lifts through a coplanar coast layer.
+    // The look (slope, chop, foam, texture) fades in over the short one. It has only to match the
+    // flat sheet where an opaque coast tile meets the ocean. LookCalm clears the texel beside the
+    // coast one, which the linear filter blends into the boundary.
+    private const float ShoreCalm = 24f;
+    private const float ShoreFull = OceanMaskRaster.ShoreReach;
+    private const float LookCalm = 12f;
+    private const float LookFull = 64f;
+
     // A hull is on the water while its origin sits this close to sea level; a hoisted lifeboat is not.
     private const float HullWaterBand = OceanMovers.OriginBand;
 
@@ -435,6 +445,15 @@ vec2 ocean_mask(vec2 p) {
     return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
 }
 
+// The swell height and the look left at the mask's shore distance g.
+float shore_swell(float g) {
+    return smoothstep(" + Literal(ShoreCalm / OceanMaskRaster.ShoreReach) + @", " + Literal(ShoreFull / OceanMaskRaster.ShoreReach) + @", g);
+}
+
+float shore_look(float g) {
+    return smoothstep(" + Literal(LookCalm / OceanMaskRaster.ShoreReach) + @", " + Literal(LookFull / OceanMaskRaster.ShoreReach) + @", g);
+}
+
 float foam_hash(vec2 c) {
     return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -513,7 +532,7 @@ void vertex() {
     } else {
         vec2 p = VERTEX.xz + CAMERA_POSITION_WORLD.xz;
         float spacing = max(UV.x, 0.01);
-        float amp = ocean_mask(p).g * ship_calm(p) * wave_scale;
+        float amp = shore_swell(ocean_mask(p).g) * ship_calm(p) * wave_scale;
         vec3 disp = vec3(0.0);
         vec4 sea = sea_state(p);
         vec4 fine = sea_fine(p);
@@ -550,9 +569,11 @@ void fragment() {
     if (zone < " + Literal(OceanMaskRaster.AnyZone - 0.5f) + @" && abs(zone - zone_index) > 0.5) {
         discard;
     }" : "") + @"
-    // A ship's zone flattens only the geometry. Its normals keep the swell and the chop, so the
-    // water there shades like the open sea. A calm patch would read as an artefact.
-    float amp = m.g * wave_scale;
+    // A ship's zone and the shore's swell ramp flatten only the geometry. The normals keep the
+    // swell and the chop, so the water there shades like the open sea; only the short look ramp
+    // below calms them. A calm patch would read as an artefact.
+    float look = shore_look(m.g);
+    float amp = wave_scale;
     vec2 fw = fwidth(p);
     float footprint = max(max(fw.x, fw.y), 0.001);
     vec3 n = vec3(0.0, 1.0, 0.0);
@@ -596,10 +617,10 @@ void fragment() {
         }
     }
     float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
-    // How fully this fragment shades as the flat sheet does. Wholly where the shore calms the
-    // waves, so no edge shows against a coplanar coast tile. Rising with the fog, so the far sea
-    // fogs as the sheet does instead of showing darker, wavier water through it.
-    float sheet = max(1.0 - m.g, smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt));
+    // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
+    // against a coplanar coast tile. Rising with the fog, so the far sea fogs as the sheet does
+    // instead of showing darker, wavier water through it.
+    float sheet = max(1.0 - look, smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt));
     n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);

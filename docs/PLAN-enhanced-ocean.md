@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☐ Break up the swell's wave lattice
 32. ☐ Foam that reads as foam up close
-33. ☐ A gradual fade to flat water at the coast
+33. ☑ A gradual fade to flat water at the coast
 
 ## Dependency and parallelism notes
 
@@ -1031,7 +1031,39 @@ strip showing the motion; the C1B cruise pose unchanged to the eye. `gpu_ms` at 
 **⚠ Traps.** Stills cannot show flicker: judge with consecutive frames. Foam is on `csky_time`, never
 `TIME`.
 
-## D33 ☐ A gradual fade to flat water at the coast
+## D33 ☑ A gradual fade to flat water at the coast
+
+**Landed.** The cut was the look, not the height. The fragment scaled the swell and chop normals by
+the mask's height weight and then blended toward the sheet by one minus the same weight, so the
+visible waves rose roughly with its square: flat out to about 90 m from any shore, surf or solid
+texel and nearly full only past 130 m. In C2's harbour (a channel about 190 m wide, with the Eiffel
+plinth, the ramp `g36353`'s foot and small solids inside it) no texel reaches full height, and the
+breakwaters left a flat band across the whole mouth. The mask's G is now the shore distance over
+`OceanMaskRaster.ShoreReach` (160 m, saturating), and the shader reads two ramps from it
+(`Ocean.cs`'s `ShoreCalm`/`ShoreFull`, `LookCalm`/`LookFull`): the swell's height over the same
+24-160 m as before, and the look over 12-64 m. The fragment's swell and chop normals run at full
+amplitude, as they already did in a ship's zone; `sheet = max(1 - look, fog)` alone calms them.
+LookCalm clears the texel beside a coast texel, which the linear filter blends into the boundary.
+The mask stays RG8 and band-count independent (`OceanMaskRasterTests`, the oracle encodes the
+distance; `TheShoreChannelIsTheDistanceFromASolidCorner` holds 0, 128 at 80 m, 255 past the reach).
+Re-encoding alone is near byte-exact: the old ramps applied to the distance reproduce the old C2
+150 m shot to 0.005 levels (2 pixels off by more than 4). A shorter height ramp (24-96 m) was shot
+as a second variant and reads the same as the look ramp alone at both harbour heights, so the
+height ramp is unchanged and no displaced crest reaches the coast layers any closer than before
+(low beach shots at C2 and C3 match). C25's seam at `c1-lake-enhanced`'s pose: the ocean-minus-sheet
+profile across the coast tile boundary is unchanged within 20 px of it (-0.42 levels on the ocean
+side, 0.00 on the tile, before and after), so no edge; the whole-frame difference rises from mean
+0.145 to 0.666 levels (1,329 to 52,871 pixels off by more than 4) because the lake's open water now
+shows waves. C5's golden pose is byte-identical. Open-sea whitecaps now form nearer small rocks,
+where the swell ramp used to suppress them; their blocky edges are D32's value noise. `gpu_ms`
+at the low-pass hold is not measured yet: the quiet gate never cleared (external GPU load at 55-69 %
+with no Godot running). The change adds one smoothstep per vertex and per fragment and leaves the
+wave loops' lengths as they were (they end on the footprint fade, not the amplitude). Montage, flat / before / after: C2 harbour at 30 m and 150 m, C1B coast, C3 shore at 120 m
+and 250 m, C1 lake, in the D33 worktree's `.scratch\d33\montage-d33.png`.
+
+**Verified.** The user accepted the montage; the motion judgement comes at the Wave D re-check flight. In the D33 tree: units 6337 passed, 3 skipped; `graphics-ocean-switch` and `graphics-water-quality` pass, engine errors clean. Owed on the merged tree: `gpu_ms` at the low-pass hold and the complete battery with the Wave D re-pins.
+
+**Original approach (kept for reference).**
 
 **Goal.** The waves calm toward the coast gradually, with no visible cut, and a narrow harbour keeps
 waves across most of its width rather than a thin stripe.

@@ -18,13 +18,13 @@ internal static class OceanMaskRaster
     /// <summary>The zone byte of a texel every zone group's ocean draws: water the gate never splits.</summary>
     public const byte AnyZone = 255;
 
-    // Waves are fully calm this close to a shore or a surf texel, and reach full height here.
-    private const float ShoreCalm = 24f;
-    private const float ShoreFull = 160f;
+    /// <summary>The shore distance in metres at which the mask's G saturates. G is the distance to
+    /// the nearest texel that is not open base sea (a shore, surf or solid texel) over this.</summary>
+    public const float ShoreReach = 160f;
 
-    // Rows a band reads past its own edges in the distance pass. Every distance below ShoreFull is
-    // a chain of at most ShoreFull / Cell steps, so a band sees every chain its own rows can take.
-    private const int Halo = (int)(ShoreFull / Cell) + 4;
+    // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
+    // a chain of at most ShoreReach / Cell steps, so a band sees every chain its own rows can take.
+    private const int Halo = (int)(ShoreReach / Cell) + 4;
 
     // Below this many rows a band's halo costs more than its thread saves.
     private const int MinBandRows = 64;
@@ -265,7 +265,7 @@ internal static class OceanMaskRaster
     }
 
     // Rows r0..r1 of both channels. The distance runs over the band plus its halo, then keeps its
-    // own rows. A chain reaching past the halo is longer than ShoreFull and encodes as full height.
+    // own rows. A chain reaching past the halo is longer than ShoreReach and saturates.
     private static void Encode(Grid g, int r0, int r1, byte[] mask)
     {
         int w = g.W;
@@ -277,10 +277,10 @@ internal static class OceanMaskRaster
             {
                 int i = (y * w) + x;
                 mask[2 * i] = g.Sea[i] != 0 ? (byte)255 : (byte)0;
-                // SmoothStep is exactly 0 and 1 past its ends, so only the band between calls it.
+                // The distance, not a height. The shader fades the swell and the look over ramps
+                // of their own, from the distance the linear filter interpolates between texels.
                 float d = dist[((y - e0) * w) + x];
-                mask[(2 * i) + 1] = d <= ShoreCalm ? (byte)0 : d >= ShoreFull ? (byte)255
-                    : (byte)Math.Round(Mathf.SmoothStep(ShoreCalm, ShoreFull, d) * 255f);
+                mask[(2 * i) + 1] = d >= ShoreReach ? (byte)255 : (byte)Math.Round(d / ShoreReach * 255f);
             }
         }
     }
@@ -335,7 +335,7 @@ internal static class OceanMaskRaster
     /// and the zone group its mesh instance is drawn in.</summary>
     public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0);
 
-    /// <summary>The texel bytes of the mask (RG8: sea, wave height), the tint (RGB8, sRGB) and the
+    /// <summary>The texel bytes of the mask (RG8: sea, shore distance), the tint (RGB8, sRGB) and the
     /// zone group (R8, <see cref="AnyZone"/> on surf-ring water). Also the milliseconds each pass
     /// took over how many bands.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
