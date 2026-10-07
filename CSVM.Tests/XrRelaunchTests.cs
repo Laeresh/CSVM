@@ -7,9 +7,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// VR mode's relaunch decisions, engine-free. They are which <c>--xr-mode</c> a command line
+/// VR mode's restart decisions, engine-free. They are which <c>--xr-mode</c> a command line
 /// carries, and the child's arguments with the engine flag ahead of <c>--</c>. Then the boot's and
-/// the Options apply's relaunch, the flat-only runs and the fallback notice's condition. None of
+/// the Options apply's restart, the flat-only runs and the menu's notices. None of
 /// this starts a process or a runtime. The launcher hands these functions the process's own
 /// arguments and acts on the answer.
 /// </summary>
@@ -81,7 +81,7 @@ public class XrRelaunchTests
         Assert.False(XrRelaunch.AtBoot(saved: true, mode: false, flatOnly: null));
         Assert.False(XrRelaunch.AtBoot(saved: true, mode: null, flatOnly: "--det"));
 
-        // The child carries the flag, so its own boot does not relaunch again. A child whose
+        // The child carries the flag, so its own boot does not restart again. A child whose
         // runtime failed stays put rather than retrying.
         var child = XrRelaunch.Arguments(System.Array.Empty<string>(), on: true, skipIntro: false);
         Assert.False(XrRelaunch.AtBoot(saved: true, mode: XrRelaunch.Mode(child), flatOnly: null));
@@ -146,5 +146,28 @@ public class XrRelaunchTests
     public void TheFallbackNoticeStandsWhenOpenXrWasAskedForAndIsNotLive(bool requested, bool live, bool notice)
     {
         Assert.Equal(notice, XrRelaunch.FellBack(requested, live));
+    }
+
+    [Fact]
+    public void AFailedStartPostsItsOwnNoticeAheadOfTheFallback()
+    {
+        string intoHeadset = XrRelaunch.StartFailedNotice(on: true);
+        string outOfHeadset = XrRelaunch.StartFailedNotice(on: false);
+
+        Assert.Equal(intoHeadset, XrRelaunch.MenuNotice(requested: false, openXrLive: false, failedStart: true));
+        Assert.Equal(outOfHeadset, XrRelaunch.MenuNotice(requested: true, openXrLive: true, failedStart: false));
+        Assert.Equal(intoHeadset, XrRelaunch.MenuNotice(requested: true, openXrLive: false, failedStart: true));
+        Assert.Contains("plays flat", intoHeadset, System.StringComparison.Ordinal);
+        Assert.Contains("stays in VR", outOfHeadset, System.StringComparison.Ordinal);
+        Assert.NotEqual(XrRelaunch.FallbackNotice, intoHeadset);
+    }
+
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public void WithNoFailedStartTheMenuOwesTheFallbackNoticeAlone(bool requested, bool live, bool notice)
+    {
+        Assert.Equal(notice ? XrRelaunch.FallbackNotice : null, XrRelaunch.MenuNotice(requested, live, failedStart: null));
     }
 }

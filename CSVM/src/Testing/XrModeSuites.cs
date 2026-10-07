@@ -11,7 +11,7 @@ namespace CSVM.Testing;
 
 /// <summary>
 /// VR mode's menu-side rules on the real screens of both presentations. One suite reads the
-/// relaunch's argument source in this process. One is the single seat a headset or its stand-in
+/// restart's argument source in this process. One is the single seat a headset or its stand-in
 /// flies, where the join boards close the entries past the captain's. One is the fallback notice a
 /// launch that asked for OpenXR and plays flat shows the player. None starts a process or a
 /// runtime; the launcher's decisions are units (<c>CSVM.Tests/XrRelaunchTests.cs</c>).
@@ -49,11 +49,11 @@ internal static class XrModeSuites
     }
 
     [Suite("xr-relaunch-args",
-        "The relaunch's argument source read in this real engine process: the program name .NET puts "
+        "The VR mode restart's argument source read in this real engine process: the program name .NET puts "
         + "first is the executable Godot reports and is dropped, the user arguments behind the "
         + "separator are exactly what Godot hands the game, no --xr-mode stands, turning VR mode on "
         + "puts --xr-mode on ahead of the separator with every other argument carried verbatim, and "
-        + "this --run-tests process is flat-only, so it neither relaunches at boot nor reads the "
+        + "this --run-tests process is flat-only, so it neither restarts at boot nor reads the "
         + "player's saved VR mode")]
     internal static void XrRelaunchArgs(TestContext ctx)
     {
@@ -76,7 +76,7 @@ internal static class XrModeSuites
         string? flatOnly = XrRelaunch.FlatOnly(CSVM.Spec.SessionSpec.Parse(user), Godot.DisplayServer.GetName() == "headless",
             OperatingSystem.IsWindows());
         ctx.Check(flatOnly != null && !XrRelaunch.AtBoot(saved: true, XrRelaunch.Mode(args), flatOnly),
-            $"and this run is flat-only whatever is saved ({flatOnly ?? "may relaunch"})");
+            $"and this run is flat-only whatever is saved ({flatOnly ?? "may restart"})");
     }
 
     private static void BuiltInOneSeat(TestContext ctx)

@@ -753,7 +753,7 @@ internal static class MenuOriginalSuites
             ctx.Check(applied.ShadowQuality == shadowQuality,
                 $"and the shadow quality the row left, never set where the row stood dead ({applied.ShadowQuality ?? "unset"})");
             ctx.Check(applied.VrMode == vrMode,
-                $"and VR mode as the row left it, the launcher's to relaunch for ({applied.VrMode?.ToString() ?? "unset"})");
+                $"and VR mode as the row left it, the launcher's to restart for ({applied.VrMode?.ToString() ?? "unset"})");
             ctx.Check(applied.VrRenderScale == comfort.RenderScale && applied.VrVignette == comfort.Vignette,
                 $"and the headset's render scale and vignette as their rows left them ({applied.VrRenderScale ?? "unset"}, {applied.VrVignette ?? "unset"})");
             ctx.Check(applied.AudioMaster == null && applied.AudioMusic == AudioMix.DefaultMusic - SliderControl.KeyStep

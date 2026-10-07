@@ -5,9 +5,9 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The world flare's placement against the screen rig's through Godot's own projection,
-/// and the stereo session's head-locked colour quads. Module entries: docs/architecture/Session.md
-/// on WorldFlareRig, docs/architecture/UI.md on HeadLockedQuads.</summary>
+/// <summary>The world flare's placement against the screen rig's through Godot's own projection, the
+/// cameras that draw its quads, and the stereo session's head-locked colour quads. Module entries:
+/// docs/architecture/Session.md on WorldFlareRig, docs/architecture/UI.md on HeadLockedQuads.</summary>
 internal static class StereoPaneSuites
 {
     private const float PixelTol = 0.05f;
@@ -62,6 +62,40 @@ internal static class StereoPaneSuites
         finally
         {
             camera.QueueFree();
+        }
+    }
+
+    /// <summary>Builds C3's world flare for one pane and for four, then reads every quad's layers
+    /// against each pane camera's mask and each picture camera's.</summary>
+    [Suite("world-flare-layers",
+        "the world flare's quads, built from C3's own flare for one pane and for four, are drawn by their own pane's camera alone: never by another pane, never by any pane's spyglass picture flat or Enhanced, with or without a headset, and never by the Danger Zone photograph, each of which would place a flare for its own view")]
+    internal static void WorldFlareLayers(TestContext ctx)
+    {
+        string texturesPath = Extraction.SessionPaths.ChapterTextures(ctx.DataRoot, "C3");
+        ctx.RequireData(texturesPath, $"C3 textures");
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        var root = new Node3D { Name = "world-flare-layers" };
+        ctx.Host.AddChild(root);
+        using var textures = new Mech3.TextureArchive(texturesPath);
+        try
+        {
+            uint main = SplitScreen.OwnViewCullMask(SplitScreen.PaneCullMask(Mech3.ZoneGate.OpenCullMask(0xFFFFFu)), 0);
+            Layers(ctx, root, textures, new[] { main }, "one pane");
+            var panes = new uint[SplitScreen.MaxPlayers];
+            for (int i = 0; i < panes.Length; i++)
+            {
+                panes[i] = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(i), i);
+            }
+
+            Layers(ctx, root, textures, panes, "four panes");
+            uint everyCameraLayer = SplitScreen.EveryCameraLayer;
+            ctx.Check((everyCameraLayer & SpyglassView.DiscMask(main, SplitScreen.OwnAirframeLayer(0), enhanced: true)) != 0
+                && (everyCameraLayer & Flight.Modes.DangerZonePhotograph.PhotoMask(main)) != 0,
+                $"ABLE-TO-FAIL CONTROL: a quad on layer 1, where a single pane's flare stood, is in both pictures");
+        }
+        finally
+        {
+            root.Free();
         }
     }
 
@@ -131,5 +165,61 @@ internal static class StereoPaneSuites
             quads.QueueFree();
             layer.QueueFree();
         }
+    }
+
+    // One flare per pane mask, each quad checked against every pane and picture mask.
+    private static void Layers(TestContext ctx, Node3D parent, Mech3.TextureArchive textures, uint[] paneMasks, string label)
+    {
+        var root = new Node3D { Name = label.Replace(' ', '_') };
+        parent.AddChild(root);
+        var rigs = new System.Collections.Generic.List<PlayerRig>();
+        for (int i = 0; i < paneMasks.Length; i++)
+        {
+            var horizon = new Node3D { Name = $"horizon{i + 1}" };
+            horizon.AddChild(new Node3D { Name = "sun" });
+            root.AddChild(horizon);
+            var hud = new Node { Name = $"hud{i + 1}" };
+            root.AddChild(hud);
+            rigs.Add(new PlayerRig
+            {
+                Index = i,
+                Camera = null!,
+                HudParent = hud,
+                Horizon = horizon,
+                VisualLayer = paneMasks.Length > 1 ? SplitScreen.PlayerVisualLayer(i) : 0,
+            });
+        }
+
+        var rig = new WorldFlareRig(Spec.SessionSpec.Parse(new[] { "--chapter=C3" }), null);
+        rig.Build(rigs, textures, ctx.InterpPath, "C3", root);
+        var quads = new System.Collections.Generic.List<(int Pane, MeshInstance3D Quad)>(rig.Quads());
+        ctx.Check(rig.InstanceCount == paneMasks.Length && quads.Count == paneMasks.Length * WorldFlareRig.Elements.Count,
+            $"{label}: C3 builds a flare per pane, {quads.Count} quads for {rig.InstanceCount} pane(s)");
+        int stray = 0;
+        foreach (var (owner, quad) in quads)
+        {
+            for (int pane = 0; pane < paneMasks.Length; pane++)
+            {
+                uint own = SplitScreen.OwnAirframeLayer(pane);
+                bool drawn = (quad.Layers & paneMasks[pane]) != 0;
+                bool pictured = (quad.Layers & Flight.Modes.DangerZonePhotograph.PhotoMask(paneMasks[pane])) != 0;
+                foreach (bool enhanced in new[] { false, true })
+                {
+                    foreach (bool headset in new[] { false, true })
+                    {
+                        pictured |= (quad.Layers & SpyglassView.DiscMask(paneMasks[pane], own, enhanced, headset)) != 0;
+                    }
+                }
+
+                if (drawn != (pane == owner) || pictured)
+                {
+                    stray++;
+                    ctx.Note($"{label}: {quad.Name} on 0x{quad.Layers:X6} against pane {pane + 1} 0x{paneMasks[pane]:X6}: drawn {drawn}, in a picture {pictured}");
+                }
+            }
+        }
+
+        ctx.Check(quads.Count > 0 && stray == 0,
+            $"{label}: every quad is drawn by its own pane alone and by no spyglass picture or photograph ({stray} stray reading(s))");
     }
 }

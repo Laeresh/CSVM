@@ -247,6 +247,20 @@ public class VrCockpitTuningTests
     }
 
     [Fact]
+    public void ANumberPastAFloatsRangeIsRewrittenOrKeptWithoutThrowing()
+    {
+        const string json = """{ "planes": { "player_fury": { "interiorScaleFactor": 1e40 }, "player_bhawk": { "eyeOffsetZ": -1e39 } } }""";
+
+        string fury = Rewrite(json, "player_fury", new VrCockpit(0.9f, 0.1f));
+        var table = VrCockpits.Parse(Encoding.UTF8.GetBytes(fury), new List<string>());
+
+        Assert.Equal(new VrCockpit(0.9f, 0.1f), table.For("player_fury"));
+        Assert.DoesNotContain("1e40", fury, StringComparison.Ordinal);
+        Assert.Contains("\"eyeOffsetZ\": -1e39", fury, StringComparison.Ordinal);
+        Assert.Equal(VrCockpit.Default, table.For("player_bhawk"));
+    }
+
+    [Fact]
     public void TheReadoutNamesThePlaneEachFieldItsStepAndWhetherItIsSaved()
     {
         string text = VrCockpitTuning.Readout("player_warhawk", 4, 11, new VrCockpit(0.9f, 0.06f, -0.01f), VrCockpit.Default,

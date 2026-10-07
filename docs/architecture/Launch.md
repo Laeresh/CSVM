@@ -10,7 +10,7 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits and the `--extract` run (`Extraction/ExtractionRun.cs` on a worker thread),
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, the stick pump `Sticks/StickPump.cs` started after the pad roster is logged, the typed-character feed `UI/Boards/TypedText.cs` its `_Input` fills with every key event's character and paste chord, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
-menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/Screens/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on), VR mode's relaunch at boot and on a menu-side apply (`XrRelaunch.cs`), the headset launch's shader cache sweep (`XrShaderCache.cs`), and under a headset or the stand-in one seat (`--players` refused, the feature's `SeatLimit`), the menu's fallback notice and the theater screen the boards draw on (`UI/Boards/TheaterScreen.cs`) with the hand controllers' laser on it (`UI/Boards/TheaterPointer.cs`), the comfort fade and vignette (`UI/Boards/ComfortQuads.cs`, wired to the rig's cuts) and the headset's render scale and vignette level at boot and on an apply (`ApplyVrComfort`),
+menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/Screens/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on), VR mode's restart at boot and on a menu-side apply (`XrRelaunch.cs`), the headset launch's shader cache sweep (`XrShaderCache.cs`), and under a headset or the stand-in one seat (`--players` refused, the feature's `SeatLimit`), the menu's fallback and failed-start notices and the theater screen the boards draw on (`UI/Boards/TheaterScreen.cs`) with the hand controllers' laser on it (`UI/Boards/TheaterPointer.cs`), the comfort fade and vignette (`UI/Boards/ComfortQuads.cs`, wired to the rig's cuts) and the headset's render scale and vignette level at boot and on an apply (`ApplyVrComfort`),
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), the graphics mode at startup and switched live on an apply or a seat's Toggle Graphics Mode action (`SwitchGraphicsMode`, dressing the sun and Environment through `EnhancedLook.cs`),
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction or a stale stamp it shows `UI/Screens/NoGameDataScreen.cs` before any sound archive opens, and enters the menu from it in the same process. Each launch hands the session one `LauncherContext`, the settled paths, the persistent nodes, the process services and the match's wire (`NetTransport` with `NetHost` and `NetAirframes` beside it, or `NetSeats` and `NetHandshake` where a caller has them already), never a new argument, which is a `SessionSpec` change. The wire arrives from the `UI/Menu/NetPlayFeature.cs` door the launcher registers, or from `--net-host`/`--net-join` on a headless run, which waits for the link before it launches and lays `--net-shape` over it through `Net/ShapedTransport.cs`; both open through `Net/NetCarrier.cs`, so which carrier a build ships is not this file's to know; the launcher steps neither, since the session owns a wire from the moment it takes it, but it does give the router's port back when the flight ends. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
@@ -127,19 +127,21 @@ own recenter. It logs the boot, the session states and an `xr frames` Debug line
 (`XrFrameWindow.cs`) with the seat's position and speed; `XrLaunch` reads `--xr-mode`. Its boot sets `Bindings/XrControllers.cs`'s `SessionLive`. `ApplyRenderScale` sets the interface's eye-size multiplier (`Utils/VrRenderScaleSetting.cs`), live under OpenXR. `WillBoot` answers ahead of the boot whether it will start, which the VR quality profile (`Utils/VrQuality.cs`) resolves from.
 
 ## src/Launch/XrRelaunch.cs
-VR mode's relaunch rules, engine-free. OpenXR starts only with the engine, so the saved option
+VR mode's restart rules, engine-free. OpenXR starts only with the engine, so the saved option
 (`Utils/OptionsStore.cs`'s `VrMode`) takes effect through a new process: a boot with it saved on and
-no `--xr-mode` given relaunches once, and so does a menu Options apply that changed it. `Arguments`
+no `--xr-mode` given restarts once, and so does a menu Options apply that changed it. `Arguments`
 carries every engine and user argument verbatim with `--xr-mode on` first (or every `--xr-mode` pair
-dropped), so the child's own flag stops a loop. `FlatOnly` names the runs that never relaunch: off
-Windows, headless, pinned, scripted, the stand-in, the dev modes and labs. `FellBack` is when the
-menu shows `FallbackNotice` (`UI/Menu/MenuNoticeFeature.cs`). `Launcher.cs` acts on the answers.
+dropped), so the child's own flag stops a loop. `FlatOnly` names the runs that never restart: off
+Windows, headless, pinned, scripted, the stand-in, the dev modes and labs. `MenuNotice` is what the
+menu shows (`UI/Menu/MenuNoticeFeature.cs`): `StartFailedNotice` when the new process did not start,
+else `FallbackNotice` where `FellBack` says so. `Launcher.cs` acts on the answers.
 
 ## src/Launch/XrShaderCache.cs
 A headset launch's shader cache writes kept from the flat launches after it ([../verification.md](../verification.md)
-LOG-25): a launch that asked for OpenXR writes a marker at boot and, as it ends or relaunches,
-deletes every `user://shader_cache` file written since its process started. A launch booting over the
-marker of a process that is gone sweeps the same way, which covers a crash. The flat launches' own
+LOG-25): a launch that asked for OpenXR writes a marker at boot and, as it ends or restarts, deletes
+every `user://shader_cache` file written since its process started; a restart whose child fails to
+start watches again (`EndThenStart`). Every launch's `Boot`, a headset one's too, first sweeps the
+same way over the marker of a process that is gone, which covers a crash. The flat launches' own
 files are never touched, so a flat launch after a headset session recompiles only what that session
 rewrote. Engine-free; `Launcher.cs` passes the paths and the process start.
 

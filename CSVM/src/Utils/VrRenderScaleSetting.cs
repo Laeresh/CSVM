@@ -20,8 +20,9 @@ public static class VrRenderScaleSetting
     /// <summary>The word a launch with nothing saved runs at, the runtime's own size.</summary>
     public const string Default = "100";
 
-    /// <summary>The scales a row offers, percentages of the runtime's recommended eye size. A
-    /// runtime set to 2112x2304 against a 3072x3264 recommendation is about 70.</summary>
+    /// <summary>The scales a row offers, percentages of the runtime's recommended eye size. The
+    /// range reaches down to what a runtime's own lower resolution setting gives
+    /// (docs/architecture/Utils.md).</summary>
     public static readonly IReadOnlyList<string> Words = new[] { "50", "60", "70", "80", "90", "100", "125" };
 
     /// <summary>The lookup over <see cref="Words"/>. No config key is read.</summary>

@@ -70,16 +70,19 @@ public sealed partial class SpyglassView : SubViewport
     }
 
     /// <summary>The picture's cull mask: <paramref name="paneMask"/> less the pilot's own airframe's
-    /// layer (<see cref="UI.Boards.SplitScreen.OwnAirframeLayer"/>). Under <paramref name="enhanced"/>
-    /// the world sun is traded for its shadowless copy (<see cref="SpyglassSun"/>). With
-    /// <paramref name="headset"/> it drops the headset's two layers, whose quads ride any camera.
-    /// ⚠ NOT decoded, and do not put the airframe back on the decode's authority: the original's
-    /// update touches no per-object visibility (docs/org/spyglass.md).</summary>
+    /// layer (<see cref="UI.Boards.SplitScreen.OwnAirframeLayer"/>) and the world flare's band. Under
+    /// <paramref name="enhanced"/> the world sun is traded for its shadowless copy
+    /// (<see cref="SpyglassSun"/>). With <paramref name="headset"/> it drops the headset's two
+    /// layers, whose quads ride any camera. ⚠ NOT decoded, and do not put the airframe back on the
+    /// decode's authority: the original's update touches no per-object visibility (docs/org/spyglass.md).</summary>
     public static uint DiscMask(uint paneMask, uint ownLayer, bool enhanced, bool headset = false)
     {
-        uint mask = headset
-            ? paneMask & ~(UI.Boards.SplitScreen.HeadsetLayer | UI.Boards.SplitScreen.HeadOverlayLayer)
-            : paneMask;
+        uint mask = paneMask & ~UI.Boards.SplitScreen.WorldFlareBand;
+        if (headset)
+        {
+            mask &= ~(UI.Boards.SplitScreen.HeadsetLayer | UI.Boards.SplitScreen.HeadOverlayLayer);
+        }
+
         return enhanced
             ? (mask & ~ownLayer & ~UI.Boards.SplitScreen.SunLayer) | UI.Boards.SplitScreen.SpyglassSunLayer
             : mask & ~ownLayer;

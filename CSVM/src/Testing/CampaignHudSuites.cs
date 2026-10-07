@@ -33,7 +33,7 @@ internal static class CampaignHudSuites
     /// <see cref="AudioStreamPlayer3D"/> (<see cref="WorldSounds.OneShotsStarted"/>). A group name
     /// is not guaranteed to resolve here, so both halves try every candidate.</summary>
     [Suite("campaign-objectives-hud",
-        "D33's in-flight objectives display and cue firing against a BUILT campaign world: " +
+        "the in-flight objectives display and cue firing against a BUILT campaign world: " +
         "ObjectivesHud carries one line per ObjectiveGraph display row, a scripted " +
         "IDENTITY objective completing off whichever condition the chapter's own mission " +
         "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
@@ -41,9 +41,9 @@ internal static class CampaignHudSuites
         "(not only the graph's) with the original's own mark art centred over that row's " +
         "leading characters and its text left in the colour an open row's carries, a " +
         "WAKEUP_SOUND_GROUP the mission authors starts a real " +
-        "AudioStreamPlayer3D through WorldSounds (D31's existing routing, counted rather than " +
-        "duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
-        "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483); the readout " +
+        "AudioStreamPlayer3D through WorldSounds (the world's existing sound routing, counted rather " +
+        "than duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
+        "COMPLETED_SOUND_GROUP, one of its groups reaches a real player; the readout " +
         "draws on a board layer only while paused, so a headset's theater screen carries it with " +
         "the pause board and it never raises that screen in flight on its own")]
     internal static void CampaignObjectivesHud(TestContext ctx)

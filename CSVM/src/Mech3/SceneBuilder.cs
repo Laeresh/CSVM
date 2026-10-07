@@ -2057,7 +2057,8 @@ void fragment() {
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
         if (!shaded || sunLit || gammaBlend)
-            sb.AppendLine(SrgbInclude); if (sunLit)
+            sb.AppendLine(SrgbInclude);
+        if (sunLit)
         {
             sb.AppendLine("varying vec3 v_sun_lit;");
             // Where this frame's origin sits in the world, for a model drawn in a frame of its own

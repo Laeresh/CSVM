@@ -21,9 +21,9 @@ namespace CSVM.Flight.Hud;
 /// </summary>
 public sealed partial class XrMarkers : Node3D
 {
-    /// <summary>Surface texels per flat HUD reference pixel. In the flat cockpit view a reference
-    /// pixel spans about 0.045 degrees, under one headset pixel. So the card is drawn finer than
-    /// shown and filtered down. TUNE.</summary>
+    /// <summary>Surface texels per flat HUD reference pixel. A reference pixel spans less than one
+    /// headset pixel, so the card is drawn finer than shown and filtered down. TUNE
+    /// (docs/architecture/Flight.md).</summary>
     public const float CardScale = 1.5f;
 
     /// <summary>How far ahead of the head the ring hangs, metres along the view axis: about the

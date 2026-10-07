@@ -105,6 +105,10 @@ public sealed class WorldFlareRig
     /// <see cref="RefHeight"/> frame whose half height is <paramref name="tanHalfV"/>.</summary>
     public static float HalfSize(float diaPx, float tanHalfV) => diaPx / RefHeight * tanHalfV;
 
+    /// <summary>The visual layer <paramref name="rig"/>'s flare quads are drawn on, which that pane's
+    /// camera alone draws and no picture camera does (<see cref="SplitScreen.WorldFlareLayer"/>).</summary>
+    public static uint LayerOf(PlayerRig rig) => SplitScreen.WorldFlareLayer(rig.Index);
+
     /// <summary>The tangent of half a camera's vertical field of view in a pane of
     /// <paramref name="pane"/> pixels, whichever axis the camera keeps.</summary>
     public static float TanHalfVertical(Camera3D camera, Vector2 pane)
@@ -189,12 +193,8 @@ public sealed class WorldFlareRig
                     // The shader moves the quad onto the view, so no camera may cull it by bounds.
                     CustomAabb = new Aabb(new Vector3(-1e7f, -1e7f, -1e7f), new Vector3(2e7f, 2e7f, 2e7f)),
                     Visible = false,
+                    Layers = LayerOf(rig),
                 };
-                if (rig.VisualLayer != 0)
-                {
-                    mesh.Layers = rig.VisualLayer;
-                }
-
                 worldRoot.AddChild(mesh);
                 inst.Elements.Add(new Element(i, mesh, material));
             }
@@ -274,6 +274,19 @@ public sealed class WorldFlareRig
                 e.Material.SetShaderParameter("depth_m", depth);
                 e.Material.SetShaderParameter("half_size", HalfSize(Elements[e.Index].DiaPx, tanHalfV));
                 e.Material.SetShaderParameter("gain", Elements[e.Index].Intensity * fade * LookGain(e.Index, enhanced));
+            }
+        }
+    }
+
+    /// <summary>Every element quad with the index of the pane it was built for, in build order: the
+    /// suite reads their layers.</summary>
+    internal IEnumerable<(int Pane, MeshInstance3D Quad)> Quads()
+    {
+        foreach (var inst in _instances)
+        {
+            foreach (var e in inst.Elements)
+            {
+                yield return (inst.Rig.Index, e.Mesh);
             }
         }
     }

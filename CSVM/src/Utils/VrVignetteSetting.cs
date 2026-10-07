@@ -17,7 +17,7 @@ public enum VrVignette
 
 /// <summary>
 /// The headset's comfort vignette as a word: off, mild or strong. It dims the edge of view while the
-/// aircraft turns the view (<c>Flight/Camera/XrVignette.cs</c> holds the curve). The flag beats the
+/// aircraft turns the view (<c>UI/Boards/XrVignette.cs</c> holds the curve). The flag beats the
 /// saved word, which beats off, and no deterministic run reads the file. The composition sets
 /// <see cref="Current"/> at boot and from the options apply, and <c>UI/Boards/ComfortQuads.cs</c>
 /// reads it every frame. docs/architecture/Utils.md.

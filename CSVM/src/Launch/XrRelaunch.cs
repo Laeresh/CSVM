@@ -5,11 +5,11 @@ using CSVM.Spec;
 namespace CSVM.Launch;
 
 /// <summary>
-/// When the game relaunches itself to switch VR mode, and with which arguments. Godot starts OpenXR
+/// When the game restarts itself to switch VR mode, and with which arguments. Godot starts OpenXR
 /// only with the engine, from <c>--xr-mode on</c> ahead of <c>--</c>, so the saved option takes
 /// effect through a new process. A boot with VR mode saved on and no
-/// <c>--xr-mode</c> given relaunches once, and so does a menu apply that changed the option. The
-/// child carries <c>--xr-mode</c> itself, which is what stops a loop. A dev run never relaunches
+/// <c>--xr-mode</c> given restarts once, and so does a menu apply that changed the option. The
+/// child carries <c>--xr-mode</c> itself, which is what stops a loop. A dev run never restarts
 /// (<see cref="FlatOnly"/>). Engine-free, so it unit-tests.
 /// </summary>
 public static class XrRelaunch
@@ -38,7 +38,7 @@ public static class XrRelaunch
         return XrLaunch.Requested(processArgs, projectEnabled: true) ? null : false;
     }
 
-    /// <summary>Why this launch stays flat whatever is saved, or null when it may relaunch. The
+    /// <summary>Why this launch stays flat whatever is saved, or null when it may restart. The
     /// dev modes, the labs, every scripted and pinned run, and the stand-in are flat-only. No test
     /// or golden therefore reads the player's saved VR mode. PC VR is the Windows build's alone.</summary>
     public static string? FlatOnly(SessionSpec spec, bool headless, bool windows)
@@ -58,12 +58,12 @@ public static class XrRelaunch
             : spec.Freecam ? "--freecam"
             : spec.AnimLab ? "--anim-lab"
             : spec.WeaponLab ? "--weapon-lab"
-            : spec.DebugNodeLab != null ? "--debug-node-lab"
+            : spec.DebugNodeLab != null ? "--debug-nodelab"
             : spec.DebugDamage != null ? "--debug-damage"
             : null;
     }
 
-    /// <summary>Whether a launch relaunches into the headset as it boots: VR mode saved on, no
+    /// <summary>Whether a launch restarts into the headset as it boots: VR mode saved on, no
     /// <c>--xr-mode</c> given, and not a flat-only run. An explicit <c>--xr-mode off</c> is a flat
     /// launch asked for by name, and an explicit on already is the headset launch.</summary>
     public static bool AtBoot(bool? saved, bool? mode, string? flatOnly) =>
@@ -73,10 +73,26 @@ public static class XrRelaunch
     /// Godot for OpenXR and no OpenXR session is live, whether or not the stand-in draws.</summary>
     public static bool FellBack(bool requested, bool openXrLive) => requested && !openXrLive;
 
-    /// <summary>The VR mode a menu-side Options apply relaunches into, or null for none. It does
+    /// <summary>What the menu tells the player when the game could not start its new process to
+    /// switch VR mode <paramref name="on"/> or off. This process carries on as it was.</summary>
+    public static string StartFailedNotice(bool on) => on
+        ? "VR mode is on, but the game could not start again in the headset, so it plays flat. "
+          + "Launch it again, or turn VR mode off in Options."
+        : "VR mode is off, but the game could not start again without the headset, so it stays "
+          + "in VR until it is launched again.";
+
+    /// <summary>The notice the menu owes the player at its next show, or null. A failed start
+    /// toward <paramref name="failedStart"/> wins; otherwise <see cref="FallbackNotice"/> where
+    /// <see cref="FellBack"/> says so.</summary>
+    public static string? MenuNotice(bool requested, bool openXrLive, bool? failedStart) =>
+        failedStart is { } on ? StartFailedNotice(on)
+        : FellBack(requested, openXrLive) ? FallbackNotice
+        : null;
+
+    /// <summary>The VR mode a menu-side Options apply restarts into, or null for none. It does
     /// when the player changed the option and the new choice differs from what this launch asked
     /// Godot for (<paramref name="requested"/>). An unchanged row, an apply in a flat-only run, and
-    /// a choice this process already runs under relaunch nothing.</summary>
+    /// a choice this process already runs under restart nothing.</summary>
     public static bool? OnApply(bool? before, bool? chosen, bool requested, string? flatOnly)
     {
         bool now = chosen == true;
@@ -92,7 +108,7 @@ public static class XrRelaunch
     /// Every argument is carried verbatim, engine and user alike, so a dev launch keeps its
     /// <c>--path</c> and its user flags. Each <c>--xr-mode</c> pair ahead of <c>--</c> is dropped.
     /// For <paramref name="on"/>, <c>--xr-mode on</c> goes first. <paramref name="skipIntro"/>
-    /// adds <c>--skip-intro</c> after <c>--</c>, so a relaunch from the menu replays no intro.</summary>
+    /// adds <c>--skip-intro</c> after <c>--</c>, so a restart from the menu replays no intro.</summary>
     public static IReadOnlyList<string> Arguments(IReadOnlyList<string> processArgs, bool on, bool skipIntro)
     {
         ArgumentNullException.ThrowIfNull(processArgs);

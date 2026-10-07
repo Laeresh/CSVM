@@ -1079,6 +1079,11 @@ member, and it does not go here.
   `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
   drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
   during it.
+- **INSTR-101**, **A suite that can go red only in a process no earlier suite has touched (the first
+  TAA draw, a cold cache) passes its regression anywhere else in a shard: mark it
+  `FirstInProcess` so the harness runs it ahead of its shard's other suites.** With the rewrite's
+  keeper removed, `shader-twins-retext-owner` passed as suite 67 of its shard and failed once it
+  ran first there.
 
 ## SRC, sources and documents
 

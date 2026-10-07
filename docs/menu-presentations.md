@@ -302,8 +302,9 @@ at, a scripted run's window being hidden off screen with its capture compared ag
 VR mode is the one option an apply answers with a new process. Both screens offer it, Original on
 its VIDEO page's Clutter Detail line, live on Windows alone. `Launcher.ApplyOptions` saves it and,
 when the player changed it and the running launch did not already ask Godot for that mode,
-relaunches the executable with or without `--xr-mode on` (`CSVM/src/Launch/XrRelaunch.cs`); the
-pause leaf's apply saves it and no more. A launch with it saved on relaunches itself once at boot.
+restarts the executable with or without `--xr-mode on` (`CSVM/src/Launch/XrRelaunch.cs`); the
+pause leaf's apply saves it and no more. A launch with it saved on restarts itself once at boot. A
+new process that fails to start leaves this one running, with a notice at the menu's next show.
 Under a headset or the `--xr-sim` stand-in the shared player setup holds one seat
 (`PlayerSetupFeature.SeatLimit`), so both join boards draw the seats past the captain's closed and a
 local Dogfight's gate says VR flies one seat. The headset's render scale and comfort vignette are

@@ -21,13 +21,28 @@ public sealed class XrShaderCache
     public const string CacheFolder = "shader_cache";
 
     private readonly string _userDir;
+    private readonly int _pid;
     private readonly DateTime _sinceUtc;
     private bool _open = true;
 
-    private XrShaderCache(string userDir, DateTime sinceUtc)
+    private XrShaderCache(string userDir, int pid, DateTime sinceUtc)
     {
         _userDir = userDir;
+        _pid = pid;
         _sinceUtc = sinceUtc;
+    }
+
+    /// <summary>A launch's boot. It first sweeps what a headset launch that never ended left
+    /// (<see cref="Recover"/>). Then it opens a <paramref name="stereo"/> launch's own watch
+    /// (<see cref="Begin"/>), or answers null. <paramref name="recovered"/> is Recover's answer.
+    /// </summary>
+    public static XrShaderCache? Boot(string userDir, bool stereo, int pid, DateTime startUtc,
+        Func<int, DateTime?> liveStartUtc, out int? recovered)
+    {
+        // ⚠ Recover in a headset launch too, and first. Begin overwrites the marker, so a crashed
+        // headset launch restarted straight into the headset would leave its files to the flat game.
+        recovered = Recover(userDir, liveStartUtc);
+        return stereo ? Begin(userDir, pid, startUtc) : null;
     }
 
     /// <summary>Opens the stereo launch's watch: writes the marker naming <paramref name="pid"/>
@@ -37,18 +52,9 @@ public sealed class XrShaderCache
     public static XrShaderCache Begin(string userDir, int pid, DateTime startUtc)
     {
         ArgumentException.ThrowIfNullOrEmpty(userDir);
-        try
-        {
-            Directory.CreateDirectory(userDir);
-            File.WriteAllText(Path.Combine(userDir, MarkerName), string.Create(CultureInfo.InvariantCulture,
-                $"{pid} {startUtc.ToUniversalTime().Ticks}"));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // The end-of-launch sweep still runs; only a crash's recovery is lost.
-        }
-
-        return new XrShaderCache(userDir, startUtc.ToUniversalTime());
+        var watch = new XrShaderCache(userDir, pid, startUtc.ToUniversalTime());
+        watch.WriteMarker();
+        return watch;
     }
 
     /// <summary>A launch's boot over a marker another process left. When that process is gone, it
@@ -143,7 +149,7 @@ public sealed class XrShaderCache
     }
 
     /// <summary>Ends the watch once: deletes every cache file written since the process started,
-    /// then the marker, and answers how many files went. A second call does nothing, so a relaunch
+    /// then the marker, and answers how many files went. A second call does nothing, so a restart
     /// that swept before starting its child never sweeps what the child writes.</summary>
     public int End()
     {
@@ -158,6 +164,24 @@ public sealed class XrShaderCache
         return swept;
     }
 
+    /// <summary>The VR mode restart's order. <see cref="End"/> comes first, since the child's renderer
+    /// reads the cache before any game code runs. Then <paramref name="start"/> answers the child's
+    /// process id, or a negative number for none. A start that failed leaves this launch running, so
+    /// the watch opens again and its own end still sweeps. Answers the id.</summary>
+    public int EndThenStart(Func<int> start, out int swept)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        swept = End();
+        int pid = start();
+        if (pid < 0)
+        {
+            _open = true;
+            WriteMarker();
+        }
+
+        return pid;
+    }
+
     private static void TryDelete(string path)
     {
         try
@@ -167,6 +191,20 @@ public sealed class XrShaderCache
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // A marker left behind is swept again by the next boot, which is harmless.
+        }
+    }
+
+    private void WriteMarker()
+    {
+        try
+        {
+            Directory.CreateDirectory(_userDir);
+            File.WriteAllText(Path.Combine(_userDir, MarkerName), string.Create(CultureInfo.InvariantCulture,
+                $"{_pid} {_sinceUtc.Ticks}"));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The end-of-launch sweep still runs; only a crash's recovery is lost.
         }
     }
 }

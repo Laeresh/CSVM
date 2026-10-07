@@ -31,8 +31,8 @@ public enum VrTuneKnob
 /// </summary>
 public static class VrCockpitTuning
 {
-    /// <summary>One step of <see cref="VrCockpit.InteriorScaleFactor"/>: a millimetre per unit at the
-    /// 0.04 mount, so the measured 0.875 alternative is five steps down.</summary>
+    /// <summary>One step of <see cref="VrCockpit.InteriorScaleFactor"/>, fine enough that the
+    /// measured alternative factor is a whole number of steps (docs/architecture/Flight.md).</summary>
     public const float ScaleStep = 0.025f;
 
     /// <summary>One step of either eye offset, in metres.</summary>

@@ -17,8 +17,8 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class GunsightReticle
 {
-    /// <summary>How far a texel's alpha may stand from the tint's and still be tint. The ringing
-    /// beside a line dips to 26 against the tint's 38, and a texel further off joins the reticle.</summary>
+    /// <summary>How far a texel's alpha may stand from the tint's and still be tint. A texel further
+    /// off joins the reticle, which takes the ringing beside a line with it (docs/org/cameraViews.md).</summary>
     public const int TintTolerance = 6;
 
     /// <summary>The add gain on the reticle's colour under Enhanced, whose AgX tonemap compresses the

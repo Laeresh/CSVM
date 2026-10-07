@@ -605,11 +605,11 @@ capture stays usable for unrelated comparisons. The spec is measured from captur
 and calibration: `git show analysis-archive:analysis/bl-165-lens-flare/FINDINGS.md`.
 
 ## src/Session/World/WorldFlareRig.cs
-The same flare drawn in the world: the core and three rings as view-space quads at sky depth on the
-great circle from the sun to the view axis, so in a flat pane each lands on the screen rig's pixel
-at its size whatever the field of view. The core is depth-tested; the rings skip the seat. Each
-element adds in gamma space over the opaque picture, as the canvas does. Every stereo and every flat
-Enhanced session builds it in place of `LensFlareRig` (`--screen-flare` restores the screen rig in
-flat Enhanced; `Launch/SkyStage.cs` chooses at the build); stereo places it for the tracked head and
-hands its wash to `UI/Boards/HeadLockedQuads`. AgX tonemaps these quads and not the canvas, so under
-Enhanced the rings take a per-ring gain (`EnhancedGain`, measured in `docs/org/weather.md`).
+The same flare drawn in the world: the core and three rings as view-space quads at sky depth on the great circle from
+the sun to the view axis, so in a flat pane each lands on the screen rig's pixel at its size whatever the field of view.
+The core is depth-tested; the rings skip the seat. Each element adds in gamma space over the opaque picture, as the
+canvas does. Every stereo and every flat Enhanced session builds it in place of `LensFlareRig` (`--screen-flare` restores
+the screen rig in flat Enhanced; `Launch/SkyStage.cs` chooses at the build); stereo places it for the tracked head and
+hands its wash to `UI/Boards/HeadLockedQuads`. AgX tonemaps these quads and not the canvas, so under Enhanced the rings
+take a per-ring gain (`EnhancedGain`, measured in `docs/org/weather.md`). Each pane's quads stand on its own
+`UI.Boards.SplitScreen.WorldFlareLayer` (`LayerOf`), which no picture camera draws.

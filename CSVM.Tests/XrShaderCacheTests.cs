@@ -35,10 +35,81 @@ public class XrShaderCacheTests
         Assert.True(File.Exists(other));
         Assert.False(File.Exists(Path.Combine(user, XrShaderCache.MarkerName)));
 
-        // Once only: what a relaunched child writes after the sweep is never the parent's to take.
+        // Once only: what a restarted child writes after the sweep is never the parent's to take.
         string child = Cache(user, "VrsShaderRD/bb/child.vulkan.cache", Start.AddMinutes(1));
         Assert.Equal(0, watch.End());
         Assert.True(File.Exists(child));
+    }
+
+    [Fact]
+    public void AHeadsetBootOverADeadHeadsetLaunchsMarkerSweepsItFirst()
+    {
+        string user = TestData.TempDir();
+        string flat = Cache(user, "A/x/flat.vulkan.cache", Start.AddMinutes(-5));
+        string crashed = Cache(user, "A/x/crashed.vulkan.cache", Start.AddMinutes(5));
+        XrShaderCache.Begin(user, 4242, Start);
+        var restart = Start.AddHours(1);
+
+        var watch = XrShaderCache.Boot(user, stereo: true, 5151, restart, _ => null, out int? recovered);
+
+        Assert.Equal(1, recovered);
+        Assert.True(File.Exists(flat));
+        Assert.False(File.Exists(crashed));
+        Assert.Equal($"5151 {restart.Ticks}", File.ReadAllText(Path.Combine(user, XrShaderCache.MarkerName)));
+        Assert.NotNull(watch);
+        Assert.Equal(0, watch!.End());
+    }
+
+    [Fact]
+    public void AFlatBootSweepsTheDeadMarkerAndOpensNoWatch()
+    {
+        string user = TestData.TempDir();
+        string crashed = Cache(user, "A/x/crashed.vulkan.cache", Start.AddMinutes(5));
+        XrShaderCache.Begin(user, 4242, Start);
+
+        Assert.Null(XrShaderCache.Boot(user, stereo: false, 5151, Start.AddHours(1), _ => null, out int? recovered));
+        Assert.Equal(1, recovered);
+        Assert.False(File.Exists(crashed));
+        Assert.False(File.Exists(Path.Combine(user, XrShaderCache.MarkerName)));
+    }
+
+    [Fact]
+    public void ARestartWhoseStartFailedOpensTheWatchAgainSoTheLaunchsOwnEndStillSweeps()
+    {
+        string user = TestData.TempDir();
+        string before = Cache(user, "A/x/before.vulkan.cache", Start.AddSeconds(5));
+        var watch = XrShaderCache.Begin(user, 4242, Start);
+
+        Assert.Equal(-1, watch.EndThenStart(() => -1, out int swept));
+        Assert.Equal(1, swept);
+        Assert.False(File.Exists(before));
+        Assert.Equal($"4242 {Start.Ticks}", File.ReadAllText(Path.Combine(user, XrShaderCache.MarkerName)));
+
+        // The launch carries on in the headset and compiles more; its end takes those too.
+        string after = Cache(user, "A/x/after.vulkan.cache", Start.AddMinutes(10));
+        Assert.Equal(1, watch.End());
+        Assert.False(File.Exists(after));
+        Assert.False(File.Exists(Path.Combine(user, XrShaderCache.MarkerName)));
+    }
+
+    [Fact]
+    public void ARestartWhoseStartSucceededLeavesTheChildsFilesAlone()
+    {
+        string user = TestData.TempDir();
+        var watch = XrShaderCache.Begin(user, 4242, Start);
+        bool sweptFirst = false;
+
+        Assert.Equal(777, watch.EndThenStart(() =>
+        {
+            sweptFirst = !File.Exists(Path.Combine(user, XrShaderCache.MarkerName));
+            return 777;
+        }, out _));
+        string child = Cache(user, "A/x/child.vulkan.cache", Start.AddMinutes(10));
+
+        Assert.True(sweptFirst);
+        Assert.Equal(0, watch.End());
+        Assert.True(File.Exists(child));
+        Assert.False(File.Exists(Path.Combine(user, XrShaderCache.MarkerName)));
     }
 
     [Fact]

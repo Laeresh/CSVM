@@ -491,6 +491,7 @@
     "wingman-lost-leader": 0.449,
     "wingman-station": 1.513,
     "world-emitter-ambience": 2.65,
+    "world-flare-layers": 0.1,
     "world-flare-pixels": 0.01,
     "world-lights-enhanced-budget": 0.03,
     "world-lights-nearest-viewer": 0.002,

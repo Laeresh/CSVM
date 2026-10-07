@@ -254,7 +254,7 @@ public sealed class OptionsDef
     public string? NetMasterServer { get; set; }
 
     /// <summary>Whether the game starts in a PC VR headset through OpenXR. Godot starts OpenXR only
-    /// with the engine, so a launch that did not ask for it relaunches itself
+    /// with the engine, so a launch that did not ask for it restarts itself
     /// (<c>Launch/XrRelaunch.cs</c>). Null is "never set" and reads as off. ⚠ Read only where that
     /// module's dev-run rule allows, never under <c>--det</c> or <c>--run-tests</c>.</summary>
     public bool? VrMode { get; set; }

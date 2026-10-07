@@ -110,6 +110,15 @@ public sealed partial class DangerZonePhotograph : SubViewport
         return new Transform3D(LookAt(eye, target), eye);
     }
 
+    /// <summary>The photograph's cull mask from its pane's <paramref name="paneMask"/>. It stands
+    /// outside every aeroplane, so it draws the airframe a first-person pilot hides from the pane
+    /// (<see cref="SplitScreen.OutsideCullMask"/>). ⚠ Keep the headset's two layers and the world
+    /// flare's band out. Their quads place themselves for whichever camera draws them, and the
+    /// photograph has no screen effects.</summary>
+    public static uint PhotoMask(uint paneMask) =>
+        SplitScreen.OutsideCullMask(paneMask)
+        & ~(SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer | SplitScreen.WorldFlareBand);
+
     /// <summary>The eye's turn toward <paramref name="target"/> as the original builds it: a yaw
     /// and a pitch off the two positions and a zero roll. Unlike a look-at against an up vector it
     /// has an answer when the target is straight above or below.</summary>
@@ -179,10 +188,7 @@ public sealed partial class DangerZonePhotograph : SubViewport
         _camera.Far = _pane.Far;
         _camera.Environment = _pane.Environment;
         _camera.Attributes = _pane.Attributes;
-        // Outside every aeroplane, so it draws the airframe a first-person pilot hides from the pane.
-        // Never the headset's own layers: they place themselves for whichever camera draws them.
-        _camera.CullMask = SplitScreen.OutsideCullMask(_pane.CullMask)
-            & ~(SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer);
+        _camera.CullMask = PhotoMask(_pane.CullMask);
         Fill(_camera.Transform.Origin);
         RenderTargetUpdateMode = UpdateMode.Once;
         _drawing = true;

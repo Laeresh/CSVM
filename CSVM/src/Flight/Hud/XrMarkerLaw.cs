@@ -11,17 +11,17 @@ namespace CSVM.Flight.Hud;
 public static class XrMarkerLaw
 {
     /// <summary>The ring's angular radius about the head's view axis, degrees. A marker further off
-    /// the axis than this leaves the world for the ring. TUNE: the flat views' 5 percent inset sits
-    /// 29.5 degrees above the cockpit view's centre and 21.3 above the chase view's.</summary>
+    /// the axis than this leaves the world for the ring. TUNE, between where the flat views' edge
+    /// inset sits in Cockpit and in chase (docs/architecture/Flight.md).</summary>
     public const float RingDeg = 25f;
 
-    /// <summary>How much wider than the flat disc the ring's spyglass picture is drawn. TUNE: at 21
-    /// headset pixels per degree it spans 104 pixels in Nose and 151 in Cockpit. The flat angle gives
-    /// 69 and 101, against a 1440p screen's 96.</summary>
+    /// <summary>How much wider than the flat disc the ring's spyglass picture is drawn. A headset's
+    /// lower pixel density would otherwise show it smaller than a flat screen's disc. TUNE
+    /// (docs/architecture/Flight.md).</summary>
     public const float SpyglassScale = 1.5f;
 
-    /// <summary>Picture texels per reference pixel of the ring's spyglass disc. That is about twice a
-    /// headset's pixels in Cockpit, so the picture is filtered down. TUNE.</summary>
+    /// <summary>Picture texels per reference pixel of the ring's spyglass disc, more than a headset
+    /// shows, so the picture is filtered down. TUNE.</summary>
     public const float SpyglassTexelsPerRef = 2f;
 
     /// <summary>The ring's spyglass picture's radius, reference pixels: the flat disc's

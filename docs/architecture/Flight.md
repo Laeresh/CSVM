@@ -344,7 +344,9 @@ builds it and hands it the seat (`XrTuneSeat`) and the swap; it acts through `Xr
 Arithmetic and writer: `VrCockpitTuning.cs`. Controls: docs/controls.md.
 
 ## src/Flight/Hud/VrCockpitTuning.cs
-The tuning lab's engine-free parts: a step of each field on the file's grid and range, the plane
+The tuning lab's engine-free parts: a step of each field on the file's grid and range (`ScaleStep`
+0.025 is a millimetre per unit at the 0.04 mount, so the measured 0.875 alternative is five steps
+down; an eye offset steps 10 mm), the plane
 order, the readout text, the held input's repeat (`VrTuneRepeat`), and `TryRewrite`, which writes one
 plane's numbers into the file's own bytes, adding a field or an entry where missing, and refuses a
 rewrite that would not read back with every other entry unchanged.
@@ -352,9 +354,9 @@ rewrite that would not read back with every other entry unchanged.
 ## src/Flight/Hud/XrMarkers.cs
 The flight markers of a stereo session, which draws no canvas layer: the pipper (`ImpactReticle`),
 `TargetHud`'s and the dogfight HUD's `WorldMark`s. Each is drawn by the flat HUD's own code into a
-small 2D surface, its card, at `CardScale` texels per reference pixel. A marker within
-`XrMarkerLaw.RingDeg` of the view axis stands at its world point (clamped to `MaxDistanceM`), facing
-the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
+small 2D surface, its card, at `CardScale` texels per reference pixel (in the flat cockpit view a reference pixel spans
+about 0.045 degrees, under one headset pixel). A marker within `XrMarkerLaw.RingDeg` of the view axis stands at its world
+point (clamped to `MaxDistanceM`), facing the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
 arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
 `MarksInWorld` stops their own drawing; `AnswerSpyglass` then answers `TargetHud`'s spyglass gates off the
 head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
@@ -385,12 +387,14 @@ with or without the eye feed. Defaults are TUNE at the headset; coverage is
 `CSVM.Tests/XrHudPanelLayoutTests.cs`, and the suite `xr-hud-panel` reads the live panel.
 
 ## src/Flight/Hud/XrMarkerLaw.cs
-The stereo markers' geometry, engine-free: the tangent one flat HUD reference pixel spans in a view
-of a given vertical angle, a point's place in the head's frame and its angle off the view axis, the
-`RingDeg` cone that sends a marker from the world to the ring, the ring's bearing (dead astern points
-down, as `EdgeMarker` does), a world card's facing axes and a label's inward step, and the ring's
-spyglass disc: `SpyglassScale` times the flat disc, its texel side and its place inside the arrow. Coverage is
-`CSVM.Tests/XrMarkerLawTests.cs`; `XrMarkers.cs` is the user.
+The stereo markers' geometry, engine-free: the tangent one flat HUD reference pixel spans in a view of a given vertical
+angle, a point's place in the head's frame and its angle off the view axis, the `RingDeg` cone that sends a marker from
+the world to the ring (25 degrees, TUNE: the flat views' 5 percent edge inset sits 29.5 degrees above the cockpit view's
+centre and 21.3 above the chase view's), the ring's bearing (dead astern points down, as `EdgeMarker` does), a world
+card's facing axes and a label's inward step, and the ring's spyglass disc: `SpyglassScale` 1.5 times the flat disc (at
+21 headset pixels per degree it spans 104 pixels in Nose and 151 in Cockpit, where the flat angle gives 69 and 101
+against a 1440p screen's 96), its texel side at `SpyglassTexelsPerRef` (about twice a headset's pixels in Cockpit) and
+its place inside the arrow. `CSVM.Tests/XrMarkerLawTests.cs` covers it; `XrMarkers.cs` is the user.
 
 ## src/Flight/Hud/WorldMark.cs
 One marker a flat HUD draws at a world point, as data: its style (`WorldMarkStyle`: the selection's
@@ -506,7 +510,7 @@ The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCaptu
 `dist` ahead on the nose's level heading, a world-axis scatter of 0.15, 0.25 and 0.15 `dist`, and a
 roll-free look back at the aircraft. The node is a `SubViewport` on the pane's world that poses its
 camera in `_Process` after the controller's, at the external FOV with no HUD, draws a first-person
-pilot's airframe through `UI.Boards.SplitScreen.OutsideCullMask`, arms the fill light (`csky_photo_eye`) on its pilot's
+pilot's airframe through `PhotoMask` (`UI.Boards.SplitScreen.OutsideCullMask` less the headset's layers and the world flare's band), arms the fill light (`csky_photo_eye`) on its pilot's
 instances, renders once, and disarms and reads back on the frame after that draw was issued. Decode:
 [../formats/campaign-screens.md](../formats/campaign-screens.md), "The danger-zone slot".
 
@@ -820,8 +824,8 @@ own, one per pane, hung on `TargetHud` so it sits inside that pane's viewport. `
 planes and cull mask and starts it rendering; `Idle` stops it. The world is inherited rather than
 owned, so the target is the one in play and wears the flown zone's fog. `DiscMask` departs from the
 pane's view: the pilot's own aeroplane's layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by
-`Session/HumanFlightAdapter`) is dropped, and under Enhanced the sun is traded for `SpyglassSun.cs`.
-Under a headset (`Headset`) it also drops the headset's two layers. `Census` is the `--perf` spyglass line. `TargetHud.DrawDisc` masks it to a circle; a headset shows it through `Hud/XrSpyglassDisc.cs`.
+`Session/HumanFlightAdapter`) is dropped, so is the world flare's band (`UI.Boards.SplitScreen.WorldFlareBand`),
+and under Enhanced the sun is traded for `SpyglassSun.cs`. Under a headset (`Headset`) it also drops the headset's two layers. `Census` is the `--perf` spyglass line. `TargetHud.DrawDisc` masks it to a circle; a headset shows it through `Hud/XrSpyglassDisc.cs`.
 
 ## src/Flight/Camera/SpyglassSun.cs
 The spyglass discs' own sun under Enhanced: a shadowless `DirectionalLight3D` on

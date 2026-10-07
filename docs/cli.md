@@ -97,8 +97,9 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 **Written exceptions to "one flag, one bullet":** `--spawn-dir` shares `--spawn-at`'s bullet, since
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
-section further down. The counts reconcile as **161 index entries, 161 parser flags and 162 bullet
-lines**.
+section further down; `--perf` carries four further bullets for its other readouts, and
+`--dump-sticks` and `--menu` one more each. The counts reconcile as **209 index entries, 209 parser
+flags and 216 bullet lines**.
 
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world for deterministic weather, fog and edge screenshots. It hosts three labs, always built and needing no extra flag: the damage lab on **F19**, the livery lab on **L** and the mesh lab on **M**. All three start hidden, so an unadorned `--viewer` screenshot matches the pre-paint viewer. F19 toggles the damage lab as a whole, slider panel and HUD gauges together; the panel's own checkbox controls the gauges while it is up. **P** halts the simulation and **`.`** advances one frame)
@@ -418,7 +419,7 @@ lines**.
 - `--xr-render-scale=50|60|70|80|90|100|125` (**the headset's eye size as a percentage of the runtime's recommendation**, OpenXR's render target multiplier, applied live: Godot recreates the swapchain on the next frame. It cuts the GPU's work and the runtime's compositing alike, and multiplies with the flat render scale inside it. Beats the saved Options row (`vrRenderScale`), which no `--det` run reads; an unknown word is ignored with a note. Logs `xr: render scale <s> eye_px=WxH`. `Utils/VrRenderScaleSetting.cs`)
 - `--xr-vignette=off|mild|strong` (**the headset's tunnel vignette**, default `off`: the edge of view darkens while the aircraft turns the view, from 20 to 90 deg/s, the clear cone closing to 40 (mild) or 28 (strong) degrees. Beats the saved Options row (`vrVignette`), which no `--det` run reads; an unknown word is ignored with a note. A flat launch never reads either flag. `UI/Boards/XrVignette.cs`)
 - `--xr-quality=vr|flat` (**which render settings a headset session flies at**, default `vr`: the VR quality profile, anti-aliasing off, the project's 4x MSAA, shadow quality `low` and foveation off, in place of the saved flat options, so a stereo frame at the runtime's eye size holds 90 Hz. `flat` keeps the flat options. `--anti-aliasing`, `--msaa`, `--shadow-quality` and `--xr-foveation` beat either. Logs `[world] vr quality: profile=...`; a flat launch never reads it. `Utils/VrQuality.cs`)
-- `--xr-foveation=on|off` (**whether a headset shades the edges of each eye coarser**, Godot's XR variable-rate shading on the root viewport; default `off` under either profile. Full rate round each eye's centre; on the stand-in it saved about 0.9 ms at 3072x3264 per eye and pulled the edge's textures toward coarser mips. Needs Vulkan and a GPU with fragment shading rate; a flat launch never reads it)
+- `--xr-foveation=on|off` (**whether a headset shades the edges of each eye coarser**, Godot's XR variable-rate shading on the root viewport; default `off` under either profile. Full rate round each eye's centre; on the stand-in it saves about 0.9 ms at 3072x3264 per eye and pulls the edge's textures toward coarser mips. Needs Vulkan and a GPU with fragment shading rate; a flat launch never reads it)
 - `--look=x,y` (**hold a right-stick look deflection for the whole run**, the scripted twin of pushing the look stick and the only way a headless run aims it. Both components are clamped to `[−1, 1]`, `+x` right and `+y` up; a malformed pair warns and leaves the stick centred. It drives **both** halves of the look-around from one value: outside first person it swings the camera around the plane, and in `--view=cockpit`/`=nose` it aims the head, over one shared envelope (±150° round, ±60° up and down, see [`controls.md`](controls.md)). A live stick beats it while deflected)
 - `--campos=x,y,z` (**deprecated**, the pre-A5 camera-only spelling of `--pos`; logs `WARN [core] deprecated flag=--campos use=--pos` once per run, then behaves identically. It never placed the plane and still does not, so it is not simply a rename of `--pos` in `--fly`. Where both reach the same camera (`--freecam`, `--anim-lab`), `--pos` wins)
 - `--screenshot=<path>` (render a few frames, save a PNG, quit. Implies `--no-focus` and `--det`, so a bare `--screenshot` is reproducible with no other flags; `--no-det` opts out. The hidden window still renders, a minimized one does not (SHOT-16). Every capture prints `[core] shot pixmd5=<md5> size=<WxH> gpu=<adapter / api>`, the md5 of the raw pixel buffer rather than of the PNG (SHOT-6), which is what the golden tripwire compares; copying it into `analysis/goldens/manifest.json` turns the shot into a golden, see `analysis/goldens/README.md`)
@@ -495,13 +496,14 @@ after it. `RunGame.ps1 -EngineArgs '<arg>','<value>'` and `RunProbe.ps1 -EngineA
 
 **VR mode and `--xr-mode`.** The Options row (Original's VIDEO page, on the Clutter Detail line;
 Built-in's Options screen) saves `vrMode` in `options.json`. Applied from the menu with a change, it
-relaunches the executable with `--xr-mode on` placed first, every other argument (engine and user)
-carried verbatim and `--skip-intro` added; turning it off relaunches without the flag. A launch with
-VR mode saved on and no `--xr-mode` relaunches itself once at boot, and `--xr-mode off` keeps a launch
-flat by name. The child carries the flag, so it never relaunches again: a runtime that does not start
-leaves the flat game with a notice on the menu. A run that is `--det`, `--run-tests`, scripted,
-`--headless`, `--xr-sim`, a dev mode, a lab, `--net-host`/`--net-join` or not on Windows never
-relaunches and never reads the saved choice (`Launch/XrRelaunch.cs`). Under a headset or `--xr-sim`
+restarts the executable with `--xr-mode on` placed first, every other argument (engine and user)
+carried verbatim and `--skip-intro` added; turning it off restarts it without the flag. A launch with
+VR mode saved on and no `--xr-mode` restarts itself once at boot, and `--xr-mode off` keeps a launch
+flat by name. The child carries the flag, so it never restarts again: a runtime that does not start
+leaves the flat game with a notice on the menu, and so does a new process that fails to start. A run
+that is `--det`, `--run-tests`, scripted, `--headless`, `--xr-sim`, a dev mode, a lab,
+`--net-host`/`--net-join` or not on Windows never restarts for VR mode and never reads the saved
+choice (`Launch/XrRelaunch.cs`). Under a headset or `--xr-sim`
 the game flies one seat: `--players` above one is refused with a warning and the join boards close
 the other seats. A headset flight opens in Cockpit unless `--view=` names a view, whatever the saved
 Default View, and its head look, look-behind and chase swing are off (`docs/org/cameraViews.md`,

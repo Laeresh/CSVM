@@ -196,7 +196,7 @@ public class SpyglassTests
     }
 
     [Fact]
-    public void TheDiscDropsThePilotsOwnAirframeAndNothingElse()
+    public void TheDiscDropsThePilotsOwnAirframeAndTheWorldFlareAndNothingElse()
     {
         uint own = SplitScreen.OwnAirframeLayer(0);
         uint pane = SplitScreen.PlayerCullMask(0);
@@ -204,7 +204,9 @@ public class SpyglassTests
 
         Assert.Equal(0u, disc & own);
         Assert.NotEqual(0u, pane & own);            // the control: the pane itself still draws it
-        Assert.Equal(pane & ~own, disc);
+        Assert.NotEqual(0u, pane & SplitScreen.WorldFlareLayer(0));
+        Assert.Equal(0u, disc & SplitScreen.WorldFlareBand);
+        Assert.Equal(pane & ~own & ~SplitScreen.WorldFlareBand, disc);
         Assert.NotEqual(0u, disc & 1u);             // the shared world's own layer 1
         for (int other = 1; other < 4; other++)
         {
@@ -227,6 +229,7 @@ public class SpyglassTests
                 | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
             SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)
                 | SplitScreen.PlayerVisualLayer(2) | SplitScreen.PlayerVisualLayer(3),
+            SplitScreen.WorldFlareBand,
         };
         foreach (uint band in taken)
         {
@@ -258,6 +261,7 @@ public class SpyglassTests
                 | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
             SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)
                 | SplitScreen.PlayerVisualLayer(2) | SplitScreen.PlayerVisualLayer(3),
+            SplitScreen.WorldFlareBand,
         };
         foreach (uint band in taken)
         {
@@ -275,8 +279,8 @@ public class SpyglassTests
             Assert.Equal(0u, pane & SplitScreen.SpyglassSunLayer);
             Assert.Equal(0u, disc & SplitScreen.SunLayer);
             Assert.NotEqual(0u, disc & SplitScreen.SpyglassSunLayer);
-            // Nothing else moves: the world, the zone gate and every other airframe stay as the pane has them.
-            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer, disc & ~SplitScreen.SpyglassSunLayer);
+            // Nothing else moves but the world flare: the world, the zone gate and every other airframe stay as the pane has them.
+            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer & ~SplitScreen.WorldFlareBand, disc & ~SplitScreen.SpyglassSunLayer);
         }
 
         // The single-player camera, whose mask the launcher's fresh camera starts at all 20 layers.

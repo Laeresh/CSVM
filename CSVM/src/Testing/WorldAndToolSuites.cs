@@ -472,7 +472,7 @@ internal static class WorldAndToolSuites
 
             uint ownPane = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(0), 0);
             uint otherPane = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1), 1);
-            uint photo = SplitScreen.OutsideCullMask(ownPane);
+            uint photo = Flight.Modes.DangerZonePhotograph.PhotoMask(ownPane);
             ctx.Check(DrawnBy(body, ownPane).Shown > 0, $"the body carries drawables {DrawnBy(body, ownPane)}");
             cockpit.Apply(PilotViewMode.Cockpit, firstPerson: true);
             ctx.Check(interior.Visible && DrawsNone(body, ownPane) && DrawsAll(dontmove, ownPane),

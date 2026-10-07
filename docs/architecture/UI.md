@@ -580,7 +580,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
 skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
-by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names. `HeadsetLayer` carries the theater screen and laser, which a picture camera (the stereo cutscene's) leaves out. `HeadOverlayLayer` carries the head-locked quads and the flight markers, which the cutscene pair draws and the spyglass picture leaves out with `HeadsetLayer`.
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names. `HeadsetLayer` carries the theater screen and laser, which a picture camera (the stereo cutscene's) leaves out. `HeadOverlayLayer` carries the head-locked quads and the flight markers, which the cutscene pair draws and the spyglass picture leaves out with `HeadsetLayer`. `WorldFlareLayer`, one per seat in bits 20 to 23, above Godot's 20 named layers, carries that seat's world flare: only its pane (`PlayerCullMask`, or `PaneCullMask` for the first) draws it, and the spyglass and photograph drop the whole `WorldFlareBand`.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -1029,8 +1029,8 @@ definition persisted data.
 
 ## src/UI/Menu/MenuNoticeFeature.cs
 One notice the launcher posts for the player to read at the menu's next show, whichever
-presentation is active: today only VR mode falling back to the flat game
-(`Launch/XrRelaunch.cs`'s `FallbackNotice`). Built-in writes it on its error line
+presentation is active: today only VR mode's, the flat game it fell back to or a restart whose new
+process did not start (`Launch/XrRelaunch.cs`'s `MenuNotice`). Built-in writes it on its error line
 (`LaunchMenu.ShowError`) and Original raises it as the one-button warning box
 (`OriginalShell.ShowNotice`); each takes it once, and a switch keeps one nothing has shown.
 

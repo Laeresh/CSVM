@@ -338,7 +338,8 @@ internal static class GraphicsSwitchSuites
         + "first switch to Enhanced, a TAA frame then builds the advanced variants, and a new material "
         + "on it still draws the Enhanced text's colour with no engine error: the rewrite keeps a "
         + "material on the shader, so Godot recompiles it before that frame (docs/verification.md "
-        + "LOG-26). Red only as the first TAA draw of its process, so run it alone with -Suite")]
+        + "LOG-26). Red only as the first TAA draw of its process, so it runs first in its process, "
+        + "a shard of the battery included", FirstInProcess = true)]
     internal static void RetextOwner(TestContext ctx)
     {
         bool wasEnhanced = GraphicsMode.Enhanced;
@@ -734,6 +735,9 @@ internal static class GraphicsSwitchSuites
             bool copy = (disc & UI.Boards.SplitScreen.SpyglassSunLayer) != 0;
             ctx.Check(fromPane && sun != enhanced && copy == enhanced,
                 $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun" : "the sun itself")} (0x{disc:X5}: sun {sun}, copy {copy})");
+            ctx.Check((disc & UI.Boards.SplitScreen.WorldFlareBand) == 0
+                && panes.Any(p => (p.Camera.CullMask & UI.Boards.SplitScreen.WorldFlareLayer(p.Index)) != 0),
+                $"{label}: and leaves out the world flare, which its pane draws (0x{disc:X6})");
         }
     }
 

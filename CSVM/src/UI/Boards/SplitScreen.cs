@@ -12,9 +12,9 @@ namespace CSVM.UI.Boards;
 /// Each player owns one layer of a reserved band (<see cref="PlayerLayerBit0"/>) for
 /// camera-anchored singletons like the skydome, which <see cref="PlayerCullMask"/> keeps private.
 /// Every pane is a 3D audio listener (docs/architecture.md), or a splitscreen session has no
-/// listener at all. The zone-gate, <see cref="OwnAirframeLayer"/> and
-/// <see cref="FirstPersonLayer"/> bands, <see cref="HeadsetLayer"/> and <see cref="HeadOverlayLayer"/>
-/// are separate allocations of the same 20 layers.
+/// listener at all. The zone-gate, <see cref="OwnAirframeLayer"/> and <see cref="FirstPersonLayer"/>
+/// bands, <see cref="HeadsetLayer"/> and <see cref="HeadOverlayLayer"/> share the 20 named layers;
+/// <see cref="WorldFlareBand"/> sits above them.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -47,6 +47,11 @@ public sealed partial class SplitScreen : CanvasLayer
     /// shows the world alone.</summary>
     public const uint HeadOverlayLayer = 1u << 5;
 
+    /// <summary>The band <see cref="WorldFlareLayer"/> takes its bits from, bits 20 to 23. Every
+    /// picture camera standing in the world for its own view (the spyglass disc, the Danger Zone
+    /// photograph) drops the whole band.</summary>
+    public const uint WorldFlareBand = 0xFu << 20;
+
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
     // range free for future use.
@@ -66,6 +71,10 @@ public sealed partial class SplitScreen : CanvasLayer
     // onto it leaves exactly one pilot's view (OwnViewCullMask).
     private const int FirstPersonBit0 = 1;
     private const uint FirstPersonBand = 0xFu << FirstPersonBit0;
+
+    // First bit of WorldFlareBand, the four bits above Godot's 20 named layers, which the other
+    // bands fill. The renderer culls on all 32 bits; the editor's own gizmos use bits 24 to 27.
+    private const int WorldFlareBit0 = 20;
 
     // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
     // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
@@ -163,14 +172,23 @@ public sealed partial class SplitScreen : CanvasLayer
     public static string PlayerTag(int index) => $"P{index + 1}";
 
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
-    /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
+    /// reserved per-player band (the shared world, all aircraft). It adds only this player's own bit
+    /// and this player's <see cref="WorldFlareLayer"/>.</summary>
     public static uint PlayerCullMask(int index) =>
-        (AllLayers & ~PlayerBand & ~SpyglassSunLayer) | PlayerVisualLayer(index);
+        (AllLayers & ~PlayerBand & ~SpyglassSunLayer) | PlayerVisualLayer(index) | WorldFlareLayer(index);
 
     /// <summary><paramref name="mask"/> less <see cref="SpyglassSunLayer"/>, with every
-    /// <see cref="FirstPersonLayer"/> back, for a pane camera <see cref="PlayerCullMask"/> did not
-    /// build. That is the main camera, which outlives a session whose pilot dropped a bit.</summary>
-    public static uint PaneCullMask(uint mask) => OutsideCullMask(mask) & ~SpyglassSunLayer;
+    /// <see cref="FirstPersonLayer"/> back and the first pane's <see cref="WorldFlareLayer"/>, for a
+    /// pane camera <see cref="PlayerCullMask"/> did not build. That is the main camera, which
+    /// outlives a session whose pilot dropped a bit. A headset draws through it too.</summary>
+    public static uint PaneCullMask(uint mask) => (OutsideCullMask(mask) & ~SpyglassSunLayer) | WorldFlareLayer(0);
+
+    /// <summary>The layer player <paramref name="index"/>'s world flare quads are drawn on
+    /// (<c>Session/World/WorldFlareRig.cs</c>). Only that player's pane camera draws it. ⚠ Keep it off
+    /// every picture camera (<see cref="WorldFlareBand"/>). Each quad places itself for whichever
+    /// camera draws it, so a picture would show a misplaced flare.</summary>
+    public static uint WorldFlareLayer(int index) =>
+        1u << (WorldFlareBit0 + Mathf.PosMod(index, MaxPlayers));
 
     /// <summary>The visual layer player <paramref name="index"/>'s own airframe groups move onto
     /// while that pilot looks out of the aeroplane (<see cref="Flight.Hud.CockpitVisibility"/>).

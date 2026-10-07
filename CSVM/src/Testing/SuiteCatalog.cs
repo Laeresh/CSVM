@@ -38,10 +38,10 @@ public static class SuiteCatalog
         name.Equals("quick", StringComparison.OrdinalIgnoreCase) ? QuickTier : null;
 
     /// <summary>Every marked body, ordered by name. ⚠ Keep this order deterministic and
-    /// machine-independent: <see cref="SuiteShards"/> breaks balancer ties on registry position and
-    /// sorts each shard by it, so a rerun divides the same way only if the order does not move.
+    /// machine-independent. <see cref="SuiteShards"/> breaks balancer ties on registry position and
+    /// sorts each shard by it. A rerun then divides the same way only if the order does not move.
     /// Reflection order does not qualify; alphabetical does. No suite depends on running after
-    /// another.</summary>
+    /// another; the harness runs one marked <see cref="SuiteAttribute.FirstInProcess"/> first.</summary>
     internal static IReadOnlyList<TestHarness.Suite> Discover()
     {
         var found = new List<TestHarness.Suite>();
@@ -56,7 +56,7 @@ public static class SuiteCatalog
                 {
                     continue;
                 }
-                found.Add(new TestHarness.Suite(mark.Name, mark.What, Body(method, mark, seen)));
+                found.Add(new TestHarness.Suite(mark.Name, mark.What, Body(method, mark, seen), mark.FirstInProcess));
             }
         }
         found.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));

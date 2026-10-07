@@ -159,8 +159,9 @@ internal static class XrTuneSuites
                 $"stick right scales the lifted interior by one step, {before:0.#####} to {after:0.#####} m per unit");
             ctx.Check(interiorEye.DistanceTo(marker) < EyeTol,
                 $"about the authored eye, which stays on the marker ({Mm(interiorEye.DistanceTo(marker))})");
-            ctx.Check(FirstGeometry(interior) is not { } geometry || geometry.CustomAabb == XrCockpit.Everywhere(Vector3.One * cockpit.MountScale),
-                $"and the lifted geometry's reach follows the new scale");
+            var geometry = FirstGeometry(interior);
+            ctx.Check(geometry != null && geometry.CustomAabb == XrCockpit.Everywhere(Vector3.One * cockpit.MountScale),
+                $"and the lifted geometry's reach follows the new scale ({(geometry != null ? geometry.Name : "the interior holds no geometry")})");
             ctx.Check(tuner.Readout.Contains("scale 1.025 (41.0 mm per unit)", StringComparison.Ordinal) && tuner.Readout.Contains("unsaved", StringComparison.Ordinal),
                 $"the readout shows the nudged values as unsaved");
 

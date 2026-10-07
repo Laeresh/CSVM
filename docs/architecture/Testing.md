@@ -16,11 +16,11 @@ states the rule binding each. A check that needs a live Godot belongs in `CSVM/s
 instead; read `TestHarness.cs` for that half.
 
 ## src/Testing/TestHarness.cs
-`--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
-scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld`
-chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
-`TestContext.ScratchDir`, and the process exit code. `Select` is the pure selector over the flag's
-value; `SuiteShards` handles the one term that divides rather than selects. The world cache and its
+`--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a scene-tree host,
+`SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld` chapter-world builder over `WorldSession`),
+the PASS/FAIL/SKIP table, `test-report.json` in `TestContext.ScratchDir`, and the process exit code. `Select` is the pure
+selector over the flag's value; `SuiteShards` handles the one term that divides rather than selects, and
+`FirstInProcessFirst` runs a suite marked `FirstInProcess` ahead of the rest of its process (verification INSTR-101). The world cache and its
 eviction, the mission-override and private-world forms, the shared `DecodeCache`, the per-build
 `StartupProfile`, the between-suite queued-free flush and the engine-error allowlist carry their
 own rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.

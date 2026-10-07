@@ -688,7 +688,8 @@ authored eye sees along that direction, so the reticle has no disparity and keep
 place and angular size. The tint, the frame line and the sight body stay on the glass at its depth.
 
 Which texels are reticle is read off the alpha: the texels off the tint by more than 6 levels group
-8-connected, and the reticle is the group at the centre plus every group clear of the second texel
+8-connected (the ringing beside a line dips to alpha 26 against the tint's 38, so it joins the
+reticle rather than the tint), and the reticle is the group at the centre plus every group clear of the second texel
 ring; the frame corners and the sight body reach that ring. On the shipped texture that is 902
 texels. The reticle shows where the head centre looks through the glass, one window for both eyes,
 so a lean out of the eye box loses it as a real sight does, and the opaque sight body covers it in

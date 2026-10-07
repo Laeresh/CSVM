@@ -115,6 +115,7 @@ public static class TestHarness
         // Sharding narrows an already-valid selection, so it runs AFTER the miss checks above: an
         // empty shard is a legitimate division of a small set, an empty selector is a typo.
         var plan = PlanShard(ctx, shard, ref selected);
+        selected = FirstInProcessFirst(selected);
         var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < All.Count; i++)
         {
@@ -304,6 +305,12 @@ public static class TestHarness
         }
         return suites.Where(s => wanted.Contains(s.Name)).ToList();
     }
+
+    /// <summary><paramref name="suites"/> in the order one process runs them: every suite marked
+    /// <see cref="SuiteAttribute.FirstInProcess"/> first, then the rest, each keeping its order. A
+    /// shard runs its share this way too, so such a suite is red in the battery as it is alone. Pure.</summary>
+    public static IReadOnlyList<Suite> FirstInProcessFirst(IReadOnlyList<Suite> suites) =>
+        suites.Where(s => s.FirstInProcess).Concat(suites.Where(s => !s.FirstInProcess)).ToList();
 
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
     /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure, no
@@ -689,7 +696,7 @@ public static class TestHarness
         double FinalDisposalSeconds, double RestSeconds, double OverrunSeconds, int WorldsBuilt,
         double WallSeconds);
 
-    public sealed record Suite(string Name, string What, Action<TestContext> Body);
+    public sealed record Suite(string Name, string What, Action<TestContext> Body, bool FirstInProcess = false);
 }
 
 /// <summary>Marks a body as a registered in-engine suite and carries its two facts: the name every
@@ -709,6 +716,10 @@ public sealed class SuiteAttribute : Attribute
     public string Name { get; }
 
     public string What { get; }
+
+    /// <summary>Whether the suite runs ahead of every other suite in its process. It is for a defect
+    /// that shows only in a process no earlier suite has touched (<see cref="TestHarness.FirstInProcessFirst"/>).</summary>
+    public bool FirstInProcess { get; set; }
 }
 
 /// <summary>Thrown by <see cref="TestContext.RequireData"/> to end a suite as SKIP.</summary>

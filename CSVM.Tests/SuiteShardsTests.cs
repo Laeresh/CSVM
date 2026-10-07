@@ -151,6 +151,32 @@ public sealed class SuiteShardsTests
     }
 
     [Fact]
+    public void A_suite_marked_first_in_process_runs_ahead_of_the_rest_which_keep_their_order()
+    {
+        var suites = new[] { "a", "b", "c", "d" }
+            .Select(n => new TestHarness.Suite(n, n, _ => { }, FirstInProcess: n == "c"))
+            .ToList();
+
+        Assert.Equal(new[] { "c", "a", "b", "d" }, TestHarness.FirstInProcessFirst(suites).Select(s => s.Name));
+    }
+
+    [Fact]
+    public void The_retext_owner_suite_runs_first_in_whichever_shard_takes_it()
+    {
+        var weights = SuiteShards.Load(Path.Combine(RepoRoot(), "analysis", "engine-suite-weights.json"));
+        var marked = TestHarness.All.Where(s => s.FirstInProcess).Select(s => s.Name).ToList();
+
+        Assert.Equal(new[] { "shader-twins-retext-owner" }, marked);
+        foreach (int count in new[] { 1, 4, 6 })
+        {
+            var holder = SuiteShards.Plan(TestHarness.All, s => s.Name, weights, count)
+                .Single(shard => shard.Any(s => s.FirstInProcess));
+
+            Assert.Equal("shader-twins-retext-owner", TestHarness.FirstInProcessFirst(holder)[0].Name);
+        }
+    }
+
+    [Fact]
     public void A_missing_weights_file_weighs_every_suite_the_same_rather_than_throwing()
     {
         var weights = SuiteShards.Load(Path.Combine(Path.GetTempPath(), "csvm-no-such-weights.json"));

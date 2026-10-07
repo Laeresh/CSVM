@@ -407,7 +407,8 @@ The VR render scale, a headset setting: the multiple of the runtime's recommende
 renders at, OpenXR's `render_target_size_multiplier`, which Godot 4.7 applies live by recreating the
 swapchain on the next frame whose size differs. It cuts the GPU's work and the runtime's compositing and
 encoding, where `RenderScaleSetting.cs` resamples the 3D inside that size; under a headset the two
-multiply, and the root's 2D layout (the eye's render target) shrinks with it. Words 50 to 125 percent;
+multiply, and the root's 2D layout (the eye's render target) shrinks with it. Words 50 to 125 percent
+(a runtime set to 2112x2304 against a 3072x3264 recommendation is about 70);
 `Resolve` takes `--xr-render-scale=` over the saved `vrRenderScale` over 100, and `SavedWord`
 holds the `--det` guard. `Launch/XrSession.cs` applies it at boot and on every options apply.
 
@@ -425,7 +426,7 @@ Godot 4.7.0 and 4.7.1 a sun with an angular distance costs more the farther the 
 search radius takes the cascade's world-space near plane against a view-space depth, fixed in 4.7.2), which the VR cockpit,
 drawn in the main world, pays at every pixel: at 3072x3264 per eye Ultra cost 20-43 ms where `low` costs 5.7-6.3. A setting's
 own flag beats the profile, `--xr-quality=flat` keeps the flat words, `--xr-foveation=on` sets the root's VRS mode to XR
-(about -0.9 ms there, coarser mips at each eye's edge). The shadow trap is `docs/verification.md` PERF-49.
+(about -0.9 ms at 3072x3264, but the night city's window textures drop toward coarser mips at each eye's edge, hence off). The shadow trap is `docs/verification.md` PERF-49.
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`

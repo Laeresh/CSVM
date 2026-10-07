@@ -41,8 +41,9 @@ public static class VrQuality
     /// from the world origin (docs/architecture/Utils.md).</summary>
     public const string ShadowQuality = ShadowQualitySetting.Low;
 
-    /// <summary>Whether the profile shades the eye's edges coarser. Off: it saves about 0.9 ms at
-    /// 3072x3264 but lifts the night city's window textures toward their coarser mips there.</summary>
+    /// <summary>Whether the profile shades the eye's edges coarser. Off: the time it saves does not
+    /// pay for the coarser mips it lifts the night city's window textures toward
+    /// (docs/architecture/Utils.md).</summary>
     public const bool Foveation = false;
 
     /// <summary>The foveation flag's words.</summary>

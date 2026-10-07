@@ -1065,6 +1065,11 @@ and the flat goldens; lead-only for anything a headset shows until the author's 
   the next flat launch recompiles only what the headset session rewrote. Units over a scratch user
   directory; the sweep runs before a relaunch starts its child, whose renderer reads the cache before
   any game code.
+- **Review follow-up (traced to code, units).** A launch started straight in the headset
+  (`--xr-mode on`) used to overwrite a crashed headset launch's marker without sweeping it; every
+  boot now recovers first (`XrShaderCache.Boot`). A relaunch whose `OS.CreateProcess` fails reopens
+  the watch it ended (`EndThenStart`) and posts `XrRelaunch.StartFailedNotice` through
+  `XrRelaunch.MenuNotice`. The log lines read `xr: restarting ...` and `xr: could not restart ...`.
 
 **Approach (landed).** `OptionsDef.VrMode` (`vrMode`, null reads off) rides `OptionsApplyExit` like
 every field; Original shows it on the VIDEO page's Clutter Detail line (`VP_B_CLUTTER`, a checkbox,
@@ -1082,12 +1087,12 @@ the store round trip, the seat limit and the VIDEO row. Suites: `xr-relaunch-arg
 failed" path is exercised as the pure `XrRelaunch.FellBack` and the notice it posts, so nothing here
 starts a runtime. Owed at the headset (the author's), each from a fresh `.\RunGame.ps1`:
 1. Options, VR mode On, ACCEPT CHANGES: the game closes and relaunches into the headset. The first
-   launch's `.scratch/logs/menu-*.log` ends `xr: relaunching into the headset (...)`, and the child's
+   launch's `.scratch/logs/menu-*.log` ends `xr: restarting into the headset (...)`, and the child's
    log carries `xr: OpenXR live runtime=...`.
 2. In that headset launch, Options, VR mode Off, ACCEPT CHANGES: it relaunches flat, logging
-   `xr: swept N shader cache files` before `xr: relaunching flat`.
+   `xr: swept N shader cache files` before `xr: restarting flat`.
 3. With VR mode left On, quit and run `.\RunGame.ps1` again: one window opens and closes, the
-   headset launch follows (`xr: relaunching into the headset (VR mode is saved on)`).
+   headset launch follows (`xr: restarting into the headset (VR mode is saved on)`).
 4. Fallback: with the Virtual Desktop streamer disconnected (or the headset off), `.\RunGame.ps1`
    with VR mode On: the relaunched game plays flat and the menu shows "VR mode is on, but no headset
    started..." (Original's box; `.\RunGame.ps1 --force-builtin` shows the error line).
@@ -2576,7 +2581,11 @@ montages above for the Enhanced adoption and its gain. `world-flare-pixels` and 
 (engine suites) and `CSVM.Tests/WorldFlareTests.cs` (the law, the selection rule, the flag, the
 gain's shape, and the spec pinned to `LensFlareRig`'s private copy by reflection). The golden `c3-flare-xr-sim` (C3, nose view,
 `--xr-sim`, frame 120, frame-sensitive 15.38 %, 86 % of its pixels move over 8 levels without the
-flare): the core, the three rings and the wash quad in both eyes.
+flare): the core, the three rings and the wash quad in both eyes. A review found the quads on layer 1
+(or the pane's player layer in splitscreen), so the spyglass picture and the Danger Zone photograph
+drew a flare placed for their own view; each pane's quads now stand on its own
+`SplitScreen.WorldFlareLayer` (bits 20 to 23), which both picture masks drop. Suite
+`world-flare-layers` reads C3's built quads against every pane, disc and photograph mask.
 
 **⚠ Traps.** Do not change `LensFlareRig` itself: it is the Original path and carries the footage
 calibration. An angle-sized rig drawn at a fixed angle shrinks in Cockpit view against the original's

@@ -155,8 +155,9 @@ internal static class XrMarkerSuites
             ctx.Check((pane & headset) == headset && (mask & headset) == 0
                     && mask == (Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), Utils.GraphicsMode.Enhanced) & ~headset),
                 $"the picture's camera leaves out the headset's two layers the pane draws (0x{mask:X5} against 0x{pane:X5}) and nothing else");
-            ctx.Check(Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), false) == (pane & ~SplitScreen.OwnAirframeLayer(0)),
-                $"CONTROL: the flat picture's mask is the pane's less the own airframe, as before");
+            ctx.Check(Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), false)
+                    == (pane & ~SplitScreen.OwnAirframeLayer(0) & ~SplitScreen.WorldFlareBand),
+                $"CONTROL: the flat picture's mask is the pane's less the own airframe and the world flare");
 
             // The HUD's own frame step leaves a stereo host's held subject alone.
             hud._Process(0.0);

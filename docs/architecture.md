@@ -706,7 +706,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
 - `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
 - `src/Launch/XrSession.cs`, the stereo path when Godot started OpenXR or `--xr-sim` asked for the stand-in: the viewport to the interface, the VR seat's rig placed each frame, the recenter on focus, the boot and frame-pacing log lines.
-- `src/Launch/XrRelaunch.cs`, VR mode's relaunch rules: when a boot or a menu apply relaunches, the child's arguments, the flat-only runs, the fallback notice.
+- `src/Launch/XrRelaunch.cs`, VR mode's restart rules: when a boot or a menu apply restarts the game, the child's arguments, the flat-only runs, the menu's notices.
 - `src/Launch/XrShaderCache.cs`, a headset launch's shader cache writes swept as it ends, with a marker that covers a crash, so flat launches never misread them.
 - `src/Launch/XrSimInterface.cs`, the `--xr-sim` stand-in headset: an XR interface with a pinned head and no runtime, drawing both eyes side by side.
 - `src/Launch/XrEyeFeed.cs`, a tracking-only XR interface whose render-thread pre-render writes the frame's own eye poses into the stereo interior's global uniforms.

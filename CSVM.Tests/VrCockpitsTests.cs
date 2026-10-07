@@ -87,6 +87,8 @@ public class VrCockpitsTests
     [InlineData("""{ "interiorScaleFactor": 40 }""")]
     [InlineData("""{ "eyeOffsetZ": 3 }""")]
     [InlineData("""{ "eyeOffsetZ": null }""")]
+    [InlineData("""{ "interiorScaleFactor": 1e40 }""")]
+    [InlineData("""{ "eyeOffsetY": -1e39 }""")]
     [InlineData("1.5")]
     public void AMalformedOrOutOfRangeEntryIsNamedAndTakesTheDefault(string entry)
     {
@@ -130,6 +132,32 @@ public class VrCockpitsTests
             Assert.Same(VrCockpits.Defaults, fromBroken);
             Assert.Contains(lines, l => l.Contains("not found"));
             Assert.Contains(lines, l => l.Contains("could not be read"));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void ANumberPastAFloatsRangeLoadsWithoutThrowingAndKeepsTheOtherPlanes()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "csvm-tests", "vr-cockpits-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string huge = Path.Combine(dir, "huge.json");
+            File.WriteAllText(huge, """{ "planes": { "player_fury": { "interiorScaleFactor": 1e40 }, "player_bhawk": { "eyeOffsetZ": 0.02 } } }""");
+            var lines = new List<string>();
+            VrCockpits table;
+            using (Log.PushConsoleSink(lines.Add))
+            {
+                table = VrCockpits.Load(huge);
+            }
+
+            Assert.Equal(VrCockpit.Default, table.For("player_fury"));
+            Assert.Equal(new VrCockpit(1f, 0.02f), table.For("player_bhawk"));
+            Assert.Contains(lines, l => l.Contains("player_fury") && l.Contains("out of range"));
         }
         finally
         {

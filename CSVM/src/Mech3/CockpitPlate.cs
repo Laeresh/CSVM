@@ -13,9 +13,9 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class CockpitPlate
 {
-    /// <summary>How far aft of the eye a plate may lie, in interior units. Ten plates lie 0.16-1.80
-    /// units aft and the Warhawk's 6.80. Nothing else in any interior meets the rest of the rule at
-    /// any depth.</summary>
+    /// <summary>How far aft of the eye a plate may lie, in interior units: past the farthest plate
+    /// surveyed (docs/architecture/Mech3.md). Nothing else in any interior meets the rest of the
+    /// rule at any depth.</summary>
     public const float MaxAft = 8f;
 
     /// <summary>The draw priority every plate polygon carries.</summary>
