@@ -3436,7 +3436,9 @@ the left stick to the next plane; `xr tune: saved ...` in the log is the record.
 - Grip and trigger also click a theater screen that is up; the lab is silent under a pause and the
   photo mode, but another board raised in flight would take the click.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with E20 and E22: build PASS, units 6517 passed
+3 skipped, engine 551 passed 2 skipped with clean engine errors, goldens 37/37 hash-identical;
+exit 0. The headset check named above is still owed.
 
 ## E21 ☐ At-the-headset playtests on both runtimes
 
@@ -3560,4 +3562,6 @@ At release time (the author's; the sandbox opens a window, so no agent runs it):
 - The release notes are published verbatim: an unremoved draft comment does not render, but the
   "provisional" list does.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with E20 and E22: build PASS, units 6517 passed
+3 skipped, engine 551 passed 2 skipped with clean engine errors, goldens 37/37 hash-identical;
+exit 0. The headset check named above is still owed.
