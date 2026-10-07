@@ -24,6 +24,8 @@ public partial class XrSimInterface : XRInterfaceExtension
     private readonly Vector2 _eyePx;
     private readonly float _ipdMm;
     private readonly float _fovDeg;
+    // Builds the foveated shading-rate image Godot asks for when the root's VRS mode is XR.
+    private readonly Xrvrs _vrs = new();
 
     // Swapped whole, never edited, so a render-thread read sees one pose or the other.
     private volatile Pinned _pinned;
@@ -172,6 +174,10 @@ public partial class XrSimInterface : XRInterfaceExtension
     public override Vector2 _GetRenderTargetSize() => (_eyePx * _sizeMultiplier).Round();
 
     public override uint _GetViewCount() => 2;
+
+    public override Rid _GetVrsTexture() => _vrs.MakeVrsTexture(_GetRenderTargetSize(), new[] { Vector2.Zero, Vector2.Zero });
+
+    public override XRInterface.VrsTextureFormat _GetVrsTextureFormat() => XRInterface.VrsTextureFormat.Unified;
 
     // The two below run on the render thread. XRServer hands that thread its own copy of the
     // origin, recenter frame and scale, and the pinned eyes are swapped whole, so nothing here races.

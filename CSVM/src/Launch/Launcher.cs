@@ -702,6 +702,11 @@ public partial class Launcher : Node3D
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
         var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
+        // A headset session's profile stands in for the flat words' flags. It resolves before any of
+        // them, and a flat launch gets nothing from it.
+        Utils.VrQuality.Current = Utils.VrQuality.Resolve(XrSession.WillBoot(_spec.XrSim), _spec.XrQuality,
+            _spec.AntiAliasing, _spec.Msaa, _spec.ShadowQuality, _spec.XrFoveation);
+        Utils.AntiAliasingSetting.FlagWord = Utils.VrQuality.Current.AntiAliasing;
         // The view distance under the same --det rule, a machine's own state a capture must not read.
         var viewDistance = Utils.ViewDistance.Resolve(_spec.ViewDistance, savedOptions?.ViewDistance,
             Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default));
@@ -721,7 +726,7 @@ public partial class Launcher : Node3D
         // Resolved under either mode so the line says what a flip to Enhanced would fly; only
         // SetupLighting's enhanced sun reads it.
         string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
-        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(Utils.VrQuality.Current.ShadowQuality,
             Utils.ShadowQualitySetting.SavedWord(_spec.Det),
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
@@ -730,6 +735,22 @@ public partial class Launcher : Node3D
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
+        // The stereo root's own MSAA and foveation, written only when the plan names them.
+        var vrQuality = Utils.VrQuality.Current;
+        if (Utils.VrQuality.MsaaOf(vrQuality.Msaa) is { } msaa)
+        {
+            GetViewport().Msaa3D = msaa;
+        }
+
+        if (vrQuality.Foveation)
+        {
+            GetViewport().VrsMode = Viewport.VrsModeEnum.XR;
+        }
+
+        if (Utils.VrQuality.Describe(vrQuality) is { } vrLine)
+        {
+            Log.Info("world", $"{vrLine}");
+        }
         // The clutter fade's squared distance scale, 0 when the fade is off. Enhanced mode pushes
         // the fade out with the fog and further by the View Distance (ClutterFadeScaleSq).
         float clutterFadeScaleSq = EnhancedLook.ClutterFadeScaleSq();
@@ -2800,9 +2821,9 @@ public partial class Launcher : Node3D
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
         ApplyViewDistance(applied.ViewDistance);
-        // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
+        // The shadow level reaches the flying world now; its flag and a headset's profile beat the saved word.
         string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
-        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(Utils.VrQuality.Current.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
         // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.

@@ -2802,7 +2802,7 @@ public partial class GameSession : Node3D
         if (panes <= 1 && ShadowQualitySetting.Panes <= 1)
             return;
         string before = ShadowQualitySetting.Word;
-        var plan = ShadowQualitySetting.ResolveForPanes(panes, _spec.ShadowQuality, _spec.Det);
+        var plan = ShadowQualitySetting.ResolveForPanes(panes, VrQuality.Current.ShadowQuality ?? _spec.ShadowQuality, _spec.Det);
         Log.Info("world", $"shadow quality at {panes} pane(s): shadow_quality={plan.Word} shadow_source={ShadowQualitySetting.Lookup.SourceName(plan.Source)}");
         if (plan.Word != before && IsInstanceValid(_sun))
             EnhancedLook.ApplyShadowQuality(_sun, GraphicsMode.Enhanced, _spec.SkippedPasses);

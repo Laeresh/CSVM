@@ -66,6 +66,9 @@ public sealed partial class TheaterScreen : Node3D
     private Godot.Environment _plain = null!;
     private Godot.Environment? _cameraEnv;
     private bool _plainOn;
+    // The camera's own cull mask while a cutscene has the headset draw the theater alone, null
+    // otherwise. Put back before every physics and process pass, so no writer sees the cut.
+    private uint? _ownMask;
     private float _rootOversampling;
     private float _shownOpacity = -1f;
     private string _state = string.Empty;
@@ -190,11 +193,19 @@ public sealed partial class TheaterScreen : Node3D
     /// coordinates.</summary>
     public Vector2 LayoutPoint(Vector2 uv) => TheaterLayout.LayoutPoint(uv, LayoutSize);
 
-    public override void _EnterTree() => _rehost.Attach();
+    public override void _EnterTree()
+    {
+        _rehost.Attach();
+        GetTree().PhysicsFrame += RestoreMask;
+        GetTree().ProcessFrame += RestoreMask;
+    }
 
     public override void _ExitTree()
     {
         _rehost.Detach();
+        GetTree().PhysicsFrame -= RestoreMask;
+        GetTree().ProcessFrame -= RestoreMask;
+        RestoreMask();
         Plain(false);
         if (LayoutSize != Vector2.Zero)
         {
@@ -209,6 +220,7 @@ public sealed partial class TheaterScreen : Node3D
     /// <see cref="_Process"/>'s body.</summary>
     public void Refresh()
     {
+        RestoreMask();
         Vector2 layout = _root.GetVisibleRect().Size;
         if (layout != LayoutSize && layout.X >= 1f && layout.Y >= 1f)
         {
@@ -240,6 +252,7 @@ public sealed partial class TheaterScreen : Node3D
         Plain(!live || cutscene != null);
         Place(_origin());
         Pose(cutscene);
+        CutWorld(cutscene != null);
 
         string state = !live ? "no flight"
             : cutscene != null ? $"a cutscene in stereo{(raiser != null ? $" under {raiser.Name}" : "")}"
@@ -436,6 +449,31 @@ public sealed partial class TheaterScreen : Node3D
         _screenMaterial.SetShaderParameter("cutscene_rect", new Vector4(rect.Position.X, rect.Position.Y, rect.Size.X, rect.Size.Y));
         var inv = CultureInfo.InvariantCulture;
         Log.Info("ui", $"theater: layout {size2d.X}x{size2d.Y} drawn at {Surface.Size.X}x{Surface.Size.Y}, screen {_quad.Size.X.ToString("0.###", inv)}x{_quad.Size.Y.ToString("0.###", inv)} m, board {Layout.VerticalDeg.ToString("0.#", inv)} deg at {Layout.RowsPerDegree().ToString("0.#", inv)} rows per degree");
+    }
+
+    // Under a cutscene the opaque surround hides the whole world. The headset then draws its own
+    // layer alone for this frame, with no world, sky or sun shadow behind it. Called after Pose,
+    // which reads the camera's own mask for the pair.
+    private void CutWorld(bool on)
+    {
+        if (!on || _camera == null || !IsInstanceValid(_camera))
+        {
+            return;
+        }
+
+        _ownMask = _camera.CullMask;
+        _camera.CullMask = SplitScreen.HeadsetLayer;
+    }
+
+    // Puts the camera's own mask back, so the zone gate and every other writer works on it.
+    private void RestoreMask()
+    {
+        if (_ownMask is { } mask && _camera != null && IsInstanceValid(_camera))
+        {
+            _camera.CullMask = mask;
+        }
+
+        _ownMask = null;
     }
 
     // The plain environment while no flight is live: no tonemap, glow or adjustment on the boards.

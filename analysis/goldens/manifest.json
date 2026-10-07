@@ -188,6 +188,13 @@
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
+      "name": "c1-cockpit-xr-sim-enhanced",
+      "frame": 120,
+      "hash": "a1ca3522c94aade436bb0aa069c6b752",
+      "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.15 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
+    },
+    {
       "name": "c1-cockpit-xr-sim-far",
       "frame": 120,
       "hash": "3dd67ec910f44b669a519b0ed1295cb8",

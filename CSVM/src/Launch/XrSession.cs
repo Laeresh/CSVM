@@ -129,6 +129,13 @@ public partial class XrSession : Node
         return null;
     }
 
+    /// <summary>Whether <see cref="Boot"/> will start a stereo path: OpenXR is live, or
+    /// <paramref name="sim"/> asks for the stand-in and the launch carries its feature tag. The
+    /// launcher resolves the VR quality profile from it before any viewport is built.</summary>
+    public static bool WillBoot(XrSimSpec? sim) =>
+        (XRServer.FindInterface("OpenXR") is OpenXRInterface xr && xr.IsInitialized())
+        || (sim != null && OS.HasFeature(XrLaunch.SimFeature));
+
     /// <summary>Sets the eye size <paramref name="xr"/> renders at to <paramref name="scale"/> times
     /// the runtime's recommendation, OpenXR or the stand-in, and logs the size it now asks for. It
     /// applies live: Godot 4.7 recreates the swapchain on the next frame whose size differs.</summary>

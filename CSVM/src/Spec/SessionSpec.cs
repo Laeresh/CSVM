@@ -788,6 +788,12 @@ public sealed record SessionSpec
     /// <summary><c>--xr-vignette=off|mild|strong</c>, the headset's tunnel vignette. Null when not
     /// given, and for an unknown word with a note. Beats the saved option.</summary>
     public string? XrVignette { get; private set; }
+    /// <summary><c>--xr-quality=vr|flat</c>, whether a headset session flies the VR quality profile
+    /// (the default) or the flat options. Null when not given, and for an unknown word with a note.</summary>
+    public string? XrQuality { get; private set; }
+    /// <summary><c>--xr-foveation=on|off</c>, whether a headset shades the edges of each eye coarser.
+    /// Null when not given, and for an unknown word with a note. Beats the VR profile's choice.</summary>
+    public string? XrFoveation { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -1092,6 +1098,15 @@ public sealed record SessionSpec
     /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
     /// the saved option and the config key, including under <c>--det</c>.</summary>
     public string? ViewDistance { get; private set; }
+
+    /// <summary><c>--anti-aliasing=off|fxaa|smaa|taa|fsr2</c>, the 3D viewports' method. Null when
+    /// not given, and for an unknown word with a note. Beats the saved option, the config key and the
+    /// VR profile, including under <c>--det</c>.</summary>
+    public string? AntiAliasing { get; private set; }
+
+    /// <summary><c>--msaa=off|2x|4x|8x</c>, the root viewport's 3D MSAA in place of the project's 4x.
+    /// Null when not given, and for an unknown word with a note. Beats the VR profile.</summary>
+    public string? Msaa { get; private set; }
 
     /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
     /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
@@ -1689,6 +1704,10 @@ public sealed record SessionSpec
             {
                 s.ViewDistance = viewWord ?? s.ViewDistance;
             }
+            else if (TryWordFlag(arg, Utils.AntiAliasingSetting.Lookup, notes, out string? aaWord))
+            {
+                s.AntiAliasing = aaWord ?? s.AntiAliasing;
+            }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
@@ -1849,6 +1868,18 @@ public sealed record SessionSpec
                 {
                     notes.Add(new Note("core", $"{VrVignetteSetting.Flag}={want} is not one of {string.Join("/", VrVignetteSetting.Words)}, ignoring it"));
                 }
+            }
+            else if (TryWordFlag(arg, VrQuality.Lookup, notes, out string? xrQualityWord))
+            {
+                s.XrQuality = xrQualityWord ?? s.XrQuality;
+            }
+            else if (TryWordFlag(arg, VrQuality.FoveationLookup, notes, out string? foveationWord))
+            {
+                s.XrFoveation = foveationWord ?? s.XrFoveation;
+            }
+            else if (TryWordFlag(arg, VrQuality.MsaaLookup, notes, out string? msaaWord))
+            {
+                s.Msaa = msaaWord ?? s.Msaa;
             }
             else if (arg == "--xr-sim") { s.XrSim = XrSimSpec.Default; }
             else if (arg.StartsWith("--xr-sim="))

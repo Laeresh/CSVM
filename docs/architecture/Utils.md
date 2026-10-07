@@ -311,7 +311,7 @@ setting's `SavedWord` goes through. `Spec/SessionSpec.cs` parses a setting's fla
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
-`taa` or `fsr2`. `Resolve` runs `WordSetting` over the saved `antiAliasing` word, then the `graphics.antiAliasing` config
+`taa` or `fsr2`. `Resolve` runs `WordSetting` over `FlagWord` (`--anti-aliasing=`, else the VR profile's word under a headset), the saved `antiAliasing` word, then the `graphics.antiAliasing` config
 key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
 written whichever mode won, since only the default follows the mode. `SavedWord` holds the
 `--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
@@ -416,6 +416,16 @@ The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `Vr
 `Resolve` takes `--xr-vignette=` over the saved `vrVignette` over off, the shipped default, and
 `SavedWord` holds the `--det` guard. The composition sets `Current` at boot and on every options
 apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
+
+## src/Utils/VrQuality.cs
+The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launcher`
+before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no
+temporal history to smear on a head turn), the project's 4x MSAA, shadow quality `low` (no penumbra) and foveation off. On
+Godot 4.7.0 and 4.7.1 a sun with an angular distance costs more the farther the camera is from the world origin (the PCSS
+search radius takes the cascade's world-space near plane against a view-space depth, fixed in 4.7.2), which the VR cockpit,
+drawn in the main world, pays at every pixel: at 3072x3264 per eye Ultra cost 20-43 ms where `low` costs 5.7-6.3. A setting's
+own flag beats the profile, `--xr-quality=flat` keeps the flat words, `--xr-foveation=on` sets the root's VRS mode to XR
+(about -0.9 ms there, coarser mips at each eye's edge). The shadow trap is `docs/verification.md` PERF-49.
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`

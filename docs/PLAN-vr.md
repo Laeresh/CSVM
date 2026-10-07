@@ -226,7 +226,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ◐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
 16. ◐ D16 Comfort: fades, tunnel vignette, render-scale slider
 17. ◐ D17 Port the screen-space effects to multiview
-18. ☐ D18 Performance pass to the 90 Hz budget
+18. ◐ D18 Performance pass to the 90 Hz budget
 19. ◐ D19 Spyglass as a binocular quad
 
 ### Wave E, headset pass and release
@@ -2726,7 +2726,7 @@ head changes nothing inside the frame; (4) the framing and the bars match the fl
 raises the pause board over the playing cutscene; (6) the hand-back to the cockpit is one cut. The
 values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and sinks the bars),
 `TheaterLayout.CutsceneSize` and the surround. Frame pacing during the cutscene is in the
-`xr frames` lines of the run's log: three world renders a frame.
+`xr frames` lines of the run's log: two world renders a frame, the pair's (D18 cut the headset's own).
 
 **⚠ Traps.**
 - Do not take the cutscene camera's heading for the origin, and do not hold the origin's position
@@ -2739,8 +2739,8 @@ values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and
 - Scene nearer than 7.5 m at the left or right edge stands in front of the screen and is cut by the
   screen's edge (a window violation); no floating-window mask is drawn.
 - The pair reads the pane camera's `Fov` as vertical (`KeepAspect.Height`, Godot's default).
-- The headset still renders the world behind the opaque surround, so a cutscene costs three world
-  renders a frame (D18).
+- Do not let the headset draw the world behind the opaque surround: while a cutscene presents its
+  camera's mask is cut to `SplitScreen.HeadsetLayer` for the frame, after the pair has read it (D18).
 
 **Verified.** The complete battery on the merged tree with D15 and C12: build PASS, units 6462
 passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
@@ -3014,54 +3014,178 @@ the headset; (3) say whether the ghost reads well enough or wants alpha-to-cover
 errors, goldens 35/35 hash-identical. A first run on the tree without the exit fix crashed one shard
 at quit after a passing report. The headset checks named above are still owed.
 
-## D18 ☐ Performance pass to the 90 Hz budget
+## D18 ◐ Performance pass to the 90 Hz budget
+
+**Outcome: the cost is found and cut on the stand-in; the headset's own frame times are owed.** The
+flat options cost a VR cockpit 20-43 ms of GPU time at the runtime's 3072x3264 per eye, almost all
+of it Enhanced's soft sun shadow, whose search radius on Godot 4.7.0 grows with the camera's distance
+from the world origin (a Godot bug, fixed in 4.7.2). A VR quality profile (anti-aliasing off over
+the project's 4x MSAA, shadow quality `low`, foveation off) flies every headset session at 5.7-6.3 ms
+there and 2.7-3.2 ms at the author's 2112x2304, and a cutscene no longer draws the world behind its
+opaque surround. At 1.0 resolution the profile sits 0.2-0.7 ms over Decision 10's half frame
+(5.55 ms) and well inside the full 11.1 ms; the trades that close the gap are the author's (below).
 
 **Goal.** A VR flight on the 5080 at the runtime's 1.0 resolution with Enhanced on holds 90 Hz using
 at most half of the 11 ms frame.
 
-**Evidence (confidence: measured, three runs).** Decision 10. The author's first cockpit batch
-(VDXR, Quest 3, 3072x3264 per eye at 120 Hz, the saved options: Enhanced, TAA, ultra shadows, far
-view distance; C1) ran GPU-bound at 20.4-23.8 ms mean GPU time (p90 25.9-28.6 ms) against the
-8.3 ms period, about 41-49 fps, with 80-98 % of frames late, in both render-thread modes; the author
-saw it as "performance problems". The runtime was at 120 Hz, not Decision 10's 90; the per-second
-`xr frames` lines in each `fly-*.log` are the instrument; they carry the seat's `pos=`, ground
-speed `mps=` and `main_max_ms=`. A fourth run at 90 Hz with the runtime's
-resolution lowered to 2112x2304 per eye (same options) averaged 10.8 ms GPU time (p90 12.6 ms)
-against the 11.1 ms period, about 74 fps, 9 % late: at the budget, still twice Decision 10's half
-frame.
+**Budget (GPU ms per stereo frame, `--xr-sim` at `fov=96`, `--det --perf --no-vsync`, the median of
+five 60-frame windows after two dropped; no other Godot ran during any row).** "Flat" is the author's
+saved options (Enhanced, TAA, Ultra, 4x MSAA) through `--xr-quality=flat`; "VR" the profile;
+"Original" the faithful look on the profile. Cockpit view at 600 m unless named.
 
-**The "one eye lagged behind" double image past the map edge (diagnosis, confidence: measured on
-the stand-in; the runtime's share is the headset's to decide).**
-- **No per-eye lag in the engine.** Flown `--xr-sim` bursts (`--frames=240 --shots=4`, nose view at
-  600 m, C1 in-map and at -40000, TAA against AA off) hold the L-to-R shift constant within 0.01 px
-  and both eyes' frame-to-frame world motion equal within 0.01 px. Each eye's TAA frame registers on
-  its AA-off frame within 0.02 px. Cockpit bursts at -50000 skimming terrain at frame 480 register
-  noisily (near parallax), equally with TAA and without, and TAA against AA off stays within
-  0.08 px. TAA keeps a history and a velocity slice
-  per view (`taa.cpp` `TAA::process`). World-scale eye rounding is A3's millimetre, which is
-  sub-pixel past a few metres.
-- **The failing run is the only one that collapsed to 11-12 fps.** `fly-...195216` (120 Hz,
-  3072x3264, `--render-thread safe`) ends with about 45 s at 11-12 frames a second, with 80-100 ms
-  main-loop steps against a GPU time of 6-20 ms and about 217 draws. The other three runs have no
-  such stretch. `main.cpp` counts `RenderingServer::draw` in the process time, so under the safe
-  thread the stall can be the runtime's swapchain or end-frame wait as well as game code.
-- **Past the map edge, Enhanced's soft sun shadow costs more than twice as much.** At 2112x2304 per
-  eye in cockpit view at 5000 m, GPU time was 8.8 ms at -6000 and 20.1 ms at -40000. With
-  `--no-soft-shadows` it was 2.8 ms, and with `--shadow-quality=off` 2.7 ms. Along -x/-z at
-  2000 m it was 13.0 ms at -11500, 14.5 ms at -13000, 17.7 ms at -20000 and 18.5 ms at -50000.
-  This item owns that cost.
+| pose | 3072x3264 flat | 3072x3264 VR | 3072x3264 Original | 2112x2304 flat | 2112x2304 VR | 2112x2304 Original |
+|---|---|---|---|---|---|---|
+| C1 map centre (-6144, 600, -6144) | 19.93 | 5.80 | 2.21 | 9.92 | 2.92 | 1.91 |
+| C1 past the edge (-40000, 600, -40000) | 42.82 | 5.71 | 2.21 | 21.24 | 2.86 | 1.83 |
+| C5 night city (-9256, 250, -3155) | 27.78 | 6.25 | 3.91 | 13.99 | 3.17 | 2.79 |
+| C2/M02 spawn | 10.55 | 5.71 | 2.33 | 5.27 | 2.89 | 1.67 |
+| C4 snow (-3330, 958, -9181) | 29.33 | 5.80 | 2.27 | 14.59 | 2.91 | 1.60 |
+| C1 dogfight, six attacking Furies | 20.06 | 5.87 | 2.23 | 10.33 | 2.97 | 1.52 |
+| C1 centre, chase view | | | | 4.64 | 2.69 | 1.71 |
+| C3/M01 intro cutscene (root + pair) | | | | 0.90 + 1.6 | 0.35 + 1.3 | 0.48 + pair |
 
+Against Decision 10's half frame of 5.55 ms at 1.0 resolution: the VR profile is 0.16-0.70 ms over
+on every Enhanced pose, Original is at 40-70 % of it, and at the author's 2112x2304 the profile uses
+24-29 % of the frame. The dogfight's `frame_ms` (12-16 ms) is an instrument artefact (PERF-50), not
+the game's.
 
-**Approach.** Time the worst chapters in VR, then cut by render scale defaults, per-eye costs (MSAA,
-SSAO, shadows) and the effects with the largest stereo cost. <TODO: the instrument; `--perf` is the
-flat profiler stand-in.>
+**Evidence (confidence: measured on the stand-in for every cost and calibrated against the headset;
+traced to the Godot 4.7-stable source for the shadow mechanism and checked against the upstream fix;
+lead-only for anything the runtime's compositor adds).**
+- **The author's runs.** Decision 10. The first cockpit batch (VDXR, Quest 3, 3072x3264 per eye at
+  120 Hz, the saved options: Enhanced, TAA, ultra shadows, far view distance; C1) ran GPU-bound at
+  20.4-23.8 ms mean GPU time (p90 25.9-28.6 ms) against the 8.3 ms period, about 41-49 fps, 80-98 %
+  of frames late, in both render-thread modes. A fourth run at 90 Hz at 2112x2304 per eye averaged
+  10.8 ms GPU (p90 12.6 ms), about 74 fps, 9 % late. Logs: `.scratch/headset/` in this worktree.
+- **The stand-in reads the headset's GPU cost closely.** The same options at C1 centre read 11.06 ms
+  at 2112x2304 against the headset's 10.8 ms mean, and 19.93 ms at 3072x3264 against 20.4-23.8 ms
+  (PERF-51). It has no compositor and no lens distortion, so it ranks settings; the headset's
+  `xr frames` line remains the verdict.
+- **Cause of the soft-shadow cost: a Godot 4.7.0 bug.** The soft sun shadow's search radius is
+  `(range_pos - range_begin) * tan(angle)` (`scene_forward_clustered.glsl`). `range_pos` is the
+  vertex's view-space depth along the sun; `range_begin` is the cascade's near plane in world space
+  (`renderer_scene_cull.cpp` `_light_instance_setup_directional_shadow`, `range_begin = z_max`). The
+  radius therefore carries the camera's world position projected on the sun. Upstream fixed it in
+  godotengine/godot#120774 (`range_begin = z_max - z_vec.dot(p_cam_transform.origin)`), shipped in
+  4.7.2-stable and absent from 4.7.1. Measured: with the sun at C1's 90° yaw, 25° pitch, Ultra at
+  2112x2304 read 19.18 ms at x=-20000, 14.86 at -12000, 9.82 at -6144, 6.19 at -2000, 5.52 at 0 and
+  8.20 at +2000 (z held at -6144), and 10.23, 9.82 and 9.80 ms at z=-20000, -6144 and 0 (x held):
+  the cost follows x, the sun's direction, and bottoms out where the camera's projection on the sun
+  is near zero. Hard shadows read 3.48-3.50 ms at every x. High read 5.32 ms at centre and 9.09 at
+  -20000, Medium 3.82 and 6.23, Low 3.61 and 3.55: every level with a penumbra carries the bug, Low
+  (no angular distance) does not. Even the minimum (x=0) leaves Ultra 2 ms over Low at 2112x2304.
+- **Why VR pays it and flat play much less.** The flat cockpit pass draws its interior in its own
+  world at the origin; the VR cockpit (A3b, B8) draws in the main world, where the interior fills
+  the eye at kilometres from the origin. Flat Enhanced at 1280x720 read 0.64, 0.72 and 0.99 ms at
+  x=0, -6144 and -20000 (cockpit), 0.71, 0.81 and 1.08 ms (chase), 0.52 ms hard. **Flat-play defect,
+  recorded:** flat Enhanced pays the same growth on its main world, small at these sizes, and the
+  penumbra's width there changes with where the camera stands, so Ultra's judged look varies over
+  the map. The fix is the engine upgrade to 4.7.2 (editor, export templates, .NET glue); it is
+  expected to move the five Enhanced flat goldens (`c1-lake-enhanced`, `c5-city-night-enhanced`,
+  `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`, `c1-cockpit-enhanced`) and to want Ultra's
+  width judged again. **Recommendation:** a separate item for the 4.7.2 upgrade, landed on its own
+  merits with the goldens re-pinned in the same commit; after it, the VR profile can try Medium
+  (0.25°), which cost 0.2 ms over Low at the C1 centre on 4.7.0.
+- **Every other Enhanced pass is small.** At 2112x2304 on the flat options (C1 centre, 9.82 ms):
+  SSAO 0.26 ms, SSR 0.36, glow 0.25, TAA 0.64 against off, FXAA 0.0, 4x MSAA 1.13 against off and
+  2x 0.48, view distance `normal` 0.0. At 3072x3264 on the VR profile (C5 6.25 ms, C1 5.80 ms): 2x
+  MSAA saves 0.65/0.45, MSAA off 1.93/1.67, `--no-ssr` 0.73/0.69, `--no-ssao` 0.56/0.53, `--no-glow`
+  0.75/0.72. Original costs 1.5-3.9 ms everywhere.
+- **The cutscene's hidden world (D15's finding), fixed.** The headset's camera drew the whole world
+  behind the opaque surround. With its mask cut to `SplitScreen.HeadsetLayer` for the frame (after
+  the pair has read it, put back before every physics and process pass) the root read 0.90 ms
+  against 1.82 on two interleaved pairs (2112x2304, flat options), draws 1,544 to 1,087. The pair's
+  own two 1600x1200 renders cost 1.6 ms flat and 1.3 ms on the profile, outside `gpu_ms`. The cut
+  also changes the root's pixels under TAA: 0.24 % of the frame, the screen's edges and the picture,
+  because the world's motion vectors no longer reproject the screen; Original draws no TAA.
+- **Foveation.** Godot 4.7's `xr/openxr/foveation_level` is Meta's extension and is disabled on
+  desktop with MSAA on; the runtime-independent path is the root viewport's VRS mode `XR`, whose
+  texture `OpenXRInterface.get_vrs_texture` builds from the eye foci (`XRVRS`) on Vulkan with
+  fragment shading rate (the RTX 5080 has it). The stand-in now answers the same call. At C5,
+  3072x3264, VR profile: 5.38 ms against 6.23 on two interleaved pairs, under the half frame; the
+  centre of each eye is pixel-identical, and at the edge the night city's window textures read
+  brighter (coarser shading picks coarser mips). Whether VDXR or SteamVR offer Meta's foveation
+  extension was not checked: it needs a live runtime.
+- **AA under multiview.** TAA keeps a history and velocity per view (D18's earlier bursts register
+  each eye's TAA frame on its AA-off frame within 0.02 px). The profile drops it anyway: 0.64 ms at
+  2112x2304, a smear a head turn shows, and MSAA already covers the edges.
+- **The double image past the map edge (earlier diagnosis, kept).** No per-eye lag in the engine:
+  flown bursts hold the left-to-right shift within 0.01 px; the one failing run (`fly-...195216`, 120 Hz,
+  3072x3264, `--render-thread safe`) is the only one that collapsed to 11-12 fps, with 80-100 ms
+  main-loop steps against 6-20 ms GPU time, which under the safe thread can be the runtime's own
+  wait. At 20-43 ms of GPU past the edge on the flat options, that run was GPU-starved there; the
+  profile removes the growth, so a rerun past the edge answers it.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Resolved TODOs.**
+- **The instrument:** `--xr-sim=eye=WxH,fov=96 --perf --no-vsync` under `--det` through
+  `RunProbe.ps1`, reading `[perf] window` `gpu_ms` (the stereo root alone, PERF-51); A/B pairs run
+  interleaved, with the Godot count recorded (zero other Godots in every row above). The perf
+  stage now carries two stereo scenarios, `c1-cockpit-xr-sim` (2112x2304) and `c5-city-xr-sim`
+  (3072x3264), which recorded 2.95 and 6.24 ms under `-Perf -PerfFilter xr-sim -PerfLabel
+  d18-vr-profile`.
+- Model recommendation: Standard for the profile; the engine upgrade is its own item.
 
-**Verify.** <TODO: the measured frame time per chapter on the reference rig.>
+**Approach (landed, VR only).**
+- `Utils/VrQuality.cs`: the profile and its selection (`Resolve`, `Current`, `Describe`), the
+  `--xr-quality=vr|flat`, `--msaa=` and `--xr-foveation=` lookups. `Launch/XrSession.cs` `WillBoot`
+  says before any viewport is built whether a stereo path will start; `Launch/Launcher.cs` resolves
+  the plan there, feeds its anti-aliasing word to `AntiAliasingSetting.FlagWord` and its shadow word
+  to the three shadow resolves (launch, `GameSession.FollowPaneShadows`, options apply), writes the
+  root's MSAA and VRS mode, and logs `[world] vr quality: profile=...`.
+- `Utils/AntiAliasingSetting.cs`: `--anti-aliasing=` (`FlagWord`), a door any launch can use.
+- `UI/Boards/TheaterScreen.cs`: `CutWorld` and `RestoreMask`, the cutscene's world cut.
+- `Launch/XrSimInterface.cs`: `_GetVrsTexture` through `Xrvrs`, so the stand-in measures foveation.
+- Flat unchanged: with no headset the plan is `none` and writes nothing; no flat flag's default
+  moved. The new golden `c1-cockpit-xr-sim-enhanced` pins the profile's Enhanced look (three runs,
+  `a1ca3522...`, frame 121 moves 27.15 %).
 
-**⚠ Traps.** Read `docs/verification.md` on performance measurement before timing; the author's rig
-runs the sim clock behind wall time in late chapters.
+**The trades for the author (decisions, not taken).** To bring the 1.0-resolution frame under half
+of 11.1 ms on every Enhanced pose, any one of: (a) `--xr-foveation=on` as the default, -0.85 ms at
+C5, edge textures shift toward coarser mips; (b) 2x MSAA, -0.45 to -0.65 ms, softer edges; (c) SSR
+off in VR, -0.7 ms, the water keeps only its own specular; (d) glow off in VR, -0.7 ms, flares and
+fire lose their bloom; (e) a VR render scale default of 90 %, about -1 ms estimated from the pixel count, not measured. The author's own runtime
+setting (2112x2304, about 70 %) already runs the profile at a quarter of the frame. Separately, the
+4.7.2 engine upgrade (recommended above) restores a soft shadow at little cost.
+
+**Verify.** Units: `CSVM.Tests/VrQualityTests.cs` (flat plan empty; the headset's profile words;
+`flat`; each setting's flag over the profile; MSAA words; the flags' grammar; the anti-aliasing flag
+over the saved word). Suites: `theater-cutscene` (the pair keeps the camera's own layers while the
+headset draws its own layer alone, twice in a frame, and the hand-back restores them),
+`theater-screen`. Golden: `c1-cockpit-xr-sim-enhanced`. Perf: the two stereo scenarios. The rules
+that bite (docs/verification.md): PERF-49 (a soft shadow's cost depends on the pose), PERF-50 (the
+spyglass census inflates `proc_ms`), PERF-51 (what `gpu_ms` covers under the stand-in), PERF-9
+(interleaved A/B), PERF-39 (viewports outside the root).
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, its resolution at the runtime's
+default for 90 Hz (the log's `eye_px=` says which), from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --graphics=enhanced
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-40000,600,-40000" "--direction=-0.743,0,-0.669" --graphics=enhanced
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C5 --plane=player_bhawk "--pos=-9256,250,-3155" "--direction=-0.588,0,-0.809" --graphics=enhanced
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C5 --plane=player_bhawk "--pos=-9256,250,-3155" "--direction=-0.588,0,-0.809" --graphics=original
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C5 --plane=player_bhawk "--pos=-9256,250,-3155" "--direction=-0.588,0,-0.809" --graphics=enhanced --xr-foveation=on
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-40000,600,-40000" "--direction=-0.743,0,-0.669" --graphics=enhanced --xr-quality=flat
+```
+Fly each for a minute in the cockpit, then chase. Look for: (1) the log's `[world] vr quality:
+profile=vr anti_aliasing=off msaa=4x shadow_quality=low foveation=off` (and `profile=flat` on the
+last line); (2) the `xr frames` lines: `gpu_ms` under 5.5 ms and `late` near 0 on the first four,
+against the last line's flat options past the edge (expected 20 ms or more, the bug's control);
+(3) whether the hard-edged sun shadow and the absence of TAA read acceptably in the cockpit and on
+the ground, and whether the fifth line's edge of view looks different; (4) past the map edge, no
+double image. Pick from the trades above if the first lines miss 5.5 ms.
+
+**⚠ Traps.**
+- Do not raise the profile's shadow to a level with a penumbra on this engine: its cost grows with
+  the distance from the origin (PERF-49), and the VR cockpit pays it on every pixel it covers.
+- Do not read a soft-shadow cost from one pose, and never from the flat cockpit pass, which draws at
+  the origin.
+- Do not read `proc_ms` from a window with a spyglass disc up (PERF-50).
+- Do not cut the headset camera's mask before the pair has read it, nor leave it cut into the next
+  frame's passes: the zone gate rewrites that mask from its own value each frame.
+- The author's rig runs the sim clock behind wall time in late chapters; the stand-in rows are
+  `--det`, so their `frame_ms` is not the headset's.
+
+**Verified.** <pending orchestrator run>
 
 ## D19 ◐ Spyglass as a binocular quad
 

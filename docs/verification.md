@@ -499,6 +499,30 @@ member, and it does not go here.
   `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
   apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
   in a later one, against a merge effect of 0.4 to 1.8 ms.
+- **PERF-49**, **On Godot 4.7.0 and 4.7.1 a soft sun shadow's cost depends on where the camera stands
+  in the world, so a penumbra cost measured at one pose does not transfer to another; time it across
+  positions along the sun's direction, with `--no-soft-shadows` as the control.** The PCSS search
+  radius is `(range_pos - range_begin) * tan(angle)`, where the shader's `range_pos` is view-space and
+  `range_begin` the cascade's world-space near plane (`renderer_scene_cull.cpp`), so the radius grows
+  with the camera's world position projected on the sun; 4.7.2 subtracts it (godotengine/godot#120774).
+  A C1 cockpit under the stand-in at 2112x2304 per eye read 5.5 ms at x=0, 9.8 at -6144, 14.9 at
+  -12000 and 19.2 at -20000 with z held, 9.8 to 10.2 ms with x held and z swept, and 3.5 ms hard at
+  every one. The flat cockpit pass draws its interior near the origin, so flat play pays far less:
+  0.64, 0.72 and 0.99 ms at x=0, -6144 and -20000 at 1280x720 against 0.52 ms hard.
+- **PERF-50**, **`--perf`'s spyglass census asks each live disc for its draw counts, which on the
+  editor binary prints Godot's per-frame synchronisation warning with a C# backtrace, so a window
+  with a disc up reads about 12 ms of `proc_ms` that is the instrument's console write.** A C1
+  dogfight against six attacking Furies read `proc_ms` 14.6 to 16.0 ms flat and stereo alike, with
+  every named site summing to about 2 ms and about 2,900 lines of warning and backtrace in the two windows; without the
+  attack, so with no disc up, the same pose read 2.1 ms. Read `gpu_ms` there, and a CPU cost only
+  from a window whose `[perf] spyglass` line is absent (PERF-35, PERF-43).
+- **PERF-51**, **Under `--xr-sim` the `gpu_ms` term is the headset's stereo render alone: a playing
+  cutscene's two picture viewports and the spyglass disc are viewports of their own and are not in
+  it (PERF-39).** At `eye=2112x2304,fov=96` the stand-in read 11.06 ms on the C1 cockpit with the
+  author's options against 10.8 ms mean at the headset at the same eye size, and 19.9 ms at
+  3072x3264 against 20.4 to 23.8 ms there: close enough to rank settings, never a substitute for the
+  headset's own `xr frames` line, which also carries the runtime's compositing. The cutscene pair
+  added 1.3 to 1.6 ms at 1600x1200 per eye.
 
 ## LOG, logs, error censuses, and exit codes
 

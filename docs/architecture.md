@@ -385,7 +385,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/Boards/HeadLockedQuads.cs`, a stereo session's whiteout, flash, sun wash and mission-end fade as head-locked quads copying the flat layers' colours.
-- `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards, cinemas and cutscenes on a quad ahead of the seated eye, in a dark surround or over a dimmed flight.
+- `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards, cinemas and cutscenes on a quad ahead of the seated eye, in a dark surround (drawing no world behind a cutscene) or over a dimmed flight.
 - `src/UI/Boards/CanvasRehost.cs`, the root's canvas layers of chosen numbers drawn into a SubViewport, their controls left in the root's tree.
 - `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers, cutscene rect and pointer hit, engine-free.
 - `src/UI/Boards/StereoPair.cs`, the 3D-cinema pair a cutscene plays as on the theater screen: eye cameras, converging frusta and the parallax law, engine-free.
@@ -622,6 +622,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
+- `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/SceneCopy.cs`, a node subtree's copy in place of `Duplicate()`, which under the separate render thread corrupts memory on any geometry node.
@@ -633,7 +634,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/TextureUpload.cs`, every Image handed to a texture, at creation or repaint, held until the render thread lets go so a queued upload never reads a refilled one or swaps a handle off the main thread.
 - `src/Utils/SwitchProfile.cs`, the live graphics-mode switch's per-step stopwatch, written on the switch's log line.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
-- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
+- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the flag/saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
 - `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config `WordSetting` lookup over ultra (high on an integrated GPU, off there at three or four panes), and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
 - `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.

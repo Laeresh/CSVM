@@ -119,7 +119,7 @@ internal static class TheaterScreenSuites
     /// and how its pair stands on the authored camera. It checks each eye's frustum against a flat
     /// camera's.</summary>
     [Suite("theater-cutscene",
-        "under the stereo path a presenting cutscene in flight brings the theater screen up in a full surround with the camera's plain environment, its two cameras stand one interocular apart on the authored camera with its orientation, layers less the headset's and pre-swap environment, a point at the convergence lands on the same pixel in both eyes and on a flat 4:3 camera's, a far point carries the parallax law's disparity, a board raised over it keeps it playing, and its hand-back hides the screen, stops both renders and gives the camera its environment back")]
+        "under the stereo path a presenting cutscene in flight brings the theater screen up in a full surround with the camera's plain environment, its two cameras stand one interocular apart on the authored camera with its orientation, its own layers less the headset's and pre-swap environment, while the headset's camera draws the headset layer alone for the frame, a point at the convergence lands on the same pixel in both eyes and on a flat 4:3 camera's, a far point carries the parallax law's disparity, a board raised over it keeps it playing, and its hand-back hides the screen, stops both renders and gives the camera its environment and layers back")]
     internal static void TheaterPlaysACutscene(TestContext ctx)
     {
         var report = new StringBuilder();
@@ -132,13 +132,14 @@ internal static class TheaterScreenSuites
         bool playing = false;
         var origin = new Transform3D(Basis.FromEuler(new Vector3(0f, -2.3f, 0f)), new Vector3(-6350f, 300f, -4144f));
         var look = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Sky };
+        const uint ownMask = 0xFFFFFu & ~(1u << 13);
         var authored = new Camera3D
         {
             Name = "theater-cutscene-camera",
             Fov = fov,
             Near = 0.05f,
             Far = 40000f,
-            CullMask = 0xFFFFFu & ~(1u << 13),
+            CullMask = ownMask,
             Environment = look,
             Current = false,
         };
@@ -177,12 +178,13 @@ internal static class TheaterScreenSuites
             ctx.Check(authored.Environment != look && theater.CutsceneCameras[0].Environment == look && theater.CutsceneCameras[1].Environment == look,
                 $"the camera takes the plain environment while each eye keeps the look it wore before");
             Pair(ctx, theater, authored, control, ipd, convergence, report);
-            Layers(ctx, theater, authored);
+            Layers(ctx, theater, authored, ownMask);
 
             layer.Visible = true;
             theater.Refresh();
             ctx.Check(theater.Shown && theater.PlaysCutscene && theater.SurroundOpacity == 1f,
                 $"a board raised over the cutscene leaves it playing under the board in the full surround");
+            Layers(ctx, theater, authored, ownMask);
             layer.Visible = false;
 
             playing = false;
@@ -190,6 +192,7 @@ internal static class TheaterScreenSuites
             ctx.Check(!theater.Shown && !theater.PlaysCutscene && authored.Environment == look
                 && theater.CutsceneEyes[1].RenderTargetUpdateMode == SubViewport.UpdateMode.Disabled,
                 $"the hand-back takes the screen down, stops both renders and gives the camera its environment back");
+            ctx.Check(authored.CullMask == ownMask, $"and its own layers (0x{authored.CullMask:X5})");
         }
         finally
         {
@@ -242,11 +245,15 @@ internal static class TheaterScreenSuites
         ctx.Check(Mathf.Abs(vertical) < 0.05f, $"with no vertical disparity ({vertical:0.###} px)");
     }
 
-    private static void Layers(TestContext ctx, TheaterScreen theater, Camera3D authored)
+    // Each refresh reads the camera's own layers for the pair, then cuts the headset's draw to its own
+    // layer. A second refresh in the same frame must not hand the pair the cut mask.
+    private static void Layers(TestContext ctx, TheaterScreen theater, Camera3D authored, uint ownMask)
     {
         uint mask = theater.CutsceneCameras[0].CullMask;
-        ctx.Check(mask == (authored.CullMask & ~SplitScreen.HeadsetLayer) && theater.CutsceneCameras[1].CullMask == mask,
-            $"each eye draws the camera's layers less the headset's (0x{mask:X5})");
+        ctx.Check(mask == (ownMask & ~SplitScreen.HeadsetLayer) && theater.CutsceneCameras[1].CullMask == mask,
+            $"each eye draws the camera's own layers less the headset's (0x{mask:X5})");
+        ctx.Check(authored.CullMask == SplitScreen.HeadsetLayer,
+            $"while the headset's camera draws the headset's layer alone behind the surround (0x{authored.CullMask:X5})");
         ctx.Check(theater.ScreenQuad.Layers == SplitScreen.HeadsetLayer,
             $"and the screen stands on the headset's layer, out of its own picture");
     }

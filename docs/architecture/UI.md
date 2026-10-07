@@ -616,7 +616,7 @@ seated eye, in the XR origin's frame and placed from `Launch/XrEyeFeed.cs` as th
 `CanvasRehost.cs` moves every root canvas layer from `HudLayers.Board` up into its SubViewport, while
 the controls keep the root's layout and input. Its geometry and resolution are `TheaterLayout.cs`.
 With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
-or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board. The world behind that surround is still drawn.
+or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board. For that frame the camera's mask is cut to `HeadsetLayer` alone, after the pair has read it, and put back before the next physics and process pass, so the headset draws no world, sky or sun shadow behind the surround.
 Its geometry stands on `SplitScreen.HeadsetLayer`, which the pair leaves out, so it never draws into its own picture. Its render priorities sit over `HeadLockedQuads`'
 fade and under `ComfortQuads.cs`' fade, which `BoardShown` drops under it. `Launch/Launcher.cs` builds it beside `XrSession`; the laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
 

@@ -124,7 +124,7 @@ its feature tag; otherwise `Boot` logs why not and builds nothing. It turns the 
 and builds the VR seat's `Flight/Camera/XrRig.cs` (`Rig`), which it has place itself each frame. It
 recenters on the head's first tracked pose after the session gains focus and after the runtime's
 own recenter. It logs the boot, the session states and an `xr frames` Debug line per wall second
-(`XrFrameWindow.cs`) with the seat's position and speed; `XrLaunch` reads `--xr-mode`. Its boot sets `Bindings/XrControllers.cs`'s `SessionLive`. `ApplyRenderScale` sets the interface's eye-size multiplier (`Utils/VrRenderScaleSetting.cs`), live under OpenXR.
+(`XrFrameWindow.cs`) with the seat's position and speed; `XrLaunch` reads `--xr-mode`. Its boot sets `Bindings/XrControllers.cs`'s `SessionLive`. `ApplyRenderScale` sets the interface's eye-size multiplier (`Utils/VrRenderScaleSetting.cs`), live under OpenXR. `WillBoot` answers ahead of the boot whether it will start, which the VR quality profile (`Utils/VrQuality.cs`) resolves from.
 
 ## src/Launch/XrRelaunch.cs
 VR mode's relaunch rules, engine-free. OpenXR starts only with the engine, so the saved option
@@ -151,7 +151,7 @@ without lens distortion; `Tooling/CaptureDirector.cs` reads the eye layers for a
 multiview shader variants come from the `csvm_xr_sim` feature tag the launch scripts set, never from
 this code. It reports the head again on a recenter, as OpenXR does every frame, and `MoveHead` lets
 a suite move it; `ConnectHands`, `AimHand` and `SetHandInput` give a suite two Touch hand trackers to
-point and press with, which no launch carries. `RenderTargetSizeMultiplier` is OpenXR's twin, scaling the flag's eye size. Read `XrSession.cs` for the boot.
+point and press with, which no launch carries. `RenderTargetSizeMultiplier` is OpenXR's twin, scaling the flag's eye size, and its VRS image (`Xrvrs`, full rate round each eye's centre) serves `--xr-foveation=on`. Read `XrSession.cs` for the boot.
 
 ## src/Launch/XrEyeFeed.cs
 A tracking-only `XRInterfaceExtension`, never primary, that hands the stereo cockpit interior the
