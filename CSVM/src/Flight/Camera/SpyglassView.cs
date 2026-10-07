@@ -160,11 +160,11 @@ public sealed partial class SpyglassView : SubViewport
     /// <inheritdoc/>
     public override void _ExitTree() => InTree.Remove(this);
 
-    /// <summary>One picture's census counters, published from the render thread as
-    /// <see cref="Utils.MeasuredRenderTime"/> publishes the root viewport's times. Built at the first
-    /// census, so only a run that reads one measures the picture's GPU time.
-    /// ⚠ Never call the viewport's render-info getter from the main thread. Under the separate render
-    /// thread each call waits for it, which held every <c>--perf</c> frame a disc rendered.</summary>
+    // One picture's census counters, published from the render thread as Utils.MeasuredRenderTime
+    // publishes the root viewport's times. Built at the first census, so only a run that reads one
+    // measures the picture's GPU time.
+    // ⚠ Never call the viewport's render-info getter from the main thread. Under the separate render
+    // thread each call waits for it, stalling every frame a disc renders.
     private sealed class Counters
     {
         private readonly Rid _viewport;

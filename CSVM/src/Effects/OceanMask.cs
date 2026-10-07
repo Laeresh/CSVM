@@ -260,7 +260,7 @@ internal sealed class OceanMask
             {
                 int i = (y * w) + x;
                 byte z = zones[i];
-                if (mask[2 * i] == 0 || z >= OceanMaskRaster.AnyZone - 1)
+                if (mask[2 * i] == 0 || z >= SeamZone)
                     continue;
                 for (int d = 0; d < 4; d++)
                 {
@@ -268,8 +268,8 @@ internal sealed class OceanMask
                     if (nx < 0 || ny < 0 || nx >= w || ny >= h)
                         continue;
                     int n = (ny * w) + nx;
-                    if (mask[2 * n] != 0 && zones[n] < OceanMaskRaster.AnyZone - 1 && zones[n] != z)
-                        seamed[i] = OceanMaskRaster.AnyZone - 1;
+                    if (mask[2 * n] != 0 && zones[n] < SeamZone && zones[n] != z)
+                        seamed[i] = SeamZone;
                 }
             }
         }

@@ -27,7 +27,7 @@ internal static class GraphicsSwitchSuites
     // on a commit, so a reading taken before one would show the pool the switch left.
     private const int Steps = 3;
 
-    // The one chapter the wave ocean covers (Effects.Ocean.Covers).
+    // The chapter these suites build the wave ocean on. Effects.Ocean.Covers lists every chapter it covers.
     private const string OceanChapter = "C1B";
 
     // A whole-map wtr sea opened at flat water quality, so no ocean builds over it. Its sheet still
