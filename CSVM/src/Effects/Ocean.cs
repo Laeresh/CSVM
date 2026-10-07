@@ -55,15 +55,22 @@ public sealed partial class Ocean : Node3D
     private const float FogSheetAt = 0.25f;
 
     // TUNE. The sea-state field that keeps the fixed waves from meeting on a lattice. Each wave reads
-    // two noise fields along its own direction: one scales its height, one shifts its phase. The
-    // shift is capped at PhaseMetres of travel, so a long wave's crests bend only slightly.
-    // The field holds still in world space, so the csky_time wrap still lands on an identical frame.
+    // two noise fields along its own direction: one scales its height, one warps its phase. A long
+    // wave's crests shift up to PhaseMetres, a short wave's at most PhaseMaxRad, so crossing crests
+    // bend apart. The warp's slope is part of each wave's local wavelength, which the fades and the
+    // normals read. The field holds still in world space, so the csky_time wrap lands on an
+    // identical frame.
     private const float GroupScale = 500f;
     private const float GroupGain = 0.8f;
-    private const float PhaseScaleCoarse = 400f;
-    private const float PhaseScaleFine = 130f;
-    private const float PhaseMetres = 16f;
-    private const float PhaseMaxRad = 3f;
+    private const float PhaseScaleCoarse = 360f;
+    private const float PhaseScaleFine = 90f;
+    private const float PhaseFineShare = 0.5f;
+    private const float PhaseMetres = 60f;
+    private const float PhaseMaxRad = 14f;
+
+    // The longest a warped wave counts as, in its own lengths, when the fades read it. The bound
+    // keeps the tables' longest-first order valid for every later wave's local length.
+    private const float WarpStretchMax = 1.5f;
 
     // TUNE. A finer field for the short waves, whose crests the coarse one leaves as a straight
     // grain. A wave feels it fully at FineFull metres and shorter, not at all from FineFrom up, so
@@ -75,11 +82,14 @@ public sealed partial class Ocean : Node3D
     private const float FineFrom = 40f;
     private const float FineFull = 10f;
 
-    // TUNE. The chop's own field, a few of its wavelengths across, so its crests break into short
-    // irregular strokes. Fragment-only, as the chop is.
-    private const float MicroScale = 9f;
-    private const float MicroGain = 0.8f;
-    private const float MicroMetres = 1f;
+    // TUNE. The fine detail's slope per layer, and the cells a layer's wavelength is taken as for the
+    // footprint fade. Gradient noise puts most of its energy near two cells.
+    private const float DetailSlope = 0.08f;
+    private const float DetailWaveCells = 2f;
+
+    // The cells along a detail layer's drift axis after which its noise repeats, so the drift
+    // wraps with csky_time. At the shortest cell it is still hundreds of metres.
+    private const int DetailPeriod = 1024;
 
     // TUNE. Pixels per wavelength over which a wave fades into the fragment normals. A wave drawn
     // at a few pixels per wavelength reads as a straight grain, not as water.
@@ -101,14 +111,16 @@ public sealed partial class Ocean : Node3D
     {
         new(0f, 152f, 0.04f), new(31f, 117f, 0.042f), new(-24f, 93f, 0.045f), new(55f, 71f, 0.047f),
         new(-47f, 57f, 0.05f), new(14f, 44f, 0.052f), new(-71f, 34f, 0.052f), new(38f, 26f, 0.06f),
-        new(-9f, 19.5f, 0.06f), new(66f, 14.2f, 0.058f), new(-36f, 10.1f, 0.055f), new(21f, 7.3f, 0.05f),
     };
 
-    // TUNE. The chop the fragment normals add on top: too small for any grid to carry.
-    private static readonly Wave[] Chop =
+    // TUNE. The fine detail the fragment normals add on top of the swell: gradient-noise layers, each
+    // drifting along its own direction. Noise has no fixed crests, so crossing layers print no weave.
+    // Cell in metres, longest first; speed in m/s, rounded so the csky_time wrap lands on a whole
+    // DetailPeriod of cells.
+    private static readonly Detail[] DetailLayers =
     {
-        new(-38f, 4.4f, 0.07f), new(71f, 2.9f, 0.07f), new(17f, 1.9f, 0.06f), new(-66f, 1.25f, 0.06f),
-        new(42f, 0.82f, 0.05f), new(-8f, 0.54f, 0.05f),
+        new(-38f, 6f, 2.2f), new(57f, 3.4f, 1.6f), new(-71f, 1.9f, 1.2f), new(14f, 1.05f, 0.9f),
+        new(-20f, 0.58f, 0.6f),
     };
 
     private readonly Func<IEnumerable<Node3D>> _ships;
@@ -166,7 +178,6 @@ public sealed partial class Ocean : Node3D
         }
         double bakeMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
         var baseTex = textures.Find(mask.BaseTexture);
-        var meanTex = MeanColor(textures.FindImage(mask.BaseTexture));
 
         bool zoned = mask.ZoneTexture != null;
         var shader = new Shader { Code = ShaderCode(mask.BaseLevel - 1, zoned) };
@@ -176,7 +187,6 @@ public sealed partial class Ocean : Node3D
         if (baseTex != null)
             material.SetShaderParameter("albedo_tex", baseTex);
         material.SetShaderParameter("tile_m", mask.TileMetres);
-        material.SetShaderParameter("base_color", meanTex);
         material.SetShaderParameter("tint_tex", mask.TintTexture);
         if (mask.ZoneTexture is { } zoneTex)
             material.SetShaderParameter("zone_tex", zoneTex);
@@ -254,27 +264,6 @@ public sealed partial class Ocean : Node3D
 
     public override void _Process(double delta) => PublishShips();
 
-    private static Color MeanColor(Image? img)
-    {
-        if (img == null)
-            return new Color(0.1f, 0.25f, 0.35f);
-        img.Convert(Image.Format.Rgba8);
-        double r = 0, g = 0, b = 0;
-        int w = img.GetWidth(), h = img.GetHeight();
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                var c = img.GetPixel(x, y).SrgbToLinear();
-                r += c.R;
-                g += c.G;
-                b += c.B;
-            }
-        }
-        double n = w * h;
-        return new Color((float)(r / n), (float)(g / n), (float)(b / n));
-    }
-
     // Concentric rings around the origin whose spacing grows with radius, so a triangle covers
     // about the same screen area at every distance. UV.x carries the local spacing for the
     // vertex stage's per-wave fade.
@@ -351,19 +340,40 @@ public sealed partial class Ocean : Node3D
 
     private static string Literal(float v) => v.ToString("0.0#####", CultureInfo.InvariantCulture);
 
+    // vec4(drift dir.x, dir.z, 1 / cell, drift in cells per second) per detail layer, and vec2
+    // grouping weights, a golden angle on per layer. The drift is a whole number of DetailPeriods
+    // per csky_time wrap, so the hourly rollover lands on an identical frame.
+    private static void EmitDetail(StringBuilder sb)
+    {
+        var l = new List<string>();
+        var g = new List<string>();
+        for (int i = 0; i < DetailLayers.Length; i++)
+        {
+            var d = DetailLayers[i];
+            if (i > 0 && d.Cell >= DetailLayers[i - 1].Cell)
+                throw new InvalidOperationException("ocean: the detail table must run longest first; the fragment's fade ends its sum on the first faded layer");
+            float ang = Mathf.DegToRad(WindDeg + d.AngleDeg);
+            double turns = Math.Max(1.0, Math.Round(d.Speed * ShaderTime.RolloverSecs / (DetailPeriod * d.Cell)));
+            float cellsPerSec = (float)(turns * DetailPeriod / ShaderTime.RolloverSecs);
+            l.Add($"vec4({Literal(Mathf.Cos(ang))}, {Literal(Mathf.Sin(ang))}, {Literal(1f / d.Cell)}, {Literal(cellsPerSec)})");
+            float u = Mathf.DegToRad(137.50776f * (i + Swell.Length));
+            g.Add($"vec2({Literal(GroupGain * Mathf.Cos(u))}, {Literal(GroupGain * Mathf.Sin(u))})");
+        }
+        sb.AppendLine($"const vec4 DETAIL_L[{l.Count}] = vec4[{l.Count}]({string.Join(", ", l)});");
+        sb.AppendLine($"const vec2 DETAIL_G[{g.Count}] = vec2[{g.Count}]({string.Join(", ", g)});");
+    }
+
     // vec4(dir.x, dir.z, k, A) and vec2(Q, omega) per wave. Omega is rounded to a whole number of
     // cycles per csky_time wrap, so the hourly rollover lands on an identical frame.
     // Also vec4 _MOD per wave: the height field's weights, then the phase field's. Each wave's weights
     // turn a golden angle on from the last, so no two waves follow the field alike. The _FINE
-    // weights do the same on the fine field, scaled by how short the wave is. The chop's _MICRO
-    // weights are its height and phase on the micro field.
-    private static void EmitWaves(StringBuilder sb, string name, Wave[] waves, int count, int first, bool micro)
+    // weights do the same on the fine field, scaled by how short the wave is.
+    private static void EmitWaves(StringBuilder sb, string name, Wave[] waves)
     {
         var a = new List<string>();
         var b = new List<string>();
         var m = new List<string>();
         var fine = new List<string>();
-        var mic = new List<string>();
         for (int i = 1; i < waves.Length; i++)
         {
             if (waves[i].Length >= waves[i - 1].Length)
@@ -371,21 +381,19 @@ public sealed partial class Ocean : Node3D
         }
         foreach (var w in waves)
         {
-            float u = Mathf.DegToRad(137.50776f * (first + m.Count));
+            float u = Mathf.DegToRad(137.50776f * m.Count);
             float rad = Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * PhaseMetres);
             m.Add($"vec4({Literal(GroupGain * Mathf.Cos(u))}, {Literal(GroupGain * Mathf.Sin(u))}, {Literal(rad * Mathf.Sin(u + 1f))}, {Literal(rad * Mathf.Cos(u + 1f))})");
             float s = Mathf.Clamp((FineFrom - w.Length) / (FineFrom - FineFull), 0f, 1f);
             float fineRad = s * Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * FineMetres);
             float v = u + 2f;
             fine.Add($"vec4({Literal(s * FineGain * Mathf.Cos(v))}, {Literal(s * FineGain * Mathf.Sin(v))}, {Literal(fineRad * Mathf.Sin(v + 1f))}, {Literal(fineRad * Mathf.Cos(v + 1f))})");
-            float microRad = Mathf.Min(PhaseMaxRad, Mathf.Tau / w.Length * MicroMetres);
-            mic.Add($"vec2({Literal(MicroGain * Mathf.Cos(v + 2f))}, {Literal(microRad * Mathf.Sin(v + 2f))})");
             float ang = Mathf.DegToRad(WindDeg + w.AngleDeg);
             float k = Mathf.Tau / w.Length;
             float amp = w.Steepness / k;
             float omega = Mathf.Sqrt(9.81f * k);
             omega = Mathf.Tau * Mathf.Round(omega * (float)ShaderTime.RolloverSecs / Mathf.Tau) / (float)ShaderTime.RolloverSecs;
-            float q = Choppiness / (k * amp * count);
+            float q = Choppiness / (k * amp * waves.Length);
             a.Add($"vec4({Literal(Mathf.Cos(ang))}, {Literal(Mathf.Sin(ang))}, {Literal(k)}, {Literal(amp)})");
             b.Add($"vec2({Literal(q)}, {Literal(omega)})");
         }
@@ -393,8 +401,6 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine($"const vec2 {name}_QW[{waves.Length}] = vec2[{waves.Length}]({string.Join(", ", b)});");
         sb.AppendLine($"const vec4 {name}_MOD[{waves.Length}] = vec4[{waves.Length}]({string.Join(", ", m)});");
         sb.AppendLine($"const vec4 {name}_FINE[{waves.Length}] = vec4[{waves.Length}]({string.Join(", ", fine)});");
-        if (micro)
-            sb.AppendLine($"const vec2 {name}_MICRO[{waves.Length}] = vec2[{waves.Length}]({string.Join(", ", mic)});");
     }
 
     // The view-space scale that draws the ocean at priority level, in the bias shader's own step
@@ -419,12 +425,9 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine("uniform vec4 mask_rect;");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
         sb.AppendLine("uniform float tile_m = 32.0;");
-        sb.AppendLine("uniform vec3 base_color : source_color = vec3(0.1, 0.25, 0.35);");
         sb.AppendLine("uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;");
         sb.AppendLine("uniform float rough_near = 0.2;");
         sb.AppendLine("uniform float rough_far = 0.3;");
-        // TUNE: how much of the original's painted texture shows through the mean colour.
-        sb.AppendLine("uniform float detail_mix = 0.6;");
         sb.AppendLine("uniform float wave_scale = 1.0;");
         sb.AppendLine("uniform float foam_strength = 0.12;");
         // Per ship zone: centre X/Z and heading axis, then the half length, half width, margin, fade.
@@ -436,8 +439,8 @@ public sealed partial class Ocean : Node3D
             sb.AppendLine("uniform sampler2D zone_tex : filter_nearest, repeat_disable;");
             sb.AppendLine("instance uniform float zone_index = 0.0;");
         }
-        EmitWaves(sb, "SWELL", Swell, Swell.Length, 0, false);
-        EmitWaves(sb, "CHOP", Chop, Chop.Length, Swell.Length, true);
+        EmitWaves(sb, "SWELL", Swell);
+        EmitDetail(sb);
         sb.AppendLine($"const float SWELL_CREST = {Literal(crestRef)};");
         sb.AppendLine("varying vec2 v_param;");
         sb.AppendLine(@"
@@ -483,31 +486,82 @@ vec2 sea_noise(vec2 p) {
         mix(sea_hash(c + vec2(0.0, 1.0)), sea_hash(c + vec2(1.0, 1.0)), f.x), f.y) * 2.0 - 1.0;
 }
 
-// The sea-state field at p: xy the grouping channels, zw the phase channels. Each octave is turned
-// off the grid's axes so the noise cells do not line up with each other.
-vec4 sea_state(vec2 p) {
-    vec2 g = sea_noise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * " + Literal(1f / GroupScale) + @");
-    vec2 c = sea_noise(mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p * " + Literal(1f / PhaseScaleCoarse) + @" + vec2(17.0, 5.0));
-    vec2 f = sea_noise(mat2(vec2(0.28, 0.96), vec2(-0.96, 0.28)) * p * " + Literal(1f / PhaseScaleFine) + @" + vec2(-9.0, 31.0));
-    return vec4(g, c * 0.6 + f * 0.4);
+// sea_noise with its slope: d's columns are the two channels' change along x and along y.
+vec2 sea_noise_d(vec2 p, out mat2 d) {
+    vec2 c = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 du = 6.0 * f * (1.0 - f);
+    vec2 a = sea_hash(c);
+    vec2 k1 = sea_hash(c + vec2(1.0, 0.0)) - a;
+    vec2 k2 = sea_hash(c + vec2(0.0, 1.0)) - a;
+    vec2 k3 = sea_hash(c + vec2(1.0, 1.0)) - a - k1 - k2;
+    d = mat2(2.0 * du.x * (k1 + k3 * u.y), 2.0 * du.y * (k2 + k3 * u.x));
+    return (a + k1 * u.x + k2 * u.y + k3 * (u.x * u.y)) * 2.0 - 1.0;
 }
 
-// The fine field at p, laid out as sea_state's.
+// The grouping channels at p. Each field is turned off the grid's axes so the noise cells do not
+// line up with each other.
+vec2 sea_group(vec2 p) {
+    return sea_noise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * " + Literal(1f / GroupScale) + @");
+}
+
+// The phase (warp) channels at p in xy, and its fine octave alone in zw. The out matrix is the
+// slope of xy per metre. A wave's local wavenumber is its own plus its phase weights times it.
+vec4 sea_warp(vec2 p, out mat2 d) {
+    const mat2 rc = mat2(vec2(0.6, -0.8), vec2(0.8, 0.6));
+    const mat2 rf = mat2(vec2(0.28, 0.96), vec2(-0.96, 0.28));
+    mat2 dc;
+    mat2 df;
+    vec2 c = sea_noise_d(rc * p * " + Literal(1f / PhaseScaleCoarse) + @" + vec2(17.0, 5.0), dc);
+    vec2 f = sea_noise_d(rf * p * " + Literal(1f / PhaseScaleFine) + @" + vec2(-9.0, 31.0), df);
+    d = dc * rc * " + Literal((1f - PhaseFineShare) / PhaseScaleCoarse) + @" + df * rf * " + Literal(PhaseFineShare / PhaseScaleFine) + @";
+    return vec4(c * " + Literal(1f - PhaseFineShare) + @" + f * " + Literal(PhaseFineShare) + @", f);
+}
+
+// A wave's local wavenumber vector: its own plus the warp's slope along its phase weights. Its
+// length is capped at WarpStretchMax times the wave's own, so the fades keep their order.
+vec2 sea_wavevector(vec4 w, vec4 coarse_w, mat2 d) {
+    vec2 k = w.z * w.xy + coarse_w.zw * d;
+    return k * max(1.0, w.z / (" + Literal(WarpStretchMax) + @" * max(length(k), 1e-4)));
+}
+
+// The fine field at p: xy its grouping channels, zw its phase channels.
 vec4 sea_fine(vec2 p) {
     vec2 g = sea_noise(mat2(vec2(0.96, -0.28), vec2(0.28, 0.96)) * p * " + Literal(1f / FineGroupScale) + @" + vec2(41.0, -23.0));
     vec2 f = sea_noise(mat2(vec2(-0.6, 0.8), vec2(-0.8, -0.6)) * p * " + Literal(1f / FinePhaseScale) + @" + vec2(-57.0, 13.0));
     return vec4(g, f);
 }
 
-// The chop's micro field at p: x height, y phase.
-vec2 sea_micro(vec2 p) {
-    return sea_noise(mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * p * " + Literal(1f / MicroScale) + @" + vec2(7.0, 61.0));
+// Two gradients in [-1, 1] per integer cell. The cell's x is taken modulo DetailPeriod, so a
+// layer's noise repeats along its drift axis and its drift wraps with csky_time.
+vec2 detail_hash(vec2 c) {
+    return sea_hash(vec2(mod(c.x, " + DetailPeriod.ToString(CultureInfo.InvariantCulture) + @".0), c.y)) * 2.0 - 1.0;
+}
+
+// Gradient noise at q: x the value, yz its slope along q's axes.
+vec3 detail_noise(vec2 q) {
+    vec2 i = floor(q);
+    vec2 f = fract(q);
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+    vec2 ga = detail_hash(i);
+    vec2 gb = detail_hash(i + vec2(1.0, 0.0));
+    vec2 gc = detail_hash(i + vec2(0.0, 1.0));
+    vec2 gd = detail_hash(i + vec2(1.0, 1.0));
+    float va = dot(ga, f);
+    float vb = dot(gb, f - vec2(1.0, 0.0));
+    float vc = dot(gc, f - vec2(0.0, 1.0));
+    float vd = dot(gd, f - vec2(1.0, 1.0));
+    float k = va - vb - vc + vd;
+    return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k,
+        ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
 }
 
 // One wave's height factor and phase shift from its weights on both fields.
-vec2 sea_mod(vec4 coarse_w, vec4 fine_w, vec4 sea, vec4 fine) {
-    return vec2(clamp(1.0 + dot(coarse_w.xy, sea.xy) + dot(fine_w.xy, fine.xy), 0.0, 1.8),
-        dot(coarse_w.zw, sea.zw) + dot(fine_w.zw, fine.zw));
+vec2 sea_mod(vec4 coarse_w, vec4 fine_w, vec2 group, vec2 warp, vec4 fine) {
+    return vec2(clamp(1.0 + dot(coarse_w.xy, group) + dot(fine_w.xy, fine.xy), 0.0, 1.8),
+        dot(coarse_w.zw, warp) + dot(fine_w.zw, fine.zw));
 }
 
 // OceanCalmZone.Distance and Calm, per ship: flat within the margin of the box, full height a fade
@@ -534,14 +588,16 @@ void vertex() {
         float spacing = max(UV.x, 0.01);
         float amp = shore_swell(ocean_mask(p).g) * ship_calm(p) * wave_scale;
         vec3 disp = vec3(0.0);
-        vec4 sea = sea_state(p);
+        vec2 group = sea_group(p);
+        mat2 dwarp;
+        vec4 warp = sea_warp(p, dwarp);
         vec4 fine = sea_fine(p);
         for (int i = 0; i < SWELL_DKA.length(); i++) {
             vec4 w = SWELL_DKA[i];
-            float len = 6.2831853 / w.z;
-            vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], sea, fine);
-            // Full height at eight grid steps per wavelength, none at four: a wave the grid cannot
-            // carry would crawl as the grid follows the eye.
+            float len = 6.2831853 / length(sea_wavevector(w, SWELL_MOD[i], dwarp));
+            vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
+            // Full height at eight grid steps per local wavelength, none at four. A wave the grid
+            // cannot carry would crawl as the grid follows the eye.
             float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
             float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
             disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
@@ -570,8 +626,8 @@ void fragment() {
         discard;
     }" : "") + @"
     // A ship's zone and the shore's swell ramp flatten only the geometry. The normals keep the
-    // swell and the chop, so the water there shades like the open sea; only the short look ramp
-    // below calms them. A calm patch would read as an artefact.
+    // swell and the fine detail, so the water there shades like the open sea. Only the short look
+    // ramp below calms them. A calm patch would read as an artefact.
     float look = shore_look(m.g);
     float amp = wave_scale;
     vec2 fw = fwidth(p);
@@ -580,41 +636,44 @@ void fragment() {
     // The full swell height here, independent of how much of it the grid displaced, so the
     // foam reads the same at every distance.
     float h = 0.0;
-    // The sea-state field's own slope is left out of the normals: it bends a crest by a few
-    // per cent at most.
-    vec4 sea = sea_state(p);
+    // The warp's slope is in each wave's normal, as the vertex stage's fade reads it. The grouping
+    // and fine fields' slopes are left out: they bend a crest by a few per cent at most.
+    vec2 group = sea_group(p);
+    mat2 dwarp;
+    vec4 warp = sea_warp(p, dwarp);
     vec4 fine = sea_fine(p);
-    // The tables run longest first (EmitWaves checks), so the first wave the footprint fades out
-    // ends the sum: every wave after it is shorter still.
+    // The tables run longest first (EmitWaves checks), and no local length passes WarpStretchMax
+    // times the wave's own. Once that bound fades out, every later wave fades too.
     for (int i = 0; i < SWELL_DKA.length(); i++) {
         vec4 w = SWELL_DKA[i];
-        float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", 6.2831853 / w.z / footprint);
-        if (fade <= 0.0) {
+        float len = 6.2831853 / w.z;
+        if (len * " + Literal(WarpStretchMax) + @" <= footprint * " + Literal(FootprintFadeFrom) + @") {
             break;
         }
-        vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], sea, fine);
+        vec2 kv = sea_wavevector(w, SWELL_MOD[i], dwarp);
+        float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", 6.2831853 / length(kv) / footprint);
+        vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
         float f = amp * fade * sm.x;
         float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
         float ka = w.z * w.w * f;
-        n.xz -= w.xy * (ka * cos(th));
+        n.xz -= kv * (w.w * f * cos(th));
         n.y -= SWELL_QW[i].x * ka * sin(th);
         h += w.w * f * sin(th);
     }
-    if (6.2831853 / CHOP_DKA[0].z / footprint > " + Literal(FootprintFadeFrom) + @") {
-        vec2 micro = sea_micro(p);
-        for (int i = 0; i < CHOP_DKA.length(); i++) {
-            vec4 w = CHOP_DKA[i];
-            float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", 6.2831853 / w.z / footprint);
-            if (fade <= 0.0) {
-                break;
-            }
-            vec2 sm = sea_mod(CHOP_MOD[i], CHOP_FINE[i], sea, fine) + CHOP_MICRO[i] * micro;
-            float f = amp * fade * clamp(sm.x, 0.0, 1.8);
-            float th = w.z * dot(w.xy, p) - CHOP_QW[i].y * csky_time + sm.y;
-            float ka = w.z * w.w * f;
-            n.xz -= w.xy * (ka * cos(th));
-            n.y -= CHOP_QW[i].x * ka * sin(th);
+    // The detail layers run longest first (EmitDetail checks), so the first faded layer ends the sum.
+    // A layer's height is DetailSlope times its cell times the noise, the same slope at every cell
+    // size. The sea-state grouping varies it by region.
+    for (int i = 0; i < DETAIL_L.length(); i++) {
+        vec4 l = DETAIL_L[i];
+        float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", " + Literal(DetailWaveCells) + @" / l.z / footprint);
+        if (fade <= 0.0) {
+            break;
         }
+        vec2 side = vec2(-l.y, l.x);
+        vec2 q = vec2(dot(p, l.xy), dot(p, side)) * l.z - vec2(l.w * csky_time, 0.0);
+        vec3 nd = detail_noise(q);
+        float f = amp * fade * " + Literal(DetailSlope) + @" * clamp(1.0 + dot(DETAIL_G[i], group), 0.2, 1.8);
+        n.xz -= (l.xy * nd.y + side * nd.z) * f;
     }
     float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
     // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
@@ -625,7 +684,11 @@ void fragment() {
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
-    vec3 col = mix(base_color, csky_sample_albedo(albedo_tex, p / tile_m).rgb, mix(detail_mix, 1.0, sheet)) * tint;
+    // The open sea takes the texture's mean and the light alone varies it: a tiled texture reads as
+    // a lattice from the air. The last mip is the mean the GPU samples. At sheet = 1 the texture is
+    // the sheet's own mapping, so C25's seam holds.
+    vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb;
+    vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
     // Crest height alone spreads whitecaps too evenly. A drifting patch field decides where they
     // can form and moves each crest's threshold.
     vec2 drift = SWELL_DKA[0].xy * (csky_time * 1.5);
@@ -843,4 +906,7 @@ void fragment() {
 
     // One Gerstner component: direction, wavelength in metres, steepness k*A.
     private readonly record struct Wave(float AngleDeg, float Length, float Steepness);
+
+    // One fine-detail noise layer: drift direction off the wind, cell size in metres, drift in m/s.
+    private readonly record struct Detail(float AngleDeg, float Cell, float Speed);
 }

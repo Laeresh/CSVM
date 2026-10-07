@@ -53,14 +53,14 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 `Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Effects/Ocean.cs
-The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred
-polar grid with a Gerstner swell in its vertex stage and chop in its fragment normals replaces the sea-level
-base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders
-stay flat. It draws a priority level below the lowest base sheet, one grid per zone-gate group, and a spyglass
-disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet instead. Owns the wave tables, a still sea-state field so
-the swell shows no lattice, the foam field and up to 16 ship calm zones (`OceanCalmZone.cs`) over roster hulls,
-wake ships and animated hulls (`OceanMovers.cs`), nearest the eye first, all on `csky_time`. Off the mask's shore
-distance the swell fades on a long ramp, the look on a short one (flat sheet at the shore and in fog). `GameSession.FollowOcean` builds and drops it.
+The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
+grid with a Gerstner swell in its vertex stage and drifting noise in its fragment normals replaces the sea-level base
+sheet, which steps aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. It
+draws a priority level below the lowest base sheet, one grid per zone-gate group; a spyglass disc
+(`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the wave tables, a still field bending the crests out of a
+lattice, the noise detail, the foam and up to 16 ship calm zones (`OceanCalmZone.cs`, `OceanMovers.cs`), nearest
+the eye first, all on `csky_time`. Off the mask's shore distance the swell fades on a long ramp and the look on a
+short one, so it shades as the flat sheet at the shore and in fog. `GameSession.FollowOcean` builds and drops it.
 
 ## src/Effects/OceanCalmZone.cs
 One ship's calm zone on the wave ocean: a box on the water along the hull's heading, grown over

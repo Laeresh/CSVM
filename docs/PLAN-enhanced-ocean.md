@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, A3's look findings
 
-31. ☐ Break up the swell's wave lattice
+31. ☑ Break up the swell's wave lattice
 32. ☐ Foam that reads as foam up close
 33. ☑ A gradual fade to flat water at the coast
 
@@ -975,7 +975,59 @@ sequence. D33 edits the shore ramp (`Effects/OceanMaskRaster.cs`) and the shore 
 shader, so it runs after D32 or in its own tree with a hand-merged shader. Each comes back as a
 montage for the user; C24's four Enhanced goldens move and are re-pinned once, after the last.
 
-## D31 ☐ Break up the swell's wave lattice
+## D31 ☑ Break up the swell's wave lattice
+
+**Landed.** Three patterns, each found by shots at 1920x1080 with parts of the sea switched off:
+- At C1B cruise the criss-cross is the original's water texture (`wtr00000`, 32x32 texels) repeating
+  every 64 m tile. It survives with every subset of the swell and with the chop alone, and goes with
+  the texture off; the flat sheet shows the same grid, and on the ocean it swayed with the swell's
+  horizontal displacement.
+- At C2 at 350 m the middle swell (57 to 26 m) alone prints diamonds, the long four straight bands.
+- In the open water beside the plane at C2 at 350 m (the region the user marked), the fine woven
+  cross-hatch is the short swell (19.5 to 7.3 m): a shot with only those four waves reproduces it,
+  the chop alone draws nothing there (its footprint fade has removed it), and the chop off, the
+  chop's micro field off and `--no-ssr` each leave it unchanged.
+
+Changes in `Effects/Ocean.cs`:
+- Open water takes the texture's last-mip mean times the tint, and only the light varies it. The
+  sheet's own texture mapping returns as `sheet` goes to 1 (calmed shore, fog), so C25's seam reads
+  the sheet's texture. The user chose this over a broken-up texture; `detail_mix`, `base_color` and
+  its CPU mean (`MeanColor`, darker than what the GPU samples) are gone.
+- The sea-state phase channels are a warp with an analytic slope (`sea_warp`, `sea_noise_d`): 360
+  and 90 m octaves, the fine one half the weight (were 400 and 130 m at 0.4), up to 60 m of crest
+  shift (was 16) and 14 rad (was 3). Each wave's crests bend along its own golden-angle projection,
+  so crossing crests drift apart; the middle swell, which C23's caps held to 12 to 16 m of shift,
+  now moves 58 to 60 m. Each swell wave's local wavenumber (`sea_wavevector`, its own plus the
+  warp's slope) drives the vertex grid-spacing fade, the fragment footprint fade and its normals,
+  capped at 1.5 times the wave's length (`WarpStretchMax`) so the longest-first early exit stays
+  exact. The vertex stage and the fragment evaluate the same field at the same grid point, with no
+  time term. 80 m and 20 rad read as swirls and rings.
+- The swell is the eight waves from 152 to 26 m. The four short waves and the six-sine chop are
+  replaced in the fragment normals by five gradient-noise layers (`DetailLayers`: cells of 6, 3.4,
+  1.9, 1.05 and 0.58 m, each drifting along its own direction at 0.7 to 1.9 m/s; `detail_noise`
+  with an analytic gradient; slope 0.08 per layer, varied by the grouping field). Noise has no fixed
+  crests, so crossing layers print no weave. Each layer fades with the footprint as the chop did (4
+  to 9 pixels over two cells), and the sum stops at the first faded layer (`EmitDetail` checks the
+  order). The micro field and the `CHOP_*` tables are gone.
+- The drift holds the `csky_time` wrap: a layer's hash takes the cell's x modulo 1024
+  (`DetailPeriod`) along its drift axis, and its drift is rounded to a whole number of those periods
+  per 3600 s (1024, 2048, 2048, 3072 and 4096 cells for the five layers), so the rollover lands on
+  the same field. The shortest period is 594 m along one axis only; the literal's rounding leaves
+  under 0.002 cells of jump.
+
+C25's seam at `c1-lake-enhanced`'s pose (1280x720, ocean minus `--no-ocean`): before mean 0.15 levels,
+759 pixels off by more than 4; now 0.14 and 616. Height over a 4 km square (`heights.ps1`, 40 000
+samples): standard deviation 1.23 m, 90th percentile 1.61 m, 99th 2.70 m, against 1.25, 1.64 and
+2.81 m for C23's field on the same samples; the four short waves carried about 2 % of the variance.
+`gpu_ms` at 1920x1080 over `--no-ocean` in the same round, two quiet-gated rounds (`.scratch\d31\ab.ps1`): low-pass hold before +0.95 and +0.92 ms, now +1.19 and +1.17 ms (Decision 11's budget is 1.5); cruise before +0.42 and +0.42 ms, now +0.49 and +0.58 ms. Near the water all five noise layers are live, which costs about 0.25 ms more than the six chop sines did.
+Montages in the D31 tree's `.scratch\d31\`: `montage-d31-r3.png` (flat, before, round 2's no
+texture and round 3 at C2 350 m, C1B cruise, the C1B low-pass hold and the C3 coast),
+`montage-d31-r3-mark.png` (the user's marked region at C2 350 m, 3x) and
+`montage-d31-r3-cruise.png` (a 640x360 crop of C1B cruise, contrast-stretched).
+
+**Verified.** The user chose no texture over the stronger texture breakup, marked the remaining fine weave on round 2, and accepted round 3; the motion judgement comes at the Wave D re-check flight. In the D31 tree: units 6337 passed, 3 skipped; `graphics-ocean-switch` and `graphics-water-quality` pass, engine errors clean. Owed: the complete battery with the Wave D re-pins.
+
+**Original approach (kept for reference).**
 
 **Goal.** The swell shows no regular crossing pattern at the user's flight altitudes; the crests read
 as an irregular sea.
