@@ -2896,7 +2896,10 @@ no more than a frame's hitch; a campaign mission's end keeps its 2 s fade. The v
 - A golden whose shot frame falls within 0.3 s of a cut would carry the fade; the nine `xr-sim`
   shots stand well clear (frame 120, or 45 for the markers).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with D16, D17 and the exit-finalizer fix
+(LOG-27): build PASS, units 6476 passed 3 skipped, engine 549 passed 2 skipped with clean engine
+errors, goldens 35/35 hash-identical. A first run on the tree without the exit fix crashed one shard
+at quit after a passing report. The headset checks named above are still owed.
 
 ## D17 ◐ Port the screen-space effects to multiview
 
@@ -3006,7 +3009,10 @@ the headset; (3) say whether the ghost reads well enough or wants alpha-to-cover
 - Measure a dither's shift in absolute pixel coordinates, and pick a disparity away from a multiple
   of 4: the pattern's period aliases a 4 px disparity to none.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with D16, D17 and the exit-finalizer fix
+(LOG-27): build PASS, units 6476 passed 3 skipped, engine 549 passed 2 skipped with clean engine
+errors, goldens 35/35 hash-identical. A first run on the tree without the exit fix crashed one shard
+at quit after a passing report. The headset checks named above are still owed.
 
 ## D18 ☐ Performance pass to the 90 Hz budget
 
