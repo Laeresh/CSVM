@@ -131,13 +131,15 @@ Every step in order, for one agent at a time:
    goldens; `-Suite <name>` for one; "selector matched nothing" is a FAIL). Read the log's tail.
    - A moved golden the agent re-pinned is fine when the agent proved confinement (pixel diff
      inside the mechanism's footprint) and the manifest carries the new hash.
-   - A moved golden nobody re-pinned: re-run goldens alone with two workers on a quiet machine.
+   - A moved golden nobody re-pinned: re-run goldens alone with two workers and `-WaitQuiet`.
      A reproducible move from a change that cannot reach the shot is bisected before landing,
      never re-pinned to pass.
    - Two items moving the same shots: take HEAD's hashes, run goldens (expect exactly those shots
      MOVED), `-RegenGoldens`, re-check 18/18, note it in the commit message.
-   - "Cannot instantiate C# script" or "no PNG" on shots: the assembly was rebuilt under a running
-     Godot, usually another test pass on the machine; re-run when quiet.
+   - `DEFERRED: rebuild`: `CSVM.dll` changed under the run (a commit's format gate rebuilding the
+     run tree, or an agent building it), and the runner stopped; re-run once that build is done.
+   - A red listed in `docs/verification.md`'s known environmental reds: rerun it alone with the
+     command given there; green alone, land with a `Waiver:` naming the listed owner.
    - A real failure: do not commit. Send the agent the failure with `SendMessage` (it resumes with
      its context) or fix a one-line cause yourself and say so in the message.
    - A failure that is red on the run branch's HEAD without this squash is not the item's; the

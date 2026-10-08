@@ -1094,6 +1094,29 @@ Scripted probes are pinned by `--det`; `--no-det` restores live input, clocks, s
 randomness. Expect variation in flight framing, weather, water, particles, random animation,
 damage effects, and liveries. Measure a fresh same-build floor for the exact scenario.
 
+## Known environmental reds
+
+A battery red that matches an entry here comes from the machine, not the change, and has an open
+owner. Rerun it alone with the entry's command: red alone, it is the change's until it reproduces
+on the unchanged build (METHOD-8); green alone, the landing carries a `Waiver:` line naming that
+owner. An entry leaves when its owner closes. A `DEFERRED` result (memory, `rebuild`, `quiet`) is
+not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs/tooling.md`).
+
+- **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
+  or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
+  `.scratch\goldens-failures\<stamp>\`. Rerun: `.\RunTests.ps1 -SkipUnits -SkipEngine -WaitQuiet`.
+- **`MasterServerLinkTests` timed out**: the units stage fails a `MasterServerLinkTests` test with
+  `the condition never held`, under load only, so the rerun waits for quiet. Owner #168. Rerun:
+  `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~MasterServerLinkTests" -SkipEngine -SkipGoldens
+  -WaitQuiet`.
+- **A shard crashed at exit after a full report**: `!! sN: Godot exited -1073741819 though it wrote
+  a report`, its `.log.err` ending in `Fatal error. 0xC0000005` under
+  `DisposablesTracker.OnGodotShuttingDown` or `GodotObject.Finalize`. Owner #169. Rerun:
+  `.\RunTests.ps1 -SkipUnits -SkipGoldens -WaitQuiet`.
+- **A shard ran past the watchdog under load**: `!! s1: timed out after 300s (exit 124)` while
+  other sessions' Godots ran. Owner #170. Rerun:
+  `.\RunTests.ps1 -SkipUnits -SkipGoldens -WaitQuiet`.
+
 ## The standing checklist
 
 - [ ] `.\RunTests.ps1` exits 0; every `SKIP` is understood as not checked.

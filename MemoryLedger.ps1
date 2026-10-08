@@ -4,7 +4,9 @@
 #
 #   .\MemoryLedger.ps1 status      live reservations, waiters, the learned estimate per kind
 #   .\MemoryLedger.ps1 -SelfTest   the admission rule, handle-held liveness, the empty-ledger
-#                                  progress rule and the estimate update
+#                                  progress rule, the estimate update and the quiet census
+#
+# Wait-QuietMachine (RunTests.ps1 -WaitQuiet) waits for every CSVM Godot on the machine to end.
 #
 # One reservation file per live launch in %TEMP%\csvm-mem, held open (delete-on-close) for the
 # launch's lifetime. The open handle is the claim, as with the net-port slots: a dead holder frees
@@ -474,6 +476,67 @@ function Wait-MemAdmission {
     }
 }
 
+<#
+.SYNOPSIS
+The scripted CSVM launches on this machine as { Pid; Kind; Worktree }: every Godot whose --path names
+a folder called CSVM and that holds a live ledger reservation or carries a scripted flag
+(Test-MemNonInteractive). Interactive play and an editor are left out: a wait on the user's own
+game is gaming mode's business, and an editor idles. Kind is the reservation's, or "unledgered" (a
+scripted launch nothing admitted). -Processes is test-only.
+#>
+function Get-CsvmGodots {
+    param([object[]]$Processes = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'Godot%'"))
+    $kinds = @{}
+    foreach ($r in @(Get-MemReservations)) { $kinds[$r.Pid] = $r.Kind }
+    $out = @()
+    foreach ($p in $Processes) {
+        $cmd = [string]$p.CommandLine
+        $reserved = $kinds.ContainsKey([int]$p.ProcessId)
+        if (-not $reserved -and -not (Test-MemNonInteractive ($cmd -split '\s+'))) { continue }
+        if ($cmd -notmatch '--path\s+(?:"([^"]+)"|(\S+))') { continue }
+        $project = $(if ($Matches[1]) { $Matches[1] } else { $Matches[2] }).TrimEnd('\', '/')
+        if ((Split-Path -Leaf $project) -ne "CSVM") { continue }
+        $kind = if ($reserved) { $kinds[[int]$p.ProcessId] } else { "unledgered" }
+        $out += [pscustomobject]@{ Pid = [int]$p.ProcessId; Kind = $kind; Worktree = (Split-Path -Parent $project) }
+    }
+    return $out
+}
+
+<#
+.SYNOPSIS
+Blocks until no scripted CSVM Godot runs on the machine (Get-CsvmGodots; the user's own play is
+never waited on), naming each one waited on (pid, kind, worktree)
+when the set of worktrees changes and every 60 s. Returns $true once quiet, $false past
+$TimeoutSec. Admission already queues launches on memory; this waits out the CPU and GPU contention
+of runs that fit in memory side by side. Call it before the caller starts a Godot of its own.
+#>
+function Wait-QuietMachine {
+    param([int]$TimeoutSec)
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastTrees = $null
+    $lastLine = -60.0
+    while ($true) {
+        $busy = @(Get-CsvmGodots)
+        $waited = $watch.Elapsed.TotalSeconds
+        if ($busy.Count -eq 0) {
+            Write-Host ([string]::Format($MemInv, "  quiet: no CSVM Godot running, waited {0:0}s", $waited)) -ForegroundColor DarkGray
+            return $true
+        }
+        $who = ($busy | ForEach-Object { "pid $($_.Pid) $($_.Kind) $($_.Worktree)" }) -join "; "
+        if ($waited -ge $TimeoutSec) {
+            Write-Host ([string]::Format($MemInv, "  DEFERRED: quiet, still {0} CSVM Godot(s) after {1:0}s: {2}", $busy.Count, $waited, $who)) -ForegroundColor Yellow
+            return $false
+        }
+        $trees = (@($busy | ForEach-Object { $_.Worktree } | Sort-Object -Unique)) -join "|"
+        if ($trees -ne $lastTrees -or $waited - $lastLine -ge 60) {
+            Write-Host ([string]::Format($MemInv, "  quiet: waiting {0:0}s on {1} CSVM Godot(s): {2}", $waited, $busy.Count, $who)) -ForegroundColor Yellow
+            $lastTrees = $trees
+            $lastLine = $waited
+        }
+        Start-Sleep -Seconds 5
+    }
+}
+
 if ($Action -eq "status") {
     Format-MemLedger | ForEach-Object { Write-Host $_ }
     exit 0
@@ -560,6 +623,25 @@ if ($SelfTest) {
 
         Assert-Mem ((Get-MemKind @("--run-tests=quick")) -eq "engine-shard" -and (Get-MemKind @("--det", "--graphics=enhanced", "--frames=9")) -eq "capture-enhanced") "kinds classify from the user arguments"
         Assert-Mem ((Test-MemNonInteractive @("--frames=9")) -and -not (Test-MemNonInteractive @("--plane=player_bhawk"))) "interactive play is not admitted"
+
+        # The quiet census: scripted launches by worktree (a quoted tree with a space, a bare one,
+        # one known only by its live reservation, this process standing in), never play, an editor
+        # or another project.
+        $held = (Request-MemAdmission -Kind "probe" -Worktree "selftest").Reservation
+        Set-MemReservationPid -Reservation $held -ProcessId $PID
+        $fake = @(
+            [pscustomobject]@{ ProcessId = 11; CommandLine = '"G.exe" --path "Z:\Crimson Skies\CSVM" --log-file x res://scenes/Main.tscn -- --run-tests' }
+            [pscustomobject]@{ ProcessId = 12; CommandLine = 'G.exe --path Z:\CSVM\.claude\worktrees\a\CSVM\ res://scenes/Main.tscn -- --fly --frames=9 "--screenshot=Z:\a b\x.png"' }
+            [pscustomobject]@{ ProcessId = $PID; CommandLine = 'G.exe --path Z:\CSVM\.claude\worktrees\b\CSVM res://scenes/Main.tscn -- --fly' }
+            [pscustomobject]@{ ProcessId = 13; CommandLine = 'G.exe --path Z:\CSVM\CSVM res://scenes/Main.tscn -- --plane=player_bhawk' }
+            [pscustomobject]@{ ProcessId = 14; CommandLine = 'G.exe --path Z:\CSVM\CSVM --remote-debug tcp://127.0.0.1:6007' }
+            [pscustomobject]@{ ProcessId = 15; CommandLine = 'G.exe --editor --path Z:\CSVM\CSVM' }
+            [pscustomobject]@{ ProcessId = 16; CommandLine = 'G.exe --path D:\Other\game -- --det' }
+        )
+        $quiet = @(Get-CsvmGodots -Processes $fake)
+        Close-MemReservation $held
+        Assert-Mem ($quiet.Count -eq 3 -and $quiet[0].Worktree -eq "Z:\Crimson Skies" -and $quiet[0].Kind -eq "unledgered" -and
+            $quiet[1].Worktree -eq "Z:\CSVM\.claude\worktrees\a" -and $quiet[2].Kind -eq "probe" -and $quiet[2].Worktree -eq "Z:\CSVM\.claude\worktrees\b") "the quiet census names scripted CSVM launches by worktree and skips play, editors and other projects"
     } finally {
         $env:CSVM_MEM_AVAILABLE_GB = $savedAvail
         Remove-Item -LiteralPath $MemLedgerDir -Recurse -Force -ErrorAction SilentlyContinue

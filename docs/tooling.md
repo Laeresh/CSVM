@@ -107,7 +107,33 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 **`-GoldenWorkers <n>`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`,
 `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`), and **`-Graphics
 original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
-`--graphics=enhanced` to the perf and hitch launches only).
+`--graphics=enhanced` to the perf and hitch launches only), and **`-WaitQuiet`** (+
+`-QuietTimeoutSec`, below).
+
+**`-WaitQuiet` is the one way to wait for a quiet machine.** Before the build it waits until no
+scripted CSVM Godot runs on the machine: any Godot whose `--path` names a `CSVM` folder, from any
+tree, that holds a live ledger reservation or carries a scripted flag (`--det`, `--run-tests`,
+`--frames=`, `--shots=`, `--screenshot=`, the set the ledger admits). **An interactive session is
+not waited on**: the user's own play (`RunGame.ps1` without a scripted flag, an editor's F5 run)
+and an open editor are left out, since holding test runs while the user plays is gaming mode's job
+(#152); a play session started with `--det` counts as scripted. It prints each one it waits on as
+`pid <n> <ledger kind or unledgered> <worktree>`, again when the set of worktrees changes and every
+60 s. The memory ledger already
+queues every launch on memory; this waits out the CPU and GPU contention of runs that fit side by
+side, which is what runs a shard past its watchdog. Past `-QuietTimeoutSec` (default 1800 s) the
+run ends `DEFERRED: quiet`, exit 3, without building. `Wait-QuietMachine` in `MemoryLedger.ps1` is
+the code, and `-SelfTest` checks its census.
+
+**A rebuild under a run stops it.** The build stage records `CSVM.dll`'s write time and size;
+every launch pool (shards, golden shots, perf, hitch, the golden retry) checks them once a second,
+and reads each running launch's `--log-file` while it is under 64 KB for `Cannot instantiate C#
+script`, the line a launch that met a swapped assembly prints before it sits until its watchdog.
+Either one prints `DEFERRED: rebuild, <cause> ...`, closes the run's job, which kills every launch
+at once, and ends the run DEFERRED, exit 3: a stopped launch counts as never started, what finished
+before it is still judged, and later Godot stages are skipped. The shard-hash compare (METHOD-6)
+remains the proof after the fact. `.\RunTests.ps1 -SelfTest` checks the trigger against a scratch
+DLL and log without building. A red summary names `docs/verification.md`'s known environmental
+reds.
 
 **Every test stage prints its wall time against a budget, and a budget never fails a run**.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
@@ -906,7 +932,8 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   FAIL: `RunTests.ps1` marks the stage DEFERRED, skips the later Godot stages and exits **3**
   (`$MemDeferredExitCode`); `RunProbe.ps1` exits 3 without launching. What did run is still
   judged: the shards and shots that ran are merged and scored, and **a FAIL outranks DEFERRED** in
-  both the stage and the run result. Gaming mode shares the wait cap and the outcome.
+  both the stage and the run result. Gaming mode shares the wait cap and the outcome, and a
+  rebuild under the run and `-WaitQuiet`'s cap share the outcome (Launch scripts, above).
 - **The engine's side** (`src/Tooling/MemoryAdmission.cs`, called once from `Launcher._Ready`,
   Windows editor builds only). A non-interactive launch (`--det`, `--run-tests`, `--frames=`,
   `--shots=`, `--screenshot=`) reads physical memory available as the ledger does

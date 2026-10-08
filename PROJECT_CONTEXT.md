@@ -163,7 +163,11 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
   passes it; whoever lands the change (the orchestrator, for a run) checks the reported battery
   result and refuses a red one without a waiver.
 - **`result: DEFERRED` (exit 3) is neither pass nor fail**: a launch waited past the memory ledger's cap
-  or met the memory floor (`docs/tooling.md`); re-run it when memory frees, and never land on it.
+  or met the memory floor, `CSVM.dll` was rebuilt under the run, or `-WaitQuiet` ran past its cap
+  (`docs/tooling.md`); re-run it, and never land on it.
+- **To start on a quiet machine, pass `-WaitQuiet`**, which waits for every scripted CSVM Godot to
+  end (never the user's own play) and names each one; write no wait loop of your own. A red that matches `docs/verification.md`'s
+  known environmental reds is rerun alone with the command given there.
 - **Every test stage prints its wall time against a budget from `analysis/verification-budgets.json`.**
   An `over budget` marker is awareness only and never changes the exit code, because a busy
   workstation must not fail correct code; `docs/tooling.md` holds the rule that set the numbers.

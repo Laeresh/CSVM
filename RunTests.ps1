@@ -67,6 +67,11 @@
     below the memory floor, ends the run DEFERRED with exit 3, neither PASS nor FAIL. See
     docs/tooling.md.
 
+    Rebuild: when CSVM.dll changes after the build stage (another build on this tree), or a
+    running launch logs "Cannot instantiate C# script", the run's launches are killed within about
+    a second and the run ends "DEFERRED: rebuild, ...", exit 3: nothing after that point measured
+    the built binary. A red summary points at docs/verification.md's known environmental reds.
+
     Wall-time budgets: each stage row prints the measured budget for the lane the run
     is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
     the numbers and the rule that set them live, so this help names the file rather than figures
@@ -191,6 +196,21 @@
     in the perf/hitch stage headers. "original" appends nothing, so the
     default launch argument lists are byte-identical to a run that omits this parameter.
 
+.PARAMETER WaitQuiet
+    Before the build, wait until no scripted CSVM Godot runs on this machine (any tree; one with a
+    ledger reservation or a scripted flag such as --det or --run-tests), printing the pid, ledger
+    kind and worktree of each one waited on. The user's own play (without a scripted flag such as --det) and an editor are never waited on. The memory ledger
+    already queues each launch on memory; this waits out the CPU and GPU contention that runs a
+    shard past its watchdog or flips an enhanced golden. Past -QuietTimeoutSec the run ends
+    DEFERRED, exit 3, without building.
+
+.PARAMETER QuietTimeoutSec
+    The longest -WaitQuiet waits, in seconds (default 1800, the memory ledger's own cap).
+
+.PARAMETER SelfTest
+    Check the rebuild stop's trigger (Get-RebuildCause) against a scratch DLL and log, then exit
+    without building or launching anything.
+
 .EXAMPLE
     .\RunTests.ps1
     Build, the unit tests, the in-engine suites, one summary block, one exit code.
@@ -253,7 +273,10 @@ param(
     [int]$PerfIterations = 0,
     [int]$PerfFrames = 0,
     [ValidateSet("original", "enhanced")]
-    [string]$Graphics = "original"
+    [string]$Graphics = "original",
+    [switch]$WaitQuiet,
+    [int]$QuietTimeoutSec = 1800,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -290,6 +313,10 @@ $RepoRoot   = $PSScriptRoot
 $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
+# The assembly Godot actually loads. Hashing it is the only honest answer to "did the new build
+# run" (METHOD-6): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
+# nothing else distinguishes two builds of one revision.
+$PerfDll    = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 $EngineTimeoutSec = 300
 # The engine stage's budget is capped below the watchdog, so a growing catalog reads "over budget"
@@ -324,12 +351,19 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
 # belongs to the desktop its process was started on, and that is fixed before the process runs.
 # Falls back to the visible desktop rather than failing: the tests must still run where it is
 # refused, just visibly.
+# Every Godot launch below is admitted against the machine-wide memory ledger (Invoke-GodotPool).
+# Dot-sourcing binds the ledger's own -SelfTest parameter here as $false, so this run's is kept first.
+$RunSelfTest = [bool]$SelfTest
+. (Join-Path $PSScriptRoot "MemoryLedger.ps1")
+# Before the desktop and the job exist, so a run that gives up leaves nothing open in this session.
+if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
+    Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; another CSVM Godot ran past -QuietTimeoutSec ${QuietTimeoutSec}s" -ForegroundColor Yellow
+    exit $MemDeferredExitCode
+}
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop
 # Every child below joins this job, held until the summary, so a killed runner takes them with it.
 $null = Open-RunJob
-# Every Godot launch below is admitted against the machine-wide memory ledger (Invoke-GodotPool).
-. (Join-Path $PSScriptRoot "MemoryLedger.ps1")
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -372,10 +406,84 @@ function Invoke-Godot {
     return $item.ExitCode
 }
 
-# Set to the DEFERRED line once a launch waited past $MemMaxWaitSec or the engine refused to start
-# below the memory floor. From then on no launch is admitted, and the run ends DEFERRED.
-$script:MemDeferred = $null
-$script:MemDeferredStage = $null
+# Set to the DEFERRED line once a launch waited past $MemMaxWaitSec, the engine refused to start
+# below the memory floor, or the binary changed under the run (Get-RebuildCause). From then on no
+# launch is admitted, and the run ends DEFERRED with the ledger's $MemDeferredExitCode.
+$script:Deferred = $null
+$script:DeferredStage = $null
+# The CSVM.dll the build stage produced (its FileInfo), and whether a rebuild has stopped the run.
+$script:BuiltDll = $null
+$script:Rebuilt = $false
+$script:RebuildCheck = $null
+
+# The rebuild line, or $null. Checked at most once a second: the DLL's write time and size against
+# the build stage's, and each running launch's log for the line a launch that met a half-written
+# or swapped assembly prints before it sits until its watchdog.
+function Get-RebuildCause {
+    param([object[]]$Running)
+    if (-not $script:BuiltDll) { return $null }
+    if ($script:RebuildCheck -and $script:RebuildCheck.Elapsed.TotalSeconds -lt 1) { return $null }
+    $script:RebuildCheck = [System.Diagnostics.Stopwatch]::StartNew()
+    $now = Get-Item -LiteralPath $PerfDll -ErrorAction SilentlyContinue
+    $cause = $null
+    if (-not $now) {
+        $cause = "CSVM.dll was deleted"
+    } elseif ($now.LastWriteTimeUtc -ne $script:BuiltDll.LastWriteTimeUtc -or $now.Length -ne $script:BuiltDll.Length) {
+        $cause = "CSVM.dll was rewritten at $($now.LastWriteTime.ToString('HH:mm:ss'))"
+    }
+    foreach ($item in $Running) {
+        if ($cause) { break }
+        # Every pool launch names its --log-file in its own arguments, Invoke-Godot's included.
+        $at = [array]::IndexOf([string[]]@($item.Args), "--log-file")
+        $log = if ($at -ge 0 -and $at + 1 -lt @($item.Args).Count) { [string]@($item.Args)[$at + 1] } else { "" }
+        # Only a log under 64 KB is read: one whose Launcher loaded passes that within seconds.
+        $small = $log -and (Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -lt 64KB
+        if ($small -and (Select-String -LiteralPath $log -Pattern 'Cannot instantiate C# script' -SimpleMatch -Quiet)) {
+            $cause = "$($item.Label) logged 'Cannot instantiate C# script'"
+        }
+    }
+    if (-not $cause) { return $null }
+    return "DEFERRED: rebuild, $cause after this run's build, so its launches were stopped; re-run once that build is done"
+}
+
+if ($RunSelfTest) {
+    $failed = 0
+    function Assert-Rebuild {
+        param([bool]$Ok, [string]$What)
+        $script:RebuildCheck = $null
+        if ($Ok) { Write-Host "  PASS  $What" } else { Write-Host "  FAIL  $What" -ForegroundColor Red; $script:failed++ }
+    }
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-rebuild-selftest-$PID"
+    $null = New-Item -ItemType Directory -Path $dir -Force
+    try {
+        $PerfDll = Join-Path $dir "CSVM.dll"
+        [System.IO.File]::WriteAllText($PerfDll, "built")
+        $log = Join-Path $dir "s1.log"
+        [System.IO.File]::WriteAllText($log, "Godot Engine v4.7`n")
+        $shard = [pscustomobject]@{ Label = "s1"; Args = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn") }
+        $built = Get-Item -LiteralPath $PerfDll
+        $script:BuiltDll = $built
+        Assert-Rebuild (-not (Get-RebuildCause -Running @($shard))) "the build's own stamp and a clean log do not trigger"
+        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc; Length = $built.Length + 1 }
+        Assert-Rebuild ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different size triggers"
+        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc.AddSeconds(-5); Length = $built.Length }
+        Assert-Rebuild ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different write time triggers"
+        $script:BuiltDll = $built
+        [System.IO.File]::AppendAllText($log, "ERROR: Cannot instantiate C# script because the associated class could not be found.`n")
+        Assert-Rebuild ((Get-RebuildCause -Running @($shard)) -like "DEFERRED: rebuild, s1 logged 'Cannot instantiate C# script'*") "a running launch's log line triggers"
+        Assert-Rebuild (-not (Get-RebuildCause -Running @())) "the log line of a launch no longer running does not"
+        Remove-Item -LiteralPath $PerfDll
+        Assert-Rebuild ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was deleted*") "a deleted DLL triggers"
+    } finally {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        Close-HiddenDesktop
+        Close-RunJob
+    }
+    Write-Host ""
+    if ($failed -gt 0) { Write-Host "SELFTEST FAIL: $failed check(s)" -ForegroundColor Red; exit 1 }
+    Write-Host "SELFTEST PASS" -ForegroundColor Green
+    exit 0
+}
 
 # Launches each item's .Args (at most $MaxConcurrent in flight), every launch admitted first by the
 # machine-wide memory ledger (MemoryLedger.ps1), and sets each item's .ExitCode. The watchdog starts
@@ -387,25 +495,31 @@ function Invoke-GodotPool {
     foreach ($item in $Items) { $pending.Enqueue($item) }
     $running = New-Object System.Collections.ArrayList
     $waiter = $null
-    while ($running.Count -gt 0 -or ($pending.Count -gt 0 -and -not $script:MemDeferred)) {
+    while ($running.Count -gt 0 -or ($pending.Count -gt 0 -and -not $script:Deferred)) {
         foreach ($item in @($running)) {
             $handle = if ($item.Launch.Kind -eq "desktop") { $item.Launch.Handle } else { $item.Launch.Process.Handle }
-            $overdue = $TimeoutSec -gt 0 -and $item.Watch.Elapsed.TotalSeconds -ge $TimeoutSec
+            $overdue = $script:Rebuilt -or ($TimeoutSec -gt 0 -and $item.Watch.Elapsed.TotalSeconds -ge $TimeoutSec)
             if (-not $overdue -and -not [CSVMMemLedger]::HasExited($handle)) { continue }
             # An overdue launch is killed here, and its reservation released only after the kill.
             $item.ExitCode = Wait-Godot -Launch $item.Launch -TimeoutSec 1
             Close-MemReservation -Reservation $item.Reservation -CompleteCatalog:$CompleteCatalog
             $running.Remove($item)
-            if ($item.ExitCode -eq $MemTripwireExitCode -and -not $script:MemDeferred) {
-                $script:MemDeferred = "DEFERRED: memory, $($item.Label) exited $MemTripwireExitCode, the engine found available memory below the floor"
-                Write-Host "  $script:MemDeferred" -ForegroundColor Yellow
+            if ($script:Rebuilt) {
+                # Stopped, not finished: it reads as never started, as a launch the ledger deferred does.
+                $item.Launch = $null
+                $item.ExitCode = $MemDeferredExitCode
+                continue
+            }
+            if ($item.ExitCode -eq $MemTripwireExitCode -and -not $script:Deferred) {
+                $script:Deferred = "DEFERRED: memory, $($item.Label) exited $MemTripwireExitCode, the engine found available memory below the floor"
+                Write-Host "  $script:Deferred" -ForegroundColor Yellow
             }
         }
-        while ($pending.Count -gt 0 -and $running.Count -lt $MaxConcurrent -and -not $script:MemDeferred) {
+        while ($pending.Count -gt 0 -and $running.Count -lt $MaxConcurrent -and -not $script:Deferred) {
             $next = $pending.Peek()
             if (-not $waiter) { $waiter = New-MemWaiter -Kind $Kind -Label $next.Label -Worktree $RepoRoot }
             $reservation = Step-MemWaiter $waiter
-            if ($waiter.Deferred) { $script:MemDeferred = $waiter.Deferred }
+            if ($waiter.Deferred) { $script:Deferred = $waiter.Deferred }
             if (-not $reservation) { break }
             $waiter = $null
             $null = $pending.Dequeue()
@@ -420,6 +534,16 @@ function Invoke-GodotPool {
             $next | Add-Member -NotePropertyName Reservation -NotePropertyValue $reservation -Force
             $next | Add-Member -NotePropertyName Watch -NotePropertyValue ([System.Diagnostics.Stopwatch]::StartNew()) -Force
             $null = $running.Add($next)
+        }
+        if (-not $script:Deferred -and ($cause = Get-RebuildCause -Running $running)) {
+            $script:Deferred = $cause
+            $script:Rebuilt = $true
+            Write-Host "  $cause" -ForegroundColor Yellow
+            if ($waiter -and $waiter.Held) { $waiter.Held.Stream.Dispose() }
+            # The job kills every launch of this run at once, so the reaping above returns at once;
+            # without a job each is killed there after a second.
+            Close-RunJob
+            continue
         }
         Start-Sleep -Milliseconds 200
     }
@@ -560,10 +684,10 @@ function Add-Stage {
     )
     # The stage that met a memory deferral is DEFERRED unless what did run failed: FAIL outranks
     # DEFERRED. Every Godot stage after it is skipped before it starts.
-    if ($script:MemDeferred -and -not $script:MemDeferredStage -and $Status -ne "SKIP") {
-        $script:MemDeferredStage = $Name
+    if ($script:Deferred -and -not $script:DeferredStage -and $Status -ne "SKIP") {
+        $script:DeferredStage = $Name
         if ($Status -ne "FAIL") { $Status = "DEFERRED" }
-        $Detail = "$Detail; $script:MemDeferred"
+        $Detail = "$Detail; $script:Deferred"
     }
     $null = $Stages.Add([pscustomobject]@{
         Name    = $Name
@@ -856,6 +980,9 @@ if ($buildCode -eq 0) {
     Add-Stage -Name "build" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "dotnet build exited $buildCode"
 }
 $buildOk = ($buildCode -eq 0)
+if ($buildOk) {
+    $script:BuiltDll = Get-Item -LiteralPath $PerfDll -ErrorAction SilentlyContinue
+}
 
 # ---- units -------------------------------------------------------------------------------
 
@@ -949,8 +1076,8 @@ if ($SkipEngine) {
 } elseif (-not $buildOk) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the in-engine suites did not run (the build failed)"
-} elseif ($script:MemDeferred) {
-    Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:MemDeferredStage"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the in-engine suites did not run: no Godot at $GodotExe (in a worktree, set `$env:CSVM_DATA_ROOT to the primary tree)"
@@ -1066,15 +1193,15 @@ if ($SkipEngine) {
     # After a deferral the shards that ran are still merged and judged, so a deferral never hides
     # a failure; only their partial coverage of the selection is not one.
     $ranShards = @($shardRuns | Where-Object { $_.Launch -and $_.ExitCode -ne $MemTripwireExitCode })
-    if ($script:MemDeferred -and $ranShards.Count -eq 0) {
+    if ($script:Deferred -and $ranShards.Count -eq 0) {
         Add-Stage -Name "engine" -Status "DEFERRED" -Seconds $watch.Elapsed.TotalSeconds -Detail "no shard ran"
     } else {
-        $judged = if ($script:MemDeferred) { $ranShards } else { $shardRuns }
+        $judged = if ($script:Deferred) { $ranShards } else { $shardRuns }
         $merged = Merge-EngineShards -Shards $judged -TimeoutSec $EngineTimeoutSec
         $status = $merged.Status
         $problems = @($merged.Problems)
         $detail = $merged.Detail
-        if ($script:MemDeferred) {
+        if ($script:Deferred) {
             $problems = @($problems | Where-Object { $_ -notmatch '^the shards covered ' })
             $status = if ($merged.Failed -gt 0 -or $problems.Count -gt 0) { "FAIL" } else { "DEFERRED" }
             $detail = "$detail; $($ranShards.Count) of $shardCount shard(s) ran"
@@ -1209,8 +1336,8 @@ if ($SkipGoldensNow) {
 } elseif (-not $buildOk) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the golden-image shots did not run (the build failed)"
-} elseif ($script:MemDeferred) {
-    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:MemDeferredStage"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the golden-image shots did not run: no Godot at $GodotExe"
@@ -1356,7 +1483,7 @@ if ($SkipGoldensNow) {
 
     # Second pass: the silent-death retry, serially and with --verbose, exactly as the plan
     # requires -- a batch's worth of concurrent launches is not where a flaky retry should run.
-    foreach ($state in ($states | Where-Object { $_.NeedsRetry -and -not $script:MemDeferred })) {
+    foreach ($state in ($states | Where-Object { $_.NeedsRetry -and -not $script:Deferred })) {
         $retried += $state.Shot.name
         Write-Host "  RETRY $($state.Shot.name): exited $($state.ShotCode) with no PNG -- re-running with --verbose" -ForegroundColor DarkYellow
         $state.Attempt = 2
@@ -1366,7 +1493,7 @@ if ($SkipGoldensNow) {
         Resolve-GoldenAttempt -State $state
     }
     # A deferral skips the retry, so a shot still owed one is unrun, not broken.
-    if ($script:MemDeferred) {
+    if ($script:Deferred) {
         $unrun += @($states | Where-Object { $_.NeedsRetry -and $_.Attempt -lt 2 })
     }
 
@@ -1479,10 +1606,6 @@ if ($SkipGoldensNow) {
 $PerfManifest = Join-Path $RepoRoot "analysis\perf\scenarios.json"
 $PerfDir      = Join-Path $ScratchDir "perf"
 $PerfHistory  = Join-Path $RepoRoot "perf-history.jsonl"
-# The assembly Godot actually loads. Hashing it is the only honest answer to "did the new build
-# run" (METHOD-6): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
-# nothing else distinguishes two builds of one revision.
-$PerfDll      = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 
 function Get-Median {
     param([double[]]$Values)
@@ -1529,8 +1652,8 @@ if (-not $Perf) {
 } elseif (-not $buildOk) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the perf scenarios did not run (the build failed)"
-} elseif ($script:MemDeferred) {
-    Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:MemDeferredStage"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the perf scenarios did not run: no Godot at $GodotExe"
@@ -1617,7 +1740,7 @@ if (-not $Perf) {
                                        "res://scenes/Main.tscn", "--") + $runArgs) -Kind "perf"
             $ErrorActionPreference = "Stop"
             # A launch the ledger deferred, or the engine refused, measured nothing and broke nothing.
-            if ($script:MemDeferred -and ($runCode -eq $MemDeferredExitCode -or $runCode -eq $MemTripwireExitCode)) {
+            if ($script:Deferred -and ($runCode -eq $MemDeferredExitCode -or $runCode -eq $MemTripwireExitCode)) {
                 break
             }
 
@@ -1688,7 +1811,7 @@ if (-not $Perf) {
                 $null = $startupSamples[$key].Add([double]$startup[$key])
             }
         }
-        if ($script:MemDeferred) {
+        if ($script:Deferred) {
             break
         }
 
@@ -1929,8 +2052,8 @@ if (-not $RunHitchNow) {
 } elseif (-not $buildOk) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the hitch-detector check did not run (the build failed)"
-} elseif ($script:MemDeferred) {
-    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:MemDeferredStage"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the hitch-detector check did not run: no Godot at $GodotExe"
@@ -2209,8 +2332,9 @@ Close-HiddenDesktop
 Close-RunJob
 if ($failedStages.Count -gt 0) {
     Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
-} elseif ($script:MemDeferred) {
-    Write-Host ("  result: DEFERRED in {0} -- {1}s total, exit {2}; {3}" -f $script:MemDeferredStage, (Format-Seconds $totalSeconds), $MemDeferredExitCode, $script:MemDeferred) -ForegroundColor Yellow
+    Write-Host "  a red that matches an entry in docs\verification.md 'Known environmental reds' has an owner and a one-line rerun there" -ForegroundColor Red
+} elseif ($script:Deferred) {
+    Write-Host ("  result: DEFERRED in {0} -- {1}s total, exit {2}; {3}" -f $script:DeferredStage, (Format-Seconds $totalSeconds), $MemDeferredExitCode, $script:Deferred) -ForegroundColor Yellow
 } else {
     Write-Host ("  result: PASS -- {0}s total, exit 0" -f (Format-Seconds $totalSeconds)) -ForegroundColor Green
 }
@@ -2219,7 +2343,7 @@ Write-Host "--------------------------------------------------------------------
 if ($failedStages.Count -gt 0) {
     exit 1
 }
-if ($script:MemDeferred) {
+if ($script:Deferred) {
     exit $MemDeferredExitCode
 }
 exit 0
