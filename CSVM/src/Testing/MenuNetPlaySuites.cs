@@ -70,6 +70,64 @@ internal static class MenuNetPlaySuites
         }
     }
 
+    [Suite("menu-net-dogfight-launch",
+        "a networked Dogfight with one local seat flies: the password row takes a letter while the "
+        + "door is shut and refuses one once Host on Built-in's multiplayer board opens it, "
+        + "Continue and the map lead to aircraft select, and the lone pilot's select and confirm "
+        + "leave as one Dogfight launch exit carrying the host's wire, the two-seat minimum lifted")]
+    internal static void TheLonePilotLaunches(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        var door = host.Features.Get<NetPlayFeature>();
+        ctx.Host.AddChild(menu);
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-net-dogfight-launch");
+        try
+        {
+            menu.ShowMenu();
+            OpenBoard(ctx, menu);
+            var key = new Godot.InputEventKey { Pressed = true, Keycode = Godot.Key.A, Unicode = 'a' };
+            Walk(menu, 4);
+            menu._UnhandledInput(key);
+            ctx.Check(menu.ShownRowText.StartsWith("Password", StringComparison.Ordinal) && door.Password == "a",
+                $"ABLE-TO-FAIL CONTROL: a shut door's password row takes a typed letter ({menu.ShownRowText}, '{door.Password}')");
+            door.Password = "";
+            Walk(menu, -4);
+            if (HostAMatch(ctx, menu, door) == 0)
+            {
+                return;
+            }
+
+            Walk(menu, 2);
+            menu._UnhandledInput(key);
+            ctx.Check(door.Password.Length == 0, $"a hosting door's password row refuses it, the lobby holding the one it opened with ('{door.Password}')");
+            Walk(menu, -2);
+            menu.Drive(Accept);
+            menu.Drive(Accept);
+            ctx.Check(menu.ShownScreen == "Plane" && exits.Count == 0, $"Continue and the map reach aircraft select ({menu.ShownScreen}, {exits.Count})");
+            menu.Drive(Accept);
+            ctx.Check(exits.Count == 0, $"ABLE-TO-FAIL CONTROL: selecting the airframe alone does not launch ({exits.Count})");
+            menu.Drive(Accept);
+            ctx.Check(exits.Count == 1 && exits[0] is LaunchExit { Mode: CSVM.Spec.MenuMode.Versus, Seats.Count: 1, Net.IsHost: true },
+                $"the lone pilot's confirm leaves as one Dogfight exit with the host's wire ({exits.Count}, {(exits.Count > 0 ? exits[0] : null)})");
+        }
+        finally
+        {
+            // The launch handed the wire to a session this suite never builds, so the suite closes it.
+            if (exits.Count > 0 && exits[0] is LaunchExit { Net.Transport: IDisposable wire })
+            {
+                wire.Dispose();
+            }
+
+            door.Discard();
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     [Suite("menu-screen-keyboard",
         "Steam's on-screen keyboard on Built-in's multiplayer board, its URLs recorded: off a "
         + "SteamOS device a pad's Accept on the address row raises nothing, on one it raises the "
@@ -214,6 +272,15 @@ internal static class MenuNetPlaySuites
         finally
         {
             mute.Discard();
+        }
+    }
+
+    // Down (or Up, for a negative count) that many board rows.
+    private static void Walk(LaunchMenu menu, int rows)
+    {
+        for (int i = 0; i < Math.Abs(rows); i++)
+        {
+            menu.Drive(rows > 0 ? Down : Up);
         }
     }
 

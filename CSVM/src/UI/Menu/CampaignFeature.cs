@@ -910,6 +910,30 @@ public sealed class CampaignFeature : IMenuFeature
         return new CampaignMissionExit(IsGuest ? "" : profile.Name, MissionSeq, seats, Wingman: IsGuest ? null : WingmanOverride);
     }
 
+    /// <summary>A co-op guest's launch, once <paramref name="net"/>'s host has launched the mission
+    /// this guest is seated for. It holds one pane per seat the host gave this machine. Each flies
+    /// on the devices <paramref name="padsOf"/> names for its local seat, and the exit carries the
+    /// door's wire. Null until then, and on a campaign that is not a guest's.</summary>
+    public CampaignMissionExit? CoopGuestExit(NetPlayFeature net, Func<int, IReadOnlyList<int>> padsOf)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        ArgumentNullException.ThrowIfNull(padsOf);
+        if (!IsGuest || !net.CoopLaunchDue || net.CoopFlow is not { } flow)
+        {
+            return null;
+        }
+
+        SetMission(flow.MissionSeq);
+        Field.SetPlayers(net.CoopSeats);
+        var pads = new List<IReadOnlyList<int>>(net.CoopSeats);
+        for (int local = 0; local < net.CoopSeats; local++)
+        {
+            pads.Add(padsOf(local));
+        }
+
+        return BuildExit(pads) is { } exit ? exit with { Net = net.BuildLaunch() } : null;
+    }
+
     /// <summary>Drops the open campaign: the store, the seated profile, the mission and its
     /// briefing, the sortie's field and every intent. Called on a presentation switch and by every
     /// door out of the campaign; nothing saved is touched.</summary>

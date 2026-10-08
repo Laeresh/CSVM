@@ -93,7 +93,7 @@ internal static class MenuCampaignSuites
         try
         {
             EmptyRoster(ctx, menu);
-            CreatePlayer(ctx, menu, store);
+            CreatePlayer(ctx, menu, store, seat);
             SecondPlayerAndDelete(ctx, menu, store);
             FreshCabin(ctx, menu, store);
             Progress(store);
@@ -148,13 +148,16 @@ internal static class MenuCampaignSuites
         ctx.Check(menu.ShownScreen == "Mode" && menu.Campaign == null, $"CANCEL closes the flow and lands on the Mode screen ({menu.ShownScreen})");
     }
 
-    private static void CreatePlayer(TestContext ctx, LaunchMenu menu, CampaignProfileStore store)
+    private static void CreatePlayer(TestContext ctx, LaunchMenu menu, CampaignProfileStore store, CSVM.UI.Menu.BuiltIn.BuiltInSeat seat)
     {
         WalkTo(menu, LaunchMenu.CampaignRow);
         menu.Drive(Accept);
         var flow = menu.Campaign!;
         menu.Drive(Accept);
         ctx.Check(flow.CapturesText, $"Accept on the field arms it for typing");
+        // Space is a keyboard Accept alias, so a seat not capturing text would commit mid-name.
+        menu._Process(0);
+        ctx.Check(seat.CapturingText, $"and seat 0 captures text, so a typed space is a letter and not an Accept");
         Has(ctx, "the footer names typing", "Type a name", menu.ShownFooter);
         Is(ctx, "the armed field shows a caret", "Name:  _", menu.ShownRowText);
         flow.Type(Pilot);

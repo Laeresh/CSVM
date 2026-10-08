@@ -784,30 +784,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// until then, and on a campaign that is not a guest's.</summary>
     internal MenuExit? GuestLaunch()
     {
-        if (!IsGuest || _net() is not { CoopLaunchDue: true } net || net.CoopFlow is not { } flow)
-        {
-            return null;
-        }
-
-        _campaign!.SetMission(flow.MissionSeq);
-
-        // One pane per seat the host gave this machine, each on its own player's devices.
-        _campaign.Field.SetPlayers(net.CoopSeats);
-        var pads = new List<IReadOnlyList<int>>(net.CoopSeats);
-        for (int local = 0; local < net.CoopSeats; local++)
-        {
-            pads.Add(local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>());
-        }
-
-        var exit = _campaign.BuildExit(pads);
-        if (exit == null)
+        if (!IsGuest || _net() is not { } net
+            || _campaign!.CoopGuestExit(net, local => local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>()) is not { } exit)
         {
             return null;
         }
 
         // A guest still watching its host's film leaves it for the launch rather than missing it.
         StopGuestFilm();
-        return exit with { Net = net.BuildLaunch() };
+        return exit;
     }
 
     /// <summary>Typed characters and Backspace into the roster's name box, the campaign's own

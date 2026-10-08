@@ -3,16 +3,15 @@ using System.Linq;
 using CSVM.Mech3;
 using CSVM.Spec;
 using CSVM.UI.Menu;
-using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>
-/// The shared Instant Action feature: its decoded option sets, the setup's opening state, the
-/// rules between the fields (the ace duel, the militia reset, the clouds barring stunt flying), a
-/// preset applied over the fields, the launch gate and the built def and exit, and what a discard
-/// drops. The launchscreen's public rosters are checked against it so the two cannot drift.
+/// The shared Instant Action feature: its decoded option sets, the setup's opening state and the
+/// rules between the fields. Those are the ace duel, the militia reset and the clouds barring
+/// stunt flying. Also a preset applied over the fields, the launch gate, the built def and exit,
+/// and what a discard drops.
 /// </summary>
 public class InstantActionFeatureTests
 {
@@ -32,18 +31,6 @@ public class InstantActionFeatureTests
         Assert.Equal(new[] { "novice", "veteran", "ace" }, InstantActionFeature.Skills);
         Assert.Equal(19, InstantActionFeature.Presets.Count);
         Assert.Throws<ArgumentException>(() => InstantActionFeature.AircraftFor("Not A Militia"));
-    }
-
-    [Fact]
-    public void TheLaunchscreensRostersReadOffTheFeature()
-    {
-        Assert.Equal(InstantActionFeature.Environments.Select(e => e.Code), LaunchMenu.EnvironmentCodes());
-        Assert.Equal(InstantActionFeature.Environments.Select(e => e.Name), LaunchMenu.EnvironmentNames());
-        Assert.Equal(InstantActionFeature.Airframes.Select(a => a.Name), LaunchMenu.PlaneNames());
-        Assert.Equal(InstantActionFeature.Militias.Select(m => m.Name), LaunchMenu.MilitiaNames());
-        Assert.Equal(InstantActionFeature.Skills, LaunchMenu.SkillKeys());
-        Assert.Equal(InstantActionFeature.MissionTypesFor("C2B").Select(m => m.Key), LaunchMenu.MissionTypeKeysFor("C2B"));
-        Assert.Equal(InstantActionFeature.WaveFor(3, 1, 0, 2), LaunchMenu.WaveFor(3, 1, 0, 2));
     }
 
     [Fact]

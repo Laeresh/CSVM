@@ -405,6 +405,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the file). Null until then; a failed load leaves UiStrings.Empty here.
     private UiStrings? _uiStrings;
     private string _error = "";
+    // The door's revision a host lobby last refused the launch at. The open gate re-asks the lobby
+    // only after an input or network news, since each ask rewrites the lobby's options.
+    private int? _launchRefusedAt;
     // The join strip as last drawn, _Process redraws when the live roster changes (hotplug).
     private string _stripText = "";
     // --menu=campaign-guestcheck: which guest's flight check the aid asked for, applied by
@@ -745,40 +748,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         return codes;
     }
 
-    /// <summary>The Instant Action Environment screen's roster, as chapter codes, in the decoded
-    /// dropdown order, C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. The shared feature's
-    /// roster, kept here as the screen's own read-out.</summary>
-    public static string[] EnvironmentCodes() =>
-        Names(InstantActionFeature.Environments, e => e.Code);
-
-    /// <summary>The Instant Action Environment screen's roster as the display names the preset
-    /// table names an environment by, in the same decoded dropdown order
-    /// <see cref="EnvironmentCodes"/> returns codes in.</summary>
-    public static string[] EnvironmentNames() =>
-        Names(InstantActionFeature.Environments, e => e.Name);
-
-    /// <summary>The MissionType screen's roster for one chapter, as `ia.json` `mission_type` keys
-    /// in the UI dropdown order, with Stunt Flying dropped where `disallow_missions` bars it, the
-    /// same rule <see cref="ChapterCodesFor"/> applies via <see cref="DangerZonesFor"/>.</summary>
-    public static string[] MissionTypeKeysFor(string chapterCode) =>
-        Names(InstantActionFeature.MissionTypesFor(chapterCode), m => m.Key);
-
-    /// <summary>The eleven airframe display names in the langui 3700 order, the shared feature's
-    /// roster as this screen reads it.</summary>
-    public static string[] PlaneNames() =>
-        Names(InstantActionFeature.Airframes, a => a.Name);
-
-    /// <summary>The wave editor's Militia field roster, in the langui dropdown order (3670).</summary>
-    public static string[] MilitiaNames() =>
-        Names(InstantActionFeature.Militias, m => m.Name);
-
-    /// <summary>The wave editor's Aircraft field roster for one militia (by <see cref="MilitiaNames"/>'s
-    /// own name, case-sensitive), the `.BM` pattern coverage table
-    /// (docs/formats/instant-action.md), never <c>vehicle.json</c>'s narrower <c>paint_pattern</c>
-    /// reading. Throws <see cref="ArgumentException"/> on an unrecognised name.</summary>
-    public static string[] AircraftFor(string militiaName) =>
-        Names(InstantActionFeature.AircraftFor(militiaName), a => a);
-
     /// <summary>The pylons the Ammo Selection list offers for <paramref name="def"/>, in the
     /// order it lists them. They stand in fill order under their PHYSICAL number, so the screen
     /// agrees with the weapon gauge's belt lights rather than renumbering them 1..N. A fill-order
@@ -798,25 +767,13 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         return pylons;
     }
-    /// <summary>The wave editor's Skill field roster, internal keys in the langui dropdown order
-    /// (3695), the same vocabulary <c>InstantActionWave.EnemySkill</c> stores.</summary>
-    public static string[] SkillKeys() => Names(InstantActionFeature.Skills, s => s);
 
-    /// <summary>Builds one wizard wave slot into the <see cref="InstantActionWave"/>
-    /// <see cref="Mech3.InstantAction.BuildFromWizard"/> stores, returning
-    /// <see cref="InstantAction.EmptyWave"/> when <paramref name="count"/> is 0 so an unconfigured
-    /// slot matches a JSON file's omitted `groupN` byte-identically. The feature's own build rule,
-    /// kept here as the screen's read-out.</summary>
-    public static InstantActionWave WaveFor(int count, int militiaIndex, int aircraftIndex, int skillIndex) =>
-        InstantActionFeature.WaveFor(count, militiaIndex, aircraftIndex, skillIndex);
-
-    /// <summary>Show the menu (normally from the Mode screen) and prime every input edge so a
-    /// button still held from the transition here (the Esc that left a flight, the Start that
-    /// joined a player) does not fire immediately. Joined players survive a return from flight;
-    /// their plane locks do not. <paramref name="startScreen"/> opens on a later screen, a
-    /// screenshot aid: docs/cli.md's <c>--menu=</c> list, with the hangar's own values handled by
-    /// <see cref="OpenHangarAid"/> and the campaign's by <see cref="OpenCampaignAid"/>.</summary>
-    public void ShowMenu(string startScreen = "")
+    /// <summary>Show the menu and prime every input edge, so a button held from the transition
+    /// here does not fire at once. Joined players survive a return from flight; plane locks do not.
+    /// A campaign's network door closes too, unless <paramref name="keepCoopDoor"/> says a co-op
+    /// flight returns. The aid's <paramref name="startScreen"/> is a value of docs/cli.md's
+    /// <c>--menu=</c> list, as are <see cref="OpenHangarAid"/>'s and <see cref="OpenCampaignAid"/>'s.</summary>
+    public void ShowMenu(string startScreen = "", bool keepCoopDoor = false)
     {
         // The pause leaf may have registered these player numbers during a flight. First, since the
         // Controls aid below registers the seats again.
@@ -909,7 +866,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = null;
         _campaignFeature.Discard();
         // The campaign's network door goes with the campaign that opened it.
-        CloseCoopDoor();
+        if (!keepCoopDoor)
+            CloseCoopDoor();
         _coopWait = false;
         _aidGuest = 0;
         RefreshRoster();
@@ -1025,6 +983,21 @@ public sealed partial class LaunchMenu : CanvasLayer
             flow.OpenScrapbookAfterMission(profile, seq, missionWon);
         }
 
+        Rebuild();
+    }
+
+    /// <summary>Opens the co-op guest's waiting board, the screen a guest's flight returns to while
+    /// its link stands. Off a co-op guest's door the menu stays where it is.</summary>
+    public void OpenCoopWait()
+    {
+        if (_net is not { IsCoopGuest: true })
+        {
+            return;
+        }
+
+        _screen = Screen.Network;
+        _coopWait = true;
+        _netIndex = 0;
         Rebuild();
     }
 
@@ -1147,9 +1120,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         // Player 1's commands come through the host's first seat and are applied onto its poller;
         // every other seat's frame is read from its own source. Text capture is set before the
-        // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
+        // poll: a name field's key aliases, Space's Accept among them, must be dead that frame.
         var seat = _host.Seats[0];
-        seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0;
+        seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0
+            || (_screen == Screen.Campaign && _campaign is { CapturesText: true });
         Apply(WithPointer(Gestured(gestures, seat.Poll((float)delta))));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
@@ -1256,15 +1230,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static string LevelLabel(int? level, int shipped) =>
         Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel).ToString(CultureInfo.InvariantCulture);
 
-    // The read-out helpers behind the public rosters: one name per row of a feature list.
-    private static string[] Names<T>(IReadOnlyList<T> rows, Func<T, string> name)
-    {
-        var names = new string[rows.Count];
-        for (int i = 0; i < rows.Count; i++)
-            names[i] = name(rows[i]);
-        return names;
-    }
-
     private static (string Name, string Node)[] BuildPlanes()
     {
         var rows = new (string Name, string Node)[InstantActionFeature.Airframes.Count];
@@ -1276,10 +1241,19 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static (string Name, string Code, bool DangerZones)[] ChaptersFor(MenuMode mode) =>
         mode == MenuMode.Stunt ? Array.FindAll(Chapters, c => c.DangerZones) : Chapters;
 
-    // Whether a chapter's `ia.json` ships `dzones`, read off the shared roster so the
-    // Environment/MissionType screens and the plain Chapter screen cannot read two different
-    // answers for the same chapter.
-    private static bool DangerZonesFor(string chapterCode) => MenuChapters.DangerZonesFor(chapterCode);
+    // A list window's first row once it keeps the cursor in view, never scrolled past the end of a
+    // list of count rows. The cursor wraps (Wrap, like every other screen), so top-to-bottom jumps
+    // both ways are normal here rather than an edge case.
+    private static int ScrollTop(int top, int cursor, int count, int window)
+    {
+        int last = Math.Max(0, count - window);
+        top = Math.Clamp(top, 0, last);
+        if (cursor < top)
+            top = cursor;
+        else if (cursor >= top + window)
+            top = cursor - window + 1;
+        return Math.Clamp(top, 0, last);
+    }
 
     // The same roster as the shared setup's rows, so both presentations pick from one list.
     private static IReadOnlyList<MenuAircraft> MenuRoster(IReadOnlyList<CustomPlaneDef> customs) =>
@@ -1567,6 +1541,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             return true;
         }
 
+        if (TakeCoopGuestLaunch())
+        {
+            return true;
+        }
+
         bool dirty = false;
         if (_screen != Screen.Plane)
         {
@@ -1761,10 +1740,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             }
         }
 
-        if (CanLaunch())
+        if (CanLaunch() && (dirty || _launchRefusedAt is null || _launchRefusedAt != _net?.Revision))
         {
+            // Either the host took the exit and hid us, or the refusal line needs drawing.
             FireLaunch();
-            return false; // the host took the exit, hid us and is building
+            return true;
         }
         return dirty;
     }
@@ -2249,9 +2229,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         store.Save(saved);
     }
 
-    // One keypress into a name row, under the Original boxes' limits and character rule.
+    // One keypress into a name row, under the Original boxes' limits and character rule. ⚠ Do not
+    // let the password change while a socket is open. The lobby copied it at the open, and refuses
+    // a guest given the new one. The address row refuses for the same reason.
     private void TypeNetName(NetPlayFeature net, int row, InputEventKey key)
     {
+        if (row == NetPasswordRow && net.Stage is NetDoorStage.Hosting or NetDoorStage.Joining or NetDoorStage.Joined)
+        {
+            return;
+        }
+
         string text = row switch
         {
             NetGameNameRow => net.GameName,
@@ -2388,6 +2375,45 @@ public sealed partial class LaunchMenu : CanvasLayer
         _screen = Screen.Chapter;
         _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
         _error = "";
+    }
+
+    // The waiting board's guest has no flight check of its own, so each of its seats stands Ready
+    // under every round. A host that waits on Ready would otherwise wait forever. Once the host
+    // launches, the guest leaves with the exit an Original guest builds, over a guest campaign
+    // opened on the host's word. True when the launch went.
+    private bool TakeCoopGuestLaunch()
+    {
+        if (!_coopWait || _net is not { IsCoopGuest: true } net)
+        {
+            return false;
+        }
+
+        for (int local = 0; local < net.CoopSeats; local++)
+        {
+            var pick = net.PickOf(local);
+            if (!pick.Ready)
+            {
+                pick.Set(pick.Airframe, true, pick.Fit);
+            }
+        }
+
+        if (!net.CoopLaunchDue || net.CoopFlow is not { } flow)
+        {
+            return false;
+        }
+
+        _campaignFeature.OpenGuest(net.Advert?.Host ?? "", flow.Progress, net.CoopHangar, flow.Slot, Fits, _dataRoot,
+            net.Pick.Plane, net.Pick.Fit);
+        if (_campaignFeature.CoopGuestExit(net, local => local < _slots.Count ? _slots[local].Input.Pads ?? Array.Empty<int>() : Array.Empty<int>()) is not { } exit)
+        {
+            _campaignFeature.Discard();
+            return false;
+        }
+
+        Log.Info("ui", $"launchscreen: co-op guest flying mission seq {exit.MissionSeq.ToString(CultureInfo.InvariantCulture)} behind {net.Advert?.Host}");
+        _campaignFeature.Discard();
+        _host.Exit(exit);
+        return true;
     }
 
     // --- the hangar ---
@@ -2590,9 +2616,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         // Two of the aids need a roster to pick from and five need a profile part-way through the
-        // campaign; the seeded store carries both, since a second profile changes no later screen.
+        // campaign. The seeded store carries both, since a second profile changes no later screen.
+        // The scratch store is the one both presentations' aids share, emptied on every open.
         bool seeded = value != "campaign-empty" && value != "campaign-entry";
-        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
+        _campaign = NewCampaignFlow(CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         _screen = Screen.Campaign;
         _error = "";
         if (_campaign is not { } flow)
@@ -2724,12 +2751,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             page.Advance(slice);
         }
     }
-
-    // The scratch store the campaign screenshot aids read, the one both presentations' aids share
-    // (CampaignAidProfiles): emptied on every open, seeded for the filled-roster shot, progressed
-    // for the screens past the cabin.
-    private CampaignProfileStore AidProfileStore(bool seeded, bool progressed = false) =>
-        CampaignAidProfiles.Store(seeded, progressed);
 
     // One frame of player 1's input on a campaign screen. While a page's text field is armed the
     // keyboard's letters are text, so the cursor axes come from the pad alone.
@@ -2892,9 +2913,12 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         StopNarration();
 
-        // No campaign mission carries a wire yet, so the door closes rather than stranding its
-        // guests on a socket nobody steps.
-        CloseCoopDoor();
+        // A co-op host's guests fly with it, so the door's wire leaves with the launch.
+        if (_net is { IsCoopHost: true } net)
+        {
+            exit = exit with { Net = net.BuildLaunch() };
+        }
+
         _campaign = null;
         _campaignFeature.Discard();
         _screen = Screen.Mode;
@@ -2970,6 +2994,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // What the open door advertises: the mission the boards are about, else the profile's next.
     // Re-offered every frame; the lobby sends only a change, a guest arriving or a mission picked.
+    // The guests are shown the cabin on that mission, which is what a launch then names as flown.
     private void OfferCoopMission(CampaignFlow flow)
     {
         if (_net is not { IsCoopHost: true } net || flow.Profile is not { } profile)
@@ -2979,6 +3004,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         int seq = flow.MissionSeq >= 0 ? flow.MissionSeq : flow.Feature.NextMissionSeq;
         net.Offer(seq, profile.Name, _slots.Count);
+        net.ShowCoop(NetCoopScreen.Cabin, seq, profile.MissionsCompleted, CampaignFeature.HangarAirframes(profile));
     }
 
     // Leaving the campaign, flying out of it and a menu reopened all close the carrier and give
@@ -3141,31 +3167,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         _slots[0].Fit.ResetToStock();
     }
 
-    // Keeps the 14-row window over the cursor, and never scrolls past the end of the list. The
-    // cursor wraps (Wrap, like every other screen), so top-to-bottom jumps both ways are normal
-    // here rather than an edge case.
-    private void ScrollPresetsToCursor()
-    {
-        int last = Math.Max(0, InstantActionPresets.All.Count - PresetWindow);
-        int top = Math.Clamp(_presetTop, 0, last);
-        if (_presetCursor < top)
-            top = _presetCursor;
-        else if (_presetCursor >= top + PresetWindow)
-            top = _presetCursor - PresetWindow + 1;
-        _presetTop = Math.Clamp(top, 0, last);
-    }
+    private void ScrollPresetsToCursor() =>
+        _presetTop = ScrollTop(_presetTop, _presetCursor, InstantActionPresets.All.Count, PresetWindow);
 
-    // The Options window's counterpart of the one above, the cursor wrapping the same way.
-    private void ScrollOptionsToCursor()
-    {
-        int last = Math.Max(0, CurrentCount() - OptionsWindow);
-        int top = Math.Clamp(_optionsTop, 0, last);
-        if (_optionsIndex < top)
-            top = _optionsIndex;
-        else if (_optionsIndex >= top + OptionsWindow)
-            top = _optionsIndex - OptionsWindow + 1;
-        _optionsTop = Math.Clamp(top, 0, last);
-    }
+    private void ScrollOptionsToCursor() =>
+        _optionsTop = ScrollTop(_optionsTop, _optionsIndex, CurrentCount(), OptionsWindow);
 
     // Whether the Plane screen's launch gesture is live right now. The gate reads CONFIRMED, the
     // second stage, which leaves a window between selecting an airframe and flying it for the
@@ -3202,12 +3208,15 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        var exit = _setup.BuildExit(CurrentChapters[_chapterIndex].Code, _mode, _devices.FlightPads);
+        var exit = _setup.BuildExit(CurrentChapters[_chapterIndex].Code, _mode, _devices.FlightPads, Networked());
         if (Networked() && HostLobbyRefusal(exit) is { } refusal)
         {
             _error = refusal;
+            _launchRefusedAt = _net!.Revision;
             return;
         }
+
+        _launchRefusedAt = null;
 
         // The open wire rides out with the launch, and the door keeps nothing: from here the
         // session owns the transport, steps it and closes it.
@@ -3621,7 +3630,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             return StepControlsSensitivity(dir);
         if (_controlsIndex == ControlsContextRow)
             return StepControlsContext(dir);
-        return ControlsButton(_controlsIndex) >= 0 ? false : StepControlsSlot(dir);
+        if (ControlsButton(_controlsIndex) >= 0)
+            return false;
+        _controls.MoveSlot(dir);
+        return true;
     }
 
     private bool StepControlsPlayer(int dir)
@@ -3660,23 +3672,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         return true;
     }
 
-    private bool StepControlsSlot(int dir)
-    {
-        _controls.MoveSlot(dir);
-        return true;
-    }
-
     // Keeps the window over the cursor and the feature's focused action under it, so the row the
     // player is looking at is the row a capture binds.
     private void SyncControlsCursor()
     {
-        int last = Math.Max(0, CurrentCount() - ControlsWindow);
-        int top = Math.Clamp(_controlsTop, 0, last);
-        if (_controlsIndex < top)
-            top = _controlsIndex;
-        else if (_controlsIndex >= top + ControlsWindow)
-            top = _controlsIndex - ControlsWindow + 1;
-        _controlsTop = Math.Clamp(top, 0, last);
+        _controlsTop = ScrollTop(_controlsTop, _controlsIndex, CurrentCount(), ControlsWindow);
         if (IsControlsActionRow(_controlsIndex))
             _controls.Focus(_controlsIndex - ControlsHeaderRows);
     }
@@ -5016,13 +5016,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (s == null)
             return "(stats unavailable)";
         return $"Top Speed  {Mph(s)} mph        Weight  {s.VehWeight:0}";
-    }
-
-    // Just the top speed, the compact form used in the per-player pick lines.
-    private string PlaneSpeed(string node)
-    {
-        var s = StatsFor(node);
-        return s == null ? "stats n/a" : $"{Mph(s)} mph";
     }
 
     private PlaneStats? StatsFor(string node)

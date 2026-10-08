@@ -291,6 +291,7 @@ public class PlayerSetupFeatureTests
         Assert.Equal(new VersusRules(5, 5), exit.Match);
         Assert.Equal(2, exit.Seats.Count);
         Assert.Throws<InvalidOperationException>(() => Seated(1, 1).BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>()));
+        Assert.Single(Seated(1, 1).BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>(), networked: true).Seats);
         Assert.Throws<InvalidOperationException>(() => Seated(2, 1).BuildExit("C4", MenuMode.Free, _ => Array.Empty<int>()));
         Assert.Throws<ArgumentException>(() => setup.BuildExit(string.Empty, MenuMode.Free, _ => Array.Empty<int>()));
     }
