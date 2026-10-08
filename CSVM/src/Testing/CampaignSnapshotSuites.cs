@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;

@@ -5,6 +5,7 @@ using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
+using CSVM.UI.Menu.Original;
 using Godot;
 using Xunit;
 
@@ -174,7 +175,7 @@ public class SyntheticPlaneTests
     private static string Built()
     {
         string root = Path.Combine(TestData.TempDir(), "root");
-        SyntheticData.Build(TestData.Fixture(), root);
+        SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);
         return root;
     }
 }

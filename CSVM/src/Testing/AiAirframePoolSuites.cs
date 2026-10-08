@@ -2,14 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.Session.Launch;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;
@@ -163,7 +165,7 @@ internal static class AiAirframePoolSuites
                 new HumanRosterBindings { RigCount = 1 });
             roster = built;
 
-            GameSession.OrderWaveAirframes(built, defs, templates);
+            OppositionStage.OrderWaveAirframes(built, defs, templates);
             ctx.Check(built.OwedAirframes > 0, $"{Chapter}/{Mission}'s generators order at least one wave aeroplane");
             int prebuilt = 0;
             while (built.BuildOrderedAirframe())

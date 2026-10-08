@@ -22,6 +22,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CSVM\CSVM.csproj" />
+    <!-- The master server, run on an in-memory host against the game's own socket code. It
+         compiles the game's wire file too, so its types live behind an alias. -->
+    <ProjectReference Include="..\server\MasterServer\MasterServer.csproj" Aliases="master" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.20" />
   </ItemGroup>
 
   <ItemGroup>

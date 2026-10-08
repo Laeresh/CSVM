@@ -7,8 +7,8 @@ namespace CSVM.Flight.Modes;
 /// Who is holding the sim clock, and why. One instance is shared by every human rig in the session,
 /// assigned to <see cref="FlightController.PauseState"/> as <see cref="VersusMatch"/> is. Any
 /// player's Start/P freezes the shared <c>GameClock</c> for everybody, and only the pauser resumes.
-/// <see cref="FlightController"/> mirrors <see cref="ClockHeld"/> into <c>GameClock.Halted</c> every
-/// frame. This class only decides who may flip it, and keeps a results board's halt separate.
+/// Each seat's <see cref="SeatPause"/> mirrors <see cref="ClockHeld"/> into <c>GameClock.Halted</c>
+/// every frame. This class only decides who may flip it, and keeps a results board's halt separate.
 /// In a network session the pause is an <see cref="Overlay"/>: the sheet goes up and the clock runs.
 /// </summary>
 public sealed class PauseState

@@ -47,7 +47,7 @@ extracted menu artwork to be usable, and every other presentation is additive be
 
 `PresentationRegistry` (`CSVM/src/UI/Menu/PresentationRegistry.cs`) holds one factory per
 `PresentationId`, a non-empty ordinal token, the word `--presentation=` names. `Launcher.BuildMenuHost`
-(`CSVM/src/Session/Launch/Launcher.cs`) fills the registry once per process:
+(`CSVM/src/Launch/Launcher.cs`) fills the registry once per process:
 
 ```
 registry.Register(PresentationId.BuiltIn,  () => new BuiltInPresentation(...));
@@ -136,7 +136,7 @@ and `MoveX` with auto-repeat applied, the edges `Accept`, `Back`, `Join`, `Loado
 on the press edge, `Wheel` as the steps turned since the last poll and positive toward a list's
 foot; null when the seat's devices have none). A presentation reads meaning and never a key, button
 or axis. A presentation that polls its seats also reads the campaign flow's `Film`
-(`CSVM/src/UI/Screens/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
+(`CSVM/src/Video/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
 input flush, ahead of that poll, so the press that skipped the film would otherwise land as an edge
 on the screen the film just opened.
 
@@ -149,17 +149,17 @@ plugs in as another `IMenuInputSource` with no change to any presentation.
 The seats themselves are the `PlayerSetupFeature`'s. Once that feature is registered,
 `MenuHost.Seats` is its live source list, `MenuHost.AddSeat` joins through it, and a join made
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
-`CSVM/src/UI/Screens/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
-hotplug reconciliation, the gesture scans (each presentation decides on which screens they are
-open), and `FlightPads`, the binding a launch carries per seat. Built-in keeps the Start-to-join
-scan (`PrimeJoins`/`ScanJoins`) on the screens that launch a flight and calls `ClaimP1Pad` every
-frame off its Plane screen, so the pad seat 0 steers with is seat 0's for good and can never join
-as a further seat. Original signs pads on at one screen only, the join board (`OriginalJoinBoard`,
-behind the top level's JOIN BOARD door), through `PrimeBoard` and `ScanBoard`: A signs a pad onto
-the next open seat, B on a seated pad gives that seat back, and the captain's Start casts off.
-`OriginalShell.JoiningOpen` is true on the board alone, so the screens that launch a flight (Free
-Flight, Dogfight, Instant Action and the campaign flight check) only read the roster the board
-wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
+`CSVM/src/UI/Screens/MenuSeatDevices.cs`) is presentation-side and shared by both: the captain's
+pad, hotplug reconciliation, the join board's gesture scan, and `FlightPads`, the binding a launch
+carries per seat. Each presentation signs pads on at one screen only, its join board, through
+`PrimeBoard` and `ScanBoard`: the first A takes the captain's chair beside the keyboard, A on any
+other pad signs it onto the next open seat, B on a seated pad gives that seat back, and the
+captain's Start casts off. Steering a screen with a pad claims nothing. Original's board is
+`OriginalJoinBoard`, behind the top level's JOIN BOARD door, and `OriginalShell.JoiningOpen` is true
+on it alone. Built-in's is the launchscreen's Join Board screen, behind the Mode screen's door of
+the same name, where a frame a gesture landed in reads no Accept or Back from seat 0. On either,
+the screens that launch a flight (Free Flight, Dogfight, Instant Action, the campaign) and the
+rebinding screen only read the roster the board wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
 over the Instant Action screen as an overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
 player tags alone in the top-right corner each in its seat's identity colour over a dark ground
 (`CSVM/src/UI/Boards/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for
@@ -286,7 +286,8 @@ graphics mode's own default; FSR 2.2 clamps a scale above native back to it. The
 settings that reach no window: they are written on each 3D viewport as it is built, so they take hold
 at the next start the way the graphics mode does, which is what the rows' own descriptions say. The
 shadow quality beside them is `ShadowQualitySetting.Resolve`, `--shadow-quality=` over the saved word
-over the `graphics.shadowQuality` config key over `ultra` (`high` on an integrated GPU); it reaches the Enhanced sun alone, and unlike
+over the `graphics.shadowQuality` config key over `ultra` (`high` on an integrated GPU, `off` there in a
+three- or four-pane session); it reaches the Enhanced sun alone, and unlike
 those two the apply puts it on the flying world at once (`Launcher.ApplyShadowQuality`, which the
 cockpit pass follows). Its row draws dead while the page's own graphics word is Original. Every other display
 setting is the case where the apply does
@@ -373,7 +374,7 @@ around rectangles the layout authors at differing widths.
 `BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
 `EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
 mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
-service (`MenuAudioService`, `CSVM/src/Session/Launch/MenuAudioService.cs`) owns lookup, decoding,
+service (`MenuAudioService`, `CSVM/src/Launch/MenuAudioService.cs`) owns lookup, decoding,
 playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a
 missing file or a failed decode is logged once and cached as silence; a presentation never learns
 whether a sound exists.
@@ -419,7 +420,7 @@ the script: `ZB = 0` stands on every `@ctl@SK` object the shipped scripts build,
 `GLOBALS.SCRIPT`'s menu music, which plays on while the menu is up, so the field settles nothing.
 Film of the original is the only thing that would.
 
-The cue table (`MenuCueTable`, `CSVM/src/Session/Launch/MenuCueTable.cs`) resolves the four names the
+The cue table (`MenuCueTable`, `CSVM/src/Launch/MenuCueTable.cs`) resolves the four names the
 original's globals script binds: `menu.rollover`, `menu.click`, `menu.text`, `menu.text-error`, each
 to a wav under the extracted rof tree's `ASSETS/SOUNDS`. Original asks for all four
 (`OriginalCues`); Built-in asks for none and uses the service for briefing narration alone. A new
@@ -527,19 +528,17 @@ Shared contracts, features and readers live in the namespace `CSVM.UI.Menu` exac
 and the other board types stay presentation-side in `CSVM.UI.Boards`, beside the other flat UI
 sub-namespaces (`CSVM.UI.Campaign`, `.Screens`, `.Hangar`, `.Overlays`, `.Labs`).
 
-Two scans over the compiled metadata enforce it (`CSVM.Tests/MenuNamespaceDependencyTests.cs`,
+A scan over the compiled metadata enforces it (`CSVM.Tests/MenuNamespaceDependencyTests.cs`,
 through `AssemblyDependencyScan`, which walks signatures and method-body IL alike without loading
-the assembly):
-
-- no type in `CSVM.UI.Menu` references `Godot.*` or any `CSVM.UI.*` type outside that exact
-  namespace, which is what keeps every feature free of both presentations and of the engine;
-- nothing in `CSVM.UI` or any of its sub-namespaces names `GameSession`, `Launcher` or
-  `LauncherContext`, which is what keeps every presentation from building a session or reaching
-  the launcher.
+the assembly): no type in `CSVM.UI.Menu` references `Godot.*` or any `CSVM.UI.*` type outside that
+exact namespace, which is what keeps every feature free of both presentations and of the engine.
+Nothing in `CSVM.UI` names `GameSession` or `Launcher` because `UI` ranks below `Launch` in the
+family order (`CSVM.Tests/FamilyOrderTests.cs`), which keeps every presentation from building a
+session or reaching the launcher.
 
 The scanner's own fixtures prove it sees a signature-level and a body-only reference, and a scan
-matching no types fails rather than passing. A new presentation's namespace falls under the second
-scan automatically; anything it adds to the shared namespace falls under the first.
+matching no types fails rather than passing. A new presentation's namespace falls under the family
+order automatically; anything it adds to the shared namespace falls under the scan.
 
 ## The `--menu=` aid convention
 
@@ -550,7 +549,9 @@ the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in'
 list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 `instant-action:lives[:<count>]` with the remake-only Lives box focused, at Unlimited without a
 count and at that count with one (the screen opens on one life, so neither reading is a state a
-plain shot of it can show), `instant-action-wrapup` and `instant-action-wrapup:failed` on the
+plain shot of it can show), `instant-action:race-time` on stunt flying with the remake-only Race
+Time box focused (shown only beside `--debug-join=1` or more, since a solo run has no race),
+`instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
 `instant-action-wrapup:photos` and `instant-action-wrapup:long-photos` over the same two runs with a
@@ -572,9 +573,10 @@ edited build and
 `plane-paint:decals` standing the nose decal picker open as its five-across grid, `campaign`
 and the shared scratch-store campaign poses, `campaign-delete`, `connection` on the Multiplayer
 Connection page, `connection:gameinfo` and `connection:playerinfo` with GAME INFORMATION or PLAYER
-INFORMATION standing over it on a sample answer, and `connection-games` and `connection-games:searching` on the LAN games list
+INFORMATION standing over it on a sample answer, `connection:code` with Join by code picked and a
+sample code in its box, and `connection-games` and `connection-games:searching` on the LAN games list
 over an in-process network holding five sample games, one of another build version, or none, and `lobby[:host|guest[:tab]]` on
-the Multiplayer Lobby over an in-process wire with two guests), and any other value opens that 
+the Multiplayer Lobby over an in-process wire with two guests, `lobby:late` a guest waiting on its host's match), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
 A new presentation's aids follow the same rules: they select a screen of its own graph, they never
@@ -686,7 +688,7 @@ Five layers, each catching what the others cannot:
 - **Engine-free contracts.** The seam fixtures (`MenuSeamContractTests`, two fake presentations
   driving one fake feature to the same exit), the host (`MenuHostTests`), the store and the
   resolution rule, every feature's own tests, the shell tests over hand-authored layouts, the
-  coverage check, the manifest cases, and the two metadata scans. `dotnet test` runs them all;
+  coverage check, the manifest cases, the metadata scan and the family order. `dotnet test` runs them all;
   those over the player's data are `[ExtractedDataFact]`s.
 - **Hand-authored legal fixtures.** `CSVM.Tests/fixtures/menu-layout/` for the decoder and
   `fixtures/menu-layout-original/` for the shell: invented geometry and file names in the shipped

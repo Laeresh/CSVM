@@ -1,5 +1,6 @@
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
+using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 
@@ -15,10 +16,10 @@ namespace CSVM.UI.Screens;
 /// docs/architecture.md.</summary>
 public sealed partial class StuntScoreboard : ResultsBoard
 {
-    // Base metrics at 720p (the default window); scaled up on taller viewports so the board reads
-    // at 1080p/1440p/4K without ballooning. All TUNE.
-    private const int TitleFont = 26;
-    private const int ContextFont = 15;
+    // The heading's sizes, chrome type scale rungs at the boards' 720p reference; scaled up on
+    // taller viewports so the board reads at 1080p/1440p/4K without ballooning.
+    private static readonly float TitleFont = ChromeType.InReference(ChromeSize.Title, ReferenceHeight);
+    private static readonly float ContextFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
 
     private StuntMission _mission = null!;
     private ScoreStore _store = null!;
@@ -58,7 +59,7 @@ public sealed partial class StuntScoreboard : ResultsBoard
 
     // This board draws inside one pilot's pane, so its metrics are damped by the pane share
     // (identical to plain Max(1, h/720) at any full-screen view 720p or taller).
-    protected override float BoardScale() => Mathf.Max(0.5f, HudMetrics.Scale(this, 720f));
+    protected override float BoardScale() => Mathf.Max(0.5f, HudMetrics.Scale(this, ReferenceHeight));
 
     private void OnRunCompleted()
     {

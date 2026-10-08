@@ -1,3 +1,4 @@
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using Godot;
@@ -117,8 +118,8 @@ public class HeadLookTests
         Assert.Equal(1f, head.TargetElevation, Tol);
     }
 
-    // Release is the idle frame, so the head returns to straight ahead on its own: the stick
-    // position is the whole state, and nothing of it survives letting go.
+    // A head starts in snap mode, where release is the idle frame. The head returns to straight
+    // ahead on its own, and nothing of the stick survives letting go.
     [Fact]
     public void ReleasingTheStickReturnsTheHeadToStraightAhead()
     {
@@ -218,6 +219,147 @@ public class HeadLookTests
 
         Assert.Equal(0f, filter.X);
         Assert.False(filter.Swinging);
+    }
+
+    // Free-look alone turns the head with the stick. Snap and padlock leave it to the absolute aim
+    // or to the target, and the chase swing reads the same answer.
+    [Fact]
+    public void OnlyFreeLookRatesTheStick()
+    {
+        var head = new HeadLook();
+        head.Step(StepDt, Idle);
+        Assert.False(head.PadRates);
+
+        head.Step(StepDt, SmoothKey);
+        Assert.True(head.PadRates);
+        head.Step(StepDt, new HeadLookInput(0f, 0f, 0f, 0f, true));
+        Assert.True(head.PadRates);
+
+        head.Step(StepDt, PadlockKey);
+        Assert.False(head.PadRates);
+        head.Step(StepDt, SnapKey);
+        Assert.False(head.PadRates);
+    }
+
+    // In free-look a held stick turns the head at the decoded pan rate times its deflection, less
+    // the centre band. A full stick turns as fast as a held key, half a stick about half as fast.
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(0.5f)]
+    public void InFreeLookAHeldStickTurnsTheHeadAtTheKeyRateScaledByItsDeflection(float stick)
+    {
+        const int lagFrames = 30, ratedFrames = 30;
+        var head = new HeadLook();
+        head.Step(StepDt, SmoothKey);
+        for (int i = 0; i < lagFrames; i++)      // the stick's 40 ms lag arrives
+        {
+            head.Step(StepDt, Pad(-stick, 0f));
+        }
+
+        float before = head.TargetAzimuth;
+        for (int i = 0; i < ratedFrames; i++)
+        {
+            head.Step(StepDt, Pad(-stick, 0f));
+        }
+
+        float deflection = (stick - HeadLook.PadAimCentreBand) / (1f - HeadLook.PadAimCentreBand);
+        float expected = HeadLook.FreeLookRate * deflection * ratedFrames * StepDt;
+        Assert.Equal(expected, head.TargetAzimuth - before, 1e-3f);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // A let-go stick adds nothing from its first frame back inside the band, so the targets stay
+    // bit-identical. A second push the same way turns the head further, and a push the other way
+    // turns it back.
+    [Fact]
+    public void InFreeLookALetGoStickLeavesTheHeadWhereItTurnedAndPushesAddUp()
+    {
+        var head = new HeadLook();
+        head.Step(StepDt, SmoothKey);
+        HoldStick(head, -0.6f, 0.3f);
+        float elevation = head.TargetElevation, azimuth = head.TargetAzimuth;
+        Assert.True(azimuth > 0.5f && elevation > 0.2f, $"read {azimuth}, {elevation}");
+
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            head.Step(StepDt, Idle);
+            Assert.Equal(elevation, head.TargetElevation);
+            Assert.Equal(azimuth, head.TargetAzimuth);
+        }
+
+        Assert.Equal(azimuth, head.Azimuth, 5e-3f);
+        HoldStick(head, -0.6f, 0f);
+        float further = head.TargetAzimuth;
+        Assert.True(further > azimuth + 0.5f, $"read {further} after {azimuth}");
+        HoldStick(head, 0.6f, 0f);
+        Assert.True(head.TargetAzimuth < further - 0.5f, $"read {head.TargetAzimuth} after {further}");
+    }
+
+    // The stick stays inside the keyboard pan's own bounds: first person's level floor, the chase
+    // camera's straight-down one and the azimuth stop at dead astern.
+    [Fact]
+    public void InFreeLookTheStickStaysInsideThePansBounds()
+    {
+        var head = new HeadLook();
+        head.Step(StepDt, SmoothKey);
+        HoldStick(head, 0f, -1f);
+        Assert.Equal(HeadLook.FirstPersonElevationFloor, head.TargetElevation, Tol);
+        for (int i = 0; i < 4; i++)
+        {
+            HoldStick(head, -1f, 1f);
+        }
+
+        Assert.Equal(Mathf.Pi, head.TargetAzimuth, Tol);
+        Assert.Equal(HeadLook.MaxElevation, head.TargetElevation, Tol);
+
+        var chase = new HeadLook(HeadLook.ChaseElevationFloor);
+        chase.Step(StepDt, SmoothKey);
+        for (int i = 0; i < 2; i++)
+        {
+            HoldStick(chase, 0f, -1f);
+        }
+
+        Assert.Equal(HeadLook.ChaseElevationFloor, chase.TargetElevation, Tol);
+    }
+
+    // The centre key, J again and K each return a head the stick turned, as they return a pan.
+    [Fact]
+    public void TheCentreKeyJAndKReturnAHeadTheStickTurned()
+    {
+        var returns = new[] { new HeadLookInput(0f, 0f, 0f, 0f, true), SmoothKey, SnapKey };
+        foreach (var press in returns)
+        {
+            var head = new HeadLook();
+            head.Step(StepDt, SmoothKey);
+            head.Step(StepDt, Idle);
+            HoldStick(head, -0.6f, 0.3f);
+            Assert.True(head.TargetAzimuth > 0.5f);
+            head.Step(StepDt, press);
+            Assert.Equal(0f, head.TargetElevation, Tol);
+            Assert.Equal(0f, head.TargetAzimuth, Tol);
+        }
+    }
+
+    // A view that swings the stick's absolute aim itself hands the head the pad for free-look's rate
+    // alone. In snap the head ignores it, and after J the same stick turns it.
+    [Fact]
+    public void APadThatRatesOnlyTurnsTheHeadInFreeLookAlone()
+    {
+        var input = new HeadLookInput(0f, 0f, 0f, 0f, false, -0.6f, 0f, PadRatesOnly: true);
+        var head = new HeadLook(HeadLook.ChaseElevationFloor);
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            head.Step(StepDt, input);
+        }
+
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        head.Step(StepDt, SmoothKey);
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            head.Step(StepDt, input);
+        }
+
+        Assert.True(head.TargetAzimuth > 0.5f, $"read {head.TargetAzimuth}");
     }
 
     // The filter is on the stick and nowhere else: the mouse pan still integrates at the decoded

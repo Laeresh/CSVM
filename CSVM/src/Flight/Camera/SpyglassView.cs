@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Flight.Camera;
@@ -16,6 +17,9 @@ public sealed partial class SpyglassView : SubViewport
     /// ⚠ Do not lower it under 64. Godot's ambient-occlusion depth chain takes a quarter of this
     /// size with five mip levels, and a smaller buffer fails to allocate, which crashes the Deck.</summary>
     public const int MinInternalSide = 64;
+
+    // Every picture in the tree, for the perf census.
+    private static readonly List<SpyglassView> InTree = new();
 
     private Camera3D _camera = null!;
     private Camera3D? _pane;
@@ -62,11 +66,13 @@ public sealed partial class SpyglassView : SubViewport
 
     /// <summary>The picture's cull mask: <paramref name="paneMask"/> less the one layer the pilot's
     /// own aeroplane is drawn on (<see cref="UI.Boards.SplitScreen.OwnAirframeLayer"/>), every other
-    /// aircraft kept.
+    /// aircraft kept. Under <paramref name="enhanced"/> it also trades the world sun for its
+    /// shadowless copy (<see cref="SpyglassSun"/>), so the picture renders no shadow pass.
     /// ⚠ NOT decoded, and do not put the airframe back on the decode's authority: the original's
-    /// update touches no per-object visibility, and this follows the original at the controls
-    /// (docs/org/spyglass.md).</summary>
-    public static uint DiscMask(uint paneMask, uint ownLayer) => paneMask & ~ownLayer;
+    /// update touches no per-object visibility (docs/org/spyglass.md).</summary>
+    public static uint DiscMask(uint paneMask, uint ownLayer, bool enhanced) => enhanced
+        ? (paneMask & ~ownLayer & ~UI.Boards.SplitScreen.SunLayer) | UI.Boards.SplitScreen.SpyglassSunLayer
+        : paneMask & ~ownLayer;
 
     /// <summary>The square the picture renders at for a disc <paramref name="side"/> pixels across.
     /// Under Enhanced Graphics it is raised so the internal buffer never falls under
@@ -75,6 +81,28 @@ public sealed partial class SpyglassView : SubViewport
     public static int RenderSide(int side) => Utils.GraphicsMode.Enhanced
         ? Mathf.Max(side, Mathf.CeilToInt(MinInternalSide / Utils.RenderScaleSetting.Scale))
         : side;
+
+    /// <summary>The pictures rendering now, and the visible and shadow draw calls the renderer last
+    /// made into them, summed. The <c>--perf</c> readout's spyglass line, since each disc is a
+    /// viewport of its own whose share no frame-wide counter separates.</summary>
+    public static (int Live, long Draws, long ShadowDraws) Census()
+    {
+        int live = 0;
+        long draws = 0, shadowDraws = 0;
+        foreach (var view in InTree)
+        {
+            if (!view._live)
+            {
+                continue;
+            }
+
+            live++;
+            draws += view.GetRenderInfo(RenderInfoType.Visible, RenderInfo.DrawCallsInFrame);
+            shadowDraws += view.GetRenderInfo(RenderInfoType.Shadow, RenderInfo.DrawCallsInFrame);
+        }
+
+        return (live, draws, shadowDraws);
+    }
 
     /// <summary>Point the picture and start it rendering. <paramref name="side"/> is the disc's
     /// drawn diameter in device pixels, so the texture is rasterised at the size it is shown at.
@@ -95,7 +123,7 @@ public sealed partial class SpyglassView : SubViewport
             // splitscreen seat draws through; the original hands camera 2 both alongside camera 1.
             _camera.Near = _pane.Near;
             _camera.Far = _pane.Far;
-            _camera.CullMask = DiscMask(_pane.CullMask, _ownLayer);
+            _camera.CullMask = DiscMask(_pane.CullMask, _ownLayer, Utils.GraphicsMode.Enhanced);
         }
 
         RenderTargetUpdateMode = UpdateMode.Always;
@@ -114,4 +142,10 @@ public sealed partial class SpyglassView : SubViewport
         RenderTargetUpdateMode = UpdateMode.Disabled;
         _live = false;
     }
+
+    /// <inheritdoc/>
+    public override void _EnterTree() => InTree.Add(this);
+
+    /// <inheritdoc/>
+    public override void _ExitTree() => InTree.Remove(this);
 }

@@ -7,24 +7,33 @@ namespace CSVM.UI.Boards;
 /// <summary>
 /// The splitscreen rendering rig: N panes, each a <see cref="SubViewportContainer"/> +
 /// <see cref="SubViewport"/> with its own <see cref="Camera3D"/>, all rendering the same
-/// <see cref="World3D"/> as the main viewport. Built only for 2+ players; a single player keeps
-/// GameSession's original main-viewport camera untouched. Layout is <see cref="PaneRect"/>'s, with
-/// 3P's last quadrant black. Each player owns one visual layer out of a reserved band
-/// (<see cref="PlayerLayerBit0"/>) for camera-anchored singletons like the skydome;
-/// <see cref="SetVisualLayer"/> moves the copies, <see cref="PlayerCullMask"/> culls the rest of
-/// the band. Every pane is a 3D audio listener, or a splitscreen session has no listener at all.
-/// The zone-gate band (<c>Mech3.ZoneGate.LayerBand</c>) and <see cref="OwnAirframeLayer"/>'s are
-/// separate allocations of the same 20 layers. The listener model: docs/architecture.md.
+/// <see cref="World3D"/> as the main viewport. Built only for 2+ players and laid out by
+/// <see cref="PaneRect"/>; a single player keeps GameSession's main-viewport camera untouched.
+/// Each player owns one layer of a reserved band (<see cref="PlayerLayerBit0"/>) for
+/// camera-anchored singletons like the skydome, which <see cref="PlayerCullMask"/> keeps private.
+/// Every pane is a 3D audio listener (docs/architecture.md), or a splitscreen session has no
+/// listener at all. The zone-gate, <see cref="OwnAirframeLayer"/> and
+/// <see cref="FirstPersonLayer"/> bands are separate allocations of the same 20 layers.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
     /// <summary>Panes the rig supports, the reserved visual-layer band is this wide.</summary>
     public const int MaxPlayers = 4;
 
-    /// <summary>The layer <see cref="Flight.Hud.CockpitVisibility.ShowForPhotograph"/> moves a pilot's
-    /// hidden airframe groups onto for the one frame the Danger Zone camera draws, the bit just below
-    /// the own-airframe band. No pane's cull mask carries it (<see cref="PaneCullMask"/>).</summary>
-    public const uint PhotographLayer = 1u << 8;
+    /// <summary>The layer the world sun is drawn on under Enhanced Graphics
+    /// (<c>Launch.EnhancedLook.ApplySun</c>). Every pane camera draws it and the spyglass disc's
+    /// camera does not, so the disc renders no sun shadow pass. The faithful sun keeps layer 1.</summary>
+    public const uint SunLayer = 1u << 7;
+
+    /// <summary>The layer of the spyglass disc's shadowless copy of the sun
+    /// (<see cref="Flight.Camera.SpyglassSun"/>). Only the disc's camera draws it; no pane's cull mask
+    /// carries it (<see cref="PaneCullMask"/>), or a pane would be lit twice.</summary>
+    public const uint SpyglassSunLayer = 1u << 6;
+
+    /// <summary>The world's layer 1, which every pane, spyglass and photograph camera draws. A race
+    /// ghost of a seat flown on another machine names it as its owner's layer. No camera here then
+    /// takes that aeroplane for its own, however many seats the race has.</summary>
+    public const uint EveryCameraLayer = 1u;
 
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
@@ -39,6 +48,12 @@ public sealed partial class SplitScreen : CanvasLayer
     // the single bit. Putting an airframe on its pilot's PRIVATE layer instead would hide that
     // aeroplane from every other pane, which is the reverse of what a splitscreen seat needs.
     private const int OwnAirframeBit0 = 9;
+
+    // First layer of the first-person band, the four bits just above the world's layer 1. Like the
+    // own-airframe band, every cull mask carries all four. One pane drops one bit, so a group moved
+    // onto it leaves exactly one pilot's view (OwnViewCullMask).
+    private const int FirstPersonBit0 = 1;
+    private const uint FirstPersonBand = 0xFu << FirstPersonBit0;
 
     // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
     // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
@@ -138,11 +153,30 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
     /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
     public static uint PlayerCullMask(int index) =>
-        (AllLayers & ~PlayerBand & ~PhotographLayer) | PlayerVisualLayer(index);
+        (AllLayers & ~PlayerBand & ~SpyglassSunLayer) | PlayerVisualLayer(index);
 
-    /// <summary><paramref name="mask"/> less <see cref="PhotographLayer"/>, for a pane camera
-    /// whose mask is not built by <see cref="PlayerCullMask"/>.</summary>
-    public static uint PaneCullMask(uint mask) => mask & ~PhotographLayer;
+    /// <summary><paramref name="mask"/> less <see cref="SpyglassSunLayer"/>, with every
+    /// <see cref="FirstPersonLayer"/> back, for a pane camera <see cref="PlayerCullMask"/> did not
+    /// build. That is the main camera, which outlives a session whose pilot dropped a bit.</summary>
+    public static uint PaneCullMask(uint mask) => OutsideCullMask(mask) & ~SpyglassSunLayer;
+
+    /// <summary>The visual layer player <paramref name="index"/>'s own airframe groups move onto
+    /// while that pilot looks out of the aeroplane (<see cref="Flight.Hud.CockpitVisibility"/>).
+    /// Every camera draws it but that pilot's own pane and spyglass disc. So a pilot in the
+    /// cockpit hides their own body from their own view and from no other pane.</summary>
+    public static uint FirstPersonLayer(int index) =>
+        1u << (FirstPersonBit0 + Mathf.PosMod(index, MaxPlayers));
+
+    /// <summary><paramref name="mask"/> as pilot <paramref name="index"/>'s own pane camera draws
+    /// it: every <see cref="FirstPersonLayer"/> but that pilot's. Written on the camera with the
+    /// <see cref="OwnAirframeLayer"/> stamp; the disc takes it through the pane's mask.</summary>
+    public static uint OwnViewCullMask(uint mask, int index) =>
+        OutsideCullMask(mask) & ~FirstPersonLayer(index);
+
+    /// <summary><paramref name="mask"/> with every <see cref="FirstPersonLayer"/> back, for a camera
+    /// standing outside every aeroplane. The Danger Zone photograph draws its own pilot's whole
+    /// airframe through it, whatever view that pilot is in.</summary>
+    public static uint OutsideCullMask(uint mask) => mask | FirstPersonBand;
 
     /// <summary>The visual layer player <paramref name="index"/>'s OWN airframe is drawn on, so one
     /// camera can leave that pilot's aeroplane out while every other camera, this pane's included,
@@ -151,6 +185,16 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <see cref="SetVisualLayer"/>.</summary>
     public static uint OwnAirframeLayer(int index) =>
         1u << (OwnAirframeBit0 + Mathf.PosMod(index, MaxPlayers));
+
+    /// <summary>What a local human rig's assembly writes last: pilot <paramref name="index"/>'s whole
+    /// airframe onto <see cref="OwnAirframeLayer"/>, and <paramref name="pane"/>, the camera that pilot
+    /// looks through, onto <see cref="OwnViewCullMask"/>. A null pane stamps the airframe alone.</summary>
+    public static void SeatAirframe(Node planeModel, Camera3D? pane, int index)
+    {
+        SetVisualLayer(planeModel, OwnAirframeLayer(index));
+        if (pane != null)
+            pane.CullMask = OwnViewCullMask(pane.CullMask, index);
+    }
 
     /// <summary>Moves a whole subtree onto one visual layer (recursively, every
     /// VisualInstance3D), used on each player's private skydome / deck / puff copies.</summary>

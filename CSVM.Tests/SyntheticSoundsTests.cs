@@ -5,6 +5,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
+using CSVM.UI.Menu.Original;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -113,7 +114,7 @@ public class SyntheticSoundsTests
     private static string Built()
     {
         string root = Path.Combine(TestData.TempDir(), "root");
-        SyntheticData.Build(TestData.Fixture(), root);
+        SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);
         return root;
     }
 }

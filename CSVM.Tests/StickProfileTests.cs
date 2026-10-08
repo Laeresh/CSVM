@@ -267,7 +267,7 @@ public sealed class StickProfileTests
     }
 
     [Fact]
-    public void AMalformedFileIsSkippedAndTheRestLoad()
+    public void AMalformedUserFileIsMovedAsideAndTheRestLoad()
     {
         File.WriteAllText(Path.Combine(_user, "broken.json"), "{ nope");
         File.WriteAllText(Path.Combine(_user, "231D-0200.json"), RSolo);
@@ -275,6 +275,8 @@ public sealed class StickProfileTests
         var files = Store().LoadAll();
 
         Assert.Equal("231D-0200.json", files.Single().FileName);
+        Assert.Equal("{ nope", File.ReadAllText(Path.Combine(_user, "broken.json.bad")));
+        Assert.False(File.Exists(Path.Combine(_user, "broken.json")));
     }
 
     [Fact]

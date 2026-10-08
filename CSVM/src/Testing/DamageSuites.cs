@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -8,6 +9,7 @@ using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Tooling;
 using Godot;
 
@@ -414,7 +416,7 @@ internal static class DamageSuites
 
             // A view-mode switch only ever hides/shows the interior GROUP root; a child's own
             // Visible must ride through unchanged (B11's CockpitVisibility.Apply, four nodes only).
-            var pilotView = CockpitVisibility.Bind(model, interior);
+            var pilotView = CockpitVisibility.Bind(model, interior, 0);
             ctx.Check(pilotView != null, $"the visibility rig binds to the built model");
             if (pilotView == null)
                 return;

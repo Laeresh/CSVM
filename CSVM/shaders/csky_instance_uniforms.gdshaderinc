@@ -30,5 +30,6 @@ instance uniform float csky_light_fade = 1.0; // 0 = no range fade (skydome star
 instance uniform float csky_opacity = 1.0;    // OBJECT_OPACITY_STATE; only the alpha-writing variants USE it
 instance uniform vec4 csky_tint = vec4(0.0);  // debug overlays: rgb = colour, a = strength (0 = untinted)
 instance uniform vec4 csky_photo_eye = vec4(0.0); // Danger Zone photograph: xyz = its eye, w = 1 while its fill is on
+instance uniform vec4 csky_ghost = vec4(0.0);     // race ghost: x = owning pilot's first-person layer bit, w = 1 while armed
 
 #endif

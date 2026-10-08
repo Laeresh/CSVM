@@ -32,7 +32,7 @@ public class MouseCaptureTests
     {
         var pane = new Vector2(800f, 600f);
         var capture = new MouseCapture();
-        capture.Take(new Vector2(400f, 300f));
+        capture.Take(pane);
 
         capture.Moved(new Vector2(200f, -400f));
         capture.Moved(new Vector2(300f, -200f));
@@ -51,13 +51,13 @@ public class MouseCaptureTests
     {
         var pane = new Vector2(800f, 600f);
         var capture = new MouseCapture();
-        capture.Take(new Vector2(100f, 100f));
+        capture.Take(pane);
 
         capture.Moved(new Vector2(50f, 100f));
-        Assert.Equal(new Vector2(110f, 115f), capture.StepCursor(pane));
-        Assert.Equal(new Vector2(110f, 115f), capture.StepCursor(pane));
+        Assert.Equal(new Vector2(410f, 315f), capture.StepCursor(pane));
+        Assert.Equal(new Vector2(410f, 315f), capture.StepCursor(pane));
         capture.Moved(new Vector2(25f, 0f));
-        Assert.Equal(new Vector2(115f, 115f), capture.StepCursor(pane));
+        Assert.Equal(new Vector2(415f, 315f), capture.StepCursor(pane));
     }
 
     /// <summary>The travel-to-deflection ratio. The same count of mouse travel reaches the pane's
@@ -72,7 +72,7 @@ public class MouseCaptureTests
         var pane = new Vector2(width, height);
         var half = pane * 0.5f;
         var capture = new MouseCapture();
-        capture.Take(half);
+        capture.Take(pane);
 
         capture.Moved(new Vector2(MouseCapture.FullDeflectionCounts * 0.5f, -MouseCapture.FullDeflectionCounts * 0.5f));
         var halfway = MouseFlight.Offset(capture.StepCursor(pane), half, half);
@@ -102,7 +102,7 @@ public class MouseCaptureTests
         var pane = new Vector2(1920f, 1080f);
         var half = pane * 0.5f;
         var capture = new MouseCapture();
-        capture.Take(half);
+        capture.Take(pane);
 
         capture.Moved(new Vector2(counts * 0.5f, 0f));
         var halfway = MouseFlight.Offset(capture.StepCursor(pane, sensitivity), half, half);
@@ -150,7 +150,7 @@ public class MouseCaptureTests
             var pane = new Vector2(1920f, 1080f);
             var half = pane * 0.5f;
             var capture = new MouseCapture();
-            capture.Take(half);
+            capture.Take(pane);
             capture.Moved(new Vector2(fraction * MouseCapture.FullDeflectionCounts, 0f));
             var offset = MouseFlight.Offset(capture.StepCursor(pane), half, half);
 
@@ -185,7 +185,7 @@ public class MouseCaptureTests
     {
         var pane = new Vector2(800f, 600f);
         var capture = new MouseCapture();
-        capture.Take(new Vector2(400f, 300f));
+        capture.Take(pane);
 
         capture.Moved(new Vector2(50000f, -50000f));
         Assert.Equal(new Vector2(800f, 0f), capture.StepCursor(pane));
@@ -203,25 +203,40 @@ public class MouseCaptureTests
     public void StepCursor_ReadsACornerWithNoPaneToMeasure()
     {
         var capture = new MouseCapture();
-        capture.Take(new Vector2(400f, 300f));
+        capture.Take(new Vector2(800f, 600f));
 
         capture.Moved(new Vector2(10f, 10f));
 
         Assert.Equal(Vector2.Zero, capture.StepCursor(Vector2.Zero));
     }
 
-    /// <summary>The seed: the virtual cursor starts where the real one stood. The frame the
-    /// capture begins reads the same stick as the frame before it.</summary>
+    /// <summary>The seed: every take puts the virtual cursor in the pane's middle, so the stick
+    /// starts centred. A take follows the launch or a halt, when the OS pointer stands on the menu
+    /// button last clicked. Seeded there, a click low on the screen pulls the nose up with nothing
+    /// touched. A deflection held into the halt is not kept either, since the hand left the
+    /// mouse to work the board.</summary>
     [Fact]
-    public void Take_SeedsTheVirtualCursorWhereTheRealOneStood()
+    public void Take_CentresTheStickWhereverThePointerWasLeft()
     {
+        var pane = new Vector2(800f, 600f);
+        var half = pane * 0.5f;
         var capture = new MouseCapture();
 
-        capture.Take(new Vector2(613f, 42f));
-
+        capture.Take(pane);
         Assert.True(capture.Holding);
-        Assert.Equal(new Vector2(613f, 42f), capture.Cursor);
-        Assert.Equal(new Vector2(613f, 42f), capture.StepCursor(new Vector2(800f, 600f)));
+        Assert.Equal(half, capture.Cursor);
+        Assert.Equal(half, capture.StepCursor(pane));
+
+        capture.Moved(new Vector2(0f, MouseCapture.FullDeflectionCounts * 0.8f));
+        var pulled = MouseCapture.Centred(MouseFlight.Offset(capture.StepCursor(pane), half, half));
+        Assert.True(MouseFlight.Read(pulled.X, pulled.Y, 0f, isAutogyro: false).Pitch > 0f, $"{pulled}");
+
+        capture.Release();
+        capture.Take(pane);
+        var resumed = MouseCapture.Centred(MouseFlight.Offset(capture.StepCursor(pane), half, half));
+        var stick = MouseFlight.Read(resumed.X, resumed.Y, 0f, isAutogyro: false);
+        Assert.Equal(0f, stick.Pitch);
+        Assert.Equal(0f, stick.Roll);
     }
 
     /// <summary>Head-look's half: the travel since the last read, cleared by the read, so a frame
@@ -245,14 +260,14 @@ public class MouseCaptureTests
     public void Moved_FeedsTheCursorAndTheLookIndependently()
     {
         var capture = new MouseCapture();
-        capture.Take(new Vector2(100f, 100f));
+        capture.Take(new Vector2(800f, 600f));
 
         capture.Moved(new Vector2(100f, 100f));
         var look = capture.TakeLook();
         var cursor = capture.StepCursor(new Vector2(800f, 600f));
 
         Assert.Equal(new Vector2(100f, 100f), look);
-        Assert.Equal(new Vector2(120f, 115f), cursor);
+        Assert.Equal(new Vector2(420f, 315f), cursor);
     }
 
     /// <summary>Nothing is banked while nothing is held. An uncaptured session reads as it would
@@ -268,17 +283,17 @@ public class MouseCaptureTests
         Assert.Equal(Vector2.Zero, capture.TakeLook());
     }
 
-    /// <summary>The release drops the pending travel. The next capture starts from where the real
-    /// cursor then is, not by replaying the motion that ended the last one.</summary>
+    /// <summary>The release drops the pending travel. The next capture starts centred, not by
+    /// replaying the motion that ended the last one.</summary>
     [Fact]
     public void Release_DropsThePendingTravel()
     {
         var capture = new MouseCapture();
-        capture.Take(new Vector2(100f, 100f));
+        capture.Take(new Vector2(800f, 600f));
         capture.Moved(new Vector2(50f, 50f));
 
         capture.Release();
-        capture.Take(new Vector2(400f, 300f));
+        capture.Take(new Vector2(800f, 600f));
 
         Assert.Equal(Vector2.Zero, capture.TakeLook());
         Assert.Equal(new Vector2(400f, 300f), capture.StepCursor(new Vector2(800f, 600f)));

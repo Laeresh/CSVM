@@ -33,8 +33,8 @@ install's `MPG` folder, `langui.dll`, `language.dll`, the output root, a force f
 callback. It unpacks `crimson.rof` into the output root and `crimptch.rof` into `_crimptch/`,
 skipping an archive whose `ASSETS` folder is already newer unless forced. Then it copies the
 cinemas, writes `ui_strings.json` (langui rows first) and runs `MenuLayoutDecoder`. Members land
-at `RofTree.Member`. A null or absent input is logged and skipped. The result carries each
-archive's counts and the movie count the stamp records. Finding the install and writing the stamp
+at `RofTree.Member`; one whose path leads outside its folder is refused and listed. A null or absent
+input is logged and skipped. The result carries each archive's counts and the movie count the stamp records. Finding the install and writing the stamp
 belong to the caller.
 
 ## src/Extraction/RofTree.cs
@@ -48,8 +48,8 @@ Coverage: `CSVM.Tests/RofExtractionTests.cs` and `OriginalManifestTests.cs`.
 ## src/Extraction/RofArchive.cs
 `Walk` lists a `.rof` held in memory as `RofEntry` values, a directory before its contents, paths
 joined with `/`, without inflating anything. `ReadMember` inflates one entry to its declared size
-and throws when the payload falls short. An implausible node or an unknown entry kind throws
-`InvalidDataException` rather than reading garbage. Read `BmTexture.cs` next.
+and throws when the payload falls short. An implausible node, a directory looping back to an ancestor or an
+unknown entry kind throws `InvalidDataException` rather than reading garbage. Read `BmTexture.cs` next.
 
 ## src/Extraction/BmTexture.cs
 `TryDecode` splits a `.BM` into its shading plane and its three paint-slot masks packed as RGB,
@@ -78,7 +78,9 @@ first-row-wins text map `MenuLayoutDecoder` joins widget strings against. The ru
 
 ## src/Extraction/MovieCopy.cs
 `Run` copies every `.mpg` in the install's folder byte for byte under its upper-case name
-(`RofTree`), skipping a target already at the source's length and replacing a read-only leftover.
+(`RofTree`), skipping a target already at the source's length unless forced and replacing a
+read-only leftover. Each copy lands as `<name>.part` and is renamed over the target, so a killed
+copy leaves only a `.part`, which the next run sweeps.
 `MovieCopyResult` counts copied and current files and names each of the ten `Expected` movies the
 folder lacked, for the report and the stamp.
 
@@ -144,3 +146,20 @@ unzbd) stops the run before the `.rof` half; a missing `crimson.rof` fails; a mi
 movies or no string rows only warn. `ExtractionProgress` carries a phase, a fraction (ZBD 0 to 0.85)
 and console lines; cancel throws. `RunToConsole` prints header, lines and `Summary`, answering 0 or 1.
 Blocks its thread. Read `ZbdExtraction.cs` next.
+
+## src/Extraction/SessionPaths.cs
+Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
+`MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`)
+and the `--zip-assets` switch that inverts it. A chapter or mission in either case maps through
+`Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
+the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
+
+## src/Extraction/ExtractionStamp.cs
+Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version
+line, exe hash, fork commit, schema integer) and compares its schema against this class's own
+`Schema` const, in `Launcher._Ready` right after the base paths settle, with at most one warning line
+per boot naming the fix. An unstamped tree only warns, since a dev tree holds valid extractions older
+than the stamp. `Standing` (unstamped, current, older, newer) is what stops a menu launch at the
+extraction screen on another schema (`UI/Screens/ExtractionFlow.cs`); `Behind` is the read for a
+caller that blocks, true only for a stamped schema under the one asked for. `Schema` also lives in both
+extraction scripts, and `CSVM.Tests/ExtractionStampTests.cs` refuses a bump that moves fewer than all three.

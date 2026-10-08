@@ -162,14 +162,14 @@ internal static class PausePreferencesSuites
 
             bool fallback = Config.GetBool("headLook.autohead", false);
             Frame(clock, seats);
-            ctx.Check(one.AutoHeadTurn == null && Leans(one) == fallback && Leans(two) == fallback,
+            ctx.Check(one.Look.AutoHeadTurn == null && Leans(one) == fallback && Leans(two) == fallback,
                 $"ABLE-TO-FAIL CONTROL: with nothing saved both seats fly the config key's head turn ({fallback}; leaning {Leans(one)}, {Leans(two)})");
             ctx.Check(!Nearest(one) && !Nearest(two),
                 $"ABLE-TO-FAIL CONTROL: and the decoded head rule after a kill ({Nearest(one)}, {Nearest(two)})");
 
             AcceptGameOptions(leaf, seats, toggle: true);
-            ctx.Check(applied?.AutoHeadTurn == true && one.AutoHeadTurn == true && two.AutoHeadTurn == true,
-                $"toggling Auto Head Turn over the pause puts it on both flying seats at once (applied {applied?.AutoHeadTurn}, seats {one.AutoHeadTurn}, {two.AutoHeadTurn})");
+            ctx.Check(applied?.AutoHeadTurn == true && one.Look.AutoHeadTurn == true && two.Look.AutoHeadTurn == true,
+                $"toggling Auto Head Turn over the pause puts it on both flying seats at once (applied {applied?.AutoHeadTurn}, seats {one.Look.AutoHeadTurn}, {two.Look.AutoHeadTurn})");
             ctx.Check(applied?.NearestAfterKill == true && Nearest(one) && Nearest(two),
                 $"and toggling Next Target puts both seats on the nearest target after a kill (applied {applied?.NearestAfterKill}, seats {Nearest(one)}, {Nearest(two)})");
             ctx.Check(ReferenceEquals(one.Targeting, selection),
@@ -180,8 +180,8 @@ internal static class PausePreferencesSuites
 
             AcceptGameOptions(leaf, seats, toggle: true);
             Frame(clock, seats);
-            ctx.Check(one.AutoHeadTurn == false && two.AutoHeadTurn == false && !Leans(one) && !Leans(two),
-                $"toggling the head turn off again puts the head straight ahead on the next frame (seats {one.AutoHeadTurn}, {two.AutoHeadTurn}; {Target(one)}, {Target(two)})");
+            ctx.Check(one.Look.AutoHeadTurn == false && two.Look.AutoHeadTurn == false && !Leans(one) && !Leans(two),
+                $"toggling the head turn off again puts the head straight ahead on the next frame (seats {one.Look.AutoHeadTurn}, {two.Look.AutoHeadTurn}; {Target(one)}, {Target(two)})");
             ctx.Check(!Nearest(one) && !Nearest(two),
                 $"and toggling Next Target off puts both seats back on the head rule ({Nearest(one)}, {Nearest(two)})");
 
@@ -190,15 +190,15 @@ internal static class PausePreferencesSuites
             OptionsStore.UserOptions().Save(new OptionsDef());
             foreach (var seat in seats)
             {
-                seat.AutoHeadTurn = !fallback;
+                seat.Look.AutoHeadTurn = !fallback;
                 seat.Targeting!.NearestAfterKill = true;
             }
 
             AcceptGameOptions(leaf, seats, toggle: false);
             Frame(clock, seats);
-            ctx.Check(applied?.AutoHeadTurn == null && one.AutoHeadTurn == null && two.AutoHeadTurn == null
+            ctx.Check(applied?.AutoHeadTurn == null && one.Look.AutoHeadTurn == null && two.Look.AutoHeadTurn == null
                 && Leans(one) == fallback && Leans(two) == fallback,
-                $"an accept carrying never-set values restores the config key's head turn on both seats (seats {one.AutoHeadTurn?.ToString() ?? "null"}, {two.AutoHeadTurn?.ToString() ?? "null"}; leaning {Leans(one)}, {Leans(two)})");
+                $"an accept carrying never-set values restores the config key's head turn on both seats (seats {one.Look.AutoHeadTurn?.ToString() ?? "null"}, {two.Look.AutoHeadTurn?.ToString() ?? "null"}; leaning {Leans(one)}, {Leans(two)})");
             ctx.Check(applied?.NearestAfterKill == null && !Nearest(one) && !Nearest(two),
                 $"and the decoded head rule after a kill ({Nearest(one)}, {Nearest(two)})");
         }
@@ -321,19 +321,19 @@ internal static class PausePreferencesSuites
         leaf.Drive(new MenuCommands { Accept = true });
         ctx.Check(leaf.Shell.Screen == OriginalScreen.Video,
             $"the VIDEO door behind the Options screen opens in flight ({leaf.Shell.Screen})");
-        ctx.Check(leaf.Shell.Options.DisplayModeChoice == DisplayWords.Borderless
-            && leaf.Shell.Options.ResolutionChoice == SavedResolution,
-            $"on this machine's saved display settings ({leaf.Shell.Options.DisplayModeChoice ?? "unset"}, {leaf.Shell.Options.ResolutionChoice ?? "unset"})");
+        ctx.Check(leaf.Shell.Options.Video.DisplayModeChoice == DisplayWords.Borderless
+            && leaf.Shell.Options.Video.ResolutionChoice == SavedResolution,
+            $"on this machine's saved display settings ({leaf.Shell.Options.Video.DisplayModeChoice ?? "unset"}, {leaf.Shell.Options.Video.ResolutionChoice ?? "unset"})");
         string pinned = ResolutionSetting.ScreenSizes().Fallback;
-        ctx.Check(leaf.Shell.Options.ResolutionPinned && RowOf(leaf, OriginalOptionsScreen.ResolutionKey) is { Enabled: false } dead
+        ctx.Check(leaf.Shell.Options.Video.ResolutionPinned && RowOf(leaf, OriginalVideoPage.ResolutionKey) is { Enabled: false } dead
             && dead.Label == pinned,
             $"with the size row dead at this screen's own size, borderless owning it ({SizeRow(leaf)})");
-        WalkTo(leaf, OriginalOptionsScreen.DisplayModeKey);
+        WalkTo(leaf, OriginalVideoPage.DisplayModeKey);
         leaf.Drive(new MenuCommands { MoveX = 1 });
-        string stepped = leaf.Shell.Options.DisplayModeChoice ?? string.Empty;
+        string stepped = leaf.Shell.Options.Video.DisplayModeChoice ?? string.Empty;
         ctx.Check(stepped.Length > 0 && stepped != DisplayWords.Borderless,
             $"a sideways step on the Display Mode row picks another word ({stepped})");
-        ctx.Check(!leaf.Shell.Options.ResolutionPinned && RowOf(leaf, OriginalOptionsScreen.ResolutionKey) is { Enabled: true } live
+        ctx.Check(!leaf.Shell.Options.Video.ResolutionPinned && RowOf(leaf, OriginalVideoPage.ResolutionKey) is { Enabled: true } live
             && live.Label == SavedResolution,
             $"which hands the size row back, standing on the size saved all along ({SizeRow(leaf)})");
         report.AppendLine($"display mode: {DisplayWords.Borderless} stepped to {stepped}");
@@ -348,7 +348,7 @@ internal static class PausePreferencesSuites
         Cell cell, Func<OptionsApplyExit?> applied, string stepped, StringBuilder report)
     {
         cell.At = (cell.OnStrip.X, cell.OnStrip.Y, true);
-        WalkTo(leaf, OriginalOptionsScreen.VideoAcceptKey);
+        WalkTo(leaf, OriginalVideoPage.AcceptKey);
         leaf.Drive(new MenuCommands { Accept = true });
         var exit = applied();
         ctx.Check(exit != null && exit.DisplayMode == stepped,
@@ -399,9 +399,9 @@ internal static class PausePreferencesSuites
         board.Preferences?.Invoke();
         WalkTo(leaf, OriginalOptionsScreen.VideoDoorKey);
         leaf.Drive(new MenuCommands { Accept = true });
-        ctx.Check(leaf.Shell.Options.DisplayModeChoice == stepped,
-            $"the VIDEO page reopened in the same flight stands on the mode just applied ({leaf.Shell.Options.DisplayModeChoice ?? "unset"})");
-        report.AppendLine($"reopened page: {leaf.Shell.Options.DisplayModeChoice ?? "-"}");
+        ctx.Check(leaf.Shell.Options.Video.DisplayModeChoice == stepped,
+            $"the VIDEO page reopened in the same flight stands on the mode just applied ({leaf.Shell.Options.Video.DisplayModeChoice ?? "unset"})");
+        report.AppendLine($"reopened page: {leaf.Shell.Options.Video.DisplayModeChoice ?? "-"}");
     }
 
     // A display change mid-flight resizes the viewport the flight draws into, and the leaf
@@ -410,7 +410,7 @@ internal static class PausePreferencesSuites
     private static void Resized(
         TestContext ctx, OriginalPauseBoard board, PausePreferences leaf, SubViewport view, StringBuilder report)
     {
-        var row = RowOf(leaf, OriginalOptionsScreen.VideoAcceptKey);
+        var row = RowOf(leaf, OriginalVideoPage.AcceptKey);
         if (row == null)
         {
             ctx.Check(false, $"the VIDEO page draws the row the pointer is aimed at");
@@ -428,18 +428,18 @@ internal static class PausePreferencesSuites
 
         leaf.WindowPointer = () => (before.Item1, before.Item2, false);
         leaf._Process(0.0);
-        ctx.Check(HoverKey(leaf) == OriginalOptionsScreen.VideoAcceptKey,
+        ctx.Check(HoverKey(leaf) == OriginalVideoPage.AcceptKey,
             $"the pointer hits the row it is drawn over at {FlightWindow.X}x{FlightWindow.Y} ({HoverKey(leaf)})");
 
         view.Size = ResizedWindow;
         leaf._Process(0.0);
         ctx.Check(leaf.Size.X == ResizedWindow.X && leaf.Size.Y == ResizedWindow.Y,
             $"the resized viewport is the one the leaf covers ({leaf.Size})");
-        ctx.Check(HoverKey(leaf) != OriginalOptionsScreen.VideoAcceptKey,
+        ctx.Check(HoverKey(leaf) != OriginalVideoPage.AcceptKey,
             $"the window pixel that hit that row no longer does, the screen having moved under it ({HoverKey(leaf)})");
         leaf.WindowPointer = () => (after.Item1, after.Item2, false);
         leaf._Process(0.0);
-        ctx.Check(HoverKey(leaf) == OriginalOptionsScreen.VideoAcceptKey,
+        ctx.Check(HoverKey(leaf) == OriginalVideoPage.AcceptKey,
             $"and the pixel the new fit puts it at does, so the leaf re-fit rather than kept the old one ({HoverKey(leaf)})");
         ctx.Check(leaf.Shown is { } shown && shown.Lines.Count + shown.Plaques.Count > 0,
             $"with the page still composing at the new size");
@@ -466,13 +466,13 @@ internal static class PausePreferencesSuites
         leaf.Drive(new MenuCommands { Accept = true });
         if (toggle)
         {
-            WalkTo(leaf, OriginalOptionsScreen.AutoHeadTurnKey);
+            WalkTo(leaf, OriginalGameOptionsPage.AutoHeadTurnKey);
             leaf.Drive(new MenuCommands { Accept = true });
-            WalkTo(leaf, OriginalOptionsScreen.NearestAfterKillKey);
+            WalkTo(leaf, OriginalGameOptionsPage.NearestAfterKillKey);
             leaf.Drive(new MenuCommands { Accept = true });
         }
 
-        WalkTo(leaf, OriginalOptionsScreen.GameOptionsAcceptKey);
+        WalkTo(leaf, OriginalGameOptionsPage.AcceptKey);
         leaf.Drive(new MenuCommands { Accept = true });
     }
 
@@ -550,7 +550,7 @@ internal static class PausePreferencesSuites
     // The size row as one line, for a check that has to say what it saw rather than only that it
     // disagreed: the size drawn and whether the row takes a press.
     private static string SizeRow(PausePreferences leaf) =>
-        RowOf(leaf, OriginalOptionsScreen.ResolutionKey) is { } row
+        RowOf(leaf, OriginalVideoPage.ResolutionKey) is { } row
             ? $"{row.Label}, enabled={row.Enabled}" : "no size row";
 
     private static OriginalRow? RowOf(PausePreferences leaf, string key)

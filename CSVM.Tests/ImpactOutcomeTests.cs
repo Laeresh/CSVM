@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -47,11 +48,10 @@ public class ImpactOutcomeTests
         Assert.Equal(ImpactStandIn.None, outcome.StandIn);
     }
 
-    /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id, it has no
-    /// arm of its own since the chip burst was removed. The assertion that matters is that the
-    /// answer is not <c>None</c>: <c>ProjectilePool</c> gates the world-effects sink (the
-    /// <c>blacksmokepuffer</c>) on <c>StandIn != None</c>, so a terrain hit resolving to nothing
-    /// would silently take the gunhit smoke with it.</summary>
+    /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id. The
+    /// assertion that matters is that the answer is not <c>None</c>. Off an aircraft the sink gate
+    /// <c>EffectOwed</c> follows the stand-in, so a terrain hit resolving to nothing would silently
+    /// drop the gunhit smoke.</summary>
     [Theory]
     [InlineData(SurfaceRegistry.Default)]
     [InlineData(13)]
@@ -79,16 +79,38 @@ public class ImpactOutcomeTests
             ImpactOutcome.Resolve(Rocket(), SurfaceRegistry.Buildings, false, hasEffectsRuntime: true).StandIn);
     }
 
-    /// <summary>Water and a struck aircraft fall to the single spark. This is the existing
-    /// else-branch, not a case authored for <c>player</c>/<c>enemy</c>.</summary>
+    /// <summary>Water and the unreachable <c>enemy</c> id fall to the single spark. This is the
+    /// existing else-branch, not a case authored for either.</summary>
     [Theory]
     [InlineData(SurfaceRegistry.Water)]
-    [InlineData(SurfaceRegistry.Player)]
     [InlineData(SurfaceRegistry.Enemy)]
     public void EverySurfaceWithNoLookOfItsOwnFallsToTheSpark(int surfaceId)
     {
         Assert.Equal(ImpactStandIn.Spark,
             ImpactOutcome.Resolve(Gun(), surfaceId, false, hasEffectsRuntime: true).StandIn);
+    }
+
+    /// <summary>A round on an aircraft stands nothing in, yet the runtime still owes the row's own
+    /// effect; the ground keeps both. An instanced model owes the runtime nothing.</summary>
+    [Fact]
+    public void AnAircraftHitStandsInNothingButStillOwesTheRowsEffect()
+    {
+        var gun = Gun();
+        gun.Impact[SurfaceRegistry.Default] = new WeaponEffect { Animation = "3040slug_gunhit" };
+        gun.Impact[SurfaceRegistry.Player] = new WeaponEffect { Animation = "3040slug_gunhit" };
+        var onPlane = ImpactOutcome.Resolve(gun, SurfaceRegistry.Player, false, hasEffectsRuntime: true,
+            effectBound: true);
+        Assert.Equal(ImpactStandIn.None, onPlane.StandIn);
+        Assert.True(onPlane.EffectOwed);
+        Assert.Equal(ImpactStandIn.None, ImpactOutcome.Resolve(Rocket(), SurfaceRegistry.Player, false,
+            hasEffectsRuntime: true).StandIn);
+
+        var onGround = ImpactOutcome.Resolve(gun, SurfaceRegistry.Default, false, hasEffectsRuntime: true);
+        Assert.Equal(ImpactStandIn.Spark, onGround.StandIn);
+        Assert.True(onGround.EffectOwed);
+
+        Assert.False(ImpactOutcome.Resolve(gun, SurfaceRegistry.Player, modelResolved: true,
+            hasEffectsRuntime: true).EffectOwed);
     }
 
     /// <summary>With no world-effects runtime to build its real fireball, a hardpoint weapon shows
@@ -330,8 +352,12 @@ public class ImpactOutcomeTests
                 var outcome = ImpactOutcome.Resolve(weapon, surfaceId, modelResolved: false, hasEffectsRuntime: true);
                 var where = $"{weapon.Id} ({weapon.Name}) / {surfaceId}/{SurfaceRegistry.NameForId(surfaceId)}";
 
-                if (outcome.EffectName == null && outcome.StandIn == ImpactStandIn.None)
+                // An aircraft is the one surface where an empty row draws nothing, as in the original.
+                if (outcome.EffectName == null && outcome.StandIn == ImpactStandIn.None
+                    && surfaceId != SurfaceRegistry.Player)
                     violations.Add($"{where}: neither an effect name nor a stand-in");
+                if (surfaceId == SurfaceRegistry.Player && outcome.EffectName != null && !outcome.EffectOwed)
+                    violations.Add($"{where}: the aircraft row's effect '{outcome.EffectName}' is owed to no runtime");
 
                 // A SOUND token names either a SETS def or a SOUND_GROUPS entry; the coherent
                 // check is the union of both tables.

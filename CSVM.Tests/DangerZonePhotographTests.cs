@@ -1,5 +1,4 @@
 using CSVM.Flight.Modes;
-using CSVM.Mech3;
 using CSVM.UI.Boards;
 using Godot;
 using Xunit;
@@ -7,11 +6,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Danger Zone camera's engine-free rules (<see cref="DangerZonePhotograph"/>): the eye stands
-/// two and a half chase distances ahead along the nose's level heading, scattered on the world axes
-/// by at most 0.15, 0.25 and 0.15 of that distance, and turned with no roll to look back at the
-/// aircraft, including when the nose points straight up. Plus the one-frame layer the pilot's
-/// hidden airframe moves onto, which no pane draws.
+/// The Danger Zone camera's engine-free rules (<see cref="DangerZonePhotograph"/>). The eye stands
+/// two and a half chase distances ahead along the nose's level heading. It is scattered on the
+/// world axes by at most 0.15, 0.25 and 0.15 of that distance. It turns with no roll to look back
+/// at the aircraft, even with the nose straight up. Its cull mask draws the airframe a
+/// first-person pilot's own pane leaves out.
 /// Decode: docs/formats/campaign-screens.md, "The danger-zone slot".
 /// </summary>
 public class DangerZonePhotographTests
@@ -77,18 +76,18 @@ public class DangerZonePhotographTests
     }
 
     [Fact]
-    public void ThePhotographLayerIsInNoPaneAndOnNoOtherBand()
+    public void ThePhotographDrawsTheAirframeItsPilotsPaneLeavesOut()
     {
-        uint layer = SplitScreen.PhotographLayer;
-        Assert.Equal(1, System.Numerics.BitOperations.PopCount(layer));
         for (int pane = 0; pane < SplitScreen.MaxPlayers; pane++)
         {
-            Assert.Equal(0u, SplitScreen.PlayerCullMask(pane) & layer);
-            Assert.Equal(0u, SplitScreen.PlayerVisualLayer(pane) & layer);
-            Assert.Equal(0u, SplitScreen.OwnAirframeLayer(pane) & layer);
+            uint seated = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(pane), pane);
+            uint photo = SplitScreen.OutsideCullMask(seated);
+            Assert.Equal(0u, seated & SplitScreen.FirstPersonLayer(pane));
+            Assert.NotEqual(0u, photo & SplitScreen.FirstPersonLayer(pane));
+
+            // Nothing else moves: the photograph draws what the pane draws, its own pilot's body added.
+            Assert.Equal(SplitScreen.FirstPersonLayer(pane), photo ^ seated);
         }
-        Assert.Equal(0u, ZoneGate.LayerBand & layer);
-        Assert.Equal(0u, SplitScreen.PaneCullMask(0xFFFFFu) & layer);
 
         // Layer 1, where the world is built, stays in every pane.
         Assert.Equal(1u, SplitScreen.PaneCullMask(0xFFFFFu) & 1u);

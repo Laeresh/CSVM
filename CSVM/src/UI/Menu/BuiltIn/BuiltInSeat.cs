@@ -1,3 +1,4 @@
+using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 
 namespace CSVM.UI.Menu.BuiltIn;
@@ -36,6 +37,7 @@ public sealed class BuiltInSeat : IMenuInputSource
             MoveY = Input.Move,
             MoveX = Input.MoveX,
             Accept = Input.Accept,
+            KeylessAccept = Input.KeylessAccept,
             Back = Input.Back,
             Join = Input.Start,
             Loadout = Input.Loadout,
@@ -44,6 +46,7 @@ public sealed class BuiltInSeat : IMenuInputSource
             Erase = Input.Erase,
             Paste = Input.Paste,
             Unbind = Input.Unbind,
+            OnPad = Input.Device == CSVM.Bindings.DeviceSide.Pad,
         };
     }
 

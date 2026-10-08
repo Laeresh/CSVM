@@ -3,6 +3,7 @@ using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.UI.Screens;
 using Godot;
 
@@ -52,13 +53,13 @@ internal static class MouseFlightSuites
 
             // Inside the deadzone the cursor flies nothing at all. A player can let go of the
             // mouse without the aeroplane holding a deflection.
-            plane.MouseStickForTest = new Vector2(0.09f, 0.09f);
+            plane.Mouse.StickForTest = new Vector2(0.09f, 0.09f);
             var idle = plane.ReadKeyboard(Dt);
             ctx.Check(idle.Roll == 0f && idle.Pitch == 0f && idle.Yaw == 0f,
                 $"a cursor inside the deadzone flies nothing (roll {idle.Roll:0.###}, pitch {idle.Pitch:0.###}, yaw {idle.Yaw:0.###})");
 
-            plane.MouseStickForTest = new Vector2(0.8f, 0f);
-            gyro.MouseStickForTest = new Vector2(0.8f, 0f);
+            plane.Mouse.StickForTest = new Vector2(0.8f, 0f);
+            gyro.Mouse.StickForTest = new Vector2(0.8f, 0f);
             var planeRight = plane.ReadKeyboard(Dt);
             var gyroRight = gyro.ReadKeyboard(Dt);
             ctx.Check(planeRight.Roll < -0.7f && planeRight.Yaw == 0f,
@@ -66,7 +67,7 @@ internal static class MouseFlightSuites
             ctx.Check(gyroRight.Yaw < -0.7f && gyroRight.Roll == 0f,
                 $"and yaws the autogyro and banks it nowhere, the exchange the decode names (yaw {gyroRight.Yaw:0.###}, roll {gyroRight.Roll:0.###})");
 
-            plane.MouseStickForTest = new Vector2(0f, 0.6f);
+            plane.Mouse.StickForTest = new Vector2(0f, 0.6f);
             var pull = plane.ReadKeyboard(Dt);
             ctx.Check(pull.Pitch > 0.5f && pull.Roll == 0f,
                 $"a cursor below the middle pulls the nose up on either airframe (pitch {pull.Pitch:0.###})");
@@ -89,8 +90,9 @@ internal static class MouseFlightSuites
     [Suite("flight-mouse-capture",
         "the desktop mouse a flight seat takes, and the guard that keeps it off this harness: a "
         + "session assembled from this launch's own command line resolves the capture OFF because "
-        + "the launch is scripted, while the same resolution from an interactive command line on "
-        + "this very display says yes, a human seat carrying the harness's own answer holds no "
+        + "the launch is scripted, and so does one a suite assembles from an interactive command "
+        + "line inside this launch, while that same resolution in a launch that is not scripted "
+        + "answers the display alone, a human seat carrying the harness's own answer holds no "
         + "mouse and leaves Input.MouseMode exactly where the harness left it over a run of frames, "
         + "and the decision goes false for a halted frame, a photo-mode pane, the pause options "
         + "leaf and a watcher's seat, which is what hands the pointer back to every board that "
@@ -104,8 +106,20 @@ internal static class MouseFlightSuites
         bool realDisplay = DisplayServer.GetName() != "headless";
         ctx.Check(!scripted.MouseCaptureAllowed,
             $"a session assembled from this launch's command line takes no mouse ({scripted.MouseCaptureAllowed})");
-        ctx.Check(interactive.MouseCaptureAllowed == realDisplay,
-            $"ABLE-TO-FAIL CONTROL: the same resolution from an interactive command line answers the display alone (allowed {interactive.MouseCaptureAllowed}, real display {realDisplay})");
+        ctx.Check(MouseCapture.ScriptedLaunch && !interactive.MouseCaptureAllowed,
+            $"and neither does one a suite assembles from an interactive command line inside this launch (launch scripted {MouseCapture.ScriptedLaunch}, allowed {interactive.MouseCaptureAllowed})");
+        bool launch = MouseCapture.ScriptedLaunch;
+        MouseCapture.ScriptedLaunch = false;
+        try
+        {
+            var unscripted = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--fly" }));
+            ctx.Check(unscripted.MouseCaptureAllowed == realDisplay,
+                $"ABLE-TO-FAIL CONTROL: the same resolution in a launch that is not scripted answers the display alone (allowed {unscripted.MouseCaptureAllowed}, real display {realDisplay})");
+        }
+        finally
+        {
+            MouseCapture.ScriptedLaunch = launch;
+        }
 
         var before = Godot.Input.MouseMode;
         var seat = Rig(ctx, PlaneStats.Load(ctx.ZrdrPath, "player_bhawk"), "MouseCaptureSeat",
@@ -113,14 +127,14 @@ internal static class MouseFlightSuites
         try
         {
             seat.MouseFlying = true;
-            seat.MouseCaptureAllowed = scripted.MouseCaptureAllowed;
+            seat.Mouse.Allowed = scripted.MouseCaptureAllowed;
             for (int frame = 0; frame < 30; frame++)
             {
                 seat.StepMouseCaptureForTest(halted: false);
             }
 
-            ctx.Check(!seat.HoldsMouseForTest() && Godot.Input.MouseMode == before,
-                $"and thirty frames of a mouse-flying seat leave the harness's mouse mode alone (holding {seat.HoldsMouseForTest()}, mode {Godot.Input.MouseMode}, was {before})");
+            ctx.Check(!seat.Mouse.Holding && Godot.Input.MouseMode == before,
+                $"and thirty frames of a mouse-flying seat leave the harness's mouse mode alone (holding {seat.Mouse.Holding}, mode {Godot.Input.MouseMode}, was {before})");
             BoardsGetThePointerBack(ctx, seat);
         }
         finally
@@ -197,18 +211,18 @@ internal static class MouseFlightSuites
         TestContext ctx, PausePreferences leaf, UI.Menu.ControlsFeature controls, FlightController one, FlightController two)
     {
         const Key Rebound = Key.F8;
-        one.MouseStickForTest = new Vector2(0.8f, 0f);
-        two.MouseStickForTest = new Vector2(0.8f, 0f);
+        one.Mouse.StickForTest = new Vector2(0.8f, 0f);
+        two.Mouse.StickForTest = new Vector2(0.8f, 0f);
         ctx.Check(!one.MouseFlying && one.ReadKeyboard(Dt).Roll == 0f,
             $"ABLE-TO-FAIL CONTROL: player 1's seat starts on head-look, the cursor banking nothing ({one.MouseFlying})");
         bool wantedOnLook = CaptureDecision(one);
 
-        leaf.Open(new[] { new UI.Screens.MenuInput { Keyboard = true } }, 0, new[] { one, two });
+        leaf.Open(new[] { new UI.Boards.MenuInput { Keyboard = true } }, 0, new[] { one, two });
         WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsDoorKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         ctx.Check(leaf.Shell.Screen == UI.Menu.Original.OriginalScreen.ControlsPrefs,
             $"the CONTROLS door opens over the pause ({leaf.Shell.Screen})");
-        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsMouseKey);
+        WalkTo(leaf, UI.Menu.Original.OriginalControlsPage.MouseKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         controls.Context = InputContext.Flight;
         controls.Focus(IndexOf(controls.Actions, InputAction.AutoLand));
@@ -219,13 +233,13 @@ internal static class MouseFlightSuites
             $"a staged flip and rebind reach no seat before the accept (page {controls.MouseFlying}, seat {one.MouseFlying})");
 
         // Five sideways steps on the slider, a quarter of its scale up: twice the sensitivity.
-        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsSensitivityKey);
+        WalkTo(leaf, UI.Menu.Original.OriginalControlsPage.SensitivityKey);
         for (int i = 0; i < 5; i++)
             leaf.Drive(new UI.Menu.MenuCommands { MoveX = 1 });
         ctx.Check(controls.MouseSensitivity == 2f && one.MouseSensitivity == SensitivityScale.Default,
             $"the slider stages twice the sensitivity and the seat keeps its own until the accept (page {controls.MouseSensitivity}, seat {one.MouseSensitivity})");
 
-        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsAcceptKey);
+        WalkTo(leaf, UI.Menu.Original.OriginalControlsPage.AcceptKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         var flown = one.ReadKeyboard(Dt);
         ctx.Check(one.MouseFlying && flown.Roll < -0.7f,
@@ -242,17 +256,17 @@ internal static class MouseFlightSuites
         bool wantedOnFly = CaptureDecision(one);
         ctx.Check(wantedOnLook && wantedOnFly,
             $"the capture decision is the same under either scheme, the seat holding the mouse for the stick and for head-look alike (look {wantedOnLook}, fly {wantedOnFly})");
-        one.MouseStickForTest = null;
-        two.MouseStickForTest = null;
+        one.Mouse.StickForTest = null;
+        two.Mouse.StickForTest = null;
     }
 
     // The capture decision for an unhalted frame on a seat allowed the mouse, read and put back in
     // one call. The harness must never leave a seat allowed, or its next frame would take the mouse.
     private static bool CaptureDecision(FlightController seat)
     {
-        seat.MouseCaptureAllowed = true;
+        seat.Mouse.Allowed = true;
         bool wanted = seat.WantsMouseCaptureForTest(halted: false) && !seat.WantsMouseCaptureForTest(halted: true);
-        seat.MouseCaptureAllowed = false;
+        seat.Mouse.Allowed = false;
         return wanted;
     }
 
@@ -289,23 +303,23 @@ internal static class MouseFlightSuites
     // has it back. A hold rather than a toggle, so one tap cannot strand the mouse on the head.
     private static void FreeLookHold(TestContext ctx, FlightController plane)
     {
-        plane.MouseStickForTest = new Vector2(0.8f, 0f);
+        plane.Mouse.StickForTest = new Vector2(0.8f, 0f);
         plane.HoldActionForTest(InputAction.FreeLook, true);
         var looking = plane.ReadKeyboard(Dt);
-        ctx.Check(plane.FreeLookActiveForTest() && looking.Roll == 0f,
-            $"a held free-look control takes the stick off the mouse (held {plane.FreeLookActiveForTest()}, roll {looking.Roll:0.###})");
+        ctx.Check(plane.Look.FreeLookHeld && looking.Roll == 0f,
+            $"a held free-look control takes the stick off the mouse (held {plane.Look.FreeLookHeld}, roll {looking.Roll:0.###})");
 
         plane.HoldActionForTest(InputAction.FreeLook, false);
         var released = plane.ReadKeyboard(Dt);
-        ctx.Check(!plane.FreeLookActiveForTest() && released.Roll < -0.7f,
-            $"the release hands the mouse straight back to the stick (held {plane.FreeLookActiveForTest()}, roll {released.Roll:0.###})");
+        ctx.Check(!plane.Look.FreeLookHeld && released.Roll < -0.7f,
+            $"the release hands the mouse straight back to the stick (held {plane.Look.FreeLookHeld}, roll {released.Roll:0.###})");
 
         // The reading a toggle could not give: a second press takes the mouse off the stick AGAIN
         // rather than handing it back. A toggle would hand it back on that second press.
         plane.HoldActionForTest(InputAction.FreeLook, true);
         var again = plane.ReadKeyboard(Dt);
-        ctx.Check(plane.FreeLookActiveForTest() && again.Roll == 0f,
-            $"and a second hold takes it off once more, no toggle underneath (held {plane.FreeLookActiveForTest()}, roll {again.Roll:0.###})");
+        ctx.Check(plane.Look.FreeLookHeld && again.Roll == 0f,
+            $"and a second hold takes it off once more, no toggle underneath (held {plane.Look.FreeLookHeld}, roll {again.Roll:0.###})");
         plane.HoldActionForTest(InputAction.FreeLook, false);
     }
 
@@ -313,7 +327,7 @@ internal static class MouseFlightSuites
     // does to the same slots. An autogyro pilot banks with the roll keys while the mouse yaws.
     private static void KeysSum(TestContext ctx, FlightController gyro)
     {
-        gyro.MouseStickForTest = new Vector2(0.8f, 0f);
+        gyro.Mouse.StickForTest = new Vector2(0.8f, 0f);
         var summed = default(FlightInput);
         for (int i = 0; i < 120; i++)
         {
@@ -332,17 +346,17 @@ internal static class MouseFlightSuites
     private static void KeyboardScheme(TestContext ctx, FlightController plane)
     {
         plane.MouseFlying = false;
-        plane.MouseStickForTest = new Vector2(0.8f, 0.8f);
+        plane.Mouse.StickForTest = new Vector2(0.8f, 0.8f);
         plane.HoldActionForTest(InputAction.FreeLook, true);
         var off = plane.ReadKeyboard(Dt);
         ctx.Check(off.Roll == 0f && off.Pitch == 0f && off.Yaw == 0f,
             $"the keyboard scheme takes no stick from the mouse (roll {off.Roll:0.###}, pitch {off.Pitch:0.###}, yaw {off.Yaw:0.###})");
-        ctx.Check(plane.FreeLookActiveForTest(),
-            $"and reads the same held free-look posture head-look has always read ({plane.FreeLookActiveForTest()})");
+        ctx.Check(plane.Look.FreeLookHeld,
+            $"and reads the same held free-look posture head-look has always read ({plane.Look.FreeLookHeld})");
 
         plane.HoldActionForTest(InputAction.FreeLook, false);
         var up = plane.ReadKeyboard(Dt);
-        ctx.Check(!plane.FreeLookActiveForTest() && up.Roll == 0f && up.Pitch == 0f,
+        ctx.Check(!plane.Look.FreeLookHeld && up.Roll == 0f && up.Pitch == 0f,
             $"and releasing it leaves the stick on the keys, not on the cursor (roll {up.Roll:0.###}, pitch {up.Pitch:0.###})");
     }
 
@@ -355,8 +369,8 @@ internal static class MouseFlightSuites
         TestContext ctx, FlightController gyro, PlaneStats gyroStats, FlightController plane, PlaneStats planeStats)
     {
         var cursor = new Vector2(0.25f, 0.25f);
-        gyro.MouseStickForTest = cursor;
-        plane.MouseStickForTest = cursor;
+        gyro.Mouse.StickForTest = cursor;
+        plane.Mouse.StickForTest = cursor;
         var gyroStick = gyro.ReadKeyboard(Dt);
         var planeStick = plane.ReadKeyboard(Dt);
         ctx.Check(gyroStick.Yaw < -0.15f && gyroStick.Pitch > 0.15f && gyroStick.Roll == 0f,
@@ -371,8 +385,8 @@ internal static class MouseFlightSuites
         ctx.Check(Mathf.Abs(planeHeading) > 1f,
             $"the aeroplane the same cursor already flew is unchanged by this ({planeHeading:0.0} degrees of heading)");
 
-        gyro.MouseStickForTest = null;
-        plane.MouseStickForTest = null;
+        gyro.Mouse.StickForTest = null;
+        plane.Mouse.StickForTest = null;
     }
 
     // Three seconds of the seat's own stick into a throwaway plant on that airframe's shipped
@@ -400,27 +414,27 @@ internal static class MouseFlightSuites
     // gives the pause sheet, the preferences leaf, photo mode and a watcher their pointer.
     private static void BoardsGetThePointerBack(TestContext ctx, FlightController seat)
     {
-        seat.MouseCaptureAllowed = true;
+        seat.Mouse.Allowed = true;
         ctx.Check(seat.WantsMouseCaptureForTest(halted: false),
             $"an allowed seat flying with nothing over it wants the mouse ({seat.WantsMouseCaptureForTest(false)})");
         ctx.Check(!seat.WantsMouseCaptureForTest(halted: true),
             $"a halted frame hands it back, which is every pause sheet and every wrap-up board ({seat.WantsMouseCaptureForTest(true)})");
 
-        seat.BeginPhotoMode();
+        seat.Pause.BeginPhotoMode();
         ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
             $"photo mode hands it back to the free camera's own right-button look ({seat.WantsMouseCaptureForTest(false)})");
-        seat.EndPhotoMode();
+        seat.Pause.EndPhotoMode();
 
-        seat.BeginPauseLeaf();
+        seat.Pause.BeginPauseLeaf();
         ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
             $"the pause options leaf hands it back to the preferences page ({seat.WantsMouseCaptureForTest(false)})");
-        seat.EndPauseLeaf();
+        seat.Pause.EndPauseLeaf();
 
         seat.Spectating = true;
         ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
             $"and a watcher's seat never takes it, its pane being the spectator camera's ({seat.WantsMouseCaptureForTest(false)})");
         seat.Spectating = false;
-        seat.MouseCaptureAllowed = false;
+        seat.Mouse.Allowed = false;
     }
 
     // One flying seat over a plant and nothing else: no model to draw, no camera and no HUD. Every

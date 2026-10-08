@@ -1,3 +1,4 @@
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
 using Xunit;

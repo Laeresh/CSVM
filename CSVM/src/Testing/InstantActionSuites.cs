@@ -2,23 +2,24 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Bindings;
-using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.InstantAction;
-using CSVM.Session.Launch;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
+using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
-
 using static CSVM.Testing.SuiteConstants;
 namespace CSVM.Testing;
 
@@ -866,10 +867,7 @@ internal static class InstantActionSuites
         "menu at all and the board that follows answers the first press on its Restart row; and " +
         "a C1/IA1 stunt run completing on that seat, which flies on through the whole win's hold " +
         "to the wrap-up with a marker first entered inside the hold not photographed, where the " +
-        "same seat under a solo scoreboard holds its finish pose; and a two-pilot C1/IA1 stunt " +
-        "run built through the session's roster, where the last pilot in wins, no race board is " +
-        "built, both aircraft fly through the hold with no halt and nothing photographed, and " +
-        "the wrap-up follows, while the same field as a plain race wakes its board and holds")]
+        "same seat under a solo scoreboard holds its finish pose")]
     internal static void InstantActionEnd(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1190,7 +1188,6 @@ internal static class InstantActionSuites
             }
 
             StuntRunFliesOn(ctx, seat, missionZrdr);
-            SplitscreenStuntRunEndsOnTheHold(ctx, planesGamez, textures, live, missionZrdr);
         }
         finally
         {
@@ -1202,7 +1199,7 @@ internal static class InstantActionSuites
             textures.Dispose();
         }
 
-        // ---- stunt_flying: StuntRace's all-finished path over the authored zones -------------
+        // ---- stunt_flying: the zone sets' all-finished rule over the authored zones ----------
         ctx.WithWorld("C1", collision: false, mission: "IA1", world =>
         {
             var zones = StuntMission.Load(world.Gamez, missionZrdr, Messages.Load(ctx.MessagesPath));
@@ -1213,10 +1210,7 @@ internal static class InstantActionSuites
             }
             var stunt = new InstantActionRuntime(EndDef(ctx, "stunt", "stunt_flying"));
             var notStunt = new InstantActionRuntime(EndDef(ctx, "ace2", "dogfight_ace"));
-            var race = new StuntRace();
             var second = zones.ForAnotherPlayer();
-            race.Add(0, zones, "P1");
-            race.Add(1, second, "P2");
             // GameSession.CheckInstantActionZoneSets, over the same predicate it calls: the two
             // pilots' runs, with P2's out-of-lives state under the suite's control.
             bool p2OutOfLives = false;
@@ -1235,17 +1229,16 @@ internal static class InstantActionSuites
 
             // Decision 10: all-finished, never first past the post.
             zones.DebugCompleteAll();
-            ctx.Check(zones.AllComplete && !race.AllFinished && !stunt.Ended,
-                $"the FIRST pilot's zone set is flown and the mission runs on ({race.FinishedCount} of 2 in)");
+            ctx.Check(zones.AllComplete && !second.AllComplete && !stunt.Ended,
+                $"the FIRST pilot's zone set is flown and the mission runs on (1 of 2 in)");
             second.DebugCompleteAll();
-            ctx.Check(race.AllFinished && stunt.Outcome == InstantActionOutcome.Won,
+            ctx.Check(second.AllComplete && stunt.Outcome == InstantActionOutcome.Won,
                 $"the last pilot in WINS a stunt_flying mission: {stunt.Outcome}");
             ctx.Check(!notStunt.Ended,
                 $"…and the same report leaves a dogfight_ace mission running: {notStunt.Outcome}");
 
-            // The same field with P2 out of lives instead: a pilot who can never clear another
-            // gate must not hold the mission open, which is what StuntRace's own all-finished
-            // rule alone would do (AllFinished is still false here).
+            // The same field with P2 out of lives instead. A pilot who can never clear another gate
+            // must not hold the mission open, as an all-finished rule over every pilot would.
             var outOfLives = new InstantActionRuntime(EndDef(ctx, "stunt-out", "stunt_flying"));
             var rerun = zones.ForAnotherPlayer();
             var stranded = zones.ForAnotherPlayer();
@@ -1568,6 +1561,93 @@ internal static class InstantActionSuites
             $"a splitscreen end records the pilot whose OWN run completed and not the other: p1 new={p1Summary.NewBest} p2 new={p2Summary.NewBest}");
     }
 
+    // The store choice both stunt records go through, over a seeded file under ctx.ScratchDir that
+    // stands in for the player's user://stunt_scores.json. ⚠ Never point this at the real store:
+    // the control below writes into whatever file it is handed.
+    [Suite("stunt-scores-scripted",
+        "a --det --debug-scoreboard stunt run records its synthetic best into a throwaway store: " +
+        "the solo scoreboard and the Instant Action summary both claim NEW BEST over no stored " +
+        "best, and the player's store file is byte-identical afterwards; --scores= writes the " +
+        "named file instead; the control, a played run, records into the player's file and keeps " +
+        "its other entries")]
+    internal static void StuntScoresScripted(TestContext ctx)
+    {
+        string chapter = "C1", mission = "IA1";
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        var gamez = GameZ.Load(gamezPath);
+        var messages = Messages.Load(ctx.MessagesPath);
+        StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
+            ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
+
+        string dir = Path.Combine(ctx.ScratchDir, "StuntScoresScripted");
+        Directory.CreateDirectory(dir);
+        string player = Path.Combine(dir, "player_scores.json");
+        string named = Path.Combine(dir, "named_scores.json");
+        if (File.Exists(named))
+        {
+            File.Delete(named);
+        }
+        const string other = "C1/IA1/player_other";
+        File.WriteAllText(player, $"{{\n  \"{other}\": {{ \"best\": 300.0, \"date\": \"2000-01-01\" }}\n}}");
+        byte[] seeded = File.ReadAllBytes(player);
+        const string key = "stunt-scores-scripted/IA1/player_test";
+        string[] scriptedArgs = { $"--chapter={chapter}", $"--mission={mission}", "--stunt", "--debug-scoreboard", "--det" };
+        var scripted = SessionSpec.Parse(scriptedArgs);
+
+        // The solo board, completed the way --debug-scoreboard completes it.
+        var soloRun = Fresh();
+        var soloStore = ScoreStore.ForSession(scripted.ScoresPath, scripted.ScoresThrowaway, player);
+        var board = StuntScoreboard.Build(soloRun, "Test Plane", chapter, soloStore, key, exitsToMenu: true,
+            new PauseState(), _ => new MenuInput());
+        ctx.Host.AddChild(board);
+        try
+        {
+            soloRun.DebugCompleteAll();
+            ctx.Check(soloStore.Throwaway && board.Visible && soloStore.GetBest(key) == soloRun.Elapsed,
+                $"the scripted solo board wakes and records its synthetic total in its own store: throwaway={soloStore.Throwaway} visible={board.Visible} best={soloStore.GetBest(key)}");
+        }
+        finally
+        {
+            board.Free();
+        }
+        ctx.Check(seeded.SequenceEqual(File.ReadAllBytes(player)),
+            $"…and the player's store file is byte-identical afterwards");
+
+        // The Instant Action wrap-up's record, through a second scripted store. No best carries
+        // over from the first, so the board reads the same whatever ran before it.
+        var iaRun = Fresh();
+        iaRun.DebugCompleteAll();
+        var iaSummary = InstantActionDirector.BuildStuntSummary(iaRun, ScoreStore.ForSession(scripted.ScoresPath, scripted.ScoresThrowaway, player), key);
+        ctx.Check(iaSummary.NewBest && iaSummary.PrevBest == null,
+            $"the scripted Instant Action summary claims NEW BEST over no stored best: prev={iaSummary.PrevBest} new={iaSummary.NewBest}");
+        ctx.Check(seeded.SequenceEqual(File.ReadAllBytes(player)),
+            $"…and the player's store file is still byte-identical");
+
+        // --scores= names the file a scripted run records into.
+        var namedRun = Fresh();
+        namedRun.DebugCompleteAll();
+        var namedSpec = SessionSpec.Parse(scriptedArgs.Append($"--scores={named}").ToArray());
+        InstantActionDirector.BuildStuntSummary(namedRun, ScoreStore.ForSession(namedSpec.ScoresPath, namedSpec.ScoresThrowaway, player), key);
+        ctx.Check(ScoreStore.Load(named).GetBest(key) == namedRun.Elapsed && seeded.SequenceEqual(File.ReadAllBytes(player)),
+            $"--scores= records into the named file and leaves the player's alone: named best={ScoreStore.Load(named).GetBest(key)}");
+
+        // The control: a played run records into the very file the scripted runs left alone.
+        var playedRun = Fresh();
+        playedRun.DebugCompleteAll();
+        var played = SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}", "--stunt" });
+        var playedStore = ScoreStore.ForSession(played.ScoresPath, played.ScoresThrowaway, player);
+        var playedSummary = InstantActionDirector.BuildStuntSummary(playedRun, playedStore, key);
+        var reloaded = ScoreStore.Load(player);
+        ctx.Check(!playedStore.Throwaway && playedSummary.NewBest && reloaded.GetBest(key) == playedRun.Elapsed,
+            $"the control, a played run, records into the player's file: throwaway={playedStore.Throwaway} new={playedSummary.NewBest} best={reloaded.GetBest(key)}");
+        ctx.Check(reloaded.GetBest(other) == 300f,
+            $"…and the entry already there survives the write: {reloaded.GetBest(other)}");
+    }
+
     // The inert state: an aircraft built complete and held out until Activate.
     // ⚠ Compare a live control, inert aircraft, and that aircraft activated with real physics, targeting,
     // shots, and simulation; absence alone can pass for the wrong reason (METHOD-9/METHOD-10).
@@ -1785,252 +1865,6 @@ internal static class InstantActionSuites
             seat.ControlHold = FlightControlHold.None;
         }
     }
-
-    // A two-pilot C1/IA1 stunt run built through the session's own roster and race board. It flies
-    // once as Instant Action wires it and once as a plain splitscreen race, the control.
-    // In Instant Action the last pilot's finish wins the mission. Both aircraft fly through the
-    // whole hold with no board and no halt, and the wrap-up follows. The race keeps its board and
-    // its finish hold.
-    private static void SplitscreenStuntRunEndsOnTheHold(TestContext ctx, GameZ planesGamez,
-        TextureArchive textures, ProjectilePool pool, string missionZrdr)
-    {
-        var ia = FlySplitscreenStuntRun(ctx, planesGamez, textures, pool, missionZrdr, instantAction: true);
-        var race = FlySplitscreenStuntRun(ctx, planesGamez, textures, pool, missionZrdr, instantAction: false);
-        if (ia is not { } a || race is not { } r)
-        {
-            ctx.Check(false, $"both two-pilot C1/IA1 stunt runs were built and flown");
-            return;
-        }
-
-        ctx.Check(a.FirstFlewOn && r.FirstFlewOn,
-            $"the first pilot in flies on while the other still flies, in both: ia={a.FirstFlewOn} race={r.FirstFlewOn}");
-        ctx.Check(!a.BoardBuilt && a.Ranked == 2 && a.Won,
-            $"Instant Action: the last pilot in wins the mission, both placings are kept for the run HUD, and no race board exists: board={a.BoardBuilt} ranked={a.Ranked} won={a.Won}");
-        ctx.Check(!a.EverHalted && a.Wrapups == 1 && a.MinStep > 0.1f,
-            $"…both aircraft fly on through the whole {InstantActionRuntime.WrapupHoldS:0.#} s hold with no halt, and the wrap-up follows: frames={a.HoldFrames} slowest step={a.MinStep:0.00} m halted={a.EverHalted} wrapups={a.Wrapups}");
-        ctx.Check(a.LiveShot && a.HoldShots == 0,
-            $"…a marker crossed while P2's run is live is photographed, and neither pilot photographs a marker first entered inside the hold: live={a.LiveShot} hold shots={a.HoldShots}");
-        ctx.Check(r.BoardBuilt && r.EverHalted && r.Wrapups == 0 && r.MaxHeldStep < 1e-3f,
-            $"the control, a plain splitscreen race: its board wakes on the last finish and halts the clock, and each seat holds its finish pose: board={r.BoardBuilt} halted={r.EverHalted} wrapups={r.Wrapups} moved={r.MaxHeldStep:0.000} m");
-    }
-
-    private static SplitStuntRun? FlySplitscreenStuntRun(TestContext ctx, GameZ planesGamez,
-        TextureArchive textures, ProjectilePool pool, string missionZrdr, bool instantAction)
-    {
-        const float Dt = 1f / 60f;
-        var zones = StuntMission.Load(GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1")), missionZrdr,
-            Messages.Load(ctx.MessagesPath));
-        if (zones is not { TotalCount: >= 3 })
-        {
-            return null;
-        }
-
-        var pane = new SubViewport();
-        ctx.Host.AddChild(pane);
-        var rigs = new[]
-        {
-            new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
-            new PlayerRig { Index = 1, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
-        };
-        var stuntRace = new StuntRace();
-        var pauseState = new PauseState();
-        var spec = SessionSpec.Parse(new[] { "--hold=0,0,0,1" });
-        var roster = new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
-            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            SuiteConstants.AircraftResources(ctx, planesGamez, textures,
-                Messages.Load(ctx.MessagesPath), _ => new CamParams()),
-            new FlightWorldBindings
-            {
-                Projectiles = pool,
-                Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
-            },
-            new HumanRosterBindings
-            {
-                RigCount = rigs.Length,
-                Rigs = rigs,
-                PauseState = pauseState,
-                MenuInputFor = _ => new MenuInput(),
-                ExitSession = () => { },
-                StuntZones = zones,
-                Race = stuntRace,
-                InstantActionActive = instantAction,
-            }, new SplitStuntStarts());
-        var board = GameSession.RaceBoardFor(stuntRace, instantAction, "C1   ·   test", exitsToMenu: true,
-            pauseState, _ => new MenuInput());
-        if (board != null)
-        {
-            ctx.Host.AddChild(board);
-        }
-
-        try
-        {
-            roster.BuildPlayers(rigs);
-            if (rigs[0].Controller is not { Stunt: { } run1 } p1 || rigs[1].Controller is not { Stunt: { } run2 } p2)
-            {
-                return null;
-            }
-
-            var seats = new[] { p1, p2 };
-            // The pane accepts and never lands, so a latch is counted and nothing is written.
-            var cam1 = new StuntCapture(run1, "C1", _ => true);
-            var cam2 = new StuntCapture(run2, "C1", _ => true);
-            p1.StuntShots = cam1;
-            p2.StuntShots = cam2;
-
-            // The director's wiring: zone sets flown on either run's completion, the win's hold
-            // leaving the stick live, the wrap-up releasing it.
-            var mission = new InstantActionRuntime(EndDef(ctx, instantAction ? "split-stunt-ia" : "split-stunt-race", "stunt_flying"));
-            mission.RegisterPilot(0);
-            mission.RegisterPilot(1);
-            void CheckZoneSets()
-            {
-                if (InstantActionRuntime.ZoneSetsFlown(new[] { (false, run1.AllComplete), (false, run2.AllComplete) }))
-                {
-                    mission.ReportObjective(InstantActionObjective.ZonesFlown);
-                }
-            }
-
-            run1.RunCompleted += CheckZoneSets;
-            run2.RunCompleted += CheckZoneSets;
-            int wrapups = 0;
-            mission.MissionEnded += outcome =>
-            {
-                foreach (var seat in seats)
-                {
-                    seat.ControlHold = outcome == InstantActionOutcome.Won ? FlightControlHold.CommandsOnly : FlightControlHold.All;
-                }
-            };
-            mission.WrapupDue += _ =>
-            {
-                foreach (var seat in seats)
-                {
-                    seat.ControlHold = FlightControlHold.None;
-                }
-                wrapups++;
-            };
-
-            // One sim frame, as the session's clock steps it: a halted clock steps nothing.
-            bool everHalted = false;
-            bool Frame()
-            {
-                everHalted |= pauseState.Halted;
-                if (pauseState.Halted)
-                {
-                    return false;
-                }
-                p1.SimStep(Dt);
-                p2.SimStep(Dt);
-                mission.Advance(Dt);
-                return true;
-            }
-
-            // P1 finishes first; a race seat's forced finish is staggered by index, so P2 is
-            // completed later by the same flag.
-            p1.DebugCompleteStunt = true;
-            for (int i = 0; i < 10 && !run1.AllComplete; i++)
-            {
-                Frame();
-            }
-            p1.DebugCompleteStunt = false;
-            var firstAt = p1.WorldPosition;
-            for (int i = 0; i < 10; i++)
-            {
-                Frame();
-            }
-            float firstFlew = firstAt.DistanceTo(p1.WorldPosition);
-            bool firstFlewOn = run1.AllComplete && !run2.AllComplete && firstFlew > 1f;
-
-            // The camera's able-to-fail control: P2 crosses a marker while its run is live.
-            var live = run2.Zones[0];
-            p2.WarpTo(live.Position + new Vector3(0f, 500f, 0f), 0f, 80f);
-            Frame();
-            p2.WarpTo(live.Position, 0f, 80f);
-            Frame();
-            bool liveShot = cam2.Count == 1;
-
-            p2.DebugCompleteStunt = true;
-            for (int i = 0; i < 240 && !run2.AllComplete; i++)
-            {
-                Frame();
-            }
-            p2.DebugCompleteStunt = false;
-
-            // The hold: every frame until the wrap-up is due, each pilot entering a marker it
-            // never photographed halfway through.
-            int shotsAtEnd = cam1.Count + cam2.Count;
-            int frames = 0;
-            float minStep = float.MaxValue;
-            bool warped = false;
-            while (wrapups == 0 && frames < (int)((InstantActionRuntime.WrapupHoldS + 1f) / Dt))
-            {
-                if (!warped && frames * Dt >= InstantActionRuntime.WrapupHoldS / 2f)
-                {
-                    p1.WarpTo(run1.Zones[1].Position, 0f, 80f);
-                    p2.WarpTo(run2.Zones[2].Position, 0f, 80f);
-                    warped = true;
-                }
-                var before1 = p1.WorldPosition;
-                var before2 = p2.WorldPosition;
-                if (!Frame())
-                {
-                    break;
-                }
-                frames++;
-                minStep = Mathf.Min(minStep, Mathf.Min(before1.DistanceTo(p1.WorldPosition), before2.DistanceTo(p2.WorldPosition)));
-            }
-            int holdShots = cam1.Count + cam2.Count - shotsAtEnd;
-
-            // The race seat's own finish hold, stepped past the board's halt: a seat under the
-            // race's rules stays where it finished.
-            float maxHeld = 0f;
-            foreach (var seat in seats)
-            {
-                var posed = seat.WorldPosition;
-                seat.SimStep(Dt);
-                maxHeld = Mathf.Max(maxHeld, posed.DistanceTo(seat.WorldPosition));
-            }
-
-            int ranked = stuntRace.Racers.Count(racer => racer.Finished);
-            ctx.Note($"{(instantAction ? "Instant Action" : "race")}: P1 flew {firstFlew:0} m in the 10 frames after its finish while P2 flew, hold frames={frames}");
-            return new SplitStuntRun(board != null, firstFlewOn, ranked, mission.Outcome == InstantActionOutcome.Won,
-                everHalted, wrapups, frames, frames > 0 ? minStep : 0f, maxHeld, liveShot, holdShots);
-        }
-        finally
-        {
-            board?.Free();
-            var built = rigs.Select(rig => rig.Controller).Where(c => c != null).ToArray();
-            roster.ClearMembership();
-            foreach (var controller in built)
-            {
-                controller!.Free();
-            }
-            pane.Free();
-        }
-    }
-
-    // What one two-pilot flight reports.
-    private readonly record struct SplitStuntRun(bool BoardBuilt, bool FirstFlewOn, int Ranked, bool Won,
-        bool EverHalted, int Wrapups, int HoldFrames, float MinStep, float MaxHeldStep, bool LiveShot,
-        int HoldShots);
-
-    // Two abreast starts well above C1's terrain, clear of every zone.
-    private sealed class SplitStuntStarts : IFlightStarts
-    {
-        public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
-            string missionZrdrPath, int spawnBase, int playerCount)
-        {
-            var starts = new FlightStart[playerCount];
-            for (int i = 0; i < playerCount; i++)
-            {
-                var position = new Vector3(i * 200f, 3000f, 0f);
-                starts[i] = new FlightStart(position, position + Vector3.Forward, 1f, 90f);
-            }
-
-            return starts;
-        }
-    }
 }
 
 /// <summary>A minimal results board for the shell-contract suite: a settable live flag and the
@@ -2038,7 +1872,7 @@ internal static class InstantActionSuites
 internal sealed partial class ShellProbeBoard : ResultsBoard
 {
     /// <summary>The live flag under the suite's control, standing in for the match's
-    /// <c>Completed</c> or the race's <c>AllFinished</c>.</summary>
+    /// <c>Completed</c> or the race's <c>Ended</c>.</summary>
     public bool StillOver;
 
     protected override bool StillEnded => StillOver;

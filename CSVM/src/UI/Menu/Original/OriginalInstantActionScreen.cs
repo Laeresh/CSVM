@@ -5,7 +5,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -84,6 +83,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <summary>The remake-only lives dropdown, which the section authors no row for.</summary>
     public const string LivesKey = "IA_D_LIVES";
 
+    /// <summary>The remake-only race time dropdown, shown for stunt flying with more than one seat.</summary>
+    public const string RaceTimeKey = "IA_D_RACETIME";
+
     /// <summary>The layout section the loadout screen is composed from.</summary>
     public const string LoadoutSection = "OrdinanceLayout";
 
@@ -131,7 +133,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const byte LitBoxR = 246, LitBoxG = 237, LitBoxB = 214;
 
     // The lives box's own measurements, the section authoring it none. Its line is not written
-    // down. LivesLine reads the setup stack and takes the first clear one. That is the line the
+    // down. ClearLine reads the setup stack and takes the first clear one. That is the line the
     // shipped layout skips between the Wingmen row (Y 235) and the Mission row (Y 280), beside the
     // mission type dropdown. ⚠ Never write a Y here. A hardcoded line lands on an authored box the
     // moment the layout spaces its rows differently, and the reader's does.
@@ -140,6 +142,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const float LivesFallbackY = 260f;
     private const float LivesLabelX = 420f;
     private const string LivesLabelText = "Lives:";
+
+    // The race time box's own width and title, which the section authors no row for either. Its
+    // line is the setup stack's next clear one after the lives box's, read the same way.
+    private const float RaceTimeWidth = 110f;
+    private const string RaceTimeLabelText = "Race Time:";
 
     // A widget's size when the layout row is missing or its art cannot be measured.
     private const float FallbackItemHeight = 18f;
@@ -321,6 +328,30 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         _instantAction.StepLives(lives - _instantAction.Lives);
         _host.FocusKey(LivesKey);
         return true;
+    }
+
+    /// <summary>Stands the screen on stunt flying with the cursor on the race time control, for a
+    /// scripted pose. False when the screen is not showing or the environment bars stunt flying.
+    /// The control shows only once a second seat has joined.</summary>
+    public bool PoseRaceTime()
+    {
+        if (_host.Screen != OriginalScreen.InstantAction)
+        {
+            return false;
+        }
+
+        var types = _instantAction.MissionTypes;
+        for (int i = 0; i < types.Count; i++)
+        {
+            if (types[i].Key == InstantActionFeature.StuntKey)
+            {
+                _instantAction.SelectMissionType(i);
+                _host.FocusKey(RaceTimeKey);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Opens the Weapon Loadout for the seat the radio pair names. That is the wingmen's
@@ -512,6 +543,14 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     private PlayerSeat? Seat0 => _setup.Seats.Count > 0 ? _setup.Seats[0] : null;
 
+    // Whether the race time control shows. It is read fresh on every build, so a seat joining or
+    // leaving and a mission type change both reach it on the next frame.
+    private bool RaceTimeShown => _instantAction.OffersRaceWindow(_setup.Seats.Count);
+
+    // The remake-only box the page hides right now, exactly one of the two. A race spends no
+    // lives, so the lives box gives way while the race time box shows.
+    private string HiddenRemakeKey => RaceTimeShown ? LivesKey : RaceTimeKey;
+
     private int SeatIndex(PlayerSeat seat)
     {
         var seats = _setup.Seats;
@@ -558,9 +597,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         (widget.Int("X"), widget.Int("Y"), widget.Int("Width", (int)FallbackDropWidth), widget.Int("ItemHeight", (int)FallbackItemHeight));
 
     // The setup column as the layout authors it. It is the pilot and wingman rows, the mission and
-    // environment rows, and the first wave's boxes, which are the last of the column. The lives
-    // box's line is found in the gaps between these.
-    private static IEnumerable<string> LivesStackKeys()
+    // environment rows, and the first wave's boxes, which are the last of the column. The lines of
+    // the lives and race time boxes are found in the gaps between these.
+    private static IEnumerable<string> SetupStackKeys()
     {
         yield return PlayerPlaneKey;
         yield return WingmenKey;
@@ -574,7 +613,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The title column, read off an authored title rather than written down for the same reason
-    // the lives line is.
+    // the remake-only boxes' lines are.
     private static float LivesTitleX(MenuLayoutScreen screen) =>
         screen.Widget("IA_T_MISSIONTITLE") is { } title ? title.Int("X", (int)LivesLabelX) : LivesLabelX;
 
@@ -631,7 +670,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return row.IsCustom ? row.Name + " " + airframe : "Stock " + airframe;
     }
 
-    // The rows: an open list's items alone while one is open, else the screen's widgets.
+    // The rows: an open list's items alone while one is open, else the screen's widgets. A seat
+    // joining or leaving under the open list of the box it hides takes the list with it.
     private void BuildInstantActionRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(InstantActionSection);
@@ -640,9 +680,44 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return;
         }
 
+        string hidden = HiddenRemakeKey;
+        bool orphaned = _iaOpen == hidden;
+        if (orphaned)
+        {
+            _iaOpen = null;
+        }
+
         if (!AddOpenListRows(screen, rows))
         {
             BuildInstantActionWidgets(screen, rows);
+            LiftFocusOffHiddenBox(rows, hidden, orphaned);
+        }
+    }
+
+    // A focus left on the hidden remake-only row moves to the nearest live box above it. So does
+    // one left in its list as the list closed. The shell's own fallback is the first live row on
+    // the page, which is the contents window on the far page.
+    private void LiftFocusOffHiddenBox(List<OriginalRow> rows, string hidden, bool orphaned)
+    {
+        if (_host.DialogOpen)
+        {
+            return;
+        }
+
+        int at = rows.FindIndex(r => r.Key == hidden);
+        if (at < 0 || (!orphaned && _host.FocusedRow != at))
+        {
+            return;
+        }
+
+        _host.FocusedRow = at;
+        for (int i = at - 1; i >= 0; i--)
+        {
+            if (rows[i].Enabled && rows[i].Column == 1)
+            {
+                _host.FocusedRow = i;
+                return;
+            }
         }
     }
 
@@ -668,11 +743,16 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return null;
         }
 
-        // The remake-only box has no widget to read a window off. Its list therefore shows every
-        // item and hangs no scroll chrome, which is what the shared rule does with no widget.
+        // The remake-only boxes have no widget to read a window off. Their lists therefore show
+        // every item and hang no scroll chrome, which is what the shared rule does with no widget.
         if (key == LivesKey)
         {
             return OriginalDropLists.Over(key, null, list.Items, LivesBox(screen));
+        }
+
+        if (key == RaceTimeKey)
+        {
+            return OriginalDropLists.Over(key, null, list.Items, RaceTimeBox(screen));
         }
 
         return screen.Widget(key) is { } open
@@ -723,6 +803,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         // the ace duel, a wave's militia, skill and aircraft while it carries nobody.
         if (_iaPage == 0)
         {
+            int setup = rows.Count;
             AddDropdown(screen, rows, PlayerPlaneKey);
             AddDropdown(screen, rows, WingmenKey);
             AddDropdown(screen, rows, WingmanPlaneKey, live: _instantAction.NumWingmen > 0);
@@ -730,6 +811,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddDropdown(screen, rows, MissionKey);
             AddDropdown(screen, rows, EnvironmentKey);
             AddWave(screen, rows, 0);
+            AddRaceTime(screen, rows, setup);
         }
         else
         {
@@ -752,34 +834,74 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     // The lives box, this port's own control in the screen's dropdown idiom. It is no enemy
     // control, so the ace duel leaves it live where it blanks the wave boxes. No preset carries a
-    // lives value, so a contents row leaves it alone.
+    // lives value, so a contents row leaves it alone. A race spends no lives, so this box hides
+    // while the race time box shows. It hides the race time box's way, its count kept.
     private void AddLives(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         var list = LivesDropdown();
         var box = LivesBox(screen);
-        rows.Add(new OriginalRow(LivesKey, list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)],
-            OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height, true, 1, LivesArrow(screen)));
+        bool shown = HiddenRemakeKey != LivesKey;
+        string value = shown ? list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)] : string.Empty;
+        rows.Add(new OriginalRow(LivesKey, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
+            shown, shown ? 1 : -1, LivesArrow(screen), shown));
     }
 
-    // The lives box's rectangle takes the mission dropdown's left edge and item height. The
-    // remake-only row therefore stands in the setup column at the height every other box there
-    // draws. Its line is the first clear one that column leaves.
-    private (float X, float Y, float Width, float Height) LivesBox(MenuLayoutScreen screen)
+    // The race time box, this port's own control for the race window in the lives box's idiom. Its
+    // place in focus order is where its line falls, before the first box standing below it, so the
+    // walk follows the page. Hidden, it keeps that place unseen, unhit and in no column, so no
+    // other row's index moves when a seat joins or leaves.
+    private void AddRaceTime(MenuLayoutScreen screen, List<OriginalRow> rows, int setup)
+    {
+        var list = RaceTimeDropdown();
+        var box = RaceTimeBox(screen);
+        bool shown = RaceTimeShown;
+        int at = rows.Count;
+        for (int i = setup; i < rows.Count; i++)
+        {
+            if (rows[i].Y > box.Y)
+            {
+                at = i;
+                break;
+            }
+        }
+
+        string value = shown ? list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)] : string.Empty;
+        rows.Insert(at, new OriginalRow(RaceTimeKey, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
+            shown, shown ? 1 : -1, LivesArrow(screen), shown));
+    }
+
+    // The race time list: the window lengths in their order, written with their unit.
+    private DropdownList RaceTimeDropdown()
+    {
+        var ia = _instantAction;
+        return new DropdownList(Names(InstantActionFeature.RaceWindows, InstantActionFeature.RaceWindowLabel),
+            ia.RaceWindowIndex, _ => true, ia.SelectRaceWindow);
+    }
+
+    private (float X, float Y, float Width, float Height) LivesBox(MenuLayoutScreen screen) => RemakeBox(screen, 0, LivesWidth);
+
+    private (float X, float Y, float Width, float Height) RaceTimeBox(MenuLayoutScreen screen) => RemakeBox(screen, 1, RaceTimeWidth);
+
+    // A remake-only box's rectangle takes the mission dropdown's left edge and item height. The
+    // row therefore stands in the setup column at the height every other box there draws. Its line
+    // is the nth clear one that column leaves, the lives box's the first and the race time's the
+    // second.
+    private (float X, float Y, float Width, float Height) RemakeBox(MenuLayoutScreen screen, int nth, float width)
     {
         var mission = screen.Widget(MissionKey) is { } widget ? DropBox(widget) : default;
         float height = mission.Height > 0f ? mission.Height : FallbackItemHeight;
-        return (mission.Width > 0f ? mission.X : LivesFallbackX, LivesLine(screen, height), LivesWidth, height);
+        return (mission.Width > 0f ? mission.X : LivesFallbackX, ClearLine(screen, height, nth), width, height);
     }
 
-    // The line the lives box takes: the first gap in the setup stack tall enough to hold it,
-    // centred in that gap. The shipped layout skips a line between the wingman and mission rows and
-    // another above the enemy block. This takes the first, the one beside the mission type
-    // dropdown. A layout that skips none puts the box under the stack instead. That is honest about
-    // the crowding rather than drawing the box over an authored one.
-    private float LivesLine(MenuLayoutScreen screen, float height)
+    // The nth gap in the setup stack tall enough to hold a box, centred in that gap. The shipped
+    // layout skips a line between the wingman and mission rows and another above the enemy block.
+    // The lives box takes the first, beside the mission type dropdown, and the race time box the
+    // second. A layout with too few gaps stacks the boxes still owed under the column instead. That
+    // is honest about the crowding rather than drawing a box over an authored one.
+    private float ClearLine(MenuLayoutScreen screen, float height, int nth)
     {
         var stack = new List<(float Top, float Bottom)>();
-        foreach (string key in LivesStackKeys())
+        foreach (string key in SetupStackKeys())
         {
             if (screen.Widget(key) is { } widget)
             {
@@ -789,21 +911,21 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         stack.Sort((a, b) => a.Top.CompareTo(b.Top));
+        int found = 0;
         for (int i = 1; i < stack.Count; i++)
         {
             float room = stack[i].Top - stack[i - 1].Bottom;
-            if (room >= height)
+            if (room >= height && found++ == nth)
             {
                 return stack[i - 1].Bottom + ((room - height) / 2f);
             }
         }
 
-        return stack.Count > 0 ? stack[^1].Bottom : LivesFallbackY;
+        return (stack.Count > 0 ? stack[^1].Bottom : LivesFallbackY) + ((nth - found) * height);
     }
 
-
-    // The lives box's closed-box arrow, taken off a dropdown the section does author. Art 4 is
-    // every D row's own, so the remake-only row wears the page's chrome rather than a named file.
+    // A remake-only box's closed-box arrow, taken off a dropdown the section does author. Art 4 is
+    // every D row's own, so the remake-only rows wear the page's chrome rather than a named file.
     private BoardArt? LivesArrow(MenuLayoutScreen screen) =>
         screen.Widget(MissionKey) is { } mission ? StripArt(mission.Art, 4) : null;
 
@@ -961,7 +1083,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                     }
                 });
             case LivesKey:
-                return LivesDropdown();
+            case RaceTimeKey:
+                // Hidden, a box is no dropdown at all, so no scripted open or sideways step can
+                // reach a list the page does not show.
+                return key == HiddenRemakeKey ? null : key == LivesKey ? LivesDropdown() : RaceTimeDropdown();
             case EnvironmentKey:
                 return new DropdownList(Names(InstantActionFeature.Environments, e => e.Name), ia.EnvironmentIndex,
                     i => InstantActionFeature.EnvironmentAllowed(i, ia.MissionType.Key), i =>
@@ -1193,10 +1318,21 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddText(screen, lines, "IA_T_PILOTPLANETITLE", LabelFont);
             AddText(screen, lines, "IA_T_WINGMANTITLE", LabelFont);
             // The lives box's own title, written here rather than through a layout row because the
-            // section authors none. It stands in the column and the ink every authored title takes.
-            lines.Add(new BoardLine(LivesLabelText, LivesTitleX(screen), LivesBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+            // section authors none. It stands in the column and the ink every authored title takes,
+            // and goes with its box in a race.
+            if (HiddenRemakeKey != LivesKey)
+            {
+                lines.Add(new BoardLine(LivesLabelText, LivesTitleX(screen), LivesBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+            }
+
             AddText(screen, lines, "IA_T_MISSIONTITLE", LabelFont);
             AddText(screen, lines, "IA_T_ENVIRONMENTTITLE", LabelFont);
+            if (RaceTimeShown)
+            {
+                // Titled the lives box's way, its words the remake's own since no langui row has any.
+                lines.Add(new BoardLine(RaceTimeLabelText, LivesTitleX(screen), RaceTimeBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+            }
+
             AddText(screen, lines, "IA_T_ENEMY0", LabelFont);
             AddText(screen, lines, "IA_T_CONTINUED", InstructionFont);
         }
@@ -1239,7 +1375,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         ComposeContentsThumb(screen, layers.Pictures);
         for (int i = 0; i < widgets.Count; i++)
         {
-            ComposeRow(widgets[i], i == widgetFocus, i == widgetPressed, i, layers, lit: widgets[i].Key == under);
+            if (widgets[i].Visible)
+            {
+                ComposeRow(widgets[i], i == widgetFocus, i == widgetPressed, i, layers, lit: widgets[i].Key == under);
+            }
         }
 
         if (_iaOpen != null)
@@ -1633,7 +1772,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         AddPane(screen, layers.Backdrop, "OL_BACKGROUND");
-        int airframe = _loadoutNode != null ? PlanePickerRoster.AirframeOf(_loadoutNode) ?? 0 : 0;
+        int airframe = _loadoutNode != null ? StockAirframes.IdOf(_loadoutNode) ?? 0 : 0;
         foreach (string key in new[] { "OL_P_PLANETOPICON", "OL_P_PLANEFRTICON" })
         {
             if (screen.Widget(key) is { Art.Count: > 0 } diagram)

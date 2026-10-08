@@ -51,6 +51,9 @@ public sealed class MenuHost : IMenuHost
     /// <see cref="Exit"/>. What the owner reads instead of any presentation's own node.</summary>
     public bool Shown { get; private set; }
 
+    /// <summary>Whether the presentation is on screen and standing on its main menu.</summary>
+    public bool OnMainMenu => Shown && Active?.OnMainMenu == true;
+
     /// <summary>The availability answer beyond registration: why a registered presentation cannot
     /// run this time (its assets are missing), or null when it can. Built-in is never asked. The
     /// default says every registered presentation is available.</summary>

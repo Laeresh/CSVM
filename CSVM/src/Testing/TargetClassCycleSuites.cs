@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -213,7 +214,7 @@ internal static class TargetClassCycleSuites
     }
 
     // One key per class, each walking the whole of its own cycle and wrapping. This is what the
-    // shipped keymap's E, W and R do, dispatched in FlightController.StepTargeting.
+    // shipped keymap's E, W and R do, dispatched in SeatTargeting.Step.
     private static void CheckEachKeyWalksItsClass(TestContext ctx, Pane pane)
     {
         foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })

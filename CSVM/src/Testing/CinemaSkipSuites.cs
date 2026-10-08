@@ -1,4 +1,6 @@
+using CSVM.Session.Campaign;
 using CSVM.UI.Screens;
+using CSVM.Video;
 using Godot;
 
 namespace CSVM.Testing;
@@ -22,8 +24,8 @@ internal static class CinemaSkipSuites
         var button = new InputEventJoypadButton { ButtonIndex = JoyButton.A, Pressed = true };
         var press = CinemaSkips.PressOf(button, padsLive: true);
         ctx.Check(press == CinemaPress.PadButton, $"a pressed pad button reads as a pad press ({press})");
-        ctx.Check(CinemaScreen.ChapterKeys.Skips(press), $"a pad button ends the chapter cinema ({press})");
-        ctx.Check(CinemaScreen.ClosingKeys.Skips(press), $"a pad button ends the closing cinema ({press})");
+        ctx.Check(ChapterCinema.Keys.Skips(press), $"a pad button ends the chapter cinema ({press})");
+        ctx.Check(ClosingCinema.Keys.Skips(press), $"a pad button ends the closing cinema ({press})");
         ctx.Check(CinemaScreen.BootKeys.Skips(press), $"a pad button ends a boot film or still ({press})");
 
         var off = CinemaSkips.PressOf(button, padsLive: false);
@@ -56,7 +58,7 @@ internal static class CinemaSkipSuites
 
         var stickSkip = CinemaSkips.StickPress;
         ctx.Check(
-            CinemaScreen.ChapterKeys.Skips(stickSkip) && CinemaScreen.ClosingKeys.Skips(stickSkip)
+            ChapterCinema.Keys.Skips(stickSkip) && ClosingCinema.Keys.Skips(stickSkip)
             && CinemaScreen.BootKeys.Skips(stickSkip) && !CinemaSkip.Escape.Skips(stickSkip),
             $"a stick's skip press ends the chapter, closing and boot sets as a pad button does, and not an Escape-only one ({stickSkip})");
 

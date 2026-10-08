@@ -1,7 +1,7 @@
 using System;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.UI.Screens;
+using CSVM.Video;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -103,11 +103,11 @@ public class ClosingCinemaTests
         var cinema = new Recorder();
         new ClosingCinema(cinema.Play).OpenScrapbook(LastSeq, missionWon: true, cinema.OpenedBook);
 
-        Assert.Equal(CinemaScreen.ClosingKeys, cinema.Skip);
+        Assert.Equal(ClosingCinema.Keys, cinema.Skip);
         Assert.True(cinema.Skip.HasFlag(CinemaSkip.Escape) && cinema.Skip.HasFlag(CinemaSkip.LeftMouse));
         Assert.False(cinema.Skip.HasFlag(CinemaSkip.Space) || cinema.Skip.HasFlag(CinemaSkip.Return));
-        Assert.True(CinemaScreen.ChapterKeys.HasFlag(CinemaSkip.Space));
-        Assert.True(CinemaScreen.ChapterKeys.HasFlag(CinemaSkip.Return));
+        Assert.True(ChapterCinema.Keys.HasFlag(CinemaSkip.Space));
+        Assert.True(ChapterCinema.Keys.HasFlag(CinemaSkip.Return));
     }
 
     // The whole gate as a table: one corner of the four plays the film.
@@ -130,7 +130,7 @@ public class ClosingCinemaTests
 
         flow.Play(cinema.OpenedBook);
         Assert.Equal("Final.MPG", cinema.Name);
-        Assert.Equal(CinemaScreen.ClosingKeys, cinema.Skip);
+        Assert.Equal(ClosingCinema.Keys, cinema.Skip);
         Assert.Equal(0, cinema.Books);
 
         flow.Stop();

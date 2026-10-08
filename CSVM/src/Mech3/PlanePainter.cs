@@ -174,7 +174,7 @@ public sealed class PlanePainter
     private ImageTexture? DecalFor(int slot)
     {
         var texName = DecalTextureName(slot);
-        return texName != null && DecalImage(texName) is { } img ? ImageTexture.CreateFromImage(img) : null;
+        return texName != null && DecalImage(texName) is { } img ? TextureUpload.Create(img) : null;
     }
 
     private string? DecalTextureName(int slot) => _textures.FindByDecalIndex(
@@ -200,7 +200,7 @@ public sealed class PlanePainter
         if (SkinImage(baseName, original) is not { } img)
             return null;
         PaintedSkins++;
-        return ImageTexture.CreateFromImage(img);
+        return TextureUpload.Create(img);
     }
 
     private Image? SkinImage(string baseName, ImageTexture? original)

@@ -69,7 +69,8 @@ A failing shot tells you *that* pixels moved, never *why*. Do not diagnose by st
 go to the headless instruments: `--tex-census` / `--tex-override` for "is this surface drawing",
 `--debug-anim` for pose, condition and emitter state, `--perf` for the frame split, the mesh lab for
 shading and normals. The saved `.scratch/goldens/<shot>.png` is for eyeballing *which* thing moved so
-you know which instrument to reach for.
+you know which instrument to reach for. The next run deletes it, so a moved shot's PNG and logs are
+also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL line names.
 
 ## What the set does and does not cover
 
@@ -83,7 +84,7 @@ perturbation (`c1-flight-kill` 78.07 %, `campaign-4p-grid` 73.79 %, `c1-cockpit`
 
 **The five `-enhanced` shots pin the Enhanced Graphics stack** (`--graphics=enhanced` in their own
 args, which `--det` honours while it drops the saved mode): the lake's reflection and sun shadows,
-the night city's omni pool, the deck's lit puffs and volumetric banks, a rocket burst's lit effects,
+the night city's omni pool, the deck's lit puffs, a rocket burst's lit effects,
 and the cockpit pass. Every other shot is the faithful path, and `RunTests.ps1 -Graphics` reaches
 none of them. Their frame sensitivity is mostly TAA's jitter: a static freecam pose moves 5.77 % to
 24.69 % from one frame to the next, against 0.01 % (the C5 pose) and 1.04 % (the lake, its falls

@@ -1,5 +1,6 @@
 using System;
 using CSVM.Flight.Hangar;
+using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using Godot;
 
@@ -37,6 +38,8 @@ public sealed class BuiltInPresentation : IMenuPresentation
     }
 
     public PresentationId Id => PresentationId.BuiltIn;
+
+    public bool OnMainMenu => _menu?.OnMainMenu == true;
 
     /// <summary>The launchscreen while built. The owner's door for what is Built-in's alone: its
     /// one-shot debug aids and the failed-build note.</summary>

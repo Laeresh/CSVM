@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -10,7 +11,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
-using CSVM.UI.Screens;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;
@@ -41,7 +42,7 @@ internal static class SpawnPropsSuites
             foreach (var rig in new[] { player, ai })
             {
                 CheckSilentSpawn(ctx, rig, "the assembler's first spawn");
-                ctx.Check(!rig.PropsStopped && rig.CrashRuntime!.SuppressedMotionAnims.Contains(rig.SpinPropsAnim),
+                ctx.Check(!rig.Propellers.Stopped && rig.CrashRuntime!.SuppressedMotionAnims.Contains(rig.Propellers.SpinAnim),
                     $"{rig.Name}: …with the discs on the slot and PropAnimator the only writer on them");
             }
 
@@ -74,8 +75,8 @@ internal static class SpawnPropsSuites
             foreach (var rig in gyros)
             {
                 var runtime = rig.CrashRuntime!;
-                ctx.Check(rig.SpinPropsAnim == rotorAnim,
-                    $"{rig.Name}: the autogyro's def names its own spin definition spin={rig.SpinPropsAnim}");
+                ctx.Check(rig.Propellers.SpinAnim == rotorAnim,
+                    $"{rig.Name}: the autogyro's def names its own spin definition spin={rig.Propellers.SpinAnim}");
                 ctx.Check(runtime.AnimStateOf(rotorAnim) != 0 && runtime.AnimStateOf(EffectCatalogue.DefaultSpinPropsAnim) == 0,
                     $"{rig.Name}: the spawn started {rotorAnim} and not spinprops ({rotorAnim}={runtime.AnimStateOf(rotorAnim)} spinprops={runtime.AnimStateOf(EffectCatalogue.DefaultSpinPropsAnim)})");
                 ctx.Check(runtime.SuppressedMotionAnims.Contains(rotorAnim),
@@ -83,8 +84,8 @@ internal static class SpawnPropsSuites
             }
 
             var plain = ordinary.CrashRuntime!;
-            ctx.Check(ordinary.SpinPropsAnim == EffectCatalogue.DefaultSpinPropsAnim,
-                $"{ordinary.Name}: the Warhawk's def names spinprops spin={ordinary.SpinPropsAnim}");
+            ctx.Check(ordinary.Propellers.SpinAnim == EffectCatalogue.DefaultSpinPropsAnim,
+                $"{ordinary.Name}: the Warhawk's def names spinprops spin={ordinary.Propellers.SpinAnim}");
             ctx.Check(plain.AnimStateOf(EffectCatalogue.DefaultSpinPropsAnim) != 0 && plain.AnimStateOf(rotorAnim) == 0,
                 $"{ordinary.Name}: the spawn started spinprops and not {rotorAnim} (spinprops={plain.AnimStateOf(EffectCatalogue.DefaultSpinPropsAnim)} {rotorAnim}={plain.AnimStateOf(rotorAnim)})");
 
@@ -93,12 +94,12 @@ internal static class SpawnPropsSuites
             foreach (var rig in flown)
             {
                 rig.CrashRuntime!.ManualAdvance = true;
-                ctx.Check(rig.TryChokeEngine(3f) && rig.PropsStopped
-                          && rig.CrashRuntime.AnimStateOf(rig.StopPropsAnim) != 0,
-                    $"{rig.Name}: the choke started {rig.StopPropsAnim}");
+                ctx.Check(rig.TryChokeEngine(3f) && rig.Propellers.Stopped
+                          && rig.CrashRuntime.AnimStateOf(rig.Propellers.StopAnim) != 0,
+                    $"{rig.Name}: the choke started {rig.Propellers.StopAnim}");
             }
 
-            for (float t = 0f; t < 6f && flown.Any(r => r.EngineDeadRemainingS > 0f || r.PropsStopped); t += Dt)
+            for (float t = 0f; t < 6f && flown.Any(r => r.EngineDeadRemainingS > 0f || r.Propellers.Stopped); t += Dt)
             {
                 foreach (var rig in flown)
                 {
@@ -111,9 +112,9 @@ internal static class SpawnPropsSuites
             {
                 rig.CrashRuntime!.Advance(Dt);
                 bool rotor = !ReferenceEquals(rig, cabbie) || Shown(rig, "rotor1");
-                ctx.Check(!rig.PropsStopped && rig.CrashRuntime.AnimStateOf(rig.SpinPropsAnim) != 0
+                ctx.Check(!rig.Propellers.Stopped && rig.CrashRuntime.AnimStateOf(rig.Propellers.SpinAnim) != 0
                           && Shown(rig, "prop1") && !Shown(rig, "staticprop1") && rotor,
-                    $"{rig.Name}: the restart ran {rig.SpinPropsAnim} and put the discs back stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} rotor1={rotor}");
+                    $"{rig.Name}: the restart ran {rig.Propellers.SpinAnim} and put the discs back stopped={rig.Propellers.Stopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} rotor1={rotor}");
             }
         });
     }
@@ -129,7 +130,7 @@ internal static class SpawnPropsSuites
             return;
         }
 
-        string spin = rig.SpinPropsAnim;
+        string spin = rig.Propellers.SpinAnim;
         ctx.Check(runtime.AnimStateOf(spin) != 0, $"{rig.Name}: {what} spun the discs with {spin}");
         int sounding = 0;
         foreach (var def in runtime.ProgramDefs)
@@ -252,8 +253,6 @@ internal static class SpawnPropsSuites
                         RigCount = 1,
                         Rigs = new[] { seat },
                         PauseState = new PauseState(),
-                        MenuInputFor = _ => new MenuInput(),
-                        ExitSession = () => { },
                     }, new HighStarts());
                 roster.BuildPlayers(new[] { seat });
                 if (seat.Controller is not { } player)

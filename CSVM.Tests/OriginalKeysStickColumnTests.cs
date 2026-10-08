@@ -30,7 +30,7 @@ public class OriginalKeysStickColumnTests
         var action = rig.OpenRow(0);
         var before = rig.Controls.Bindings(InputContext.Flight, action).ToList();
 
-        rig.Click(OriginalOptionsScreen.KeysStickCellKey(0));
+        rig.Click(OriginalKeysPage.StickCellKey(0));
         Assert.True(rig.Controls.Capturing);
         rig.Devices.Keys.Add((int)Key.M);
         rig.Devices.PadButtons.Add((int)JoyButton.A);
@@ -43,7 +43,7 @@ public class OriginalKeysStickColumnTests
         var r5 = new Binding(VkbR.Device, BindingControl.Button(5));
         Assert.False(rig.Controls.Capturing);
         Assert.Equal(before.Append(r5), rig.Controls.Bindings(InputContext.Flight, action));
-        var text = rig.Shell.Options.KeysCellText(0);
+        var text = rig.Shell.Options.Keys.CellText(0);
         // No profile set is live here, so R is unnamed: the column prints the control alone, from 1.
         Assert.Equal("Button 6", text.Stick);
         Assert.Equal(BindingLabels.Describe(before[0]), text.A);
@@ -62,7 +62,7 @@ public class OriginalKeysStickColumnTests
         var others = rig.Controls.Bindings(InputContext.Flight, action).Where(b => !KeysStickColumn.IsStick(b)).ToList();
         Assert.NotEmpty(others);
 
-        rig.Click(OriginalOptionsScreen.KeysStickCellKey(0));
+        rig.Click(OriginalKeysPage.StickCellKey(0));
         rig.Native.Press(2, 7);
         rig.Frame();
 
@@ -71,7 +71,7 @@ public class OriginalKeysStickColumnTests
         Assert.DoesNotContain(r1, after);
         Assert.Contains(l1, after);
         Assert.Equal(others, after.Where(b => !KeysStickColumn.IsStick(b)));
-        Assert.Equal("231D/0201 Button 2 / 231D/0200 Button 8", rig.Shell.Options.KeysCellText(0).Stick);
+        Assert.Equal("231D/0200 Button 8 / 231D/0201 Button 2", rig.Shell.Options.Keys.CellText(0).Stick);
     }
 
     /// <summary>A full axis counts once for its pair. R's new axis replaces R's old one on both
@@ -80,7 +80,7 @@ public class OriginalKeysStickColumnTests
     public void AStickAxisReplacesThatSticksFullAxisOnBothPairRows()
     {
         using var rig = new Rig();
-        var movement = OriginalOptionsScreen.ControlTabs[0].Rows;
+        var movement = OriginalKeysPage.ControlTabs[0].Rows;
         int row = Enumerable.Range(0, movement.Count).Single(i => movement[i].Action == InputAction.PitchUp);
         rig.OpenRow(row);
         var oldR = new Binding(VkbR.Device, BindingControl.FullAxis(1, false, StickCapture.FlightDeadzone));
@@ -88,7 +88,7 @@ public class OriginalKeysStickColumnTests
         rig.Add(InputAction.PitchUp, oldR);
         rig.Add(InputAction.PitchDown, l);
 
-        rig.Click(OriginalOptionsScreen.KeysStickCellKey(row));
+        rig.Click(OriginalKeysPage.StickCellKey(row));
         rig.Native.SetAxis(2, 3, 32767);
         rig.Frame();
 
@@ -124,13 +124,13 @@ public class OriginalKeysStickColumnTests
             rig.Add(action, binding);
         }
 
-        rig.Click(OriginalOptionsScreen.KeysCellKey(0, second: false));
+        rig.Click(OriginalKeysPage.CellKey(0, second: false));
         Assert.Equal(1, rig.Controls.Slot);
         rig.Controls.CancelCapture();
-        rig.Click(OriginalOptionsScreen.KeysCellKey(0, second: true));
+        rig.Click(OriginalKeysPage.CellKey(0, second: true));
         Assert.Equal(2, rig.Controls.Slot);
         rig.Controls.CancelCapture();
-        var text = rig.Shell.Options.KeysCellText(0);
+        var text = rig.Shell.Options.Keys.CellText(0);
         Assert.Equal(BindingLabels.Describe(shipped[0]), text.A);
         Assert.Equal("Button 2", text.Stick);
     }
@@ -141,11 +141,11 @@ public class OriginalKeysStickColumnTests
         using var rig = new Rig();
         rig.OpenRow(0);
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        Assert.Equal(OriginalOptionsScreen.KeysCellKey(0, second: false), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.CellKey(0, second: false), rig.Shell.FocusedKey);
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        Assert.Equal(OriginalOptionsScreen.KeysStickCellKey(0), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.StickCellKey(0), rig.Shell.FocusedKey);
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        Assert.Equal(OriginalOptionsScreen.KeysCellKey(0, second: true), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.CellKey(0, second: true), rig.Shell.FocusedKey);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class OriginalKeysStickColumnTests
         var first = before.First(b => !KeysStickColumn.IsStick(b));
 
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        Assert.Equal(OriginalOptionsScreen.KeysCellKey(0, second: false), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.CellKey(0, second: false), rig.Shell.FocusedKey);
         rig.Shell.Step(new MenuCommands { Unbind = true });
 
         Assert.Equal(before.Where(b => b != first), rig.Controls.Bindings(InputContext.Flight, action));
@@ -179,29 +179,29 @@ public class OriginalKeysStickColumnTests
         rig.Add(action, l1);
         var others = rig.Controls.Bindings(InputContext.Flight, action).Where(b => !KeysStickColumn.IsStick(b)).ToList();
         // Two unnamed models share the row, so each caption keeps its model; one alone drops it.
-        Assert.Equal("231D/0200 Button 2 / 231D/0201 Button 4", rig.Shell.Options.KeysCellText(0).Stick);
+        Assert.Equal("231D/0200 Button 2 / 231D/0201 Button 4", rig.Shell.Options.Keys.CellText(0).Stick);
 
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        Assert.Equal(OriginalOptionsScreen.KeysStickCellKey(0), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.StickCellKey(0), rig.Shell.FocusedKey);
         rig.Shell.Step(new MenuCommands { Unbind = true });
 
         var after = rig.Controls.Bindings(InputContext.Flight, action);
         Assert.DoesNotContain(r1, after);
         Assert.Contains(l1, after);
         Assert.Equal(others, after.Where(b => !KeysStickColumn.IsStick(b)));
-        Assert.Equal("Button 4", rig.Shell.Options.KeysCellText(0).Stick);
+        Assert.Equal("Button 4", rig.Shell.Options.Keys.CellText(0).Stick);
 
         rig.Shell.Step(new MenuCommands { Unbind = true });
         Assert.DoesNotContain(l1, rig.Controls.Bindings(InputContext.Flight, action));
-        Assert.Equal(string.Empty, rig.Shell.Options.KeysCellText(0).Stick);
+        Assert.Equal(string.Empty, rig.Shell.Options.Keys.CellText(0).Stick);
     }
 
     [Fact]
     public void ClearingAStickFullAxisClearsBothPairRows()
     {
         using var rig = new Rig();
-        var movement = OriginalOptionsScreen.ControlTabs[0].Rows;
+        var movement = OriginalKeysPage.ControlTabs[0].Rows;
         int row = Enumerable.Range(0, movement.Count).Single(i => movement[i].Action == InputAction.PitchUp);
         rig.OpenRow(row);
         var axis = new Binding(VkbR.Device, BindingControl.FullAxis(1, false, StickCapture.FlightDeadzone));
@@ -213,10 +213,10 @@ public class OriginalKeysStickColumnTests
             }
         }
 
-        rig.Click(OriginalOptionsScreen.KeysStickCellKey(row));
+        rig.Click(OriginalKeysPage.StickCellKey(row));
         rig.Controls.CancelCapture();
         rig.Frame();
-        Assert.Equal(OriginalOptionsScreen.KeysStickCellKey(row), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.StickCellKey(row), rig.Shell.FocusedKey);
         rig.Shell.Step(new MenuCommands { Unbind = true });
 
         Assert.DoesNotContain(axis, rig.Controls.Bindings(InputContext.Flight, InputAction.PitchUp));
@@ -230,7 +230,7 @@ public class OriginalKeysStickColumnTests
         var action = rig.OpenRow(0);
         var before = rig.Controls.Bindings(InputContext.Flight, action).ToList();
 
-        rig.Click(OriginalOptionsScreen.KeysCellKey(0, second: false));
+        rig.Click(OriginalKeysPage.CellKey(0, second: false));
         Assert.True(rig.Controls.Capturing);
         rig.Shell.Step(new MenuCommands { Unbind = true });
 
@@ -243,8 +243,8 @@ public class OriginalKeysStickColumnTests
     {
         using var rig = new Rig();
         rig.OpenRow(0);
-        Assert.Contains(rig.Shell.Compose().Lines, l => l.Text.Contains(OriginalOptionsScreen.KeysClearHint, StringComparison.Ordinal));
-        Assert.Contains("Delete", OriginalOptionsScreen.KeysClearHint, StringComparison.Ordinal);
+        Assert.Contains(rig.Shell.Compose().Lines, l => l.Text.Contains(OriginalKeysPage.ClearHint, StringComparison.Ordinal));
+        Assert.Contains("Delete", OriginalKeysPage.ClearHint, StringComparison.Ordinal);
     }
 
     /// <summary>Every binding cell is one marquee line, never a box its face shrinks into. A long
@@ -254,7 +254,7 @@ public class OriginalKeysStickColumnTests
     {
         using var rig = new Rig();
         rig.OpenRow(0);
-        var action = OriginalOptionsScreen.ControlTabs[0].Rows[1].Action;
+        var action = OriginalKeysPage.ControlTabs[0].Rows[1].Action;
         rig.Add(action, new Binding(VkbR.Device, BindingControl.Button(1)));
         rig.Add(action, new Binding(VkbL.Device, BindingControl.Button(9)));
         var lines = rig.Shell.Compose().Lines;
@@ -274,13 +274,13 @@ public class OriginalKeysStickColumnTests
     {
         using var rig = new Rig();
         rig.OpenRow(0);
-        rig.Shell.Options.PoseStickCaptions();
+        rig.Shell.Options.Keys.PoseStickCaptions();
 
-        Assert.Equal("Axis 6 inverted", rig.Shell.Options.KeysCellText(0).Stick);
+        Assert.Equal("Axis 6 inverted", rig.Shell.Options.Keys.CellText(0).Stick);
         Assert.Equal(
             "231D/0200 Axis 6 inverted / 231D/0200 Button 4 / 231D/0201 Button 12 / 231D/0201 Hat Up",
-            rig.Shell.Options.KeysCellText(1).Stick);
-        Assert.EndsWith(" / Pagedown / Insert", rig.Shell.Options.KeysCellText(2).B);
+            rig.Shell.Options.Keys.CellText(1).Stick);
+        Assert.EndsWith(" / Pagedown / Insert", rig.Shell.Options.Keys.CellText(2).B);
     }
 
     [Fact]
@@ -301,20 +301,20 @@ public class OriginalKeysStickColumnTests
     public void TheThrottleTabEndsWithTheLeverRowWhichCapturesAStickLever()
     {
         using var rig = new Rig();
-        var rows = OriginalOptionsScreen.ControlTabs[1].Rows;
+        var rows = OriginalKeysPage.ControlTabs[1].Rows;
         Assert.Equal(InputAction.ThrottleLever, rows[^1].Action);
         int lever = rows.Count - 1;
         rig.Native.SetAxis(2, 2, -18677);
-        rig.Shell.Options.OpenKeys();
-        rig.Click(OriginalOptionsScreen.KeysTabKey(1));
+        rig.Shell.Options.Keys.Open();
+        rig.Click(OriginalKeysPage.TabKey(1));
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        for (int i = 0; i < rows.Count + 4 && rig.Shell.FocusedKey != OriginalOptionsScreen.KeysCellKey(lever, second: false); i++)
+        for (int i = 0; i < rows.Count + 4 && rig.Shell.FocusedKey != OriginalKeysPage.CellKey(lever, second: false); i++)
         {
             rig.Shell.Step(new MenuCommands { MoveY = 1 });
         }
 
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
-        Assert.Equal(OriginalOptionsScreen.KeysStickCellKey(lever), rig.Shell.FocusedKey);
+        Assert.Equal(OriginalKeysPage.StickCellKey(lever), rig.Shell.FocusedKey);
         rig.Shell.Step(new MenuCommands { Accept = true });
         Assert.True(rig.Controls.Capturing);
         rig.Frame();
@@ -343,7 +343,7 @@ public class OriginalKeysStickColumnTests
         rig.Add(InputAction.FireGuns, r7);
         rig.Add(InputAction.FireGuns, l7);
 
-        rig.Click(OriginalOptionsScreen.KeysResetKey);
+        rig.Click(OriginalKeysPage.ResetKey);
 
         var fire = rig.Controls.Bindings(InputContext.Flight, InputAction.FireGuns);
         Assert.Contains(new Binding(VkbR.Device, BindingControl.Button(0)), fire);
@@ -397,8 +397,8 @@ public class OriginalKeysStickColumnTests
         // Opens the page on its Movement tab and names the action on that row.
         public InputAction OpenRow(int row)
         {
-            Shell.Options.OpenKeys();
-            return OriginalOptionsScreen.ControlTabs[0].Rows[row].Action;
+            Shell.Options.Keys.Open();
+            return OriginalKeysPage.ControlTabs[0].Rows[row].Action;
         }
 
         // Adds one control to an action in the staged keymap, the way a capture on an empty slot does.

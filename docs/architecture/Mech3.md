@@ -38,7 +38,7 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ShaderTwins.cs
 The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites,
@@ -48,7 +48,7 @@ Godot compiles it once. `Follow` records the key a material wears, `Copy` and `F
 duplicate wears, and `Regenerate` moves each onto its key's shader for the standing mode with no
 text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
 (`EnhancedDrawn`) a first switch to Enhanced rewrites in place. `Pooled` also serves constant texts
-made per instance (plane flare, light sprites, ground shadow). Read `Session/Launch/EnhancedLook.cs`.
+made per instance (plane flare, light sprites, ground shadow). Read `Launch/EnhancedLook.cs`.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -130,7 +130,16 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
 (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+mounts `cockpit1` hidden at that offset under `InteriorScale` and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Mech3/RaceGhost.cs
+The race ghost: how solid another race pilot's aircraft draws at a camera distance (`Alpha`,
+`GhostWithinM`, `SolidBeyondM`, and a floor per presentation, `GhostAlpha` and `EnhancedGhostAlpha`, all TUNE), the vertex line that carries those constants
+into `csky_race_ghost.gdshaderinc`, and `Stamp`, the static per-instance `csky_ghost` write naming the
+owning pilot's first-person layer. The fade is measured in the shader from the drawing camera, so each
+splitscreen pane fades every other aircraft at its own distance in one shared scene; the owner's own
+cameras, which drop that layer, and its armed Danger Zone photograph draw it solid. The ghost is the
+clutter fade's ordered dither in the opaque pass, never a blend. Read `SceneBuilder.cs` next.
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`
@@ -337,7 +346,7 @@ the launchscreen's Instant Action wizard. The first two funnel through one priva
 key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
 path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
 chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
-and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
+and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Two fields no `ia.json` key carries are the remake's own rules: `Lives`, and `RaceWindowMinutes`, the split screen stunt race's window, which only the wizard sets and which defaults to 5. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants from `player.json`: the `ai_skill_parameters` block as
@@ -375,7 +384,7 @@ The `vehicle.json` def table as an index, next to `Flight/Airframe/PlaneStats.cs
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
 `DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
-`WeaponsOf` and `AttackOf` return the nearest authored value up that chain, the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
+`TitleOf`, `WeaponsOf` and `AttackOf` return the nearest authored value up that chain, `TitleOf` naming a hull whose block authors no slot 20 and the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
 Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
@@ -504,7 +513,7 @@ Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, in
 to the NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime
 owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a burst ranks
 against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit` mirrors the same rank onto pooled
-`OmniLight3D` nodes ([Root.md](Root.md)), up to `OmniBudget` for the effects level while the texture keeps `MaxActive`. Enhanced alone, `AddBurst` adds an explosion flash in a per-def `BurstShape`, lifted and unattenuated, aged on `Begin`'s dt and
+`OmniLight3D` nodes ([Spec.md](Spec.md)), up to `OmniBudget` for the effects level while the texture keeps `MaxActive`. Enhanced alone, `AddBurst` adds an explosion flash in a per-def `BurstShape`, lifted and unattenuated, aged on `Begin`'s dt and
 dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`). `AddFire` is one burning emitter's light, ranked below the rest. The pool reads the mode on every commit, and `FollowGraphicsMode` drops the live bursts on a switch to the faithful path.
 
 ## src/Mech3/MissionSetup.cs

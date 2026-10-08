@@ -52,8 +52,7 @@ public sealed class HudFont
         }
         if (runCount != CodeCount)
         {
-            GD.PushWarning($"[hudfont] {NormalFile}: found {runCount} glyphs, expected {CodeCount} "
-                           + $"({FirstCode:X2}..{LastCode:X2}), the ASCII mapping may be off");
+            Log.Warn("flight", $"hudfont: {NormalFile}: found {runCount} glyphs, expected {CodeCount} ({FirstCode:X2}..{LastCode:X2}), the ASCII mapping may be off");
         }
         var bright = LoadAtlas(Path.Combine(rimageDir, BrightFile), null, out _, out _, out _) ?? normal;
         return new HudFont(normal, bright, glyphs, top, height);
@@ -172,7 +171,7 @@ public sealed class HudFont
             runCount = idx;
         }
 
-        var tex = ImageTexture.CreateFromImage(img);
+        var tex = TextureUpload.Create(img);
         return tex;
     }
 

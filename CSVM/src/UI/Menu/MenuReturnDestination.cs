@@ -1,20 +1,7 @@
 using System.Collections.Generic;
-using CSVM.Flight.Modes;
+using CSVM.Session.InstantAction;
 
 namespace CSVM.UI.Menu;
-
-/// <summary>
-/// The final numbers one ended Instant Action mission hands the menu. They are the outcome, the
-/// context line naming the chapter and mission type, and the four counters the wrap-up screen
-/// draws. The stunt run's split table comes already flattened to text, with player 1's Danger Zone
-/// photographs in marker order. Every number is read at the ending and never again, so the record
-/// can outlive the session node that made it. The splits are strings rather than a
-/// <c>StuntSummary</c> for the same reason. The photographs are the camera's own records, which a thumbnail still on its way
-/// completes in place after the session is gone (<see cref="StuntShot.Landed"/>).
-/// </summary>
-public sealed record IaWrapupSnapshot(
-    bool Won, string Context, float Elapsed, int EnemiesShotDown, int ZonesCompleted, int ShotPercent,
-    IReadOnlyList<string>? StuntLines = null, IReadOnlyList<StuntShot>? Shots = null);
 
 /// <summary>
 /// Where the menu should stand when it comes back, said semantically so the host never names a
@@ -85,6 +72,6 @@ public sealed record CoopGuestReturn(CSVM.Session.Campaign.MissionAttempt? Attem
 
 /// <summary>Back into the Multiplayer Lobby a Dogfight was launched from, on its Game Scores page. It
 /// carries the match's final lines, best first, because the session that counted them is freed
-/// before the page draws. A lobby whose link has ended lands on the Connection page instead.
-/// </summary>
-public sealed record LobbyReturn(IReadOnlyList<DogfightScore> Scores) : MenuReturnDestination;
+/// before the page draws. A stunt race carries its table in <paramref name="Race"/>. A lobby whose
+/// link has ended lands on the Connection page instead.</summary>
+public sealed record LobbyReturn(IReadOnlyList<DogfightScore> Scores, IReadOnlyList<RaceTableRow>? Race = null) : MenuReturnDestination;

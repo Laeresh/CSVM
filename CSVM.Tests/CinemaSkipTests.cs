@@ -1,4 +1,6 @@
+using CSVM.Session.Campaign;
 using CSVM.UI.Screens;
+using CSVM.Video;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -19,7 +21,7 @@ public class CinemaSkipTests
     [InlineData(CinemaPress.None, false)]
     public void TheChapterCinemaTakesItsFourPressesAndAPadButton(CinemaPress press, bool skips)
     {
-        Assert.Equal(skips, CinemaScreen.ChapterKeys.Skips(press));
+        Assert.Equal(skips, ChapterCinema.Keys.Skips(press));
     }
 
     [Theory]
@@ -32,7 +34,7 @@ public class CinemaSkipTests
     [InlineData(CinemaPress.None, false)]
     public void TheClosingCinemaStillRefusesSpaceAndReturn(CinemaPress press, bool skips)
     {
-        Assert.Equal(skips, CinemaScreen.ClosingKeys.Skips(press));
+        Assert.Equal(skips, ClosingCinema.Keys.Skips(press));
     }
 
     [Theory]

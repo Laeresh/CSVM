@@ -27,6 +27,11 @@
 #   ./CheckCommentCaps.ps1 -Root <path>    another worktree, with this copy's rules
 #   ./CheckCommentCaps.ps1 -Against <ref>  sentence scope is what changed since <ref> (CI: the PR base)
 #   ./CheckCommentCaps.ps1 a.cs b.cs       just these files
+#   ./CheckCommentCaps.ps1 -Edited a.cs    the gate's verdict on just these files: sentence caps
+#                                          on their changed blocks only
+#   <hook payload on stdin> | ./CheckCommentCaps.ps1 -Hook
+#                                          -Edited on the file an Edit/Write touched, in that
+#                                          file's own tree; exit 2 with the findings on stderr
 # PositionalBinding off: with it on, a bare file argument binds to -Root, the scan then finds no
 # files under that "root", and the run reports clean without reading anything.
 [CmdletBinding(PositionalBinding = $false)]
@@ -34,9 +39,26 @@ param(
     [switch]$Summary,
     [string]$Root,
     [string]$Against = 'HEAD',
+    [switch]$Edited,
+    [switch]$Hook,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Path
 )
+
+# The post-edit hook: the finding reaches the agent while the comment is still being written, not
+# at the commit. A worktree file is checked in its own tree, with this copy's rules.
+if ($Hook) {
+    $f = ''
+    try { $f = [string]([Console]::In.ReadToEnd() | ConvertFrom-Json).tool_input.file_path } catch { exit 0 }
+    if ($f -notlike '*.cs' -or -not (Test-Path -LiteralPath $f -PathType Leaf)) { exit 0 }
+    $tree = git -C (Split-Path -Parent $f) rev-parse --show-toplevel 2>$null
+    if (-not $tree) { exit 0 }
+    $found = & $PSCommandPath -Edited -Root ([string]$tree) $f
+    if ($LASTEXITCODE -ne 1) { exit 0 }
+    [Console]::Error.WriteLine('Comment caps: the commit gate will block these, so fix them now.')
+    foreach ($line in $found) { [Console]::Error.WriteLine([string]$line) }
+    exit 2
+}
 
 $caps = @{ type = 12; member = 6; decl = 6; stmt = 3 }
 $sentenceCap = 25
@@ -55,10 +77,11 @@ $labels = @{
 if (-not $Root) { $Root = $PSScriptRoot }
 if (-not $Root) { $Root = git rev-parse --show-toplevel 2>$null }
 if (-not $Root) { $Root = (Get-Location).Path }
-$root = $Root
 # A git path joined with a hardcoded backslash names nothing on macOS or Linux, and a file that is
 # not found is a file that is not checked.
 $sep = [IO.Path]::DirectorySeparatorChar
+# git hands out forward slashes; the relative names printed below are cut against this spelling.
+$root = ($Root -replace '[\\/]', $sep).TrimEnd($sep)
 
 function Get-Scope {
     param([string]$Root)
@@ -237,11 +260,26 @@ function Test-BlockChanged {
     $false
 }
 
+if ($Edited) {
+    # An edit outside the checked scope (a doc, a script, a file in obj/) has no caps to meet.
+    $inScope = @()
+    foreach ($p in $Path) {
+        if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { continue }
+        $full = (Resolve-Path -LiteralPath $p).Path
+        if ($full -match '\\(obj|bin|\.godot)\\') { continue }
+        # Parenthesised because "," binds tighter than "+".
+        foreach ($scope in @(('CSVM' + $sep + 'src' + $sep), ('CSVM.Tests' + $sep))) {
+            if ($full.StartsWith($root + $sep + $scope, [StringComparison]::OrdinalIgnoreCase)) { $inScope += $full }
+        }
+    }
+    if ($inScope.Count -eq 0) { exit 0 }
+    $Path = $inScope
+}
 $targets = if ($Path) { $Path } else { Get-Scope -Root $root }
-# Named files are checked whole; without names, the sentence scope is the changed lines.
-$changed = if ($Path) { $null } else { Get-ChangedLines -Root $root -Against $Against }
+# Named files are checked whole; without names, or with -Edited, the sentence scope is the changed lines.
+$changed = if ($Path -and -not $Edited) { $null } else { Get-ChangedLines -Root $root -Against $Against }
 $sentenceSet = @{}
-if ($Path) {
+if ($Path -and -not $Edited) {
     foreach ($f in $Path) {
         if (Test-Path -LiteralPath $f -PathType Leaf) {
             $sentenceSet[(Resolve-Path -LiteralPath $f).Path] = @(,@(1, [int]::MaxValue))
@@ -282,11 +320,12 @@ foreach ($f in $targets) {
                 $rel, $b.Line, $b.Length, $caps[$b.Kind], $labels[$b.Kind], $shortDecl)
         }
         foreach ($s in $long) {
-            $head = if ($s.Head.Length -gt 60) { $s.Head.Substring(0, 60) + '...' } else { $s.Head }
             if ($s.Sentences -gt 0) {
+                $head = if ($s.Head.Length -gt 60) { $s.Head.Substring(0, 60) + '...' } else { $s.Head }
                 Write-Output ('{0}:{1}  {2} sentences, cap {3}  {4}' -f $rel, $s.Line, $s.Sentences, $blockCap, $head)
             } else {
-                Write-Output ('{0}:{1}  {2} words, cap {3}  {4}' -f $rel, $s.Line, $s.Words, $sentenceCap, $head)
+                # Whole, so the sentence can be found and split without reopening the file.
+                Write-Output ('{0}:{1}  {2} words, cap {3}  {4}' -f $rel, $s.Line, $s.Words, $sentenceCap, $s.Head)
             }
         }
     }

@@ -138,9 +138,10 @@ public sealed partial class OriginalPauseBoard : Control
 
         _input.Poll((float)delta);
 
-        // PadBack only: Escape and Start already reach the pause toggle through FlightController,
-        // so reading the combined back here would act twice.
-        bool changed = _menu.Handle(_input.Move, _input.Accept, _input.PadBack);
+        // The strips stand as a grid, so both axes step by position. PadBack only: Escape and Start
+        // already reach the pause toggle through FlightController, so the combined back acts twice.
+        bool changed = _menu.MoveTo(PauseScreens.Step(_sheet.Strips, _menu.Index, _input.MoveX, _input.Move));
+        changed |= _menu.Handle(0, _input.Accept, _input.PadBack);
         if (Visible)
         {
             changed |= _pointer.Step(_menu, PointerSource(), (x, y) => PauseScreens.RowAt(_sheet, x, y));
@@ -211,23 +212,8 @@ public sealed partial class OriginalPauseBoard : Control
         Compose();
     }
 
-    // The pausing seat's mouse in authored pixels. Only a seat that reads the keyboard holds one
-    // (MenuInput's rule for seat 0), so a pad player's pause is driven by the pad alone.
-    private (float X, float Y, bool Pressed)? SeatPointer()
-    {
-        if (_input is not { Keyboard: true } || !IsInsideTree())
-        {
-            return null;
-        }
-
-        var size = GetViewportRect().Size;
-        var fit = BoardFit.For(size.X, size.Y);
-        var at = GetViewport().GetMousePosition();
-        return (
-            (at.X - fit.OriginX) / fit.Scale,
-            (at.Y - fit.OriginY) / fit.Scale,
-            Input.IsMouseButtonPressed(MouseButton.Left));
-    }
+    // The pausing seat's mouse in authored pixels.
+    private (float X, float Y, bool Pressed)? SeatPointer() => AuthoredPointer.Of(this, _input);
 
     // The dialog authors its own pointer, so the OS one goes away while the sheet stands. Taken
     // only where the seat has a mouse to point with and the dialog a cursor to draw in its place.

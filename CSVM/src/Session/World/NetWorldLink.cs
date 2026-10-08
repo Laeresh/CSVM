@@ -61,6 +61,7 @@ internal sealed class NetWorldLink
         _world = world;
         if (net.IsHost)
         {
+            net.RequireSeatOwner<AiHitMessage>(hit => hit.ShooterSeat);
             net.On<AiHitMessage>((_, hit) => TakeAiHit(hit));
             if (world != null)
             {
@@ -257,7 +258,6 @@ internal sealed class NetWorldLink
             {
                 ai.WeaponFired += (weapon, origin, direction) => SendAiFire(ordinal, weapon, origin, direction);
                 ai.Downed += (_, killer) => SendAiDowned(ordinal, killer);
-                ai.DamageApplied += (hurt, _) => SendAiHull(ordinal, hurt);
                 ai.InertChanged += changed => SendAiPresence(ordinal, changed);
                 ai.HitRouter = HostRoutes;
             }
@@ -288,6 +288,8 @@ internal sealed class NetWorldLink
         {
             SendSurfaceVehicles();
         }
+
+        SendAiHulls();
 
         if (step % AircraftStateCadence.SendStepInterval != 0)
         {
@@ -393,9 +395,10 @@ internal sealed class NetWorldLink
 
         AiHitsTaken++;
         int shooter = _seats.ShooterOfSeat(hit.ShooterSeat) ?? ProjectilePool.NoShooter;
+        // A negative share would hand the pools back. No ceiling: the debug kill key claims a 1e6 share.
         var pose = new Transform3D(ai.Attitude, ai.WorldPosition);
         ai.TakeProjectileHit(weapon, pose * hit.LocalImpact, ai.Body?.PartName(hit.Part) ?? "center",
-            shooter, hit.Damage);
+            shooter, Math.Max(0f, hit.Damage));
     }
 
     private void SendDestructibleClaim(DestructibleRegistry.Instance inst, float damage)
@@ -409,11 +412,12 @@ internal sealed class NetWorldLink
         _net.Send(_net.HostPeer, new DestructibleHitMessage((ushort)index, PoolKey(inst), damage), NetChannels.Events);
     }
 
-    // Spent through DamageAt, so the stage change it causes goes back out to every guest.
+    // Spent through DamageAt, so the stage change it causes goes back out to every guest. A
+    // negative amount would heal the pool.
     private void TakeDestructibleHit(in DestructibleHitMessage hit)
     {
         if (_world != null && FindPool(_world.Destructibles.All, hit.Pool, hit.Key) is { } pool
-            && _world.DamageAt(pool.Anchor, hit.Damage))
+            && _world.DamageAt(pool.Anchor, Math.Max(0f, hit.Damage)))
         {
             DestructibleHitsTaken++;
         }
@@ -438,16 +442,21 @@ internal sealed class NetWorldLink
             NetChannels.Events);
     }
 
-    private void SendAiHull(int ordinal, FlightController hurt)
+    // Every admitted AI whose ledger moved since the last step. It runs every step rather than on
+    // the sample cadence, so a ram or a graze is mirrored as promptly as a shot.
+    private void SendAiHulls()
     {
-        if (hurt.Damage is not { } damage)
+        for (int i = 0; i < _admitted.Count; i++)
         {
-            return;
+            if (GodotObject.IsInstanceValid(_admitted[i]) && _admitted[i].Damage is { } damage && damage.TakeChanged())
+            {
+                float armor = damage.WholeArmorMax > 0f ? damage.WholeArmor / damage.WholeArmorMax : 1f;
+                _net.Broadcast(
+                    new WorldEventMessage((ushort)NetWorldEvent.AiHull, (ushort)i, DamagePools.Word(armor),
+                        damage.SummaryHealthFraction),
+                    NetChannels.Events);
+            }
         }
-
-        _net.Broadcast(
-            new WorldEventMessage((ushort)NetWorldEvent.AiHull, (ushort)ordinal, 0, damage.SummaryHealthFraction),
-            NetChannels.Events);
     }
 
     // Reliable and seat-independent: every guest hears the host AI's line, and each guest's own gate
@@ -735,10 +744,19 @@ internal sealed class NetWorldLink
 
                 break;
             case NetWorldEvent.AiHull:
-                if (AiAt(e.Subject) is { } hurt && GodotObject.IsInstanceValid(hurt))
+                if (AiAt(e.Subject) is { } hurt && GodotObject.IsInstanceValid(hurt) && hurt.Damage is { } ledger)
                 {
-                    hurt.Visuals?.OnHullDamage(e.Value);
-                    _voice?.TakeHull(hurt, e.Value);
+                    // Mirrored as a player seat's ledger is, the copy's own before-state deciding a
+                    // restore. The distress is derived only as the health falls, as the host's is.
+                    bool wasFull = ledger.IsFull;
+                    float before = ledger.SummaryHealthFraction;
+                    ledger.MirrorWhole(DamagePools.Fraction((ushort)e.Argument), e.Value);
+                    hurt.ShowRemoteDamage(wasFull, zonesMirrored: false);
+                    if (ledger.SummaryHealthFraction < before)
+                    {
+                        _voice?.TakeHull(hurt, ledger.SummaryHealthFraction);
+                    }
+
                     WorldEventsApplied++;
                 }
 

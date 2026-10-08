@@ -143,11 +143,11 @@ public sealed class WorldBuilder
     public Node3D? CloudDeck { get; private set; }
 
     /// <summary>Each deck tile's UNDIMMED mesh, keyed by the <see cref="Rid"/> of the DIMMED mesh
-    /// the tile is built with. Empty for a world with no deck. Both variants are built here
-    /// because <c>forceLit</c> is a shader variant, not a uniform, so the regime switch is a mesh
-    /// swap; <c>Session/WeatherRig.Tick</c> assigns one per camera at the band crossing.
+    /// the tile is built with. Empty for a world with no deck. Both variants are built here,
+    /// since <c>forceLit</c> is a shader variant and the regime switch is therefore a mesh swap.
+    /// <c>Session/WeatherRig.Tick</c> assigns one per camera at the band crossing.
     /// ⚠ Key on the RID, not the node. A splitscreen session's deck copies
-    /// (<c>GameSession.AssignCloudDecks</c>) share these very resources.</summary>
+    /// (<c>Launch/SkyStage.AssignCloudDecks</c>) share these very resources.</summary>
     public IReadOnlyDictionary<Rid, ArrayMesh> CloudDeckUndimmedMeshes => _deckUndimmedMeshes;
 
     /// <summary>The gamez <c>zone_id</c> the deck tiles author, or −1 when this world has no deck
@@ -250,7 +250,7 @@ public sealed class WorldBuilder
     /// a <see cref="GameZ"/> so it needs no built scene and is testable off-engine.
     /// ⚠ Read this before the horizon build. Three chapters ship a <c>zone2</c> that is a bare
     /// marker, so requesting it renders no sky at all; the selection rule is
-    /// <c>Flight.Airframe.WeatherState.ResolveZone</c>.</summary>
+    /// <c>Effects.WeatherState.ResolveZone</c>.</summary>
     public static IReadOnlyList<HorizonZone> HorizonZonesOf(GameZ gamez)
     {
         var zones = new List<HorizonZone>();
@@ -854,9 +854,7 @@ public sealed class WorldBuilder
         Log.Info("world", $"draw order: {report.Pairs} conflicting node pair(s) over {nodes.Count} node(s) / {report.Triangles} triangle(s) -> {report.MaxRank + 1} rank(s), {excluded} origin-parked root(s) excluded, {Time.GetTicksMsec() - start} ms");
         if (report.MaxRank > SceneBuilder.ConflictRankCap)
         {
-            GD.PushWarning($"draw order: conflict chain {report.MaxRank + 1} exceeds the "
-                           + $"{SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers "
-                           + "share a bias and can z-fight");
+            Log.Warn("world", $"draw order: conflict chain {report.MaxRank + 1} exceeds the {SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers share a bias and can z-fight");
         }
     }
 

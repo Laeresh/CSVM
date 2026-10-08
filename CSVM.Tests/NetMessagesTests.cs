@@ -125,9 +125,14 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void DamageRoundTripsTheVictimsHullState()
+    public void DamageRoundTripsTheOwnersWholeLedger()
     {
-        var sent = new DamageMessage(Seat: 4, Stage: 2, Flags: 0x0003, Hull: 37.25f);
+        var pools = new DamagePools(4, DamagePools.Word(0.25f), DamagePools.Word(0.6f), 0UL, 0UL)
+            .WithZone(0, 0f, 0.4f)
+            .WithZone(1, 1f, 1f)
+            .WithZone(2, 0.5f, 0.851f)
+            .WithZone(3, 0f, 0f);
+        var sent = new DamageMessage(Seat: 4, pools);
 
         Span<byte> buffer = stackalloc byte[DamageMessage.Size];
         int written = sent.Write(buffer);
@@ -135,6 +140,37 @@ public class NetMessagesTests
         Assert.Equal(DamageMessage.Size, written);
         Assert.True(DamageMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
+        Assert.Equal(DamagePools.Full, got.Pools.ArmorAt(1));
+        Assert.Equal(0, got.Pools.HealthAt(3));
+        Assert.InRange(DamagePools.Fraction(got.Pools.HealthAt(0)), 0.4f - 1e-4f, 0.4f + 1e-4f);
+    }
+
+    // The 16-bit step is what keeps a stage's threshold honest on the reader. A zone just above
+    // the 0.85 fuel-leak entry must still read above it, and a full pool must read exactly 1.
+    [Fact]
+    public void ADamageWordKeepsAThresholdsSideAndAFullPoolExact()
+    {
+        Assert.True(DamagePools.Fraction(DamagePools.Word(0.8501f)) > 0.85f);
+        Assert.True(DamagePools.Fraction(DamagePools.Word(0.8499f)) <= 0.85f);
+        Assert.Equal(1f, DamagePools.Fraction(DamagePools.Word(1f)));
+        Assert.Equal(0f, DamagePools.Fraction(DamagePools.Word(-0.2f)));
+        Assert.Equal(DamagePools.Full, DamagePools.Word(1.3f));
+    }
+
+    // Only four zones ride. A zone past them is neither written nor read as damaged, and setting
+    // one leaves its neighbours' words alone.
+    [Fact]
+    public void DamagePoolsCarryFourZonesEachInItsOwnWord()
+    {
+        var pools = new DamagePools(6, DamagePools.Full, DamagePools.Full, 0UL, 0UL)
+            .WithZone(2, 0.5f, 0.5f)
+            .WithZone(5, 0f, 0f);
+
+        Assert.Equal(DamagePools.Word(0.5f), pools.HealthAt(2));
+        Assert.Equal(0, pools.HealthAt(1));
+        Assert.Equal(0, pools.HealthAt(3));
+        Assert.Equal(DamagePools.Full, pools.HealthAt(5));
+        Assert.Equal(new DamagePools(6, DamagePools.Full, DamagePools.Full, 0UL, 0UL).WithZone(2, 0.5f, 0.5f), pools);
     }
 
     // The original's 0x12 shape: a killer beside the victim and a cause word. The no-killer case
@@ -287,6 +323,62 @@ public class NetMessagesTests
         Assert.Equal(CoopPickMessage.NoVoice, clipped.Seats[0].Voice);
     }
 
+    // A nameless player rides bit 4 of the flags byte. Every machine's marker then reads it as
+    // "Unknown" rather than the roster's stand-in callsign.
+    [Fact]
+    public void SeatRosterCarriesANamelessPlayerBesideTheVoice()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 0, 0, true, "P1", Voice: CoopPickMessage.MaxVoice, Unnamed: true),
+            new(1, 0, 1, false, "Lucy", Voice: 2),
+            new(2, 0, 2, false, "guest 7", Unnamed: true),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(new[] { true, false, true }, got.Seats.Select(s => s.Unnamed).ToArray());
+
+        // ABLE-TO-FAIL CONTROL: the bit leaves the host bit and a full voice where they were.
+        Assert.Equal(seats, got.Seats.ToList());
+        Assert.Equal(1 | (CoopPickMessage.MaxVoice << 1) | (1 << 4), buffer[SeatRosterMessage.PrefixSize + 2]);
+    }
+
+    // A bot rides bit 5 of the flags byte and its skill tier bits 6 and 7. The entry keeps its 20
+    // bytes, and a build that reads the host bit alone still finds the host.
+    [Fact]
+    public void SeatRosterCarriesBotsAndTheirSkillBesideTheOtherFlags()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host", Voice: 2, Unnamed: true),
+            new(1, 2, 0, false, "guest"),
+            new(2, 1, 7, true, "Novice", Pilot: NetPilot.Bot, Skill: NetBotSkill.Novice),
+            new(3, 2, 1, true, "Veteran", Pilot: NetPilot.Bot, Skill: NetBotSkill.Veteran),
+            new(4, 0, 2, true, "Ace", Voice: 1, Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+
+        Assert.Equal(SeatRosterMessage.PrefixSize + (20 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(seats, got.Seats.ToList());
+
+        int Flags(int entry) => buffer[SeatRosterMessage.PrefixSize + (entry * SeatRosterMessage.EntrySize) + 2];
+        Assert.Equal(1 | (2 << 1) | (1 << 4), Flags(0));
+        Assert.Equal(0, Flags(1));
+        Assert.Equal(1 | (1 << 5), Flags(2));
+        Assert.Equal(1 | (1 << 5) | (1 << 6), Flags(3));
+        Assert.Equal(1 | (1 << 1) | (1 << 5) | (2 << 6), Flags(4));
+
+        // ABLE-TO-FAIL CONTROL: a tier past Ace, or skill bits on a person, is no roster this writes.
+        buffer[SeatRosterMessage.PrefixSize + (4 * SeatRosterMessage.EntrySize) + 2] = (byte)(1 | (1 << 5) | (3 << 6));
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+        new SeatRosterMessage(5u, seats).Write(buffer);
+        buffer[SeatRosterMessage.PrefixSize + SeatRosterMessage.EntrySize + 2] = 1 << 6;
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]
@@ -350,6 +442,12 @@ public class NetMessagesTests
         Assert.True(NetMessage.TryReadHeader(buffer, out var type, out int length));
         Assert.Equal(NetMessageType.Handshake, type);
         Assert.Equal(HandshakeMessage.Size, length);
+
+        // A joiner flying two seats is named its first and the one after it, in the same 24 bytes.
+        var pair = sent with { Extra = 1 };
+        Assert.Equal(HandshakeMessage.Size, pair.Write(buffer));
+        Assert.True(HandshakeMessage.TryRead(buffer, out var gotPair));
+        Assert.Equal(pair, gotPair);
     }
 
     // A guest with no seat yet is a real state, not a malformed message. NoSeat has to survive
@@ -382,7 +480,7 @@ public class NetMessagesTests
     public void ADeserialiserRefusesAnotherTypesBuffer()
     {
         Span<byte> buffer = stackalloc byte[DamageMessage.Size];
-        new DamageMessage(1, 1, 0, 50f).Write(buffer);
+        new DamageMessage(1, new DamagePools(4, DamagePools.Full, DamagePools.Word(0.5f), 0UL, 0UL)).Write(buffer);
 
         Assert.False(HitMessage.TryRead(buffer, out _));
         Assert.True(DamageMessage.TryRead(buffer, out _));
@@ -817,6 +915,46 @@ public class NetMessagesTests
         Assert.False(clipped.Ready);
     }
 
+    // A guest flying several seats sends a pick per seat, its place in bits 5 and 6 and "another
+    // follows" in bit 7. A one-seat guest's pick leaves all three clear, so its bytes are as before.
+    [Fact]
+    public void APicksSeatAndItsFollowingMarkRideTheFlagsByteAndAOneSeatPickIsUnchanged()
+    {
+        Span<byte> buffer = stackalloc byte[CoopPickMessage.Size];
+        var fit = CoopFit.Of(new[] { 1, 0, 0, 0 }, null);
+        for (byte local = 0; local <= CoopPickMessage.MaxLocal; local++)
+        {
+            var sent = new CoopPickMessage(6, true, 3, fit, "", Voice: 5, Local: local, More: local < CoopPickMessage.MaxLocal);
+            Assert.Equal(CoopPickMessage.Size, sent.Write(buffer));
+            Assert.True(CoopPickMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        new CoopPickMessage(6, true, 3, Voice: 6, Local: 2, More: true).Write(buffer);
+        Assert.Equal(1 | (6 << 2) | (2 << 5) | 0x80, buffer[NetMessage.HeaderBytes + 1]);
+
+        // ABLE-TO-FAIL CONTROL: the one-seat pick writes the flags byte it always did.
+        new CoopPickMessage(6, true, 3, Voice: 6).Write(buffer);
+        Assert.Equal(1 | (6 << 2), buffer[NetMessage.HeaderBytes + 1]);
+    }
+
+    // The flow names how many seats after its player number the reading guest got. It rides the
+    // byte that was reserved, and a one-seat guest's stays zero.
+    [Fact]
+    public void ACoopFlowCarriesTheGuestsFurtherSeatsInItsReservedByte()
+    {
+        Span<byte> buffer = stackalloc byte[CoopFlowMessage.Size];
+        var sent = new CoopFlowMessage(NetCoopScreen.FlightCheck, 3, 2, 1, 0b0110, 4, 2, false, 0, 0, 0, Locals: 1, Extra: 2);
+        sent.Write(buffer);
+        Assert.Equal(2, buffer[15]);
+        Assert.True(CoopFlowMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+
+        // ABLE-TO-FAIL CONTROL: a one-seat guest's flow leaves the byte zero.
+        (sent with { Extra = 0 }).Write(buffer);
+        Assert.Equal(0, buffer[15]);
+    }
+
     [Fact]
     public void DogfightOptionsRoundTripEveryFieldInSixteenBytes()
     {
@@ -871,6 +1009,39 @@ public class NetMessagesTests
         });
         Assert.NotEqual(sent, other);
         Assert.False(DogfightRosterMessage.TryRead(buffer.AsSpan(0, DogfightRosterMessage.Size - 1), out _));
+    }
+
+    [Fact]
+    public void ADogfightRosterCarriesBotRowsWithTheirTierAndRandomPlane()
+    {
+        var buffer = new byte[DogfightRosterMessage.Size];
+        var sent = new DogfightRosterMessage(3, 1, new[]
+        {
+            new DogfightLobbySeat("Host", 5, false, true, 1, true),
+            new DogfightLobbySeat("Lucy", 1, true, false),
+            new DogfightLobbySeat("Winthrop", DogfightLobbySeat.RandomAirframe, true, false, 1, false, NetPilot.Bot, NetBotSkill.Ace),
+            new DogfightLobbySeat("Cabbie", 7, true, false, 0, false, NetPilot.Bot, NetBotSkill.Novice),
+        });
+        sent.Write(buffer);
+        Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+        Assert.Equal(new[] { false, false, true, true }, got.Rows.Select(r => r.IsBot));
+        Assert.Equal((NetBotSkill.Ace, DogfightLobbySeat.RandomAirframe, (byte)1), (got.Rows[2].Skill, got.Rows[2].Airframe, got.Rows[2].Team));
+        Assert.Equal(NetBotSkill.Novice, got.Rows[3].Skill);
+
+        // ABLE-TO-FAIL CONTROL: a tier on a person's row, a tier past ace and a bot hosting are refused.
+        int flagsAt = NetMessage.HeaderBytes + 4;
+        int lucy = flagsAt + DogfightRosterMessage.RowSize;
+        int bot = flagsAt + (2 * DogfightRosterMessage.RowSize);
+        var tiered = (byte[])buffer.Clone();
+        tiered[lucy] |= 0x10;
+        Assert.False(DogfightRosterMessage.TryRead(tiered, out _));
+        var past = (byte[])buffer.Clone();
+        past[bot] |= 0x30;
+        Assert.False(DogfightRosterMessage.TryRead(past, out _));
+        var hosting = (byte[])buffer.Clone();
+        hosting[bot] |= 0x02;
+        Assert.False(DogfightRosterMessage.TryRead(hosting, out _));
     }
 
     [Fact]

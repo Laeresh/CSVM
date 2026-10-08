@@ -12,7 +12,7 @@ the addresses are given so any claim can be re-checked at source.
 per-zone `ZONE<n>` blocks, the precipitation block, the per-chapter zone-naming split, is
 [`formats/weather.md`](../formats/weather.md); the fog volumes' own file is
 [`formats/fogvol.md`](../formats/fogvol.md) and the `zone_id` field the gate reads is
-[`formats/gamez.md`](../formats/gamez.md). Our implementation is `CSVM/src/Flight/Airframe/Weather.cs`
+[`formats/gamez.md`](../formats/gamez.md). Our implementation is `CSVM/src/Effects/Weather.cs`
 (the reader and the state machine), `CSVM/src/Session/World/WeatherRig.cs` (the per-frame rig: fog
 apply, whiteout, deck, dome, band flicker), `CSVM/src/Mech3/ZoneGate.cs` (the visibility gate) and
 `CSVM/src/Mech3/FogVolumes.cs` (the volumes and their whiteout). This page is the original's
@@ -199,7 +199,7 @@ on its first frame.
 
 ⚠ The remap's **rate** is read from a per-mission weather-struct field (≈ `+0x934`) that **no
 reader decodes** and no capture pins a value for. It is the one genuinely unknown constant in this
-subsystem (`BL-329`).
+subsystem; the remake's picked rate reads like the original's shimmer at the controls.
 
 ## The fog volumes: the in-volume whiteout (`FUN_0044e6f0`, `FUN_0044e010`)
 
@@ -315,8 +315,9 @@ contribution is computed per vertex inside the polygon loop rather than baked. W
 receive it is decided on the hardware draw by one gate, the model's `lighting` flag; the texture's
 alpha bit exempts a polygon in the software draw only, which no retail capture shows. Both draws
 are in [`vertexLighting.md`](vertexLighting.md). **Water is lit in the original** and so is every
-textured surface whose model carries the flag, alpha class or not. Night cloud sprites being
-moonlit directionally (`BL-325`) is a separate, still-open reading.
+textured surface whose model carries the flag, alpha class or not. Night cloud sprites are not
+moonlit directionally: a C1B cloud reads the same from the moon side and the far side in the
+original, and its brightness falls with distance through the night fog.
 
 ### `FOG_COLOR` luminance as the night key (enhanced mode only)
 
@@ -507,8 +508,8 @@ Everything here is a known, deliberate divergence, not a gap waiting to be close
 | **The gate is a per-camera CULL MASK, never `Node3D.Visible`** | Splitscreen panes can sit in different states at the same instant, and several other subsystems already read/write `Visible` on that same world content. The two camera-anchored per-rig singletons (deck, dome) are the exception and do use `Visible`, because a per-player copy is already private to one camera |
 | **The flicker drift is per RIG, not one global** | The original's `_DAT_0064efcc`/`_DAT_0062154c` pair is a single global, which assumes one camera; two panes on opposite sides of the band must not share a drift phase |
 | **The flicker amplitude ramps in over ~0.5 s per rig** | Neither curve is the identity at an interior opacity, so a fresh instance would otherwise pop; the ramp makes a rig's first tick return the unremapped opacity bit-for-bit, which is what static probes and golden shots were pinned against |
-| **The flicker rate constant** | The engine reads it from an undecoded per-mission field; ours is picked so the drift traverses `[0,1]` in a few seconds (`BL-329`) |
-| **Fog + sun are one global set, applied from rig 0** | Same as the original (one `sunlight` node, one fog set), but it means a splitscreen pane wears player 1's zone |
+| **The flicker rate constant** | The engine reads it from an undecoded per-mission field; ours is picked so the drift traverses `[0,1]` in a few seconds, and reads like the original's pace at the controls |
+| **The fog and the vertex light are per view; the scene sun is one set, applied from the first rig** | The original has one camera, so one fog set and one `sunlight` node served it. Each splitscreen pane and spyglass picture here wears its own camera state's fog and, on the faithful presentation, its own zone's per-vertex sun on the aircraft and the lit cloud cards (`Session/World/FogViewTable.cs`). The scene `DirectionalLight3D`, its energies, the Environment ambient and sky colour stay the first rig's: every pane renders one `World3D`, and a light's cull mask selects objects, not cameras. Enhanced Graphics lights a pane across the boundary from player 1 by player 1's sun, and panes are deliberately not given a `World3D` of their own to change that |
 | **The whiteout is one screen-space overlay carrying BOTH the band and the volume curtain**, unioned `a + b − a·b` | The binary computes one camera-space density and blends the frame with it; the union is its own combiner between volumes. The two never coexist in shipped data, so this is unmeasurable today, it is a union rather than a pick so that a future chapter authoring both would not silently lose one |
 | **That overlay draws UNDER the cockpit interior's own pass**, per pane | The original applies the density to the world draw, which the interior does not take, so the window whites out and the canopy, panel and gauges stay clear. An overlay above the pass whitens the panel too, which is not what the original does at the controls |
 | **The world is rendered fullbright and dimmed by a scalar** | We do not reproduce the per-vertex `N·L` bake; the scalar is the data-driven collapse of it (see above) |

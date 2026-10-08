@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -196,7 +197,7 @@ internal static class AiVesselTargetSuites
                 var excludedPick = Acquire(excluding.Biases);
                 ctx.Check(ReferenceEquals(excludedPick, quarry),
                     $"'{ExcludingBlock}'s authored exclusion moves the pick to the aeroplane: {TargetPool.NameOf(excludedPick)}");
-                var pooled = shooter.RankedPoolSourcesForTest(gunner);
+                var pooled = shooter.Acquisition.RankedSources;
                 ctx.Check(pooled.Any(s => s is SurfaceVehicle),
                     $"the excluded hull is still a RANKED candidate, dropped by its own bias rather than never offered: {pooled.Count} candidate(s)");
                 var secondPick = Acquire(secondExcluding.Biases);

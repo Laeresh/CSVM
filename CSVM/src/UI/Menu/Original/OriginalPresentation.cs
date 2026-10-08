@@ -9,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Campaign;
+using CSVM.Session.InstantAction;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Screens;
@@ -80,7 +81,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string KeysOtherAid = "other";
 
     /// <summary>The suffix after a KEYS aid's category, <c>keys:movement:sticks</c>. It poses long
-    /// and shared captions on the first rows (<see cref="OriginalOptionsScreen.PoseStickCaptions"/>),
+    /// and shared captions on the first rows (<see cref="OriginalKeysPage.PoseStickCaptions"/>),
     /// so the cells' marquee is shot with no stick connected.</summary>
     public const string KeysSticksAid = "sticks";
 
@@ -102,6 +103,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The Instant Action aid's argument that stands its remake-only lives control at the
     /// count a further <c>:n</c> names, and at Unlimited when it names none.</summary>
     public const string InstantActionLivesAid = "lives";
+
+    /// <summary>The Instant Action aid's argument that picks stunt flying and focuses the race time
+    /// control, which shows once <c>--debug-join</c> has seated a second pilot.</summary>
+    public const string InstantActionRaceTimeAid = "race-time";
 
     /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
     /// the page a flown mission's ending lands on. Original's own: Built-in shows a board inside
@@ -127,6 +132,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the join board, <c>join-board</c> alone for an empty
     /// manifest or <c>join-board:N</c> with that many entries posed as signed on.</summary>
     public const string JoinBoardAid = "join-board";
+
+    /// <summary>The join board aid's suffix, <c>join-board:N:bots</c>, that stands five bot rows
+    /// under the articles.</summary>
+    public const string JoinBoardBotsAid = "bots";
+
+    /// <summary>The join board aid's suffix, <c>join-board:N:bot</c>, that also opens the Edit Bot
+    /// panel on one of them.</summary>
+    public const string JoinBoardBotAid = "bot";
 
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
@@ -167,8 +180,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string CampaignDeleteAid = "campaign-delete";
 
     /// <summary>The aid value that opens the cabin with its network door open over the aids'
-    /// loopback door. Its colon argument is how many guests are on the wire.</summary>
+    /// loopback door. Its first colon argument is how many guests are on the wire. A second,
+    /// <c>code</c> or <c>offline</c>, poses a master server that listed it or one it cannot reach.
+    /// </summary>
     public const string CampaignCoopAid = "campaign-coop";
+
+    /// <summary>The aid value that stands HOST CO-OP's GAME INFORMATION over the cabin, posed with
+    /// the aids' sample game.</summary>
+    public const string CampaignCoopAskAid = "campaign-coop-ask";
 
     /// <summary>The aid value that shows a joined co-op guest following the aids' loopback host.
     /// Its colon argument names the host's board: cabin (the default), briefing, flightcheck,
@@ -198,11 +217,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// page, posed with the aids' sample callsign and voice.</summary>
     public const string PlayerInfoAid = "playerinfo";
 
+    /// <summary>The <see cref="ConnectionAid"/> argument that poses the page over a door with a
+    /// master server, Join by code picked with the sample code in its box.</summary>
+    public const string JoinCodeAid = "code";
+
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
-    /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
-    /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
-    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed.</summary>
+    /// waiting (a guest not yet Ready). The second names the tab or pose, mission by default, and a
+    /// third, <c>code</c> or <c>offline</c>, what the host's master server does. Each value is
+    /// listed in <c>docs/org/menu-inventory.md</c>.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -214,7 +237,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
         "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", "campaign-hangar",
-        CampaignDeleteAid, CampaignCoopAid, CampaignCoopGuestAid, CampaignCoopReadyAid,
+        CampaignDeleteAid, CampaignCoopAid, CampaignCoopAskAid, CampaignCoopGuestAid, CampaignCoopReadyAid,
     };
 
     /// <summary>The cabin's palette: the shared cabin board's, with the mission pull-down's words
@@ -296,6 +319,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     public PresentationId Id => PresentationId.Original;
+
+    public bool OnMainMenu => _shell?.Screen == OriginalScreen.TopLevel;
 
     /// <summary>The shell while built, for the suites that read the screen back.</summary>
     public OriginalShell? Shell => _shell;
@@ -490,7 +515,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The lobby the match was launched from, on its scores, or the Connection page saying
             // why the link ended.
-            if (!_shell.Lobby.Land(landing.Scores))
+            if (!_shell.Lobby.Land(landing.Scores, landing.Race))
             {
                 _shell.ReturnToConnection();
             }
@@ -525,46 +550,46 @@ public sealed class OriginalPresentation : IMenuPresentation
                     OpenGameOptionsAid(aid);
                     break;
                 case AudioAid:
-                    _shell.Options.OpenAudio();
+                    _shell.Options.Audio.Open();
                     break;
                 case AudioAid + ":" + AudioMixedAid:
                     // The four rows open on two levels between them, so a shot of the shipped mix
                     // says nothing about where a thumb stands at a level it was moved to.
-                    _shell.Options.OpenAudio();
-                    _shell.Options.PoseAudioMix();
+                    _shell.Options.Audio.Open();
+                    _shell.Options.Audio.PoseMix();
                     break;
                 case VideoAid:
-                    _shell.Options.OpenVideo();
+                    _shell.Options.Video.Open();
                     break;
                 case VideoAid + ":" + VideoCheckedAid:
                     // Onto the checkbox by name: the page opens on its first row, which is a
                     // display setting rather than the graphics one this pose is about.
-                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.GraphicsKey);
+                    _shell.Options.Video.OpenOn(OriginalVideoPage.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case VideoAid + ":" + VideoOpenAid:
                     // Onto the Resolution row by name: the page opens on the monitor row above it,
                     // whose one screen on this machine says nothing about a windowed list.
-                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.ResolutionKey);
+                    _shell.Options.Video.OpenOn(OriginalVideoPage.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case ControlsAid:
                     SyncControlsSeats();
-                    _shell.Options.OpenControlsPrefs();
+                    _shell.Options.Controls.Open();
                     break;
                 case KeysAid:
                     SyncControlsSeats();
-                    _shell.Options.OpenKeys();
+                    _shell.Options.Keys.Open();
                     break;
                 case string keys when keys.StartsWith(KeysAid + ":", StringComparison.Ordinal):
                     SyncControlsSeats();
-                    _shell.Options.OpenKeys();
+                    _shell.Options.Keys.Open();
                     string tab = keys[(KeysAid.Length + 1)..];
                     bool posed = tab.EndsWith(":" + KeysSticksAid, StringComparison.Ordinal);
-                    _shell.Options.ShowKeysTab(KeysTabOf(posed ? tab[..^(KeysSticksAid.Length + 1)] : tab));
+                    _shell.Options.Keys.ShowTab(KeysTabOf(posed ? tab[..^(KeysSticksAid.Length + 1)] : tab));
                     if (posed)
                     {
-                        _shell.Options.PoseStickCaptions();
+                        _shell.Options.Keys.PoseStickCaptions();
                     }
 
                     break;
@@ -581,6 +606,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Connection.OpenConnection();
                     _shell.AskNetInfo(aid.EndsWith(GameInfoAid, StringComparison.Ordinal) ? NetSessionKind.Dogfight : null,
                         () => { }, NetDoorAid.SamplePlayer());
+                    break;
+                case ConnectionAid + ":" + JoinCodeAid:
+                    _shell.StandInNetDoor(NetDoorAid.CodeGuest());
+                    _shell.Connection.OpenConnection();
+                    _shell.Connection.PoseCode(NetDoorAid.SampleCode);
                     break;
                 case ConnectionGamesAid:
                 case ConnectionGamesAid + ":" + ConnectionSearchingAid:
@@ -614,6 +644,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.InstantAction.OpenInstantAction();
                     _shell.InstantAction.PoseLives(AidCount(lives));
                     break;
+                case InstantActionAid + ":" + InstantActionRaceTimeAid:
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.PoseRaceTime();
+                    break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));
                     break;
@@ -631,6 +665,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case JoinBoardAid:
                     _shell.JoinBoard.Open();
+                    break;
+                case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal)
+                    && board.Split(':') is { Length: 3 } parts && parts[2] is JoinBoardBotsAid or JoinBoardBotAid:
+                    _shell.JoinBoard.PoseBots(AidCount(parts[0] + ":" + parts[1]), parts[2] == JoinBoardBotAid);
                     break;
                 case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal):
                     _shell.JoinBoard.Pose(AidCount(board));
@@ -838,9 +876,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The AUDIO page's levels are heard while it is open and the mix it opened over goes back the
         // moment it is left, by any door. Read off the shell rather than a seat's step: the page is
         // seat 0's, and a guest's own step carries no mix, so its poll would end the preview.
-        if (_shell.Options.AudioPreviewMix is { } mix)
+        if (_shell.Options.Audio.PreviewMix is { } mix)
         {
-            _host.Audio.PreviewMix(mix, _shell.Options.TakeAudioMoved());
+            _host.Audio.PreviewMix(mix, _shell.Options.Audio.TakeMoved());
         }
         else
         {
@@ -849,6 +887,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         // And again after the frame, so a screen change this frame is what the next poll reads.
         _host.Seats[0].CapturingText = _shell.CapturingText;
+        _shell.FollowKeyboard();
         // The same for the player rows, so the press that opened a rebinding page leaves it already
         // holding its seats rather than blank until the next frame.
         if (_shell.Screen is OriginalScreen.ControlsPrefs or OriginalScreen.Keys)
@@ -895,6 +934,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             host.Seats[0].CapturingText = false;
         }
 
+        ScreenKeyboard.Hide(OriginalShell.KeyboardOwner);
+
         StopNarration();
         // Off screen the AUDIO page's preview goes with it, the mix it opened over put back: a hide
         // is a door out that no frame follows.
@@ -935,7 +976,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     // leaves the page on its first category, which is where the bare aid opens it anyway.
     private static int KeysTabOf(string argument)
     {
-        var tabs = OriginalOptionsScreen.ControlTabs;
+        var tabs = OriginalKeysPage.ControlTabs;
         for (int i = 0; i < tabs.Count; i++)
         {
             if (string.Equals(tabs[i].Name.Replace(" ", string.Empty), argument, StringComparison.OrdinalIgnoreCase))
@@ -1012,15 +1053,28 @@ public sealed class OriginalPresentation : IMenuPresentation
     private void OpenLobbyAid(string argument)
     {
         string[] parts = argument.Split(':');
+        if (parts[0] == "late")
+        {
+            // A guest that joined while its host flies a match: no options, no list but its own row.
+            _shell!.StandInNetDoor(NetDoorAid.LateDogfightGuest());
+            _shell.Lobby.OpenGuest();
+            _shell.StepNet(0.0);
+            return;
+        }
+
         bool waiting = parts[0] == "waiting";
         bool guestView = parts[0] == "guest" || waiting;
         string tab = parts.Length > 1 ? parts[1] : parts[0] is "host" or "guest" or "waiting" ? string.Empty : parts[0];
-        var (host, guests) = NetDoorAid.DogfightDoors();
+        var (host, guests) = NetDoorAid.DogfightDoors(NetDoorAid.InternetOf(parts.Length > 2 ? parts[2] : string.Empty));
         var shown = guestView ? guests[waiting ? 1 : 0] : host;
         _shell!.StandInNetDoor(shown);
         if (guestView)
         {
             host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            if (host.Dogfight is { } drawn)
+            {
+                drawn.CallsignPool = _shell.Lobby.BotNames();
+            }
         }
         else
         {
@@ -1049,6 +1103,27 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         NetDoorAid.PoseDogfight(host, guests);
+        if (tab is "bots" or "bot" or "bot-scores" or "race" && host.Dogfight is { } field)
+        {
+            // Three bot rows after the two guests, the first an ace on the Fury.
+            field.FillTo(6);
+            field.SetBotAirframe(field.Bots[0].Id, 7);
+            field.SetBotSkill(field.Bots[0].Id, NetBotSkill.Ace);
+            if (tab == "race")
+            {
+                // A Stunt Race over those rows, which stand grounded with the bot controls greyed.
+                field.SetMissionType(Spec.DogfightMissionType.StuntRace);
+            }
+
+            NetDoorAid.SettleDogfight(host, guests);
+            if (tab == "bot")
+            {
+                _shell.Lobby.ShowBot(field.Bots[0].Id);
+                _shell.StepNet(0.0);
+                return;
+            }
+        }
+
         if (outlaw)
         {
             _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);
@@ -1056,10 +1131,10 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
-        if (tab == "scores")
+        if (tab is "scores" or "bot-scores")
         {
             // Game Scores fills only on the way back from a match, so every door lands one.
-            var scores = NetDoorAid.PlayedScores(host);
+            var scores = tab == "scores" ? NetDoorAid.PlayedScores(host) : NetDoorAid.PlayedBotScores(host);
             foreach (var door in guests.Prepend(host).Where(door => door != shown))
             {
                 door.Dogfight?.Land(scores);
@@ -1074,7 +1149,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             {
                 "plane" => LobbyTab.Plane,
                 "ammo" or "rockets" => LobbyTab.Ammo,
-                "scores" => LobbyTab.Scores,
+                "scores" or "bot-scores" => LobbyTab.Scores,
                 _ => LobbyTab.Mission,
             },
             rockets: tab == "rockets");
@@ -1083,7 +1158,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private void OpenGameOptionsAid(string aid)
     {
-        _shell!.Options.OpenGameOptions();
+        _shell!.Options.GameOptions.Open();
         if (aid.IndexOf(':') >= 0)
         {
             _shell.Step(new MenuCommands { Accept = true });
@@ -1166,15 +1241,27 @@ public sealed class OriginalPresentation : IMenuPresentation
                 break;
             case CampaignCoopAid:
                 // The cabin with its network door open over the aids' loopback door, the same pose
-                // as Built-in's aid of this name. The colon argument is the guests on its wire.
+                // as Built-in's aid of this name. The colon arguments are the guests on its wire and
+                // what its master server does. The host and each guest go by a callsign.
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
-                int.TryParse(argument, System.Globalization.NumberStyles.None,
+                string[] coop = argument.Split(':');
+                int.TryParse(coop[0], System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out int guests);
-                var door = NetDoorAid.Host(guests, out _);
+                var door = NetDoorAid.Host(guests, out _, out var named, NetDoorAid.InternetOf(coop.Length > 1 ? coop[1] : string.Empty));
+                door.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(door);
                 NetDoorAid.OpenCoopHost(door, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.StepNet(0.0);
+                NetDoorAid.NameGuests(door, named);
+                _shell.StepNet(0.0);
                 argument = string.Empty;
+                break;
+            case CampaignCoopAskAid:
+                // HOST CO-OP's Game Information over the cabin. The aids' own answer and door stand
+                // in, so the pose never reads or writes the player's options.
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.StandInNetDoor(NetDoorAid.Host(0, out _));
+                _shell.AskNetInfo(NetSessionKind.CampaignCoop, () => { }, NetDoorAid.SamplePlayer());
                 break;
             case CampaignCoopGuestAid:
                 PoseCoopGuest(argument);
@@ -1183,11 +1270,14 @@ public sealed class OriginalPresentation : IMenuPresentation
             case CampaignCoopReadyAid:
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 var ready = NetDoorAid.Host(2, out _, out var guestEnds);
+                ready.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(ready);
                 NetDoorAid.OpenCoopHost(ready, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
                 _shell.StepNet(0.0);
-                NetDoorAid.AnswerReady(ready, guestEnds[0], _shell.Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe);
+                NetDoorAid.NameGuests(ready, guestEnds);
+                NetDoorAid.AnswerReady(ready, guestEnds[0], _shell.Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe,
+                    NetDoorAid.GuestNames[0]);
                 _shell.StepNet(0.0);
                 break;
             case "campaign-previous":
@@ -1326,7 +1416,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage == CampaignScreen.Cabin ? CabinPalette
-                : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
+                : _shell.CampaignPage is { } campaign ? CampaignBoards.Palette(campaign)
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
         }

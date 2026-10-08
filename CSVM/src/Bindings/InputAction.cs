@@ -39,12 +39,13 @@ public enum InputAction
     TargetNearest,
     TargetClear,
 
-    // Views and the head. The snap-look diagonals are one control on two actions, which is what a
-    // binding list expresses and four typed slots cannot.
+    // Views and the head. The snap-look rows are the original's Views 2 page, one numpad key each;
+    // SnapLookRows composes them into one direction. LookRear is the original's "Look Back" (Kp2),
+    // stored as "LookDown" before the four diagonals below joined it.
     CycleCockpitViews,
     SelectChaseView,
     LookUp,
-    LookDown,
+    LookRear,
     LookLeft,
     LookRight,
     LookCenter,
@@ -156,4 +157,16 @@ public enum InputAction
     // port's own action, a flight one so the steal rule keeps G off every other flight action.
     // Appended because the enum is positional.
     ToggleGraphicsMode,
+
+    // The four diagonal rows of the original's Views 2 page, Look Up/Left (Kp7), Look Up/Right
+    // (Kp9), Look Up/Left/Rear (Kp1) and Look Up/Right/Rear (Kp3). Appended because the enum is
+    // positional.
+    LookUpLeft,
+    LookUpRight,
+    LookUpLeftRear,
+    LookUpRightRear,
+
+    // The original's Display Scores (Multiplayer Only), Tab by default: held, it shows the race's
+    // or the Dogfight's standings in that seat's pane. Appended because the enum is positional.
+    DisplayScores,
 }

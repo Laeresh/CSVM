@@ -19,11 +19,21 @@ public abstract partial class ResultsBoard : Control
     // The share of the window an over-tall panel is shrunk into. TUNE.
     internal const float PanelRoom = 0.96f;
 
+    // The window height every board metric is stated at, the reference a chrome type scale rung
+    // converts into for a board (ChromeType.InReference).
+    internal const float ReferenceHeight = 720f;
+
+    /// <summary>The exit row's words on a board launched from the command line, where it quits.</summary>
+    internal const string QuitLabel = "Quit Game";
+
     // The shared board style: one palette so every board reads as the same screen. All TUNE.
     internal static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     internal static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
     internal static readonly Color HeaderColor = new(0.50f, 0.62f, 0.80f);
     internal static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
+
+    // The line a withheld Restart row leaves, on the context line's rung.
+    private static readonly float WithheldFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
 
     private PauseState _state = null!;
     private string _exitLabel = "";
@@ -33,10 +43,16 @@ public abstract partial class ResultsBoard : Control
     private BoardMenuHost? _host;
     private StuntShotStrip? _strip;
     private ShotViewer _viewer = null!;
+    private Label? _withheld;
 
     /// <summary>Rerun the ended mode in place, chosen from the menu (or R / pad Y where the mode
     /// offers them directly).</summary>
     public System.Action? Restart { get; set; }
+
+    /// <summary>The line drawn over the menu in place of its Restart row, null for the standard
+    /// menu. A network guest's dogfight board carries one, since the rematch is its host's to
+    /// call. A Restart row there would do nothing and say nothing.</summary>
+    public string? RestartWithheld { get; set; }
 
     /// <summary>Leave the session, chosen from the menu.</summary>
     public System.Action? Exit { get; set; }
@@ -50,6 +66,9 @@ public abstract partial class ResultsBoard : Control
     /// activation routing without a device.</summary>
     internal BoardMenu? StandardMenu => _host?.Menu;
 
+    /// <summary>The withheld-Restart line as drawn on the panel, or null where none stands.</summary>
+    internal string? WithheldLine => _withheld is { } line && IsInstanceValid(line) ? line.Text : null;
+
     /// <summary>The board's photographs while it carries any, the second cursor region above the
     /// menu, for the suites.</summary>
     internal StuntShotStrip? ShotStrip => _strip;
@@ -62,8 +81,8 @@ public abstract partial class ResultsBoard : Control
     internal bool RowsShowCursor => _host?.View.ShowsCursor == true;
 
     /// <summary>Whether the run this board reported is still over. A live flag here (the match's
-    /// <c>Completed</c>, the race's <c>AllFinished</c>) makes a rerun retire the board from
-    /// <c>_Process</c>; a board nothing retires answers true and overrides
+    /// <c>Completed</c>, the race's <c>Ended</c>) lets a rerun retire the board from
+    /// <c>_Process</c>. A board nothing retires answers true and overrides
     /// <see cref="OnRestartChosen"/> instead.</summary>
     protected abstract bool StillEnded { get; }
 
@@ -230,11 +249,13 @@ public abstract partial class ResultsBoard : Control
     }
 
     /// <summary>The board's own state for the Build methods: hidden, input-transparent, full-rect,
-    /// with the backdrop and centre container underneath. Call once from the subclass Build.</summary>
-    protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor)
+    /// with the backdrop and centre container underneath. Call once from the subclass Build.
+    /// <paramref name="exitLabel"/> replaces the standard exit row's words, null keeping them.</summary>
+    protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor,
+        string? exitLabel = null)
     {
         _state = state;
-        _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game";
+        _exitLabel = exitLabel ?? (exitsToMenu ? "Exit to Menu" : QuitLabel);
         _inputFor = inputFor;
         _center = BuildShell(this);
         _viewer = ShotViewer.Build(clickCloses: true);
@@ -262,13 +283,14 @@ public abstract partial class ResultsBoard : Control
     // The board spans the whole window, not a pane, so it scales on the window height alone
     // (no HudMetrics pane damping, which is for HUD elements drawn inside a pane). The one
     // per-pane board, StuntScoreboard, overrides this.
-    protected virtual float BoardScale() => Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / 720f : 1f);
+    protected virtual float BoardScale() => Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / ReferenceHeight : 1f);
 
     /// <summary>Frees any previous panel, builds the styled panel at scale <paramref name="s"/>
     /// and returns its body. Populate implementations start here.</summary>
     protected VBoxContainer BeginPanel(float s)
     {
         _strip = null;
+        _withheld = null;
         _viewer.Close();
         return RebuildPanel(_center, ref _panel, s);
     }
@@ -287,14 +309,30 @@ public abstract partial class ResultsBoard : Control
     }
 
     /// <summary>Appends the standard non-dismissable Photo Mode · Restart · Exit menu, driven by
-    /// player 1: an ended run is a session-wide decision, and no single player raised the board.</summary>
+    /// player 1. An ended run is a session-wide decision, and no single player raised the board.
+    /// With <see cref="RestartWithheld"/> set the Restart row is left off and that line stands
+    /// over the remaining two.</summary>
     protected void AddStandardMenu(VBoxContainer body, float s)
     {
-        var menu = new BoardMenu(
-            dismissable: false,
-            (BoardMenuItem.Photo, "Photo Mode"),
-            (BoardMenuItem.Restart, "Restart"),
-            (BoardMenuItem.Exit, _exitLabel));
+        BoardMenu menu;
+        if (RestartWithheld is { } line)
+        {
+            _withheld = Label(line, (int)(WithheldFont * s), ContextColor);
+            body.AddChild(Centered(_withheld));
+            menu = new BoardMenu(
+                dismissable: false,
+                (BoardMenuItem.Photo, "Photo Mode"),
+                (BoardMenuItem.Exit, _exitLabel));
+        }
+        else
+        {
+            menu = new BoardMenu(
+                dismissable: false,
+                (BoardMenuItem.Photo, "Photo Mode"),
+                (BoardMenuItem.Restart, "Restart"),
+                (BoardMenuItem.Exit, _exitLabel));
+        }
+
         menu.Activated += OnActivated;
         _host = BoardMenuHost.Build(menu, _inputFor(0), s, legend: true);
         body.AddChild(_host.View);

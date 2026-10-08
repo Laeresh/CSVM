@@ -78,14 +78,14 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "bb7d13a646f961660c219d0058a17f99",
+      "hash": "3237492d016b0adbfb79d610f20367a1",
       "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD, including the heading tape's uncapped ends, hem and rim fade; frame-sensitive 12.21 %, and renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "b389b5a15e7aec35f3b5763e419f1f6c",
+      "hash": "e4984f01bf344dded4d2fe9cc9a2415c",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -99,7 +99,7 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "d1e54445d3a1404cceca9d1a2d1b06e0",
+      "hash": "d9c49e0ad7c005df7564439c8e8b0941",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, the SpeedCue wisps spread across a 16:9 pane, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -120,14 +120,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "1cfac38f9e0120653cdfe9fe2873020b",
+      "hash": "b675686b425eb4587450f5027c58227d",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "521ce4a96eac81a44ee813b9527f79a6",
+      "hash": "a4fd9edfa043e4657538553fb4628218",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
@@ -141,7 +141,7 @@
     {
       "name": "menu-original-flag",
       "frame": 120,
-      "hash": "16b04e00b9988f6b5adf09bd12fc1f4c",
+      "hash": "8aa0b6a60a2699624f53e9f5d04ea746",
       "exercises": "The Original top level: the CrimFlag movie decoded from the install's MPEG-1 as the backmost layer at 250 percent, the logo, frame and every plaque over it, Multiplayer and the join board door included, and the build stamp with its folder icons.",
       "args": ["--menu", "--presentation=original", "--det", "--mute"]
     },
@@ -156,27 +156,27 @@
       "name": "c5-city-night-enhanced",
       "frame": 120,
       "hash": "7fe15f15527dc356857add7c0d5876c2",
-      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, no volumetric bank, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
+      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cloud-deck-enhanced",
       "frame": 120,
-      "hash": "a3639a47f1d8c50c87fcb876d37790ab",
-      "exercises": "Enhanced graphics along C1's 1,208 m deck: the rendered puff sprites on the fvol lattice with sun tint, rim and shadowed cores, the volumetric banks under the cards, TAA; frame-sensitive 5.77 %.",
+      "hash": "7bb034290bb5625a6ca3cffee7995d73",
+      "exercises": "Enhanced graphics along C1's 1,208 m deck: the rendered puff sprites on the fvol lattice with sun tint, rim and shadowed cores over the deck sheet in the zone fog, TAA; frame-sensitive 5.77 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-6144,1208,-6144", "--direction=0,0,-1", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "05acd6d817e878fdd4029e47777ac7b9",
+      "hash": "7534fd874ad6bfa91de257dd7fece809",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light on the ground, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools live, wind streaks, TAA; frame-sensitive 94.08 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "e67ed2aff1760e922bac6ae0a02fafb9",
+      "hash": "366314f638592ae6b7c42f3a97ed10bd",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     }

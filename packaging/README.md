@@ -19,7 +19,7 @@ terminal in the folder holding the zip and run this, with the name replaced by t
 actually have:
 
 ```
-Get-FileHash CSVM-v0.2.0-win64.zip -Algorithm SHA256
+Get-FileHash CSVM-v0.3.0-win64.zip -Algorithm SHA256
 ```
 
 The printed hash must match the one on the release page (upper and lower case do not
@@ -139,6 +139,12 @@ and custom planes are kept outside it, in:
 (paste that into Explorer's address bar). Deleting those two folders removes everything
 CSVM has written; your Crimson Skies install is never modified.
 
+Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
+model. The Controls screen writes those files for you. To edit one by hand, for example to
+set a deadzone, fly two sticks together, or stop a keypad being read as a stick, follow
+<https://github.com/Laeresh/CSVM/blob/main/docs/stick-profiles.md>, which links an example
+file that binds every action.
+
 ## What else is in this folder
 
 - `CSVM.exe` and the `data_CSVM_windows_x86_64` folder beside it are the engine. They
@@ -151,6 +157,8 @@ CSVM has written; your Crimson Skies install is never modified.
   runtime, and the Rust libraries inside `tools\unzbd.exe`. It also carries the notice for
   `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from, and the SIL Open
   Font License for PromptFont, the font the controller button pictures are drawn from.
+- `libwebrtc_native.windows.template_release.x86_64.dll` is the WebRTC library internet games run
+  over, and `LICENSE-webrtc\` holds its licences.
 - `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
   Quote it in a bug report when you are not sure which build you have.
 
@@ -158,7 +166,7 @@ CSVM has written; your Crimson Skies install is never modified.
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by
 Microsoft or Zipper Interactive**. "Crimson Skies" and all related names, marks and
-artwork are the property of their respective owners.
+artwork are the property of their respective owners. Crimson Skies © Microsoft Corporation.
 
 No game content is distributed in this zip. The engine requires, and reads at runtime,
 game files from your own legally-obtained copy of Crimson Skies. Nothing in this zip will

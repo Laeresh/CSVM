@@ -36,7 +36,7 @@ public sealed class ClutterBuilder
     private const string FogLines =
         "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
-        + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
+        + "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);\n";
 
     // The SphericalY pose, single-sourced with every other facade population so the law cannot
     // drift. Emitted into the spherical variant alone; a CylindricalY card poses off its own
@@ -851,7 +851,7 @@ public sealed class ClutterBuilder
                 discard;
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
-            ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
+            ALBEDO = col.rgb{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
         {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}

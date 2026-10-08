@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -203,7 +205,9 @@ internal static class PauseSheetSuites
         + "word for word at its authored points, the remake's photo strip takes the free cell under "
         + "RESTART on a block that stands three across, the environment digit is read rather than assumed "
         + "(loading_i6a puts its second head 40 px left of every other ace dialog's) and "
-        + "CampaignSequence.ChapterNumber inverts every campaign chapter's own folder, and a real "
+        + "CampaignSequence.ChapterNumber inverts every campaign chapter's own folder, every "
+        + "Dogfight's blackboard (each environment and mode the lobby offers) stands its five "
+        + "strips and labels where this sheet does rather than in escape.zrd's two columns, and a real "
         + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all five strips "
         + "and fires the one it was pressed and released on")]
     internal static void InstantActionPauseSheet(TestContext ctx)
@@ -246,6 +250,7 @@ internal static class PauseSheetSuites
         CheckBlackboardArt(ctx, sheets, report);
         CheckFilmedBlackboard(ctx, report);
         CheckEnvironmentIsRead(ctx, report);
+        CheckMultiplayerStrips(ctx, report);
         DriveBlackboardBoard(ctx, report);
 
         ctx.WriteArtifact($"test-pause-sheet-ia.txt", report.ToString());
@@ -511,6 +516,60 @@ internal static class PauseSheetSuites
         ctx.Same(0, CampaignSequence.ChapterNumber("c9"), $"and answers 0 for a code no chapter world carries");
         report.AppendLine(
             $"environment: {odd.State.Key} head2 x={odd.Texts[1].X}, {rest.State.Key} x={rest.Texts[1].X}");
+    }
+
+    // A Dogfight pauses on a blackboard too, so it stands its strips where an Instant Action sheet
+    // does. Its dialog comes out of escape.zrd, whose own block would lay the campaign's two columns
+    // under it.
+    private static void CheckMultiplayerStrips(TestContext ctx, StringBuilder report)
+    {
+        if (Blackboard(ctx, FilmedEnvironment, FilmedType) is not { } ia)
+        {
+            ctx.Check(false, $"{FilmedEnvironment}'s {FilmedType} sheet resolves");
+            return;
+        }
+
+        var modes = new (DogfightMissionType Type, bool Teamed)[]
+        {
+            (DogfightMissionType.Deathmatch, false), (DogfightMissionType.Deathmatch, true),
+            (DogfightMissionType.CaptureTheFlag, false), (DogfightMissionType.ZeppelinVsZeppelin, false),
+        };
+        int offered = 0, sheets = 0, striped = 0, labelled = 0;
+        for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
+        {
+            string chapter = DogfightLobby.ChapterOf(environment);
+            foreach (var mode in modes)
+            {
+                // A greyed row is never flown, and Above the Clouds authors no flag dialog for it.
+                if (!DogfightLobby.Offers(mode.Type, environment))
+                {
+                    continue;
+                }
+
+                offered++;
+                if (LoadScreens.MultiplayerKey(
+                        chapter, mode.Type, mode.Teamed) is not { } key
+                    || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.MessagesPath, key) is not { } sheet)
+                {
+                    ctx.Check(false, $"{chapter}'s Dogfight ({mode}) resolves a multiplayer sheet");
+                    continue;
+                }
+
+                sheets++;
+                bool atStrips = Striped(PauseScreens.For(sheet, PauseReadout.Empty, 0, false));
+                striped += atStrips ? 1 : 0;
+                labelled += string.Join("/", sheet.ButtonLabels) == string.Join("/", ia.ButtonLabels) ? 1 : 0;
+                if (!atStrips)
+                {
+                    report.AppendLine($"  {key}: strips are not the Instant Action block's");
+                }
+            }
+        }
+
+        ctx.Same(offered, sheets, $"every environment and mode the lobby offers resolves a sheet");
+        ctx.Same(sheets, striped, $"every Dogfight sheet stands its five strips where the Instant Action sheet does");
+        ctx.Same(sheets, labelled, $"and labels them as it does ({string.Join("/", ia.ButtonLabels)})");
+        report.AppendLine($"multiplayer: {striped}/{sheets} sheets on the Instant Action strips");
     }
 
     // The real board over a real pause state, on the blackboard sheet: hidden until the pause, the

@@ -347,6 +347,11 @@ internal sealed class FlagRuntime
         var net = _in.Net;
         net.On<FlagTableMessage>((_, table) => TakeTable(table));
         net.On<FlagRequestMessage>(TakeRequest);
+        // Every ask, a take and a home as much as an eject, comes from the machine flying its seat.
+        if (net.IsHost)
+        {
+            net.RequireSeatOwner<FlagRequestMessage>(request => request.Seat);
+        }
     }
 
     // One ask from a seat flown here. The host decides it at once. A guest asks its host, and takes a
@@ -566,8 +571,8 @@ internal sealed class FlagRuntime
         flag.Visible = true;
     }
 
-    // The carrier's name tag, row 198 by the reading pane's side. Team 0 puts the airframe's own
-    // name back once the flag leaves it, as FUN_0049a300 and FUN_0049ab50 restore the pilot's.
+    // The carrier's name tag, row 198 by the reading pane's side. Team 0 clears it once the flag
+    // leaves, and the marker falls back to the callsign, as FUN_0049a300 and FUN_0049ab50 restore it.
     private void Tag(int seat, int team)
     {
         if (seat < 0 || seat >= _in.SeatRigs.Count || _in.SeatRigs[seat].Controller is not { } pilot)

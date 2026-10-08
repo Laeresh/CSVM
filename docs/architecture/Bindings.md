@@ -227,7 +227,15 @@ reinterprets an old save. `Encode` and `Decode` are the token grammar (version 3
 stick hat tokens, the lever row reusing the full-axis token); an older file loads whole, so the
 reader checks no version. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
 Shape, tokens and unreadable rows: [../org/input.md](../org/input.md). `DirectoryOverride` keeps a
-suite off this machine's own keymap.
+suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`. A file that is no JSON object is moved to `.bad`.
+
+## src/Bindings/SnapLookRows.cs
+The original's Views 2 snap-look rows: eight directions round Look Forward, one numpad key each, the
+bottom row looking rearward (`Directions`, X right and Y up or rear). `Compose` folds the held rows
+into the one direction `Flight/Camera/SeatLook.cs` hands the head, each side taking its strongest
+row. `MigrateSaved` rewrites a keymap saved under the earlier four direction rows, where a diagonal
+was one key on two of them: such a key moves to its diagonal row, and a diagonal it leaves empty is
+saved empty rather than given its default.
 
 ## src/Bindings/LaunchBindings.cs
 Where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped
@@ -254,3 +262,13 @@ one and a length, and the static band functions (`GunFire`, `Launch`, `CannonHit
 `Contact`) hold the original's edges. `Overspeed` is the one sustained cue, restarted on a cadence.
 `IRumbleSink` is the unit tests' seam over `Input.StartJoyVibration`; the static `Enabled` is the Game
 Options toggle, held off under `--det`. Every number and why the bearing is dropped: [../org/input.md](../org/input.md).
+
+## src/Bindings/Pads.cs
+Single source of truth for which gamepads exist: every reader goes through it rather than
+`Input.GetConnectedJoypads()`. Owns the phantom-device policy (span every pad, never `pads[0]`),
+`Disabled` (`--no-pads`) and the focus gate that suppresses reads without un-joining anyone.
+`AssignPads` is the launch-time roster split: P2 to P4 take roster POSITIONS in order and P1 gets
+every pad none of them claimed, so a device occupying a position without producing input takes that
+seat and leaves the real pad in P1's pool, flying P1's plane beside P1's own. `LogPads` records the
+roster with position and id separately, which is what makes that mismatch readable afterwards. A
+menu-driven launch binds by device id instead (`Launcher.BindMenuPads`) and so seats no phantom.

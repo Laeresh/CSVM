@@ -26,7 +26,7 @@ public static class BindingLabels
 
     /// <summary>An action's caption: the original's own keybind-page string where it binds that
     /// action. Otherwise it is the enum name with its words separated, so <c>FireRockets</c> reads as
-    /// "Fire Rockets". The throttle lever has a caption of its own. The original's captions read under their category heading, which is why the
+    /// "Fire Rockets". The throttle lever and the look-behind have captions of their own. The original's captions read under their category heading, which is why the
     /// targeting ones carry no "Target" prefix.</summary>
     public static string Name(InputAction action)
     {
@@ -36,6 +36,9 @@ public static class BindingLabels
         // one more way to set the same lever.
         if (action == InputAction.ThrottleLever)
             return "Throttle (lever)";
+        // This port's held look-behind (numpad 0), which the original's Kp2 "Look Back" row is not.
+        if (action == InputAction.LookBack)
+            return "Look Behind (hold)";
 
         string name = action.ToString();
         var text = new StringBuilder(name.Length + 8);
@@ -158,8 +161,15 @@ public static class BindingLabels
         InputAction.ToggleSpyglass => "Toggle Spyglass",
         InputAction.CycleCockpitViews => "Cycle Cockpit Views",
         InputAction.FlybyView => "Access Chase View",
+        InputAction.LookUpLeftRear => "Look Up/Left/Rear",
+        InputAction.LookRear => "Look Back",
+        InputAction.LookUpRightRear => "Look Up/Right/Rear",
+        InputAction.LookLeft => "Look Left",
         InputAction.LookCenter => "Look Forward",
-        InputAction.LookBack => "Look Back",
+        InputAction.LookRight => "Look Right",
+        InputAction.LookUpLeft => "Look Up/Left",
+        InputAction.LookUp => "Look Up",
+        InputAction.LookUpRight => "Look Up/Right",
         InputAction.SnapLookMode => "Access Snap Look Mode",
         InputAction.SmoothLookMode => "Access Smooth Look Mode",
         InputAction.TrackTarget => "Track Target",
@@ -168,6 +178,7 @@ public static class BindingLabels
         InputAction.Pause => "Pause/Quit/Objectives",
         InputAction.ChatEveryone => "Chat to Everyone",
         InputAction.ChatTeam => "Chat to Team",
+        InputAction.DisplayScores => "Display Scores (Multiplayer Only)",
         _ => ThrottleFraction(action),
     };
 

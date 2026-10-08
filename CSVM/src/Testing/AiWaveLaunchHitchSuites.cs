@@ -5,15 +5,17 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.Session.Launch;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -174,7 +176,7 @@ internal static class AiWaveLaunchHitchSuites
             // The load screen, stood in for. A launch orders its generators' aeroplanes, and the
             // screen builds them before the first frame. The window below measures what a launch
             // costs with that build behind the load rather than inside it.
-            GameSession.OrderWaveAirframes(built, defs, templates);
+            OppositionStage.OrderWaveAirframes(built, defs, templates);
             long loadMark = ThreadCpuClock.Now();
             window.Prebuilt = 0;
             while (built.BuildOrderedAirframe())

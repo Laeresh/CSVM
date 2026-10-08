@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -8,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;
@@ -27,10 +29,10 @@ internal static class PlaneWobbleSuites
 
     [Suite("plane-wobble-walk",
         "the overspeed rattle and the nitro engage reach the flown plane node as the original's " +
-        "random walk: cruise short of the authored gate leaves the shake pivot dead still, a dive " +
-        "past it rolls the pivot both ways with a swing amplitude that wanders rather than " +
-        "repeating one envelope, and an engage swings the pivot on the decoded ramp law's own " +
-        "rate, ramping into each turn instead of wrapping like the sawtooth it replaced")]
+        "rendered rotation: cruise short of the authored gate leaves the shake pivot dead still, a " +
+        "dive past it rolls the pivot both ways with a swing amplitude that wanders and pitches " +
+        "and yaws the nose too, the pivot turning by twice the summed block position, and an " +
+        "engage swings the pivot on the decoded ramp law's own rate, moving the nose as well")]
     internal static void PlaneWobbleWalk(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -67,13 +69,16 @@ internal static class PlaneWobbleSuites
                 return;
             }
 
-            // Cruise: nothing else kicks an untouched aeroplane, so the gate is the only reason
-            // the pivot could move, and below it the original's own updater never calls the kicker.
-            var cruise = Drive(rig, at, rated, CruiseRatio, ticks: 60);
-            ctx.Check(cruise.All(r => r == 0f),
-                $"cruise at {CruiseRatio:0.00} of rated max leaves the shake pivot dead still (worst {cruise.Max(Mathf.Abs):E2} rad)");
+            // Flown as a person flies it: the camera blocks are a human pilot's alone, and an AI
+            // rocks to an aishake def instead. Cruise: nothing else kicks an untouched aeroplane, so
+            // the gate is the only reason the pivot could move, and below it nothing kicks.
+            rig.IsHumanPiloted = true;
+            var cruise = Drive(rig, at, rated, CruiseRatio, ticks: 60, out _);
+            ctx.Check(cruise.All(r => r == Vector3.Zero),
+                $"cruise at {CruiseRatio:0.00} of rated max leaves the shake pivot dead still (worst {cruise.Max(r => r.Length()):E2} rad)");
 
-            var dive = Drive(rig, at, rated, DiveRatio, ticks: 300);
+            var diveTurns = Drive(rig, at, rated, DiveRatio, ticks: 300, out float doubling);
+            var dive = diveTurns.Select(r => r.Z).ToList();
             var swings = Swings(dive);
             float peak = dive.Max(Mathf.Abs);
             double mean = swings.Count == 0 ? 0.0 : swings.Average(s => Mathf.Abs(s.Roll));
@@ -86,17 +91,25 @@ internal static class PlaneWobbleSuites
             // amplitude, where a walk re-kicked every tick cannot.
             ctx.Check(mean > 0.0 && spread / mean > 0.15,
                 $"…with a swing amplitude that wanders rather than repeating one envelope (spread/mean {spread / System.Math.Max(mean, 1e-9):0.000})");
+            // A port that rescaled only the roll would leave these two at zero.
+            float divePitch = diveTurns.Max(r => Mathf.Abs(r.X)), diveYaw = diveTurns.Max(r => Mathf.Abs(r.Y));
+            ctx.Check(divePitch > 0f && diveYaw > 0f,
+                $"…and pitches and yaws the nose as well (peak pitch {divePitch:E2}, yaw {diveYaw:E2} rad)");
+            // The pivot's turn over the summed block position, 2 for the original's unhalved
+            // quaternion, 1 for a rotation that read the sum as the angle.
+            ctx.Check(Mathf.Abs(doubling - 2f) < 0.02f,
+                $"…turning the pivot by twice the summed block position (ratio {doubling:0.000})");
 
-            // The engage, flown as a person flies it, back under the speed gate so the nitro
-            // source is the only thing the pivot carries. The dive's block rings on for about a
-            // second after the gate shuts, so this waits it out; reading across it sums two sources.
-            var settle = Drive(rig, at, rated, CruiseRatio, ticks: 180);
-            ctx.Check(settle[^1] == 0f,
-                $"the dive's rattle rings down to rest once the gate shuts (last {settle[^1]:E2} rad)");
-            rig.IsHumanPiloted = true;
+            // The engage, back under the speed gate so the nitro source is the only thing the
+            // pivot carries. The dive's block rings on for about a second after the gate shuts,
+            // so this waits it out; reading across it sums two sources.
+            var settle = Drive(rig, at, rated, CruiseRatio, ticks: 180, out _);
+            ctx.Check(settle[^1] == Vector3.Zero,
+                $"the dive's rattle rings down to rest once the gate shuts (last {settle[^1].Length():E2} rad)");
             rig.Nitro.Installed = true;
             rig.AutoNitro = true;
-            var engage = Drive(rig, at, rated, CruiseRatio, ticks: 180);
+            var engageTurns = Drive(rig, at, rated, CruiseRatio, ticks: 180, out _);
+            var engage = engageTurns.Select(r => r.Z).ToList();
             var engageSwings = Swings(engage);
             float engagePeak = engage.Max(Mathf.Abs);
             float biggestStep = 0f;
@@ -123,6 +136,9 @@ internal static class PlaneWobbleSuites
                 ctx.Check(gaps.Count >= 4 && gaps.All(g => g is >= 8 and <= 11),
                     $"…at the ramp law's own rate rather than the authored 4 Hz (gaps [{string.Join(",", gaps)}])");
             }
+            float engageNose = engageTurns.Max(r => Mathf.Max(Mathf.Abs(r.X), Mathf.Abs(r.Y)));
+            ctx.Check(engageNose > 0f,
+                $"…and the engage moves the nose too (peak pitch or yaw {engageNose:E2} rad)");
         }
         finally
         {
@@ -132,19 +148,32 @@ internal static class PlaneWobbleSuites
         }
     }
 
-    // Flies the rig at a fixed multiple of its rated max, one warp per tick so the speed read the
-    // flight step makes is the one this arm asked for rather than whatever the plant drifted to,
-    // and collects the roll the step wrote to the shake pivot.
-    private static List<float> Drive(FlightController rig, Vector3 at, float rated, float ratio, int ticks)
+    // Flies the rig at a fixed multiple of its rated max and collects the pivot's rotation. One
+    // warp per tick makes the flight step read the speed this arm asked for. The doubling out is
+    // the pivot's turn angle over the summed block position, on the tick that summed the most.
+    private static List<Vector3> Drive(FlightController rig, Vector3 at, float rated, float ratio, int ticks,
+        out float doubling)
     {
-        var rolls = new List<float>(ticks);
+        var turns = new List<Vector3>(ticks);
+        float biggestSum = 0f;
+        doubling = 0f;
         for (int i = 0; i < ticks; i++)
         {
             rig.WarpTo(at, 0f, rated * ratio);
             rig.SimStep(Dt);
-            rolls.Add(rig.ShakePivot?.Rotation.Z ?? 0f);
+            var pivot = rig.ShakePivot?.Basis ?? Basis.Identity;
+            turns.Add(rig.ShakePivot?.Rotation ?? Vector3.Zero);
+            float sum = rig.Shake?.Sum.Length() ?? 0f;
+            if (sum > biggestSum)
+            {
+                biggestSum = sum;
+                // The skew half of a rotation is sin(angle) times its axis, exact where acos of
+                // the trace loses the small angles a wobble turns through.
+                var skew = new Vector3(pivot.Y.Z - pivot.Z.Y, pivot.Z.X - pivot.X.Z, pivot.X.Y - pivot.Y.X) * 0.5f;
+                doubling = Mathf.Asin(Mathf.Min(1f, skew.Length())) / sum;
+            }
         }
-        return rolls;
+        return turns;
     }
 
     // Every turning point of a roll trace, with the tick it turned on: swing amplitude and swing

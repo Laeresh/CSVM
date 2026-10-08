@@ -185,6 +185,26 @@ public class VersusMatchTests
         Assert.NotEqual(1, order[1].Rank); // the sole leader, not a shared rank 1
     }
 
+    /// <summary>A guest reads the host's clock once every sixty steps and shows its whole seconds.
+    /// Over ten minutes of fixed steps the readout must fall by exactly one each time. A clock
+    /// summed in float drifts across a whole second and holds one number.</summary>
+    [Fact]
+    public void TheRemainingTimeReadEverySixtyStepsFallsOneWholeSecondEachRead()
+    {
+        var match = new VersusMatch(playerCount: 2, killTarget: 0, timeLimit: 600f);
+        int? shown = null;
+        for (int step = 1; step < 36000; step++)
+        {
+            match.Advance(1f / 60f);
+            if (step % 60 != 1)
+                continue;
+            int now = (int)System.Math.Ceiling(match.TimeRemaining);
+            if (shown is int before)
+                Assert.Equal(before - 1, now);
+            shown = now;
+        }
+    }
+
     [Fact]
     public void EqualTopKillsAtTimeOutIsADraw()
     {

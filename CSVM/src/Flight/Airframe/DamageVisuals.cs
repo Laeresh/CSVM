@@ -397,8 +397,8 @@ public sealed class DamageVisuals
         }
         else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
         {
-            // The per-impact spark burst; see docs/formats/vehicle.md for
-            // random_gun_impact's panel pick. Health-gated like every other entry.
+            // The Devastator's first-damage spark at its pdpN panels, once per zone and never per
+            // impact. The executable runs it (docs/org/vehicleDamage.md, "The first-damage spark shim").
             PlayStage(anim, partName, healthFraction);
         }
     }

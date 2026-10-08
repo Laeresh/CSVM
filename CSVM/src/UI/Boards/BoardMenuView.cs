@@ -15,10 +15,12 @@ namespace CSVM.UI.Boards;
 /// </summary>
 public sealed partial class BoardMenuView : VBoxContainer
 {
-    // Base metrics at 720p, matching the boards' own row/footer sizes. All TUNE.
-    private const int RowFont = 20;
-    private const int LegendFont = 15;
+    // The legend's gap between hints at the boards' 720p reference. TUNE.
     private const float LegendGap = 28f;
+
+    // The rows' and the legend's sizes, chrome type scale rungs at the same reference.
+    private static readonly float RowFont = ChromeType.InReference(ChromeSize.Body, ResultsBoard.ReferenceHeight);
+    private static readonly float LegendFont = ChromeType.InReference(ChromeSize.Caption, ResultsBoard.ReferenceHeight);
 
     private static readonly Color RowColor = new(0.55f, 0.62f, 0.72f);
     private static readonly Color RowFocusColor = new(1f, 0.86f, 0.38f);

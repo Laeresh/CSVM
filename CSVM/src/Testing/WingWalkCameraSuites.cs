@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -11,7 +12,7 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
-using CSVM.UI.Screens;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -179,8 +180,6 @@ internal static class WingWalkCameraSuites
                 RigCount = rigs.Count,
                 Rigs = rigs,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new MenuInput(),
-                ExitSession = () => { },
             }, new WingWalkStarts(near));
     }
 

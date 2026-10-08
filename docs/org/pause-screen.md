@@ -373,14 +373,14 @@ released.
 
 ## Where CSVM differs
 
-`UI/Boards/PauseScreens.cs` composes the pause sheet at its authored coordinates and
+`UI/Screens/PauseScreens.cs` composes the pause sheet at its authored coordinates and
 `UI/Menu/Original/OriginalPauseBoard.cs` hangs it over the flown world in the Original presentation; the
 Built-in presentation keeps `UI/Screens/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` reads `escape.zrd`,
 its Instant Action twin and the load screen's `Loading.zrd`, and `UI/Overlays/MissionMap.cs` is the one map
 drawer this screen shares with the campaign briefing and the load screen, which is where the world
 window and the pin placement live.
 
-**An Instant Action sortie pauses on its own blackboard.** `Session/Launch/GameSession.cs` keys the sheet on
+**An Instant Action sortie pauses on its own blackboard.** `Launch/SessionBoards.cs` keys the sheet on
 the sortie's chapter, through `Mech3/CampaignSequence.cs`'s `ChapterNumber`, and its mission type's
 own letter, reads it out of `ia_escape.zrd`, and hands `UI/Menu/Original/OriginalPauseBoard.cs` a board written
 in `UI/Boards/BoardPalette.cs`'s `EscapeBlackboard`, the load screen's chalk with the near-black label inks
@@ -394,13 +394,16 @@ describes, so it keeps the Built-in board, the same split the load screen makes.
 `--menu=pauseboard-ia` door composes one with no sortie behind it.
 
 **A Dogfight pauses on its mode's briefing, which the original never shows there.**
-`Session/Launch/GameSession.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s
+`Launch/SessionBoards.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s
 `MultiplayerKey`, from the chapter, the type and whether any seat is on a lobby team) and
-`UI/Boards/PauseScreens.cs`'s `PauseSheet.LoadMultiplayer` reads that dialog out of `escape.zrd`,
-with that file's strips and the blackboard inks. The briefing is chosen over the original's bare
-frame because `escape.zrd` authors it. Above the Clouds is keyed 3, which `escape.zrd` numbers 5,
-so that row takes `Loading.zrd`'s own dialog instead; the composition leaves out any cycling
-element, since a halted mission has no load for the propeller to turn for.
+`UI/Screens/PauseScreens.cs`'s `PauseSheet.LoadMultiplayer` reads that dialog out of `escape.zrd`
+with the blackboard inks. The briefing is chosen over the original's bare frame because
+`escape.zrd` authors it. Above the Clouds is keyed 3, which `escape.zrd` numbers 5, so that row
+takes `Loading.zrd`'s own dialog instead; the composition leaves out any cycling element, since a
+halted mission has no load for the propeller to turn for. The strips and their labels are
+`ia_escape.zrd`'s, not `escape.zrd`'s: the sheet is a blackboard, and a Dogfight pause stands its
+buttons where an Instant Action pause does rather than in the campaign's two columns. The
+`--menu=pauseboard-mp` door composes one with no match behind it.
 
 **The three authored faces meet one of ours.** The extraction ships no menu typeface, so
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette
@@ -450,14 +453,16 @@ compose, so the Original strip is drawn and unbound and Built-in's row is left o
 
 **Photo mode is a fifth strip the original does not author.** It is this port's own feature, so the
 sheet stands it in the authored plates and label offset the block's own RESUME carries, between
-RESUME and PREFERENCES in the order a cursor walks, and the four authored strips keep their own
+RESUME and RESTART in the sheet's row order, and the four authored strips keep their own
 points. Where it stands is read off the block rather than fixed: the campaign block's two columns
 of two leave a 128-pixel channel between them on RESUME's row, which the 132-pixel plate takes with
 two columns of overlap at each neighbour's rounded end, while `ia_escape.zrd`'s three across leave
 no channel (their midpoint is RESTART's own point) and the strip takes the free cell under RESTART
 instead, level with MAINMENU. The rule is which of the two candidate points covers less authored
-plate. The hit test answers the earlier row in walk order for a column two strips share. Built-in's
-board keeps its own Photo Mode row.
+plate. The hit test answers the earlier row for a column two strips share. The pad and arrow
+cursor does not walk the row order: both blocks stand as a grid, so a press moves to the strip
+drawn in that direction, the nearest in the same column or row band, wrapping to the band's far
+end. Built-in's board keeps its own Photo Mode row.
 
 **The progress bar in a campaign dialog is not drawn.** Every campaign `escape.zrd` dialog carries a
 `PROGRESS` entry at `[90, 548]` copied from its `Loading.zrd` sibling, and `FUN_004a0d20` binds no

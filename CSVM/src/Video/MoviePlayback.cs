@@ -3,12 +3,12 @@ namespace CSVM.Video;
 /// <summary>
 /// One movie playing on a clock: an <see cref="MpegMovie"/>, the elapsed time it has been played
 /// for, and the picture due now as RGBA. Which picture that is comes from the frames' own
-/// presentation timestamps, so a file plays at the rate its headers declare and no rate is
-/// written down here; two of the ten cinemas differ from the other eight.
+/// presentation timestamps, so a file plays at the rate its headers declare. No rate is written
+/// down here; two of the ten cinemas differ from the other eight.
 /// A play count of zero plays endlessly, which is how the layout's <c>Loops</c> field spells a
-/// background, and every pass after the first restarts through <see cref="MpegMovie.Rewind"/>.
+/// background. Every pass after the first restarts through <see cref="MpegMovie.Rewind"/>.
 /// Nothing here touches the engine, so the clock and the loop decision run in a plain unit test;
-/// the texture they feed is <c>CSVM.UI.Screens.MovieSurface</c>.
+/// the texture they feed is <c>CSVM.UI.Boards.MovieSurface</c>.
 /// </summary>
 public sealed class MoviePlayback
 {

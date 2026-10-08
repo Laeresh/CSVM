@@ -9,6 +9,7 @@ using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -147,6 +148,10 @@ public sealed class CampaignDirector
     // before it. Kept so a re-bind neither chains to itself nor drops the rest of the chain.
     private Func<int, string?, string?, bool>? _callbackHost;
     private Func<int, string?, string?, bool>? _innerCallbackHost;
+
+    // TraceObjectives' own state: its step count and whether the reference lines went out.
+    private int _traceTick;
+    private bool _traceRefsDone;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
@@ -300,7 +305,7 @@ public sealed class CampaignDirector
 
         if (MissionFor(zrdrPath, seq) is not { } mission || mission.ChapterFolder.Length == 0)
         {
-            GD.PushWarning($"--campaign: seq {seq} is not in cm_sequence, flying the CLI chapter instead");
+            Log.Warn("core", $"--campaign: seq {seq} is not in cm_sequence, flying the CLI chapter instead");
             return spec;
         }
 
@@ -325,7 +330,7 @@ public sealed class CampaignDirector
 
         int at = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
         var plane = profile.Planes[at];
-        string node = UI.Hangar.PlanePickerRoster.AirframeNode(plane.Airframe);
+        string node = Flight.Hangar.StockAirframes.Node(plane.Airframe);
         // A named entry 0 wins whether it came from --plane= or from the launchscreen's own seat,
         // which is already this node. Comparing the node rather than tracking where the name came
         // from is what keeps a cabin launch silent: it seated the same aeroplane.
@@ -333,9 +338,7 @@ public sealed class CampaignDirector
         {
             if (!string.Equals(spec.PlaneNames[0], node, StringComparison.OrdinalIgnoreCase))
             {
-                GD.PushWarning($"--plane={spec.PlaneNames[0]} overrides the seated aircraft: " +
-                               $"'{profile.Name}' flies \"{plane.Name}\" ({node}) at story position " +
-                               $"{spec.CampaignMissionSeq}, and it is flying stock {spec.PlaneNames[0]} instead");
+                Log.Warn("core", $"--plane={spec.PlaneNames[0]} overrides the seated aircraft: '{profile.Name}' flies \"{plane.Name}\" ({node}) at story position {spec.CampaignMissionSeq}, and it is flying stock {spec.PlaneNames[0]} instead");
             }
 
             return spec;
@@ -391,8 +394,7 @@ public sealed class CampaignDirector
 
         if ((guest ? CampaignProfileDef.NewProfile(CoopGuestPilot) : store!.Load(spec.CampaignProfile)) is not { } profile)
         {
-            GD.PushWarning($"--campaign={spec.CampaignProfile}: " +
-                           $"{store!.LoadProblem(spec.CampaignProfile)}, flying without a mission");
+            Log.Warn("core", $"--campaign={spec.CampaignProfile}: {store!.LoadProblem(spec.CampaignProfile)}, flying without a mission");
             return null;
         }
 
@@ -510,7 +512,7 @@ public sealed class CampaignDirector
         }
         catch (Exception e)
         {
-            GD.PushWarning($"campaign: cannot read the roster ({e.Message}): no roster spawned");
+            Log.Warn("core", $"campaign: cannot read the roster ({e.Message}): no roster spawned");
             return "";
         }
 
@@ -797,6 +799,97 @@ public sealed class CampaignDirector
         }
         RegisterObjectiveMarker(launchName, template);
         Log.Info("core", $"campaign: launch '{launchName}' ({template.Name}) booked into the roster team={template.Team?.ToString() ?? "-"} group={template.Group}");
+    }
+
+    /// <summary><c>--wake-generators</c>: the script's whole <c>WAKEUP_GENERATOR</c> credit per
+    /// generator host, granted at build, the headless stand-in for playing up to each such
+    /// objective.</summary>
+    internal void WakeGenerators(AiGeneratorRuntime generators)
+    {
+        var wakeupCredits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var objective in Script.Objectives)
+        {
+            if (objective.WakeupGenerator is { } wakeup)
+            {
+                wakeupCredits.TryGetValue(wakeup.Name, out int sum);
+                wakeupCredits[wakeup.Name] = sum + wakeup.Count;
+            }
+        }
+
+        foreach (var (host, credit) in wakeupCredits)
+        {
+            int fed = generators.GrantWaveCapacity(host, credit);
+            Log.Info("world", $"egen: '{host}' woken by --wake-generators: +{credit} credit (granted {fed}, stand-in for the script's WAKEUP_GENERATOR)");
+        }
+    }
+
+    /// <summary>The objective graph's trace on the parent-driven clock. Every TRAVELERS reference is
+    /// resolved once. Then each such objective's state and the player's distance to it go out once
+    /// every 60 steps. Quiet before <see cref="Attach"/>.</summary>
+    internal void TraceObjectives(FlightController? player)
+    {
+        if (Graph is not { } graph)
+        {
+            return;
+        }
+
+        var runtime = _world?.Runtime;
+        if (!_traceRefsDone)
+        {
+            _traceRefsDone = true;
+            foreach (var def in Script.Objectives)
+            {
+                if (def.Travelers is not { } spec)
+                {
+                    continue;
+                }
+
+                string where;
+                if (spec.WherePoint is { } pt)
+                {
+                    where = Log.Format($"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})");
+                }
+                else
+                {
+                    var found = runtime?.FindNodes(spec.WhereNode ?? "");
+                    where = found is { Count: > 0 }
+                        ? Log.Format($"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}")
+                        : $"NODE '{spec.WhereNode}' UNRESOLVED";
+                }
+
+                Log.Info("core", $"DIAGREF OBJ{def.Number} id={def.Identity?.Class.ToString() ?? "-"}/{def.Identity?.Priority.ToString() ?? "-"} dormant={def.BeginDormant}:{def.DormantUntil} who='{spec.Who}' r={spec.Radius:0} {where}");
+            }
+        }
+
+        if ((_traceTick++ % 60) != 0)
+        {
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"DIAG t={_traceTick / 60}s ");
+        if (player != null)
+        {
+            sb.Append(Log.Format($"player=({player.WorldPosition.X:0},{player.WorldPosition.Y:0},{player.WorldPosition.Z:0}) "));
+        }
+
+        foreach (var def in Script.Objectives)
+        {
+            if (def.Travelers is not { } spec)
+            {
+                continue;
+            }
+
+            Vector3? refPos = spec.WherePoint is { } pt
+                ? new Vector3(pt[0], pt[1], pt[2])
+                : runtime?.FindNodes(spec.WhereNode ?? "") is { Count: > 0 } f
+                    ? f[0].GlobalPosition
+                    : null;
+            string d = refPos is { } r && player != null ? Log.Format($"{player.WorldPosition.DistanceTo(r):0}") : "?";
+            sb.Append(Log.Format($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} "));
+        }
+
+        Log.Info("core", $"{sb}");
     }
 
     /// <summary>Makes every later <c>WARP_VEHICLE</c> wait for the host's draw instead of drawing
@@ -1096,12 +1189,12 @@ public sealed class CampaignDirector
         int at = _profile.WingmanPlane;
         if (at < 0 || at >= _profile.Planes.Count)
         {
-            GD.PushWarning($"campaign: wingman plane index {at} is not one '{_profile.Name}' owns, no wingman fit bound");
+            Log.Warn("core", $"campaign: wingman plane index {at} is not one '{_profile.Name}' owns, no wingman fit bound");
             return;
         }
 
         var plane = _profile.Planes[at];
-        WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(plane.Airframe);
+        WingmanNode = Flight.Hangar.StockAirframes.Node(plane.Airframe);
         WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
         Log.Info("core", $"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
     }
@@ -1118,9 +1211,7 @@ public sealed class CampaignDirector
 
         if (told is not { } wingman)
         {
-            GD.PushWarning($"campaign: the co-op host named no aeroplane for {WingmanName}; it flies its " +
-                         "block's own def here, which need not match the host's");
-            Log.Warn("core", $"campaign: the co-op host named no aeroplane for {WingmanName}, flying its block's own def");
+            Log.Warn("core", $"campaign: the co-op host named no aeroplane for {WingmanName}, flying its block's own def, which need not match the host's");
             return;
         }
 
@@ -1130,7 +1221,7 @@ public sealed class CampaignDirector
             return;
         }
 
-        WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(wingman.Airframe);
+        WingmanNode = Flight.Hangar.StockAirframes.Node(wingman.Airframe);
         // A stock fit reads back as null from the wire, and as an empty choice from a profile.
         // The empty choice keeps the two machines' spawns identical.
         WingmanFit = CampaignLoadout.For(wingman.Fit, StockLoadouts.Load()) ?? new LoadoutChoice();
@@ -1227,7 +1318,7 @@ public sealed class CampaignDirector
             return;
         }
 
-        if (UI.Hangar.PlanePickerRoster.AirframeOf(victim.PlaneNode) is not { } airframe)
+        if (Flight.Hangar.StockAirframes.IdOf(victim.PlaneNode) is not { } airframe)
         {
             return;
         }

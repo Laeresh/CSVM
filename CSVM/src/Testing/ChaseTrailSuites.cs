@@ -6,14 +6,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The enhanced presentation's two chase cues, driven straight through
-/// <see cref="CameraController"/> rather than through a built world: the lagged attitude that
-/// leaves the camera trailing the nose through a roll before it springs back, and the speed
-/// widening of the external FOV. The faithful arm is the reason this suite exists: the same
-/// scripted roll is flown with and without the host's per-frame cue step under
-/// <c>--graphics=original</c>, and the two camera poses must agree to the bit, since every pinned
-/// golden is that presentation's own image. Decode of the camera the cues sit beside:
-/// docs/org/cameraViews.md.</summary>
+/// <summary>How the chase camera trails a roll in each presentation, driven straight through
+/// <see cref="CameraController"/> rather than through a built world. Both presentations take the
+/// decoded <c>pos_catch_up</c>/<c>look_catch_up</c> ease, so each lag is read against that law,
+/// beside the enhanced widening of the external FOV. The faithful roll is also flown without the
+/// host's cue step. The two poses must agree to the bit, since every pinned golden is that
+/// presentation's image. Decode: docs/org/cameraViews.md, "The chase rig".</summary>
 internal static class ChaseTrailSuites
 {
     private const float Dt = 1f / 60f;
@@ -33,20 +31,19 @@ internal static class ChaseTrailSuites
     private const float RatedMaxFrac = 1f;
     private const float CruiseFrac = 0.6f;
 
-    // Where the settled pose has to be reached to: the position catch-up leaves under a
-    // thousandth of the swing after two seconds, so anything above this is a cue that never sprang
-    // back.
+    // Where the settled pose has to be reached to. The slower faithful catch-up leaves under a
+    // hundredth of its lag after two seconds, so more is a camera that never sprang back.
     private const float SettledToleranceDeg = 0.5f;
 
-    // How much further the enhanced camera must trail than the faithful one at the end of the
-    // roll. A roll about the nose swings the chase offset by the roll rate times the sine of its
-    // own elevation, so the two read about 2.8° and 8.3°; half that gap is a floor no rounding
-    // reaches and no disabled lag passes.
-    private const float TrailMarginDeg = 3f;
+    // How close the measured lags must sit to the ones the decoded ease predicts. The offset lag
+    // reads about 4.1° and the aim about 21.7°. An exponential fraction in place of the linear one
+    // reads 0.07° further. A 4/s attitude lag in place of the ease reads 1.3° nearer, and one
+    // stacked on it degrees further. A hundredth therefore separates every wrong law from the right one.
+    private const float LawToleranceDeg = 0.01f;
 
     /// <summary>Flies one scripted roll per presentation and reads the camera it left.</summary>
     [Suite("chase-trail",
-        "the enhanced chase cues: a roll leaves the camera trailing the aircraft's nose and it springs back to the settled pose, the external FOV widens toward the airframe's rated max and is untouched at cruise, and under the faithful presentation the same scripted roll writes the same camera pose and FOV to the bit whether or not the host steps the cues")]
+        "the chase camera's trail through a roll: both presentations ease the offset and aim at camparam's pos_catch_up and look_catch_up scaled by the rig's swing factor, the enhanced camera with no lag of its own in place of that ease or on top of it, each lag matching what the decoded law predicts, and both spring back to the settled pose; the external FOV widens toward the airframe's rated max under Enhanced alone and is untouched at cruise, and under the faithful presentation the same scripted roll writes the same camera pose and FOV to the bit whether or not the host steps the cues")]
     internal static void ChaseTrail(TestContext ctx)
     {
         bool wasEnhanced = GraphicsMode.Enhanced;
@@ -57,8 +54,8 @@ internal static class ChaseTrailSuites
             var unstepped = Fly(ctx, GraphicsMode.Default, stepCues: false, report);
             var enhanced = Fly(ctx, GraphicsMode.EnhancedWord, stepCues: true, report);
 
-            // The faithful path: the cue step is the only new call on it, so the pose it leaves
-            // must be the pose the pre-change order left, frame for frame and bit for bit.
+            // The faithful path: the cue step is its only extra call. So the stepped pose must equal
+            // the unstepped pose, frame for frame and bit for bit.
             int moved = 0;
             for (int i = 0; i < stepped.Poses.Count; i++)
             {
@@ -73,8 +70,13 @@ internal static class ChaseTrailSuites
                 && stepped.SettledFov == stepped.BaseFov,
                 $"and the faithful external FOV is the decoded base angle ({stepped.SettledFov:0.0000}° against {stepped.BaseFov:0.0000}°)");
 
-            // The teeth on the check above: the enhanced arm has to move the same poses, or an
-            // arm that did nothing at all would pass every line here.
+            // The teeth on the check above: the roll has to move the pose at all. A camera that
+            // never followed the aeroplane would pass it.
+            ctx.Check(stepped.Poses[0] != stepped.Poses[^1],
+                $"while the roll itself moves the faithful pose across those {stepped.Poses.Count} frames");
+
+            // Enhanced adds no lag of its own, so its pose is the faithful one frame for frame.
+            // The widening it does add is a FOV, which the transform does not carry.
             int enhancedMoved = 0;
             for (int i = 0; i < stepped.Poses.Count; i++)
             {
@@ -83,12 +85,23 @@ internal static class ChaseTrailSuites
                     enhancedMoved++;
                 }
             }
-            ctx.Check(enhancedMoved > 0,
-                $"while the enhanced presentation moves the pose on {enhancedMoved} of those frames");
+            ctx.Same(0, enhancedMoved,
+                $"frames of the roll whose camera pose the enhanced presentation moved off the faithful one, out of {stepped.Poses.Count}");
 
-            // The cue itself: trailing through the roll, settled after it.
-            ctx.Check(enhanced.RolledLagDeg > stepped.RolledLagDeg + TrailMarginDeg,
-                $"the enhanced camera trails the nose through the roll by {enhanced.RolledLagDeg:0.#}°, against the faithful camera's {stepped.RolledLagDeg:0.#}°");
+            // Both presentations trail at the decoded law and no other: the catch-up rates times
+            // the swing factor. Nothing stands in place of that ease or on top of it.
+            var cam = new CamParams();
+            float scale = CameraController.CatchUpScale(
+                CameraController.AuthoredRig(0f, 0f, cam.ThirdpHeight, cam.ThirdpPitchRad).Offset);
+            float posLaw = PredictedLagDeg(Mathf.Min(cam.PosCatchUp * scale * Dt, 1f), stepped.SettledDir);
+            float lookLaw = PredictedLagDeg(Mathf.Min(cam.LookCatchUp * scale * Dt, 1f), null);
+            ctx.Check(Mathf.Abs(stepped.RolledLagDeg - posLaw) < LawToleranceDeg,
+                $"the faithful camera's offset trails the roll by {stepped.RolledLagDeg:0.###}°, the decoded pos_catch_up {cam.PosCatchUp:0.#}/s x {scale:0.####} predicting {posLaw:0.###}°");
+            ctx.Check(Mathf.Abs(stepped.RolledAimLagDeg - lookLaw) < LawToleranceDeg,
+                $"and its aim by {stepped.RolledAimLagDeg:0.###}°, the decoded look_catch_up {cam.LookCatchUp:0.#}/s x {scale:0.####} predicting {lookLaw:0.###}°");
+            ctx.Check(Mathf.Abs(enhanced.RolledLagDeg - posLaw) < LawToleranceDeg
+                && Mathf.Abs(enhanced.RolledAimLagDeg - lookLaw) < LawToleranceDeg,
+                $"the enhanced camera trails by {enhanced.RolledLagDeg:0.###}° offset and {enhanced.RolledAimLagDeg:0.###}° aim, the same decoded ease predicting {posLaw:0.###}° and {lookLaw:0.###}°");
             ctx.Check(enhanced.HalfwayLagDeg < enhanced.RolledLagDeg
                 && enhanced.SettledLagDeg < enhanced.HalfwayLagDeg,
                 $"and converges once the roll stops ({enhanced.RolledLagDeg:0.#}° to {enhanced.HalfwayLagDeg:0.#}° to {enhanced.SettledLagDeg:0.###}°)");
@@ -139,6 +152,8 @@ internal static class ChaseTrailSuites
             // path rather than restated here, so the trail is measured against the camera's own
             // idea of where it belongs.
             var settledDir = camera.Position.Normalized();
+            var settledAim = camera.Basis;
+            sortie.SettledDir = settledDir;
 
             for (int i = 1; i <= RollFrames; i++)
             {
@@ -147,6 +162,7 @@ internal static class ChaseTrailSuites
                 sortie.Poses.Add(camera.Transform);
             }
             sortie.RolledLagDeg = LagDeg(camera, attitude, settledDir);
+            sortie.RolledAimLagDeg = TurnDeg((attitude * settledAim).Inverse() * camera.Basis);
             sortie.RatedMaxFov = camera.Fov;
 
             for (int i = 1; i <= HoldFrames; i++)
@@ -166,7 +182,7 @@ internal static class ChaseTrailSuites
             cam.CrashView(Vector3.Zero, -attitude.Z);
             sortie.CrashCutFov = camera.Fov;
 
-            report.AppendLine($"{mode} cues={stepCues}: rolled {sortie.RolledLagDeg:0.##}°, holding {sortie.HalfwayLagDeg:0.##}°, settled {sortie.SettledLagDeg:0.####}°, fov base {sortie.BaseFov:0.0000}° rated-max {sortie.RatedMaxFov:0.0000}° cruise {sortie.CruiseFov:0.0000}° crash {sortie.CrashCutFov:0.0000}°");
+            report.AppendLine($"{mode} cues={stepCues}: rolled {sortie.RolledLagDeg:0.####}° (aim {sortie.RolledAimLagDeg:0.####}°), holding {sortie.HalfwayLagDeg:0.##}°, settled {sortie.SettledLagDeg:0.####}°, fov base {sortie.BaseFov:0.0000}° rated-max {sortie.RatedMaxFov:0.0000}° cruise {sortie.CruiseFov:0.0000}° crash {sortie.CrashCutFov:0.0000}°");
             return sortie;
         }
         finally
@@ -180,7 +196,7 @@ internal static class ChaseTrailSuites
     {
         if (stepCues)
         {
-            cam.StepEnhancedCues(Dt, attitude, speedFrac);
+            cam.StepEnhancedCues(speedFrac);
         }
         cam.RestoreExternalFov();
         cam.Chase(Dt, Vector3.Zero, attitude);
@@ -190,13 +206,38 @@ internal static class ChaseTrailSuites
     private static float LagDeg(Camera3D camera, Basis attitude, Vector3 settledDir) =>
         Mathf.RadToDeg(camera.Position.Normalized().AngleTo(attitude * settledDir));
 
+    // The angle a basis turns through, in degrees.
+    private static float TurnDeg(Basis b) =>
+        Mathf.RadToDeg(2f * Mathf.Acos(Mathf.Min(1f, Mathf.Abs(b.GetRotationQuaternion().W))));
+
+    // The lag a frame eased by `fraction` a step leaves behind the scripted roll, from the law alone.
+    // The frame and the roll share one axis, so each step closes that fraction of the angle gap.
+    // With a direction it returns how far that direction swings; without, the frame's own turn.
+    private static float PredictedLagDeg(float fraction, Vector3? dir)
+    {
+        float step = Mathf.DegToRad(RollRateDeg) * Dt, frame = 0f, roll = 0f;
+        for (int i = 1; i <= RollFrames; i++)
+        {
+            roll = step * i;
+            frame += fraction * (roll - frame);
+        }
+        float lag = roll - frame;
+        return dir is { } d
+            ? Mathf.RadToDeg(d.AngleTo(new Basis(Vector3.Forward, lag) * d))
+            : Mathf.RadToDeg(lag);
+    }
+
     private sealed class Sortie
     {
         public List<Transform3D> Poses { get; } = new List<Transform3D>();
 
         public float BaseFov { get; init; }
 
+        public Vector3 SettledDir { get; set; }
+
         public float RolledLagDeg { get; set; }
+
+        public float RolledAimLagDeg { get; set; }
 
         public float HalfwayLagDeg { get; set; }
 

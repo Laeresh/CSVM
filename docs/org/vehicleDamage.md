@@ -342,7 +342,7 @@ Two consequences for a per-part list. Each part carries its own copy of a shared
 slot, so an entry authored on all four player zones fires up to four times over a flight, once as
 each zone first crosses. And because the fraction is health-only while `FUN_004b7f80` blocks health
 damage outright until a part's armour is spent, a fully-armoured part crosses nothing at all: even a
-0.99 entry waits for the armour pool. Decoded 2026-08-15 (`BL-297`).
+0.99 entry waits for the armour pool.
 
 ### Which airframe a stage's anim binds to
 
@@ -405,7 +405,8 @@ subtree (inst`+0x6c`), the context node (inst`+0x48`), the anim's two local tabl
 airframe resolves to the same node whichever context started the anim, because a miss in the context
 subtree falls through to the global lookup. The `pdpN` panel nodes are unique, so a stage naming
 `pdp1` sparks at `pdp1` regardless of which part's list started it. There is no part-relative
-retarget on this path. Decoded 2026-08-15 (`BL-297`).
+retarget on this path. The one spark stage on this path is decoded below, "The first-damage spark
+shim".
 
 A missing anchor is a **soft** failure, unlike a missing root. When a node reference resolves to
 zero after the whole chain, `FUN_00521180` logs the same `0x00634220` message, stores zero in the
@@ -416,6 +417,43 @@ with a zero pointer leaves `EAX` zero at `0x004e8277` and `FUN_00550370` writes 
 puffer's parent slot `+0x74`. Combined with the global by-name fallback above, an anchor absent from
 the airframe that is playing the anim binds to any node of that name anywhere in the loaded scene
 before it reaches the NULL case. Decoded 2026-08-16 (`BL-385`).
+
+### The first-damage spark shim
+
+The Devastator's four per-part `[0.99, <part>_damage_effects]` entries are the only per-part stage
+that sparks, and the executable runs them. Each link of the chain, in order:
+
+1. **The entry resolves.** `FUN_00464680`, the mission-data load, reads `anim.zrd` (`FUN_005230d0`)
+   before the player globals reader `FUN_004735b0`, which parses `vehicle.zrd` through
+   `FUN_00479240`. That parser reads the per-part `injure_anims` key (`0x00627dc4`, at `0x004796a5`)
+   and resolves each anim name with `FUN_00523820` (`0x00479769`), a by-name scan of the global
+   animation array that skips state-5 records, so the shim's definition is found.
+2. **The context is zero.** The same parser writes entry `+0x14`, the context `FUN_004b3d70` passes,
+   from a local held at zero (`0x0047980f`), and `FUN_00475820` copies the def's parts into the
+   instance's `+0x9c` list (a later writer of the slot was not searched for). With a zero anchor `FUN_004ed8c0` never calls the re-anchor `FUN_00521180`, so the
+   shim plays on the bindings it got at load.
+3. **The shim calls `random_gun_impact` with a zero anchor too** (`0x004eb53d`), and the `WITH_NODE`
+   site it hands each `yellow_sparks_follow` call is read from `random_gun_impact`'s own node table
+   (`0x004eb44b`–`0x004eb451`), so `pdp1`/`pdp2`/`pdp4` are whatever that definition bound at load.
+4. **Those bindings are the Devastator's own panels.** `random_gun_impact`'s NAME is `player`, found
+   by a global by-name lookup when the reader is parsed (`FUN_0051fd30`/`FUN_0051ff40` through
+   `FUN_004d1150(name, 7)`), and `extracted/planes/nodes.json`'s `player` (node 1418) has exactly one
+   child, `player_pfighter`. No private subtree copy intervenes: the copy switch at `0x0072835c` is
+   read at `0x0051de8c` and `0x005225c2` and written nowhere, and no data pointer to it exists.
+   The spawn takes the `player` node itself as the flown vehicle (`FUN_0047c210`'s by-name lookup
+   at `0x0047c23a`, special-cased by name further down).
+
+So on a Devastator each zone sparks once, when its health first drops below 0.99 after its armour
+is spent: one of `pdp1`/`pdp2` and then `pdp4`, 16 sparks and 6 chips for under a second, with a
+`snd_ricochet1-4` sequence. It is not a per-impact effect, and the other ten airframes never run
+it. ⚠ **Undecoded:** whether a puffer drawn at an INACTIVE node renders. All three panels are torn-skin
+nodes that `plane_reset` leaves inactive, and none is torn yet at 0.99. ⚠ **Do not read this as
+"every hit sparks".** The per-impact effects on an aircraft are the weapon's `player` IMPACT row
+([`../formats/weapons.md`](../formats/weapons.md)): on most guns a `*_gunhit` definition, which is
+black smoke, flung chips and an occasional point light, and `f18sparks2` on four weapon entries.
+CSVM plays that row at the contact point and draws nothing of its own beside it: an aircraft is the
+one surface `ImpactOutcome.StandInFor` stands no sprite in for, and `EffectOwed` still hands the
+row's name to the effects runtime. The shim above is kept as decoded (`PlaneDamageEffectAnims`).
 
 ### The AI stage anchors exist on ten of the eleven airframes
 

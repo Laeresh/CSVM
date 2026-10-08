@@ -1,6 +1,6 @@
 # UI
 
-The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Six sub-namespaces, one folder each, beside the `UI.Menu` presentation tree (`docs/menu-presentations.md`), and one page for all of them: `UI.Boards` (the widget library every screen draws with: the composed board, its view, fit and palette, the board menu, the splitscreen rig and the canvas-layer order), `UI.Campaign` (the campaign pages, their flow and the scrapbook), `UI.Screens` (launch, boot, cinema, load, pause, results and wrap-up boards, and the seat input they poll), `UI.Hangar` (the hangar pages and the plane-picking tables they share), `UI.Overlays` (the debug and HUD overlays) and `UI.Labs` (the inspection labs). Nothing else in `UI` names `Labs`, `Hangar` names nothing else in `UI`, and `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`. Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`. The module index in `docs/architecture.md` groups the entries by sub-namespace.
+The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Six sub-namespaces, one folder each, beside the `UI.Menu` presentation tree (`docs/menu-presentations.md`), and one page for all of them: `UI.Boards` (the widget library every screen draws with: the composed board, its view, fit and palette, the board menu and the seat input it polls, the splitscreen rig and the canvas-layer order), `UI.Campaign` (the campaign pages, their flow and the scrapbook), `UI.Screens` (launch, boot, cinema, load, pause, results and wrap-up boards), `UI.Hangar` (the hangar pages and the plane-picking tables they share), `UI.Overlays` (the debug and HUD overlays) and `UI.Labs` (the inspection labs). Nothing else in `UI` names `Labs`, `Hangar` names only `Boards` and the shared `UI.Menu` (`CSVM.Tests/FamilyOrderTests.cs` holds these rules), and `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`. Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`. The module index in `docs/architecture.md` groups the entries by sub-namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -9,12 +9,12 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 ## src/UI/Screens/LaunchMenu.cs
 The Built-in presentation's launchscreen: one CanvasLayer holding the whole screen graph and every
 Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dogfight (whose Chapter screen also steps Dogfight's two match rules as rows below the maps), and to
-Instant Action's own wizard; the Options, Controls, hangar and campaign doors hang off the same
-graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the screenshot key and
+Instant Action's own wizard; the join board, Options, Controls, hangar and campaign doors hang off the same
+graph. The join board is the one screen a pad signs onto a seat from, through `MenuSeatDevices`' board gestures. It owns the drawing, the per-seat `MenuInput` polling, the board scan, the screenshot key and
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
 the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
-screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. On the campaign boards player 1's L / Y opens and closes the co-op network door, whose band and remote guests' chips ride the chip strip; a co-op guest's Continue leads to the Network screen's waiting mode. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. On the campaign boards player 1's L / Y opens and closes the co-op network door, Private and asking no password, whose band and remote guests' chips ride the chip strip; a co-op guest's Continue leads to the Network screen's waiting mode. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Boards/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -35,9 +35,8 @@ offsets, the sentinel substitution for an unused wave slot and each preset's con
 The picker roster rule behind every human plane pick, engine-free so it tests without a menu
 instance: `Build(stock, customs)` lists the stock rows in their given order, then one row per saved
 `CustomPlaneDef` in the store's name-sorted order, each carrying its store name and its airframe's
-stock node, skipping a campaign plane nobody has exported. `AirframeNode` and `AirframeOf` are the
-airframe-id to `player_*` node table and its inverse, `IndexOf` the after-build auto-select's
-case-blind lookup. Deliberately not `Flight.Airframe.PlaneRoster`, which answers "which plane does player N
+stock node off `Flight/Hangar/StockAirframes.cs`, skipping a campaign plane nobody has exported.
+`IndexOf` is the after-build auto-select's case-blind lookup. Deliberately not `Session.Roster.HumanFieldPlanes`, which answers "which plane does player N
 fly" off a `SessionSpec`: this is the menu-side list, that one the session-side read. Tests:
 `CSVM.Tests/PlanePickerRosterTests.cs`.
 
@@ -96,7 +95,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each playing one of the feature's two cinemas through `Film`, the span (`CinemaHandoff.cs`) a polling presentation reads before it applies a frame. The cursor walks past a row its page refuses (`Focusable`), which is how ammo selection's fieldless slots are skipped, and every cursor move closes each open drop-down but the focused row's, so a pointer that moves the focus leaves no list standing.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each playing one of the feature's two cinemas through `Film`, the span (`Video/CinemaHandoff.cs`) a polling presentation reads before it applies a frame. The cursor walks past a row its page refuses (`Focusable`), which is how ammo selection's fieldless slots are skipped, and every cursor move closes each open drop-down but the focused row's, so a pointer that moves the focus leaves no list standing.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
@@ -105,7 +104,7 @@ and each guest's aeroplane. Player 0 keeps the seated profile's aircraft; each l
 from session-scoped copies of the hangar's planes and a stock Devastator record (`StockChoice`), so
 nothing a guest flies is the profile's own record. `Holder` and `HolderOf` name the seat flying a
 plane, by `Session/Campaign/CoopPlanePool.cs`'s rule, and `Choose` refuses a held one. A guest with
-no pick of its own opens on the first free plane. `Advance`/`Retreat`/`Rewind` walk one reused flight-check page through the field, and
+no pick of its own opens on the first free plane; at a network guest's machine the field is its further players, picking from the host's hangar. `Advance`/`Retreat`/`Rewind` walk one reused flight-check page through the field, and
 the seated player's first FLY MISSION latches `Locked`.
 
 ## src/UI/Campaign/Campaign*Page.cs
@@ -193,6 +192,13 @@ element goes through the same mapping and only the scale changes; a viewport wit
 to 1:1 rather than a scale nothing can draw at. The rejected alternatives and why the art is sampled
 nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind every campaign screen.
 
+## src/UI/Boards/AuthoredPointer.cs
+A keyboard seat's mouse on a board drawn in the authored 800x600 space: the viewport pointer
+mapped back through `BoardFit` into authored pixels, with the left button, and none for a pad seat
+or a board out of the tree. The Original race and pause boards (`Menu/Original/OriginalRaceBoard.cs`,
+`OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`. `PausePreferences` and the Built-in
+`PauseBoard` read their pointer their own way, raw and capture-aware.
+
 ## src/UI/Boards/ComposedBoard.cs
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
@@ -218,8 +224,8 @@ section and row and reads through `CampaignLayout` with the value the board drew
 existed as its fallback, so a screen composes the same with or without the file; the briefing's
 chrome is `Briefing.zrd`'s own, and a slot marked pinned keeps a measured value instead. `SlotOf`
 and `DialogSlot` answer a plaque's rectangle for a pointer to hit-test, `DetailSlot` and
-`DetailPaned` the description panes, and `DialogChrome` the messagebox widget set a box draws and
-where its pane lands. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
+`DetailPaned` the description panes, `DialogChrome` the messagebox widget set a box draws and
+where its pane lands, and `Palette` the `BoardPalette` a screen writes in. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Campaign/CampaignLayout.cs
 The decoded menu layout as the campaign boards read it: one widget row's authored geometry and art
@@ -254,10 +260,9 @@ One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload
 `AudioStreamGenerator` its samples are pushed to on the Voice bus, a cinema being a narrated film
 rather than score or world sound. The picture fills the same 800x600 rectangle `BoardFit` maps a
 board into, so a cinema and the screen it hands off to own one area of the window. `Open` answers
-null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
-which presses end it early, the per-cinema differences there being the original's own. It mounts
-itself on `HudLayers.Cinema` and frees itself; `Session/Launch/Launcher.cs`'s `PlayCinema` is the seam.
-The three authored sets live here as constants and `CinemaSkips` answers them.
+null for a file that will not read, `Ended` is how a flow learns it stopped, and a `CinemaSkip`
+set (`Video/CinemaHandoff.cs`) is which presses end it early: `BootKeys` here, the campaign films'
+own `Keys` there. It mounts itself on `HudLayers.Cinema` and frees itself; `PlayCinema` is the seam.
 
 ## src/UI/Screens/CinemaSkips.cs
 Which press ends a cinema, for every screen that offers a skip. `Skips` is the one member that
@@ -269,16 +274,6 @@ and would otherwise sit through a 145-second film; it counts only where pad inpu
 (`--no-pads`, an unfocused window), since a pad reports its first button as it connects. What each
 cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cinemas.md).
 
-## src/UI/Screens/CinemaHandoff.cs
-What every cinema flow shares. `CinemaPlay` is the shape of the call that puts a film on screen, which
-`Session/Launch/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
-skip can land on the frame the film plays out and both paths end it, so the next screen opens once however many times the
-cinema reports it stopped; the boot block, whose continuations start the next film, chains unwrapped. `CinemaFilm` is for
-the screen a film stands in front of rather than a flow that chains them: `Play` spans one film, `Up` says the film owns
-the frame, and `Swallows` says this frame is the tail of the press that ended it, the pointer's lasting until the button
-comes up and every other press spent where it lands. A screen without it reads the release of a press it never saw go
-down as a gesture of its own. Which presses end a film is `CinemaSkips.cs`'s, not this file's.
-
 ## src/UI/Screens/BootSequence.cs
 `fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
 800x600 space out of the extraction's own art, message-table strings and font metrics, and `Run`
@@ -287,7 +282,7 @@ for a film, one that puts up a still and one that takes the card down as the fir
 name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
 is also where the card's one showing, the unseen fade and the films running back to back are
 settled; `Held` is the one member that says how much of an authored hold reaches the screen.
-`BootCard` supplies the stills, `Session/Launch/Launcher.cs`'s `PlayCinema` the films.
+`BootCard` supplies the stills, `Launch/Launcher.cs`'s `PlayCinema` the films.
 
 ## src/UI/Screens/BootCard.cs
 The boot sequence's engine half, and the only file that knows a boot still is drawn at all: the
@@ -306,6 +301,20 @@ flight check and ammo values are their layout rows' own ARGB fields; the rest ar
 their background, and [../org/campaign-board.md](../org/campaign-board.md) says which is which.
 `EscapeBlackboard` is the one crossing, the load screen's own chalk under the near-black labels the
 escape strips' light plates need, which an Instant Action pause is the only screen to want both of.
+
+## src/UI/Boards/ChromeType.cs
+The type scale for chrome the original never painted, read by the join board, the in-flight
+overlays and `FlightHud`'s text block, every results board, the pause board, the board menu and
+Built-in's join strip and join board. It owns the face (the theme's default font, varied for italic and bold), one
+size ladder (`ChromeSize`) in frame units, and metres for a printed distance. A frame unit is the
+board's own authored pixel, 1/600 of the frame's height, so a composed board takes a rung as
+authored and a surface stated at another reference (1440 for the HUD through `HudMetrics`, 720 for
+a results board or the launchscreen) converts it through `InReference`. Painted original artwork
+carries no type scale: `BoardPalette` and the composed campaign boards keep their layout's own sizes.
+
+## src/UI/Boards/ChromeSize.cs
+The rungs of `ChromeType`'s ladder, largest first: 72 for a start count's figure, 26, 22, 19, 17,
+15 and 13 frame units for the boards, 11, 8 and 6 for in-flight text. Each member's comment names where the rung stands today.
 
 ## src/UI/Boards/SeatStrip.cs
 The shape both presentations' player chip strip shares, so the two corners cannot drift apart: the
@@ -344,15 +353,15 @@ mode's name and nothing else. `LoadMotion` is the moving half, the fill strip an
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 
-## src/UI/Boards/PauseScreens.cs
+## src/UI/Screens/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller.
+objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller and `ia_escape.zrd`'s strips.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, `Step` moves the pad and arrow cursor to the strip drawn in the pressed direction, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Screens/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,
@@ -453,10 +462,9 @@ clicks and raise `Dismissed`, and the Original presentation builds it to take no
 polls its own pointer and closes it through the wrap-up page's rows.
 
 ## src/UI/Screens/ResultsBoard.cs
-The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
-`VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
-halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu. A
-panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
+The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`, `VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
+halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu, whose exit row reads Exit to Menu or `QuitLabel` unless a subclass hands `InitShell` its own words.
+`RestartWithheld` leaves the Restart row off and draws its line over the other two. A panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
 through `AddShotStrip` are the cursor's second region above the rows: up off Photo Mode (the
 resting row) enters the grid, confirm opens one in a `ShotViewer` over the board, back or a click
 closes it on its cell, and down out of the grid returns to Photo Mode. `PauseBoard` shares the
@@ -485,44 +493,49 @@ Hidden while there is no shot.
 ## src/UI/Screens/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
 in the order flown with split and cumulative times, placeholder rows for zones never reached, the
-total, and the new-best or stored-best comparison line. `StuntSummary` is the value a board hands
-it, one run with its total and the stored best. A single flag keeps the two boards' shipped
-layouts apart, since the scoreboard rules off its total and the wrap-up board runs the table
-straight into it. `Lines` is the same table as flat text for the Original wrap-up page, whose
-total line opens with `TotalLabel` so the page can leave it out.
+total, and the new-best or stored-best comparison line. `Flight/Modes/StuntSummary.cs` is the value
+a board hands it, one run with its total and the stored best, and its `Lines` is the same table as
+flat text for the Original wrap-up page. A single flag keeps the two boards' shipped layouts apart,
+since the scoreboard rules off its total and the wrap-up board runs the table straight into it.
 
 ## src/UI/Screens/StuntRaceBoard.cs
-The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per player from
-`StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
-row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
-once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
-without going through the menu. No Instant Action run builds one (`GameSession.RaceBoardFor`):
-there the last finish is the mission's win, and the director's hold and wrap-up end the run.
-`StuntScoreboard` is the single-pilot form of the same table.
+The time-attack race's shared Built-in results overlay on `ResultsBoard`'s shell: one row per pilot from `StuntRace.Standings()` with placing, callsign, plane, best time, gap to the winner and runs, a
+pilot with no completed run showing their furthest run's zones and time to them (the columns' words are `RaceRows`', which the Original board shares; every column but the placing is headed), then each
+pilot's best-run splits, a row per zone in course order. Whole-window, since a race ends for everybody at once, and built in Instant Action too, where the race rather than the mission ends a
+multi-seat run. Wakes on `RaceCompleted` and retires once `Ended` clears, so a new window is reachable without the menu; `Rows` is the ranked text the suite reads. Its exit row is
+`ExitLabel`: Back from a menu launch, which returns to the screen the race was launched from, and Quit Game from the command line, the label both race boards take; a network race's is `NetworkExitLabel`, Lobby on the host and Leave on a guest, whose board shows `WaitingForHost` in place of Restart. A pilot who left reads dim, marked by `RaceRows.NameText`. `StuntScoreboard` is the
+single-pilot form; the Original presentation builds `Menu/Original/OriginalRaceBoard.cs` instead.
+
+## src/UI/Screens/RaceRows.cs
+The one reading of a stunt race's standings as board rows, engine-free: `Of(standings, zoneCount)`
+gives each pilot's `RaceRow` (place, name marked when they left, aircraft, best, gap to the
+winner, runs finished of started) and the `Racer` behind it for its seat and colour. `NameText`,
+`BestText` and `GapText` are the column words. `StuntRaceBoard`, `Overlays/ScoresTable.cs`,
+`Overlays/OriginalScoresText.cs` and `Menu/Original/OriginalRaceTable.cs` lay the rows out their own
+way. It lives in `UI.Screens` because `UI.Boards` ranks below `Flight` in the family order.
 
 ## src/UI/Screens/VersusBoard.cs
-The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
-`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
-kills and deaths from `VersusMatch.Standings()`; a team match heads it with the winning team's name (`Title`) and ranked team rows. Score is the ranked column, kills alone do not
-explain it. Whole-window, because the match ends for everybody at once.
-Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
-completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
-state. Restart routes through `GameSession.RestartMatch`, which the keyboard and pad shortcuts
-reach directly while the board is up. `StuntRaceBoard` is the same construction over a race.
+The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
+`SplitScreen.PlayerColor` (`Title`, a team match's leading team, or a draw), ranked team rows,
+then one ranked row per player with tag (a bot's callsign and `BotTag`, from the seat list `Build` takes),
+score, kills and deaths from `VersusMatch.Standings()`; score is the ranked column. Wakes on `MatchCompleted` and retires on the rematch, its rows drawn
+from that completion alone, so `Restart()` zeroing the live state never redraws them. Restart
+routes through `VersusDirector.Restart`, which R and pad Y reach directly. A network guest's
+board offers no Restart and reads `HostCallsTheRematch`, since that call refuses off the host;
+Zeppelin vs Zeppelin keeps the row, which leaves for the lobby. `StuntRaceBoard` is its twin.
 
 ## src/UI/Screens/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
 every human at once: four label and value rows for time to complete, enemies shot down, danger
-zones completed and shot percentage. It takes no live match object at all, only the caller's own
-snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
-and this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
+zones completed and shot percentage. `GameSession` builds it and `InstantActionDirector` holds it as
+an `IIaWrapupBoard`, handing in one `IaWrapupSnapshot`, so this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
 the Original presentation's wrap-up page prints too. On a stunt mission it also grows a `StuntSplits` section and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
 ending so a marker latched after the run completed is on it), and no per-pane scoreboard is built. Its Restart reaches the Launcher's session restart
 and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
 
 ## src/UI/Screens/PauseBoard.cs
 The shared pause overlay, whole-window because pausing stops the game for everybody at once. Built
-once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
+once by `Launch/SessionBoards.cs` on the shared board layer and wired to `PauseState.Changed` rather than a
 completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
 Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
 owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
@@ -530,16 +543,16 @@ menu carries no control hints, the original's pause sheet having none. It shares
 the same pause on a layer of its own. The pauser's mouse shares the cursor on `BoardMenuPointer`'s rule when they hold the keyboard seat, so a pad pauser's board reads no pointer. It writes no mouse mode, since the flight's halt releases the capture and the resume takes it again, and it is `Reprime`d when photo mode or the Preferences leaf closes.
 The Original presentation puts `OriginalPauseBoard` in its place.
 
-## src/UI/Screens/MenuInput.cs
+## src/UI/Boards/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
 state, with `Poll(dt)` filling the cursor axes, accept, back and start out of the `Menu` binding
 context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboard minus the
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
-are letters there. `Typed` is read off `TypedText`, so each character is the one the pilot's own layout produced, and `Paste` is a Ctrl+V or Shift+Insert chord whose text a box reads through the `Clipboard` seam; `TypeableKeys` names the US key positions text entry takes off the cursor bindings. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two. Player 1 also reads the flight sticks, and its menu stick rows follow the active profiles (`Sticks/StickProfileSet.cs`); a joined seat never reads a stick.
+are letters there. `Typed` is read off `TypedText`, so each character is the one the pilot's own layout produced, and `Paste` is a Ctrl+V or Shift+Insert chord whose text a box reads through the `Clipboard` seam; `KeylessAccept` is an accept the keyboard half did not give, which a text field answers with `Utils/ScreenKeyboard.cs`; `TypeableKeys` names the US key positions text entry takes off the cursor bindings. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two. Player 1 also reads the flight sticks, and its menu stick rows follow the active profiles (`Sticks/StickProfileSet.cs`); a joined seat never reads a stick.
 
-## src/UI/Screens/TypedText.cs
+## src/UI/Boards/TypedText.cs
 The characters the keyboard typed as the pilot's own layout produced them, engine-free, which every
 `MenuInput.Typed` reads. A polled key code names a US key position, so a German ':' (Shift and the
 period key) read that way is '>'; only a key event's Unicode carries the character. The launcher
@@ -564,9 +577,9 @@ backdrop, one `SubViewport` pane per player sharing the main `World3D`, and the 
 tag table. The main viewport draws no world while the rig stands (`Disable3D`). Two panes stack, or
 stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid. **Every pane is a
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
-listener-enabled viewports. `Fill(true)` gives pane 1 the whole window for a cutscene; `NoteSkip`
-names a skipping player. `OwnAirframeLayer` is one bit per seat, dropped only by that pilot's
-spyglass disc; `PhotographLayer` is one bit no pane draws, for the Danger Zone camera.
+listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
+skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -638,13 +651,37 @@ The `--viewer` marker overlay (key K, `--markers` at launch): every firepoint, p
 the parked aircraft as a coloured gizmo with a billboarded label. Reuses `MarkerRig`'s own
 classification and co-location grouping, so its gizmos agree with the marker dump by construction.
 
+## src/UI/Overlays/ScoresOverlay.cs
+One pane's held Display Scores, attached by `Launch/GameSession.cs` to every local pane of a race or
+a Dogfight. Each frame it reads the pane's seat (`FlightController.ScoresShown`), so it stands only
+while that seat holds the action and survives an airframe swap. Under the Original presentation it
+draws `OriginalScoresText`'s lines in Courier New on the original's character cell at the decoded HUD
+positions, with the flag column; under Built-in it draws `ScoresTable` as a chrome table centred in the
+pane. `Flight/Hud/ChatPanel.cs` steps aside on the same reading, and so do the pane's top-centre
+status lines (`StuntRunHud`'s status and leaderboard lines, `VersusHud`'s match line). Decode:
+[../org/multiplayer-scoring.md](../org/multiplayer-scoring.md) "The in-flight scores".
+
+## src/UI/Overlays/OriginalScoresText.cs
+The original's in-flight scores as monospaced lines, engine-free: a Dogfight's header, team lines
+and pilot lines in the decoded 21- and 7-character columns and order, the remake's kills and deaths
+after them, each pilot line carrying the flag it holds, and a race's standings borrowing that grid for its own columns. `OriginalScoresWords`
+reads the three header strings out of the message table. Capped at the HUD's 18 lines. Drawn by
+`ScoresOverlay.cs`.
+
+## src/UI/Overlays/ScoresTable.cs
+The Built-in standings a held Display Scores shows, engine-free, in the mode's results board
+columns: a race's place, pilot (marked when they left), aircraft, best, gap and runs, or a Dogfight's place, pilot, score,
+kills and deaths with a team match's lines first. `ScoresSource` holds a session's race or Dogfight,
+its seat names and flag carriers and the header words, and answers both looks, or nothing where no
+mode keeps scores.
+
 ## src/UI/Overlays/PhotoModeHud.cs
 Photo mode's only screen furniture and its way out: a hint line naming the bindings on a layer of
-its own, and the Escape or pad-B read that raises `Exit` for `GameSession.ExitPhotoMode` to act on.
+its own, and the Escape or pad-B read that raises `Exit` for `SessionBoards.ExitPhotoMode` to act on.
 It decides nothing about the mode itself. The hint fades rather than persisting, since the mode
 exists to compose a frame, and the fade runs on wall time because photo mode holds the clock. Pad
 reads go through the seat's own device filter, so in splitscreen another player's pad cannot close a
-mode that is not theirs. The mode itself is `Session/Launch/GameSession.cs`'s.
+mode that is not theirs. The mode itself is `Launch/SessionBoards.cs`'s.
 
 ## src/UI/Overlays/PerfHud.cs
 The frame-cost readout (key F14, `--debug-fps` presets it): fps, the current frame's cost and the
@@ -662,9 +699,16 @@ stranger sends carries the build it was taken on and the number is not read as t
 game's own. Two PromptFont icons left of it open the logs folder (the open log file's directory)
 and Godot's user folder through `Utils/FolderOpener.cs`. They are mouse-only, never focusable,
 and `Launcher` keeps their clicks from Original's polled pointer. Built once by `Launcher` beside
-`PerfHud` and shown while the menu host or `NoGameDataScreen.cs` is up, so it covers every
-presentation at once. It draws on `HudLayers.PerfReadout`, above the boards, and is hidden in
-flight. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+`PerfHud`, shown only while `MenuHost.OnMainMenu` holds or `NoGameDataScreen.cs` is up: deeper
+screens have bottom-edge plaques it overlaps at a Steam Deck's aspect. It draws on
+`HudLayers.PerfReadout`, above the boards. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+
+## src/UI/Screens/ScreenKeyboardEcho.cs
+A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its
+label and its text with a caret, since the keyboard covers the lower half where a field such as the
+lobby chat line is drawn. Built once by `Launcher` beside `BuildStamp`, on `HudLayers.KeyboardEcho`
+above everything; it shows while `Utils/ScreenKeyboard.cs` names a field that asks to be echoed and
+reads that field's text every frame. Original's boxes carry no label, so their text stands alone.
 
 ## src/UI/Overlays/NetReadout.cs
 The `--debug-net` corner readout: a network match's desync counters as
@@ -681,7 +725,7 @@ naming another schema. Views follow `ExtractionFlow.View`: the install folder fi
 the failures with Try again and Choose another folder. Every press is a focusable button, so a
 pad's d-pad and A drive it; Esc or B cancels a run and quits otherwise. A success hands back once
 to `Launcher`, which re-resolves the data paths and enters the menu in the same process.
-The picker's controller hint label does not wrap, since the dialog grows to its content's minimum.
+The picker's controller hint label does not wrap, since the dialog grows to its content's minimum. A pad's A or a tap on the folder field raises `Utils/ScreenKeyboard.cs`; focus alone does not.
 
 ## src/UI/Screens/ExtractionFlow.cs
 The extraction screen's state, engine-free so a unit drives it with a fake runner. A stamp naming
@@ -789,7 +833,8 @@ The node lab (key N) in `--freecam` and `--anim-lab`: the world's `cs_name` tree
 per-node frame, hide and glTF export into `Exports/`, the export set's three buttons, a dependency readout for the current selection (anim defs, destructible
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
-twin. A row's text and colour follow live visibility, re-read on the panel's own status cadence.
+twin, its token grammar checked at launch by `SessionSpec`. A row's text and colour follow live
+visibility, re-read on the panel's own status cadence.
 
 ## src/UI/Screens/ExportSet.cs
 The node lab's export set: the nodes gathered with Ctrl+click or the panel's ± set, written as one
@@ -803,16 +848,9 @@ to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
 the selection holds, each with live HP, and a slider with kill and reset on the one a weapon hit
 reaches, driving the anim runtime's damage and reset calls. `--debug-damage` is the scripted twin,
-an ordered script rather than a token set. Only the pool the registry resolves is drivable, since a
+an ordered script rather than a token set, checked at launch by `SessionSpec`. Only the pool the registry resolves is drivable, since a
 node can carry several; the rest are listed read-only with the reason, because driving a twin would
 damage a pool nothing can ever hit.
-
-## src/UI/Overlays/OrbitCamera.cs
-The static inspection view's orbit-camera controller (drag to orbit, wheel to zoom, AABB framing):
-owns the orbit state and drives a camera it does not own. `Frame` takes the eye and pivot the host
-resolved, and `MergedAabb` merges a subtree's world-space mesh boxes, shared with the anim lab. The
-`lookAt` argument is a pivot point rather than a direction, since with the eye it also sets the
-radius the wheel and the drag work in.
 
 ## src/UI/Labs/AnimLab.cs
 The `--anim-lab` debugger: a quiet world stage with a pinned seed, a fixed-dt clock, a transport
@@ -903,7 +941,7 @@ definition persisted data.
 
 ## src/UI/Menu/MenuCommands.cs
 The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
-(auto-repeated cursor steps, edge presses, typed text and a paste, an optional window-pixel `MenuPointer` whose
+(auto-repeated cursor steps, edge presses with `KeylessAccept` marking an accept no key gave, typed text and a paste, `OnPad` naming the side a hint words itself for, an optional window-pixel `MenuPointer` whose
 primary button arrives as a press and an edge and whose secondary as a held state driving no command
 of its own), and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A
 source is not synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a
@@ -923,12 +961,12 @@ The shared menu audio contract: a presentation requests a `MenuCue` by semantic 
 stops narration at moments it owns, and states through `PreviewMix`/`EndMixPreview` the mix a page
 that sets one stands at and which `MenuMixLevel` a frame moved; the service owns resolution,
 playback, volume, the buses and the handoff into a launching session. The host implementation is
-`MenuAudioService` (`src/Session/Launch/MenuAudioService.cs`); Built-in's one call site is the briefing
+`MenuAudioService` (`src/Launch/MenuAudioService.cs`); Built-in's one call site is the briefing
 narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
-`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight a `VersusRules` of kill target, minutes, lives and auto-respawn that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats),
+`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight or a lobby Stunt Race a `VersusRules` of kill target, minutes, lives, auto-respawn and the lobby type that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats, and a local Dogfight's join board bot rows as `Bots`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
 `OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels and the gameplay switches, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
@@ -979,7 +1017,7 @@ arithmetic and which tab reads which block: [../org/hangar.md](../org/hangar.md)
 The campaign as a shared engine-free feature: the state and operations both presentations read and
 write, with neither one's screen shell in it. `Open` opens a campaign over a `CampaignProfileStore`;
 `OpenGuest` opens a co-op guest's with no profile, on the host's mission and stock hangar, writing
-nothing and standing on the pick the network door kept, and `GuestCoopFit` is its ammo pick as the wire carries it. The roster operations create, seat, delete and record the last-played player in the
+nothing and standing on the pick the network door kept, `GuestCoopFit` is its ammo pick as the wire carries it, and `GuestPickOf` each of its players' picks, a further player's from the field. The roster operations create, seat, delete and record the last-played player in the
 original's own words; the mission operations settle which `cm_sequence` entry the screens after the
 cabin are about, with its briefing, wingman flag, per-slot change-plane rules and story aircraft;
 the writes save the loadout, planes, memento (refused unless held), an exported build and the
@@ -1066,25 +1104,25 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action, join-board and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door) and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box is the one `OriginalShellDialog` it holds beside its `OriginalCheats`; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action, join-board and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door) and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
-in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). `CopyWay` is the device the seat last moved, which a host's copy hint names. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalShellDialog.cs
-The standing dialog, a partial of the shell itself rather than of any screen family: the
-`OriginalDialog`/`OriginalDialogAnswer` pair, the `DIALOG:*` answer keys every family and both test
-files read off `OriginalShell`, `RaiseDialog` with the chrome-bearing overload the credits About box
-takes, `DialogRows`, `AnswerDialog` and `ComposeDialog`. The shell owns it because the shell answers
-for it: while a box stands its answers are the only rows, `Compose` draws it over the screen's own
-picture, and Back takes the declining answer. The rollover frame is the pointer's alone, the cursor's
-answer marked with an outline three pixels clear of the strip instead, and the focus a raise took is
-put back when it is answered, which is the `FocusBeforeDialog` a screen under the box draws itself from. `DialogRows` sizes an answer plaque through `OriginalWidgets.PlaqueSizeOf`, so the box reaches into no module; every module only raises, and a door onto a new screen closes the box it left behind. [../org/campaign-board.md](../org/campaign-board.md).
+The standing messagebox as a type of its own, which the shell holds one of: the `OriginalDialog`/`OriginalDialogAnswer` pair,
+the `DIALOG:*` answer keys (`OkKey` and its three siblings, which `OriginalShell` restates as `DialogOkKey` and the rest), the box
+standing (`Standing`) and the focus its raise took (`FocusBefore`), `Raise`, `Take` on one answer, `Close`, the answers' `Rows`
+at the messagebox slots and `Compose` over the screen's own picture. It holds no screen and no cursor: the shell's `RaiseDialog`
+hands it the focus and moves the cursor onto the first answer, and its `AnswerDialog` puts the remembered focus back before the
+answer runs. The rollover frame is the pointer's alone, the cursor's answer marked with an outline three pixels clear of the strip.
+An answer plaque is sized through `OriginalWidgets.PlaqueSizeOf`, so the box reaches into no module; every module only raises,
+and a door onto a new screen closes the box it left behind. [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Menu/Original/OriginalScreenHost.cs
 The two sides of the seam between `OriginalShell` and a standalone screen module. `IOriginalScreenHost` is what a module reads off the shell and
-calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, whether a dialog stands,
+calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, the device a copy hint names, whether a dialog stands,
 the string table and the art measurer, the seat strip and the shell's own plate-row rule, the film a cinema plays in front of the board and the one
 frame a screenshot aid replays, and the crossings into another family (the hangar a Build door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read, the mission the cabin's typed cheat launches). The shell implements it explicitly, so the narrower vocabulary stays
 the modules' own, and each module's tests implement it as a fake and build the module with no shell at all. `IOriginalScreenModule` is the other
@@ -1110,14 +1148,14 @@ keeps it. Each module binds its own measurer to the pane rule once, so no call s
 reading, on `OriginalDropList.cs`.
 
 ## src/UI/Menu/Original/OriginalCheats.cs
-The three typed cheats of the Original presentation, a partial of the shell over the `gui_char` bodies of `PASSENGERCABIN.SCRIPT`,
-`SCRAPBOOK_TOC.SCRIPT` and `PLANECONSTRUCTION.SCRIPT`: the authored region of each screen, its own `TypedCheat`, the primary-button arm read off the
-pointer before the row hit test (the secondary button belongs to the credits line alone), the typed characters routed here instead of to a screen's
-edit box while a latch holds the keyboard, and what a completed word fires through `CampaignCheats` and `CampaignWallet`. The latches are the shell's
-because the three screens carrying them belong to two different modules; it reads those through `Campaign.Cheats`, `Hangar.IsHub` and
-`Hangar.OpenWallet`, and the campaign module reads the cheated mission back through the `IOriginalScreenHost.CheatedMission` seam. The cabin's NEXT
-MISSION reads and empties the buffer, so the press after a cheated launch is the ordinary one, and every screen change resets all three. Engine
-coverage: `menu-original-cheats`.
+The three typed cheats of the Original presentation as a type the shell holds one of, over the `gui_char` bodies of `PASSENGERCABIN.SCRIPT`,
+`SCRAPBOOK_TOC.SCRIPT` and `PLANECONSTRUCTION.SCRIPT`: the authored region of each screen, its own `TypedCheat`, `Arm` for the primary-button press
+the shell reads off the pointer before its row hit test (the secondary button belongs to the credits line alone), `Type` for the characters the
+shell routes here instead of to a screen's edit box while `Typing` holds the keyboard, and what a completed word fires through `CampaignCheats` and
+`CampaignWallet`. It is built over the two modules whose screens carry the latches, reading `Campaign.Cheats`, `Hangar.IsHub` and `Hangar.OpenWallet`;
+the screen showing is an argument, never a field. The campaign module reads the cheated mission back through `IOriginalScreenHost.CheatedMission`,
+which the shell answers with `Mission`: the cabin's NEXT MISSION reads and empties the buffer, so the press after a cheated launch is the ordinary
+one, and the shell's every screen change calls `Reset`. Engine coverage: `menu-original-cheats`.
 
 ## src/UI/Menu/Original/OriginalDropList.cs
 The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` because every page standing on it is a
@@ -1126,8 +1164,8 @@ under and the layout widget behind it, and takes back the windowed rows, the `Li
 window is the widget's authored `TotalDisplayed` clamped to the item count, so a short list is exactly as tall as its items and carries no
 chrome. Every item is a row keyed `<key>:<index>`, the ones outside the window built but hidden, since the rows are the hit-test surface and a
 dropped row would let a pointer hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right
-edge and hangs the thumb between them. The Instant Action module's two screens and the options module's two listed pages come through here;
-`OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
+edge and hangs the thumb between them. The Instant Action module's two screens and the Game Options and VIDEO pages (through `OriginalOptionsChrome.cs`) come through here;
+`OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. `ComposeOpen` draws the multiplayer pages' open list (the Lobby's and the bot panel's) in their cream box, with one face and one ink rule per page. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -1139,8 +1177,58 @@ spent and activates nothing under it. A row declares its slider through `Origina
 `OriginalSlider`; this class knows a track and a value and nothing about the setting behind them.
 
 ## src/UI/Menu/Original/OriginalOptionsScreen.cs
-The five pages behind the Options hub's four doors as one standalone module over the decoded `[@GameOptions@]`, `[@Audio@]`, `[@Video@]`, `[@ControlsPrefs@]` and `[@Keys@]` sections; the hub itself stays the shell's. Game Options and VIDEO are one table shape: per row a key, the authored title, control and description widgets it stands on, and how the store field is read and written, so a further option is one entry plus its field and a layout that moves a row moves ours. Game Options is the original's own Difficulty, Default View and Auto Head Turn rows (the difficulty tiers, the three views its decoded `GO_D_VIEW` list names and the head-turn switch) plus the remake-only Next Target and Rumble rows; the plate grows one whole 62-pixel band per row past the three the art is painted with, tiled from the band between its own seams rather than stretched so the border art survives, the two plaques moving down with it; each row then stands on a band of the grown plate, a dropdown taking one to itself and the checkbox rows pairing from the top of their run where the canvas caps the growth short, each checkbox row's title on its own box's centre line in the dropdown rows' column (the placement the VIDEO section authors for the same pair), with the descriptions spread evenly down their own window and a single tightened pitch as the fallback where the rows outrun even the pairing; VIDEO is the monitor and Resolution rows enumerated per machine (`Utils/MonitorSetting.cs`, `Utils/ResolutionSetting.cs`, that row dead under borderless, which owns the size), Display Mode, V-Sync, Render Scale and Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns; the Render Scale row stands on the authored Objects Detail line, the Anti-aliasing row on the Lighting Quality line under it (whose `VP_D_DLight` authors five items, one per method), picking FSR 2.2 there narrowing the Render Scale list to 50..100 on the spot, the Shadow Quality row on the Texture Quality line (`Utils/ShadowQualitySetting.cs`), dead while the page's own Enhanced Graphics box is clear, and the Graphics row's title and description are the page's own, the authored ones naming a 3D card this port has no answer to. AUDIO is four slider rows over `Utils/AudioMix.cs`'s 0..100 on the authored pitches 58, 57, 53 and 53, Master taking the In-Game Music row because a slider reaching zero is that checkbox in one fewer widget and Sound Quality left out; a slider answers no Accept (`SliderControl.cs`), `AudioPreviewMix` is the mix the open page stands at and `TakeAudioMoved` the level a frame moved, taken once, the host applying and sounding them. CONTROLS carries the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over `Bindings/SensitivityScale.cs`'s levels, the flying-scheme chooser on the Mouse panel's title line (the right half of the seat chooser's column, stopping above the slider's press region) and the KEYS AND BUTTONS door; KEYS carries seven category tabs, one action list under its heading in the listbox's own window, and each row's key and pad controls in the two authored columns (the first in Control A, the rest in Control B so nothing is hidden) with its stick controls in the port's Stick column between them (`KeysStickColumn.cs`), a cell press arming a capture on that row's action and slot (a Stick cell arming a stick-only capture that replaces that stick's own binding) and the page swallowing the frame while one runs, all of it over the shared `ControlsFeature`. The Throttle tab ends with the port's Throttle (lever) row after the original's eleven.
-An open list is windowed and drawn on `OriginalDropList.cs`'s rule. The module's own `ReadSavedOptions`/`AppliedOptions` pair is what every page reads and hands back through, so a page carries the settings it does not show; ACCEPT CHANGES leaves as the one `OptionsApplyExit` and only `Launcher.ApplyOptions` writes the store, while CANCEL CHANGES and Back drop the edits. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), so `OriginalOptionsTests` drives it over a hand-written host with no shell at all; the shell dispatches to it through `ModuleFor` and exposes it whole as `Options`, the `*Choice` properties the presentation and the rebinding facts read included. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
+The form behind the Options hub's four doors, one standalone `IOriginalScreenModule` standing five page modules (below) over the decoded
+`[@GameOptions@]`, `[@Audio@]`, `[@Video@]`, `[@ControlsPrefs@]` and `[@Keys@]` sections; the hub itself stays the shell's. It keeps the frame
+(the hub's logo behind every page), the page switch (the one page whose `Screen` is showing answers every dispatch member) and each page's
+ACCEPT CHANGES and CANCEL CHANGES, routed to that page's `Accept` and `Cancel` before any other row reaches its `Activate`. Its `IOriginalOptionsPage`
+is the page-sized sibling of the module seam, and `IOriginalOptionsForm` the narrow way back a page has: `Apply`, the one `OptionsApplyExit` read off
+the three settings pages' public choices, and `Leave`, back to the hub with the edits dropped. `ScreenOpened` re-reads the saved settings into those
+three pages, so a page carries the settings it does not show and only `Launcher.ApplyOptions` writes the store. The shell exposes it as `Options`, and
+`OriginalOptionsTests` drives it over a hand-written host. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalOptionsChrome.cs
+What every options page stands on, held once so no page restates it: a section's button strips at their measured size, the ACCEPT CHANGES and
+CANCEL CHANGES pair as strips or as the shell's labelled plaques, the slider row and its press region, the open-dropdown rule
+(`OriginalDropList.cs`) and the dark option list drawn over a page, the plate, the page title, the eight-state checkbox and the row type sizes
+(14 for a title, 12 for a description or an item). It holds no page's state and reaches the shell only through `IOriginalScreenHost`, which it
+also hands each page as `Host`. Its pages are `OriginalGameOptionsPage.cs`, `OriginalAudioPage.cs`, `OriginalVideoPage.cs`,
+`OriginalControlsPage.cs` and `OriginalKeysPage.cs`; the form is `OriginalOptionsScreen.cs`.
+
+## src/UI/Menu/Original/OriginalGameOptionsPage.cs
+The Game Options page: the original's own Difficulty, Default View and Auto Head Turn rows (the difficulty tiers, the three views its decoded
+`GO_D_VIEW` list names and the head-turn switch) plus the remake-only Next Target and Rumble rows, one table whose entry is a key, a title, a control
+and the store field it reads and writes. The plate grows one whole 62-pixel band per row past the three the art is painted with, tiled from the band
+between its own seams so the border art survives, the two plaques moving down with it; a dropdown takes a band to itself and the checkbox rows pair
+from the top of their run where the canvas caps the growth, each checkbox title on its box's centre line, the descriptions spread evenly down their
+window, and a single tightened pitch is the fallback. It holds the five settings it shows as `*Choice` and leaves through the form's `Apply`.
+
+## src/UI/Menu/Original/OriginalAudioPage.cs
+The AUDIO page: four slider rows over `Utils/AudioMix.cs`'s 0..100 on the authored pitches 58, 57, 53 and 53, Master taking the In-Game Music row
+because a slider reaching zero is that checkbox in one fewer widget, and Sound Quality left out. A slider answers no Accept (`SliderControl.cs`).
+`PreviewMix` is the mix the open page stands at and `TakeMoved` the level a frame moved, taken once, the host applying and sounding them; `PoseMix`
+is the screenshot aid's four distinct levels. It holds the four levels as `*Choice` and leaves through the form's `Apply`.
+
+## src/UI/Menu/Original/OriginalVideoPage.cs
+The VIDEO page, the Game Options table's shape over the authored Video rows: the monitor and Resolution rows enumerated per machine
+(`Utils/MonitorSetting.cs`, `Utils/ResolutionSetting.cs`, that row dead under borderless, which owns the size), Display Mode, V-Sync, Render Scale and
+Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
+the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
+list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
+clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
+
+## src/UI/Menu/Original/OriginalControlsPage.cs
+The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over
+`Bindings/SensitivityScale.cs`'s levels, the flying-scheme chooser on the Mouse panel's title line (the right half of the seat chooser's column,
+stopping above the slider's press region) and the KEYS AND BUTTONS door, which opens `OriginalKeysPage.cs`. Its edits are staged in the feature, so
+ACCEPT CHANGES writes the keymaps and CANCEL CHANGES and Back drop the visit, a pending steal going first; both then leave through the form's `Leave`.
+
+## src/UI/Menu/Original/OriginalKeysPage.cs
+The KEYS AND BUTTONS page over the shared `ControlsFeature`: seven category tabs (`ControlTabs`, the Throttle tab ending with the port's Throttle
+(lever) row after the original's eleven), one action list under its heading in the listbox's own window, and each row's key and pad controls in the
+two authored columns (the first in Control A, the rest in Control B) with its stick controls in the port's Stick column between them
+(`KeysStickColumn.cs`). A cell press arms a capture on that row's action and slot, a Stick cell a stick-only one, and the shell swallows the frame
+while one runs; `ClearCell` is the clear gesture. The exit pair writes or drops the visit and returns to CONTROLS, and `SyncWindow` keeps the
+window over the cursor at the end of a frame.
 
 ## src/UI/Menu/Original/OriginalCredits.cs
 The credits screen, the shell's partial over the decoded `[@Credits@]` section behind the top
@@ -1160,7 +1248,7 @@ shifts which binding those cells replace. The Stick cell lists every stick bindi
 row's order, joined by `Separator` (" / ", which Control B shares), the first listed being the one
 the clear gesture drops; a line wider than its cell scrolls (`Boards/BoardMarquee.cs`). Captions
 come from `Sticks/StickLabels.cs`'s `Columns`. The page placing the column:
-`OriginalOptionsScreen.cs`; the stick-only capture it arms: `ControlsFeature.cs`.
+`OriginalKeysPage.cs`; the stick-only capture it arms: `ControlsFeature.cs`.
 
 ## src/UI/Menu/Original/OriginalJoinBoard.cs
 The join board, one standalone module behind the top level's remake-only JOIN BOARD door and the only screen a pad signs onto a
@@ -1170,17 +1258,22 @@ over the press that takes it, and the ARTICLES OF THE CREW down the right, three
 buttons are drawn inline through `BoardLine.Glyph`. The gestures are `MenuSeatDevices`'s (`PrimeBoard`/`ScanBoard`), read raw off
 the devices because a pad with no seat has no commands to read; CONTINUE keeps the manifest and BACK drops every sign-on. The
 keyboard is never listed, since it holds seat 1 whatever the manifest says and the first pad to sign on shares that seat, and
-`Pose` fills the entries for a screenshot with nobody at the controls: [../menu-presentations.md](../menu-presentations.md).
+`Pose` fills the entries for a screenshot with nobody at the controls: [../menu-presentations.md](../menu-presentations.md). Under the articles stand a Dogfight's bot rows and, in the articles' place while one is picked, the Edit Bot panel (`OriginalBotPanel.cs`); `PoseBots` stands them for a screenshot.
+
+## src/UI/Menu/Original/OriginalBotPanel.cs
+The join board's bot rows, the keyboard's and the mouse's to edit: the Bots block under the articles (ADD BOT, FILL TO and its 2-to-16 count, then a row per bot in two columns with its tier) and the Edit Bot panel (Callsign, Plane with Random and the eleven stock airframes, Skill from langui 3695 to 3697, REMOVE, ACCEPT, the stock plane's icon and ratings).
+The rows are `PlayerSetupFeature.Bots`, so the Dogfight screen counts them and its launch carries them; the pilot names load from the message table on the first add. A local Dogfight has no teams, so the panel offers none.
+Words, boxes and lists take the Multiplayer Lobby's bot faces through `MultiplayerBoardText`, the plaques the board's own paper strip. The lobby's twin: `OriginalLobbyScreen.cs`.
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
 seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
 the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
 joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
-gate is met and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
+gate is met (a Dogfight counting the join board's bots, which its strip names) and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
 `JoiningOpen` is the per-screen joining rule the presentation reads, true on the join board alone, so these screens read the roster that board wrote and take no join gesture of their own. `CampaignSeatPanel` is the
 seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
-has joined, Built-in's chip row on `SeatStrip`'s shared shape. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
+has joined, Built-in's chip row on `SeatStrip`'s shared shape, a co-op chip named by `NetPlayFeature.CoopSeatName`. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeatPlane.cs
 The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie
@@ -1200,7 +1293,7 @@ row and the row under the pointer, and a closed box redraws its outline in cream
 and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat. Build opens the wallet-free hangar
 (`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the flown aeroplane's gun slots and the pylons it actually hangs, over the stock table's option lists, so a fill-order entry a saved build leaves empty gets no rocket field at all, with the airframe's
 diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
-decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/Weapons/LoadoutChoice.cs`.
+decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. The Race Time box is the second, shown only for stunt flying with more than one seat joined: it takes the next clear line, enters the walk before the first box below that line, and picks `InstantActionFeature.SelectRaceWindow`; hidden, it keeps its row index unseen, unhit and in no column, and a focus left on it lifts to the live box above. A race spends no lives, so while it shows the Lives box is hidden the same way, title included, its count kept. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/Weapons/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalWrapupScreen.cs
 The Original Instant Action wrap-up page, one standalone module over the decoded `[@IA_WrapUp@]` section and `InstantActionWrapupPage.cs`'s content. It stands only while it holds a snapshot, which
@@ -1212,48 +1305,56 @@ reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`);
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
 
 ## src/UI/Menu/Original/OriginalPauseBoard.cs
-The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
+The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `Launch/SessionBoards.cs`
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
 seat's pointer shares the cursor on `BoardMenuPointer`'s rule: entering a strip moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
+## src/UI/Menu/Original/OriginalRaceTable.cs
+A stunt race's standings drawn as the original's multiplayer scores page, engine-free. `Rows(standings, zoneCount)` turns `StuntRace.Standings()` into `RaceTableRow`s in `UI/Screens/RaceRows.cs`' words, and `Compose(rows, pageX, pageY, strings, layers)` writes `MP_LOBBY_STATSCREEN.PNG` into the backdrop at that page corner and the headers and up to ten rows into the lines, at `MULTIPLAYERLOBBY_STATS.SCRIPT`'s positions and faces: rows from (+24, +69) at a 20-pixel pitch, the name column 154 wide and left-justified, then cells 62, 61, 60 and 57 wide, centred. The original has no race table, so the race borrows the page: place and callsign at the name column's left and the aircraft at its right, best, gap and runs in the next three, the fifth empty, under remake-only headers. A row whose pilot left the race draws in the scores page's grey for a flagged row (`0xffbbbbbb`), and `ComposeRows` writes the headers and rows alone over a page already drawn, the lobby's own Game Scores after a race. A held scores display composes it over its own frame. Geometry: [../org/menu-inventory.md](../org/menu-inventory.md), the Multiplayer Lobby.
+
+## src/UI/Menu/Original/OriginalRaceResults.cs
+The Original presentation's end-of-race screen, engine-free. `RaceResultsSheet.Of(race, zoneNames, context, exitLabel)` freezes one ended race (standings, zone names, each pilot's splits in race order), so a restart's cleared field never redraws it, and `Compose(sheet, strings, focus, pressed)` draws it into the screen a Dogfight's end lands on, the Multiplayer Lobby on its Game Scores tab: `MP_LOBBY_BACKGROUND.JPG`, `OriginalRaceTable` at the tab page's corner, the title in the lobby's title box, the zone key down the player list's lines (two columns past eleven zones), the splits in the chat pane (zone numbers on its first line, a pilot per line, columns no wider than the scores page's), the context in the chat line, and Photo Mode, Restart and the exit on the Create Team, Send and Leave Game plaques with the lobby's strip frames and label tints. Every word but the tab's is remake-only, in the face of the lobby string at that place. A network guest's sheet carries `Withheld`, its line after the context, and leaves the Send plaque empty, so the exit keeps its slot (`Slots`); a pilot who left draws grey in the splits too. `RowAt` is the pointer's hit test, `MenuRowAt` the menu row on a plaque.
+
+## src/UI/Menu/Original/OriginalRaceBoard.cs
+The Original presentation's end-of-race board, in `UI/Screens/StuntRaceBoard.cs`'s place: `Launch/SessionBoards.cs` builds it when the presentation is Original and the install carries the lobby art and the string table. Whole-window over the panes, it wakes on `RaceCompleted` with the sim halted, freezes a `RaceResultsSheet` and draws `OriginalRaceResults` through `ComposedBoardView`, and retires once a new window clears `Ended`, so R and pad Y reach the rerun without it. Player 1's reader steps Photo Mode, Restart and the exit in turn with any arrow, resting on Photo Mode, and player 1's pointer shares the cursor on `BoardMenuPointer`'s rule; `RestartWithheld` takes Restart off a network guest's board. `Rows`, `Sheet`, `Shown` and `Menu` are what the suite reads and drives.
+
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
-right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
+right page, the totals page and the INVENTORY, entered from Instant Action's or the Connection page's Build Custom Plane or
 the cabin, the door naming the airframe a default build opens on. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, finds this module through its own `Owns` (every screen from `PlaneName` on) and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
 the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
-caret, the inventory's plane line on the middle of the dashed box the background paints rather than on its authored row, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; the shared pane rule (`OriginalWidgets.cs`) centres a small pane and this module places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+caret, the inventory's plane line on the middle of the dashed box the background paints rather than on its authored row, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog`'s `OkKey`/`YesKey`/`NoKey`/`CancelKey`), and the export door's own Export, Delete and delete confirm; the shared pane rule (`OriginalWidgets.cs`) centres a small pane and this module places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaignScreen.cs
 The Original campaign, one standalone module over the shared `CampaignFeature`: the profile screen,
-the cabin (with a co-op host's HOST CO-OP and BOOT), the table of contents, the flight check, ammo and plane selection, the book, a scrap's
+the cabin (with a co-op host's HOST CO-OP, BOOT and the band's COPY), the table of contents, the flight check, ammo and plane selection, the book, a scrap's
 zoom and the briefing. What each screen draws is the shared board component, so the module hosts
 the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into the
 board it hands back, the cabin's painting going down as backdrop so the mission pull-down's paper stands over it; that flow is never walked, its screen and cursor mirroring this module's. The
-screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the cues and every dialog raise are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play (a co-op host's go to its guests, each guest plays the one its host names and ends it with the host's, and a launch ends one still up), and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), which raises its messageboxes, runs a script's frames and plays its films, so `OriginalCampaignTests` drives it over a hand-written host with no shell at all; the shell dispatches through `ModuleFor` and exposes it whole as `Campaign`, which is also how the seat walk and the hangar door's wallet reach campaign state. The scrapbook's pen is the only stroke any module draws, which is why `Compose` carries a strokes layer. Read `src/UI/Campaign/CampaignFlow.cs` for the pages; the screens and
+screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the cues and every dialog raise are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play (a co-op host's go to its guests, each guest plays the one its host names and ends it with the host's, and a launch ends one still up), and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. A co-op guest's READY marks the player whose check shows and walks on to the next at its machine, and CANCEL READY takes every mark back. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), which raises its messageboxes, runs a script's frames and plays its films, so `OriginalCampaignTests` drives it over a hand-written host with no shell at all; the shell dispatches through `ModuleFor` and exposes it whole as `Campaign`, which is also how the seat walk and the hangar door's wallet reach campaign state. The scrapbook's pen is the only stroke any module draws, which is why `Compose` carries a strokes layer. Read `src/UI/Campaign/CampaignFlow.cs` for the pages; the screens and
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/MultiplayerBoardText.cs
-The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, and sizes a plaque strip by its art.
+The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, words a bot's tier and a Random plane, and sizes a plaque strip by its art. Its static `Word` and `Regular` take a string table directly, for the race boards drawn in flight with no page host.
 
 ## src/UI/Menu/Original/OriginalConnectionScreen.cs
-The original's Multiplayer Connection page and the LAN games list behind its Connect, one
-`IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline,
-so every corner is the scripts' own rather than the layout's. Only LAN TCP/IP, which searches the
-network, and Internet, which joins the typed address, are offered; Build Custom Plane draws greyed,
-and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host once the shell's `OriginalNetInfoBox` is answered, as every join is first. A join started here is followed on the shared messagebox over the page until it lands or
-fails. A game of another build version lists in grey with its version as its status, and Join
-Game refuses it in a box before any socket opens. A game that asks a password reads Need Password, and its Player Information takes one. Plaques draw as pictures, over a script's labels. The IP Address box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
+The original's Multiplayer Connection page and the LAN games list behind its Connect, one `IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline, so every corner is the scripts' own rather than the layout's.
+Of the original's ways only LAN TCP/IP, which searches the network, and Internet, which joins the typed address, are offered. A third way of our own, Join by code, has its own box: it takes the code alphabet and the dash in capitals, Connect reads it through `MasterWire.TryCode` and joins by `NetPlayFeature.JoinByCode`, and while the door's `CodeFault` names a reason the radio and box stand greyed with that reason as its description.
+Build Custom Plane opens the wallet-free `OriginalHangarScreen` on the default airframe and comes back here on CANCEL or a commit, its builds being what the lobby's Custom Planes tab lists. Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host once the shell's `OriginalNetInfoBox` is answered, as every join is first. A join started here is followed on the shared messagebox over the page until it lands or fails.
+A game of another build version lists in grey with its version as its status, and Join Game refuses it in a box before any socket opens. A game that asks a password reads Need Password, and its Player Information takes one. Plaques draw as pictures, over a script's labels.
+Each edit box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
 The geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalLobbyScreen.cs
 The original's Multiplayer Lobby, one `IOriginalScreenModule` over the door's `DogfightLobby`, with its four tabs (Mission Options, Select Plane, Select Ammo, Game Scores) in the scripts' own placements and art.
-The host's option controls are live until it is Ready, a guest's are drawn greyed with the host's values, and all three types fly; Capture the Flag greys the two environments with no flags and the team count, and adds the own-flag-home box, and Zeppelin vs Zeppelin greys the team count. A host picks a guest's row in the player list, and Boot removes that guest. The player list draws each team's row over its members; the team button creates (standing `OriginalTeamBox`), joins the picked team row or leaves, while its pilot is not Ready. Restrict Number of Teams and its count boxes are live on the host, the victory radios arm Time, Score or both, and a refused LAUNCH! raises the original's 10518 to 10520 or the remake's own line. The Lives box is live only while Limited Lives is ticked. Select... (View... on a guest) is live while Outlaw Components is ticked and stands `OriginalOutlawList` over the tab page with the tabs greyed. A toggle of Outlaw Components empties the list.
-Every player picks a stock plane, or one of its saved custom planes while the host allows them, and its ammunition, live at all times. Ready is live once the options have been heard, and a refused Ready raises the original's langui 10517 dialog with each reason. `Land` stands a completed match's peers back here on Game Scores, which is greyed until then. LAUNCH! is live on the host once every row is Ready, and hands the shell a Versus `LaunchExit` on the environment's chapter with the lobby's rules and the door's wire; `GuestLaunch` is a guest's same exit once its host has launched.
-Leave Game closes the door and lands on the Connection page. The shell follows a Dogfight guest into this screen and out of it when the link ends. Geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
+The host's option controls are live until it is Ready, a guest's are drawn greyed with the host's values, and all four types fly; Capture the Flag greys the two environments with no flags and the team count, and adds the own-flag-home box, Zeppelin vs Zeppelin greys the team count, and Stunt Race, the remake's fourth (no string table id for its name or its line under the box), greys Above the Clouds and every Mission Option but the Time box. A host picks a guest's row in the player list, and Boot removes that guest. The player list draws each team's row over its members; the team button creates (standing `OriginalTeamBox`), joins the picked team row or leaves, while its pilot is not Ready. Restrict Number of Teams and its count boxes are live on the host, the victory radios arm Time, Score or both, and a refused LAUNCH! raises the original's 10518 to 10520 or the remake's own line. The Lives box is live only while Limited Lives is ticked. Select... (View... on a guest) is live while Outlaw Components is ticked and stands `OriginalOutlawList` over the tab page with the tabs greyed. A toggle of Outlaw Components empties the list.
+The bot controls are the remake's own, with no original layout: Add Bot, Fill to and its count box (2 to 16 pilots) stand on Mission Options under the type's description, greyed on a guest and outside a Deathmatch, where LAUNCH! with bot rows raises `BotsDeathmatchOnly`. A host's press on a bot's row opens Select Plane on that bot in place of its own picker (callsign, plane with Random first, skill with its langui words capitalised, team, Remove and Accept) in the Mission Options dropdowns' face, and any tab press lets it go; a guest sees bot rows in the list only. A bot row carries `BotTag` in the Ready column in place of a mark, Game Scores tags a bot's line, and the list's header counts the people against the cap with the bots after it.
+Every player picks a stock plane, or one of its saved custom planes while the host allows them, and its ammunition, live at all times. Ready is live once the options have been heard, and a refused Ready raises the original's langui 10517 dialog with each reason. `Land` stands a completed match's peers back here on Game Scores, which is greyed until then, an ended stunt race's with its table in `OriginalRaceTable`'s columns and grey rows. LAUNCH! is live on the host once every row is Ready, and hands the shell a `LaunchExit` in the type's mode (`DogfightLobby.LaunchMode`, a stunt launch for a Stunt Race) on the environment's chapter with the lobby's rules and the door's wire; `GuestLaunch` is a guest's same exit once its host has launched.
+Leave Game closes the door and lands on the Connection page. A host's chat carries `NetworkRows` pinned at its top (`CoopDoorText.HostLobbyLines`): the join code alone, the wait alone while the master server is still answering, else the address with why there is no code. Its first row is the COPY control's row, absent during the wait, so a click, a tap or a pad's Accept copies through the door. A guest that joined while its host flies a match reads `MatchInProgress` there under langui 10090's In Progress (`WaitsOnMatch`). The shell follows a Dogfight guest into this screen and out of it when the link ends. Geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalOutlawList.cs
 The lobby's outlaw list pane, which `OriginalLobbyScreen` builds, draws and answers while it is open, and `OutlawRows`, the pure map from each of its five sub-tabs' rows to a `NetPlaneRules` flag and the string naming it.
@@ -1262,7 +1363,7 @@ An ammunition or rocket row reads ticked and ignores a click while its page's Ou
 
 ## src/UI/Menu/Original/OriginalNetInfoBox.cs
 The original's GAME INFORMATION and PLAYER INFORMATION boxes in their scripts' placements and art. `OriginalShell` stands them over whatever page asked (`AskNetInfo`), as it does a messagebox: their rows are the only rows, and a refusal's messagebox stands over them.
-A host answers Game Information (name, masked password, the Maximum spinner) and then Player Information (callsign, the Voice drop-down, a greyed password); a join answers Player Information alone, its password live when the game may ask one. OK is greyed on an empty name, and a name of spaces raises langui 10510 or 10511.
+A host answers Game Information (name, masked password, the Maximum spinner, and the remake's Listing chooser beside it, opening on the kind's default and greyed while the door has no master server) and then Player Information (callsign, the Voice drop-down, a greyed password); a join answers Player Information alone, its password live when the game may ask one. OK is greyed on an empty name, and a name of spaces raises langui 10510 or 10511.
 The last OK hands a `NetPlayerInfo` to the door and the options. The Connection page's Host, Create Game and joins and the cabin's HOST CO-OP ask them. The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/UI/Menu/Original/OriginalTeamBox.cs
@@ -1298,6 +1399,15 @@ caller to log once. `ArtPath` and `RelativeArtPath` are where a layout art name 
 `RofTree`'s upper case, the presentation's size read going through the first; `IsMovie` puts the movies one directory deeper,
 under `MPG`, where the executable resolves them. Coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
+## src/UI/Menu/Original/SyntheticShell.cs
+The `--synthetic-data` tree's Original shell, `extracted/rof/`: `fixtures/menu-layout-original/LAYOUT.CSV`
+decoded by `Extraction/MenuLayoutDecoder.cs` into `menu_layout.json`, the invented string rows of
+`fixtures/synthetic/rof/ui_strings.json` (a layout symbol's row, or a row the code reads by id), and
+one generated picture per `fixtures/synthetic/rof/art.json` entry at that size. A file the asset
+manifest requires with no size stops the build. The backdrop movies stay absent, the one optional
+gap. It sits in UI because it reads the manifest, so `TreeFamilies` here composes the whole tree's
+family list over `Tooling/SyntheticData.cs`'s. Read `OriginalAvailability.cs` for what the tree must satisfy.
+
 ## src/UI/Menu/Original/OriginalAssetManifest.cs
 The versioned required/optional asset manifest, derived from the decoded layout rather than
 hand-listed. `Derive` classes the art of the sections Original composes required, less two short
@@ -1321,7 +1431,7 @@ The four cue names the Original presentation asks the shared audio service for: 
 a button press, and an edit box's keystroke and reject sounds, which are the four the original's
 globals script binds. The names are semantic and the cue table owns which wav each resolves to, so
 the presentation names no file. The contract is `IMenuAudio.cs` and the table is
-`src/Session/Launch/MenuCueTable.cs`.
+`src/Launch/MenuCueTable.cs`.
 
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the
@@ -1334,11 +1444,11 @@ arrives as one jump. The four device reads are injected delegates, so the seat i
 Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs
-Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `InstantActionWrapupReturn(snapshot)`, `CabinReturn(profile)`, `DebriefReturn(profile, missionSeq)` and `LobbyReturn(scores)`, a completed Dogfight's landing on the lobby's Game Scores. The host names the destination and the
+Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `InstantActionWrapupReturn(snapshot)`, `CabinReturn(profile)`, `DebriefReturn(profile, missionSeq)` and `LobbyReturn(scores, race)`, a completed Dogfight's or an ended stunt race's landing on the lobby's Game Scores. The host names the destination and the
 active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from, which is
 where a flight left early lands; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
 destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names
-nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared here, so nothing outside the shared namespace crosses the seam but the stunt camera's own `StuntShot` records):
+nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared by the session in `Session/InstantAction/IaWrapupSnapshot.cs`, so no other presentation type crosses the seam):
 the session that counted an ended Instant Action mission's numbers is freed before any page can draw them. The `--menu=` aid is not a destination either, reaching the cold start alone, so a return is
 always one of these. The namespace seam this whole
 folder is held to, and the two scans that enforce it, are in [../menu-presentations.md](../menu-presentations.md).
@@ -1379,67 +1489,73 @@ seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAi
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
-the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
+the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit and survive a return from flight. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
 and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs
 The multiplayer door as a shared `IMenuFeature`, engine-free and carrier-free: the port and address a board edits (`TypeAddress`, `PasteAddress`, up to `AddressLimit`), the socket it opens, and the readouts a board draws (`Stage`, `Peers`, `Link`, `Fault`, `HostStarted`, `Advert`). `OpenJoin` opens on `JoinTarget`, the address parsed by `Net/NetEndpoint.cs`.
 Carriers and the LAN socket arrive as delegates (the launcher's `Net/NetCarrier.cs`, or a suite's loopback mesh), the router as a `Net/RouterAccess.cs` (`Router`); every open wraps its carrier in a `Net/NetLobby.cs`.
 `OpenHost`, `OpenCoopHost` (whose `Offer` names the mission), `OpenDogfightHost` and `OpenJoin` open; `Step` carries the link and moves `Revision` on news, which both menus repaint on; `Close` gives the router back.
-In co-op the door seats guests and keeps the round of picks. `ShowCoop` names the host's boards through `HostFlow` (`CoopHostFlow.cs`), `CoopAllReady` holds FLY MISSION until every guest is Ready, `CoopLaunchDue` tells a guest to follow, and `TellSeatFits`, `TellSeatBuilds` and `TellCoopWingman` go out before the opener.
-`ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). `OfferCoopHangar` hands `HostFlow` the hangar with each plane's holder and the plane each seat flies, `CoopGuestPlanes` is every guest's pick as the host heard it, and `CoopHangar` is a guest's latest hangar words. A guest's own pick is `Pick` (`CoopGuestPick.cs`), and `LeaveCoopMission` tells the host at once that it walked out.
-`Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
-A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyGuestAddress` hands it to `CopyText` (the launcher's clipboard, on Ctrl+C). Boards: `LaunchMenu.cs`.
-`Take` holds what the Game and Player Information boxes answered (`NetPlayerInfo.cs`): `PlayerName` is the callsign every pick carries and a host's first seat takes, `Voice` rides every pick, and a host's `GameName` and `MaxPlayers` are its advert's name and cap, past which it refuses a guest as full. `Password` is the one a host asks before admitting a guest, or a guest's answer, and `Boot` removes a seated guest and bans its address until the door closes.
+In co-op the door seats guests and keeps the round of picks. A guest asks a seat per player at its machine (`LocalSeats`); every seat counts against the cap, a further one is granted only from room the first seats leave, and `CoopSeats` is what the guest got. `ShowCoop` names the host's boards through `HostFlow` (`CoopHostFlow.cs`), `CoopAllReady` holds FLY MISSION until every guest seat is Ready, `CoopLaunchDue` tells a guest to follow, and `TellSeatFits`, `TellSeatBuilds` and `TellCoopWingman` go out before the opener.
+`ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). `OfferCoopHangar` hands `HostFlow` the hangar with each plane's holder and the plane each seat flies, `CoopGuests` and `CoopGuestPlanes` list every guest seat side by side, `CoopHangar` is a guest's latest hangar words, and `CoopSeatName` is any co-op seat's callsign on either end. A guest's picks are `Pick` and `PickOf` (`CoopGuestPick.cs`), one per seat, and `LeaveCoopMission` tells the host at once that it walked out.
+`Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. A host's door in flight steps neither its wire nor its lobby but still advertises, In mission, to its peers, the LAN and its listing, so a player who joins mid-match waits in the lobby with no options until the match lands there. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
+A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyForGuests` hands `CopyText` (the launcher's clipboard, on Ctrl+C) the join code, else that address. Boards: `LaunchMenu.cs`. With a master server set, `Master` (`Net/MasterDirectory.cs`) adds its games to `Games`, a listed game or a typed code with its dash joins through `OpenCode`, as does `JoinByCode` with the Original Join code box's text, which leaves `Address` alone (`LinkedTo` names the code); `CodeFault` says why a guest cannot join by code (no master server, or `WebRtcReady` false). A host hands its carrier the listing (`INetListing`), unlisted while `Private`, whose `JoinCode` the boards show; `AwaitingCode` and `InternetFault` say why there is none yet.
+`Take` holds what the Game and Player Information boxes answered (`NetPlayerInfo.cs`): `PlayerName` is the callsign every pick carries and a host's first seat takes, `Voice` rides every pick, and a host's `GameName`, `MaxPlayers` and `Private` are its advert's name, cap and listing. `Password` is the one a host asks before admitting a guest, or a guest's answer; it and `Private` end with the session that used them (`ForgetAnswers`). `Boot` removes a seated guest and bans its address until the door closes.
 
 ## src/UI/Menu/NetPlayerInfo.cs
-What the original asks before a network game opens, engine-free for both presentations: the game's name, password and Maximum # of Players, and the player's callsign and voice, with the scripts' limits. `ClampPlayers` holds the cap to the spinner's floor and the kind's cap, four humans for co-op and sixteen for a Dogfight. `IsValidName` is the original's name test.
+What the original asks before a network game opens, engine-free for both presentations: the game's name, password and Maximum # of Players, the remake's Public or Private listing (`Private`, never remembered; `DefaultPrivate` is Private for co-op and Public for a Dogfight), and the player's callsign and voice, with the scripts' limits. `ClampPlayers` holds the cap to the spinner's floor and the kind's cap, four humans for co-op and sixteen for a Dogfight. `IsValidName` is the original's name test.
 `PilotVoices` is the Voice list's seven voices with their speaker values (pilot VO ids, `SpeakerFor` reads one off a voice byte) and the pick's voice byte; `CoopHost` is the voice a co-op host's first seat speaks in. `Remembered` and `Remember` read and write the callsign, the voice and the game name in `Utils/OptionsStore.cs` for the next session.
 The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayerInfoTests.cs`.
 
 ## src/UI/Menu/CoopHostFlow.cs
 What a co-op host names to its guests, owned apart from the door: the board (`Screen`), the mission, the campaign's progress, the hangar it offers, the debrief's result (`ShowResult`) and the campaign film it shares (`FilmShown`).
-It builds each seated guest's `CoopFlowMessage` and sends one again only when it changed. It holds the hangar and each seat's settled plane (`ShowHangar`, read back by `HangarAt` and `PlaneOf`) and sends each guest every `CoopHangarMessage` it has not heard as it stands before the flow, so a plain join with no hangar shown sends none.
+It builds each seated guest's `CoopFlowMessage`, naming its first seat and how many it was given, and sends one again only when it changed. It holds the hangar and each seat's settled plane (`ShowHangar`, read back by `HangarAt` and `PlaneOf`) and sends each guest every `CoopHangarMessage` it has not heard as it stands before the flow, so a plain join with no hangar shown sends none. Every seat's callsign goes the same way, as the Dogfight lobby's `DogfightRosterMessage`.
 The round of picks is the door's: `NetPlayFeature.ShowCoop` advances it on this module's answer and hands it to every send.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayFeatureTests.cs`.
 
 ## src/UI/Menu/CoopGuestPick.cs
-A guest's own pick, owned apart from the door: `Airframe`, `Fit` and the Ready it means, set together by `Set`, the hangar plane it names (`Plane`, set by `Choose`), and the walk-out mark `NetPlayFeature.LeaveCoopMission` sets.
+One seat's pick at a guest, owned apart from the door: `Airframe`, `Fit` and the Ready it means, set together by `Set`, the hangar plane it names (`Plane`, set by `Choose`), and the walk-out mark `NetPlayFeature.LeaveCoopMission` sets.
 It lasts the joined session across flights and starts on `StarterAirframe`, the stock fit and no plane. The door sends it under the host's round and again only when it changed; a new round clears Ready and the walk-out. A co-op host settles a guest's `Plane` against every earlier seat's and seats it on the answer, with the pick's fit while that is the plane it picked.
 `NetPlayFeature.CoopReady` is Ready as the host last heard it. Coverage: `CSVM.Tests/NetPlayFeatureTests.cs`.
 
 ## src/UI/Menu/DogfightLobby.cs
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.
-The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
+The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` (Allow Custom Planes ticked on its first `Show`, as the original's lobby opens) and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
 A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays; `Announce` posts a host's notice under no name, and `PeerAt` names the peer on a host's row.
-`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, Capture the Flag with its option and Zeppelin vs Zeppelin, and `ChapterOf` the chapter an environment flies on, the world its row's number names (Above the Clouds is `C1C`); `EnvironmentNumber` and `ModeOf` are the numbers the original's session setup writes for a row and a launch, and `Teamed` whether any pilot joined a team. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, a team match's team lines with their pilots under them) and opens the next round.
+The host also keeps bot rows (`Bots`, each a `DogfightBot` with an id that outlives its place, held in a `DogfightBots` whose list rules the local join board shares), listed and seated after the guests and kept across matches: `AddBot` (a Random plane at veteran, a callsign drawn from `CallsignPool`, the smallest standing team at that moment and no rebalance after), `FillTo(n)` (n counts people and bots together), `RemoveBot` and the per-row setters, all refused on a guest and while the host is Ready; only a Deathmatch takes bots (`TakesBots`, `BotsGrounded`). `FieldSeats` and `BotRoom` keep people and bots within `NetSeats.MaxPlayers`, and a host's `Step` lets the newest bots go while seated people push the field past it, one per seat with a chat notice (`YieldLine`), so a person who joins a full field takes the newest bot's place and a leaver's seat is not refilled; a disbanded team's bots go teamless; `PeopleListed` and `BotsListed` count the list's people and bot rows apart; `WaitsOnMatch` is a guest held in the lobby while its host flies a match; `LaunchRefusal` and `Teamed` count bot rows; `LaunchBots` is what the launch resolves and seats.
+`CanLaunch` is the host's gate, every row Ready; the type is `Spec.DogfightMissionType` (`TypeOf` reads the wire byte); `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99 and the type with Capture the Flag's option, a Stunt Race its Time box alone, and `LaunchMode` the menu mode it leaves in; `ChapterOf` the chapter an environment flies on, the world its row's number names (Above the Clouds is `C1C`); `EnvironmentNumber` and `ModeOf` are the numbers the original's session setup writes for a row and a launch, and `Teamed` whether any pilot joined a team. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven; Stunt Race offers the six whose chapter ships Danger Zones, sets the Time box to 5, refuses every other option and launches whatever teams stand. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, each seat named by its callsign on the session's seat roster with a bot's line marked, the launch's list the fallback, a team match's team lines with their pilots under them), or a stunt race's `RaceScores` (`RaceTableRow`s), and opens the next round.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/DogfightLobbyTests.cs`.
+
+## src/UI/Menu/DogfightBots.cs
+The bot rows a Dogfight host keeps and the rules every such list follows, engine-free, shared by the network lobby (`DogfightLobby.cs`) and the local join board (`PlayerSetupFeature.Bots`).
+`Add` makes a row on a Random plane at veteran under a callsign drawn from `CallsignPool` that neither a row nor a person holds, else `Bot n`; `Rename` (cut to 12, refusing a blank or held name), `SetAirframe`, `SetSkill`, `SetTeam`, `Remove`, `DropNewest` (the row a joining person takes the place of) and `ClearTeam` (a disband) edit them in place by id. `Room` and `FillTo` are the 16-pilot rules, and `LaunchEntries` is what a launch resolves through `Session/Roster/BotSeats.cs`.
+The owner holds the gates: who may edit, how many pilots its field holds and which team a new row joins. Coverage: `CSVM.Tests/DogfightLobbyTests.cs`, `CSVM.Tests/JoinBoardBotTests.cs`.
 
 ## src/UI/Menu/CoopDoorText.cs
 The words the network door is drawn in, engine-free and built off the door alone: the host's band
-(`HostBand`: port, router address, guest count, then `HostAddressLine`), the router's answers
+(`HostBand`: the join code and Public or Private when there is one, else port, router address, guest
+count, then `HostFallbackLines`, which waits for the master server's outcome: the wait alone while it answers, else `HostAddressLine` and `InternetLine`'s reason), a Dogfight host's `HostCodeLine` and its lobby's pinned rows, the code alone or `HostFallbackLines` (`HostLobbyLines`), each naming Ctrl+C only for `CopyWay.Keys`, and what a COPY control copies (`CopyTarget`), the router's answers
 (`RouterStatus`, `PinholeStatus`; `HostPinholeStatus` omits an address already named), what a
-guest types (`HostAddressStatus` on the board, `HostAddressNotes` in a Dogfight host's lobby), an
-advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
-`WaitingStatus`), the games list's cells with a version and a Need Password mark (`Status`), the booted and wrong-password refusals, the refusal naming both
-versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in
-as a delegate, since only the caller holds the langui table.
+guest types (`HostAddressStatus` on the board), an advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
+`WaitingStatus`, naming a join by code by its code), why a guest cannot join by code (`NoMasterServer`, `NoWebRtc`, `CodeJoinUnavailable`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both
+versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in as a delegate, since only the caller holds the langui table.
 
 ## src/UI/Menu/NetDoorAid.cs
 The multiplayer doors the `--menu=` screenshot aids stand on: a host door over a loopback wire with
 guests already on it and a router stub mapping at a documentation address, and a guest door already
 joined to a loopback host advertising a campaign mission. `CoopGuest` stands a guest on a given
-host flow and hangar words (`HangarWords`, a host profile's planes held as its seats settle before any guest picks), and `AnswerReady` makes a host's guest Ready. `DogfightDoors` is a Dogfight host and two
-guests on one wire, `PoseDogfight` sets the lobby the `lobby` aid shows, and `PlayedScores` is the
-finished match its Game Scores page lands. The games list's sample LAN holds one game of
-`OtherVersion`, which the list marks. No aid opens a socket or asks a router.
+host flow and hangar words (`HangarWords`, a host profile's planes held as its seats settle before any guest picks), and `AnswerReady` makes a host's guest Ready, `NameGuests` gives each its callsign from `GuestNames`. `DogfightDoors` is a Dogfight host and two
+guests on one wire, `PoseDogfight` sets the lobby the `lobby` aid shows, `PlayedScores` and `PlayedBotScores` (named off a seat roster, bots tagged) are the
+finished matches its Game Scores page lands, and `LateDogfightGuest` a guest waiting on its host's match. The games list's sample LAN holds one game of
+`OtherVersion`, which the list marks. `AidInternet` poses a host's master server: `Listed` gives a
+carrier `SampleCode`, or the server is set with no carrier. `CodeGuest` is a shut guest door with a master server, so the Connection page's Join by code way stands live. No aid opens a socket or asks a router.
 
 ## src/UI/Screens/MenuSeatDevices.cs
 The pad side of the shared player setup, for any presentation, over seat 0's `MenuInput` and the
-feature. `P1Pad` is the pad seat 0 claimed by steering a screen with it. `Sync` reconciles the
-seats with the connected pads: a seat whose pad vanished is unjoined, a vanished claimed pad frees
-seat 0, and seat 0's poller is bound to its claimed pad or to every unclaimed one. `PrimeJoins`
-and `ScanJoins` are Built-in's join gesture, Start on an unclaimed pad while a seat is free, the caller deciding on which screens joining is open; `PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are Original's join board, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` the board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
+feature. `P1Pad` is the captain's pad, the first to sign on. `Sync` reconciles the
+seats with the connected pads: a seat whose pad vanished is unjoined, a vanished captain's pad frees
+seat 0, and seat 0's poller is bound to the captain's pad or to every unclaimed one.
+`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are both presentations' join board and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
 `PadOf` reads a joined seat's pad back off its
 `BuiltInSeat`, and `FlightPads` is the binding a launch carries, the answer both presentations
 hand the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.
@@ -1459,12 +1575,12 @@ Instant Action as a shared `IMenuFeature`, owned by the host's feature set and c
 presentations. The option sets are static and decoded: the environments, the mission types with
 the bans a chapter and stunt flying impose, the eleven airframes, the militias with their
 aircraft and wave accent, the skills and the preset table. The setup is typed state with semantic
-operations: select and confirm an environment (which re-fits the mission type and loads the
-chapter's own base def), the mission type, the lives, the four waves, the wingmen, both plane
+operations: select and confirm an environment (which re-fits the mission type and loads the chapter's own base def), the mission type, the lives,
+the race window (3, 5, 10 or 15 minutes, offered by `OffersRaceWindow` to a stunt run with more than one seat, the same answer that hides both presentations' lives control, since a race spends none), the four waves, the wingmen, both plane
 picks and a preset. `Refusal`/`CanLaunch`, `BuildDef`, `LaunchWingmanFit` and `BuildExit` are the gate and the launch.
 `Discard` resets every field. Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
-## src/UI/Screens/MovieSurface.cs
+## src/UI/Boards/MovieSurface.cs
 A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and the `ImageTexture`
 its pixels are uploaded to, made once and updated in place. There is no node, so a caller hangs
 the texture where its own layout row puts it and this surface never learns which screen that is.

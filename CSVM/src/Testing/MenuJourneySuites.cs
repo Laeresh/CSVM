@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
 
@@ -59,8 +60,8 @@ internal static class MenuJourneySuites
         Is(ctx, "its heading", "SELECT MODE", menu.ShownHeading);
         Is(ctx, "its breadcrumb", "Mode  ›  Map  ›  Aircraft", menu.ShownBreadcrumb);
         Is(ctx, "the cursor stands on the first row", "Free Flight", menu.ShownRowText);
-        ctx.Check(menu.ShownRowCount == 7,
-            $"the Mode screen has seven rows, the three modes and the four doors ({menu.ShownRowCount})");
+        ctx.Check(menu.ShownRowCount == 8,
+            $"the Mode screen has eight rows, the three modes and the five doors ({menu.ShownRowCount})");
         menu.Drive(Up);
         Is(ctx, "the last row is the multiplayer door", LaunchMenu.NetworkRow, menu.ShownRowText);
         menu.Drive(Up);
@@ -69,7 +70,7 @@ internal static class MenuJourneySuites
         menu.Drive(Down);
         Is(ctx, "Free Flight's description", "Explore the map freely, no objectives, no clock.", menu.ShownDetail);
         Has(ctx, "the top level's Back is Quit", "Esc / B  Quit", menu.ShownFooter);
-        Is(ctx, "joining is not open here", "(other players join at aircraft select)", menu.ShownJoinHint);
+        Is(ctx, "the strip names the board that seats the others", "(other players sign on at the Join Board)", menu.ShownJoinHint);
     }
 
     private static void ChapterScreen(TestContext ctx, LaunchMenu menu)
@@ -114,8 +115,8 @@ internal static class MenuJourneySuites
         Has(ctx, "the focused airframe's stats line", "Top Speed", menu.ShownDetail);
         Has(ctx, "the footer offers the weapons list", "L / Y  Weapons", menu.ShownFooter);
         Has(ctx, "and a first Select", "Enter / A  Select", menu.ShownFooter);
-        ctx.Check(menu.ShownJoinHint != "(other players join at aircraft select)",
-            $"joining is open here, so the hint changes ({menu.ShownJoinHint})");
+        Is(ctx, "joining is the board's alone, so the aircraft screen points there too",
+            "(other players sign on at the Join Board)", menu.ShownJoinHint);
 
         menu.Drive(Down);
         menu.Drive(Down);

@@ -85,6 +85,26 @@ public class AircraftContactResolverTests
         Assert.Equal(Scale, outcome.HealthDamage, 3);
     }
 
+    /// <summary>A bot seat is AI-piloted but dies to a world contact only when a person would. The
+    /// ram that dooms an AI above leaves it to its ledger. It keeps the AI's half of the rest: its
+    /// ram into an aeroplane takes the cut, and it rocks rather than kicking a camera.</summary>
+    [Fact]
+    public void ABotSeatIsSparedTheDoomRuleAndKeepsTheEntityCut()
+    {
+        var resolver = new AircraftContactResolver(new NeverOverlaps());
+        var bot = Striker(humanPiloted: false, OneZone()) with { IsBotSeat = true };
+
+        var world = resolver.Resolve(HeadOn(struckIsAircraft: false), bot, new FakeContactEffects());
+        Assert.False(world.Dooms);
+        Assert.Equal(ContactFate.Graze, world.Fate);
+        Assert.Equal(Scale, world.HealthDamage, 3);
+        Assert.Equal(0f, world.ShakeMagnitude);
+        Assert.True(world.AiShake);
+
+        var midAir = resolver.Resolve(HeadOn(struckIsAircraft: true), bot, new FakeContactEffects());
+        Assert.Equal(Scale * CollisionDamage.EntityCut, midAir.HealthDamage, 3);
+    }
+
     /// <summary>The block-5 camera kick (<c>0x48d409</c>): a human pilot's every contact spends it,
     /// a graze included, and an AI's spends none. Its law is linear in speed and in the RAW cosine,
     /// so it discriminates cases the cubic, speed-blind damage pair cannot.</summary>

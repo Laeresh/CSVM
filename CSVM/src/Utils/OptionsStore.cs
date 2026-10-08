@@ -142,6 +142,13 @@ public sealed class OptionsDef
     /// default rather than reading as off.</summary>
     public bool? CockpitEnginePitch { get; set; }
 
+    /// <summary>Whether a pilot pane draws the flight text block, the remake's own speed,
+    /// altitude, throttle and damage readout (<c>FlightHud.TextBlockEnabled</c>). ⚠ No screen
+    /// offers this. This key, hand-set in the file, is one of its two doors and <c>--hud-text</c>
+    /// the other. Nullable because null is "never set", which reads as OFF, the original drawing
+    /// no such readout.</summary>
+    public bool? FlightTextBlock { get; set; }
+
     /// <summary>The difficulty word (<see cref="DifficultyWords"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
     public string? Difficulty { get; set; }
@@ -239,6 +246,12 @@ public sealed class OptionsDef
     /// <summary>The game name the Game Information box last took, which prefills it next session.
     /// </summary>
     public string? NetGameName { get; set; }
+
+    /// <summary>The master server the multiplayer door lists games on and joins by code through,
+    /// as <see cref="MasterAddress.Parse"/> reads it. ⚠ No screen offers this; the key is set by
+    /// hand and <c>--master-server=</c> beats it. Null takes <see cref="MasterAddress.Default"/>.
+    /// </summary>
+    public string? NetMasterServer { get; set; }
 }
 
 /// <summary>
@@ -276,8 +289,9 @@ public sealed class OptionsStore
     /// <summary>The last place in the Voice list's seven voices.</summary>
     public const int MaxVoice = 6;
 
-    private const string FileName = "options.json";
-    private const string TempFileName = "options.json.tmp";
+    /// <summary>The file's name in its directory, which a setting's log line also names as the saved
+    /// source.</summary>
+    public const string FileName = "options.json";
 
     // The only presentation names this option currently accepts. Kept as strings, not an enum: the
     // presentation identity type belongs to whichever module owns the presentation contract.
@@ -359,6 +373,7 @@ public sealed class OptionsStore
             Write(w, "viewDistance", def.ViewDistance);
             WriteFlag(w, "rocketCraters", def.RocketCraters);
             WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
+            WriteFlag(w, "flightTextBlock", def.FlightTextBlock);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -387,6 +402,7 @@ public sealed class OptionsStore
             }
 
             Write(w, "netGameName", def.NetGameName);
+            Write(w, "netMasterServer", def.NetMasterServer);
             w.WriteEndObject();
         }
 
@@ -398,22 +414,35 @@ public sealed class OptionsStore
     /// missing one rather than invalidating the whole file, and a field the file does not carry
     /// at all reads as never set, so a file written before a field existed still loads. Only the
     /// version gate rejects a whole file.</summary>
-    public static OptionsDef? Deserialize(string json)
+    public static OptionsDef? Deserialize(string json) => Deserialize(json, out _);
+
+    /// <summary>The same read, with the reason a null came back in <paramref name="error"/>, which is
+    /// what <see cref="Load"/> logs.</summary>
+    public static OptionsDef? Deserialize(string json, out string error)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                error = "not a JSON object";
+                return null;
+            }
+
             int version = root.TryGetProperty("version", out var v)
                 && v.ValueKind == JsonValueKind.Number
                 && v.TryGetInt32(out int value)
                     ? value
                     : -1;
-            if (root.ValueKind != JsonValueKind.Object || version != Version)
+            if (version != Version)
             {
+                error = "version " + version.ToString(CultureInfo.InvariantCulture) + ", this build reads "
+                    + Version.ToString(CultureInfo.InvariantCulture);
                 return null;
             }
 
+            error = string.Empty;
             return new OptionsDef
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
@@ -421,6 +450,7 @@ public sealed class OptionsStore
                 ViewDistance = Read(root, "viewDistance", ValidViewDistances),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
                 CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
+                FlightTextBlock = ReadFlag(root, "flightTextBlock"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),
@@ -444,10 +474,12 @@ public sealed class OptionsStore
                         ? place
                         : null,
                 NetGameName = ReadShaped(root, "netGameName", static v => v.Length <= NameLimit),
+                NetMasterServer = ReadShaped(root, "netMasterServer", static v => MasterAddress.Parse(v) != null),
             };
         }
-        catch (JsonException)
+        catch (JsonException e)
         {
+            error = e.Message;
             return null;
         }
     }
@@ -488,22 +520,24 @@ public sealed class OptionsStore
     }
 
     /// <summary>The stored options, or an empty <see cref="OptionsDef"/> when the file is absent,
-    /// unreadable or malformed. A read failure is never the caller's problem to handle.</summary>
+    /// unreadable or malformed. A read failure is never the caller's problem to handle. A malformed
+    /// file is moved aside to <c>options.json.bad</c>. An unreadable one is not saved over this
+    /// session, as <see cref="AtomicFile"/> rules.</summary>
     public OptionsDef Load()
     {
-        try
-        {
-            var path = Path.Combine(_dir, FileName);
-            return File.Exists(path) ? Deserialize(File.ReadAllText(path)) ?? new OptionsDef() : new OptionsDef();
-        }
-        catch (IOException)
+        var path = Path.Combine(_dir, FileName);
+        if (AtomicFile.ReadAllText(path) is not { } text)
         {
             return new OptionsDef();
         }
-        catch (UnauthorizedAccessException)
+
+        if (Deserialize(text, out string error) is { } def)
         {
-            return new OptionsDef();
+            return def;
         }
+
+        AtomicFile.SetAside(path, error);
+        return new OptionsDef();
     }
 
     /// <summary>Writes <paramref name="def"/> atomically: the JSON lands in a sibling temp file
@@ -513,10 +547,7 @@ public sealed class OptionsStore
     public void Save(OptionsDef def)
     {
         Directory.CreateDirectory(_dir);
-        var path = Path.Combine(_dir, FileName);
-        var temp = Path.Combine(_dir, TempFileName);
-        File.WriteAllText(temp, Serialize(def), new UTF8Encoding(false));
-        File.Move(temp, path, overwrite: true);
+        AtomicFile.WriteAllText(Path.Combine(_dir, FileName), Serialize(def));
     }
 
     // A never-set field is written as an explicit null rather than left out, so the file names

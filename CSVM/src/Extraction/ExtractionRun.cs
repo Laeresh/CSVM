@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using CSVM.Session.Launch;
 
 namespace CSVM.Extraction;
 
@@ -221,6 +220,15 @@ public static class ExtractionRun
         if (request.PatchArchive == null)
         {
             yield return "no GOSDATA/ASSETS/crimptch.rof, so the patch overlay is absent";
+        }
+
+        foreach (var archive in rof.Archives)
+        {
+            if (archive.Refused.Count > 0)
+            {
+                yield return archive.Name + ": " + Count(archive.Refused.Count) + " member(s) not written, their names lead outside the output folder: "
+                    + string.Join(", ", archive.Refused);
+            }
         }
 
         if (rof.Movies.Missing.Count > 0)

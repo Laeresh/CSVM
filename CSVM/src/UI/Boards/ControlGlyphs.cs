@@ -1,5 +1,6 @@
 using System.Globalization;
 using CSVM.Bindings;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Boards;
@@ -33,7 +34,7 @@ public readonly record struct GlyphKey(
 public static class ControlGlyphs
 {
     /// <summary>The A button as a glyph key. A gesture read raw off a device has no binding to name
-    /// it (<see cref="Screens.MenuInput.SignOnPressed"/>), so a line prompting one names the button itself.
+    /// it (<see cref="MenuInput.SignOnPressed"/>), so a line prompting one names the button itself.
     /// Every prompt that does stand on a binding goes through <see cref="For"/> instead.</summary>
     public static readonly GlyphKey PadA = new(ControlKind.Button, (int)JoyButton.A, 0);
 
@@ -239,7 +240,7 @@ public sealed class PromptFontGlyphs : ControlGlyphSet
             }
             else
             {
-                GD.PushWarning($"control glyphs: {FontPath} not found, pad controls draw as lettered plaques");
+                Log.Warn("ui", $"control glyphs: {FontPath} not found, pad controls draw as lettered plaques");
             }
         }
 

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM;
+using CSVM.Extraction;
 using CSVM.Flight.Weapons;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;

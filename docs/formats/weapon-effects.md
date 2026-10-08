@@ -358,7 +358,7 @@ recoverable from the data. The pick-one reading (one rolled quad playing the
 `_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (
 `BL-263`)**: it does not reproduce the stills, and what stands is a documented remake-only rule.
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
-through its own separate pool.
+through its own separate pool, on every struck surface but an aircraft.
 
 The quads are **not drawn for the guns of a pilot whose own view is the full Cockpit (mode 6)**,
 which is what the retail captures show from inside the canopy: no flash at all, only the interior

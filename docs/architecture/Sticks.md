@@ -33,8 +33,8 @@ that reports hot-plug. Exports are bound by name from the loaded handle, so a wr
 as one log line, not as a crash.
 
 ## src/Sticks/StickRoster.cs
-The gap-filling roster: every listed device whose model Godot's pad roster lacks (and, off Windows,
-that SDL does not map as a gamepad and Valve did not make), opened, kept
+The gap-filling roster: on Windows every listed device whose model Godot's pad roster lacks, off
+Windows every one SDL does not map as a gamepad and Valve did not make, opened, kept
 current across plugs and across changes in Godot's roster, and logged on every change. Reads
 (axes -1..1, buttons up to 128, hats as `Bindings.HatDirection`) answer neutral while the gate
 holds, the same `Pads.InputBlocked` pads obey. `ModelAxis`/`ModelButton`/`ModelHat` merge the
@@ -80,7 +80,7 @@ read from and saved to one directory, and a save is atomic and always a user fil
 profile saved becomes a user copy under `FileNameFor` (`231D-0200+231D-0201.json`). Rows reuse
 `Bindings/BindingStore.cs`'s tokens, written bare and by number; a full keymap token naming the
 file's model in any case also reads. An unusable model or companion refuses the whole file, with
-one log line.
+one log line, and moves a user file to `.bad` so a save under its name cannot replace it.
 
 ## src/Sticks/StickProfileResolver.cs
 Pure selection: connected models plus files give the active file per model. A file applies when its
@@ -118,7 +118,7 @@ the rows. A changed screen save turns it into a user file. The layout and rule a
 Seat 1's `SkipCutscene` off the active profile's Menu rows alone: `Pressed` (the edge) and `Held`,
 one `Poll` per frame. `Prime` swallows a trigger already down, so the press that opened a screen
 cannot skip it. Reads nothing for any other seat or with sticks off. Polled by
-`UI/Screens/CinemaScreen.cs`, `UI/Screens/BootCard.cs` and `Session/Launch/GameSession.cs` (into
+`UI/Screens/CinemaScreen.cs`, `UI/Screens/BootCard.cs` and `Launch/GameSession.cs` (into
 `CutsceneController.TakeStickPress`). Rules in `docs/org/input.md`, "Skip Cutscene, the stick's
 skip"; covered by `CSVM.Tests/StickSkipTests.cs`.
 
@@ -144,3 +144,9 @@ the `Stick` prefix and print an unnamed stick's control alone, since the column 
 wide. When two unnamed models share the row, each unnamed caption keeps its model
 (`231D/0200 Button 5`) so the two read apart. `Prefix`, `Column` and `Columns`' two-argument form
 are the pure forms a test drives with its own names.
+
+## src/Sticks/StickSplit.cs
+An `IDeviceState` filter that passes a seat's flight-stick identities alone (`SticksOnly`) or
+everything else (`WithoutSticks`), deciding by `StickModel.TryFromDevice`. `FlightController` polls
+one keymap through each, so a pad row and a stick row on the same action resolve apart for
+`AnalogAxes`. The seat's own reader stays the only thing that reads hardware.

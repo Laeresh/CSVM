@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -10,6 +11,7 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -807,7 +809,7 @@ internal static class CampaignRosterSuites
             runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
-            // The exact conversion GameSession.RegisterAiVoice applies in production: a null
+            // The exact conversion SessionVoices.RegisterAi applies in production: a null
             // override falls back to rating 5, otherwise each chance is read at its OWN rating.
             // What is under test is the two overrides CampaignDirector passes in, not this.
             void RegisterVoice(FlightController? ai, int? accentId, int? talkerOverride, int? constitutionOverride)
@@ -882,7 +884,7 @@ internal static class CampaignRosterSuites
     // that speaks is not the one whose mode moved. The mission's own roster decides both, so the
     // suite spawns C1/M02's through the director and drives the site a flown mission drives.
     [Suite("ai-voice-mission",
-        "BL-934's gap between a hand-built speaker and a flown mission: C1/M02's shipped roster "
+        "The gap between a hand-built speaker and a flown mission: C1/M02's shipped roster "
         + "spawned through CampaignDirector on the session's own mission prewarm set, where the "
         + "enemy blakepeace_2_1 authors accentID -1 and registers no speaker of its own, yet its "
         + "patrol-to-pursue commit against the human rig still rolls the computed bearing "
@@ -960,7 +962,7 @@ internal static class CampaignRosterSuites
             var human = player;
             runtime.RegisterPlayer(human);
 
-            // GameSession.RegisterAiVoice's own shape: every spawn is handed over, accent or none.
+            // SessionVoices.RegisterAi's own shape: every spawn is handed over, accent or none.
             void RegisterVoice(FlightController? ai, int? accentId, int? talkerOverride, int? constitutionOverride)
             {
                 if (ai == null)

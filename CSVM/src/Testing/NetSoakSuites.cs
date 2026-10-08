@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session;
-using CSVM.Session.Launch;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -64,9 +66,9 @@ internal static class NetSoakSuites
     private static readonly Cell[] Matrix =
     {
         new("clean", LoopbackConditions.Perfect, 0.25f, 0.5f),
-        new("50ms/5%", new LoopbackConditions(0.05, 0.01, 0.05), 1.5f, 3f),
-        new("100ms/10%", new LoopbackConditions(0.10, 0.02, 0.10), 2f, 6f),
-        new("200ms/20%", new LoopbackConditions(0.20, 0.04, 0.20), 3.5f, 10f),
+        new("50ms/5%", SoakCells.Broadband, 1.5f, 3f),
+        new("100ms/10%", SoakCells.Congested, 2f, 6f),
+        new("200ms/20%", SoakCells.PoorWireless, 3.5f, 10f),
     };
 
     [Suite("net-soak",
@@ -92,7 +94,7 @@ internal static class NetSoakSuites
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(MeshSeed));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
         };
         NetSeats.Validate(roster);
@@ -151,8 +153,8 @@ internal static class NetSoakSuites
         pair.Step(ConvergeSteps);
         int lostBefore = pair.Mesh.Sum(m => m.Lost);
         int discardedBefore = pair.Mesh.Sum(m => m.DiscardedStale);
-        var hostBefore = pair.Host.NetLink!.Instruments.Reading;
-        var guestBefore = pair.Guest.NetLink!.Instruments.Reading;
+        var hostBefore = pair.Host.Wire.Link!.Instruments.Reading;
+        var guestBefore = pair.Guest.Wire.Link!.Instruments.Reading;
         foreach (var buffer in pair.Buffers())
         {
             buffer.ResetTally();
@@ -170,8 +172,8 @@ internal static class NetSoakSuites
         var poses = pair.Buffers().Aggregate(default(RemotePoseTally), (sum, b) => sum.Plus(b.Tally));
         return new CellResult(
             cell, there, back, flown, poses,
-            pair.Host.NetLink!.Instruments.Reading - hostBefore,
-            pair.Guest.NetLink!.Instruments.Reading - guestBefore,
+            pair.Host.Wire.Link!.Instruments.Reading - hostBefore,
+            pair.Guest.Wire.Link!.Instruments.Reading - guestBefore,
             flight.RoundsFired, new[] { killed, killedBack }, returned, flight.Flying,
             pair.Mesh.Sum(m => m.Lost) - lostBefore, pair.Mesh.Sum(m => m.DiscardedStale) - discardedBefore);
     }
@@ -308,9 +310,9 @@ internal static class NetSoakSuites
         // questions and answers, leave no gap to infer and are not part of the truth.
         int toGuest = pair.Mesh[0].Lost - pair.Mesh[0].LostOn(NetChannels.Events);
         int toHost = pair.Mesh[1].Lost - pair.Mesh[1].LostOn(NetChannels.Events);
-        int guestInferred = pair.Guest.NetLink!.Instruments.Dropped;
+        int guestInferred = pair.Guest.Wire.Link!.Instruments.Dropped;
         int guestTruth = toGuest + pair.Mesh[1].DiscardedStale;
-        int hostInferred = pair.Host.NetLink!.Instruments.Dropped;
+        int hostInferred = pair.Host.Wire.Link!.Instruments.Dropped;
         int hostTruth = toHost + pair.Mesh[0].DiscardedStale;
         ctx.Check(guestTruth > 0 && guestInferred == guestTruth && hostInferred == hostTruth,
             $"each machine's drop count read off its sequence gaps is what the carrier really lost or discarded (guest {guestInferred} of {toGuest} lost + {pair.Mesh[1].DiscardedStale} discarded, host {hostInferred} of {toHost} lost + {pair.Mesh[0].DiscardedStale} discarded, events channel losses {pair.Mesh[0].LostOn(NetChannels.Events)}/{pair.Mesh[1].LostOn(NetChannels.Events)} left out)");
@@ -320,11 +322,11 @@ internal static class NetSoakSuites
     // read zero order violations, and this is the same counter moving on a real breach.
     private static void InjectedViolation(TestContext ctx, Pair pair)
     {
-        int before = pair.Guest.NetLink!.Instruments.OrderViolations;
-        pair.Host.NetLink!.Broadcast(
+        int before = pair.Guest.Wire.Link!.Instruments.OrderViolations;
+        pair.Host.Wire.Link!.Broadcast(
             new SpawnMessage(1, NetSpawnKind.Respawn, NetMessage.NoSpawnEntry), NetChannels.Events);
         pair.Step(SettleSteps);
-        int after = pair.Guest.NetLink!.Instruments.OrderViolations;
+        int after = pair.Guest.Wire.Link!.Instruments.OrderViolations;
         ctx.Check(after == before + 1,
             $"ABLE-TO-FAIL CONTROL: a respawn granted to a seat nobody reported dead is counted as out of order ({before} to {after})");
     }
@@ -349,7 +351,8 @@ internal static class NetSoakSuites
         session.SeatRigs[seat].Controller?.WorldPosition ?? Vector3.Zero;
 
     // One matrix cell: its link both ways, and the tracking bars read off this suite's own runs
-    // with headroom. What a player accepts is unmeasured, so a bar is a regression tripwire.
+    // with headroom. Each cell flown by hand on a real link played without a noticed fault. A bar
+    // is therefore both what a player accepts and a regression tripwire.
     private sealed record Cell(string Name, LoopbackConditions Conditions, float MeanBar, float WorstBar);
 
     // The two sessions and their carriers, stepped together, host first, as a listen server runs.

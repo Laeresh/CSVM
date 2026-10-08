@@ -101,8 +101,6 @@ public sealed class FlightRoster
             ArgumentNullException.ThrowIfNull(aircraft.CamParamsFor);
             ArgumentNullException.ThrowIfNull(aircraft.WeaponMessages);
             ArgumentNullException.ThrowIfNull(human.PauseState);
-            ArgumentNullException.ThrowIfNull(human.MenuInputFor);
-            ArgumentNullException.ThrowIfNull(human.ExitSession);
         }
         _world = world;
         _human = human;
@@ -110,11 +108,11 @@ public sealed class FlightRoster
         _zrdrPath = aircraft.ZrdrPath;
         _liveries = liveries;
         _aiView = _ai.AsReadOnly();
-        if (starts != null)
-            _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
-                aircraft, world, human);
         _aiAssembler = new AiFlightAssembler(policy, liveries, worldEffects, worldRoot,
             aircraft, world, human.RigCount, _crashRigs);
+        if (starts != null)
+            _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
+                aircraft, world, human, _aiAssembler);
     }
 
     /// <summary>How many mid-flight AI introductions are still owed their crash rig. Zero on any
@@ -448,8 +446,8 @@ public sealed class FlightRoster
         return captured;
     }
 
-    // The captured aircraft's livery (966 and 967), the user's own controls reading and undecoded in
-    // the executable. A live rig answers with its ShippedSkins reading: a real enemy spawn can resolve
+    // The captured aircraft's livery (966 and 967; docs/formats/anim-definitions/cutscenes.md).
+    // A live rig answers with its ShippedSkins reading: a real enemy spawn can resolve
     // to no scheme, and that null must beat the pilot's default. With no live rig, 966 reads its
     // militia def; --paint= is about this run and keeps the pilot's paint.
     private (PaintScheme? Scheme, bool ShippedSkins) CapturedPaint(AirframeSwapCode airframe,

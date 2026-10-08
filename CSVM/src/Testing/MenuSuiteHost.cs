@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.UI.Hangar;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
@@ -57,9 +58,9 @@ internal static class MenuSuiteHost
         // table, the stock fits on first need and the zrdr scope the data root carries.
         string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(dataRoot, "extracted", "zrdr.zip"));
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), zrdr));
         host.Features.Add(new CampaignFeature(
-            strings, PlanePickerRoster.AirframeNode, chapterCinema, closingCinema));
+            strings, StockAirframes.Node, chapterCinema, closingCinema));
         // No save by default: a suite must never write over the keymap saved at this machine's
         // controls, and only a suite holding the store's directory override may pass one.
         host.Features.Add(new ControlsFeature(saveBindings));

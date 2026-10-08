@@ -348,6 +348,88 @@ law) and `DistTransient` (step 1's transient, reading `dist_vary`/`dist_catch_up
 `CamParams`). The direction factor `f` has no port: CSVM's look-behind takes the forward radius
 whole, so the transient is never inverted and the blended bounds are never formed.
 
+## The chase rig
+
+The forward arm of `FUN_0042c7f0` builds the chase camera's DIRECTION and AIM from the head's shown
+angles and the two `thirdp_*` fields, then scales the direction by the distance above:
+
+1. **The swing** (`0042c881`-`0042c8a2`): elevation `e = DAT_0064ef58 + thirdp_pitch` (the block's
+   `+0x28`, which the reader `FUN_0042f700` stores as the authored degrees × `0.017453292`), azimuth
+   `a = DAT_0064ef5c`. `FUN_0053f550(a, e)` returns the quaternion
+   `(cos e/2 · cos a/2, sin e/2 · cos a/2, cos e/2 · sin a/2, −sin e/2 · sin a/2)`, which is a turn
+   by `e` about the plane's right axis followed by `a` about its up axis.
+   `CameraController.ChaseSwing` is the same rotation.
+2. **The rig vector** (`0042c8a7`-`0042c8d5`): `(0, thirdp_height · w² · 1.0145, 1.0145)` in the
+   plane's frame (+Y up, +Z astern), with `w` the swing's scalar part and `1.0145` the float
+   `0x3f81db23`, written once as a literal for Z and read from `0x006040c0` for Y. `thirdp_height` is
+   the block's `+0x24`, stored raw: a dimensionless rise per unit astern. `w²` is 1 with the head
+   settled, ½ on a flank and 0 dead ahead, so the lift fades as the head swings round.
+3. **Turned and scaled** (`0042c8d8`, `FUN_0053fb40` = `q v q*`; then `FUN_0042c670`): the swung
+   vector, multiplied by the clamped and zoomed distance, is the camera's offset from the aircraft.
+   Its length is therefore `1.0145 · √(1 + (h·w²)²)` times the distance, about `1.024` settled.
+4. **The aim** (`FUN_0042c670`, `FUN_0053f920`): the camera's orientation is the eased aircraft
+   frame times the same swing quaternion, so the camera looks along the swung nose, not at a point.
+
+### The catch-up: two eased aircraft frames
+
+`FUN_0042c670` (called at `0042ca40`) turns the offset and the aim each by an aircraft frame of
+its own: a quaternion that eases toward the aircraft's live orientation (`obj + 0x150`) every frame.
+Neither frame carries the head's swing; the swing is applied whole on top of them.
+
+- **Position.** The frame `DAT_00621510` eases at `pos_catch_up · k` (the block's `+0x20`). The
+  swung rig vector, turned by it (`FUN_0053fb40`) and multiplied by the distance, is added to the
+  aircraft's LIVE position (`obj + 0x204`). So the offset's direction lags; the world position
+  never does, and the aircraft's apparent size holds at any speed.
+- **Aim.** The frame `DAT_00621520` eases at `look_catch_up · k` (the block's `+0x2c`), and the
+  camera's orientation is that frame times the swing quaternion (`FUN_0053f920`).
+- **The ease** is `FUN_004607b0`. It forms `t = rate · DAT_009ad744`, the wall-time frame dt above.
+  At `t ≥ 1` the frame lands on the live orientation outright. Otherwise it turns `t` of the
+  remaining rotation the shorter way round: the left delta `live ⊗ frame*` (`FUN_0053f9b0`) raised
+  to the power `t` (`FUN_0053fed0`, angle times `t`, taking the negated quaternion's arc when the
+  scalar is negative), pre-multiplied onto the frame (`FUN_0053f920`) and renormalised
+  (`FUN_0053f850`). That is a slerp by the fraction `rate · dt`, **linear in dt**. ⚠ It is not the
+  scalar ease `FUN_00460490` that `dist_catch_up`, the head angles and the zoom take, whose fraction
+  is `1 − e^(−rate·dt)`. Both square roots in the quaternion ease are the bit-trick estimate
+  `(bits >> 1) + 0x1fc00000`; in the power its error cancels to first order, and the
+  renormalisation is exact at unit length.
+- **The swing factor** (`0042c937`-`0042c96a`): `k = 1 + 1.977872 · √(x² + y²)`, with `1.977872` the
+  float `0x3ffd2ae9` at `0x006040b8`, `1.0` at `0x006032dc`, and `(x, y, z)` the swung rig vector of
+  steps 2 and 3 per metre, in the plane's frame. `√(x² + y²)` is how far the camera sits off the
+  flight path's axis. Settled on the default block it is `0.1349`, so `k = 1.2667` and the position
+  eases at **2.53/s**, the aim at **3.80/s**; Balmoral's higher rig gives `k = 1.3943`. A flank view
+  or one straight up sits a whole radius off the axis (`k ≈ 3.0`), dead ahead almost on it
+  (`k ≈ 1.01`). The distance law's direction factor `f` is the same vector's `z` times `0.988936`
+  (`0x006040bc`), half the swing gain.
+- **The look-behind arm** hands the same function a fixed rig: the vector `(0, 0, −1)`, the
+  half-turn quaternion `(0, 0, 1, 0)` about up, and both rates unscaled (`k = 1`). It eases the same
+  two frames, so switching between the chase view and the look-behind never re-seeds the lag.
+- **Seeding.** `FUN_0042dcf0` copies the live orientation into both frames when `FUN_0042c7f0`
+  finds the placement flag `DAT_0064ef2c` set. The mode setter `FUN_0042c280` raises it from the
+  table at `00621380` (int32, `[from·10 + to]`) on entering mode `0` from any mode but `2`: the
+  cockpit, the nose, the flyby, the crash and the death cameras all hand over to a seeded frame.
+- A third ease in the same function, the clearance hook's height at `5.0/s` (`0x40a00000`, into
+  `DAT_0064ef8c`), carries nothing: the hook `FUN_0042c5a0` is the retail stub.
+
+What that gives at the controls: a steady roll at `ω` leaves the aim frame `ω/3.80` behind the
+wings, so the picture's horizon rolls late, by about 24° at 90°/s, and catches up once the roll
+stops. The offset frame trails by `ω/2.53`, but the offset sits only 7.6° off the roll axis, so the
+camera itself swings about 4.5° round the tail.
+
+What that gives with the head settled, on the shipped blocks: the camera sits **7.57°** above the
+tail (`atan(0.138)` less the `0.29°` pitch; Balmoral's `0.2`/`0.2°` gives **11.11°**), the
+aircraft sits `atan(thirdp_height)` = **7.86°** below the image centre whatever the pitch, and the
+pitch tilts the whole rig, offset and aim together, by a third of a degree. The level numpad keys
+follow from `w²`: the flanks sit at about **3.7°** and the nose-on view 0.29° below level.
+
+CSVM's chase camera is this law, through `CameraController.AuthoredRig`, at the distance law
+above; the authored rig is the one that reads as the original's chase camera at the controls. The
+catch-up is `CameraController.EaseFrame` on two frames scaled by `CatchUpScale`, and the
+look-behind (`BackView`) rides the same frames unscaled. A first-person view, a static cut or the
+paused orbit leaves the frames unseeded, and the next chase or look-behind frame seeds them off the
+live attitude, the port of the mode-change seeding. The look stick's absolute swing, which the
+original has no counterpart for, turns the finished pose about the eased frames and does not feed
+`k`.
+
 ## Head-look controller
 
 Decoded from `FUN_0042d010`. Three callers share it: the
@@ -357,15 +439,10 @@ autohead off, at `0042c877`-`0042c87c`). CSVM's port is `HeadLook` (`src/Flight/
 instance per pilot, floored per frame by whichever view places it
 (`CameraController.StepHead`), and turned into a chase offset by `CameraController.ChaseSwing`.
 
-⚠ **The chase placement's own elevation is the head's plus the authored `thirdp_pitch`.**
-`FUN_0042c7f0` loads the shown elevation `DAT_0064ef58` at `0042c881`, adds the camparam block's
-`+0x28` at `0042c88d` (the reader converts `thirdp_pitch` degrees to radians on the way in,
-`docs/formats/camparam.md`) and hands that with the shown azimuth `DAT_0064ef5c` to the direction
-builder `FUN_0053f550` at `0042c8a2`. So a settled head leaves the camera dead astern at the
-authored pitch, `0.29°` on every plane but Balmoral's `0.2°`, not at the `15.7°` CSVM's own
-`BaseUp`/`BaseBack` pair sits at. The look-behind arm is the exception that proves the routing: with
-the back flag set the routine never calls `FUN_0042d010` at all and writes the fixed direction
-`(0, 0, 1)` instead.
+⚠ **The chase placement adds the authored `thirdp_pitch` to the head's elevation before it
+builds the swing, and lifts the camera by `thirdp_height`.** "The chase rig" below has the whole
+law. The look-behind arm never calls `FUN_0042d010` at all and writes a fixed rig instead, on the
+same eased frames.
 
 - **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock. CSVM carries all three as
   `HeadLook.LookMode`, written by the same three keys and padlock's exit alone, never by a device
@@ -386,6 +463,14 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
   behavioural difference: state `0` zeroes both angles, so a released snap direction returns the
   head, while state `1` leaves them untouched, so a pan parks the head where it was pointed until
   the centre slot `0x3e` or a state `0` writer moves it.
+- **The look stick follows the same split (remake-only).** The original binds no axis to look, so
+  CSVM's right stick has no decode; it is fitted to the two states. In state `0` it aims absolutely
+  and a let-go stick returns the view. In state `1` it is a rate, the free-look arm's own law below
+  with the stick's deflection in place of the normalised direction: the angles move by
+  `2·dt·deflection`, inside the same clamps, and a stick back inside its centre band adds nothing,
+  so the view stays where it was turned. Both views take it through the head; the chase view's
+  absolute swing stands aside while `HeadLook.PadRates` holds. The centre key, `J` and `K` return a
+  turned view as they return a parked pan.
 - **Angles.** `DAT_0064ef60` is elevation above level (`0` = level, `π/2` = straight up, clamped to
   `[0, π/2]` in the input paths, the original's head never looks below level in front of the
   clamp; the caller-supplied floor above is a SEPARATE, per-caller bound); `DAT_0064ef64` is
@@ -487,7 +572,7 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
 | Head-look controller | snap, free-look, padlock, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`L`/`J` state the mode the original's three selectors state, which the numpad and the mouse both obey |
 | Padlock (Track Target) | state `2`: the head snaps onto the selection's bearing every frame, floored by the caller and unlimited in azimuth, any look direction returning it to snap | landed as `LookMode.Padlock`, reading `TargetSelection.Current` through `HeadLook.TargetOffset` and following the same tail-crossing wrap |
-| Chase base elevation | the head's elevation plus the authored `thirdp_pitch`, i.e. dead astern at `0.29°` with the head settled | a hand-picked `15.7°` from `BaseUp`/`BaseBack` (`BL-885`) |
+| Chase rig | `thirdp_height` lifts the camera `7.57°` above the tail with the head settled, `thirdp_pitch` tilts the rig, and the camera aims along the swung nose, offset and aim each on an aircraft frame eased at its catch-up rate | matched: `CameraController.AuthoredRig` places and aims the chase camera off the same two fields, on two aircraft frames eased at `pos_catch_up`/`look_catch_up` times the swing factor, the look-behind on the same frames unscaled |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no
 hardcoded 0.75), both first-person views sitting at it, the interior drawn + head-look + 80° for
@@ -515,20 +600,15 @@ which is why a single-pass renderer says the same thing by mounting the subtree 
 head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
 applied to the mount.
 
-## The enhanced presentation's own chase cues (remake-only)
+## The enhanced presentation's own chase cue (remake-only)
 
-Nothing on this page changes under `--graphics=enhanced`: the distance law, its transient, the
-FOV constants and the head-look rates are the decoded ones in both presentations, and the faithful
-path writes the same camera pose and the same FOV to the bit. The enhanced presentation adds two
-cues that the original has no counterpart for, both TUNE and both living in
+The distance law, its transient, the chase rig, its two eased frames, the FOV constants and the
+head-look rates are the decoded ones under `--graphics=enhanced` too, so a roll trails by the same
+`pos_catch_up`/`look_catch_up` ease in both presentations. The faithful path writes the same camera
+pose and the same FOV to the bit whether or not the cue is stepped. The enhanced presentation adds
+one cue that the original has no counterpart for, TUNE and living in
 `CameraController.StepEnhancedCues`:
 
-- **The chase pose trails the nose.** A lagged copy of the aircraft's attitude eases toward the
-  live one at 4/s (a 0.25 s time constant) through the same exponential shape `dist_catch_up`
-  uses, and the chase rig, its offset direction, its image up and its look-ahead point, is built
-  from that lagged attitude, so a roll or a yaw leaves the camera behind and it springs back. The
-  distance law keeps reading the live speed, so the radius is unchanged; the look-behind view,
-  which hard-codes its own direction, stays out of the lag entirely.
 - **The external FOV widens with speed.** `RestoreExternalFov` adds up to 6° to the external
   angle, zero at and below 0.6 of the airframe's rated max speed (`fd_speed`, `PlaneStats`),
   rising linearly to the full 6° at rated max and held there in a dive past it. The first-person
@@ -536,9 +616,9 @@ cues that the original has no counterpart for, both TUNE and both living in
   built-in angle through `ApplyDecodedExternalFov`, because a cut holds a framing rather than
   riding the aeroplane.
 
-Both rates are per real second, the rule the rest of this page states for the decoded easings: the
-camera is stepped on the sim clock, which runs one step per rendered frame at the wall delta in
-play and a fixed step per frame only under `--det`, where a capture must be reproducible.
+⚠ Enhanced has no attitude lag of its own. The decoded ease already trails a roll (about 4.1° on
+the offset and 21.7° on the aim after a one-second 90°/s roll), and a faster lag in its place reads
+stiffer than the faithful camera, while one stacked on it lags the camera twice.
 
 ## Not resolved
 

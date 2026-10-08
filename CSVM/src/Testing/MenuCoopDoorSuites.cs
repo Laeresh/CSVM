@@ -28,7 +28,8 @@ internal static class MenuCoopDoorSuites
 
     [Suite("menu-coop-door",
         "The campaign's network door on two launchscreens over the loopback: L / Y in the cabin "
-        + "opens and closes the carrier and the router mapping and shows the address, the guest's "
+        + "opens and closes the carrier and the router mapping and shows the address, opening Private "
+        + "with no password the Multiplayer board left behind, the guest's "
         + "Multiplayer board names the campaign session it joined, Continue holds the guest on a "
         + "waiting board, the remote guest counts in the host's chip strip without a local seat, "
         + "takes a net seat the guest's session hears, and leaving the campaign unmaps the port")]
@@ -113,7 +114,11 @@ internal static class MenuCoopDoorSuites
     // cabin's next mission under the seated profile.
     private static void OpenForTheMatch(TestContext ctx, LaunchMenu menu, NetPlayFeature door)
     {
+        // A password the Multiplayer board left behind must not gate a door that never showed it.
+        door.Password = "leftover";
         menu.Drive(Network);
+        ctx.Check(door.IsCoopHost && door.Private && door.Advertising is { Password: false } && door.Password.Length == 0,
+            $"L / Y opens Private, the campaign's default, asking no leftover password ({door.Private}, {door.Advertising?.Password})");
         AwaitMapping(door);
         menu.Drive(MenuCommands.None);
         string address = $"{NetDoorAid.ExternalAddress}:{NetPorts.Game.ToString(CultureInfo.InvariantCulture)}";
@@ -182,7 +187,7 @@ internal static class MenuCoopDoorSuites
 
         var guest = NetSession.Guest(guestLaunch.Transport);
         int guestPeer = guestLaunch.Transport.LocalPeer;
-        ctx.Check(guest.Joined && guest.LocalSeat == 1 && roster[1].PeerId == guestPeer && !roster[1].IsLocal,
+        ctx.Check(guest.Joined && guest.LocalSeat == 1 && roster[1].PeerId == guestPeer && !roster[1].FlownHere,
             $"the remote guest holds net seat 1 and its session knows it ({guest.Joined}, seat {guest.LocalSeat}, peer {roster[1].PeerId} vs {guestPeer})");
         ctx.Check(guest.DroppedUnknown == 0,
             $"and no payload reached the guest's session unrouted: the advert stays in the lobby ({guest.DroppedUnknown})");

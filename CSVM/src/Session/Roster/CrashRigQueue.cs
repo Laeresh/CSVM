@@ -68,16 +68,6 @@ internal sealed class CrashRigQueue
         }
     }
 
-    /// <summary>Builds every queued rig in place. The teardown-safe form for a caller that is about
-    /// to stop pumping while its aeroplanes are still in play.</summary>
-    public void FinishAll()
-    {
-        while (_pending.Count > 0)
-        {
-            Complete(_pending[0]);
-        }
-    }
-
     /// <summary>Drops one aeroplane's queued rig without building it. For a rollback: the
     /// controller is being removed from the world, so its rig has nothing left to build onto.</summary>
     public void Drop(FlightController owner)

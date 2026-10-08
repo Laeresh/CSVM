@@ -103,7 +103,8 @@ public sealed class PlaneBuilder
     /// <param name="dockingHook">Builds the airframe's <c>*_hook</c> group, parked at its archive-authored inactive bit; a human rig only.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
-        bool cockpitInterior = false, bool dockingHook = false, PlanePainter? painter = null)
+        bool cockpitInterior = false, bool dockingHook = false, PlanePainter? painter = null,
+        bool raceGhost = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -115,6 +116,8 @@ public sealed class PlaneBuilder
         {
             // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
             ShadowLookupOffset = AirframeShadowLookupOffset,
+            // The race ghost keys the airframe alone; the interior is the owner's view and never fades.
+            RaceGhostShader = raceGhost,
         };
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a

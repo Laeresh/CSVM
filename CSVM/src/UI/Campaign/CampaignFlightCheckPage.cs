@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -125,7 +126,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private const int SilhouetteFrames = 12;
 
     // Airframe id 0-10 to stock_loadouts.json's def key, the same row order
-    // PlanePickerRoster.AirframeNodes and loadouts.md's stock table both use.
+    // StockAirframes.Nodes and loadouts.md's stock table both use.
     private static readonly string[] AirframeDefKeys =
     {
         "pautogyro", "pavenger", "pbalmoral", "pbloodhawk", "pbrigand",

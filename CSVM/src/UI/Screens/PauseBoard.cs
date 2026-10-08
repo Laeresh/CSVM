@@ -17,10 +17,10 @@ namespace CSVM.UI.Screens;
 /// </summary>
 public sealed partial class PauseBoard : Control
 {
-    // Base metrics at 720p (scaled by window height), mirrors VersusBoard so a shared board reads
-    // as the same screen whichever one is up. All TUNE.
-    private const int TitleFont = 30;
-    private const int ContextFont = 18;
+    // The board's sizes, chrome type scale rungs at the results boards' 720p reference, scaled by
+    // window height. The heading is VersusBoard's, so a shared board reads as one screen.
+    private static readonly float TitleFont = ChromeType.InReference(ChromeSize.Heading, ResultsBoard.ReferenceHeight);
+    private static readonly float ContextFont = ChromeType.InReference(ChromeSize.Text, ResultsBoard.ReferenceHeight);
 
     // The owner's pointer over the rows. A flight's released capture leaves the pointer at the
     // window's middle, where the rows stand, so its first sight marks a row and moves nothing.
@@ -135,7 +135,7 @@ public sealed partial class PauseBoard : Control
     private void Populate()
     {
         // Whole window, not a pane, scales on window height alone, same reason VersusBoard does.
-        float s = Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / 720f : 1f);
+        float s = Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / ResultsBoard.ReferenceHeight : 1f);
         var body = ResultsBoard.RebuildPanel(_center, ref _panel, s);
 
         // OwnerPlayerIndex is captured once here (Populate runs only from a fresh pause), so the

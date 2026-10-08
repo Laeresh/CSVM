@@ -26,91 +26,91 @@ public class OriginalOptionsTests
     public void TheGameOptionsPageTakesEveryChoiceAndAppliesThemAsOneExit()
     {
         var host = Host();
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
 
         Assert.Equal(OriginalScreen.GameOptions, host.Screen);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
-        Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
-        Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.FocusedKey);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.GameOptions.DifficultyChoice);
+        Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
+        Assert.Equal(OriginalGameOptionsPage.DifficultyKey, host.FocusedKey);
 
         // The first row is the original's own Difficulty dropdown over the three campaign tiers:
         // its list opens on Accept, and the third item picks Hardest.
         Accept(host);
-        Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.Module.OpenGameOption);
+        Assert.Equal(OriginalGameOptionsPage.DifficultyKey, host.Module.GameOptions.OpenOption);
         Assert.Equal(new[] { "Normal", "Hard", "Hardest" }, host.Rows.Select(r => r.Label));
         Down(host);
         Down(host);
         Accept(host);
-        Assert.Null(host.Module.OpenGameOption);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.DifficultyChoice);
-        Assert.Equal("Hardest", Row(host, OriginalOptionsScreen.DifficultyKey).Label);
+        Assert.Null(host.Module.GameOptions.OpenOption);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
+        Assert.Equal("Hardest", Row(host, OriginalGameOptionsPage.DifficultyKey).Label);
         // A sideways step wraps back onto Normal, then on to Hard.
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.GameOptions.DifficultyChoice);
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.GameOptions.DifficultyChoice);
 
         // The second row is the original's own Default View dropdown. Its own list carries the
         // three views in its own order: Cockpit, First Person, Exterior.
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.DefaultViewKey, host.FocusedKey);
-        Assert.Null(host.Module.DefaultViewChoice);
-        Assert.Equal("Exterior", Row(host, OriginalOptionsScreen.DefaultViewKey).Label);
+        Assert.Equal(OriginalGameOptionsPage.DefaultViewKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.DefaultViewChoice);
+        Assert.Equal("Exterior", Row(host, OriginalGameOptionsPage.DefaultViewKey).Label);
         Accept(host);
-        Assert.Equal(OriginalOptionsScreen.DefaultViewKey, host.Module.OpenGameOption);
+        Assert.Equal(OriginalGameOptionsPage.DefaultViewKey, host.Module.GameOptions.OpenOption);
         Assert.Equal(new[] { "Cockpit", "First Person", "Exterior" }, host.Rows.Select(r => r.Label));
         // The list opens on the item the row stands at, which with nothing saved is Exterior, the
         // last of the three. Two steps up reach the first.
         MoveY(host, -1);
         MoveY(host, -1);
         Accept(host);
-        Assert.Null(host.Module.OpenGameOption);
-        Assert.Equal("cockpit", host.Module.DefaultViewChoice);
+        Assert.Null(host.Module.GameOptions.OpenOption);
+        Assert.Equal("cockpit", host.Module.GameOptions.DefaultViewChoice);
         StepX(host, 1);
-        Assert.Equal("nose", host.Module.DefaultViewChoice);
+        Assert.Equal("nose", host.Module.GameOptions.DefaultViewChoice);
         StepX(host, 1);
-        Assert.Equal("chase", host.Module.DefaultViewChoice);
+        Assert.Equal("chase", host.Module.GameOptions.DefaultViewChoice);
         StepX(host, 1);
-        Assert.Equal("cockpit", host.Module.DefaultViewChoice);
+        Assert.Equal("cockpit", host.Module.GameOptions.DefaultViewChoice);
 
         // The third row is the original's own Auto Head Turn checkbox, which reads OFF while
         // nothing is saved. An unset field leaves the headLook.autohead config key deciding, and
         // that ships off.
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.AutoHeadTurnKey, host.FocusedKey);
-        Assert.Null(host.Module.AutoHeadTurnChoice);
+        Assert.Equal(OriginalGameOptionsPage.AutoHeadTurnKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.AutoHeadTurnChoice);
         Accept(host);
-        Assert.True(host.Module.AutoHeadTurnChoice);
+        Assert.True(host.Module.GameOptions.AutoHeadTurnChoice);
         StepX(host, 1);
-        Assert.False(host.Module.AutoHeadTurnChoice);
+        Assert.False(host.Module.GameOptions.AutoHeadTurnChoice);
         StepX(host, 1);
-        Assert.True(host.Module.AutoHeadTurnChoice);
+        Assert.True(host.Module.GameOptions.AutoHeadTurnChoice);
 
         // The fourth row is the remake-only Next Target checkbox, straight under the head turn.
         // The page offers no menu presentation row, the command line alone choosing one. Accept
         // flips it, and a sideways step is the same flip, so the row is walkable either way.
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.NearestAfterKillKey, host.FocusedKey);
-        Assert.Null(host.Module.NearestAfterKillChoice);
+        Assert.Equal(OriginalGameOptionsPage.NearestAfterKillKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.NearestAfterKillChoice);
         Accept(host);
-        Assert.True(host.Module.NearestAfterKillChoice);
+        Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         StepX(host, 1);
-        Assert.False(host.Module.NearestAfterKillChoice);
+        Assert.False(host.Module.GameOptions.NearestAfterKillChoice);
         StepX(host, 1);
-        Assert.True(host.Module.NearestAfterKillChoice);
+        Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
 
         // The fifth row is the rumble toggle, which reads ON while nothing is saved, so its first
         // press is the one that turns it off.
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.RumbleKey, host.FocusedKey);
-        Assert.Null(host.Module.RumbleChoice);
+        Assert.Equal(OriginalGameOptionsPage.RumbleKey, host.FocusedKey);
+        Assert.Null(host.Module.GameOptions.RumbleChoice);
         Accept(host);
-        Assert.False(host.Module.RumbleChoice);
+        Assert.False(host.Module.GameOptions.RumbleChoice);
         StepX(host, 1);
-        Assert.True(host.Module.RumbleChoice);
+        Assert.True(host.Module.GameOptions.RumbleChoice);
 
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.GameOptionsAcceptKey, host.FocusedKey);
+        Assert.Equal(OriginalGameOptionsPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.True(exit.NearestAfterKill);
         Assert.True(exit.Rumble);
@@ -126,44 +126,44 @@ public class OriginalOptionsTests
     public void CancelChangesAndBackBothDropTheEditsAndReturnToPreferences()
     {
         var host = Host();
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.GameOptions.DifficultyChoice);
         Down(host);
         StepX(host, 1);
-        Assert.Equal("cockpit", host.Module.DefaultViewChoice);
+        Assert.Equal("cockpit", host.Module.GameOptions.DefaultViewChoice);
         Down(host);
         StepX(host, 1);
-        Assert.True(host.Module.AutoHeadTurnChoice);
+        Assert.True(host.Module.GameOptions.AutoHeadTurnChoice);
         Down(host);
         StepX(host, 1);
-        Assert.True(host.Module.NearestAfterKillChoice);
+        Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Down(host);
         StepX(host, 1);
-        Assert.False(host.Module.RumbleChoice);
+        Assert.False(host.Module.GameOptions.RumbleChoice);
 
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.GameOptionsCancelKey, host.FocusedKey);
+        Assert.Equal(OriginalGameOptionsPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
-        Assert.Null(host.Module.NearestAfterKillChoice);
-        Assert.Null(host.Module.RumbleChoice);
-        Assert.Null(host.Module.DefaultViewChoice);
-        Assert.Null(host.Module.AutoHeadTurnChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.GameOptions.DifficultyChoice);
+        Assert.Null(host.Module.GameOptions.NearestAfterKillChoice);
+        Assert.Null(host.Module.GameOptions.RumbleChoice);
+        Assert.Null(host.Module.GameOptions.DefaultViewChoice);
+        Assert.Null(host.Module.GameOptions.AutoHeadTurnChoice);
 
         // Back on the open list closes it; the next Back is CANCEL CHANGES.
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
         Accept(host);
-        Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.Module.OpenGameOption);
+        Assert.Equal(OriginalGameOptionsPage.DifficultyKey, host.Module.GameOptions.OpenOption);
         // The open list is only as tall as its own items: three tiers, three rows, and the panel
         // under them no taller. That is how the original draws a list shorter than its box allows.
         var open = Assert.Single(Compose(host).Overlays);
         Assert.Equal(3, open.Lines.Count);
         Assert.Equal(3f * 17f, open.Fills[0].Height);
         Assert.True(Back(host));
-        Assert.Null(host.Module.OpenGameOption);
+        Assert.Null(host.Module.GameOptions.OpenOption);
         Assert.Equal(OriginalScreen.GameOptions, host.Screen);
         Assert.True(Back(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
@@ -181,35 +181,35 @@ public class OriginalOptionsTests
             Difficulty = "hard", VSync = "120",
         };
         var host = Host(() => saved);
-        host.Module.OpenAudio();
+        host.Module.Audio.Open();
 
         // The page opens on the saved mix, not on the shipped defaults.
         Assert.Equal(OriginalScreen.Audio, host.Screen);
-        Assert.Equal(OriginalOptionsScreen.AudioMasterKey, host.FocusedKey);
-        Assert.Equal(80, host.Module.AudioMasterChoice);
-        Assert.Equal(20, host.Module.AudioMusicChoice);
-        Assert.Equal(55, host.Module.AudioEffectsChoice);
-        Assert.Equal(5, host.Module.AudioVoiceChoice);
+        Assert.Equal(OriginalAudioPage.MasterKey, host.FocusedKey);
+        Assert.Equal(80, host.Module.Audio.MasterChoice);
+        Assert.Equal(20, host.Module.Audio.MusicChoice);
+        Assert.Equal(55, host.Module.Audio.EffectsChoice);
+        Assert.Equal(5, host.Module.Audio.VoiceChoice);
 
         // A sideways step moves the focused level by the control's own step. It clamps at silence
         // instead of wrapping to full, which is what every other stepped row on this shell does.
         StepX(host, 1);
-        Assert.Equal(85, host.Module.AudioMasterChoice);
+        Assert.Equal(85, host.Module.Audio.MasterChoice);
         Down(host);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.AudioVoiceKey, host.FocusedKey);
+        Assert.Equal(OriginalAudioPage.VoiceKey, host.FocusedKey);
         StepX(host, -1);
-        Assert.Equal(0, host.Module.AudioVoiceChoice);
+        Assert.Equal(0, host.Module.Audio.VoiceChoice);
         StepX(host, -1);
-        Assert.Equal(0, host.Module.AudioVoiceChoice);
+        Assert.Equal(0, host.Module.Audio.VoiceChoice);
 
         // Accept on a slider is a no-op: the level moves under the pointer or by a step alone.
         Accept(host);
-        Assert.Equal(0, host.Module.AudioVoiceChoice);
+        Assert.Equal(0, host.Module.Audio.VoiceChoice);
 
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.AudioAcceptKey, host.FocusedKey);
+        Assert.Equal(OriginalAudioPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(85, exit.AudioMaster);
         Assert.Equal(20, exit.AudioMusic);
@@ -226,34 +226,34 @@ public class OriginalOptionsTests
     public void TheAudioPageOpensOnTheShippedDefaultsAndDropsAnEditOnCancelAndOnBack()
     {
         var host = Host();
-        host.Module.OpenAudio();
-        Assert.Null(host.Module.AudioMasterChoice);
-        Assert.Equal(AudioMix.DefaultMaster, Row(host, OriginalOptionsScreen.AudioMasterKey).Slider!.Value);
-        Assert.Equal(AudioMix.DefaultMusic, Row(host, OriginalOptionsScreen.AudioMusicKey).Slider!.Value);
-        Assert.Equal(AudioMix.DefaultEffects, Row(host, OriginalOptionsScreen.AudioEffectsKey).Slider!.Value);
-        Assert.Equal(AudioMix.DefaultVoice, Row(host, OriginalOptionsScreen.AudioVoiceKey).Slider!.Value);
+        host.Module.Audio.Open();
+        Assert.Null(host.Module.Audio.MasterChoice);
+        Assert.Equal(AudioMix.DefaultMaster, Row(host, OriginalAudioPage.MasterKey).Slider!.Value);
+        Assert.Equal(AudioMix.DefaultMusic, Row(host, OriginalAudioPage.MusicKey).Slider!.Value);
+        Assert.Equal(AudioMix.DefaultEffects, Row(host, OriginalAudioPage.EffectsKey).Slider!.Value);
+        Assert.Equal(AudioMix.DefaultVoice, Row(host, OriginalAudioPage.VoiceKey).Slider!.Value);
 
         Down(host);
         StepX(host, -1);
-        Assert.Equal(45, host.Module.AudioMusicChoice);
+        Assert.Equal(45, host.Module.Audio.MusicChoice);
         Down(host);
         Down(host);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.AudioCancelKey, host.FocusedKey);
+        Assert.Equal(OriginalAudioPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Null(host.Module.AudioMusicChoice);
+        Assert.Null(host.Module.Audio.MusicChoice);
 
-        host.Module.OpenAudio();
+        host.Module.Audio.Open();
         // A step at an end moves nothing, so it writes nothing and the level is still never set.
         StepX(host, 1);
-        Assert.Null(host.Module.AudioMasterChoice);
+        Assert.Null(host.Module.Audio.MasterChoice);
         StepX(host, -1);
-        Assert.Equal(95, host.Module.AudioMasterChoice);
+        Assert.Equal(95, host.Module.Audio.MasterChoice);
         Assert.True(Back(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Null(host.Module.AudioMasterChoice);
+        Assert.Null(host.Module.Audio.MasterChoice);
     }
 
     /// <summary>The AUDIO page's live preview as the module states it. While the page is open it
@@ -264,45 +264,45 @@ public class OriginalOptionsTests
     public void TheAudioPageStatesItsMixWhileOpenAndNamesAMovedLevelOnlyWhenOneMoved()
     {
         var host = Host();
-        Assert.Null(host.Module.AudioPreviewMix);
-        host.Module.OpenAudio();
+        Assert.Null(host.Module.Audio.PreviewMix);
+        host.Module.Audio.Open();
         Assert.Equal(
             new AudioLevels(AudioMix.DefaultMaster, AudioMix.DefaultMusic, AudioMix.DefaultEffects, AudioMix.DefaultVoice),
-            host.Module.AudioPreviewMix);
-        Assert.Equal(MenuMixLevel.None, host.Module.TakeAudioMoved());
+            host.Module.Audio.PreviewMix);
+        Assert.Equal(MenuMixLevel.None, host.Module.Audio.TakeMoved());
 
         // A sideways step on the Effects row names Effects, and names it once. The moved level is
         // taken rather than read, so a second ask cannot sound the same move again.
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.AudioEffectsKey, host.FocusedKey);
+        Assert.Equal(OriginalAudioPage.EffectsKey, host.FocusedKey);
         StepX(host, -1);
-        Assert.Equal(MenuMixLevel.Effects, host.Module.TakeAudioMoved());
-        Assert.Equal(MenuMixLevel.None, host.Module.TakeAudioMoved());
-        Assert.Equal(AudioMix.DefaultEffects - SliderControl.KeyStep, host.Module.AudioPreviewMix!.Value.Effects);
+        Assert.Equal(MenuMixLevel.Effects, host.Module.Audio.TakeMoved());
+        Assert.Equal(MenuMixLevel.None, host.Module.Audio.TakeMoved());
+        Assert.Equal(AudioMix.DefaultEffects - SliderControl.KeyStep, host.Module.Audio.PreviewMix!.Value.Effects);
 
         // A drag: the frame that takes hold moves the level and names it. A held frame at the same
         // point moves nothing and names nothing. The same holds at the far end of the track.
-        var row = Row(host, OriginalOptionsScreen.AudioEffectsKey);
+        var row = Row(host, OriginalAudioPage.EffectsKey);
         float left = row.X + 1f;
         float right = row.X + row.Width - 1f;
         Drag(host, left, row.Y + 5f, pressed: true, clicked: true);
-        Assert.Equal(AudioMix.MinLevel, host.Module.AudioEffectsChoice);
-        Assert.Equal(MenuMixLevel.Effects, host.Module.TakeAudioMoved());
+        Assert.Equal(AudioMix.MinLevel, host.Module.Audio.EffectsChoice);
+        Assert.Equal(MenuMixLevel.Effects, host.Module.Audio.TakeMoved());
         Drag(host, left, row.Y + 5f, pressed: true);
-        Assert.Equal(MenuMixLevel.None, host.Module.TakeAudioMoved());
+        Assert.Equal(MenuMixLevel.None, host.Module.Audio.TakeMoved());
         Drag(host, right, row.Y + 5f, pressed: true);
-        Assert.Equal(AudioMix.MaxLevel, host.Module.AudioEffectsChoice);
-        Assert.Equal(MenuMixLevel.Effects, host.Module.TakeAudioMoved());
+        Assert.Equal(AudioMix.MaxLevel, host.Module.Audio.EffectsChoice);
+        Assert.Equal(MenuMixLevel.Effects, host.Module.Audio.TakeMoved());
         Drag(host, right, row.Y + 5f, pressed: true);
-        Assert.Equal(MenuMixLevel.None, host.Module.TakeAudioMoved());
-        Assert.Equal(AudioMix.MaxLevel, host.Module.AudioPreviewMix!.Value.Effects);
+        Assert.Equal(MenuMixLevel.None, host.Module.Audio.TakeMoved());
+        Assert.Equal(AudioMix.MaxLevel, host.Module.Audio.PreviewMix!.Value.Effects);
 
         // And off the page there is no mix to apply, which is what drops the preview whichever door
         // the page was left by.
         Assert.True(Back(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Null(host.Module.AudioPreviewMix);
+        Assert.Null(host.Module.Audio.PreviewMix);
     }
 
     /// <summary>The AUDIO page over its own section: four sliders in the section's slider column,
@@ -314,16 +314,16 @@ public class OriginalOptionsTests
     public void TheAudioPageIsComposedOverItsSectionsOwnRowShape()
     {
         var host = Host();
-        host.Module.OpenAudio();
+        host.Module.Audio.Open();
 
         // Each row is the authored slot inset by 0, -10, 1 and -10. That is 137 wide of press
         // region over a three-pixel line, at the slider column and 26 pixels under its own title.
-        var master = Row(host, OriginalOptionsScreen.AudioMasterKey);
+        var master = Row(host, OriginalAudioPage.MasterKey);
         Assert.Equal((130f, 266f, 170f, 23f), Rect(master));
-        Assert.Equal((130f, 326f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.AudioMusicKey)));
-        Assert.Equal((130f, 381f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.AudioEffectsKey)));
-        Assert.Equal((130f, 431f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.AudioVoiceKey)));
-        Assert.Equal((200f, 500f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.AudioAcceptKey)));
+        Assert.Equal((130f, 326f, 170f, 23f), Rect(Row(host, OriginalAudioPage.MusicKey)));
+        Assert.Equal((130f, 381f, 170f, 23f), Rect(Row(host, OriginalAudioPage.EffectsKey)));
+        Assert.Equal((130f, 431f, 170f, 23f), Rect(Row(host, OriginalAudioPage.VoiceKey)));
+        Assert.Equal((200f, 500f, 240f, 50f), Rect(Row(host, OriginalAudioPage.AcceptKey)));
 
         var board = Compose(host);
         // The logo and the plate are the backdrop, not pictures. A board draws its fills between
@@ -378,15 +378,15 @@ public class OriginalOptionsTests
     public void TheVideoPageFlipsEnhancedGraphicsAndAppliesItAsOneExit()
     {
         var host = Host();
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
 
         Assert.Equal(OriginalScreen.Video, host.Screen);
-        Assert.Equal(OriginalOptionsScreen.MonitorKey, host.FocusedKey);
-        Assert.Null(host.Module.MonitorChoice);
-        Assert.Null(host.Module.ResolutionChoice);
-        Assert.Null(host.Module.DisplayModeChoice);
-        Assert.Null(host.Module.VSyncChoice);
-        Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
+        Assert.Equal(OriginalVideoPage.MonitorKey, host.FocusedKey);
+        Assert.Null(host.Module.Video.MonitorChoice);
+        Assert.Null(host.Module.Video.ResolutionChoice);
+        Assert.Null(host.Module.Video.DisplayModeChoice);
+        Assert.Null(host.Module.Video.VSyncChoice);
+        Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
 
         // Five steps, not six: the size row is dead under the borderless default, which owns the
         // size. A dead row is out of the walk.
@@ -395,19 +395,19 @@ public class OriginalOptionsTests
         Down(host);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Accept(host);
-        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
         Assert.Equal(4 + 2, Compose(host).Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         // A sideways step takes the next word with wrap, as a Game Options row does.
         StepX(host, 1);
-        Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
+        Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
         StepX(host, 1);
-        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
 
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.VideoAcceptKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
         Assert.Null(exit.MonitorIndex);
@@ -426,35 +426,35 @@ public class OriginalOptionsTests
     public void TheVideoPageDisplayModeRowPicksAWordAndCarriesItOnTheApply()
     {
         var host = Host();
-        host.Module.OpenVideoOn(OriginalOptionsScreen.DisplayModeKey);
-        Assert.Equal("Borderless", Row(host, OriginalOptionsScreen.DisplayModeKey).Label);
+        host.Module.Video.OpenOn(OriginalVideoPage.DisplayModeKey);
+        Assert.Equal("Borderless", Row(host, OriginalVideoPage.DisplayModeKey).Label);
 
         // The list opens focused on the row's own word, the borderless default here, not on its first.
         Accept(host);
-        Assert.Equal(OriginalOptionsScreen.DisplayModeKey, host.Module.OpenVideoOption);
+        Assert.Equal(OriginalVideoPage.DisplayModeKey, host.Module.Video.OpenOption);
         Assert.Equal(DisplayWords.DisplayModes.Count, host.Rows.Count);
         Assert.Equal((260f, 352f, 70f, 17f), Rect(host.Rows[0]));
         Down(host);
         Accept(host);
-        Assert.Null(host.Module.OpenVideoOption);
-        Assert.Equal(DisplayWords.Fullscreen, host.Module.DisplayModeChoice);
-        Assert.Equal("Fullscreen", Row(host, OriginalOptionsScreen.DisplayModeKey).Label);
+        Assert.Null(host.Module.Video.OpenOption);
+        Assert.Equal(DisplayWords.Fullscreen, host.Module.Video.DisplayModeChoice);
+        Assert.Equal("Fullscreen", Row(host, OriginalVideoPage.DisplayModeKey).Label);
 
         // A sideways step wraps past the last word back to the first, as every word row does.
         StepX(host, 1);
-        Assert.Equal(DisplayWords.Windowed, host.Module.DisplayModeChoice);
+        Assert.Equal(DisplayWords.Windowed, host.Module.Video.DisplayModeChoice);
         StepX(host, 1);
-        Assert.Equal(DisplayWords.Borderless, host.Module.DisplayModeChoice);
+        Assert.Equal(DisplayWords.Borderless, host.Module.Video.DisplayModeChoice);
 
         StepX(host, -1);
-        Assert.Equal(DisplayWords.Windowed, host.Module.DisplayModeChoice);
+        Assert.Equal(DisplayWords.Windowed, host.Module.Video.DisplayModeChoice);
 
         Down(host);
         Down(host);
         Down(host);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.VideoAcceptKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(DisplayWords.Windowed, exit.DisplayMode);
     }
@@ -466,13 +466,13 @@ public class OriginalOptionsTests
     public void TheVideoPageVSyncRowOpensItsListPicksAndCloses()
     {
         var host = Host();
-        host.Module.OpenVideoOn(OriginalOptionsScreen.VSyncKey);
-        Assert.Equal("Off", Row(host, OriginalOptionsScreen.VSyncKey).Label);
+        host.Module.Video.OpenOn(OriginalVideoPage.VSyncKey);
+        Assert.Equal("Off", Row(host, OriginalVideoPage.VSyncKey).Label);
 
         // The list opens focused on the row's own word, the off default here, so two steps down
         // land on the third choice after it.
         Accept(host);
-        Assert.Equal(OriginalOptionsScreen.VSyncKey, host.Module.OpenVideoOption);
+        Assert.Equal(OriginalVideoPage.VSyncKey, host.Module.Video.OpenOption);
         // Five words in the row's authored four-row window, so the list carries its two arrows
         // beside the five item rows. The rows narrow by the column those stand in.
         Assert.Equal(DisplayWords.VSyncChoices.Count + 2, host.Rows.Count);
@@ -480,15 +480,15 @@ public class OriginalOptionsTests
         Down(host);
         Down(host);
         Accept(host);
-        Assert.Null(host.Module.OpenVideoOption);
-        Assert.Equal("120", host.Module.VSyncChoice);
-        Assert.Equal("120 FPS", Row(host, OriginalOptionsScreen.VSyncKey).Label);
+        Assert.Null(host.Module.Video.OpenOption);
+        Assert.Equal("120", host.Module.Video.VSyncChoice);
+        Assert.Equal("120 FPS", Row(host, OriginalVideoPage.VSyncKey).Label);
 
         // Back on the open list closes it; the next Back is CANCEL CHANGES.
         Accept(host);
-        Assert.Equal(OriginalOptionsScreen.VSyncKey, host.Module.OpenVideoOption);
+        Assert.Equal(OriginalVideoPage.VSyncKey, host.Module.Video.OpenOption);
         Assert.True(Back(host));
-        Assert.Null(host.Module.OpenVideoOption);
+        Assert.Null(host.Module.Video.OpenOption);
         Assert.Equal(OriginalScreen.Video, host.Screen);
         Assert.True(Back(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
@@ -501,10 +501,10 @@ public class OriginalOptionsTests
     public void AnOptionListInsideItsWindowIsAsTallAsItsItemsAndCarriesNoBar()
     {
         var host = Host();
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
         Accept(host);
 
-        Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.Module.OpenGameOption);
+        Assert.Equal(OriginalGameOptionsPage.DifficultyKey, host.Module.GameOptions.OpenOption);
         Assert.Equal(3, host.Rows.Count);
         Assert.All(host.Rows, r => Assert.Equal(OriginalRowKind.ListRow, r.Kind));
         Assert.All(host.Rows, r => Assert.True(r.Visible));
@@ -522,14 +522,14 @@ public class OriginalOptionsTests
     public void AnOptionListPastItsWindowScrollsOnItsOwnBarInsideTheBox()
     {
         var host = Host();
-        host.Module.OpenVideoOn(OriginalOptionsScreen.VSyncKey);
+        host.Module.Video.OpenOn(OriginalVideoPage.VSyncKey);
         Accept(host);
 
         // Five words in the authored four-row window: five item rows, four of them visible.
         Assert.Equal(5, host.Rows.Count(r => r.Kind == OriginalRowKind.ListRow));
         Assert.Equal(4, host.Rows.Count(r => r.Kind == OriginalRowKind.ListRow && r.Visible));
-        var up = Row(host, OriginalOptionsScreen.VSyncKey + ":up");
-        var down = Row(host, OriginalOptionsScreen.VSyncKey + ":down");
+        var up = Row(host, OriginalVideoPage.VSyncKey + ":up");
+        var down = Row(host, OriginalVideoPage.VSyncKey + ":down");
         Assert.False(up.Enabled);
         Assert.True(down.Enabled);
 
@@ -546,26 +546,26 @@ public class OriginalOptionsTests
         // A wheel over the window moves it by a row, and the word that was outside it is the one
         // drawn. The up arrow then has somewhere to go and the down one does not.
         Wheel(host, window.X + 2f, window.Y + 2f, 1);
-        Assert.True(Row(host, OriginalOptionsScreen.VSyncKey + ":4").Visible);
-        Assert.False(Row(host, OriginalOptionsScreen.VSyncKey + ":0").Visible);
-        Assert.True(Row(host, OriginalOptionsScreen.VSyncKey + ":up").Enabled);
-        Assert.False(Row(host, OriginalOptionsScreen.VSyncKey + ":down").Enabled);
+        Assert.True(Row(host, OriginalVideoPage.VSyncKey + ":4").Visible);
+        Assert.False(Row(host, OriginalVideoPage.VSyncKey + ":0").Visible);
+        Assert.True(Row(host, OriginalVideoPage.VSyncKey + ":up").Enabled);
+        Assert.False(Row(host, OriginalVideoPage.VSyncKey + ":down").Enabled);
 
         // The up arrow puts the window back where it stood, and picks nothing on the way.
-        var arrow = Row(host, OriginalOptionsScreen.VSyncKey + ":up");
+        var arrow = Row(host, OriginalVideoPage.VSyncKey + ":up");
         ClickAt(host, arrow.X + 2f, arrow.Y + 2f);
-        Assert.False(Row(host, OriginalOptionsScreen.VSyncKey + ":4").Visible);
-        Assert.Equal(OriginalOptionsScreen.VSyncKey, host.Module.OpenVideoOption);
-        Assert.Null(host.Module.VSyncChoice);
+        Assert.False(Row(host, OriginalVideoPage.VSyncKey + ":4").Visible);
+        Assert.Equal(OriginalVideoPage.VSyncKey, host.Module.Video.OpenOption);
+        Assert.Null(host.Module.Video.VSyncChoice);
 
         // A press on the row outside the window lands on no row at all. That row is built for the
         // walk and hidden, so the list closes on nothing rather than picking the word under it.
-        var hidden = Row(host, OriginalOptionsScreen.VSyncKey + ":4");
+        var hidden = Row(host, OriginalVideoPage.VSyncKey + ":4");
         Assert.False(hidden.Visible);
         Assert.Equal(string.Empty, HitTestKey(host, hidden.X + 2f, hidden.Y + 2f));
         ClickAt(host, hidden.X + 2f, hidden.Y + 2f);
-        Assert.Null(host.Module.OpenVideoOption);
-        Assert.Null(host.Module.VSyncChoice);
+        Assert.Null(host.Module.Video.OpenOption);
+        Assert.Null(host.Module.Video.VSyncChoice);
     }
 
     /// <summary>CANCEL CHANGES and Back both leave the VIDEO page with every choice dropped: the
@@ -574,47 +574,47 @@ public class OriginalOptionsTests
     public void TheVideoPageDropsTheChoiceOnCancelAndOnBack()
     {
         var host = Host();
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
         // The size row is dead under the borderless default, which owns the size, so the walk goes
         // from the monitor row straight onto Display Mode.
         Down(host);
         StepX(host, 1);
-        Assert.Equal(DisplayWords.Fullscreen, host.Module.DisplayModeChoice);
+        Assert.Equal(DisplayWords.Fullscreen, host.Module.Video.DisplayModeChoice);
         Down(host);
         StepX(host, 1);
-        Assert.Equal("60", host.Module.VSyncChoice);
+        Assert.Equal("60", host.Module.Video.VSyncChoice);
         Down(host);
         StepX(host, 1);
-        Assert.Equal("125", host.Module.RenderScaleChoice);
+        Assert.Equal("125", host.Module.Video.RenderScaleChoice);
         Down(host);
         StepX(host, 1);
-        Assert.Equal(DisplayWords.AntiAliasingFxaa, host.Module.AntiAliasingChoice);
+        Assert.Equal(DisplayWords.AntiAliasingFxaa, host.Module.Video.AntiAliasingChoice);
         Down(host);
         Accept(host);
-        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.VideoCancelKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
-        Assert.Null(host.Module.DisplayModeChoice);
-        Assert.Null(host.Module.VSyncChoice);
-        Assert.Null(host.Module.RenderScaleChoice);
-        Assert.Null(host.Module.AntiAliasingChoice);
+        Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
+        Assert.Null(host.Module.Video.DisplayModeChoice);
+        Assert.Null(host.Module.Video.VSyncChoice);
+        Assert.Null(host.Module.Video.RenderScaleChoice);
+        Assert.Null(host.Module.Video.AntiAliasingChoice);
 
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
         Down(host);
         Down(host);
         Down(host);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Accept(host);
-        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
         Assert.True(Back(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
+        Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
     }
 
     /// <summary>The Anti-aliasing row follows the page's own graphics choice while nothing is
@@ -625,31 +625,31 @@ public class OriginalOptionsTests
     {
         var saved = new OptionsDef { RenderScale = "200" };
         var host = Host(() => saved);
-        host.Module.OpenVideoOn(OriginalOptionsScreen.AntiAliasingKey);
-        Assert.Equal("Off", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
-        Assert.Equal("200%", Row(host, OriginalOptionsScreen.RenderScaleKey).Label);
+        host.Module.Video.OpenOn(OriginalVideoPage.AntiAliasingKey);
+        Assert.Equal("Off", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
+        Assert.Equal("200%", Row(host, OriginalVideoPage.RenderScaleKey).Label);
 
         // A step back from the first word wraps onto the last, FSR 2.2.
         StepX(host, -1);
-        Assert.Equal(DisplayWords.AntiAliasingFsr2, host.Module.AntiAliasingChoice);
-        Assert.Equal("FSR 2.2", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
-        Assert.Equal("100", host.Module.RenderScaleChoice);
-        Assert.Equal("100%", Row(host, OriginalOptionsScreen.RenderScaleKey).Label);
-        Assert.Equal(new[] { "50", "67", "77", "100" }, host.Module.RenderScaleWords);
+        Assert.Equal(DisplayWords.AntiAliasingFsr2, host.Module.Video.AntiAliasingChoice);
+        Assert.Equal("FSR 2.2", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
+        Assert.Equal("100", host.Module.Video.RenderScaleChoice);
+        Assert.Equal("100%", Row(host, OriginalVideoPage.RenderScaleKey).Label);
+        Assert.Equal(new[] { "50", "67", "77", "100" }, host.Module.Video.RenderScaleWords);
 
         // Off again offers every scale, and leaves the clamped 100 where it stands.
         StepX(host, 1);
-        Assert.Equal(DisplayWords.RenderScaleChoices, host.Module.RenderScaleWords);
-        Assert.Equal("100", host.Module.RenderScaleChoice);
+        Assert.Equal(DisplayWords.RenderScaleChoices, host.Module.Video.RenderScaleWords);
+        Assert.Equal("100", host.Module.Video.RenderScaleChoice);
 
         // With nothing saved the row reads the default of the graphics choice on the same page.
         saved.RenderScale = null;
-        host.Module.OpenVideoOn(OriginalOptionsScreen.GraphicsKey);
-        Assert.Equal("Off", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
+        host.Module.Video.OpenOn(OriginalVideoPage.GraphicsKey);
+        Assert.Equal("Off", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
         Accept(host);
-        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
-        Assert.Equal("TAA", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
-        Assert.Null(host.Module.AntiAliasingChoice);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
+        Assert.Equal("TAA", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
+        Assert.Null(host.Module.Video.AntiAliasingChoice);
     }
 
     /// <summary>The Shadow Quality row follows the page's own graphics choice. It is dead under
@@ -660,29 +660,29 @@ public class OriginalOptionsTests
     {
         var saved = new OptionsDef { ShadowQuality = ShadowQualitySetting.Medium };
         var host = Host(() => saved);
-        host.Module.OpenVideo();
-        Assert.False(Row(host, OriginalOptionsScreen.ShadowQualityKey).Enabled);
-        Assert.Equal("Medium", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+        host.Module.Video.Open();
+        Assert.False(Row(host, OriginalVideoPage.ShadowQualityKey).Enabled);
+        Assert.Equal("Medium", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
         saved.ShadowQuality = null;
         saved.GraphicsMode = GraphicsMode.EnhancedWord;
-        host.Module.OpenVideoOn(OriginalOptionsScreen.ShadowQualityKey);
-        Assert.Equal(OriginalOptionsScreen.ShadowQualityKey, host.FocusedKey);
-        Assert.True(Row(host, OriginalOptionsScreen.ShadowQualityKey).Enabled);
-        Assert.Equal("Ultra", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
-        Assert.Null(host.Module.ShadowQualityChoice);
+        host.Module.Video.OpenOn(OriginalVideoPage.ShadowQualityKey);
+        Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
+        Assert.True(Row(host, OriginalVideoPage.ShadowQualityKey).Enabled);
+        Assert.Equal("Ultra", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
+        Assert.Null(host.Module.Video.ShadowQualityChoice);
 
         // Ultra is the last word, so a step right wraps onto Off and a step left comes back.
         StepX(host, 1);
-        Assert.Equal(ShadowQualitySetting.Off, host.Module.ShadowQualityChoice);
+        Assert.Equal(ShadowQualitySetting.Off, host.Module.Video.ShadowQualityChoice);
         StepX(host, -1);
         StepX(host, -1);
-        Assert.Equal(ShadowQualitySetting.High, host.Module.ShadowQualityChoice);
-        Assert.Equal("High", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+        Assert.Equal(ShadowQualitySetting.High, host.Module.Video.ShadowQualityChoice);
+        Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.VideoAcceptKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(ShadowQualitySetting.High, exit.ShadowQuality);
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
@@ -701,31 +701,31 @@ public class OriginalOptionsTests
             Resolution = "1920x1080", MonitorIndex = "0", NearestAfterKill = true, Rumble = false,
         };
         var host = Host(() => saved);
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
 
-        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.DifficultyChoice);
-        Assert.True(host.Module.NearestAfterKillChoice);
-        Assert.False(host.Module.RumbleChoice);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
+        Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
+        Assert.False(host.Module.GameOptions.RumbleChoice);
         // An older file's saved presentation word opens no row: the page reads it nowhere.
         Assert.Equal(
             new[]
             {
-                OriginalOptionsScreen.DifficultyKey, OriginalOptionsScreen.DefaultViewKey, OriginalOptionsScreen.AutoHeadTurnKey,
-                OriginalOptionsScreen.NearestAfterKillKey, OriginalOptionsScreen.RumbleKey,
-                OriginalOptionsScreen.GameOptionsAcceptKey, OriginalOptionsScreen.GameOptionsCancelKey,
+                OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey, OriginalGameOptionsPage.AutoHeadTurnKey,
+                OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
+                OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
             },
             host.Rows.Select(r => r.Key));
-        Assert.Equal("Hardest", Row(host, OriginalOptionsScreen.DifficultyKey).Label);
-        host.Module.OpenVideo();
-        Assert.Equal("120", host.Module.VSyncChoice);
-        Assert.Equal("120 FPS", Row(host, OriginalOptionsScreen.VSyncKey).Label);
-        Assert.Equal(DisplayWords.Fullscreen, host.Module.DisplayModeChoice);
-        Assert.Equal("Fullscreen", Row(host, OriginalOptionsScreen.DisplayModeKey).Label);
-        Assert.Equal("1920x1080", host.Module.ResolutionChoice);
-        Assert.Equal("1920x1080", Row(host, OriginalOptionsScreen.ResolutionKey).Label);
-        Assert.Equal("0", host.Module.MonitorChoice);
-        Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
+        Assert.Equal("Hardest", Row(host, OriginalGameOptionsPage.DifficultyKey).Label);
+        host.Module.Video.Open();
+        Assert.Equal("120", host.Module.Video.VSyncChoice);
+        Assert.Equal("120 FPS", Row(host, OriginalVideoPage.VSyncKey).Label);
+        Assert.Equal(DisplayWords.Fullscreen, host.Module.Video.DisplayModeChoice);
+        Assert.Equal("Fullscreen", Row(host, OriginalVideoPage.DisplayModeKey).Label);
+        Assert.Equal("1920x1080", host.Module.Video.ResolutionChoice);
+        Assert.Equal("1920x1080", Row(host, OriginalVideoPage.ResolutionKey).Label);
+        Assert.Equal("0", host.Module.Video.MonitorChoice);
+        Assert.Equal("Screen 0", Row(host, OriginalVideoPage.MonitorKey).Label);
 
         // A file that never set the fields opens the rows on the shipped defaults, each agreeing
         // with its own setting's fallback rule. That is off and borderless, not either vocabulary's
@@ -738,20 +738,20 @@ public class OriginalOptionsTests
         saved.DisplayMode = null;
         saved.Resolution = null;
         saved.MonitorIndex = "9";
-        host.Module.OpenGameOptions();
-        Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
-        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
-        Assert.Null(host.Module.NearestAfterKillChoice);
-        Assert.Null(host.Module.RumbleChoice);
-        host.Module.OpenVideo();
-        Assert.Null(host.Module.VSyncChoice);
-        Assert.Equal("Off", Row(host, OriginalOptionsScreen.VSyncKey).Label);
-        Assert.Null(host.Module.DisplayModeChoice);
-        Assert.Equal("Borderless", Row(host, OriginalOptionsScreen.DisplayModeKey).Label);
-        Assert.Null(host.Module.ResolutionChoice);
-        Assert.Equal(ResolutionSetting.ProjectSize, Row(host, OriginalOptionsScreen.ResolutionKey).Label);
-        Assert.Equal("9", host.Module.MonitorChoice);
-        Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
+        host.Module.GameOptions.Open();
+        Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.GameOptions.DifficultyChoice);
+        Assert.Null(host.Module.GameOptions.NearestAfterKillChoice);
+        Assert.Null(host.Module.GameOptions.RumbleChoice);
+        host.Module.Video.Open();
+        Assert.Null(host.Module.Video.VSyncChoice);
+        Assert.Equal("Off", Row(host, OriginalVideoPage.VSyncKey).Label);
+        Assert.Null(host.Module.Video.DisplayModeChoice);
+        Assert.Equal("Borderless", Row(host, OriginalVideoPage.DisplayModeKey).Label);
+        Assert.Null(host.Module.Video.ResolutionChoice);
+        Assert.Equal(ResolutionSetting.ProjectSize, Row(host, OriginalVideoPage.ResolutionKey).Label);
+        Assert.Equal("9", host.Module.Video.MonitorChoice);
+        Assert.Equal("Screen 0", Row(host, OriginalVideoPage.MonitorKey).Label);
     }
 
     /// <summary>The graphics row's description owes no restart for either saved word, since the
@@ -761,11 +761,11 @@ public class OriginalOptionsTests
     {
         var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
         var host = Host(() => saved);
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
         string enhanced = Compose(host).Lines.Single(l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)).Text;
 
         saved.GraphicsMode = GraphicsMode.Default;
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
         string original = Compose(host).Lines.Single(l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)).Text;
 
         Assert.Equal(enhanced, original);
@@ -776,17 +776,17 @@ public class OriginalOptionsTests
     public void TheGameOptionsPageIsComposedOverItsSectionsOwnRowShape()
     {
         var host = Host();
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
 
         // Row one's dropdown box at the authored Difficulty dropdown's corner and width, the Default
         // View row's one whole band down, then the two decoded plaques.
-        Assert.Equal((135f, 295f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DifficultyKey)));
-        Assert.Equal((135f, 355f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DefaultViewKey)));
+        Assert.Equal((135f, 295f, 144f, 17f), Rect(Row(host, OriginalGameOptionsPage.DifficultyKey)));
+        Assert.Equal((135f, 355f, 144f, 17f), Rect(Row(host, OriginalGameOptionsPage.DefaultViewKey)));
         // The exit pair side by side on one line, ACCEPT left of CANCEL, which is the arrangement
         // this section authors and the film shows; the VIDEO page's own section stacks them instead.
         // Both stand one whole band below their authored 470, the band the plate grew by.
-        Assert.Equal((200f, 532f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.GameOptionsAcceptKey)));
-        Assert.Equal((450f, 532f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.GameOptionsCancelKey)));
+        Assert.Equal((200f, 532f, 240f, 50f), Rect(Row(host, OriginalGameOptionsPage.AcceptKey)));
+        Assert.Equal((450f, 532f, 240f, 50f), Rect(Row(host, OriginalGameOptionsPage.CancelKey)));
 
         var board = Compose(host);
         // Backdrop, not pictures, for the reason the AUDIO page's own case states. A fill is drawn
@@ -847,28 +847,28 @@ public class OriginalOptionsTests
     public void TheVideoPageIsComposedOverItsSectionsOwnRowShape()
     {
         var host = Host();
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
 
-        Assert.Equal((260f, 245f, 70f, 15f), Rect(Row(host, OriginalOptionsScreen.MonitorKey)));
-        var resolution = Row(host, OriginalOptionsScreen.ResolutionKey);
+        Assert.Equal((260f, 245f, 70f, 15f), Rect(Row(host, OriginalVideoPage.MonitorKey)));
+        var resolution = Row(host, OriginalVideoPage.ResolutionKey);
         Assert.Equal((260f, 290f, 70f, 17f), Rect(resolution));
         // The size row keeps its authored geometry under the borderless default and draws dead.
         Assert.False(resolution.Enabled);
-        Assert.Equal((260f, 335f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.DisplayModeKey)));
-        Assert.Equal((260f, 380f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.VSyncKey)));
-        Assert.Equal((260f, 402f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.RenderScaleKey)));
+        Assert.Equal((260f, 335f, 70f, 17f), Rect(Row(host, OriginalVideoPage.DisplayModeKey)));
+        Assert.Equal((260f, 380f, 70f, 17f), Rect(Row(host, OriginalVideoPage.VSyncKey)));
+        Assert.Equal((260f, 402f, 70f, 17f), Rect(Row(host, OriginalVideoPage.RenderScaleKey)));
         // Anti-aliasing stands on the authored Lighting Quality line under Render Scale.
-        Assert.Equal((260f, 440f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.AntiAliasingKey)));
+        Assert.Equal((260f, 440f, 70f, 17f), Rect(Row(host, OriginalVideoPage.AntiAliasingKey)));
         // Shadow Quality stands on the authored Texture Quality line, dead under the Original
         // default, whose world casts no sun shadow.
-        var shadow = Row(host, OriginalOptionsScreen.ShadowQualityKey);
+        var shadow = Row(host, OriginalVideoPage.ShadowQualityKey);
         Assert.Equal((260f, 530f, 70f, 17f), Rect(shadow));
         Assert.False(shadow.Enabled);
         // The Graphics checkbox keeps the authored Shadows corner. The Clutter Detail line above it
         // stays blank, no row moving up onto a line the artwork does not draw it on.
-        Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.GraphicsKey)));
-        Assert.Equal((500f, 470f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoAcceptKey)));
-        Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoCancelKey)));
+        Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalVideoPage.GraphicsKey)));
+        Assert.Equal((500f, 470f, 240f, 50f), Rect(Row(host, OriginalVideoPage.AcceptKey)));
+        Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalVideoPage.CancelKey)));
 
         var board = Compose(host);
         // Backdrop, not pictures, for the reason the AUDIO page's own case states. A board draws
@@ -921,7 +921,7 @@ public class OriginalOptionsTests
         Down(host);
         Down(host);
         Down(host);
-        Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Assert.Empty(Compose(host).Fills.Where(f => f.Border));
     }
 
@@ -929,7 +929,7 @@ public class OriginalOptionsTests
     public void EveryActionBelongsToExactlyOneCategoryTab()
     {
         var seen = new Dictionary<InputAction, int>();
-        foreach (var tab in OriginalOptionsScreen.ControlTabs)
+        foreach (var tab in OriginalKeysPage.ControlTabs)
         {
             foreach (var row in tab.Rows)
             {
@@ -947,7 +947,7 @@ public class OriginalOptionsTests
     [Fact]
     public void TheSixNamedTabsAreFlightActionsAndOtherHoldsWhatTheOriginalNeverBound()
     {
-        var tabs = OriginalOptionsScreen.ControlTabs;
+        var tabs = OriginalKeysPage.ControlTabs;
         Assert.Equal(7, tabs.Count);
         Assert.Equal(
             new[] { "Movement", "Throttle", "Weapons", "Targeting", "Views 1", "Views 2", "Other" },
@@ -982,7 +982,7 @@ public class OriginalOptionsTests
                 InputAction.PitchDown, InputAction.PitchUp, InputAction.RollLeft, InputAction.RollRight,
                 InputAction.YawLeft, InputAction.YawRight,
             },
-            OriginalOptionsScreen.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
+            OriginalKeysPage.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
     }
 
     /// <summary>The Throttle tab is the two lever keys and then the nine absolute eighths on the
@@ -990,7 +990,7 @@ public class OriginalOptionsTests
     [Fact]
     public void TheThrottleTabCarriesTheNineEighthsBelowTheLeverPairAndTheLeverRowLast()
     {
-        var rows = OriginalOptionsScreen.ControlTabs[1].Rows.Select(r => r.Action).ToArray();
+        var rows = OriginalKeysPage.ControlTabs[1].Rows.Select(r => r.Action).ToArray();
 
         Assert.Equal(InputAction.ThrottleUp, rows[0]);
         Assert.Equal(InputAction.ThrottleDown, rows[1]);
@@ -1019,16 +1019,16 @@ public class OriginalOptionsTests
                 InputAction.TargetNextNonAircraft, InputAction.TargetPreviousNonAircraft,
                 InputAction.TargetNearestNonAircraft, InputAction.TargetNearest, InputAction.TargetClear,
             },
-            OriginalOptionsScreen.ControlTabs[3].Rows.Select(r => r.Action).ToArray());
+            OriginalKeysPage.ControlTabs[3].Rows.Select(r => r.Action).ToArray());
     }
 
     [Fact]
     public void TheKeysPageAuthorsCancelLeftOfAccept()
     {
         var host = Host(controls: Controls(out _, out _));
-        host.Module.OpenKeys();
-        var cancel = Row(host, OriginalOptionsScreen.KeysCancelKey);
-        var accept = Row(host, OriginalOptionsScreen.KeysAcceptKey);
+        host.Module.Keys.Open();
+        var cancel = Row(host, OriginalKeysPage.CancelKey);
+        var accept = Row(host, OriginalKeysPage.AcceptKey);
         Assert.True(cancel.X < accept.X, $"CANCEL CHANGES stands left of ACCEPT CHANGES ({cancel.X} vs {accept.X})");
         Assert.Equal(cancel.Y, accept.Y);
     }
@@ -1038,17 +1038,17 @@ public class OriginalOptionsTests
     {
         var controls = Controls(out _, out _);
         var host = Host(controls: controls);
-        host.Module.OpenKeys();
-        var tab = OriginalOptionsScreen.ControlTabs[0];
+        host.Module.Keys.Open();
+        var tab = OriginalKeysPage.ControlTabs[0];
         int row = tab.Rows.Count - 1;
-        Click(host, OriginalOptionsScreen.KeysCellKey(row, second: false));
+        Click(host, OriginalKeysPage.CellKey(row, second: false));
         Assert.Equal(tab.Rows[row].Context, controls.Context);
         Assert.Equal(tab.Rows[row].Action, controls.Focused);
         Assert.Equal(0, controls.Slot);
         Assert.True(controls.Capturing);
 
         controls.CancelCapture();
-        Click(host, OriginalOptionsScreen.KeysCellKey(row, second: true));
+        Click(host, OriginalKeysPage.CellKey(row, second: true));
         Assert.Equal(tab.Rows[row].Action, controls.Focused);
         Assert.Equal(Math.Min(1, controls.FocusedBindings.Count), controls.Slot);
     }
@@ -1058,8 +1058,8 @@ public class OriginalOptionsTests
     {
         var controls = Controls(out _, out _);
         var host = Host(controls: controls);
-        host.Module.OpenKeys();
-        var action = OriginalOptionsScreen.ControlTabs[0].Rows[0].Action;
+        host.Module.Keys.Open();
+        var action = OriginalKeysPage.ControlTabs[0].Rows[0].Action;
         controls.Context = InputContext.Flight;
         controls.Focus(IndexOf(controls, action));
         while (controls.FocusedBindings.Count > 0)
@@ -1076,7 +1076,7 @@ public class OriginalOptionsTests
             controls.ConfirmSteal();
         }
 
-        var text = host.Module.KeysCellText(0);
+        var text = host.Module.Keys.CellText(0);
         Assert.Equal("M", text.A);
         Assert.Equal("N / B", text.B);
     }
@@ -1085,11 +1085,11 @@ public class OriginalOptionsTests
     public void TheKeysPageDrawsItsTabsWithTheStandingOneDepressed()
     {
         var host = Host(controls: Controls(out _, out _));
-        host.Module.OpenKeys();
-        Click(host, OriginalOptionsScreen.KeysTabKey(2));
+        host.Module.Keys.Open();
+        Click(host, OriginalKeysPage.TabKey(2));
         var board = Compose(host);
         var tabs = board.Plaques.Where(p => p.Label.Length > 0).ToList();
-        Assert.Equal(OriginalOptionsScreen.ControlTabs.Select(t => t.Name).ToArray(), tabs.Select(p => p.Label).ToArray());
+        Assert.Equal(OriginalKeysPage.ControlTabs.Select(t => t.Name).ToArray(), tabs.Select(p => p.Label).ToArray());
         Assert.Equal(3, tabs[2].Frame);
         Assert.All(tabs.Where((_, i) => i != 2), p => Assert.NotEqual(3, p.Frame));
         Assert.Contains(board.Lines, l => l.Text == "Weapons");
@@ -1104,9 +1104,9 @@ public class OriginalOptionsTests
     {
         var controls = Controls(out _, out _);
         var host = Host(controls: controls);
-        host.Module.OpenControlsPrefs();
-        Assert.Equal("Player 1", Row(host, OriginalOptionsScreen.ControlsPlayerKey).Label);
-        Assert.Equal("Look", Row(host, OriginalOptionsScreen.ControlsMouseKey).Label);
+        host.Module.Controls.Open();
+        Assert.Equal("Player 1", Row(host, OriginalControlsPage.PlayerKey).Label);
+        Assert.Equal("Look", Row(host, OriginalControlsPage.MouseKey).Label);
         var board = Compose(host);
         Assert.Contains(board.Lines, l => l.Text == "CONTROLS");
         Assert.Contains(board.Lines, l => l.Text == "Player");
@@ -1124,11 +1124,11 @@ public class OriginalOptionsTests
     public void TheControlsRowsTakeTheirBoxesFromTheirOwnLayoutEntries()
     {
         var host = Host(controls: Controls(out _, out _));
-        host.Module.OpenControlsPrefs();
-        Assert.Equal((128f, 305f, 175f, 17f), Rect(Row(host, OriginalOptionsScreen.ControlsPlayerKey)));
+        host.Module.Controls.Open();
+        Assert.Equal((128f, 305f, 175f, 17f), Rect(Row(host, OriginalControlsPage.PlayerKey)));
         // 16 rather than the item height's 17: the fixture's slider region starts at 371.
-        Assert.Equal((215.5f, 355f, 87.5f, 16f), Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
-        Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.ControlsSensitivityKey)));
+        Assert.Equal((215.5f, 355f, 87.5f, 16f), Rect(Row(host, OriginalControlsPage.MouseKey)));
+        Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalControlsPage.SensitivityKey)));
     }
 
     /// <summary>The scheme chooser's arrow ends where the seat row's does. The panel's title stops
@@ -1138,9 +1138,9 @@ public class OriginalOptionsTests
     public void TheFlyingSchemeRowSharesTheTitleLineAndTheSeatRowsArrowColumn()
     {
         var host = Host(controls: Controls(out _, out _));
-        host.Module.OpenControlsPrefs();
-        var seat = Row(host, OriginalOptionsScreen.ControlsPlayerKey);
-        var scheme = Row(host, OriginalOptionsScreen.ControlsMouseKey);
+        host.Module.Controls.Open();
+        var seat = Row(host, OriginalControlsPage.PlayerKey);
+        var scheme = Row(host, OriginalControlsPage.MouseKey);
         Assert.Equal(seat.X + seat.Width, scheme.X + scheme.Width);
 
         var board = Compose(host);
@@ -1161,8 +1161,8 @@ public class OriginalOptionsTests
     {
         var controls = Controls(out _, out var written);
         var host = Host(controls: controls);
-        host.Module.OpenControlsPrefs();
-        var slider = Row(host, OriginalOptionsScreen.ControlsSensitivityKey);
+        host.Module.Controls.Open();
+        var slider = Row(host, OriginalControlsPage.SensitivityKey);
         Assert.Equal(OriginalRowKind.Slider, slider.Kind);
         Assert.Equal(SensitivityScale.Level(SensitivityScale.Default), slider.Slider!.Value);
         Assert.Contains(Compose(host).Pictures, p => p.Art.Name == slider.Slider.Slot!.Name);
@@ -1171,9 +1171,9 @@ public class OriginalOptionsTests
 
         Assert.Equal(2f, controls.MouseSensitivity);
         Assert.Empty(written);
-        Assert.Equal(75, Row(host, OriginalOptionsScreen.ControlsSensitivityKey).Slider!.Value);
+        Assert.Equal(75, Row(host, OriginalControlsPage.SensitivityKey).Slider!.Value);
 
-        Click(host, OriginalOptionsScreen.ControlsAcceptKey);
+        Click(host, OriginalControlsPage.AcceptKey);
 
         Assert.Equal(new[] { 1 }, written);
         Assert.Equal(2f, controls.MouseSensitivity);
@@ -1186,12 +1186,12 @@ public class OriginalOptionsTests
     {
         var controls = Controls(out _, out var written);
         var host = Host(controls: controls);
-        host.Module.OpenControlsPrefs();
+        host.Module.Controls.Open();
 
-        Click(host, OriginalOptionsScreen.ControlsMouseKey);
+        Click(host, OriginalControlsPage.MouseKey);
 
         Assert.True(controls.MouseFlying);
-        Assert.Equal("Fly", Row(host, OriginalOptionsScreen.ControlsMouseKey).Label);
+        Assert.Equal("Fly", Row(host, OriginalControlsPage.MouseKey).Label);
         Assert.Empty(written);
 
         StepX(host, 1);
@@ -1199,7 +1199,7 @@ public class OriginalOptionsTests
         Assert.False(controls.MouseFlying);
 
         StepX(host, -1);
-        Click(host, OriginalOptionsScreen.ControlsAcceptKey);
+        Click(host, OriginalControlsPage.AcceptKey);
 
         Assert.True(controls.MouseFlying);
         Assert.Equal(new[] { 1 }, written);
@@ -1259,15 +1259,15 @@ public class OriginalOptionsTests
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
-        host.Module.OpenGameOptions();
+        host.Module.GameOptions.Open();
         var rows = host.Rows.ToArray();
         Assert.Equal(
             new[]
             {
-                OriginalOptionsScreen.DifficultyKey, OriginalOptionsScreen.DefaultViewKey,
-                OriginalOptionsScreen.AutoHeadTurnKey,
-                OriginalOptionsScreen.NearestAfterKillKey, OriginalOptionsScreen.RumbleKey,
-                OriginalOptionsScreen.GameOptionsAcceptKey, OriginalOptionsScreen.GameOptionsCancelKey,
+                OriginalGameOptionsPage.DifficultyKey, OriginalGameOptionsPage.DefaultViewKey,
+                OriginalGameOptionsPage.AutoHeadTurnKey,
+                OriginalGameOptionsPage.NearestAfterKillKey, OriginalGameOptionsPage.RumbleKey,
+                OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
             },
             rows.Select(r => r.Key));
         RowsAreClearOfEachOther(host, rows, "GAME OPTIONS", 10);
@@ -1280,14 +1280,14 @@ public class OriginalOptionsTests
     private static void AudioRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
-        host.Module.OpenAudio();
+        host.Module.Audio.Open();
         var rows = host.Rows.ToArray();
         Assert.Equal(
             new[]
             {
-                OriginalOptionsScreen.AudioMasterKey, OriginalOptionsScreen.AudioMusicKey,
-                OriginalOptionsScreen.AudioEffectsKey, OriginalOptionsScreen.AudioVoiceKey,
-                OriginalOptionsScreen.AudioAcceptKey, OriginalOptionsScreen.AudioCancelKey,
+                OriginalAudioPage.MasterKey, OriginalAudioPage.MusicKey,
+                OriginalAudioPage.EffectsKey, OriginalAudioPage.VoiceKey,
+                OriginalAudioPage.AcceptKey, OriginalAudioPage.CancelKey,
             },
             rows.Select(r => r.Key));
         RowsAreClearOfEachOther(host, rows, "AUDIO", 8);
@@ -1300,15 +1300,15 @@ public class OriginalOptionsTests
     private static void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
-        host.Module.OpenVideo();
+        host.Module.Video.Open();
         var rows = host.Rows.ToArray();
         Assert.Equal(
             new[]
             {
-                OriginalOptionsScreen.MonitorKey, OriginalOptionsScreen.ResolutionKey, OriginalOptionsScreen.DisplayModeKey,
-                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.RenderScaleKey, OriginalOptionsScreen.AntiAliasingKey,
-                OriginalOptionsScreen.ShadowQualityKey, OriginalOptionsScreen.GraphicsKey,
-                OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
+                OriginalVideoPage.MonitorKey, OriginalVideoPage.ResolutionKey, OriginalVideoPage.DisplayModeKey,
+                OriginalVideoPage.VSyncKey, OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
+                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.GraphicsKey,
+                OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
             },
             rows.Select(r => r.Key));
         RowsAreClearOfEachOther(host, rows, "VIDEO", 16);
@@ -1321,26 +1321,26 @@ public class OriginalOptionsTests
     private static void ControlsRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure, controls: Controls(out _, out _));
-        host.Module.OpenControlsPrefs();
+        host.Module.Controls.Open();
         var rows = host.Rows.ToArray();
         Assert.Equal(
             new[]
             {
-                OriginalOptionsScreen.ControlsPlayerKey, OriginalOptionsScreen.ControlsMouseKey,
-                OriginalOptionsScreen.ControlsSensitivityKey,
-                OriginalOptionsScreen.KeysDoorKey, OriginalOptionsScreen.ControlsAcceptKey,
-                OriginalOptionsScreen.ControlsCancelKey,
+                OriginalControlsPage.PlayerKey, OriginalControlsPage.MouseKey,
+                OriginalControlsPage.SensitivityKey,
+                OriginalControlsPage.KeysDoorKey, OriginalControlsPage.AcceptKey,
+                OriginalControlsPage.CancelKey,
             },
             rows.Select(r => r.Key));
 
-        var mouse = layout.Screen(OriginalOptionsScreen.ControlsPrefsSection)!.Widget(OriginalOptionsScreen.ControlsSensitivityKey)!;
+        var mouse = layout.Screen(OriginalControlsPage.Section)!.Widget(OriginalControlsPage.SensitivityKey)!;
         var slot = measure(mouse.Art[0])!.Value;
         Assert.Equal(
             ((float)(mouse.Int("X") + mouse.Int("Left")),
              (float)(mouse.Int("Y") + mouse.Int("Top")),
              (float)(slot.Width - mouse.Int("Right") - mouse.Int("Left")),
              (float)(slot.Height - mouse.Int("Bottom") - mouse.Int("Top"))),
-            Rect(Row(host, OriginalOptionsScreen.ControlsSensitivityKey)));
+            Rect(Row(host, OriginalControlsPage.SensitivityKey)));
 
         RowsAreClearOfEachOther(host, rows, "CONTROLS", 5);
     }

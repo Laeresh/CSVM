@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
 using Xunit;
@@ -73,6 +74,35 @@ public class InstantActionFeatureTests
         Assert.Equal(-1, ia.PresetIndex);
         Assert.Null(ia.BaseDef);
         Assert.All(ia.Waves, w => Assert.Equal(default, w));
+        Assert.Equal(InstantActionDef.DefaultRaceWindowMinutes, ia.RaceWindowMinutes);
+    }
+
+    [Fact]
+    public void TheRaceWindowIsOfferedToAMultiSeatStuntRunAndRidesTheDefUntilDiscarded()
+    {
+        var ia = Feature();
+        ia.ConfirmEnvironment();
+        Assert.Equal(new[] { 3, 5, 10, 15 }, InstantActionFeature.RaceWindows);
+        Assert.Equal(1, ia.RaceWindowIndex);
+        Assert.Equal("10 minutes", InstantActionFeature.RaceWindowLabel(10));
+        Assert.Equal(5, ia.BuildDef().RaceWindowMinutes);
+
+        Assert.False(ia.OffersRaceWindow(2));
+        ia.SelectMissionType(2);
+        Assert.Equal(InstantActionFeature.StuntKey, ia.MissionType.Key);
+        Assert.False(ia.OffersRaceWindow(1));
+        Assert.True(ia.OffersRaceWindow(2));
+
+        ia.SelectRaceWindow(3);
+        Assert.Equal(15, ia.RaceWindowMinutes);
+        Assert.Throws<ArgumentOutOfRangeException>(() => ia.SelectRaceWindow(4));
+        Assert.Equal(15, ia.BuildDef().RaceWindowMinutes);
+
+        // No preset carries a window, so a contents row leaves the pick; Discard restores five.
+        ia.ApplyPreset(1);
+        Assert.Equal(15, ia.RaceWindowMinutes);
+        ia.Discard();
+        Assert.Equal(5, ia.RaceWindowMinutes);
     }
 
     [Fact]

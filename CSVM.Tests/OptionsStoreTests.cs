@@ -172,13 +172,37 @@ public class OptionsStoreTests
         Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
     }
 
+    /// <summary>A hand edit that broke the JSON reads as empty. The file is moved aside with a
+    /// warning rather than left for the next save to replace.</summary>
     [Fact]
-    public void Load_MalformedJson_ReadsAsEmpty()
+    public void Load_MalformedJson_ReadsAsEmptyAndMovesTheFileAside()
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "options.json"), "{ not json", new UTF8Encoding(false));
+        string path = Path.Combine(dir, "options.json");
+        File.WriteAllText(path, "{ not json", new UTF8Encoding(false));
+        var lines = new System.Collections.Generic.List<string>();
+
+        OptionsDef loaded;
+        using (Log.PushConsoleSink(lines.Add))
+        {
+            loaded = new OptionsStore(dir).Load();
+        }
+
+        Assert.Null(loaded.MenuPresentation);
+        Assert.Contains(lines, l => l.StartsWith("WARN", System.StringComparison.Ordinal) && l.Contains(path) && l.Contains(".bad"));
+        new OptionsStore(dir).Save(new OptionsDef { MenuPresentation = "original" });
+        Assert.Equal("{ not json", File.ReadAllText(path + ".bad"));
+        Assert.Equal("original", new OptionsStore(dir).Load().MenuPresentation);
+    }
+
+    [Fact]
+    public void Load_ANonObjectFile_ReadsAsEmptyRatherThanThrowing()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"), "[1, 2]", new UTF8Encoding(false));
 
         Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
+        Assert.True(File.Exists(Path.Combine(dir, "options.json.bad")));
     }
 
     /// <summary>The four display settings round-trip beside the three words, so a page that hands

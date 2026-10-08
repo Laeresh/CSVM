@@ -33,6 +33,12 @@ public static class Rng
     // AI behaviour draws (patrol-net branch choices; later waves add theirs). Its own stream so
     // an AI's route never shifts what the weapons or paint code rolls, and vice versa.
     public const string Ai = "ai";
+    // A network bot's pilot draws (gunner, ordnance and mode-machine seeds). Its own stream, not
+    // Rng.Ai: only the host builds a bot's pilot, so its draws must not move a stream both ends share.
+    public const string Bots = "bots";
+    // A host's bot field at launch (a Random plane, the callsign draw). Its own stream, read through
+    // IntSeedFor, so seating bots takes nothing out of Rng.Bots, which the pilots then draw from.
+    public const string BotField = "botfield";
     public const string Puffer = "puffer";
     public const string Clouds = "clouds";
     // The cloud field's per-sprite fade band (FogVolumeClutter). Its own stream, not
@@ -53,9 +59,9 @@ public static class Rng
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a
     // function of how many frames the wind had been blowing.
     public const string Wind = "wind";
-    // The plane wobble's per-shot fire-kick steps (PlaneShake random-walk accumulator, BL-266(a)
-    // branch). Its own stream so a draw here never shifts what another subsystem rolls; under
-    // --det it is a pure function of the master, so the gun-buzz wobble replays exactly.
+    // The plane wobble's random kick steps (PlaneShake's fire walk and its component blocks).
+    // Its own stream, so a draw here never shifts what another subsystem rolls. Under --det it
+    // is a pure function of the master, so the wobble replays exactly.
     public const string Shake = "shake";
     // The hangar's rolled plane names (PlaneNameTables). Its own stream so naming a plane never
     // shifts what the paint or spawn code rolls; under --det the offered name replays exactly,

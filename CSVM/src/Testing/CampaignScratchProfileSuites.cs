@@ -2,11 +2,13 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
-using CSVM.UI.Hangar;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;
@@ -61,7 +63,7 @@ internal static class CampaignScratchProfileSuites
             CheckLoad(ctx, spec, report);
 
             var seated = CampaignDirector.ResolveSeatedPlane(spec);
-            string node = PlanePickerRoster.AirframeNode(5);
+            string node = StockAirframes.Node(5);
             ctx.Check(seated.PlaneNames.Count > 0 && seated.PlaneNames[0] == node,
                 $"the seat is read off the copy in the named store, {node}");
             var director = CampaignDirector.TryCreate(seated, ctx.ZrdrPath, missionZrdr);

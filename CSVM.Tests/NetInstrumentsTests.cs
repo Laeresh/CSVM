@@ -204,7 +204,7 @@ public sealed class NetInstrumentsTests
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(21));
         var seats = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "first", PlaneNode = Airframes[1] },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "second", PlaneNode = Airframes[0] },
         };
@@ -236,7 +236,7 @@ public sealed class NetInstrumentsTests
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(22));
         var seats = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         var host = NetSession.Host(mesh[0], seats, 1UL, null, Airframes);
@@ -247,6 +247,21 @@ public sealed class NetInstrumentsTests
         Assert.StartsWith("net host seat 0 peers 1:", line, StringComparison.Ordinal);
         Assert.Contains("| poses interp 7 extrap 2 starved 1 jumps 1 |", line, StringComparison.Ordinal);
         Assert.EndsWith("extrap err 1.50 m mean 2.25 m worst", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_guests_readout_line_ends_with_its_clock_offset_snaps_and_round_trip()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(23));
+        var guest = NetSession.Guest(mesh[1], Airframes);
+        var clock = new NetClockSlew(10.0);
+        clock.ObserveRoundTrip(1.0, 11.5, 1.04);
+        clock.Observe(30.0, 2.0);
+
+        string line = NetInstruments.Describe(guest, default, clock);
+
+        Assert.StartsWith("net guest", line, StringComparison.Ordinal);
+        Assert.EndsWith("| clock offset 28.020 s target 28.020 s snaps 1 rtt 40 ms answered 0 of 0", line, StringComparison.Ordinal);
     }
 
     private static byte[] State(byte seat, ushort sequence) => Bytes(new AircraftStateMessage(

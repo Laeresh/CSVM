@@ -2,14 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Campaign;
-using CSVM.Session.Launch;
-using CSVM.UI.Hangar;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.Utils;
 
@@ -225,9 +226,9 @@ internal static class NetCoopGuestPlaneSuites
 
         var saved = CampaignDirector.TryCreate(Spec(root, wing, null), ctx.ZrdrPath, zrdr);
         var settled = CampaignDirector.TryCreate(Spec(root, wing, told), ctx.ZrdrPath, zrdr);
-        ctx.Check(saved?.WingmanNode == PlanePickerRoster.AirframeNode(WingAirframe),
+        ctx.Check(saved?.WingmanNode == StockAirframes.Node(WingAirframe),
             $"ABLE-TO-FAIL CONTROL: with nothing settled the director binds the saved wingman plane ({saved?.WingmanNode})");
-        ctx.Check(settled?.WingmanNode == PlanePickerRoster.AirframeNode(CoopPlanePool.StockAirframe),
+        ctx.Check(settled?.WingmanNode == StockAirframes.Node(CoopPlanePool.StockAirframe),
             $"and with the stock Devastator settled it binds the Devastator ({settled?.WingmanNode})");
     }
 
@@ -248,7 +249,7 @@ internal static class NetCoopGuestPlaneSuites
             return;
         }
 
-        var own = new[] { PlanePickerRoster.AirframeNode(rig.Host.Profile!.Planes[SeatedAt].Airframe) };
+        var own = new[] { StockAirframes.Node(rig.Host.Profile!.Planes[SeatedAt].Airframe) };
         var (roster, fits) = Launcher.CoopLaunchField(rig.HostDoor, launch.Transport, own, new LoadoutChoice?[] { null }, StockLoadouts.Load());
         var builds = Launcher.CoopSeatBuilds(roster, new CustomPlaneDef?[] { null }, rig.HostDoor, launch.Transport);
         var seats = new List<string>();
@@ -259,7 +260,7 @@ internal static class NetCoopGuestPlaneSuites
             var campaign = rig.Guests[g];
             var plane = campaign.Field.Plane(0)!;
             var exit = campaign.BuildExit(new[] { Array.Empty<int>() });
-            string node = PlanePickerRoster.AirframeNode(plane.Airframe);
+            string node = StockAirframes.Node(plane.Airframe);
             seats.Add(seat >= 0 ? roster[seat].PlaneNode : "-");
             agrees &= seat == g + 1 && roster[seat].PlaneNode == node && exit?.Seats[0].PlaneNode == node
                 && builds[seat]?.PaintPattern == exit?.Seats[0].Custom?.PaintPattern
@@ -321,7 +322,7 @@ internal static class NetCoopGuestPlaneSuites
 
     private static CampaignFeature OpenHost(TestContext ctx, string root, CampaignProfileStore store, CampaignMission mission)
     {
-        var host = new CampaignFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        var host = new CampaignFeature(UiStrings.Empty, StockAirframes.Node);
         host.Open(store, new CustomPlaneStore(Path.Combine(root, "Planes")), StockLoadouts.Load(), ctx.DataRoot);
         host.SeatProfile(HostPilot);
         host.SetMission(mission.Seq);
@@ -331,7 +332,7 @@ internal static class NetCoopGuestPlaneSuites
     private static SessionSpec Spec(string root, CampaignMission mission, CoopWingmanMessage? wingman) =>
         SessionSpec.FromCampaign(
             SessionSpec.Parse(new[] { "--mute", "--no-pads", $"--profiles={Path.Combine(root, "Profiles")}" }),
-            HostPilot, mission.Seq, new[] { PlanePickerRoster.AirframeNode(CoopPlanePool.StockAirframe) }, 1, wingman: wingman);
+            HostPilot, mission.Seq, new[] { StockAirframes.Node(CoopPlanePool.StockAirframe) }, 1, wingman: wingman);
 
     private static NetPlayFeature Door(LoopbackTransport wire) => new((_, _, _) => wire, (_, _) => wire);
 
@@ -345,7 +346,7 @@ internal static class NetCoopGuestPlaneSuites
             HostDoor = Door(mesh[0]);
             GuestWires = mesh.Skip(1).ToArray();
             GuestDoors = GuestWires.Select(Door).ToArray();
-            Guests = GuestDoors.Select(_ => new CampaignFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode)).ToArray();
+            Guests = GuestDoors.Select(_ => new CampaignFeature(UiStrings.Empty, StockAirframes.Node)).ToArray();
             Lost = GuestDoors.Select(_ => -1).ToArray();
         }
 

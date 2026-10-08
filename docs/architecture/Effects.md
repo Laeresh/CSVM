@@ -52,16 +52,6 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
 `Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
-## src/Effects/FogVolumeBanks.cs
-Enhanced Graphics only: the soft volumetric bank standing inside each authored `fvol*` volume, under
-the cards `FogVolumeClutter` lays over the same geometry. `Create` builds one bank per volume, each
-laying its own bounds down as `FogVolume` boxes over one shared `FogMaterial`, and `ApplyFroxelFog`
-arms the Environment's froxel pass for a world that built some and clears it for one that did not,
-with zero global density so the banks carry it all and the authored `csky_fog_*` ramp is not hazed
-twice. `WeatherRig`'s zone apply calls `ApplyZone`, so the scattering colour is the zone's own, or
-the chapter's authored whiteout colour where `fogvol.zrd` arms one, which also sets the density.
-Every constant is TUNE, including the tile width, which is an engine limit. Volumes: [../formats/fogvol.md](../formats/fogvol.md).
-
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh
 whose shader derives each quad's position from a per-instance seed, `csky_time` and
@@ -70,6 +60,25 @@ SNOW flutters as flakes; RAIN streaks along the data's world fall velocity. The 
 procedural (`MakeFlakeTexture`/`MakeStreakTexture`), the original having drawn untextured
 primitives no archive carries. Schema and the data-to-look TUNE mapping:
 [../formats/weather.md](../formats/weather.md).
+
+## src/Effects/Weather.cs
+`WeatherState`, the flown mission's own weather.json as per-zone `ZoneWeather` records: fog colour,
+ranges and altitude, the sunlight block resolved into a world light, a sun orientation and its two
+uncollapsed colours, the cloud-cover whiteout band, wind, and precipitation. `DefaultDiffuse` and
+`DefaultAmbient` are the install's modal day pair, public because both lighting mappings anchor a
+zone against them. `ResolveZone` picks the flown zone by name, falling back to the one zone whose
+horizon subtree carries meshes where the requested one is empty and this mission also fogs it;
+`CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes.
+Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
+
+## src/Effects/ViewerSet.cs
+The "what do the cameras see" registry, session-owned and bound once after the rigs are built, so
+every draw rule needing it shares one registration, single player included. `Cameras` hands back
+the raw bound list for a consumer that needs each viewer's own field of view and pane height and
+already skips a freed instance; `Positions` and `Poses` are the two derived shapes, the latter
+filling a caller-owned buffer for a consumer that republishes the set every frame. It carries
+cameras, not the screen-size or view-depth arithmetic, which stays in `ScreenSize`. Its consumers
+are the tracer floor, the puffer distance fade, the screen wash and the world-light budget.
 
 ## src/Effects/WindStreaks.cs
 Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/Hud/SpeedCue.cs`) rather than a
@@ -96,6 +105,6 @@ Remake-only scorch marks, a layer OVER the crater carve (`Mech3/CraterField.cs`)
 of it: a capped pool of `Decal` nodes sharing one procedural radial burn texture built on first use,
 projected along the struck surface normal and faded out over their own life. `Create` returns null
 unless `GraphicsMode.Enhanced`, so the faithful build holds no pool, no node and no texture.
-`GameSession.RegisterScorch` is the one decision point (a bowl was carved, or the impact played one
+`ProjectileStage.RegisterScorch` is the one decision point (a bowl was carved, or the impact played one
 of `EffectCatalogue`'s fireballs); `Flight/Projectile.ScorchSink` is the hook and skips water. Size
 comes from the weapon's crater radius. Every size, darkness and life constant is TUNE.

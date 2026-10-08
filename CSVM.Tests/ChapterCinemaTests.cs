@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Session.Campaign;
-using CSVM.UI.Screens;
+using CSVM.Video;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -155,10 +155,10 @@ public class ChapterCinemaTests
         var cinema = new Recorder();
         new ChapterCinema(cinema.Play).OpenCabin(0, cinema.OpenedCabin);
 
-        Assert.Equal(CinemaScreen.ChapterKeys, cinema.Skip);
+        Assert.Equal(ChapterCinema.Keys, cinema.Skip);
         Assert.True(cinema.Skip.HasFlag(CinemaSkip.Space) && cinema.Skip.HasFlag(CinemaSkip.Return));
-        Assert.False(CinemaScreen.ClosingKeys.HasFlag(CinemaSkip.Space));
-        Assert.False(CinemaScreen.ClosingKeys.HasFlag(CinemaSkip.Return));
+        Assert.False(ClosingCinema.Keys.HasFlag(CinemaSkip.Space));
+        Assert.False(ClosingCinema.Keys.HasFlag(CinemaSkip.Return));
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class ChapterCinemaTests
         Assert.True(flow.Play(2, () => handed++));
         Assert.Equal(2, cinema.Plays);
         Assert.Equal("chap2", cinema.Name);
-        Assert.Equal(CinemaScreen.ChapterKeys, cinema.Skip);
+        Assert.Equal(ChapterCinema.Keys, cinema.Skip);
         Assert.Equal(2, flow.ChapterPlayed);
 
         // The stop call ends it the way a skip does, and the hand-off still runs once.

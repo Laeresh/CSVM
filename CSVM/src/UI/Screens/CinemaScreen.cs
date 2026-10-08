@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Sticks;
 using CSVM.UI.Boards;
 using CSVM.Utils;
@@ -7,39 +9,6 @@ using CSVM.Video;
 using Godot;
 
 namespace CSVM.UI.Screens;
-
-/// <summary>Which presses end a cinema before it has played out. The sets differ per cinema, and
-/// the difference is the original's own. <c>CAMPAIGNINTRO.SCRIPT</c> takes Escape, Space, Return
-/// and a left mouse press, where <c>FINALCINEMA.SCRIPT</c> takes Escape and the mouse alone.
-/// ⚠ Do not unify them: Space and Return doing nothing on the closing cinema is authored.
-/// A pad button is in every set (a pad player has no other press), and a stick's skip counts as
-/// one. A set meets a press in <see cref="CinemaSkips"/>.</summary>
-[Flags]
-public enum CinemaSkip
-{
-    /// <summary>Nothing skips: the cinema plays to its last frame.</summary>
-    None = 0,
-
-    /// <summary>Escape alone.</summary>
-    Escape = 1,
-
-    /// <summary>Space, which the chapter cinema takes and the closing one does not.</summary>
-    Space = 2,
-
-    /// <summary>Return, on the same footing as <see cref="Space"/>.</summary>
-    Return = 4,
-
-    /// <summary>A left mouse press, which both cinema scripts take.</summary>
-    LeftMouse = 8,
-
-    /// <summary>Any press at all, key, mouse or pad button alike, which is what the boot sequence
-    /// offers a player who has not been taught a key yet.</summary>
-    AnyPress = 16,
-
-    /// <summary>A gamepad button, any of them. Read only where pad input counts at all, since a
-    /// pad reports its first button pressed as it arrives.</summary>
-    PadButton = 32,
-}
 
 /// <summary>
 /// One cinema on screen: a <see cref="CinemaPlayback"/>, the <see cref="ImageTexture"/> its
@@ -52,16 +21,6 @@ public enum CinemaSkip
 /// </summary>
 public sealed partial class CinemaScreen : Node
 {
-    /// <summary>Escape, Space, Return or a left mouse press, the chapter cinema's set, and a pad
-    /// button with them.</summary>
-    public const CinemaSkip ChapterKeys = CinemaSkip.Escape | CinemaSkip.Space | CinemaSkip.Return
-        | CinemaSkip.LeftMouse | CinemaSkip.PadButton;
-
-    /// <summary>Escape or a left mouse press, the closing cinema's set and no more, and a pad
-    /// button with them.</summary>
-    public const CinemaSkip ClosingKeys =
-        CinemaSkip.Escape | CinemaSkip.LeftMouse | CinemaSkip.PadButton;
-
     /// <summary>Any press whatsoever, the boot sequence's set.</summary>
     public const CinemaSkip BootKeys = CinemaSkip.AnyPress;
 
@@ -108,10 +67,10 @@ public sealed partial class CinemaScreen : Node
     /// <summary>How many pictures have reached the screen.</summary>
     public int FramesShown => _cinema.FramesShown;
 
-    /// <summary>Opens the cinema a name means under <paramref name="dataRoot"/>, or null when the
-    /// file is not there or will not decode, because a flow that cannot show a cinema still has to
+    /// <summary>Opens the cinema a name means under <paramref name="dataRoot"/>. Returns null when
+    /// the file is not there or will not decode. A flow that cannot show a cinema still has to
     /// reach the screen after it. The name resolves without regard to case
-    /// (<see cref="CSVM.SessionPaths.Cinema"/>).</summary>
+    /// (<see cref="CSVM.Extraction.SessionPaths.Cinema"/>).</summary>
     public static CinemaScreen? Open(string dataRoot, string name, CinemaSkip skip)
     {
         string path = SessionPaths.Cinema(dataRoot, name);

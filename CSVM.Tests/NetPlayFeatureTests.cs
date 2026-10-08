@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Net;
 using CSVM.UI.Menu;
 using Xunit;
@@ -990,6 +991,179 @@ public class NetPlayFeatureTests
         Assert.False(Assert.Single(host.CoopGuests).Left);
     }
 
+    // Two players at one guest's machine. The host seats both side by side and its launch waits on
+    // each one's Ready, not the machine's. The join names the guest both seats.
+    [Fact]
+    public void AGuestWithTwoPlayersTakesTwoSeatsAndTheLaunchWaitsOnEachOnesReady()
+    {
+        var (host, guest) = CoopPair(73);
+        guest.PlayerName = "Lucy";
+        guest.LocalSeats = 2;
+        host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
+        Pump(host, guest);
+
+        var seated = host.CoopGuests;
+        Assert.Equal(new[] { 1, 2 }, seated.Select(g => g.Slot));
+        Assert.Equal(new[] { 0, 1 }, seated.Select(g => g.Local));
+        Assert.Single(seated.Select(g => g.Peer).Distinct());
+        Assert.Equal(1, guest.CoopFlow!.Value.Slot);
+        Assert.Equal(new[] { "Lucy", "" }, seated.Select(g => g.Name));
+        Assert.Equal(2, guest.CoopSeats);
+        Assert.Equal(1, guest.CoopFlow!.Value.Extra);
+        Assert.Equal(3, guest.CoopFlow!.Value.Humans);
+        Assert.Equal(3, host.Advertising!.Value.Players);
+        Assert.Equal("", guest.CoopSeatsShort);
+
+        // ABLE-TO-FAIL CONTROL: one of the machine's two players Ready holds the launch.
+        guest.Pick.Set(5, true);
+        Pump(host, guest);
+        Assert.True(guest.CoopReadyAt(0));
+        Assert.False(guest.CoopSeatsReady);
+        Assert.False(host.CoopAllReady);
+        Assert.Equal(new[] { true, false }, host.CoopGuests.Select(g => g.Ready));
+
+        guest.PickOf(1).Set(5, true);
+        Pump(host, guest);
+        Assert.True(guest.CoopSeatsReady);
+        Assert.True(host.CoopAllReady);
+        Assert.True(guest.CoopFlow!.Value.IsReady(1) && guest.CoopFlow!.Value.IsReady(2));
+        Assert.Equal(2, host.CoopGuestPlanes.Count);
+
+        // The launch's field seats the machine twice, and its join names it both seats.
+        var launch = host.BuildLaunch()!;
+        var roster = NetSeats.CoopField(launch.Transport.LocalPeer, new[] { "player_pfighter" },
+            host.CoopGuests.Select(g => (g.Peer, "player_pfighter", g.Name)).ToList());
+        _ = NetSession.Host(launch.Transport, roster, seed: 5);
+        guest.Step(0.016);
+        Assert.True(guest.CoopLaunchDue);
+        var joined = NetSession.Guest(guest.BuildLaunch()!.Transport);
+        joined.Step(0.016);
+        Assert.True(joined.Joined);
+        Assert.Equal(2, joined.LocalSeatCount);
+        Assert.Equal(new[] { false, true, true }, joined.Seats.Select(s => s.FlownHere));
+    }
+
+    // Every seat a guest flies counts against the four humans. Seats a guest asked for before the
+    // others came are its own, and a later guest past the cap is refused. The password holds the
+    // later two off the host's peer list until their doors open, which is what makes them later.
+    [Fact]
+    public void AGuestsFurtherSeatsCountAgainstTheCapAndALaterGuestPastItIsRefused()
+    {
+        var mesh = LoopbackTransport.Mesh(4, Clean, new Random(79));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Password = "kestrel" };
+        host.OpenCoopHost(NetSeats.MaxPlayers - 1);
+        host.Offer(3, "Zachary", 1);
+        var pair = Guest(mesh[1]);
+        pair.LocalSeats = 2;
+        pair.OpenJoin();
+        Pump(host, pair);
+        Pump(host, pair);
+        Assert.Equal(2, host.CoopGuests.Count);
+
+        var second = Guest(mesh[2]);
+        var third = Guest(mesh[3]);
+        second.OpenJoin();
+        third.OpenJoin();
+        for (int frame = 0; frame < 6; frame++)
+        {
+            host.Step(0.016);
+            pair.Step(0.016);
+            second.Step(0.016);
+            third.Step(0.016);
+        }
+
+        Assert.Equal(3, host.CoopGuests.Count);
+        Assert.Equal(2, pair.CoopSeats);
+        Assert.True(second.IsCoopGuest);
+        Assert.Equal(NetDoorStage.Failed, third.Stage);
+        Assert.Equal(CoopDoorText.GameFull, third.Fault);
+        Assert.Equal(4, host.Advertising!.Value.Players);
+        Assert.Equal(NetSessionStatus.Full, host.Advertising!.Value.Status);
+    }
+
+    // A guest whose second player arrives once the cap is full keeps its first seat and is told the
+    // second sits out. ⚠ The seat a seated guest flies is never taken for another's further one.
+    [Fact]
+    public void AGuestsSecondPlayerPastTheCapSitsOutAndItsBandSaysSo()
+    {
+        var mesh = LoopbackTransport.Mesh(4, Clean, new Random(83));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
+        host.OpenCoopHost(NetSeats.MaxPlayers - 1);
+        host.Offer(3, "Zachary", 1);
+        var guests = new[] { Guest(mesh[1]), Guest(mesh[2]), Guest(mesh[3]) };
+        foreach (var guest in guests)
+        {
+            guest.OpenJoin();
+        }
+
+        void PumpAll()
+        {
+            for (int frame = 0; frame < 4; frame++)
+            {
+                host.Step(0.016);
+                Array.ForEach(guests, guest => guest.Step(0.016));
+            }
+        }
+
+        PumpAll();
+        Assert.Equal(3, host.CoopGuests.Count);
+        guests[0].LocalSeats = 2;
+        host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
+        PumpAll();
+
+        Assert.Equal(3, host.CoopGuests.Count);
+        Assert.All(guests, guest => Assert.True(guest.IsCoopGuest));
+        Assert.Equal(1, guests[0].CoopSeats);
+        Assert.Equal(CoopDoorText.SeatsShort(1, 2), guests[0].CoopSeatsShort);
+        Assert.Contains(CoopDoorText.SeatsShort(1, 2), CoopDoorText.GuestBand(guests[0]));
+
+        // ABLE-TO-FAIL CONTROL: once a seat frees, the waiting player is given it.
+        guests[2].Close();
+        mesh[3].Disconnect(mesh[0].LocalPeer);
+        PumpAll();
+        Assert.Equal(2, guests[0].CoopSeats);
+        Assert.Equal("", guests[0].CoopSeatsShort);
+        Assert.Equal(3, host.CoopGuests.Count);
+    }
+
+    [Fact]
+    public void EveryCoopSeatIsNamedByItsCallsignOnEveryMachine()
+    {
+        var mesh = LoopbackTransport.Mesh(4, Clean, new Random(59));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { PlayerName = "Zachary" };
+        host.OpenCoopHost(NetSeats.MaxPlayers - 1);
+        host.Offer(3, "Zachary", 1);
+        string[] callsigns = { "Nathan", "", "Sheila" };
+        var guests = new List<NetPlayFeature>();
+        for (int i = 1; i < mesh.Count; i++)
+        {
+            int end = i;
+            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { PlayerName = callsigns[i - 1] };
+            guest.OpenJoin();
+            guests.Add(guest);
+        }
+
+        for (int frame = 0; frame < 6; frame++)
+        {
+            host.Step(0.016);
+            guests.ForEach(guest => guest.Step(0.016));
+        }
+
+        // The host reads each guest's callsign off its pick; a guest with none goes by its tag.
+        string[] want = { "Zachary", "Nathan", "", "Sheila" };
+        Assert.Equal(want, Enumerable.Range(0, 4).Select(host.CoopSeatName).ToArray());
+
+        // Each guest reads the host's and the other guests' off the host's player list.
+        foreach (var guest in guests)
+        {
+            Assert.True(guest.IsCoopGuest);
+            Assert.Equal(want, Enumerable.Range(0, 4).Select(guest.CoopSeatName).ToArray());
+        }
+
+        // ABLE-TO-FAIL CONTROL: a slot past the field names nobody.
+        Assert.Equal("", guests[0].CoopSeatName(4));
+    }
+
     // A co-op host with one local seat and one guest seated behind it, both on their boards.
     private static (NetPlayFeature Host, NetPlayFeature Guest) CoopPair(int seed)
     {
@@ -1003,6 +1177,9 @@ public class NetPlayFeatureTests
         Assert.True(guest.IsCoopGuest);
         return (host, guest);
     }
+
+    private static NetPlayFeature Guest(LoopbackTransport wire) =>
+        new((_, _, _) => wire, (_, _) => wire) { Password = "kestrel" };
 
     // A payload no lobby reads, sent host to guest, which the guest's lobby holds for a session.
     private static void SessionPayload(IReadOnlyList<LoopbackTransport> mesh) =>

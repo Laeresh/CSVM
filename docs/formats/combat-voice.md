@@ -452,7 +452,7 @@ Stand-ins and inventions, named:
   per speaker and family: a warning when the pilot owns the family's defs and none was prewarmed,
   an info line when it owns none. A campaign roster spawn carries its own slot 65 (`CampaignDirector` hands
   `AiSpawn.AccentId` to `RegisterVoice`), and its talker and constitution slots reach the runtime
-  the same way: `RegisterVoice` takes one override per stat, and `GameSession.RegisterAiVoice`
+  the same way: `RegisterVoice` takes one override per stat, and `SessionVoices.RegisterAi`
   looks up `talker_chance` at the block's own talker rating and `constitution_chance` at its own
   constitution rating, each on its own curve. A rating a block does not author falls back to the
   session's skill rating, same as before.

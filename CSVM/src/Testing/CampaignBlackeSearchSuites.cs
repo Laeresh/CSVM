@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
@@ -13,6 +14,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;
@@ -611,7 +613,7 @@ internal static class CampaignBlackeSearchSuites
             var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(WarpSeed));
             var seats = new NetSeat[]
             {
-                new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = "player_pfighter" },
+                new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = "player_pfighter" },
                 new() { PeerId = 1, SeatIndex = 1, Callsign = "early", PlaneNode = "player_fbrand" },
                 new() { PeerId = 2, SeatIndex = 2, Callsign = "late", PlaneNode = "player_fbrand" },
             };

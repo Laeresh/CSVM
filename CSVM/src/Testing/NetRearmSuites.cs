@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Net;
-using CSVM.Session.Launch;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -61,7 +63,7 @@ internal static class NetRearmSuites
             }
 
             var guest = peers[1].SeatRigs[1].Controller!;
-            var baseAt = peers[1].RearmPlay!.BaseAt(0)!.Value.Position;
+            var baseAt = peers[1].Dogfight!.RearmPlay!.BaseAt(0)!.Value.Position;
             var inside = baseAt + (Vector3.Down * UnderNode);
 
             Place(guest, inside);
@@ -70,8 +72,8 @@ internal static class NetRearmSuites
             Restored(ctx, peers, guest, pylon, "the team 3 guest at a base no node of its team names");
 
             Lockstep(ReportSteps, peers);
-            ctx.Check(peers[0].RepairsTaken == 1 && peers[1].RepairsTaken == 0,
-                $"and the host's copy of the guest hears its full hull once, the guest nothing from itself ({peers[0].RepairsTaken}/{peers[1].RepairsTaken})");
+            ctx.Check(peers[0].Wire.RepairsTaken == 1 && peers[1].Wire.RepairsTaken == 0,
+                $"and the host's copy of the guest hears its full hull once, the guest nothing from itself ({peers[0].Wire.RepairsTaken}/{peers[1].Wire.RepairsTaken})");
             OncePerEntry(ctx, peers, guest, baseAt);
 
             Place(guest, inside + (Vector3.Right * Away));
@@ -79,8 +81,8 @@ internal static class NetRearmSuites
             Place(guest, inside);
             Strip(guest);
             Lockstep(1, peers);
-            ctx.Check(peers[1].RearmPlay!.Rearms == 2 && guest.Damage!.SummaryHealthFraction >= 1f,
-                $"after leaving the radius, a second entry rearms it again ({peers[1].RearmPlay!.Rearms} rearms, hull {guest.Damage!.SummaryHealthFraction:0.##})");
+            ctx.Check(peers[1].Dogfight!.RearmPlay!.Rearms == 2 && guest.Damage!.SummaryHealthFraction >= 1f,
+                $"after leaving the radius, a second entry rearms it again ({peers[1].Dogfight!.RearmPlay!.Rearms} rearms, hull {guest.Damage!.SummaryHealthFraction:0.##})");
         });
     }
 
@@ -96,15 +98,15 @@ internal static class NetRearmSuites
         RunPair(ctx, spec, new[] { 2, 1 }, 9002, peers =>
         {
             if (!Bases(ctx, peers, RearmRule.OwnTeam, "zep_rearm_node_1 and zep_rearm_node_2")
-                || peers.Any(p => p.ZvzPlay == null))
+                || peers.Any(p => p.Dogfight?.ZvzPlay == null))
             {
                 return;
             }
 
             var hulls = peers[0].ZeppelinHulls!;
-            var rearm = peers[1].RearmPlay!;
-            ctx.Check(peers.All(p => p.RearmPlay!.BaseAt(0)!.Value.Team == 2 && p.RearmPlay!.BaseAt(1)!.Value.Team == 1),
-                $"zep_rearm_node_1 serves team 2, the side of hull 0, and zep_rearm_node_2 team 1 on both machines ({string.Join(" | ", peers.Select(p => $"{p.RearmPlay!.BaseAt(0)?.Team}/{p.RearmPlay!.BaseAt(1)?.Team}"))})");
+            var rearm = peers[1].Dogfight!.RearmPlay!;
+            ctx.Check(peers.All(p => p.Dogfight!.RearmPlay!.BaseAt(0)!.Value.Team == 2 && p.Dogfight!.RearmPlay!.BaseAt(1)!.Value.Team == 1),
+                $"zep_rearm_node_1 serves team 2, the side of hull 0, and zep_rearm_node_2 team 1 on both machines ({string.Join(" | ", peers.Select(p => $"{p.Dogfight!.RearmPlay!.BaseAt(0)?.Team}/{p.Dogfight!.RearmPlay!.BaseAt(1)?.Team}"))})");
             var nearest = Enumerable.Range(0, 2).Select(i =>
             {
                 var at = rearm.BaseAt(i)!.Value.Position;
@@ -157,7 +159,7 @@ internal static class NetRearmSuites
             ctx.Check(rearm.Rearms == before && guest.Damage!.SummaryHealthFraction < 1f,
                 $"with its hull lost, the guest's own node restores nothing ({rearm.Rearms - before} rearms, hull {guest.Damage!.SummaryHealthFraction:0.##})");
 
-            var hostRearm = peers[0].RearmPlay!;
+            var hostRearm = peers[0].Dogfight!.RearmPlay!;
             Place(host, Under(hostRearm, 0));
             Strip(host);
             Lockstep(1, peers);
@@ -178,7 +180,7 @@ internal static class NetRearmSuites
             new[] { "player_pfighter" }, MenuMode.Versus);
         var guestSpec = SessionSpec.FromMenu(SessionSpec.Parse(args), ctx.Chapter, new[] { "player_pfighter" }, MenuMode.Versus);
         ctx.Check(hostSpec.Mission == SessionSpec.DeathmatchMission && guestSpec.Mission == SessionSpec.DeathmatchMission
-                  && hostSpec is { Versus: true, CaptureTheFlag: false, ZeppelinVsZeppelin: false },
+                  && hostSpec is { Versus: true, MissionType: DogfightMissionType.Deathmatch },
             $"both machines' menu launches fly {ctx.Chapter}'s MP1 as a Deathmatch whatever their command lines name ({hostSpec.Mission}, {guestSpec.Mission})");
 
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.DeathmatchMission);
@@ -200,7 +202,7 @@ internal static class NetRearmSuites
             }
 
             var guest = peers[1].SeatRigs[1].Controller!;
-            Place(guest, peers[1].RearmPlay!.BaseAt(0)!.Value.Position + (Vector3.Down * UnderNode));
+            Place(guest, peers[1].Dogfight!.RearmPlay!.BaseAt(0)!.Value.Position + (Vector3.Down * UnderNode));
             int pylon = Strip(guest);
             Lockstep(1, peers);
             Restored(ctx, peers, guest, pylon, "the guest at MP1's base");
@@ -284,15 +286,15 @@ internal static class NetRearmSuites
     // Both machines list the same two bases under the mode's rule.
     private static bool Bases(TestContext ctx, GameSession[] peers, RearmRule rule, string names)
     {
-        ctx.Check(peers.All(p => p.RearmPlay is { BaseCount: 2 } r && r.Rules.Rule == rule
+        ctx.Check(peers.All(p => p.Dogfight?.RearmPlay is { BaseCount: 2 } r && r.Rules.Rule == rule
                                  && Mathf.IsEqualApprox(r.Rules.RadiusSquared, RearmBases.InitialRadiusSquared)),
-            $"both machines list {names} under {rule}, at player.zrd's radius, which it leaves at 25 m ({string.Join(" | ", peers.Select(p => p.RearmPlay is { } r ? $"{r.BaseCount} {r.Rules.Rule} {r.Rules.RadiusSquared:0}" : "none"))})");
-        if (peers.Any(p => p.RearmPlay is not { BaseCount: 2 }))
+            $"both machines list {names} under {rule}, at player.zrd's radius, which it leaves at 25 m ({string.Join(" | ", peers.Select(p => p.Dogfight?.RearmPlay is { } r ? $"{r.BaseCount} {r.Rules.Rule} {r.Rules.RadiusSquared:0}" : "none"))})");
+        if (peers.Any(p => p.Dogfight?.RearmPlay is not { BaseCount: 2 }))
         {
             return false;
         }
 
-        var at = peers[1].RearmPlay!;
+        var at = peers[1].Dogfight!.RearmPlay!;
         ctx.Note($"bases at {at.BaseAt(0)!.Value.Position} and {at.BaseAt(1)!.Value.Position}");
         return true;
     }
@@ -328,8 +330,8 @@ internal static class NetRearmSuites
         var damage = guest.Damage!;
         bool whole = Mathf.IsEqualApprox(damage.WholeHealth, damage.WholeHealthMax)
             && Mathf.IsEqualApprox(damage.WholeArmor, damage.WholeArmorMax) && damage.WorstFraction >= 1f;
-        ctx.Check(peers[1].RearmPlay!.Rearms == 1 && whole && Full(guest) && guest.Loadout!.Hardpoints.Count > 0,
-            $"{where} is restored to full health, armour and every gun and pylon ({peers[1].RearmPlay!.Rearms} rearms, health {damage.WholeHealth:0}/{damage.WholeHealthMax:0}, armour {damage.WholeArmor:0}/{damage.WholeArmorMax:0}, full {Full(guest)})");
+        ctx.Check(peers[1].Dogfight!.RearmPlay!.Rearms == 1 && whole && Full(guest) && guest.Loadout!.Hardpoints.Count > 0,
+            $"{where} is restored to full health, armour and every gun and pylon ({peers[1].Dogfight!.RearmPlay!.Rearms} rearms, health {damage.WholeHealth:0}/{damage.WholeHealthMax:0}, armour {damage.WholeArmor:0}/{damage.WholeArmorMax:0}, full {Full(guest)})");
         ctx.Check(guest.SelectedPylon == pylon && pylon > 0,
             $"and keeps its selected pylon rather than the first ({guest.SelectedPylon}, selected {pylon})");
         string? own = guest.MessageStack?.LineAt(0);
@@ -348,12 +350,12 @@ internal static class NetRearmSuites
     // Damaged again while still inside the radius, the latch holds and nothing is restored.
     private static void OncePerEntry(TestContext ctx, GameSession[] peers, FlightController guest, Vector3 baseAt)
     {
-        int before = peers[1].RearmPlay!.Rearms;
+        int before = peers[1].Dogfight!.RearmPlay!.Rearms;
         guest.Damage!.ScalePools(0.5f, 0.5f);
         Lockstep(2, peers);
         float off = guest.WorldPosition.DistanceSquaredTo(baseAt);
-        ctx.Check(off <= RearmBases.InitialRadiusSquared && peers[1].RearmPlay!.Rearms == before && guest.Damage.SummaryHealthFraction < 1f,
-            $"damaged again inside the radius, it stays damaged: once per entry ({Mathf.Sqrt(off):0.#} m off, {peers[1].RearmPlay!.Rearms - before} more rearms, hull {guest.Damage.SummaryHealthFraction:0.##})");
+        ctx.Check(off <= RearmBases.InitialRadiusSquared && peers[1].Dogfight!.RearmPlay!.Rearms == before && guest.Damage.SummaryHealthFraction < 1f,
+            $"damaged again inside the radius, it stays damaged: once per entry ({Mathf.Sqrt(off):0.#} m off, {peers[1].Dogfight!.RearmPlay!.Rearms - before} more rearms, hull {guest.Damage.SummaryHealthFraction:0.##})");
     }
 
     // Put at a point with a fresh collision window, so walls and hulls cannot end the flight.
@@ -370,10 +372,10 @@ internal static class NetRearmSuites
     private static void Kill(GameSession[] peers, string hull, string part, int seat)
     {
         var host = peers[0];
-        var pool = host.NetWorld?.World?.Destructibles.All.FirstOrDefault(inst =>
+        var pool = host.Wire.World?.World?.Destructibles.All.FirstOrDefault(inst =>
             string.Equals(inst.Owner, hull, StringComparison.OrdinalIgnoreCase)
             && string.Equals(AnimRuntime.NameOf(inst.Anchor), part, StringComparison.OrdinalIgnoreCase));
-        if (pool != null && host.NetWorld?.World is { } world)
+        if (pool != null && host.Wire.World?.World is { } world)
         {
             world.DamageAt(pool.Anchor, Overkill, host.SeatRigs[seat].Controller!.PlayerIndex);
         }

@@ -798,9 +798,7 @@ public sealed partial class ZeppelinRuntime : Node
             // Instant Action's zeppelin_run is won by emptying this list, so an engine that can
             // never die makes that mode unwinnable on its own objective. Say it outright rather
             // than leaving it to be read out of the census line below.
-            GD.PushWarning($"zep: '{def.Node}' has {def.Engines.Count - pooled} engine(s) with no " +
-                           $"destructible pool, they can never die, so an Instant Action " +
-                           $"zeppelin run on this hull cannot be won on engines");
+            Log.Warn("flight", $"zep: '{def.Node}' has {def.Engines.Count - pooled} engine(s) with no destructible pool, they can never die, so an Instant Action zeppelin run on this hull cannot be won on engines");
         }
 
         // cannon_health cannons: record hp beats the def pool (Reseed); the record's stages

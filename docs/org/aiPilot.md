@@ -443,7 +443,7 @@ scorers' admission, and the primary arm is held to it because it runs through th
 
 CSVM applies that admission in `AiTargetRanking.Score` (a sphere of `AttackRange`, where the
 original tests a cylinder), in `SelectBest` and `KeepsStandingTarget`, and in the primary pick of
-`FlightController.SelectRankedTarget`. `FlightController.HoldsStandingTarget` keeps an assigned
+`GunnerAcquisition`'s sweep. Its hold keeps an assigned
 primary only while it is inside `AttackRange`, the port of the primary arm's per-frame re-score.
 `AiModeMachine` tests no range of its own.
 
@@ -577,7 +577,7 @@ what the crash-avoidance ray then sees.
 
 ### What CSVM ports of this
 
-`FlightController.SelectRankedTarget` sweeps `TargetVehicle`/`TargetTurret`/`TargetStruct` (the
+`GunnerAcquisition` sweeps `TargetVehicle`/`TargetTurret`/`TargetStruct` (the
 gun aim assist's own three lists, the struct arm narrowed to the flagged set by
 `AimCandidateSet.AddMissionStructures`) for one global minimum into `AiGunner.Target`, a standing
 target of any class, which `AiPilot` reads through `PursuitQuarry.Of` as its pursuit quarry: the mode
@@ -592,7 +592,7 @@ hull supplies its own node name and nothing else. Nine missions author a `patrol
 term: the `wingman` **+0.4** (an aircraft flying `AiPilot.Escort`, which is the netless `mode
 wingman` fork), the half-metre deadband on the raw offset for ahead/behind, the altitude sign, the
 closing term on the candidate's velocity, and the gasbag **−0.5**. The gasbag admission gate is
-`FlightController.HasGasbagOrdnanceReady`, walking the pylons for a `DAMAGES_ZEPPELIN` weapon with
+`GunnerAcquisition`'s ordnance gate, walking the pylons for a `DAMAGES_ZEPPELIN` weapon with
 ammo whose two launch timers have run out, and the gasbag identity reaches `AiRocketeer.Solve`, so
 a torpedo-armed pilot that picked a gasbag launches at it.
 
@@ -605,7 +605,7 @@ the aeroplane picker and in a `mode ship` hull's gun alike. A turret's own picke
 which is what the original does.
 
 The hold is ported too. `AiGunner.TakeTarget` stamps `AiGunner.TargetHoldSeconds` (the engine's
-20.0) and keeps the winning `RankedTargetCandidate`, and `FlightController.HoldsStandingTarget`
+20.0) and keeps the winning `RankedTargetCandidate`, and `GunnerAcquisition`'s hold
 re-scores that one candidate at the target's live position every tick, dropping it and sweeping the
 pool whole the moment the rank fails or the hold runs out. A target written straight onto
 `AiGunner.Target` by a mission order or an airframe swap carries no rank snapshot and keeps the
@@ -613,7 +613,7 @@ older rule that alive is enough, which is what an assigned `primary_target` gets
 
 CSVM then departs from the original deliberately. `AiTargetRanking.AircraftFirst`, on by default and
 settled once per launch from `--ai-targeting=` ([`../cli.md`](../cli.md)), withdraws every turret and
-structure candidate while any aircraft still ranks, in `FlightController.SelectRankedTarget` and
+structure candidate while any aircraft still ranks, in `GunnerAcquisition` and
 `TurretController.AcquireTarget` both, so a wingman and the guns of the airship beside it go after
 the same enemies and an ally fights a structure only with no aeroplane in reach. The same preference
 runs inside the hold through `AiTargetRanking.KeepsStandingTarget`, so an enemy aeroplane coming
@@ -623,9 +623,16 @@ the bare decoded hold with it, and the order is then the two biases' alone.
 `Flight/Ai/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
+The second departure is the Dogfight bot's. The original has no computer-flown Deathmatch pilot, so
+nothing decoded says whom one prefers, and a bot seat's gunner is armed with
+`AiGunner.PlayersPreferred` off: `AiTargetRanking.Score` then weighs a person at the base 1.0, and
+a person and a bot at equal geometry rank alike. Every other pilot keeps the 0.7. The switch gates
+the weight alone: `IsHumanPiloted` and the `"player"` role in `primary_target` and `rating_biases`
+read as before, and a bot seat's gunner carries neither field.
+
 The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
-candidate past the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its
-re-score `HoldsStandingTarget` and the withdrawal's reach test all hand it
+candidate past the `attackRange` it is handed, and `GunnerAcquisition`, its
+re-scoring hold and the withdrawal's reach test all hand it
 `AiModeMachine.AttackRange`, so a member whose activation volume a `DEDG` widened keeps its own
 attack radius for what it may pick up. `Flight/Ai/SurfaceGunner` is handed the radius
 `SurfaceVehicleRuntime` resolves for the hull at spawn, the block's and net's attack slot over the

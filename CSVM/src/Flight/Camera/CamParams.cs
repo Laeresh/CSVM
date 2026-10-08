@@ -6,12 +6,11 @@ using CSVM.Mech3;
 namespace CSVM.Flight.Camera;
 
 /// <summary>The original's camera tuning for one aircraft, from the zrdr extraction's
-/// <c>camparam.json</c>: a <c>default</c> block every plane starts from, with seven of the eleven
-/// airframes overriding their own chase distance on top (docs/formats/camparam.md).
-/// <see cref="Dist"/>/<see cref="DistFactor"/> drive the chase radius
-/// (<c>d = Dist + DistFactor·V</c>) and <see cref="DistMin"/>/<see cref="DistMax"/> bound it;
-/// several other fields are decoded and carried here but deliberately dormant, see the docs page
-/// before wiring one in.
+/// <c>camparam.json</c> (docs/formats/camparam.md). Seven of the eleven airframes override their
+/// own chase distance on top of the <c>default</c> block. The chase radius is
+/// <c>d = Dist + DistFactor·V</c>, bounded by the <c>DistMin</c>/<c>DistMax</c> pair. The
+/// <c>Thirdp</c> pair shapes the authored chase rig. Several other fields are decoded and carried
+/// here but deliberately dormant; read the docs page before wiring one in.
 /// </summary>
 public sealed class CamParams
 {
@@ -31,17 +30,17 @@ public sealed class CamParams
     public float DistMin = 15.7f;
     public float DistMax = 25f;
 
-    // Catch-up rates, per frame-second, in the same exponential (docs/formats/camparam.md).
-    // ⚠ Per REAL second: the original eases these on its per-frame wall dt, so no measured-to-sim
-    // conversion belongs on them.
+    // Catch-up rates (docs/formats/camparam.md): the lagged speed's, then the two eased aircraft
+    // frames' the chase rig turns by. ⚠ Per REAL second: the original eases all three on its
+    // per-frame wall dt, so no measured-to-sim conversion belongs on them.
     public float DistCatchUp = 1f;
     public float PosCatchUp = 2f;
     public float LookCatchUp = 3f;
 
-    /// <summary>Third-person eye height and pitch. The Balmoral is the only airframe overriding
-    /// them (0.2/0.2 against 0.138/0.29). ThirdpPitch is DEGREES in the file, and 0.29° is far too
-    /// small to be the chase offset's elevation; the height's units are unknown. So the offset
-    /// DIRECTION stays hand-picked and only the radius comes from the data.</summary>
+    /// <summary>The authored chase rig's shape, read by <see cref="CameraController.AuthoredRig"/>.
+    /// The height is the rise per metre astern, a ratio of the chase radius. The pitch is DEGREES in
+    /// the file and tilts the whole rig. The Balmoral alone overrides both (0.2/0.2 against
+    /// 0.138/0.29). The decoded law: docs/org/cameraViews.md, "The chase rig".</summary>
     public float ThirdpHeight = 0.138f;
     public float ThirdpPitch = 0.29f;
 
@@ -82,6 +81,10 @@ public sealed class CamParams
     /// <summary>False when <c>camparam.json</c> was not present, so every value above is the
     /// hard-coded fallback. A partial extraction still flies; the session says so once.</summary>
     public bool FromData;
+
+    /// <summary><see cref="ThirdpPitch"/> in radians, the unit the original's reader stores it
+    /// in.</summary>
+    public float ThirdpPitchRad => ThirdpPitch * (MathF.PI / 180f);
 
     /// <summary>Resolves one airframe's camera block: <c>default</c> first, then the plane's own
     /// keys layered over it. ⚠ Keyed by DISPLAY name ("Bloodhawk"), not the model node or the

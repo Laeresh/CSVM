@@ -174,6 +174,20 @@ public enum NetMessageType : ushort
     /// <summary>One line a pilot typed in flight, to everybody or to its lobby team. The original's
     /// <c>0x15</c>.</summary>
     FlightChat = 0x0066,
+
+    /// <summary>A stunt race seat's own run, reported by the machine flying it to the host: a start,
+    /// a zone split, a finish or a rerun.</summary>
+    RaceRun = 0x0067,
+
+    /// <summary>A stunt race host's clock: the phase, how far into it, and the window's length.</summary>
+    RaceState = 0x0068,
+
+    /// <summary>One racer's line of a stunt race host's leaderboard, with its ranking run's splits.</summary>
+    RaceStanding = 0x0069,
+
+    /// <summary>A stunt race's window decided for the field: the host's new window or its return to the
+    /// lobby, or a guest leaving.</summary>
+    RaceCall = 0x006A,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -298,8 +312,10 @@ public enum NetWorldEvent : ushort
     /// seat or -1 when no seat is credited.</summary>
     AiDowned = 1,
 
-    /// <summary>An AI aircraft's hull after damage. The subject is its admission ordinal and the
-    /// value its summary health fraction.</summary>
+    /// <summary>An AI aircraft's hull, sent in the step after either of its pools moved. The
+    /// subject is its admission ordinal, the argument its whole armour as a
+    /// <see cref="DamagePools.Word"/>, and the value its summary health fraction. An AI airframe
+    /// has no zones, so the pair is its whole ledger.</summary>
     AiHull = 2,
 
     /// <summary>A destructible pool's health after a stage change or a kill. The subject is its
@@ -439,9 +455,12 @@ public interface INetMessage<TSelf>
 
 /// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field. A
 /// roster's size therefore depends only on how many seats there are. <see cref="Voice"/> is the
-/// seat's pilot voice in the pick's form, 0 for none.</summary>
+/// seat's pilot voice in the pick's form, 0 for none. The nameless flag carries
+/// <see cref="NetSeat.Unnamed"/> to every machine, and <see cref="Pilot"/> and <see cref="Skill"/>
+/// say which seats the host's bots fly. A human entry carries the default skill.</summary>
 public readonly record struct NetSeatEntry(
-    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0);
+    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0, bool Unnamed = false,
+    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = NetBotSkill.Veteran);
 
 /// <summary>
 /// One aircraft's state as its owner has it: pose, motion, the lever and the surfaces. It is the
@@ -493,7 +512,7 @@ public readonly record struct AircraftStateMessage(
         message = new AircraftStateMessage(
             seat, sequence, position, attitude, velocity,
             throttle, aileron, elevator, rudder, (flags & 1) != 0);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -561,7 +580,7 @@ public readonly record struct FireMessage(
         var direction = new Vector3(reader.ReadUnit(), reader.ReadUnit(), reader.ReadUnit());
         byte target = reader.ReadByte();
         message = new FireMessage(seat, weapon, sequence, origin, direction, target);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -623,7 +642,7 @@ public readonly record struct HitMessage(
         float damage = reader.ReadSingle();
         var impact = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
         message = new HitMessage(victim, shooter, weapon, damage, part, impact, hull);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -645,15 +664,76 @@ public readonly record struct HitMessage(
 }
 
 /// <summary>
-/// The victim's own hull state once it has applied whatever hit it. Reliable, and the reason a
-/// lost or reordered hit cannot leave two peers disagreeing about how hurt an aircraft is.
-/// The owner's number is the number, and this is the owner saying it. A full hull is a rearm base's
-/// restore (docs/org/multiplayer-rearm.md).</summary>
-public readonly record struct DamageMessage(
-    byte Seat, byte Stage, ushort Flags, float Hull) : INetMessage<DamageMessage>
+/// An aircraft's whole damage ledger as fractions of its maxima, one 16-bit word per pool. The
+/// whole armour and health pair travels on its own, since a zone-less spend dents it alone. <see cref="Zones"/> is the owner's zone count in
+/// def order. Only the first <see cref="MaxZones"/> ride, packed four words to a field, so a reader
+/// whose ledger counts differently takes the whole pair alone.</summary>
+public readonly record struct DamagePools(
+    byte Zones, ushort WholeArmor, ushort WholeHealth, ulong ZoneArmor, ulong ZoneHealth)
+{
+    /// <summary>The zones that ride, a player airframe's nose, tail and two wings.</summary>
+    public const int MaxZones = 4;
+
+    /// <summary>The bytes the pools take on the wire.</summary>
+    public const int Bytes = 1 + 2 + 2 + 8 + 8;
+
+    /// <summary>The word of a full pool. A 16-bit step keeps a value just above a damage stage's
+    /// threshold from rounding below it on the reader.</summary>
+    public const ushort Full = ushort.MaxValue;
+
+    /// <summary>A fraction of a pool's maximum as its word, clamped to [0, 1].</summary>
+    public static ushort Word(float fraction) => (ushort)Math.Round(Math.Clamp(fraction, 0f, 1f) * Full);
+
+    /// <summary>A word back to its fraction.</summary>
+    public static float Fraction(ushort word) => word / (float)Full;
+
+    /// <summary>Zone <paramref name="zone"/>'s armour word, a full pool past <see cref="MaxZones"/>.</summary>
+    public ushort ArmorAt(int zone) => WordAt(ZoneArmor, zone);
+
+    /// <summary>Zone <paramref name="zone"/>'s health word, a full pool past <see cref="MaxZones"/>.</summary>
+    public ushort HealthAt(int zone) => WordAt(ZoneHealth, zone);
+
+    /// <summary>These pools with zone <paramref name="zone"/> set to the two fractions. A zone past
+    /// <see cref="MaxZones"/> is not carried and leaves them as they are.</summary>
+    public DamagePools WithZone(int zone, float armorFraction, float healthFraction) =>
+        zone is < 0 or >= MaxZones
+            ? this
+            : this with
+            {
+                ZoneArmor = SetWord(ZoneArmor, zone, Word(armorFraction)),
+                ZoneHealth = SetWord(ZoneHealth, zone, Word(healthFraction)),
+            };
+
+    internal static DamagePools Read(ref NetMessageReader reader) =>
+        new(reader.ReadByte(), reader.ReadUInt16(), reader.ReadUInt16(), reader.ReadUInt64(), reader.ReadUInt64());
+
+    internal void Write(ref NetMessageWriter writer)
+    {
+        writer.WriteByte(Zones);
+        writer.WriteUInt16(WholeArmor);
+        writer.WriteUInt16(WholeHealth);
+        writer.WriteUInt64(ZoneArmor);
+        writer.WriteUInt64(ZoneHealth);
+    }
+
+    private static ushort WordAt(ulong packed, int zone) =>
+        zone is < 0 or >= MaxZones ? Full : (ushort)(packed >> (16 * zone));
+
+    private static ulong SetWord(ulong packed, int zone, ushort word) =>
+        (packed & ~(0xFFFFUL << (16 * zone))) | ((ulong)word << (16 * zone));
+}
+
+/// <summary>
+/// The owner's damage ledger, sent in the step after any pool moved: a shot, a ram, a graze, a rearm
+/// or an airframe swap. Reliable, and the reason a lost or reordered hit cannot leave two peers
+/// disagreeing about how hurt an aircraft is. The owner's numbers are the numbers, and this is the
+/// owner saying them. A reader mirrors them into its copy and plays the damage stages off that.
+/// A copy that was hurt and reads full again was restored, a rearm base's restore among them
+/// (docs/org/multiplayer-rearm.md).</summary>
+public readonly record struct DamageMessage(byte Seat, DamagePools Pools) : INetMessage<DamageMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
-    public const int Size = 12;
+    public const int Size = NetMessage.HeaderBytes + 1 + DamagePools.Bytes;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.Damage;
@@ -669,8 +749,8 @@ public readonly record struct DamageMessage(
         if (!reader.Is(Size) || reader.Type != Type)
             return false;
 
-        message = new DamageMessage(
-            reader.ReadByte(), reader.ReadByte(), reader.ReadUInt16(), reader.ReadSingle());
+        byte seat = reader.ReadByte();
+        message = new DamageMessage(seat, DamagePools.Read(ref reader));
         return true;
     }
 
@@ -679,9 +759,7 @@ public readonly record struct DamageMessage(
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Seat);
-        writer.WriteByte(Stage);
-        writer.WriteUInt16(Flags);
-        writer.WriteSingle(Hull);
+        Pools.Write(ref writer);
         return writer.Close();
     }
 }
@@ -898,7 +976,7 @@ public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float 
         float y = reader.ReadSingle();
         float z = reader.ReadSingle();
         message = new SpawnAtMessage(seat, new Vector3(x, y, z), reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1033,7 +1111,7 @@ public readonly record struct MatchStateMessage(
         var end = (NetMatchEnd)reader.ReadByte();
         byte winner = reader.ReadByte();
         message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle(), winner);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1079,7 +1157,7 @@ public readonly record struct DirectorTransitionMessage(ushort Code, int Id, flo
         _ = reader.ReadUInt16();
         int id = reader.ReadInt32();
         message = new DirectorTransitionMessage(code, id, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1098,10 +1176,10 @@ public readonly record struct DirectorTransitionMessage(ushort Code, int Id, flo
 /// The host's answer to a join, sent to that one peer before the roster. It carries the master
 /// seed every peer's streams derive from, the host's session clock, and the joiner's seat.
 /// The seat is here rather than in the roster because the roster is the same bytes for everybody.
-/// Which of its entries is yours is the one fact that differs per guest. The seed and the clock
-/// are the two halves of <see cref="NetHandshake"/>. Each rides as two 32-bit fields, since the
-/// cursors carry no wider primitive.</summary>
-public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byte Seat)
+/// Which of its entries is yours is the one fact that differs per guest. The joiner also flies the
+/// <see cref="Extra"/> seats after <see cref="Seat"/>, 0 for one pilot. The seed and
+/// the clock are the two halves of <see cref="NetHandshake"/>, each as two 32-bit fields.</summary>
+public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byte Seat, byte Extra = 0)
     : INetMessage<HandshakeMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -1124,8 +1202,10 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
         ulong seed = reader.ReadUInt32() | ((ulong)reader.ReadUInt32() << 32);
         ulong clock = reader.ReadUInt32() | ((ulong)reader.ReadUInt32() << 32);
         byte seat = reader.ReadByte();
-        message = new HandshakeMessage(seed, BitConverter.UInt64BitsToDouble(clock), seat);
-        return true;
+        byte extra = reader.ReadByte();
+        double hostClock = BitConverter.UInt64BitsToDouble(clock);
+        message = new HandshakeMessage(seed, hostClock, seat, extra);
+        return double.IsFinite(hostClock);
     }
 
     /// <inheritdoc/>
@@ -1138,7 +1218,7 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
         writer.WriteUInt32((uint)clock);
         writer.WriteUInt32((uint)(clock >> 32));
         writer.WriteByte(Seat);
-        writer.WriteByte(0);
+        writer.WriteByte(Extra);
         writer.WriteUInt16(0);
         return writer.Close();
     }
@@ -1356,9 +1436,12 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>
     public const int MaxSeats = 16;
 
-    // An entry's flags byte: bit 0 the host, bits 1 to 3 the seat's voice. An older reader reads
-    // the host bit alone and ignores the voice.
+    // An entry's flags byte: bit 0 the host, bits 1 to 3 the voice, bit 4 a nameless player. Bit 5
+    // marks a bot and bits 6 and 7 its skill tier. An older reader reads the host bit alone.
     private const int VoiceShift = 1;
+    private const int UnnamedBit = 1 << 4;
+    private const int BotBit = 1 << 5;
+    private const int SkillShift = 6;
 
     private readonly NetSeatEntry[] _seats;
 
@@ -1429,9 +1512,16 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             byte team = reader.ReadByte();
             byte flags = reader.ReadByte();
             byte plane = reader.ReadByte();
+            bool bot = (flags & BotBit) != 0;
+            int skill = flags >> SkillShift;
+            // A tier past Ace, or skill bits on a human, is no roster this vocabulary writes.
+            if (bot ? skill > (int)NetBotSkill.Ace : skill != 0)
+                return false;
+
             seats[i] = new NetSeatEntry(
                 seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes),
-                (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice));
+                (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice), (flags & UnnamedBit) != 0,
+                bot ? NetPilot.Bot : NetPilot.Human, bot ? (NetBotSkill)skill : NetBotSkill.Veteran);
         }
 
         message = new SeatRosterMessage(seats, seed);
@@ -1452,7 +1542,10 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             writer.WriteByte(seat.Seat);
             writer.WriteByte(seat.Team);
             int voice = seat.Voice <= CoopPickMessage.MaxVoice ? seat.Voice : CoopPickMessage.NoVoice;
-            writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift)));
+            bool bot = seat.Pilot == NetPilot.Bot;
+            int skill = bot && seat.Skill <= NetBotSkill.Ace ? (int)seat.Skill : bot ? (int)NetBotSkill.Veteran : 0;
+            writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift) | (seat.Unnamed ? UnnamedBit : 0)
+                | (bot ? BotBit : 0) | (skill << SkillShift)));
             writer.WriteByte(seat.Plane);
             writer.WriteText(seat.Callsign, CallsignBytes);
         }
@@ -1490,7 +1583,7 @@ public readonly record struct ClockPingMessage(float AskedClock, float HostClock
 
         float asked = reader.ReadSingle();
         message = new ClockPingMessage(asked, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1578,6 +1671,10 @@ public static class NetMessage
         NetMessageType.FlagTable => FlagTableMessage.Reliability,
         NetMessageType.SpawnAt => SpawnAtMessage.Reliability,
         NetMessageType.FlightChat => FlightChatMessage.Reliability,
+        NetMessageType.RaceRun => RaceRunMessage.Reliability,
+        NetMessageType.RaceState => RaceStateMessage.Reliability,
+        NetMessageType.RaceStanding => RaceStandingMessage.Reliability,
+        NetMessageType.RaceCall => RaceCallMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

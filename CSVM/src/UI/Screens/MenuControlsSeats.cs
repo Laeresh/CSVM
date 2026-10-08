@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Sticks;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 
 namespace CSVM.UI.Screens;

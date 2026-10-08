@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
+using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session;
-using CSVM.Session.Launch;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -54,7 +56,8 @@ internal static class NetAiSpawnSuites
         + "the host's ordinals, each first seen "
         + "at the host's launch point and named as the host named it, then tracking the host's "
         + "path; a sample for an unadmitted ordinal admits nothing, and the host's deactivation of "
-        + "an AI reaches the guest while a cutscene park does not")]
+        + "an AI reaches the guest while a cutscene park does not, and an armour spend on the host's "
+        + "AI reaches its copy as the whole pair, building the copy's pending crash rig first")]
     internal static void GuestsBuildTheHostsLaunches(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -71,7 +74,7 @@ internal static class NetAiSpawnSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(4141));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = "player_pfighter" },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = "player_pfighter" },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = "player_fbrand" },
         };
         NetSeats.Validate(roster);
@@ -100,8 +103,8 @@ internal static class NetAiSpawnSuites
             }
 
             Lockstep(1, host.Session, guest.Session);
-            var mine = host.Session.NetWorld!;
-            var theirs = guest.Session.NetWorld!;
+            var mine = host.Session.Wire.World!;
+            var theirs = guest.Session.Wire.World!;
             int first = mine.Admitted;
             ctx.Check(theirs.Admitted == first && guestGen.Replicated && !hostGen.Replicated,
                 $"both ends start from {first} admitted AI and only the guest replicates its generators");
@@ -123,6 +126,7 @@ internal static class NetAiSpawnSuites
             Tracking(ctx, host.Session, guest.Session, first);
             Unknown(ctx, host.Session, guest.Session);
             Presence(ctx, host.Session, guest.Session, first);
+            Hull(ctx, host.Session, guest.Session, first);
         }
         finally
         {
@@ -139,7 +143,7 @@ internal static class NetAiSpawnSuites
         List<(GeneratorAircraftLaunch Launch, FlightController Aircraft)> launches)
     {
         var seen = new Dictionary<int, Vector3>();
-        var theirs = guest.NetWorld!;
+        var theirs = guest.Wire.World!;
         bool second = false;
         int settle = SettleSteps;
         for (int s = 0; s < LaunchSteps && settle > 0; s++)
@@ -212,8 +216,8 @@ internal static class NetAiSpawnSuites
     // Both copies trace the host's own paths, and not each other's.
     private static void Tracking(TestContext ctx, GameSession host, GameSession guest, int first)
     {
-        var mine = host.NetWorld!;
-        var theirs = guest.NetWorld!;
+        var mine = host.Wire.World!;
+        var theirs = guest.Wire.World!;
         var hostPath = new[] { new List<Vector3>(), new List<Vector3>() };
         var guestPath = new[] { new List<Vector3>(), new List<Vector3>() };
         for (int s = 0; s < FlightSteps; s++)
@@ -242,10 +246,10 @@ internal static class NetAiSpawnSuites
     // A sample naming an ordinal the guest never admitted is dropped, and admits nothing.
     private static void Unknown(TestContext ctx, GameSession host, GameSession guest)
     {
-        var theirs = guest.NetWorld!;
+        var theirs = guest.Wire.World!;
         int admitted = theirs.Admitted;
         ushort ordinal = (ushort)(admitted + 5);
-        host.NetLink!.Broadcast(
+        host.Wire.Link!.Broadcast(
             new AiStateMessage(ordinal, 0, new Vector3(0f, 500f, 0f), Quaternion.Identity, Vector3.Zero,
                 0.5f, 0f, 0f, 0f, false),
             NetChannels.Events);
@@ -257,9 +261,9 @@ internal static class NetAiSpawnSuites
     // The host's deactivation and reactivation reach the guest's copy; a cutscene park does not.
     private static void Presence(TestContext ctx, GameSession host, GameSession guest, int first)
     {
-        var owned = host.NetWorld!.AiAt(first)!;
-        var copy = guest.NetWorld!.AiAt(first)!;
-        int applied = guest.NetWorld.WorldEventsApplied;
+        var owned = host.Wire.World!.AiAt(first)!;
+        var copy = guest.Wire.World!.AiAt(first)!;
+        int applied = guest.Wire.World.WorldEventsApplied;
         owned.Inert = true;
         Lockstep(SettleSteps, host, guest);
         bool followedOut = copy.Inert;
@@ -267,7 +271,7 @@ internal static class NetAiSpawnSuites
         Lockstep(SettleSteps, host, guest);
         bool followedIn = !copy.Inert;
         ctx.Check(followedOut && followedIn,
-            $"the host's deactivation of ordinal {first} reaches the guest, and so does its return (out {followedOut}, back {followedIn}, {guest.NetWorld.WorldEventsApplied - applied} event(s))");
+            $"the host's deactivation of ordinal {first} reaches the guest, and so does its return (out {followedOut}, back {followedIn}, {guest.Wire.World.WorldEventsApplied - applied} event(s))");
 
         // ABLE-TO-FAIL CONTROL. A cutscene park sets the park before the inert bit, as the
         // cutscene host does. Each end's own cutscene parks its own copy, so nothing is sent.
@@ -280,6 +284,36 @@ internal static class NetAiSpawnSuites
         Lockstep(SettleSteps, host, guest);
         ctx.Check(stayed && !copy.Inert,
             $"ABLE-TO-FAIL CONTROL: a cutscene park of ordinal {first} on the host leaves the guest's copy in play ({(stayed ? "in play" : "inert")})");
+    }
+
+    // A hull report builds a copy's pending crash rig first. A stage crossed with no rig plays
+    // nothing and is never retried. The pending build is a stand-in: this
+    // harness never pumps a frame, so the roster never defers and the real rig is already bound.
+    private static void Hull(TestContext ctx, GameSession host, GameSession guest, int first)
+    {
+        var owned = host.Wire.World!.AiAt(first)!;
+        var copy = guest.Wire.World!.AiAt(first)!;
+        bool built = false;
+        copy.ArmPendingCrashRig(() => built = true);
+
+        // ABLE-TO-FAIL CONTROL. Stepping alone builds nothing, so the build below is the report's.
+        Lockstep(SettleSteps, host, guest);
+        ctx.Check(copy.CrashRigPending && !built,
+            $"ABLE-TO-FAIL CONTROL: ordinal {first}'s pending crash rig stays pending while nothing reports its hull ({(built ? "built" : "pending")})");
+
+        // Half the armour off, health untouched: a spend no hull stage reads, which only the
+        // mirrored pair can show.
+        var damage = owned.Damage!;
+        damage.Apply("hull", 0f, damage.WholeArmorMax * 0.5f);
+        Lockstep(SettleSteps, host, guest);
+        ctx.Check(built && !copy.CrashRigPending,
+            $"the host's hull report for ordinal {first} builds the guest copy's pending crash rig ({(built ? "built" : "pending")})");
+        var mirrored = copy.Damage!;
+        float hostArmor = damage.WholeArmor / damage.WholeArmorMax;
+        float guestArmor = mirrored.WholeArmor / mirrored.WholeArmorMax;
+        ctx.Check(Mathf.Abs(guestArmor - hostArmor) <= 1.5f / DamagePools.Full && hostArmor < 1f
+                  && Mathf.IsEqualApprox(mirrored.SummaryHealthFraction, damage.SummaryHealthFraction),
+            $"and mirrors its whole pair into the copy: armour {guestArmor:0.0000} against the host's {hostArmor:0.0000}, health {mirrored.SummaryHealthFraction:0.000} against {damage.SummaryHealthFraction:0.000}");
     }
 
     // Mean distance between the guest's shown path and the host's own, at the best whole-step lag.

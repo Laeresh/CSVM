@@ -7,6 +7,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -511,13 +512,18 @@ public sealed class WorldEffectsFactory
         return names;
     }
 
-    private static void CollectRestStates(Node3D node, List<(Node3D, Node3D?, Transform3D, bool)> into)
+    // ⚠ The cockpit interior's root is left out. The cockpit pass moves it into a world of its own
+    // after this snapshot. Re-homed to the airframe by a respawn, it draws at the aircraft's
+    // origin. Its descendants keep their entries.
+    private static void CollectRestStates(Node3D node, List<(Node3D, Node3D?, Transform3D, bool)> into,
+        Node3D? interior = null)
     {
-        into.Add((node, node.GetParent() as Node3D, node.Transform, node.Visible));
+        if (!ReferenceEquals(node, interior))
+            into.Add((node, node.GetParent() as Node3D, node.Transform, node.Visible));
         foreach (var child in node.GetChildren())
             if (child is Node3D c)
             {
-                CollectRestStates(c, into);
+                CollectRestStates(c, into, interior);
             }
     }
 
@@ -904,7 +910,7 @@ public sealed class WorldEffectsFactory
             }
             // The def's own propeller pair. Its anchors are airframe names, so the stage closure above
             // needs no template for it.
-            var propAnims = new[] { _controller.SpinPropsAnim, _controller.StopPropsAnim };
+            var propAnims = _controller.PropellerAnims;
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
@@ -920,7 +926,7 @@ public sealed class WorldEffectsFactory
             // before any crash. That is the airframe, the wreck and the templates a def adopts.
             // ⚠ A snapshot taken at respawn would record the death's end pose.
             if (_controller.PlaneModel != null)
-                CollectRestStates(_controller.PlaneModel, _restStates);
+                CollectRestStates(_controller.PlaneModel, _restStates, _controller.Dressing.Interior);
             foreach (var adopted in AdoptedTemplates(_crashRoot!, AdoptedChildNames(bound)))
                 CollectRestStates(adopted, _restStates);
             // One call for the whole rig, so it cannot be half-bound. The anchor is the context node

@@ -21,7 +21,7 @@
                    every player's install reads, in -Shards processes,
                    split by the harness's own shard:<i>/<n> term over
                    analysis/engine-suite-weights.json, so the suite list is the registry's and
-                   never a copy of it
+                   never a copy of it; on the safe render thread (see the shard launch)
 
     A stage that fails does not stop the ones after it that can still run: a tarball whose unzbd
     lost its bit fails the payload stage AND shows what the extraction does with it.
@@ -129,7 +129,8 @@ if (-not $NoSuites -and -not (Test-Path $Weights)) {
 
 # packaging/MANIFEST.md's Linux table is the statement of what the tarball holds, so the
 # expected listing is read from it rather than restated here. Each backticked name in a row's
-# first cell is one entry; a name ending in / is a folder that must hold at least one file.
+# first cell is one entry; a name ending in / is a folder that must hold at least one file, and a
+# name with a * is a pattern that must match at least one file.
 $manifestText = [IO.File]::ReadAllText((Join-Path $RepoRoot "packaging\MANIFEST.md"), $Utf8)
 $linuxPart = $manifestText.Substring($manifestText.IndexOf("## Linux tarball"))
 $Expected = @()
@@ -226,7 +227,12 @@ while [ "$k" -le "$shards" ]; do
     # No --log-file: an exported build cannot see Godot's own flags from managed code, so the
     # harness screens the engine log at user://logs/godot.log, which this process owns alone.
     # Each shard's own port block, below Linux's ephemeral range, as RunTests.ps1 hands them.
-    timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless -- --run-tests="shard:$k/$shards" --data-root="$data" \
+    # --render-thread safe: Godot 4.7's headless dummy renderer keeps its mesh, material and
+    # texture RIDs in tables that are not thread-safe, and the separate render thread allocates
+    # them on the calling thread. The tables corrupt (null mesh/material errors, wrong or
+    # uninitialized RIDs, a crash at exit). Fixed upstream in godotengine/godot#121958 (4.8);
+    # drop the flag on that upgrade. The render thread's hand-offs are the windowed battery's.
+    timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless --render-thread safe -- --run-tests="shard:$k/$shards" --data-root="$data" \
       --net-port-base=$((30000 + (k - 1) * 100)) > "$out/shard$k.out" 2>&1
     echo $? > "$out/shard$k.exit"
   ) &
@@ -299,13 +305,18 @@ if ((Read-Exit "listing") -ne 0) {
             if (-not ($files | Where-Object { $_.Name.StartsWith($prefix) })) {
                 $problems += "MANIFEST.md names the folder $name, and the archive holds no file under it"
             }
+        } elseif ($name.Contains('*')) {
+            if (-not ($files | Where-Object { $_.Name -like $name })) {
+                $problems += "MANIFEST.md names $name, and no file in the archive matches it"
+            }
         } elseif (-not ($files | Where-Object { $_.Name -eq $name })) {
             $problems += "MANIFEST.md names $name, and the archive does not carry it"
         }
     }
     foreach ($entry in $files) {
         $covered = $Expected | Where-Object {
-            ($_ -eq $entry.Name) -or ($_.EndsWith('/') -and $entry.Name.StartsWith($_))
+            ($_ -eq $entry.Name) -or ($_.EndsWith('/') -and $entry.Name.StartsWith($_)) -or
+                ($_.Contains('*') -and $entry.Name -like $_)
         }
         if (-not $covered) {
             $problems += "the archive carries $($entry.Name), which MANIFEST.md's Linux table does not name"

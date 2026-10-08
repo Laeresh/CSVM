@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
+using CSVM.Session.InstantAction;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Screens;

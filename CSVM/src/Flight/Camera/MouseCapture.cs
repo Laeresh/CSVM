@@ -5,12 +5,11 @@ using Godot;
 namespace CSVM.Flight.Camera;
 
 /// <summary>The mouse a flight seat takes from the desktop, and the virtual cursor that stands in
-/// for the OS one while it holds it. A captured pointer stops reporting a position, so the absolute
-/// reads the stick and head-look grew up on are fed from relative motion instead: this accumulates
-/// that motion into a cursor confined to the pane, which the stick reads through the same offset and
-/// the same gate as the real one. Two things differ: travel is scaled from mouse counts, and the
-/// centre band is wider. Pure arithmetic with no device and no display in it, so a unit drives the
-/// whole law; <see cref="FlightController"/> owns the mode write and the release.
+/// for the OS one while it holds it. A captured pointer stops reporting a position. The stick and
+/// head-look are fed from relative motion instead, accumulated here into a cursor confined to the
+/// pane. The stick reads it through the same offset and the same gate as the real one. Two things
+/// differ: travel is scaled from mouse counts, and the centre band is wider. It is pure arithmetic
+/// that a unit drives whole; <see cref="SeatMouse"/> owns the mode write and the release.
 /// </summary>
 public sealed class MouseCapture
 {
@@ -28,6 +27,13 @@ public sealed class MouseCapture
 
     private Vector2 _pendingCursor;
     private Vector2 _pendingLook;
+
+    /// <summary>Whether this process's own command line is <c>--det</c> or scripted, set once by the
+    /// launcher and read as <see cref="Allowed"/>'s scripted arm beside the session's spec. ⚠ A
+    /// suite assembles sessions from command lines it writes itself (<c>--fly</c> among them), and
+    /// those specs say nobody is scripted. A seat built from one captured the mouse on the hidden
+    /// test desktop, whose <c>ClipCursor</c> still reaches the user's pointer.</summary>
+    public static bool ScriptedLaunch { get; set; }
 
     /// <summary>Whether the mouse is held right now.</summary>
     public bool Holding { get; private set; }
@@ -64,18 +70,20 @@ public sealed class MouseCapture
     public static float DeflectionCounts(float sensitivity) =>
         FullDeflectionCounts / SensitivityScale.Clamp(sensitivity);
 
-    /// <summary>Takes the mouse, seeding the virtual cursor where the real one stood, so the capture
-    /// starts from the stick position the pointer held rather than jumping to the middle.</summary>
-    public void Take(Vector2 cursor)
+    /// <summary>Takes the mouse with the virtual cursor at the middle of <paramref name="pane"/>, so
+    /// the stick starts centred. ⚠ Never seed it from the OS pointer. A take follows the launch or a
+    /// halt, when the pointer stands on the menu button last clicked. A seed there flies that
+    /// button's offset with nothing touched.</summary>
+    public void Take(Vector2 pane)
     {
-        Cursor = cursor;
+        Cursor = new Vector2(Mathf.Max(pane.X, 0f), Mathf.Max(pane.Y, 0f)) * 0.5f;
         _pendingCursor = Vector2.Zero;
         _pendingLook = Vector2.Zero;
         Holding = true;
     }
 
     /// <summary>Gives the mouse back. The pending travel goes with it, so a later capture starts
-    /// from where the real cursor then is rather than replaying a release's last motion.</summary>
+    /// centred rather than replaying a release's last motion.</summary>
     public void Release()
     {
         Holding = false;

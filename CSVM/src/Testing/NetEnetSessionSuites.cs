@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using CSVM.Extraction;
+using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session;
-using CSVM.Session.Launch;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -76,8 +78,8 @@ internal static class NetEnetSessionSuites
         {
             guestWire = EnetTransport.Join(Loopback, port);
             double linked = Pump(hostWire, guestWire,
-                () => hostWire.Peers.Count == 1 && guestWire.LinkState == EnetLinkState.Up);
-            ctx.Check(hostWire.Peers.Count == 1 && guestWire.LinkState == EnetLinkState.Up,
+                () => hostWire.Peers.Count == 1 && guestWire.LinkState == NetLinkState.Up);
+            ctx.Check(hostWire.Peers.Count == 1 && guestWire.LinkState == NetLinkState.Up,
                 $"two sockets link over {Loopback}:{port} in {linked:0.000} s (host peers {hostWire.Peers.Count}, guest link {guestWire.LinkState})");
             if (hostWire.Peers.Count != 1)
             {
@@ -86,7 +88,7 @@ internal static class NetEnetSessionSuites
 
             var roster = new NetSeat[]
             {
-                new() { PeerId = hostWire.LocalPeer, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+                new() { PeerId = hostWire.LocalPeer, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = airframes[0] },
                 new() { PeerId = hostWire.Peers[0], SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
             };
             NetSeats.Validate(roster);
@@ -108,8 +110,8 @@ internal static class NetEnetSessionSuites
             }
 
             Join(ctx, host.Session, guest.Session);
-            var link = host.Session.NetLink!;
-            var far = guest.Session.NetLink!;
+            var link = host.Session.Wire.Link!;
+            var far = guest.Session.Wire.Link!;
             // The host flies while the guest's socket is held. An aircraft-state sample can land
             // before the guest exists to claim it, and the replay drops that one unclaimed. The
             // next sample follows three steps later, so only a parse failure is a fault.
@@ -120,7 +122,7 @@ internal static class NetEnetSessionSuites
             Lockstep(host.Session, guest.Session);
             ctx.Check(link.Sent > sentAtJoin && far.Received > receivedAtJoin && far.Malformed == 0,
                 $"and once both fly, the owners' aircraft state keeps crossing the same socket (sent {sentAtJoin} then {link.Sent}, received {receivedAtJoin} then {far.Received}, malformed {far.Malformed})");
-            ctx.Check(hostWire.LinkState == EnetLinkState.Up && guestWire.LinkState == EnetLinkState.Up,
+            ctx.Check(hostWire.LinkState == NetLinkState.Up && guestWire.LinkState == NetLinkState.Up,
                 $"and both links stand after {LockstepSteps} lockstepped frames ({hostWire.LinkState} and {guestWire.LinkState})");
         }
         finally
@@ -160,11 +162,11 @@ internal static class NetEnetSessionSuites
                                  && p.First.Callsign == p.Second.Callsign
                                  && p.First.PlaneNode == p.Second.PlaneNode),
             $"every seat crosses intact: {string.Join(", ", guest.NetSeats.Select(s => $"{s.SeatIndex}:{s.Callsign}/{s.PlaneNode}"))}");
-        int here = host.NetLink!.LocalSeat;
-        int there = guest.NetLink!.LocalSeat;
+        int here = host.Wire.Link!.LocalSeat;
+        int there = guest.Wire.Link!.LocalSeat;
         ctx.Check(here == 0 && there == 1
-                  && host.NetSeats[0].IsLocal && !host.NetSeats[1].IsLocal
-                  && !guest.NetSeats[0].IsLocal && guest.NetSeats[1].IsLocal,
+                  && host.NetSeats[0].FlownHere && !host.NetSeats[1].FlownHere
+                  && !guest.NetSeats[0].FlownHere && guest.NetSeats[1].FlownHere,
             $"and each end flies its own seat alone (host seat {here}, guest seat {there})");
     }
 
@@ -268,7 +270,7 @@ internal static class NetEnetSessionSuites
             CaptureDirector = new CaptureDirector(spec),
             MasterSeed = seed,
             Camera = camera,
-            Orbit = new UI.Overlays.OrbitCamera(camera),
+            Orbit = new Flight.Camera.OrbitCamera(camera),
             Sun = sun,
             Env = new Godot.Environment(),
             MenuDriven = false,

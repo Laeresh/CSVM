@@ -163,7 +163,15 @@ message table. Control codes are the raw stored values.
 | | `0x37` | Access Snap Look Mode | `0x025` K | | | |
 | | `0x38` | Track Target | `0x026` L | | | |
 | | `0x39` | Access Smooth Look Mode | `0x024` J | | | |
-| Views 2 | `0x3a`-`0x42` | Look Up/Left, Left, Rear, through Look Up/Right | Numpad 1-9 (`0x04f`, `0x050`, `0x051`, `0x04b`, `0x04c`, `0x04d`, `0x047`, `0x048`, `0x049`) | | | |
+| Views 2 | `0x3a` | Look Up/Left/Rear | `0x04f` Numpad1 | | | |
+| | `0x3b` | Look Back | `0x050` Numpad2 | | | |
+| | `0x3c` | Look Up/Right/Rear | `0x051` Numpad3 | | | |
+| | `0x3d` | Look Left | `0x04b` Numpad4 | | | |
+| | `0x3e` | Look Forward | `0x04c` Numpad5 | | | |
+| | `0x3f` | Look Right | `0x04d` Numpad6 | | | |
+| | `0x40` | Look Up/Left | `0x047` Numpad7 | | | |
+| | `0x41` | Look Up | `0x048` Numpad8 | | | |
+| | `0x42` | Look Up/Right | `0x049` Numpad9 | | | |
 | | `0x43` | External Camera Zoom In | `0x04e` NumpadPlus | | | |
 | | `0x44` | External Camera Zoom Out | `0x04a` NumpadMinus | | | |
 | Other | `0x12` | Use Nitro-Booster | `0x031` N | | | |
@@ -194,6 +202,13 @@ Not a scan. The buffered DirectInput keyboard read in `FUN_005357b0` composes
 `code = DIK | modifiers` and writes the press or release state straight into
 `(&DAT_007582e4)[code * 2]`, with the registered handler for that code at `(&DAT_007582e8)[code * 2]`.
 Lookup is a direct index by control code.
+
+[Evidence: decoded] **A handler runs on the press.** The dispatch loop in `FUN_00535a80`
+(`0x00535dfe`..`0x00535e24`) calls the handler of each code that changed this frame only while the
+code's state word has bit 0 set. A press writes 1 (3 when the word was already 1), a release ORs 4,
+and the next frame's `FUN_00535a00` turns 1 into 2 and any released word into 0. A key held across a
+frame is released from 2 into 6, so its release calls nothing; a press and release inside one frame
+(5 or 7) calls the handler once.
 
 `FUN_00536e80` maintains the inverse direction as four arrays inside the manager, one per slot
 (`+0x18` keyboard A, `+0x1f90` keyboard B, `+0x3f08` joystick, `+0x3f48` mouse), each mapping a code

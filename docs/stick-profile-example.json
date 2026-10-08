@@ -1,0 +1,142 @@
+// An example CSVM stick profile that binds every action a stick can bind.
+// docs/stick-profiles.md explains every part of it.
+//
+// To use it: copy it into the stick_profiles folder of your CSVM user folder, replace "1234/5678"
+// below with your own stick's model, then change the controls to match your stick. Close CSVM
+// while you edit; the game reads these files when it starts.
+//
+// The stick this example imagines has six axes, two hats and 48 buttons, more than most real
+// sticks. Delete any row you have no control for: an action this file does not name is unbound
+// on the stick, and the keyboard, mouse and gamepad keep their own bindings either way.
+//
+// Numbers count from 0. The Controls screen counts from 1, so "button:#4" here is "Button 5"
+// on screen, and "fullaxis:2" is "Axis 3".
+//
+// The game accepts these // comments, but a save from the in-game Controls screen rewrites the
+// file without them.
+{
+  "version": 1,
+  "model": "1234/5678",
+  "name": "S",
+  "companions": [],
+  "ignore": false,
+  "contexts": {
+    "flight": {
+      // Attitude and throttle. One full axis covers both directions, so it is written only under
+      // PitchUp, RollRight, YawRight and ThrottleUp. "-" instead of "+" inverts the axis.
+      "PitchUp": ["fullaxis:1+@0.02"],
+      "RollRight": ["fullaxis:0+@0.02"],
+      "YawRight": ["fullaxis:5+@0.02"],
+      // The absolute throttle: the lever's whole travel is idle to full. "-" because this lever
+      // reads -1 pushed forward.
+      "ThrottleLever": ["fullaxis:2-@0.02"],
+      // Stepping the throttle up and down, here on the second hat, alongside the lever.
+      "ThrottleUp": ["hat:1:Up"],
+      "ThrottleDown": ["hat:1:Down"],
+      // The nine fixed throttle settings, "Throttle 0/8" (idle) to "Throttle 8/8" (full).
+      "ThrottleSet0": ["button:#33"],
+      "ThrottleSet1": ["button:#34"],
+      "ThrottleSet2": ["button:#35"],
+      "ThrottleSet3": ["button:#36"],
+      "ThrottleSet4": ["button:#37"],
+      "ThrottleSet5": ["button:#38"],
+      "ThrottleSet6": ["button:#39"],
+      "ThrottleSet7": ["button:#40"],
+      "ThrottleSet8": ["button:#41"],
+
+      // Weapons. A row can hold several controls: both stages of the trigger fire the guns.
+      "FireGuns": ["button:#0", "button:#1"],
+      "FireRockets": ["button:#2"],
+      "SelectGunGroup": ["hat:1:Right"],
+      "SelectGunGroupPrev": ["button:#15"],
+      "SelectOrdnance": ["hat:1:Left"],
+      "SelectOrdnancePrev": ["button:#16"],
+      "Nitro": ["button:#3"],
+
+      // Targeting.
+      "TargetNextEnemy": ["button:#4"],
+      "TargetPreviousEnemy": ["button:#5"],
+      "TargetNearestEnemy": ["button:#6"],
+      "TargetNextAlly": ["button:#7"],
+      "TargetPreviousAlly": ["button:#8"],
+      "TargetNearestAlly": ["button:#9"],
+      "TargetNextNonAircraft": ["button:#10"],
+      "TargetPreviousNonAircraft": ["button:#11"],
+      "TargetNearestNonAircraft": ["button:#12"],
+      "TargetNearest": ["button:#13"],
+      "TargetClear": ["button:#14"],
+
+      // Views.
+      "CycleCockpitViews": ["button:#17"],
+      "SelectChaseView": ["button:#18"],
+      "FlybyView": ["button:#19"],
+      "ToggleSpyglass": ["button:#20"],
+      "ZoomIn": ["button:#31"],
+      "ZoomOut": ["button:#32"],
+
+      // Snap looks, the numpad's directions in the original game. The first hat takes the four
+      // straight ones; a hat has no diagonals, so those are buttons.
+      "LookUp": ["hat:0:Up"],
+      "LookRight": ["hat:0:Right"],
+      "LookRear": ["hat:0:Down"],
+      "LookLeft": ["hat:0:Left"],
+      "LookCenter": ["button:#21"],
+      "LookBack": ["button:#22"],
+      "LookUpLeft": ["button:#23"],
+      "LookUpRight": ["button:#24"],
+      "LookUpLeftRear": ["button:#25"],
+      "LookUpRightRear": ["button:#26"],
+      "FreeLook": ["button:#27"],
+      "SnapLookMode": ["button:#28"],
+      "SmoothLookMode": ["button:#29"],
+      "TrackTarget": ["button:#30"],
+
+      // Moving the head with a thumb mini-stick (axes 3 and 4). Each direction is a half axis:
+      // "+" or "-" names the half, and the number after "@" is its deadzone.
+      "LookAimUp": ["axis:#4+@0.05"],
+      "LookAimDown": ["axis:#4-@0.05"],
+      "LookAimLeft": ["axis:#3-@0.05"],
+      "LookAimRight": ["axis:#3+@0.05"],
+
+      // Session commands.
+      "AutoLand": ["button:#42"],
+      "Pause": ["button:#43"],
+      "Respawn": ["button:#44"],
+      "ChatEveryone": ["button:#45"],
+      "ChatTeam": ["button:#46"],
+      "ToggleGraphicsMode": ["button:#47"]
+    },
+    "menu": {
+      // Each context has its own rows, so menu rows may reuse controls the flight rows use.
+      "MenuUp": ["hat:0:Up"],
+      "MenuDown": ["hat:0:Down"],
+      "MenuLeft": ["hat:0:Left"],
+      "MenuRight": ["hat:0:Right"],
+      "MenuAccept": ["button:#0"],
+      "MenuBack": ["button:#2"],
+      "MenuStart": ["button:#43"],
+      "MenuLoadout": ["button:#3"],
+      "MenuPresets": ["button:#4"],
+      // Skipping a cutscene may share a control with another menu action.
+      "SkipCutscene": ["button:#0"]
+    },
+    "camera": {
+      // The free camera you fly while spectating.
+      "CameraForward": ["axis:#1-@0.18"],
+      "CameraBack": ["axis:#1+@0.18"],
+      "CameraLeft": ["axis:#0-@0.18"],
+      "CameraRight": ["axis:#0+@0.18"],
+      "CameraUp": ["hat:1:Up"],
+      "CameraDown": ["hat:1:Down"],
+      "CameraBoost": ["button:#0"],
+      "CameraSlow": ["button:#2"],
+      "CameraLockTarget": ["button:#3"],
+      "CameraLookUp": ["axis:#4+@0.18"],
+      "CameraLookDown": ["axis:#4-@0.18"],
+      "CameraLookLeft": ["axis:#3-@0.18"],
+      "CameraLookRight": ["axis:#3+@0.18"],
+      "CameraDollyOut": ["axis:#5+@0.1"],
+      "CameraDollyIn": ["axis:#5-@0.1"]
+    }
+  }
+}

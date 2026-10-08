@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight.Hangar;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
 using CSVM.UI.Hangar;
@@ -618,5 +619,5 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         Flow.Feature.IsGuest ? Flow.Feature.GuestBuildOf(plane)
             : Flow.Field.IsStock(plane) ? null
             : Flow.Planes?.Load(plane.Name),
-        Flow.Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe)));
+        Flow.Stock?.ForModel(StockAirframes.Node(plane.Airframe)));
 }

@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
 [world-structure.md](world-structure.md)). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
-`CSVM/src/Flight/Airframe/Weather.cs` (`WeatherState`) + `Session.World.WeatherRig.Build`.
+`CSVM/src/Effects/Weather.cs` (`WeatherState`) + `Session.World.WeatherRig.Build`.
 
 This reference covers fog colour, precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
@@ -258,7 +258,7 @@ the repro poses recorded in `analysis/`. Coverage: `CSVM.Tests/SkyZoneTests.cs` 
 and the real per-chapter census.
 
 ⚠ **A dome bigger than the far plane is clipped open.** The dome is camera-anchored, so its far
-wall sits at (its own radius × `GameSession.HorizonScale`) from the eye. Every chapter's dome is
+wall sits at (its own radius × `SkyStage.HorizonScale`) from the eye. Every chapter's dome is
 6.4–12.0 km and clears the 40 km far plane at the 2.5× anchor scale, except **C1B's zone1 at
 21.8 km**, where 2.5× reaches 54.5 km and the sky renders as a hole onto the engine clear colour
 (seen at the controls the moment this selection first chose that zone). `HorizonScaleFor` therefore
@@ -456,7 +456,7 @@ to `FOG_COLOR` at the horizon.
 The deck tiles author `lighting: false` like the dome and C1's and C4's `fvol` cloud cards (C1C,
 C2B and C5 author theirs `true`, which buys them a per-vertex directional term rather than a
 brightness scalar; see [`../org/vertexLighting.md`](../org/vertexLighting.md)), but the deck
-alone was measured to be SUNLIGHT-dimmed in the original, `Flight/Airframe/Weather.cs`'s `SunIncidence`
+alone was measured to be SUNLIGHT-dimmed in the original, `Effects/Weather.cs`'s `SunIncidence`
 was calibrated on this exact texture. `WorldBuilder.Add` therefore force-lights the deck's own
 tiles (`forceLit: isDeck`) regardless of the authored flag, applying `csky_world_light` deck-local,
 never as a change to the `lighting` gate or to `csky_world_light` itself.
@@ -554,8 +554,8 @@ dome is centred on the camera and scaled uniformly about it, and it is unfogged,
 unobservable and the rim ELEVATION is the whole of what a frame shows. Measured on our own render
 (C1 river pose, camera pitched +30°, `f` = 599.1 px): the flat cap's edge appears at **48–52°**
 elevation against the authored 46.9–48.5° at the centre column, the spread being the 12-gon's own
-inradius/circumradius and the off-centre columns' geometry. See `docs/architecture.md`'s
-`GameSession.HorizonScaleFor` entry for why `B14` therefore keeps one uniform scale rather than
+inradius/circumradius and the off-centre columns' geometry. See `src/Launch/SkyStage.cs`'s
+`HorizonScaleFor` for why `B14` therefore keeps one uniform scale rather than
 pinning Y to metric.
 
 ### Zone keys
@@ -663,9 +663,9 @@ average up-facing sun incidence, **one TUNE constant** calibrated to the C1/IA1 
 clamp 1.0. **Matched-pose footage supports the calibration** (`CAP-11`, at
 0.426 / 0.784 / clamp 1.0, C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
 `git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). One exemption the original applies
-that we do not: water renders unmodulated (`BL-304`). A second reading, that night cloud sprites are
-directionally moonlit rather than uniformly dimmed (`BL-325`), is open on its footage but cannot
-come from the lighting gate: C1B's clouds are placed `cloudparent` facades and every one of them in
+that we do not: water renders unmodulated (`BL-304`). Night cloud sprites are uniformly dimmed, not
+directionally moonlit: the original shows no moon side on a C1B cloud, and none could come from the
+lighting gate either: C1B's clouds are placed `cloudparent` facades and every one of them in
 every deck chapter is authored `lighting: false`, so the original's sun reaches none of them
 ([`../org/vertexLighting.md`](../org/vertexLighting.md)). `Weather.WorldLightFactor` computes it (`ZoneWeather.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light`, **linearised** first, so the shader's
@@ -678,8 +678,9 @@ the terrain's washed-yellow → saturated-green hue independent of brightness.
 ### `SUNLIGHT_ORIENTATION` - the shading direction
 
 Read per zone into `ZoneWeather.SunOrientation` and written to the world's one
-`DirectionalLight3D` by the same zone-apply that writes the fog, so it follows a zone change
-(`WeatherRig.ApplyZone`). It varies by chapter and is adopted with **no TUNE**:
+`DirectionalLight3D` by the first rig's zone apply, beside that rig's fog, so it follows a zone
+change (`WeatherRig.ApplyZone`); each splitscreen view's per-vertex sun takes its own zone's
+bearing (`FogViewTable`). It varies by chapter and is adopted with **no TUNE**:
 
 | Chapter | `[pitch, yaw]°` |
 |---|---|

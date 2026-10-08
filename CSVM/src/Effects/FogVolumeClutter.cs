@@ -464,7 +464,7 @@ public sealed partial class FogVolumeClutter : Node3D
         // (docs/org/vertexLighting.md). C1 and C4 author false and take nothing.
         string varying = lit ? "\nvarying float v_light;" : string.Empty;
         string vertexLight = lit
-            ? "\n    v_light = csky_sun_vertex_light(face * NORMAL);"
+            ? "\n    v_light = csky_sun_vertex_light_at(face * NORMAL, CAMERA_POSITION_WORLD);"
             : string.Empty;
         // The product is clamped, not the factor. The original clamps after multiplying the
         // authored colour, and it clamps in the framebuffer's own gamma space. COLOR is still in
@@ -474,7 +474,7 @@ public sealed partial class FogVolumeClutter : Node3D
         string albedo = fogged
             ? "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
               + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
-              + $"    ALBEDO = mix({source}, csky_fog_color, fog_amt);"
+              + $"    ALBEDO = mix({source}, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);"
             : $"    ALBEDO = {source};";
         // ⚠ Every enhanced hole below is empty AND at end of line in the faithful path, so that
         // path's text stays byte-identical. The grade layers over the lit arm's per-vertex term,

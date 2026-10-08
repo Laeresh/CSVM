@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
@@ -453,7 +454,7 @@ public sealed partial class OriginalShell
         {
             get
             {
-                if (Current is not { } row || PlanePickerRoster.AirframeOf(row.Node) is not { } airframe)
+                if (Current is not { } row || StockAirframes.IdOf(row.Node) is not { } airframe)
                 {
                     return Array.Empty<BoardPicture>();
                 }
@@ -492,7 +493,7 @@ public sealed partial class OriginalShell
 
                 var (nameX, nameY, nameWidth) = layout.Box(Section, "PS_T_PILOTPLANE", PlaneNameX, PlaneNameY, 400f);
                 lines.Add(new BoardLine(row.Name, nameX, nameY, nameWidth, BodyFont, BoardInk.Row));
-                if (PlanePickerRoster.AirframeOf(row.Node) is not { } airframe)
+                if (StockAirframes.IdOf(row.Node) is not { } airframe)
                 {
                     return lines;
                 }

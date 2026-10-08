@@ -1,0 +1,10 @@
+# The build context is the repository root, so send only what server/Dockerfile copies.
+# (BuildKit, the default builder, reads this file because it sits beside the Dockerfile.)
+*
+!Directory.Build.props
+!.editorconfig
+!CSVM/src/Net/MasterProtocol.cs
+!CSVM/src/Launch/MasterFrames.cs
+!server/MasterServer/
+server/MasterServer/bin/
+server/MasterServer/obj/

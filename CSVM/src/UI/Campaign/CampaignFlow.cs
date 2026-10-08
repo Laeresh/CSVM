@@ -7,7 +7,7 @@ using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
-using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.UI.Campaign;
 
@@ -215,7 +215,7 @@ public sealed class CampaignFlow
     /// the two profile-seeded starters are.</summary>
     public CampaignFlow(CampaignProfileStore store, UiStrings strings, string? dataRoot = null,
         CustomPlaneStore? planes = null, StockLoadouts? stock = null, CampaignLayout? layout = null)
-        : this(Opened(new CampaignFeature(strings, PlanePickerRoster.AirframeNode), store, planes, stock, dataRoot))
+        : this(Opened(new CampaignFeature(strings, StockAirframes.Node), store, planes, stock, dataRoot))
     {
         _layout = layout;
     }

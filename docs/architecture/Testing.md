@@ -25,6 +25,15 @@ Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and 
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
 cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
+## src/Testing/FinalizerGate.cs
+The `--debug-finalizers` instrument: `TestHarness.Run` wraps each suite in one gate, which parks the
+.NET finalizer thread on a sentinel, forces a collection every few milliseconds while the suite runs,
+then releases and drains the queue before the next suite. A Godot wrapper finalized after its object
+was reached again natively then logs its error at the boundary of the suite that dropped it, and the
+gate's own `finalizer gate` line counts those throws. Off unless the flag is given. It also gives
+any suite Godot's global object count after finalizer drains have settled it, without waiting on a
+gate it holds. Read `docs/verification.md` for the binding states it exposes.
+
 ## src/Testing/SuiteShards.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
 and the division behind it. `Parse` lifts that term out of a `--run-tests=` value and hands the rest
@@ -40,6 +49,12 @@ port block, `Net/NetPorts.cs`'s base up to `Block` ports above it. `RunTests.ps1
 engine shard its own base, and these offsets keep one shard's suites apart, so no two live sockets
 share a port. `Walk` bounds each suite's fallback walk and `At` turns an offset into a port. The
 report's `shard.netPortBase` is the base the process used, which `RunTests.ps1` checks.
+
+## src/Testing/LoopbackMaster.cs
+The master server's socket side in one process, for the WebRTC suites: a host is given a code, a
+guest naming it is numbered from 2 and announced, and a signal reaches only the end it names with
+the sender written as its source. It hands out no ICE servers, so a link stands on this machine's
+host candidates. The list, the expiry and the limits are the server's (`server/MasterServer`).
 
 ## src/Testing/PhaseAttribution.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): buckets a `StartupProfile`'s raw
@@ -85,7 +100,7 @@ a suite means adding a marked body to the module that already covers its domain,
 when none does, and registering nothing anywhere else. The membership itself is the catalog's
 output: `--run-tests` prints the table and writes `test-report.json`. They reach the harness only
 through `TestContext`, and shared fixtures are separate focused modules (`SuiteConstants.cs`,
-`BurstTimeline.cs`, `SuiteViewers.cs`, `EffectStageSuiteHelper.cs`, `MenuSuiteHost.cs`) rather than
+`BurstTimeline.cs`, `SuiteViewers.cs`, `EffectStageSuiteHelper.cs`, `BotSuiteHelper.cs`, `MenuSuiteHost.cs`) rather than
 an all-purpose helper. Per-suite traps live as comments on the suites themselves, in code.
 
 ## src/Testing/SuiteConstants.cs
@@ -103,6 +118,10 @@ Builds a test pane camera at a supplied world position for suites that exercise 
 ## src/Testing/EffectStageSuiteHelper.cs
 Builds and frees a production-shaped, pooled effect-template stage for mesh-visibility suites.
 
+## src/Testing/BotSuiteHelper.cs
+The readings the bot suites share: lifting a pilot clear of the ground, the spawn-table entry a
+placed aeroplane stands on, the Dogfight's ranked board as one line, and a pane's message stack.
+
 ## src/Testing/MenuSuiteHost.cs
 The launchscreen fixture a menu suite stands a `LaunchMenu` on. `Bare` builds a `MenuHost` over an
 empty `PresentationRegistry`, a silent `IMenuAudio` and a caller-owned exit list; `AddFeatures`
@@ -112,3 +131,9 @@ features the launcher wires; `Build` stands a launchscreen on a host over the su
 menu suite reads `user://Planes`; `DropScratchPlanes` removes it. Seat 0 joins through the setup
 feature, so it is added after the features; the controls feature is the form that saves nothing.
 A suite that drives the multiplayer door passes its own `netDoor`; `UI/Menu/MenuHost.cs` is the host.
+
+## src/Testing/ScreenKeyboardRecorder.cs
+A suite's stand-in for Steam's on-screen keyboard: `Utils/ScreenKeyboard.cs` reads as available
+and every URL it would open is recorded instead. Disposing it lowers whatever is still up and puts
+back the detected state and the real handler. Used by `menu-screen-keyboard` and
+`menu-original-screen-keyboard`.

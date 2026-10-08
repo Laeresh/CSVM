@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -8,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Tooling;
 using Godot;
 
@@ -887,7 +889,7 @@ internal static class DestroyChoreographySuites
     // ⚠ Respawn at two moments, mid-eject and past the whole death. A fix covering only the
     // completed choreography passes the second and leaves the network case standing.
     [Suite("death-respawn-rest-pose",
-        "after a shot-down player's death and a respawn, mid-eject (a Versus respawn's 3 s) and after the whole choreography, every airframe, wreck and bailing-pilot node the death defs touched is back on its built parent, transform and visibility, on a fixed-wing airframe and on the autogyro")]
+        "after a shot-down player's death and a respawn, mid-eject (a Versus respawn's 3 s) and after the whole choreography, every airframe, wreck and bailing-pilot node the death defs touched is back on its built parent, transform and visibility, on a fixed-wing airframe and on the autogyro, and the cockpit interior stays in its own pass")]
     internal static void DeathRespawnRestPose(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1091,10 +1093,10 @@ internal static class DestroyChoreographySuites
     }
 
     // nitro_boost/nitro_decay anchor as NAME "warhawk" (plane_props.zrd), which never resolves in
-    // a per-plane crash rig's own index, the shape spinprops/stopprops share, fixed by Play's
-    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN, whose disc geometry
-    // ships only on the separate bare-named library root. The fix restores what the flown plane's
-    // own nodes CAN show: the nitropuffN exhaust puffers at exhaust1..4.
+    // a per-plane crash rig's own index, the shape spinprops/stopprops share; Play's PlaneModel
+    // fallback resolves it. ⚠ No flyable player_* model carries nitropropN, whose disc geometry
+    // ships only on the separate bare-named library root. The fallback shows what the flown
+    // plane's own nodes can: the nitropuffN exhaust puffers at exhaust1..4.
     [Suite("nitro-boost-anchors",
         "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape spinprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
     internal static void NitroBoostAnchors(TestContext ctx)
@@ -1387,8 +1389,8 @@ internal static class DestroyChoreographySuites
                 Fly(Dt);
                 foreach (var rig in built)
                 {
-                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
-                        $"{rig.Name}: opens with the spinning discs on the slot on its first frame stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                    ctx.Check(!rig.Propellers.Stopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                        $"{rig.Name}: opens with the spinning discs on the slot on its first frame stopped={rig.Propellers.Stopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
                     SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the spawn");
                 }
 
@@ -1405,9 +1407,9 @@ internal static class DestroyChoreographySuites
                 // The rising edge, read on the frame the choke lands rather than the next step.
                 foreach (var rig in built)
                 {
-                    ctx.Check(rig.TryChokeEngine(3f) && rig.PropsStopped
+                    ctx.Check(rig.TryChokeEngine(3f) && rig.Propellers.Stopped
                               && rig.CrashRuntime!.AnimStateOf("stopprops") == Running,
-                        $"{rig.Name}: the choke put stopprops on the slot on its own frame stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                        $"{rig.Name}: the choke put stopprops on the slot on its own frame stopped={rig.Propellers.Stopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
                 // Inside the choke's own three seconds, so the reading below is the engine-out
@@ -1417,7 +1419,7 @@ internal static class DestroyChoreographySuites
                           && !Shown(ai, "prop1") && Shown(ai, "staticprop1"), 2.5f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(rig.EngineDeadRemainingS > 0f && rig.PropsStopped
+                    ctx.Check(rig.EngineDeadRemainingS > 0f && rig.Propellers.Stopped
                               && !Shown(rig, "prop1") && Shown(rig, "staticprop1"),
                         $"{rig.Name}: …and the cross-fade left the still blade alone on the aeroplane while the engine is out prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} dead={rig.EngineDeadRemainingS:0.00} s after={down:0.00} s");
                 }
@@ -1427,9 +1429,9 @@ internal static class DestroyChoreographySuites
                 FlyUntil(() => human.EngineDeadRemainingS == 0f && ai.EngineDeadRemainingS == 0f, 4f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(rig.EngineDeadRemainingS == 0f && !rig.PropsStopped
+                    ctx.Check(rig.EngineDeadRemainingS == 0f && !rig.Propellers.Stopped
                               && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
-                        $"{rig.Name}: the timer expiring put the blur discs back stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                        $"{rig.Name}: the timer expiring put the blur discs back stopped={rig.Propellers.Stopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
                 }
 
                 // Past the definition's own 0.1 s ANIMATION_OFFSET, which is all that is left of it
@@ -1461,7 +1463,7 @@ internal static class DestroyChoreographySuites
                     ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("stopprops"),
                         $"{rig.Name}: the second choke's wind-down has run to its end before the crash after={wind:0.00} s");
                     rig.DebugForceCrash();
-                    ctx.Check(rig.PropsStopped && rig.CrashRuntime!.AnimStateOf("stopprops") == Executed,
+                    ctx.Check(rig.Propellers.Stopped && rig.CrashRuntime!.AnimStateOf("stopprops") == Executed,
                         $"{rig.Name}: the crash on a choked aeroplane left that wind-down where it was rather than playing a second state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
@@ -1476,7 +1478,7 @@ internal static class DestroyChoreographySuites
                                             && Shown(ai, "prop1") && !Shown(ai, "staticprop1"), 4f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                    ctx.Check(!rig.Propellers.Stopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
                         $"{rig.Name}: the respawn put the blur discs back on a hull that went down stopped prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={spun:0.00} s");
                     SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn");
                 }
@@ -1494,9 +1496,9 @@ internal static class DestroyChoreographySuites
 
                     float overkill = (ledger.WholeHealthMax + ledger.WholeArmorMax) * 4f;
                     rig.TakeCollisionHit(overkill, overkill, rig.GlobalPosition, 0);
-                    ctx.Check(rig.Destroyed && rig.PropsStopped
+                    ctx.Check(rig.Destroyed && rig.Propellers.Stopped
                               && rig.CrashRuntime!.AnimStateOf("stopprops") == Running,
-                        $"{rig.Name}: the kill put stopprops on the slot on its own frame destroyed={rig.Destroyed} stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                        $"{rig.Name}: the kill put stopprops on the slot on its own frame destroyed={rig.Destroyed} stopped={rig.Propellers.Stopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
                 // ⚠ Read the kill's cross-fade as OPACITY, never as visibility. The destroy def
@@ -1530,7 +1532,7 @@ internal static class DestroyChoreographySuites
                                                 && Shown(ai, "prop1") && !Shown(ai, "staticprop1"), 4f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
+                    ctx.Check(!rig.Propellers.Stopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
                               && rig.CrashRuntime!.AnimStateOf("stopprops") != Running,
                         $"{rig.Name}: the respawn took the wind-down off the slot and put the blur discs back prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} stop={rig.CrashRuntime!.AnimStateOf("stopprops")} after={restored:0.00} s");
                     SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn inside the wind-down");
@@ -1707,6 +1709,148 @@ internal static class DestroyChoreographySuites
                     $"{model}: the release started a nitro_decay instance decayFrames={decayRunningFrames}");
                 ctx.Check(lockoutOutlivedDecay <= 1,
                     $"{model}: …and the re-engage lockout ends with it, not on a clock of its own (outlived it by {lockoutOutlivedDecay} frame(s))");
+            }
+            finally
+            {
+                ai?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
+    // The AI twins of a round taken and the overspeed arm, on the rig a session builds. Each starts
+    // the aishake def the original picks, one def at a time per aircraft. Nothing reaches the shake
+    // pivot, which a person's camera blocks alone drive.
+    [Suite("ai-shake-twins",
+        "an AI on a session-built rig rocks to the aishake def the original picks: small for a gun round taken, large for an HIGH_EXPLOSIVE rocket bursting on it, medium past 1.2x rated max, none while another of the three still runs, and its shake pivot never moves, where the same rig flown by a person pitches, yaws and rolls it")]
+    internal static void AiShakeTwins(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        const float Dt = 1f / 60f;
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            FlightController? ai = null;
+            try
+            {
+                var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+                var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.Caliber > 0);
+                var heRocket = weapons.All.FirstOrDefault(w => !w.IsCannon && w.HighExplosive);
+                if (gun == null || heRocket == null)
+                {
+                    ctx.Check(false, $"the shipped weapons carry a gun and an HE rocket (gun={gun?.Id}, he={heRocket?.Id})");
+                    return;
+                }
+                var factory = new Session.World.WorldEffectsFactory(
+                    SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+                var spawn = new Vector3(0f, 500f, 0f);
+                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                var pivot = new Node3D { Name = "ShakePivot" };
+                ai = new FlightController
+                {
+                    PlaneModel = planeModel,
+                    Collider = PlaneCollider.Build(planeModel),
+                    PlayerIndex = FlightRoster.ShooterIdBase,
+                    IsHumanPiloted = false,
+                    Pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                    // No ledger, so the rounds below rock the aircraft without ever killing it.
+                    Shake = new PlaneShake(ShakeDefs.Load(ctx.ZrdrPath)),
+                    ShakePivot = pivot,
+                };
+                ai.AddChild(pivot);
+                pivot.AddChild(planeModel);
+                ai.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
+                    spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(ai);
+                factory.BuildFlightCrashRuntime(ai, builder, model, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+                if (ai.CrashRuntime is not { } rig)
+                {
+                    ctx.Check(false, $"{model}: the session rig built a crash runtime");
+                    return;
+                }
+                rig.ManualAdvance = true;
+                float rated = stats.FdSpeed;
+                float pivotPeak = 0f;
+
+                string? Running()
+                {
+                    foreach (var anim in EffectCatalogue.AiShakeAnims)
+                    {
+                        if (rig.AnimStateOf(anim) == 2)
+                            return anim;
+                    }
+                    return null;
+                }
+
+                // Steps at cruise until no aishake runs, so each arm starts from a still aircraft.
+                int Settle()
+                {
+                    int ticks = 0;
+                    while (Running() != null && ticks < 600)
+                    {
+                        ai.WarpTo(spawn, 0f, rated * 0.8f);
+                        ai.SimStep(Dt);
+                        rig.Advance(Dt);
+                        pivotPeak = Mathf.Max(pivotPeak, pivot.Rotation.Length());
+                        ticks++;
+                    }
+                    return ticks;
+                }
+
+                ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+                string? onGun = Running();
+                ctx.Check(onGun == EffectCatalogue.SmallAiShakeAnim,
+                    $"{model}: a {gun.Id} round taken starts {EffectCatalogue.SmallAiShakeAnim} (running {onGun ?? "none"})");
+                ai.TakeProjectileHit(heRocket, ai.WorldPosition, "fuselage", 0);
+                ctx.Check(Running() == EffectCatalogue.SmallAiShakeAnim,
+                    $"{model}: …and a second round while it runs starts nothing else (running {Running() ?? "none"})");
+                int gunTicks = Settle();
+                ctx.Check(gunTicks is > 0 and < 600, $"{model}: …which ends on its own after {gunTicks} tick(s)");
+
+                ai.TakeProjectileHit(heRocket, ai.WorldPosition, "fuselage", 0);
+                string? onHe = Running();
+                ctx.Check(onHe == EffectCatalogue.LargeAiShakeAnim,
+                    $"{model}: an HE {heRocket.Id} bursting on the aircraft starts {EffectCatalogue.LargeAiShakeAnim} (running {onHe ?? "none"})");
+                Settle();
+
+                string? onDive = null;
+                for (int i = 0; i < 5 && onDive == null; i++)
+                {
+                    ai.WarpTo(spawn, 0f, rated * 1.3f);
+                    ai.SimStep(Dt);
+                    rig.Advance(Dt);
+                    pivotPeak = Mathf.Max(pivotPeak, pivot.Rotation.Length());
+                    onDive = Running();
+                }
+                ctx.Check(onDive == EffectCatalogue.AiShakeAnim,
+                    $"{model}: 1.3x rated max starts {EffectCatalogue.AiShakeAnim} (running {onDive ?? "none"})");
+                Settle();
+                ctx.Check(pivotPeak == 0f,
+                    $"{model}: the camera blocks stay a person's: the shake pivot never moved (peak {pivotPeak:E2} rad)");
+
+                // The control: with a person flying, the same round kicks block 1. A pivot read
+                // that could not see motion fails here instead of passing above.
+                ai.IsHumanPiloted = true;
+                ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+                var humanPeak = Vector3.Zero;
+                for (int i = 0; i < 30; i++)
+                {
+                    ai.WarpTo(spawn, 0f, rated * 0.8f);
+                    ai.SimStep(Dt);
+                    humanPeak = humanPeak.Max(pivot.Rotation.Abs());
+                }
+                ctx.Check(humanPeak.X > 0f && humanPeak.Y > 0f && humanPeak.Z > 0f,
+                    $"{model}: …while the same round taken with a person flying pitches, yaws and rolls the pivot (peak {humanPeak.X:E2}, {humanPeak.Y:E2}, {humanPeak.Z:E2} rad)");
             }
             finally
             {
@@ -2855,12 +2999,13 @@ internal static class DestroyChoreographySuites
         var factory = new Session.World.WorldEffectsFactory(
             SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
         FlightController? player = null;
+        Flight.Hud.CockpitOverlay? pass = null;
         string label = $"{planeName} respawned at {respawnAt:0} s";
         try
         {
             var spawn = new Vector3(0f, 500f, 0f);
             var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
-            var builder = new PlaneBuilder(planesGamez, textures);
+            var builder = new PlaneBuilder(planesGamez, textures, cockpitInterior: true);
             var planeModel = builder.Build(planeName);
             player = new FlightController
             {
@@ -2871,6 +3016,7 @@ internal static class DestroyChoreographySuites
                 PadDevices = System.Array.Empty<int>(),
                 AllowPause = false,
                 Damage = PlaneDamage.For(stats),
+                Dressing = { Interior = builder.CockpitInterior },
             };
             player.AddChild(planeModel);
             player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
@@ -2882,6 +3028,13 @@ internal static class DestroyChoreographySuites
             {
                 ctx.Check(false, $"{label}: the human rig built a crash runtime");
                 return;
+            }
+
+            // The session's order: the rig binds over the airframe with the interior still in it,
+            // and the cockpit pass takes the interior out afterwards (GameSession.BuildCockpitPasses).
+            if (builder.CockpitInterior is { } interior)
+            {
+                pass = Flight.Hud.CockpitOverlay.Build(ctx.Host, interior, null, null);
             }
 
             rig.ManualAdvance = true;
@@ -2938,9 +3091,20 @@ internal static class DestroyChoreographySuites
                 $"{label}: every node the death touched is back on its built state ({touched.Count - stuck.Count}/{touched.Count}){(stuck.Count == 0 ? "" : ": " + string.Join("; ", stuck.Take(8)))}");
             ctx.Check(!cpilot.IsVisibleInTree() && Find(planeModel, "pilot") is { Visible: true },
                 $"{label}: the seated pilot is back and the bailing one is gone");
+            if (pass == null)
+            {
+                ctx.Check(false, $"{label}: the human rig built a cockpit interior and its pass");
+                return;
+            }
+
+            // Re-homed to the airframe, the panel would be drawn at the aircraft's origin under the
+            // pass's origin-relative pose, below and ahead of the eye.
+            ctx.Check(pass.IsAncestorOf(pass.Interior) && !planeModel.IsAncestorOf(pass.Interior),
+                $"{label}: the cockpit interior is still in its own pass, not back in the airframe");
         }
         finally
         {
+            pass?.Free();
             player?.Free();
         }
     }

@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CSVM.Bindings;
-using CSVM.UI.Screens;
+using CSVM.UI.Boards;
 using Godot;
 using Xunit;
 
@@ -185,19 +185,20 @@ public sealed class LaunchBindingsTests : IDisposable
         Assert.Empty(live.Bindings(InputAction.FireGuns));
     }
 
-    /// <summary>The fill adds rather than assigns, so the shipped set's deliberate sharing survives
-    /// it: a steal on the way in would take each numpad diagonal off one of its two actions.
-    /// </summary>
+    /// <summary>The fill adds rather than assigns. So a keymap with one control on two actions keeps
+    /// it on both, where a steal on the way in would take it off one.</summary>
     [Fact]
     public void Fill_KeepsAControlThatDrivesTwoActions()
     {
-        var live = new ActionMap();
+        var source = DefaultBindings.MapFor(InputContext.Flight, default);
         var kp7 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7));
+        source.Add(InputAction.LookUp, kp7);
+        var live = new ActionMap();
 
-        live.Fill(DefaultBindings.MapFor(InputContext.Flight, default));
+        live.Fill(source);
 
         Assert.Contains(kp7, live.Bindings(InputAction.LookUp));
-        Assert.Contains(kp7, live.Bindings(InputAction.LookLeft));
+        Assert.Contains(kp7, live.Bindings(InputAction.LookUpLeft));
     }
 
     /// <summary>Every stick belongs to seat 1, so only player 1's keymap is completed from the stick

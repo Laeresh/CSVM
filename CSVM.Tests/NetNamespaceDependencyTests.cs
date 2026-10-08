@@ -10,19 +10,18 @@ namespace CSVM.Tests;
 /// The transport seam's boundary, enforced over compiled metadata. No type in <c>CSVM.Net</c> may
 /// reference <c>System.Net</c>, nor anything under <c>Godot</c> except its plain math structs, in
 /// a signature or in a method body. That is what keeps a session ignorant of what carries it, and
-/// lets the loopback drive a match in a plain unit test. The carriers that must name an engine type to exist are listed by full name below. The
-/// second fact holds Godot's networking types to the carrier files, and the third holds every Steam
-/// name to the Steam carrier.
-/// The scanner throws when the subject filter matches no type, so this cannot pass by scanning
-/// nothing.
+/// lets the loopback drive a match in a plain unit test. The carriers that must name an engine type
+/// to exist are listed by full name below. The other facts hold Godot's networking and WebRTC names
+/// to their carriers. The scanner throws when the subject filter matches no type, so this
+/// cannot pass by scanning nothing.
 /// </summary>
 [Trait("Tier", "Quick")]
 public sealed class NetNamespaceDependencyTests
 {
     private const string Transport = "CSVM.Net.EnetTransport";
     private const string PortMap = "CSVM.Net.UpnpPortMap";
-    private const string Steam = "CSVM.Net.SteamTransport";
     private const string LanSocket = "CSVM.Net.LanDiscoverySocket";
+    private const string WebRtc = "CSVM.Net.WebRtcTransport";
 
     private static readonly string[] EngineMathStructs =
     {
@@ -58,9 +57,11 @@ public sealed class NetNamespaceDependencyTests
                 || name.StartsWith("Godot.Multiplayer", StringComparison.Ordinal));
 
         // Able to fail on its own terms. Each file allowed to do this really does, so an empty
-        // list would mean the scan stopped finding references.
+        // list would mean the scan stopped finding references. ENet's own types stay ENet's.
         Assert.NotEmpty(networking.Where(v => Subject(v) == Transport));
-        Assert.Empty(networking.Where(v => Subject(v) != Transport));
+        Assert.NotEmpty(networking.Where(v => Subject(v) == WebRtc));
+        Assert.Empty(networking.Where(v => Subject(v) is not (Transport or WebRtc)));
+        Assert.Empty(networking.Where(v => Subject(v) == WebRtc && v.Contains("Godot.ENet", StringComparison.Ordinal)));
 
         var upnp = AssemblyDependencyScan.Violations(
             AssemblyPath(),
@@ -81,21 +82,16 @@ public sealed class NetNamespaceDependencyTests
     }
 
     [Fact]
-    public void OnlyTheSteamTransportMayNameASteamType()
+    public void OnlyTheWebRtcTransportNamesAGodotWebRtcType()
     {
-        // Over every namespace, not just the seam: an SDK reference anywhere in the engine is what
-        // this is looking for. It cannot assert the Steam carrier itself names one, since no build
-        // here links an SDK. The type's own name is pinned instead, so a rename fails this.
-        Assert.Equal(Steam, typeof(SteamTransport).FullName);
-
-        var steam = AssemblyDependencyScan.Violations(
+        var webRtc = AssemblyDependencyScan.Violations(
             AssemblyPath(),
             ns => true,
-            name => name.StartsWith("Steamworks.", StringComparison.Ordinal)
-                || name.StartsWith("Godot.Steam", StringComparison.Ordinal)
-                || name.Contains("GodotSteam", StringComparison.Ordinal));
+            name => name.StartsWith("Godot.WebRtc", StringComparison.Ordinal));
 
-        Assert.Empty(steam.Where(v => Subject(v) != Steam));
+        Assert.Equal(WebRtc, typeof(WebRtcTransport).FullName);
+        Assert.NotEmpty(webRtc.Where(v => Subject(v) == WebRtc));
+        Assert.Empty(webRtc.Where(v => Subject(v) != WebRtc));
     }
 
     private static string AssemblyPath() => Path.Combine(AppContext.BaseDirectory, "CSVM.dll");
@@ -111,5 +107,5 @@ public sealed class NetNamespaceDependencyTests
 
     private static bool Exempt(string violation) =>
         !violation.Contains("System.Net.", StringComparison.Ordinal)
-        && Subject(violation) is Transport or PortMap or Steam or LanSocket;
+        && Subject(violation) is Transport or PortMap or LanSocket or WebRtc;
 }

@@ -11,8 +11,9 @@ public sealed class MatchStateCadence
 {
     /// <summary>Simulation steps between two clock ticks. Sixty at the fixed step is 1 Hz. That
     /// is the rate the versus HUD's whole-second readout shows a difference at. A faster tick
-    /// would spend the wire on digits nobody sees. The value is TUNE. The ending never
-    /// waits for this, and a match with no time limit still ticks so the slew keeps reading.
+    /// would spend the wire on digits nobody sees, and a slower one would make a guest's readout
+    /// skip. The ending never waits for this, and a match with no time limit still ticks so the
+    /// slew keeps reading.
     /// </summary>
     public const int TickStepInterval = 60;
 

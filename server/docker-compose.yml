@@ -1,0 +1,62 @@
+# The whole master server stack on one small VPS: the master server, coturn for STUN and TURN, and
+# Caddy for HTTPS with an automatic certificate. Every setting comes from server/.env (copy
+# .env.example and fill it in). Start it from the server/ folder:
+#
+#   docker compose up -d --build
+#
+# Step by step, with the firewall and the checks: server/README.md.
+
+services:
+  master:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      Master__Stun: "stun:${CSVM_DOMAIN}:3478"
+      Master__Turn: "turn:${CSVM_DOMAIN}:3478?transport=udp,turn:${CSVM_DOMAIN}:3478?transport=tcp"
+      Master__TurnSecret: "${TURN_SECRET}"
+      Master__TurnCredentialMinutes: "720"
+      # Caddy overwrites X-Forwarded-For, and this container publishes no port of its own.
+      Master__TrustProxy: "true"
+    # No ports: only Caddy reaches it, over the compose network.
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - master
+    environment:
+      CSVM_DOMAIN: "${CSVM_DOMAIN}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    # The host's network, so the relay ports need no thousand-entry port mapping and coturn sees
+    # its own public address. Bound to the public address alone: left to discover addresses, it
+    # also relays on Docker's bridges while external-ip names the public one in every allocation.
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command:
+      - "-c"
+      - "/etc/coturn/turnserver.conf"
+      - "--static-auth-secret=${TURN_SECRET}"
+      - "--realm=${CSVM_DOMAIN}"
+      - "--external-ip=${PUBLIC_IP}"
+      - "--listening-ip=${PUBLIC_IP}"
+      - "--listening-ip=127.0.0.1"
+      - "--relay-ip=${PUBLIC_IP}"
+
+volumes:
+  caddy_data:
+  caddy_config:

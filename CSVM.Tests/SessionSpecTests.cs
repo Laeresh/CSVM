@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.Linq;
 using CSVM;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -801,6 +803,41 @@ public class SessionSpecTests
         Assert.Contains(s.Warnings, w => w.Category == "ui" && w.Message.Contains("bogus"));
     }
 
+    /// <summary>The damage script keeps its steps in order, because the lab runs them in order.
+    /// A malformed step is reported at launch as a <c>ui</c> warning naming the step.</summary>
+    [Fact]
+    public void ADamageScriptKeepsItsStepsInOrderAndReportsTheRest()
+    {
+        var s = S("--freecam", "--debug-damage=node=bld_a,hp=50,explode,tick=2,kill");
+        Assert.Equal("node=bld_a,hp=50,tick=2,kill", s.DebugDamage);
+        Assert.Contains(s.Warnings, w => w.Category == "ui"
+            && w.Message == "--debug-damage step 'explode' is not node=/pool=/hp=/kill/reset/tick=/open, ignoring it");
+    }
+
+    /// <summary>The two lab grammars read alone. The node lab accepts <c>all</c> and keeps nothing
+    /// for it, while the damage script has no <c>all</c>. Case is kept, and surrounding whitespace
+    /// is not part of a token.</summary>
+    [Theory]
+    [InlineData("all", "", "")]
+    [InlineData(" DEPS , node=Foo ,x", "DEPS,node=Foo", "x")]
+    [InlineData("open,dest,deps", "open,dest,deps", "")]
+    public void TheNodeLabGrammarKeepsOnlyItsTokens(string spec, string kept, string rejected)
+    {
+        var rejects = new List<string>();
+        Assert.Equal(kept, SessionSpec.ParseNodeLabSpec(spec, rejects));
+        Assert.Equal(rejected, string.Join(",", rejects));
+    }
+
+    [Theory]
+    [InlineData("pool=1,reset,open", "pool=1,reset,open", "")]
+    [InlineData("all,kill", "kill", "all")]
+    public void TheDamageScriptGrammarKeepsOnlyItsSteps(string spec, string kept, string rejected)
+    {
+        var rejects = new List<string>();
+        Assert.Equal(kept, SessionSpec.ParseDamageScript(spec, rejects));
+        Assert.Equal(rejected, string.Join(",", rejects));
+    }
+
     // ---- Placement -----------------------------------------------------------------------------
 
     [Fact]
@@ -1116,6 +1153,27 @@ public class SessionSpecTests
         Assert.Equal("x", cabin.ProfilesDir);
     }
 
+    /// <summary>A pinned, scripted or synthetic run keeps its stunt bests out of the player's
+    /// record, and a played run keeps them. The `--scores=` flag names the file either way.</summary>
+    [Fact]
+    public void ScriptedRunsKeepStuntBestsOffThePlayersRecord()
+    {
+        Assert.False(S("--stunt").ScoresThrowaway);
+        Assert.False(S("--stunt", "--chapter=C4").ScoresThrowaway);
+        Assert.True(S("--stunt", "--det").ScoresThrowaway);
+        Assert.True(S("--stunt", "--screenshot=x.png").ScoresThrowaway);
+        Assert.True(S("--stunt", "--screenshot=x.png", "--no-det").ScoresThrowaway);
+        Assert.True(S("--stunt", "--debug-scoreboard").ScoresThrowaway);
+        Assert.True(S("--stunt", "--debug-scoreboard", "--no-det").ScoresThrowaway);
+        Assert.Null(S("--stunt").ScoresPath);
+
+        var named = S("--stunt", "--debug-scoreboard", "--det", @"--scores=.scratch\probe\scores.json");
+        Assert.Equal(@".scratch\probe\scores.json", named.ScoresPath);
+        Assert.False(named.ScoresThrowaway);
+        Assert.Empty(named.Warnings);
+        Assert.False(S("--scores=x").HasContentArg);
+    }
+
     /// <summary>Globals are recorded, never applied, that is what keeps the type reachable from
     /// here, with no engine under it.</summary>
     [Fact]
@@ -1146,6 +1204,19 @@ public class SessionSpecTests
         var s = S("--debug-net");
         Assert.True(s.DebugNet);
         Assert.False(s.DebugAnim);
+        Assert.False(s.DebugNetTrace);
+        Assert.Empty(s.LogSpecs);
+    }
+
+    /// <summary>`--debug-net-trace` brings the readout with it, and the readout alone does not
+    /// bring the trace.</summary>
+    [Fact]
+    public void DebugNetTraceImpliesTheReadout()
+    {
+        Assert.False(S().DebugNetTrace);
+        var s = S("--debug-net-trace");
+        Assert.True(s.DebugNetTrace);
+        Assert.True(s.DebugNet);
         Assert.Empty(s.LogSpecs);
     }
 

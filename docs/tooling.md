@@ -89,12 +89,6 @@ interactive menus (plane roster, chapter) and then `--fly`, flight flags prompt 
 missing, and the static views (`--plane=`, `--chapter=`, `--damage=`) pass through promptless
 apart from `--damage=`'s own plane prompt.
 
-**The Steam build flavour.** `dotnet build CSVM/CSVM.sln -p:CsvmSteam=true` defines `CSVM_STEAM`,
-which makes `CSVM/src/Net/NetCarrier.cs` select the Steam carrier instead of ENet and nothing
-else. The Steamworks SDK is not in this repo and cannot be, so that carrier throws at every way
-in; the flavour exists to keep the seam honest, and both flavours build clean and pass the unit
-suite. `RunTests.ps1` and every release build are the default flavour.
-
 **`RunTests.ps1`, the verification entry point.** One command, one summary block, one exit code.
 Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 
@@ -115,11 +109,13 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
 `--graphics=enhanced` to the perf and hitch launches only).
 
-**Every stage prints its wall time against a budget, and a budget never fails a run**.
+**Every test stage prints its wall time against a budget, and a budget never fails a run**.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
-back-to-back warm runs plus 50 %. A skipped stage is compared against nothing, and the total only
-when its lane's stages all ran.
+back-to-back warm runs plus 50 %. A skipped stage is compared against nothing. Build carries no
+budget, since only cutting features shortens it. There is no total budget: one set by the same
+rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine budget is capped at 80 % of
+the 300 s per-launch watchdog, so a growing catalog prints `over budget` before a shard is killed.
 
 **A selection that matches nothing is a failure**: `-Suite`, `-Filter` and `-UnitFilter` each fail
 their stage naming the term, rather than reporting a green zero.
@@ -600,12 +596,13 @@ observed without data says nothing about the floor.
 rather than inside a sandbox: it drives WSL Debian over the tarball `ExportRelease.ps1 -Linux`
 built (`-Tarball` names another) and the author's install (`CrimsonSkiesGame\` under this tree or
 the one `CSVM_DATA_ROOT` names; `-Install` names another). It fails on any failure and prints
-RunTests.ps1-style stage lines and one verdict; a full run takes about 95 s (extraction 21 s, the
-suites 70 s at six shards). Three stages, each run even when an earlier one failed, where it still
+RunTests.ps1-style stage lines and one verdict; a full run takes about 2 min (extraction 25 s,
+the suites 95 s at six shards). Three stages, each run even when an earlier one failed, where it still
 can:
 
 - **payload**: the archive's listing against `packaging/MANIFEST.md`'s Linux table, read from that
-  file rather than restated: every named entry present (a folder name must hold a file), nothing
+  file rather than restated: every named entry present (a folder name must hold a file, a name
+  with a `*` must match one), nothing
   at the root the table does not name, `CSVM.x86_64` and `tools/unzbd` at `-rwxr-xr-x`, the
   notice stamped for the Linux payload, and no carriage return in any top-level text file (a file
   with no NUL byte).
@@ -637,12 +634,22 @@ What the check had to learn:
 - **Some suites cannot pass headless on any platform.** They read back what only a renderer or a
   display produces (mesh and MultiMesh instance data, viewport pixels, windows and screens).
   `analysis/headless-limits.json` lists them with the reason each fails (`headlessOnly`), beside
-  the two engine error lines only a headless process prints (`headlessEngineErrors`); the script
+  the engine error lines only a headless process prints (`headlessEngineErrors`); the script
   reads them as `$HeadlessOnly` and `$HeadlessEngineErrors`, and `RunCiSuites.ps1` reads the same
   file. The same
   suites and the same error counts come out of the Windows export run headless, which is how an
   entry is admitted: a suite that fails on Linux alone is a Linux bug and never goes on the list.
   Listed suites still run, and one that passes is reported so a stale entry is seen.
+- ⚠ **The shards run on the safe render thread (`--render-thread safe`).** Godot 4.7's headless
+  dummy renderer keeps its mesh, material and texture RIDs in tables that are not thread-safe, and
+  the project's separate render thread allocates them on the calling thread while the render
+  thread initialises, reads and frees them. On the separate thread every full run logs null mesh
+  and material errors (`mesh_get_surface_count`, `material_set_shader`, `update_end`), wrong or
+  uninitialised RIDs, intermittent network-suite failures and a crash at exit in some shards; on
+  the safe thread it logs none, and the Windows export run headless behaves the same. The fix is
+  upstream in godotengine/godot#121958 (milestone 4.8, not in 4.7.2), so the flag goes on that
+  upgrade. The render thread's hand-offs stay covered by the windowed battery, which uses the real
+  renderer's thread-safe tables.
 - **The suites read the player's zips-only tree, where the Windows battery reads unpacked
   folders.** A texture archive refuses a read after `Dispose` in both shapes alike, so a read of a
   closed archive fails the battery as it would fail here, rather than passing on the folders alone.
@@ -705,7 +712,7 @@ hash in `BUILD-INFO.txt`. With `-ToolsRoot <checkout>` a worktree's export takes
 from that checkout's `tools/sdl2/`, as it does Godot and the mech3ax fork.
 
 **Linux.** The bridge is SDL2's joystick API alone. `Sdl2Sticks` uses no `DllImport`: it loads
-one library with `NativeLibrary.TryLoad` and binds every export by name with `TryGetExport`, and
+one library through `NativeLibrary` and binds every export by name with `TryGetExport`, and
 the 24 functions it calls exist unchanged in every SDL2 build, sdl2-compat included. The roster,
 profiles, bindings, capture, prompts and glyphs never see the library. What differs off Windows:
 
@@ -717,8 +724,10 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   ships `/usr/lib/libSDL2-2.0.so.0` from sdl2-compat (SDL2's API over the system SDL3). The tarball
   ships no SDL2, and its `BUILD-INFO.txt` has no SDL block. No library found is the same one
   `sticks: off, no libSDL2-2.0.so.0 (tried ...)` line and a launch without sticks as a missing
-  `SDL2.dll`. A library that is present but cannot load (a missing dependency) reads the same,
-  since `TryLoad` reports no reason. A loaded one logs the file the loader chose, read from
+  `SDL2.dll`. A library that is present but cannot load carries the loader's reason instead,
+  `sticks: off, libSDL2-2.0.so.0 failed to load: libdep.so: cannot open shared object file: ...`,
+  read from `dlopen`'s errors in the load exception's message; an error naming any file but the
+  soname is a missing dependency, not absence. A loaded one logs the file the loader chose, read from
   `/proc/self/maps`: `sticks: SDL 2.32.4 from libSDL2-2.0.so.0 (system: /usr/lib/...)`.
 - **The hints in `Sdl2Sticks.Load`** are set on both platforms. `SDL_JOYSTICK_HIDAPI=0` matters on
   Linux too: it keeps SDL2 off the hidraw nodes, where it would handshake with the Deck's built-in
@@ -726,18 +735,19 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   backends, and their hints do nothing elsewhere. `SDL_NO_SIGNAL_HANDLERS=1` keeps SDL2's SIGINT
   and SIGTERM handlers out of Godot's process. On Linux SDL2 reads evdev, where a second reader
   shares a device rather than taking it.
-- **The gap-filler's Linux rules.** Godot's joypad layer on Linux has no DirectInput-style gap for
-  gamepads, so a gamepad is Godot's there, and the model match is not left as the only guard: a
-  pad Godot reports no `vendor_id`/`product_id` for would otherwise be read twice. `StickRoster` is built with
-  `godotReadsGamepads` off Windows and then also skips a listing SDL2 maps as a gamepad
-  (`SDL_IsGameController`) and any device of Valve's vendor id `28DE`: the Deck's built-in
-  controls, a Steam Controller and Steam Input's virtual pad. Each skip logs its reason on a
+- **The gap-filler's Linux rules.** Godot's SDL3 on Linux lists every joystick, flight sticks and
+  throttles included, so the model match would hand every stick to Godot as a raw pad, its axes
+  and buttons named as a gamepad's and every unit merged onto the one pad placeholder (issue #130).
+  `StickRoster` is built with `godotReadsGamepads` off Windows and decides by kind instead: it
+  skips a listing SDL2 maps as a gamepad (`SDL_IsGameController`) and any device of Valve's vendor
+  id `28DE` (the Deck's built-in controls, a Steam Controller and Steam Input's virtual pad), and
+  opens every other device whether or not Godot lists it. Each skip logs its reason on a
   `stick skipped:` line. Windows keeps the model match alone.
-- **Whether the bridge is needed at all.** The bridge exists because Godot's SDL3 enumerates no
-  DirectInput-only stick on Windows. If Godot's SDL3 on Linux lists a stick, `StickRoster` skips it
-  by model, and the stick reaches the game as an ordinary Godot joypad, without its stick profile,
-  stick glyphs or stick column. Which roster holds a real stick on Linux is not yet seen: run
-  `--dump-sticks` with it connected, whose first line lists Godot's pad models.
+- **Godot's view of an opened stick.** `StickPump` hands the opened models to
+  `Pads.ClaimForSticks`, and `Pads.Connected` leaves every Godot pad of a claimed model out of the
+  pad roster, so the stick is read once, through its stick profile. A raw `InputEventJoypadButton`
+  handler that does not ask `Pads` still sees its presses: the cutscene and cinema skips, and the
+  extraction screen's install picker.
 - **Device GUIDs** are SDL's 16 bytes printed in memory order on both platforms. Their content
   differs (a Linux GUID carries the bus type, vendor, product and version), and only the log
   prints them; bindings and profiles key on the model.
@@ -745,6 +755,32 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   `ExportRelease.ps1` ships in the zip, with the DLL's hash in `BUILD-INFO.txt`; and
   `SDL_JOYSTICK_DIRECTINPUT=0` in the launch scripts, a workaround for Godot's SDL3 (BL-033).
 
+## The WebRTC library and the master server
+
+**`InstallWebRtc.ps1` (repo root)** downloads webrtc-native 1.2.2's
+`godot-extension-webrtc_native.zip` from the godotengine release, checks its SHA-256 against the pin
+(GitHub's published digest), and unpacks the extension manifest, its licences and the Windows and
+Linux x86_64 libraries (debug and release) into `CSVM/addons/webrtc_native/`, which is git-ignored.
+It also adds the manifest to `CSVM/.godot/extension_list.cfg`, where a run that never opened the
+editor finds extensions; an editor import writes the same line. Unlike SDL2 the extension must sit
+inside the project folder Godot opens, so each checkout or worktree that should play over the
+internet runs it once. Each installed file is pinned by SHA-256 too, so a run reinstalls over a file
+that differs from its pin, and `-Verify` checks every file against its pin without installing.
+
+The game needs it only for internet play through a master server (`--master-server=`,
+`docs/cli.md`): `Net/WebRtcTransport.cs` reports `Available` false without it, the launcher logs that
+at startup, and LAN and direct play are unchanged. `ExportRelease.ps1` runs it into the exported
+tree before every export, because Godot's export carries the platform's library only when the
+extension is installed, and a build without it would list master-server games but never host or join
+one. The export then throws unless the library sits beside the executable, ships the release's
+licence files as `LICENSE-webrtc/`, and records the release and the library's SHA-256 in
+`BUILD-INFO.txt`. The `webrtc-transport` suite skips without it.
+
+**`server/`** is the master server itself, a .NET 8 minimal API (`server/MasterServer/`) with its
+xUnit project (`server/MasterServer.Tests/`), both in `CSVM.sln`, so `dotnet build` and the units
+stage cover them. It compiles the game's `CSVM/src/Net/MasterProtocol.cs` rather than a copy. The
+Dockerfile, `docker-compose.yml` (master, coturn, Caddy), the coturn configuration, a systemd unit
+and the step-by-step deployment are in `server/README.md`.
 ## The mech3ax fork (`tools/mech3ax/`)
 
 **Crimson Skies support lives in the fork, not upstream.** Upstream removed it, so the fork is its

@@ -253,6 +253,12 @@ public sealed class SceneBuilder
     /// composite shows the world through a gauge face. Set before building: it keys the shader.</summary>
     internal bool NoAlphaCoverage;
 
+    /// <summary>Build this builder's shaded surfaces with the race ghost (<see cref="RaceGhost"/>):
+    /// a stamped instance then fades by the drawing camera's distance. Set on a race session's
+    /// human airframes alone, so every other build keeps its shader text. Set before building: it
+    /// keys the shader.</summary>
+    internal bool RaceGhostShader;
+
     /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
     /// backdrop: the moon and the star field. Under Enhanced their materials take
     /// <see cref="ColorKeyed"/>'s copy and blend, so only the figure draws. The faithful path keeps
@@ -364,13 +370,6 @@ void fragment() {
     // picked by eye against the original's screenshots, at the controls and not by a luminance
     // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
-    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight).
-    // ⚠ Declare them here, never in csky_atmosphere.gdshaderinc, which every world shader
-    // includes. Declared in that include, a headless probe never exits; the cause is not decoded
-    // (docs/verification.md SHELL-21).
-    private const string SunVertexLightDecl =
-        "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;\n"
-        + "global uniform vec3 csky_sun_fill_rgb;";
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -724,7 +723,7 @@ void fragment() {
                 img.SetPixel(x, y, c);
             }
         img.GenerateMipmaps();
-        return ImageTexture.CreateFromImage(img);
+        return TextureUpload.Create(img);
     }
 
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's
@@ -1861,7 +1860,8 @@ void fragment() {
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
-    // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage.
+    // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage,
+    // 262144 the race ghost.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -1870,6 +1870,7 @@ void fragment() {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
         bool sunVertexLit = shaded && _sunVertexLit;
+        bool raceGhost = shaded && RaceGhostShader;
         // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
         // and moving its alpha would move the cutout silhouette instead of the composite.
         bool gammaBlend = blend && GammaBlendAlpha;
@@ -1879,13 +1880,13 @@ void fragment() {
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
-            | (noAlphaCoverage ? 131072 : 0);
+            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost), "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -1897,7 +1898,7 @@ void fragment() {
     // GraphicsMode.Enhanced, so ShaderTwins can write it again under either mode.
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
-        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage)
+        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -1942,6 +1943,13 @@ void fragment() {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
+        // The race ghost reuses the clutter fade's dither; the include guard admits it once.
+        if (raceGhost)
+        {
+            sb.AppendLine(ClutterFadeInclude);
+            sb.AppendLine(RaceGhost.Include);
+            sb.AppendLine(RaceGhost.Varying);
+        }
         // The point-light term reaches only the two original-mode arms that evaluate the original's
         // vertex light, and only on a model authored `lighting: true`.
         bool pointLit = lit && (fullbright || sunLit);
@@ -1980,7 +1988,6 @@ void fragment() {
             sb.AppendLine(SrgbInclude);
         if (sunLit)
         {
-            sb.AppendLine(SunVertexLightDecl);
             sb.AppendLine("varying vec3 v_sun_lit;");
             // Where this frame's origin sits in the world, for a model drawn in a frame of its own
             // (the cockpit pass, CockpitOverlay). Zero for anything drawn in the world itself.
@@ -1999,15 +2006,18 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
-        // Per vertex in world space: the sun and the point lights, summed into one factor on the
-        // authored colour and clamped at white. The sun's ambient half is the photograph's fill at
-        // an armed eye (PhotoEyeParam); `lighting: false` takes the authored colour unchanged.
+        string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
+        // Per vertex in world space: the drawing view's sun and the point lights, summed into one
+        // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
+        // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
         string sunVertex = !sunLit ? ""
-            : lit ? "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
+            : lit ? "    vec3 sun_dir;\n    vec3 sun_ambient_rgb;\n    vec3 sun_diffuse_rgb;\n    vec3 sun_fill_rgb;\n"
+                    + "    csky_sun_rgb_at(CAMERA_POSITION_WORLD + light_origin, sun_dir, sun_ambient_rgb, sun_diffuse_rgb, sun_fill_rgb);\n"
+                    + "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
                     + PhotoEyeReach.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + "\n"
-                    + "        ? csky_sun_fill_rgb : csky_sun_ambient_rgb;\n"
-                    + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + csky_sun_diffuse_rgb\n"
-                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)\n"
+                    + "        ? sun_fill_rgb : sun_ambient_rgb;\n"
+                    + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + sun_diffuse_rgb\n"
+                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), sun_dir), 0.0)\n"
                     + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
         // The fullbright world keeps its collapsed sun, csky_world_light. It takes the point lights
@@ -2017,12 +2027,13 @@ void fragment() {
             : "    v_point_gain = vec3(0.0);\n"
               + "    if (csky_light_count > 0) {\n"
               + "        vec3 point = csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);\n"
-              + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (csky_world_light + point), 0.0, 1.0))\n"
-              + "            - csky_srgb_to_linear(COLOR.rgb * csky_world_light);\n"
+              + "        float world_light = csky_world_light_at(CAMERA_POSITION_WORLD);\n"
+              + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (world_light + point), 0.0, 1.0))\n"
+              + "            - csky_srgb_to_linear(COLOR.rgb * world_light);\n"
               + "    }\n";
         sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -2032,6 +2043,8 @@ void vertex() {{
 void fragment() {{");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
+        if (raceGhost)
+            sb.AppendLine(RaceGhost.FragmentLine);
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
         string vcol = sunLit ? "vec4(csky_srgb_to_linear(v_sun_lit), COLOR.a)"
@@ -2061,7 +2074,7 @@ void fragment() {{");
         // `lighting: false`. Neither lit arm applies it: a real sun carries that energy there, and
         // a scalar on ALBEDO would dim the surface a second time.
         if (fullbright && lit)
-            sb.AppendLine("    ALBEDO *= csky_world_light;");
+            sb.AppendLine("    ALBEDO *= csky_world_light_at(CAMERA_POSITION_WORLD);");
         if (shaded && !sunLit)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
@@ -2102,8 +2115,8 @@ void fragment() {{");
             // a fogged albedo still varies with its normal at full fog. csky_fog_color is linear,
             // the space FOG.rgb resolves in and the one the fullbright arm's mix lands in.
             sb.AppendLine(worldLit
-                ? "    FOG = vec4(csky_fog_color, csky_fog_on * fog_amt);"
-                : "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
+                ? "    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);"
+                : "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);");
         }
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
@@ -2219,11 +2232,11 @@ void fragment() {{
         // Glow flares are light sources: no SUNLIGHT night dimming (a lamp doesn't get
         // darker at night, it's what lights the scene), and neither is a model the artists
         // authored `lighting: false`. Clouds ride the world brightness.
-        string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light_at(CAMERA_POSITION_WORLD)";
         if (glow && GraphicsMode.Enhanced)
             lightTerm = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
-            ? $"    ALBEDO = mix({lightTerm}, csky_fog_color, fog_amt);"
+            ? $"    ALBEDO = mix({lightTerm}, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);"
             : $"    ALBEDO = {lightTerm};");
         // Only the variants that took the preamble above have csky_tint declared at all.
         if (blend || scissor)
@@ -2322,11 +2335,11 @@ void fragment() {{
         if (fogged)
             sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
-        string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light_at(CAMERA_POSITION_WORLD)";
         if (glow && GraphicsMode.Enhanced)
             cylLight = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
-            ? $"    ALBEDO = mix({cylLight}, csky_fog_color, fog_amt);"
+            ? $"    ALBEDO = mix({cylLight}, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);"
             : $"    ALBEDO = {cylLight};");
         // As in GetBillboardShader: csky_tint exists only where the preamble was taken.
         if (blend || scissor)

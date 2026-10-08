@@ -15,7 +15,8 @@ namespace CSVM.Tooling;
 /// records and code-generated files. It is written at run time, so every loader takes its normal
 /// path with no install. The hand-authored records are the <c>CSVM.Tests/fixtures/</c> files, read
 /// from the repo checkout: the tests and the engine share one copy, and an export carries none.
-/// Each record family is one entry in <see cref="Families"/>. The tree's stamp carries a
+/// Each record family is one entry in <see cref="Families"/> or, for the Original shell, in
+/// <c>SyntheticShell.TreeFamilies</c>. The tree's stamp carries a
 /// <see cref="StampField"/> field, which is how <see cref="Marks"/> tells a synthetic tree apart.
 /// Engine-free, so <c>CSVM.Tests</c> builds the same tree the engine does.
 /// </summary>
@@ -28,14 +29,14 @@ public static class SyntheticData
     /// <summary>The folder under the repo's <c>.scratch/</c> that holds one tree per process.</summary>
     public const string ScratchFolder = "synthetic-data";
 
-    /// <summary>Every record family the tree carries, written in this order. Adding a family is one
-    /// entry here and one writer that touches only its own folder under <c>extracted/</c>.</summary>
+    /// <summary>The record families written from this namespace, in this order. Adding a family is one
+    /// entry here and one writer that touches only its own folder under <c>extracted/</c>. The
+    /// Original shell's family reads UI types, so it joins in <c>SyntheticShell.TreeFamilies</c>.</summary>
     public static readonly IReadOnlyList<SyntheticFamily> Families = new SyntheticFamily[]
     {
         new("chapter-textures", SyntheticTextures.WriteChapter),
         new("plane", SyntheticPlane.WritePlane),
         new("armament", SyntheticPlane.WriteArmament),
-        new("original-shell", SyntheticShell.WriteShell),
         new("sounds", SyntheticSounds.WriteArchive),
     };
 
@@ -55,8 +56,9 @@ public static class SyntheticData
 
     /// <summary>Writes and stamps the whole tree under <paramref name="dataRoot"/>, replacing a
     /// synthetic tree an earlier run left there. Throws when a fixture is missing or a write fails.
-    /// The caller then reads nothing, since falling back to the install is the one wrong answer.</summary>
-    public static void Build(string fixturesRoot, string dataRoot)
+    /// The caller then reads nothing, since falling back to the install is the one wrong answer.
+    /// <paramref name="families"/> is the whole tree's list, <c>SyntheticShell.TreeFamilies</c>.</summary>
+    public static void Build(string fixturesRoot, string dataRoot, IReadOnlyList<SyntheticFamily> families)
     {
         if (!Directory.Exists(fixturesRoot))
         {
@@ -77,13 +79,13 @@ public static class SyntheticData
 
         // Stamped first, so a tree a failed build leaves half written is still one a rebuild may replace.
         var tree = new SyntheticTree(fixturesRoot, dataRoot);
-        var families = new JsonArray(Families.Select(f => (JsonNode?)JsonValue.Create(f.Name)).ToArray());
+        var names = new JsonArray(families.Select(f => (JsonNode?)JsonValue.Create(f.Name)).ToArray());
         ExtractionStampWriter.Merge(tree.Extracted, StampField, new JsonObject
         {
             ["script"] = "CSVM",
-            ["families"] = families,
+            ["families"] = names,
         });
-        foreach (var family in Families)
+        foreach (var family in families)
         {
             family.Write(tree);
         }

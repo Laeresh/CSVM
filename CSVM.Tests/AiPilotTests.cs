@@ -1,4 +1,5 @@
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using Godot;
@@ -21,6 +22,46 @@ public class AiPilotTests
 
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+
+    // A seat pilot's respawn: the course, altitude and lever come off the new placement. The mode
+    // machine and the launcher start over, and the orders a launch set stay.
+    [Fact]
+    public void AResetForSpawnHoldsTheNewPlacementWithNoEngagementLeft()
+    {
+        var machine = new AiModeMachine(new System.Random(3)) { AttackRange = 1500f };
+        var pilot = new AiPilot
+        {
+            TargetHeadingDeg = 37f,
+            TargetAltitude = 5f,
+            Throttle = 0.3f,
+            Machine = machine,
+            Rocketeer = new AiRocketeer(() => 1f),
+            RearmOrder = new AiRearmOrder(),
+        };
+        machine.Enter(AiMode.Pursue, "a chase standing at the death");
+        pilot.Stun(2f);
+        Assert.True(pilot.IsStunned);
+        var at = new Vector3(100f, 650f, -40f);
+
+        // A rearm run standing at the death, as a bot shot down on its way to a base has one.
+        pilot.RearmOrder.Update(at, Vector3.Zero, true, 1f, at + new Vector3(0f, 0f, -3000f), restored: false);
+        Assert.True(pilot.RearmOrder.Flying);
+
+        pilot.ResetForSpawn(at, at + Vector3.Right, 0.6f);
+
+        Assert.Equal(AiPilot.HeadingDegOf(Vector3.Right), pilot.TargetHeadingDeg, 3);
+        Assert.Equal(650f, pilot.TargetAltitude);
+        Assert.Equal(0.6f, pilot.Throttle);
+        Assert.False(pilot.IsStunned);
+        Assert.Null(pilot.ZoneRun);
+        Assert.Null(pilot.RailPose);
+        Assert.Equal(AiMode.Patrol, machine.Mode);
+        Assert.Null(machine.PursuitAnchor);
+        Assert.Equal(-1, pilot.Rocketeer.SelectedPylon);
+        Assert.Same(machine, pilot.Machine);
+        Assert.Equal(1500f, machine.AttackRange);
+        Assert.Equal(AiRearmLeg.None, pilot.RearmOrder.Leg);
+    }
 
     [ExtractedDataFact]
     public void HoldsCourseFliesOrderedTurnsAndTakesMidFlightRetargets()

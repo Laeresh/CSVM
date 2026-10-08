@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Mech3;
@@ -46,6 +47,32 @@ public class AiTargetRankingTests
             new[] { ai, player }, out var best);
         Assert.Equal(1, pick);
         Assert.Equal(sPlayer.Rank, best.Rank, 2);
+    }
+
+    [Fact]
+    public void AShooterThatDoesNotPreferPlayersRanksAPersonAndABotAlike()
+    {
+        // A Dogfight bot's setting: a person and a bot at equal geometry carry one weight and one
+        // rank. Only the ranking's other terms can tell them apart.
+        var person = Ahead(800f, isPlayer: true, xOffset: 100f);
+        var bot = Ahead(800f, xOffset: -100f);
+        var sPerson = AiTargetRanking.Score(OwnPos, OwnFwd, Attack, AiScorer.Jet, person, playersPreferred: false);
+        var sBot = AiTargetRanking.Score(OwnPos, OwnFwd, Attack, AiScorer.Jet, bot, playersPreferred: false);
+        Assert.Equal(sBot.Weight, sPerson.Weight, 3);
+        Assert.Equal(sBot.Rank, sPerson.Rank, 1);
+
+        // ABLE-TO-FAIL CONTROL: the same pair under the decoded preference stays 360 apart.
+        var preferred = AiTargetRanking.Score(OwnPos, OwnFwd, Attack, AiScorer.Jet, person, playersPreferred: true);
+        Assert.Equal(360f, sBot.Rank - preferred.Rank, 1);
+
+        // A bot 100 m nearer than the person: the preference outweighs it, equal weights do not.
+        var nearerBot = Ahead(700f, xOffset: -100f);
+        var pool = new[] { nearerBot, person };
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Attack, AiScorer.Jet, aircraftFirst: false,
+            pool, out _));
+        Assert.Equal(0, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Attack, AiScorer.Jet, aircraftFirst: false,
+            pool, out var best, playersPreferred: false));
+        Assert.Equal(1.0f + 0.2f - 0.2f - 0.2f, best.Weight, 3);
     }
 
     [Fact]

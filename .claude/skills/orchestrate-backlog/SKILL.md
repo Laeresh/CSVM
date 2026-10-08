@@ -1,6 +1,6 @@
 ---
 name: orchestrate-backlog
-description: Run a backlog orchestration - a side branch, N item subagents in their own worktrees, the orchestrator squashing each result onto the branch, running the battery on the merged tree, keeping a log with an "Owed to you" section, and merging to main only on request. Use when the user says "orchestrate backlog items until I stop you" or asks to resume such a run.
+description: Run a backlog orchestration - a side branch, N item subagents in their own worktrees, the orchestrator code-reviewing and squashing each result onto the branch, running the battery on the merged tree, keeping a log with an "Owed to you" section, and merging to main only on request. Use when the user says "orchestrate backlog items until I stop you" or asks to resume such a run.
 ---
 
 You are the orchestrator of a backlog run. Subagents land items; you own every commit on the run's
@@ -27,7 +27,8 @@ theme. A resume ("continue orch-4") skips to step 3 with the existing log.
 
 Slots: exactly the number the user gave, never more. Start at two unless told otherwise; the user
 raises it when their plan allows ("Extend to 3 slots"). A fourth agent started by mistake is
-stopped at once and its tree discarded.
+stopped at once and its tree discarded. The two review agents of a code review (step 4.4) take no
+item slot; they are short and read-only, and only one review runs at a time.
 
 ## 2. Choose items
 
@@ -78,7 +79,7 @@ Every step in order, for one agent at a time:
    form `PROJECT_CONTEXT.md`'s verification loop gives, naming an open item that owns the failure:
    send the agent back with `SendMessage` to fix it or to prove it pre-existing (red on the run
    branch's HEAD without the change) and write the waiver. A waiver reported with `#NEW` as its
-   owner comes with a `new-issue-*.md`: file that issue now (step 8's command) and add the line to
+   owner comes with a `new-issue-*.md`: file that issue now (step 9's command) and add the line to
    the message with its number. Run
    `.\CheckWaiver.ps1 -MessageFile <message> -Root <agent>` for the form. A waiver is a record,
    not a way past the owner: never waive a failure the item itself caused.
@@ -88,10 +89,32 @@ Every step in order, for one agent at a time:
 3. `git -C <agent> add -A; git -C <agent> commit -q -F <message>`. The format hook builds the
    agent's tree; a ` M` it leaves on a file the agent never touched is a line-ending rewrite, check
    it with `git diff --ignore-all-space --ignore-cr-at-eol` and stage it.
-4. `git -C <run> merge --squash <agent branch>`. If it stages files the agent never touched, the
+4. Review the change with the `code-review` skill (Skill tool), before the squash so a finding
+   costs no battery. `<fork>` is the run-branch commit the agent forked from
+   (`git -C <agent> merge-base HEAD <run>`). The args name the fixed point, the spec and the
+   standards so the skill never asks the user: the diff `git -C <agent> diff <fork>...HEAD`; the
+   spec, a `BL-NNN` entry from `git show <fork>:backlog.md` (a close deletes it from the tree) or
+   `gh issue view N --comments`, plus any steer quoted in the dispatch prompt; the standards,
+   `PROJECT_CONTEXT.md`'s coding conventions, `CLAUDE.md`'s writing style and `CONTEXT.md`. Pass
+   `model: "opus"` on both of its Agent calls. Save the aggregated report to
+   `Z:\CSVM\.scratch\<run>\<id>\review.md`, then act on it:
+   - A hard Standards violation, a Spec requirement missing or partial, or an implementation the
+     Spec axis reads as wrong: send the findings, quoted, to the agent with `SendMessage`. When it
+     reports back, re-read its verification line (step 1), commit the fix on the agent branch
+     (step 3) and review again from the same `<fork>`. Fix a one-line finding yourself instead and
+     say so in the message.
+   - Scope creep: keep it when it serves the item and say so in the message; otherwise send it
+     back as above.
+   - A baseline smell is a judgement call: fix it when it is cheap and local, otherwise name it in
+     the log line and move on.
+   - A finding that rests on a misread of the entry or of a decode is declined, with the reason in
+     the log line.
+   After two rounds on one item, land what is green and file each remaining finding as a
+   `backlog` issue (step 9's command), logging the number.
+5. `git -C <run> merge --squash <agent branch>`. If it stages files the agent never touched, the
    agent forked from an older base: `git reset --hard HEAD`, merge main into the run branch first,
    then squash again.
-5. Resolve conflicts with a scratch script, never by typing markers. The regex is
+6. Resolve conflicts with a scratch script, never by typing markers. The regex is
    `(?s)<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> [^\n]*\n` over LF-normalised text, markers built
    from `'<' * 7`, written back BOM-less with `[Text.UTF8Encoding]::new($false)`. The shapes seen:
    - two entries appended at one point: union, keep both, watch a swallowed closing brace;
@@ -100,9 +123,9 @@ Every step in order, for one agent at a time:
      (`CheckItemIds` otherwise reports a duplicate id);
    - one doc entry edited twice: hand-combine within the 8-line cap of `CheckDocEntries`;
    - `analysis/goldens/manifest.json` hashes against a sibling's re-pin: take HEAD's hashes and
-     re-pin on the merged tree (step 6);
+     re-pin on the merged tree (step 7);
    - INSTR/PERF/WORLD rule numbers minted twice: renumber the later one and say so in the message.
-6. `git -C <run> add -A`, then `.\CheckCommitContent.ps1 -Root <run>` from the run worktree, exit 0
+7. `git -C <run> add -A`, then `.\CheckCommitContent.ps1 -Root <run>` from the run worktree, exit 0
    required. Then, in the background with `$env:CSVM_DATA_ROOT='Z:\CSVM'`:
    `.\RunTests.ps1 -Filter <touched suites> -GoldenWorkers 2` (units, the touched suites and the
    goldens; `-Suite <name>` for one; "selector matched nothing" is a FAIL). Read the log's tail.
@@ -120,16 +143,16 @@ Every step in order, for one agent at a time:
    - A failure that is red on the run branch's HEAD without this squash is not the item's; the
      squash lands only with a `Waiver:` line for it added to the message (file an owning issue
      first when nothing owns it). The content gate checks that line's form at the commit.
-7. `git -C <run> commit -q -F <message>`. Then `git worktree unlock`, `git worktree remove --force`
+8. `git -C <run> commit -q -F <message>`. Then `git worktree unlock`, `git worktree remove --force`
    and `git branch -D` for the agent's tree and branch.
-8. Tracker writes the agent left for you, now: a `comment.txt` (an amended question for the user,
+9. Tracker writes the agent left for you, now: a `comment.txt` (an amended question for the user,
    a decode's one-line amendment) is posted with `gh issue comment N --body-file`, citing the
    squash commit; a `new-issue-<slug>.md` is filed with
    `gh issue create --title "..." --label <backlog|playtest|capture> --body-file`, and the log
    records the number it got. A `close.txt` is **not** posted yet: the close names a commit that
-   is not on main, so it waits for step 5's merge to main; list it under a `## Closes pending`
+   is not on main, so it waits for section 5's merge to main; list it under a `## Closes pending`
    section of the log.
-9. Log it (step 7) and dispatch the next item into the freed slot, unless paused.
+10. Log it (section 7) and dispatch the next item into the freed slot, unless paused.
 
 ## 5. Keep main in step
 
@@ -139,7 +162,27 @@ and `git -C <run> rev-list --count <run>..main`. If main moved: `git -C <run> me
 ("Merge main into <run>: ..."), log it. Check `git -C Z:\CSVM status --short` first; a dirty main
 checkout is another session mid-edit, wait a moment and re-read rather than merging over it.
 
-Merge to main ONLY when the user asks ("merge it into main"): `git -C Z:\CSVM merge --ff-only <run>`
+Merge to main ONLY when the user asks ("merge it into main"). First ask them with
+`AskUserQuestion` whether a subagent should review the whole run before the merge, options
+`Review first (Recommended)` and `Merge now`. The per-item reviews cannot see what the run-wide one
+looks for: two items that contradict or duplicate each other, a convention drifting across items,
+a conflict resolution or merge of main that dropped something.
+
+On `Review first`: one `Agent` call, `subagent_type: general-purpose`, `model: "opus"`, no
+isolation, `description: "Review <run> before main"`. Its prompt tells it to invoke the
+`code-review` skill on the run worktree with fixed point `main` (`git -C <run> diff main...HEAD`,
+run after main is merged in, so the diff is the run's own work); the spec is every item landed
+since the last fast-forward, from the log's `## Items` lines, each `BL-NNN` entry from
+`git show main:backlog.md` and each `#N` from `gh issue view N --comments`; the per-item
+`review.md` files are context, so a finding already declined there is not raised again. It is
+read-only (no edits, no commits, no `gh` writes), passes `model: "opus"` on its own Agent calls,
+runs the two axes one after the other itself when it cannot spawn them, and reports under 60
+lines with the axes kept apart. Save its report to `Z:\CSVM\.scratch\<run>\review-<sha>.md` and
+log it. Both axes clean: merge. Otherwise give the user the findings per axis and wait for their
+word: a finding they want fixed goes to an item agent and lands through section 4, and "merge as
+is" merges.
+
+The merge itself: `git -C Z:\CSVM merge --ff-only <run>`
 after the run branch contains main, then `.\CheckItemIds.ps1` on main. "Not possible to
 fast-forward" means main moved again: merge it in first. Never push. Then post every close in the
 log's `## Closes pending` section, `gh issue close N --comment-file <close.txt>` with the landing
@@ -160,8 +203,10 @@ engine passes if you can avoid it; the hidden desktop is shared and a rebuild un
 `[IO.File]::WriteAllText(path, text, [Text.UTF8Encoding]::new($false))`. Under `## Items`, one
 bullet per event in order: `- **BL-NNN** landed as <sha> (agent forked at <sha>, <clean squash |
 the conflict and its resolution>): <two to four sentences of what is now true, suites added,
-goldens moved>. On the merged tree <counts>. Owed: <one line or nothing>. Not on main yet.`;
+goldens moved>. Review: <clean | each finding and whether it was fixed, kept or declined, and
+why>. On the merged tree <counts>. Owed: <one line or nothing>. Not on main yet.`;
 `- Dispatched (freed slot): BL-NNN (<what>), forked from <sha>.`; `- **Merge main** as <sha>`;
+`- **Run review** on <sha>: <per axis, clean or the finding count and the worst finding>`;
 `- **Main fast-forwarded** from <sha> to <sha> at the user's request (<items>)`; `- **Your
 steer**: <quoted>`; `- Battery N ...`; `- **#N filed** (<what>)`; `- **#N closed** after the
 fast-forward`. Item ids in the log are `BL-NNN` or `#N`.
@@ -172,7 +217,8 @@ relays verdicts, drop the passed ones into the section's summary line and keep t
 
 ## 8. The user's messages during the run
 
-- "merge to main" / "merge it back into main": step 5's fast-forward, then a short report.
+- "merge to main" / "merge it back into main": section 5's question about a run review, then the
+  fast-forward, then a short report.
 - "pause after the current items": note it in the log, land what is running, no dispatch,
   battery, report; the queue is listed for the resume.
 - "mint one, I added <still>": file the item yourself as a `backlog` issue
@@ -187,8 +233,9 @@ relays verdicts, drop the passed ones into the section's summary line and keep t
 
 ## 9. Hazards that cost time before
 
-- The Bash tool is hook-blocked except pure `git`/`gh` commands; use PowerShell. A `Set-Location`
-  inside a command is invisible to the format hook, so name trees with `git -C`.
+- The Bash tool is hook-blocked except pure `git`/`gh` commands; use PowerShell. Name trees with
+  `git -C` or an absolute runner path; both gates also read a same-call `Set-Location`, but a
+  path written into the invocation is the form a reader can check at a glance.
 - PowerShell 5.1 mangles non-ASCII: keep every script and every log write ASCII, and build
   non-ASCII from `[char]` codes.
 - The agent brief's commit-message path must be INSIDE the agent worktree (`.scratch\<run>\...`
@@ -202,6 +249,6 @@ relays verdicts, drop the passed ones into the section's summary line and keep t
 
 ## Report
 
-After every landing, merge or steer: what landed (sha, one sentence), what is running, what is
-queued, how far the run branch is ahead of main, and the new owed lines. Keep it under fifteen
+After every landing, merge or steer: what landed (sha, one sentence, the review's verdict), what
+is running, what is queued, how far the run branch is ahead of main, and the new owed lines. Keep it under fifteen
 lines; the log carries the rest.

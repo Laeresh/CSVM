@@ -63,13 +63,12 @@ public sealed class ActionMap
         return _contested.TryGetValue(keyCode, out var modifiers) ? modifiers : KeyModifiers.None;
     }
 
-    /// <summary>Gives a control to an action, taking it off every action that held it. Returns those
-    /// in enum order, so a screen can name each loss. A full axis goes onto both actions of the pair,
-    /// the partner is not reported, and an action that takes no full axis throws. ⚠ Every owner, not
-    /// the first: <see cref="Add"/> puts one control on two actions (a numpad snap-look diagonal).
-    /// Stopping at the first leaves it on the other, which the original forbids (`FUN_005371d0`).
-    /// </summary>
-    public IReadOnlyList<InputAction> Assign(InputAction action, Binding binding)
+    /// <summary>Gives a control to an action at <paramref name="at"/> in its list, the end by default.
+    /// Every action that held it loses it, returned in enum order. A full axis goes onto both
+    /// actions of the pair, the partner unreported; an action that takes none throws. ⚠ Every owner:
+    /// <see cref="Add"/> can put one control on two actions, and stopping at the first leaves it on
+    /// the other, which the original forbids (`FUN_005371d0`).</summary>
+    public IReadOnlyList<InputAction> Assign(InputAction action, Binding binding, int at = int.MaxValue)
     {
         InputAction? partner = null;
         if (binding.Control.Kind == ControlKind.FullAxis)
@@ -89,6 +88,7 @@ public sealed class ActionMap
 
         stolenFrom.Sort();
         Put(SetFor(action), binding);
+        SetFor(action).MoveTo(binding, at);
         if (partner is { } other)
             Put(SetFor(other), binding);
         _contestedStale = true;
@@ -96,7 +96,7 @@ public sealed class ActionMap
     }
 
     /// <summary>Gives a control to an action without taking it off anyone. The shipped defaults and
-    /// a loaded file need this, since a numpad snap-look diagonal is deliberately on two actions. A
+    /// a loaded file go in this way, since a file may name one control on two actions. A
     /// full axis goes onto both actions of the pair, replacing a copy with another invert or
     /// deadzone. On the lever row it goes onto that row alone, and on any other it is refused.
     /// ⚠ Not for a rebinding screen; <see cref="Assign"/> is the only path that keeps the steal rule.</summary>
@@ -162,9 +162,8 @@ public sealed class ActionMap
 
     /// <summary>Every action that currently holds that control, in enum order. A screen calls this
     /// before assigning so it can name the losers ahead of committing the steal.
-    /// ⚠ A list rather than one action, and there is no single-owner form on purpose: two actions
-    /// deliberately share several shipped controls, and a caller that took the first owner would
-    /// report one loss and perform two.</summary>
+    /// ⚠ A list, with no single-owner form on purpose. A loaded keymap may put one control on two
+    /// actions, and a caller that took the first owner would report one loss and perform two.</summary>
     public IReadOnlyList<InputAction> OwnersOf(Binding binding)
     {
         var owners = new List<InputAction>();
@@ -185,11 +184,10 @@ public sealed class ActionMap
     }
 
     /// <summary>Replaces this map's contents with <paramref name="source"/>'s, in place, so every
-    /// reader already holding this object reads the new keymap without being rebuilt. A polling site
-    /// hands the same map to two or three <see cref="PlayerActions"/>, and swapping the reference
-    /// would leave those readers on the map the seat was constructed with.
-    /// ⚠ <see cref="Add"/> rather than <see cref="Assign"/>: the shipped set deliberately puts one
-    /// control on two actions, and a steal on the way in would silently undo the second.</summary>
+    /// reader already holding this object reads the new keymap without being rebuilt. Two or three
+    /// readers share one map at a polling site, and a swapped reference would strand them.
+    /// ⚠ Through <see cref="Add"/>, never <see cref="Assign"/>. A loaded keymap may put one control
+    /// on two actions, and a steal on the way in would silently undo the second.</summary>
     public void Fill(ActionMap source)
     {
         System.ArgumentNullException.ThrowIfNull(source);

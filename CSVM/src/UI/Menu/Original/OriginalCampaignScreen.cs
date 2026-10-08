@@ -29,6 +29,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// <summary>The co-op host's BOOT plaque beside the door, live while a guest is seated.</summary>
     public const string CoopBootKey = "NET_BOOT";
 
+    /// <summary>The co-op host's COPY control on the band line naming its code or address. The row
+    /// spans the line, so a click or a tap on the code copies it as the control does.</summary>
+    public const string CoopCopyKey = "NET_COPY";
+
     // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB. The selection bar behind the
     // picked row is 0xff800000, the frame around the row under the pointer 0xffff0000.
     private const byte RosterBarRed = 0x80;
@@ -44,6 +48,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private const float CoopBandSize = 13f;
     private const float CoopBandWidth = 520f;
     private const float CoopBandGround = 0.6f;
+    private const float CoopCopyWidth = 44f;
 
     private readonly CampaignFeature? _campaign;
     private readonly PlayerSetupFeature _setup;
@@ -450,6 +455,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             {
                 var door = _net()!;
                 bool open = door.IsCoopHost;
+                // The wait for a code names nothing to copy, so it carries no control.
+                if (open && !door.AwaitingCode && CoopDoorText.CopyTarget(door).Length > 0)
+                {
+                    float height = CoopBandSize + 4f;
+                    rows.Add(new OriginalRow(CoopCopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton,
+                        CoopDoorX, BoardLine.CapsBoxTop(CopyLineY(door), CoopBandSize, height), CoopBandWidth - 8f, height,
+                        true, 0, null));
+                }
+
                 var row = _host.PlaqueRow(
                     CoopDoorKey, open ? CoopDoorText.CloseNetworkButton : CoopDoorText.HostCoopButton, 0,
                     open || door.Stage is NetDoorStage.Shut or NetDoorStage.Failed, 0);
@@ -545,6 +559,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return null;
         }
 
+        if (row.Key == CoopCopyKey)
+        {
+            _net()?.CopyForGuests();
+            return null;
+        }
+
         int pageRow = RowIndexOf(row.Key);
         if (pageRow < 0)
         {
@@ -590,10 +610,17 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return true;
         }
 
-        // A guest steps back only out of its own two screens. Anywhere else Back asks whether to
-        // leave the session, since the host's boards are not the guest's to walk.
+        // A guest steps back only out of its own two screens and from a further player's check to
+        // the one before. Anywhere else Back asks whether to leave the session, since the host's
+        // boards are not the guest's to walk.
         if (IsGuest && _host.Screen is not (OriginalScreen.CampaignAmmo or OriginalScreen.CampaignPlaneSelection))
         {
+            if (_host.Screen == OriginalScreen.CampaignFlightCheck && _campaign.Field.Retreat())
+            {
+                ShowCampaign(OriginalScreen.CampaignFlightCheck);
+                return true;
+            }
+
             AskLeaveSession();
             return true;
         }
@@ -763,10 +790,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         _campaign!.SetMission(flow.MissionSeq);
-        var pads = new List<IReadOnlyList<int>>
+
+        // One pane per seat the host gave this machine, each on its own player's devices.
+        _campaign.Field.SetPlayers(net.CoopSeats);
+        var pads = new List<IReadOnlyList<int>>(net.CoopSeats);
+        for (int local = 0; local < net.CoopSeats; local++)
         {
-            _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
-        };
+            pads.Add(local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>());
+        }
+
         var exit = _campaign.BuildExit(pads);
         if (exit == null)
         {
@@ -815,10 +847,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// setup's.</summary>
     internal void SyncField()
     {
-        // A co-op guest flies one aeroplane whatever its own seats, since the field is the host's.
+        // A co-op guest's players fly the seats its host gave them, which its cap may cut short.
         if (_host.Screen == OriginalScreen.CampaignFlightCheck && _campaign != null)
         {
-            _campaign.Field.SetPlayers(IsGuest ? 1 : _setup.Seats.Count);
+            _campaign.Field.SetPlayers(IsGuest ? _net()?.CoopSeats ?? 1 : _setup.Seats.Count);
         }
     }
 
@@ -870,6 +902,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     };
 
     // The network state's lines over one dark ground, in the painting's empty top-left corner.
+    // The band line the COPY row spans: its first with a code, else its second, the address line.
+    private static float CopyLineY(NetPlayFeature door) =>
+        CoopBandY + (door.JoinCode != null ? 0f : CoopBandSize + 4f);
+
     private static void ComposeBand(string band, BoardLayers layers)
     {
         if (band.Length == 0)
@@ -1401,20 +1437,37 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // the remake's own; the boot itself is the Dogfight lobby's.
     private void AskBoot(int from)
     {
-        if (_net() is not { IsCoopHost: true } net || from >= net.CoopGuests.Count)
+        if (_net() is not { IsCoopHost: true } net)
         {
             return;
         }
 
-        var guest = net.CoopGuests[from];
+        // One question per machine, named by its first seat, since a boot takes all of its seats.
+        var machines = new List<CoopGuest>();
+        foreach (var seat in net.CoopGuests)
+        {
+            if (seat.Local == 0)
+            {
+                machines.Add(seat);
+            }
+        }
+
+        if (from >= machines.Count)
+        {
+            return;
+        }
+
+        // A guest with no callsign is asked about by the player tag its chip shows.
+        var guest = machines[from];
+        string name = guest.Name.Length > 0 ? guest.Name : SplitScreen.PlayerTag(guest.Slot);
         var boot = Yes(() => net.Boot(guest.Peer));
-        if (from + 1 < net.CoopGuests.Count)
+        if (from + 1 < machines.Count)
         {
-            _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
+            _host.RaiseDialog(CoopDoorText.BootQuestion(name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
             return;
         }
 
-        _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, No());
+        _host.RaiseDialog(CoopDoorText.BootQuestion(name), DialogIcon.Query, boot, No());
     }
 
     private void OpenCoopDoor()
@@ -1449,16 +1502,26 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private bool FollowHost(NetPlayFeature net, CoopFlowMessage flow)
     {
         var campaign = _campaign!;
+
+        // Every player at this machine asks for a seat, and flies the ones the host gave.
+        net.LocalSeats = Math.Max(1, _setup.Seats.Count);
+        campaign.Field.SetPlayers(net.CoopSeats);
         int lostTo = campaign.FollowHost(flow.Progress, net.CoopHangar);
-        net.Pick.Set(campaign.GuestAirframe, net.Pick.Ready, campaign.GuestCoopFit);
-        net.Pick.Choose(campaign.GuestPlane);
+        for (int local = 0; local < net.LocalSeats; local++)
+        {
+            var (airframe, fit, plane) = campaign.GuestPickOf(local);
+            var pick = net.PickOf(local);
+            pick.Set(airframe, pick.Ready, fit);
+            pick.Choose(plane);
+        }
+
         bool changed = lostTo >= 0;
         if (lostTo >= 0)
         {
             _host.RaiseDialog(campaign.SeatRefusal(lostTo), DialogIcon.Warning, Ok());
         }
 
-        bool ready = net.CoopReady;
+        bool ready = net.CoopReadyAt(campaign.Field.Current);
         changed |= campaign.GuestReady != ready || net.CoopFlows != _guestFlows;
         campaign.GuestReady = ready;
         if (flow.Screen == NetCoopScreen.Debrief && net.CoopFlows != _guestFlows)
@@ -1474,6 +1537,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         _guestScreen = flow.Screen;
         _guestSeq = flow.MissionSeq;
+
+        // Off the check the walk over this machine's players starts again from the first.
+        if (flow.Screen != NetCoopScreen.FlightCheck)
+        {
+            campaign.Field.Rewind();
+        }
+
         switch (flow.Screen)
         {
             case NetCoopScreen.Briefing:
@@ -1516,6 +1586,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         return pageRow >= 0 && GuestRowLive(screen, _flow!.Page.Button(pageRow).Button);
     }
 
+    // READY marks the check showing and walks on to the next player's at this machine, so the host
+    // waits on every one of them. CANCEL READY takes back every player's mark and starts the walk again.
     private void ToggleGuestReady()
     {
         if (_net() is not { IsCoopGuest: true } net || _campaign == null)
@@ -1523,9 +1595,31 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
-        net.Pick.Set(_campaign.GuestAirframe, !net.Pick.Ready, _campaign.GuestCoopFit);
-        net.Pick.Choose(_campaign.GuestPlane);
-        _campaign.GuestReady = net.Pick.Ready;
+        var field = _campaign.Field;
+        int current = Math.Clamp(field.Current, 0, net.CoopSeats - 1);
+        bool ready = !net.PickOf(current).Ready;
+        for (int local = 0; local < net.LocalSeats; local++)
+        {
+            if (local == current || !ready)
+            {
+                var (airframe, fit, plane) = _campaign.GuestPickOf(local);
+                var pick = net.PickOf(local);
+                pick.Set(airframe, local == current && ready, fit);
+                pick.Choose(plane);
+            }
+        }
+
+        if (!ready)
+        {
+            field.Rewind();
+            ShowCampaign(OriginalScreen.CampaignFlightCheck);
+        }
+        else if (field.Advance())
+        {
+            ShowCampaign(OriginalScreen.CampaignFlightCheck);
+        }
+
+        _campaign.GuestReady = net.PickOf(Math.Clamp(field.Current, 0, net.CoopSeats - 1)).Ready;
     }
 
     // Leaving hangs up; the shell then takes the guest back to the Connection page.
@@ -1563,16 +1657,37 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
+        ComposeBand(CoopDoorText.HostBand(_net()!, _host.CopyWay), layers);
         for (int i = 0; i < rows.Count; i++)
         {
+            bool pressed = !_host.DialogOpen && _host.PressedRow == i;
             if (rows[i].Key is CoopDoorKey or CoopBootKey)
             {
-                bool pressed = !_host.DialogOpen && _host.PressedRow == i;
                 _host.ComposeGenericRow(rows[i], i == focus && !_host.DialogOpen, pressed, i, layers);
             }
+            else if (rows[i].Key == CoopCopyKey)
+            {
+                ComposeCopy(rows[i], i == focus && !_host.DialogOpen, pressed, layers);
+            }
+        }
+    }
+
+    // The COPY box at the right end of the band line its row spans. The word is drawn on that line
+    // and the box stands round it, so the two share a baseline. The focus outlines the box, which
+    // is what a pad presses.
+    private void ComposeCopy(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
+    {
+        var box = row with { X = row.X + row.Width - CoopCopyWidth, Width = CoopCopyWidth };
+        byte ground = pressed ? (byte)90 : (byte)40;
+        layers.Fills.Add(new BoardFill(box.X, box.Y, box.Width, box.Height, ground, ground, ground));
+        layers.Fills.Add(new BoardFill(box.X, box.Y, box.Width, box.Height, 226, 224, 206, Border: true));
+        if (focused)
+        {
+            layers.Fills.Add(_host.FocusMark(box));
         }
 
-        ComposeBand(CoopDoorText.HostBand(_net()!), layers);
+        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, CopyLineY(_net()!), box.Width, CoopBandSize,
+            BoardInk.Row, -1, Justify: BoardJustify.Center, Colour: new BoardTint(226, 224, 206)));
     }
 
     private void ActivateCabin(OriginalRow row, int pageRow)

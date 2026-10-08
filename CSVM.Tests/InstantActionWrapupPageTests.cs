@@ -1,7 +1,7 @@
 using System.Linq;
 using CSVM.Flight.Modes;
+using CSVM.Session.InstantAction;
 using CSVM.UI.Campaign;
-using CSVM.UI.Menu;
 using CSVM.UI.Screens;
 using Xunit;
 

@@ -2955,7 +2955,7 @@ final leg's climb-out.
 
 Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`), **completed for `C21`**
 with the placement, the angular impulse and the partition's inertia correction below (retiring
-`BL-381`): `FlightModel.BounceNormalSpeed`/`BounceRateKick` are the law and `FlightModel.Collide`
+`BL-381`): `FlightModel.BounceImpulse` is the law (`BounceNormalSpeed` exposes its linear half) and `FlightModel.Collide`
 the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep runs on every other sim
 step, as the original's does, with the skipped step's motion carried into the next sweep
 (`SweepCadence`, "What the parity is ported as" below), and every contact it resolves spends the
@@ -3025,6 +3025,24 @@ player-pointer guard to every human-piloted aircraft that `C21` recorded for the
 by the `graze-bounce` suite, which flies a player rig and an AI rig down the same trajectory into the
 same floor and measures `e = 0.56` against `0.00`.
 
+**Remake-only rule: a Dogfight bot seat takes the player's arm.** A bot is AI-piloted but stands in
+a person's seat with a person's hull, so it dies to a contact only when a person in the same plane
+would: it sweeps the airframe hulls, bounces, and is exempt from `local_11` below
+(`FlightController.TakesPersonsContactRule`). It keeps the 0.2 entity cut, the AI force path and the
+AI shakes. World AI keeps the decoded rule. `graze-bounce-bot` flies a person, a bot and world AI
+down `graze-bounce`'s trajectory, and `versus-local-bot-graze` stages a local match's bot into MP1.
+
+**Remake-only rule: a bot's impulse reads `ω` without the AI ground blow's share.** The AI ground
+blow (`0x0048c317`) writes a fixed push straight into `ω` every tick, where the player's law only
+biases the stick. Near the ground it pitches a bot nose-up within a few steps (the Fury staged 25°
+down at 80 m/s over MP1 turns from −25° to +29° in three steps), so the tail strikes carrying that
+rotation, and `vp` above turns it into rebound: read with that share, a bot's restitution across the
+stock airframes spans −0.4 to 7.3 against a person's 0.52 to 0.57. The original never meets this
+case, since its AI takes no impulse. `FlightModel` keeps the blow's deposit as its own decayed share of `ω` and
+`Collide` subtracts it before the impulse, so the bot's rebound is the one a person's state would
+give; the share is always zero on the player path. `graze-bounce-bot` sweeps every stock airframe on
+two trajectories with the blow on, and `versus-local-bot-graze` reads the MP1 staging.
+
 With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
 `I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
 
@@ -3055,8 +3073,7 @@ two momenta, `2.25·|J|` against `|I·u|`, which is also the physically coherent
 Bloodhawk's reciprocal moments near 1.1 the correction moves `f_lin` a few points up
 (`f_lin = 2.25/(2.25 + sinθ/(recI·|r|))`: ≈0.93 at a 5 m arm, ≈0.71 at 1 m), so every direction
 claim below survives it unchanged. Ported: `BounceImpulse` divides by `RecInertia` for the share
-and applies the net kick with no inertia factor; `BounceRateKick` exposes it and `Collide` spends
-it on the body rates in place of the retired fitted `GrazeKick`.
+and applies the net kick with no inertia factor; `Collide` spends it on the body rates in place of the retired fitted `GrazeKick`.
 
 Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
 `[0, 0.6]` as authored.

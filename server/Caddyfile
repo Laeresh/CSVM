@@ -1,0 +1,7 @@
+# HTTPS for the master server. Caddy asks Let's Encrypt for a certificate for the domain on its
+# first start (ports 80 and 443 must be open and the DNS record must point here), renews it, and
+# passes WebSocket upgrades through unchanged.
+{$CSVM_DOMAIN} {
+	encode gzip
+	reverse_proxy master:8080
+}

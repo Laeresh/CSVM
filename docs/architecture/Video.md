@@ -2,7 +2,8 @@
 
 The managed MPEG-1 decoder for the ten `.mpg` cinemas the retail install ships: the system-stream
 demultiplexer, the video and layer II audio decoders under it, and the pure pieces they are built
-from. No type here touches the engine, which is what lets a plain unit test play a whole file.
+from, and the contract every flow that plays a cinema shares. No type here touches the engine,
+which is what lets a plain unit test play a whole file.
 
 One `## src/...` entry per module, body at most 8 lines.
 
@@ -108,7 +109,7 @@ frames' own presentation timestamps, so no rate is written down here and the two
 differ from the other eight need no case of their own. A play count of zero plays endlessly, and
 every pass after the first restarts through `MpegMovie.Rewind`. A step longer than the cap counts
 as the cap, so a window that was not drawing comes back late instead of decoding pictures nobody
-saw. The texture side of this is `CSVM.UI.Screens.MovieSurface`.
+saw. The texture side of this is `CSVM.UI.Boards.MovieSurface`.
 
 ## src/Video/CinemaPlayback.cs
 A cinema playing with its sound: a `MoviePlayback` for the picture, the movie's own track handed
@@ -118,3 +119,12 @@ not, so a long file cannot drift away from its own sound. The two streams' conta
 are taken against each other here, as leading silence or as a lagged picture clock, and neither
 arm discards a sample. Past the last sample the picture runs on the caller's own step instead,
 because two of the ten cinemas end their sound first. The engine half is `CSVM.UI.Screens.CinemaScreen`.
+
+## src/Video/CinemaHandoff.cs
+What every cinema flow shares, below the screens and the session alike. `CinemaPlay` is the shape
+of the call that puts a film on screen, which `Launch/Launcher.cs` satisfies with `PlayCinema`, and
+`CinemaSkip` is a set of presses that end one early, each flow naming its own. `Once` wraps the
+continuation a film hands off to, so the next screen opens once however many times the film says it
+stopped; the boot block chains unwrapped. `CinemaFilm` is for the screen a film stands in front of:
+`Up` says the film owns the frame, and `Swallows` says this frame is the tail of the press that
+ended it. Which press meets which set is `UI/Screens/CinemaSkips.cs`'s.

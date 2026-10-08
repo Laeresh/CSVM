@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Flight.Modes;
+using CSVM.Session.InstantAction;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
-using CSVM.UI.Menu;
 
 namespace CSVM.UI.Screens;
 
@@ -194,7 +194,7 @@ public static class InstantActionWrapupPage
         {
             foreach (string line in splits)
             {
-                if (!line.StartsWith(StuntSplits.TotalLabel + " ", System.StringComparison.Ordinal))
+                if (!line.StartsWith(StuntSummary.TotalLabel + " ", System.StringComparison.Ordinal))
                 {
                     lines.Add(line);
                 }
@@ -441,7 +441,7 @@ public static class InstantActionWrapupPage
     /// with three zones behind it, so the page shows every line family at once.</summary>
     public static IaWrapupSnapshot Sample(bool won) => new(
         won, "C1   ·   Stunt Flying", 186f, 4, 3, 27,
-        new[] { "1.  Pier    12.4    12.4", "2.  Bridge    15.1    27.5", "3.  Tower    18.6    46.1", StuntSplits.TotalLabel + "   46.1" });
+        new[] { "1.  Pier    12.4    12.4", "2.  Bridge    15.1    27.5", "3.  Tower    18.6    46.1", StuntSummary.TotalLabel + "   46.1" });
 
     /// <summary>A stand-in for the longest stunt run the install ships: seventeen zones with a new
     /// best. The screenshot aid then shows the page carrying more than one post-it.</summary>
@@ -462,7 +462,7 @@ public static class InstantActionWrapupPage
             lines.Add($"{i + 1}.  {names[i]}   {StuntMission.FormatTime(split)}   {StuntMission.FormatTime(total)}");
         }
 
-        lines.Add($"{StuntSplits.TotalLabel}   {StuntMission.FormatTime(total)}");
+        lines.Add($"{StuntSummary.TotalLabel}   {StuntMission.FormatTime(total)}");
         lines.Add($"NEW BEST   (was {StuntMission.FormatTime(total + 21.3f)})");
         return new IaWrapupSnapshot(true, "C5   ·   Stunt Flying", total, 0, names.Length, 0, lines);
     }

@@ -246,8 +246,7 @@ internal sealed class SoundChannel
         {
             return;
         }
-        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why}, "
-                       + "it will be silent for the rest of the session");
+        Log.Warn("sound", $"anim: {kind} '{name}' requested after the world build and {why}, it will be silent for the rest of the session");
     }
 
     // The emitter an event's NAME refers to, or null when the name isn't one this definition

@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Session;
-using CSVM.Session.Launch;
 using CSVM.Utils;
 using Godot;
 
@@ -251,7 +252,7 @@ internal static class CraterSuites
             {
                 EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
                 ScorchSink = (at, normal, effectName, carved) =>
-                    GameSession.RegisterScorch(field, at, normal, effectName, carved),
+                    ProjectileStage.RegisterScorch(field, at, normal, effectName, carved),
             };
             pool = live;
             ctx.Host.AddChild(live);
@@ -286,10 +287,10 @@ internal static class CraterSuites
             ctx.Check(Drop(water), $"the rocket reaches the water plate");
             ctx.Same(2, field.LiveMarks, $"and leaves no mark on it, since a projected decal on the sea reads wrong");
 
-            GameSession.RegisterScorch(field, tarmac + new Vector3(200f, 0f, 0f), Vector3.Up, "3040slug_gunhit", carved: false);
+            ProjectileStage.RegisterScorch(field, tarmac + new Vector3(200f, 0f, 0f), Vector3.Up, "3040slug_gunhit", carved: false);
             ctx.Same(2, field.LiveMarks, $"a gun hit carries no fireball and marks nothing even under Enhanced");
 
-            GameSession.RegisterScorch(field, tarmac + new Vector3(300f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: true);
+            ProjectileStage.RegisterScorch(field, tarmac + new Vector3(300f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: true);
             ctx.Same(3, field.LiveMarks, $"a hit that carved a bowl marks the ground it opened");
             ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(2), CraterShape.RimRadius * 1.1f, 1e-3f),
                 $"and rings the carve at 1.1 of the crater radius (radius={field.RadiusOf(2):0.00} m)");
@@ -298,7 +299,7 @@ internal static class CraterSuites
             live.SimStep(Dt);
             field.Tick(5f);
             ctx.Check(field.AgeOf(0) > 0f, $"the first mark has aged");
-            GameSession.RegisterScorch(field, tarmac + new Vector3(1f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: false);
+            ProjectileStage.RegisterScorch(field, tarmac + new Vector3(1f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: false);
             ctx.Same(3, field.LiveMarks, $"a second burst inside a live mark refreshes it instead of stacking a decal on it");
             ctx.Check(Mathf.IsEqualApprox(field.AgeOf(0), 0f),
                 $"and the refreshed mark starts its life over (age={field.AgeOf(0):0.00} s)");
@@ -326,7 +327,7 @@ internal static class CraterSuites
         for (int i = 0; i < 30; i++)
         {
             field.Tick(0.5f);
-            GameSession.RegisterScorch(field, near + new Vector3(0f, 0f, 60f + (i * 60f)), Vector3.Up,
+            ProjectileStage.RegisterScorch(field, near + new Vector3(0f, 0f, 60f + (i * 60f)), Vector3.Up,
                 "he_ground_effect", carved: false);
         }
         ctx.Same(16, field.PooledNodes, $"the pool stops at its cap of 16 decal nodes");
@@ -409,7 +410,7 @@ internal static class CraterSuites
             ctx.Same(before, field.Craters.Count, $"and the ground is left intact, the behaviour every golden is pinned on");
             ctx.Check(off != null, $"the round still burst where it struck ({off?.Name ?? "no play"})");
             // The enhanced scorch is asked on either leg. Uncarved, the burst's own effect decides:
-            // a fireball marks and this rocket's spark does not (GameSession.RegisterScorch).
+            // a fireball marks and this rocket's spark does not (ProjectileStage.RegisterScorch).
             ctx.Check(scorches.Count == 1 && !scorches[0].Carved && scorches[0].Effect == off?.Name,
                 $"the uncarved burst still asks the scorch sink, uncarved, with the effect it played ({(scorches.Count > 0 ? scorches[^1].Effect : "no ask")}, fireball={(scorches.Count > 0 && scorches[^1].Effect is { } burnt && EffectCatalogue.IsBurstLight(burnt))})");
 

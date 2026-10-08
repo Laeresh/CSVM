@@ -1,9 +1,9 @@
 # Gun fire, decoded from `crimson.exe`: how the original emits rounds, and how it answers taking them
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-18, settling the fire-rate half of backlog
-`BL-266`(a). Every claim names the function or address it came from. No decompiler output is
-reproduced; addresses are given so any claim can be re-checked at source.
+`crimson.exe`, `language x86:LE:32:default`). Every claim names the function or address it came
+from. No decompiler output is reproduced; addresses are given so any claim can be re-checked at
+source.
 
 **The question this page answers.** The engine fires the player's guns *one selected slot at a
 time* at the authored `FIRE_RATE` (8.0 for `wep_40`), alternating its two muzzles. A clip of the
@@ -184,9 +184,9 @@ The clip's counter dropped **46 rounds** (2371→2325). At the true `FIRE_RATE` 
 narrower window). This is the same redraw-artifact trap `FINDINGS.md` already flagged. The engine's
 8.0/s is the correct rate; there is no rate shortfall to fix.
 
-## Implication for the gun-rattle amplitude (`BL-266`(a))
+## Implication for the gun-rattle amplitude
 
-With rate ruled out, BL-266's remaining amplitude avenue, the "(B) 60 fps pose-interpolation"
+With rate ruled out, the remaining amplitude avenue, the "(B) 60 fps pose-interpolation"
 loss, is also ruled out and replaced by a **decode, clip-independent** finding: the shake pivot
 is written once per 60 Hz physics tick and Godot auto physics interpolation is OFF, so the 15 Hz
 sawtooth renders stepped with no smoothing loss. After that, what the engine renders is fully
@@ -195,9 +195,9 @@ determined by decoded constants + the oscillator's own math: a kick of envelope 
 kick) renders as **~8e-4 rad RMS = ~0.20 px/frame** at the ±205 px lever. The engine reads under
 the law's literal number **by construction**, not by a pipeline loss;
 `magnitude_factor` was decoded as a kick amplitude but the rendered output is always ~0.28× a
-kick. Whether the look should be ~3.5× stronger to match the original is the clip/fidelity
-judgment, not the decode. Full reconciliation:
-`analysis/gun-wobble-shake/FINDINGS.md`.
+kick. The original's own rendered law, a velocity block whose roll is the `×2.5` component at twice
+its position, is in [`shakes.md`](shakes.md), "The rendered rotation"; the port's envelope reads
+right at the controls. Full reconciliation: `analysis/gun-wobble-shake/FINDINGS.md`.
 
 ## The incoming-fire cues
 

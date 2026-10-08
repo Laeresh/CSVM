@@ -44,6 +44,6 @@ confidence: it runs the checked-in quick unit and engine tiers and names every s
 check. Before landing code, run the complete `.\RunTests.ps1` (build → units → in-engine suites →
 golden hashes → one exit code) only when code under `CSVM/` changed. Quick and targeted runs never
 satisfy that landing gate. `CSVM.Tests/`-only, doc, and tooling changes (this file, `.pi/`,
-`.claude/`, `docs/`, scripts) do not need the full run. Each stage prints its wall time against a
+`.claude/`, `docs/`, scripts) do not need the full run. Each test stage prints its wall time against a
 budget from `analysis/verification-budgets.json`; an `over budget` marker is awareness only and
 never changes the exit code.

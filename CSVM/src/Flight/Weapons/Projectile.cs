@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Flight.Airframe;
-using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -2157,9 +2156,9 @@ public sealed partial class ProjectilePool : Node3D
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane, a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
         var orient = SurfaceBasis(normal);
-        // The puffer half, when a stand-in is owed: hand the name to the world-effects runtime,
-        // which no-ops on a name it does not carry. Gun hits are throttled (GunEffectInterval/Ttl).
-        if (outcome.StandIn != ImpactStandIn.None && outcome.EffectName is { } fxName
+        // The puffer half: hand the name to the world-effects runtime, which no-ops on a name it
+        // does not carry. Gun hits are throttled (GunEffectInterval/Ttl).
+        if (outcome.EffectOwed && outcome.EffectName is { } fxName
             && (!weapon.IsGun || GunEffectDue(fxName)))
             EffectSink?.Invoke(fxName, point, EffectOrient(outcome, normal), UpperRingOrient(velocity),
                 weapon.IsGun ? GunEffectTtl : 0f);
@@ -2709,7 +2708,7 @@ public sealed partial class ProjectilePool : Node3D
         // The typed array is not disposable itself; its untyped core is the finalizable wrapper.
         using var hitsCore = (Godot.Collections.Array)hits;
         if (hits.Count == MaxBlastBodies)
-            GD.PushWarning($"blast query reached {MaxBlastBodies} bodies at radius {radius:0.##} m");
+            Log.Warn("weapons", $"blast query reached {MaxBlastBodies} bodies at radius {radius:0.##} m");
         foreach (var hit in hits)
         {
             var body = hit["collider"].Obj as Node;

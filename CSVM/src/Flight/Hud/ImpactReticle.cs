@@ -38,7 +38,7 @@ public sealed partial class ImpactReticle : Control
             return null;
         }
         var img = Image.LoadFromFile(path);
-        return img != null ? ImageTexture.CreateFromImage(img) : null;
+        return img != null ? TextureUpload.Create(img) : null;
     }
 
     /// <summary>Builds the reticle over the loaded pipper texture and this player's camera. Add it to

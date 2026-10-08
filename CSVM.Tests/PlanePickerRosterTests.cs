@@ -96,15 +96,15 @@ public class PlanePickerRosterTests
     [InlineData(9, "player_peacemaker")]
     [InlineData(10, "player_warhawk")]
     public void AirframeNodesMatchTheStatTableOrder(int airframe, string node) =>
-        Assert.Equal(node, PlanePickerRoster.AirframeNode(airframe));
+        Assert.Equal(node, StockAirframes.Node(airframe));
 
     /// <summary>An out-of-range id clamps like the def's own fields rather than throwing: a
     /// hand-edited save must never break a picker.</summary>
     [Fact]
     public void AirframeNodeClampsOutOfRangeIds()
     {
-        Assert.Equal("player_autogyro", PlanePickerRoster.AirframeNode(-3));
-        Assert.Equal("player_warhawk", PlanePickerRoster.AirframeNode(99));
+        Assert.Equal("player_autogyro", StockAirframes.Node(-3));
+        Assert.Equal("player_warhawk", StockAirframes.Node(99));
     }
 
     /// <summary>The after-build auto-select's lookup: the just-built plane by name, case

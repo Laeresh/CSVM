@@ -3,6 +3,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Spec;
 
 namespace CSVM.UI.Menu;
 
@@ -65,12 +66,12 @@ public sealed record OptionsApplyExit(
 /// <summary>Dogfight's match rules as a screen set them. The kill target ends a match early and the
 /// match clock runs in MINUTES, a 0 on either disabling that limit. The lives are the deaths a pilot
 /// has before it stays down, 0 for no limit. Without auto-respawn a downed pilot waits for its own
-/// press. The two team modes are <paramref name="CaptureTheFlag"/>, with <paramref name="FlagHomeToCapture"/>
-/// its own-flag-home rule, and <paramref name="ZeppelinVsZeppelin"/>. The consumer applies them under the
-/// command line, so an explicit flag still wins.
+/// press. <paramref name="MissionType"/> is the lobby type, and <paramref name="FlagHomeToCapture"/>
+/// Capture the Flag's own-flag-home rule. A Stunt Race reads its window off the match clock. The
+/// consumer applies them under the command line, so an explicit flag still wins.
 /// </summary>
 public sealed record VersusRules(int KillTarget, int TimeLimitMinutes, int Lives = 0, bool AutoRespawn = true,
-    bool CaptureTheFlag = false, bool FlagHomeToCapture = false, bool ZeppelinVsZeppelin = false);
+    DogfightMissionType MissionType = DogfightMissionType.Deathmatch, bool FlagHomeToCapture = false);
 
 /// <summary>The open wire a network launch carries: the transport the door opened and whether
 /// this machine owns the match. The consumer takes it over whole, stepping and closing it from
@@ -82,7 +83,8 @@ public sealed record MenuNetLaunch(INetTransport Transport, bool IsHost);
 /// built <see cref="InstantActionDef"/> and the wingmen's edited fit (null for the stock fit).
 /// Dogfight alone adds the match rules; a null <paramref name="Match"/> leaves the command
 /// line's own kill target and time limit. A network match carries the open wire, null on every
-/// local launch.</summary>
+/// local launch. A local Dogfight carries the join board's bot rows in <paramref name="Bots"/>,
+/// seated after the panes; a network host's come from its lobby instead.</summary>
 public sealed record LaunchExit(
     string Chapter,
     IReadOnlyList<MenuSeatChoice> Seats,
@@ -90,7 +92,8 @@ public sealed record LaunchExit(
     InstantActionDef? InstantAction = null,
     VersusRules? Match = null,
     LoadoutChoice? WingmanLoadout = null,
-    MenuNetLaunch? Net = null) : MenuExit;
+    MenuNetLaunch? Net = null,
+    IReadOnlyList<VsBotEntry>? Bots = null) : MenuExit;
 
 /// <summary>A campaign mission launch: the seated profile's name, the <c>cm_sequence</c> story
 /// position, and one <see cref="MenuSeatChoice"/> per joined human in seat order. Seat 0 is the

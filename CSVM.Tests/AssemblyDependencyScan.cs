@@ -60,6 +60,20 @@ public static class AssemblyDependencyScan
         return violations;
     }
 
+    /// <summary>The distinct outermost namespaces of every type the assembly defines, so a
+    /// test can require that each one is covered by a rule.</summary>
+    public static IReadOnlyList<string> Namespaces(string assemblyPath)
+    {
+        using var stream = File.OpenRead(assemblyPath);
+        using var pe = new PEReader(stream);
+        var md = pe.GetMetadataReader();
+        return md.TypeDefinitions
+            .Select(h => OutermostNamespace(md, md.GetTypeDefinition(h)))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+    }
+
     private static Dictionary<short, OperandType> BuildOpcodeTable()
     {
         var table = new Dictionary<short, OperandType>();

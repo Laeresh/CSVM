@@ -43,7 +43,7 @@ public sealed class NetSessionTests
         Assert.Equal(new[] { 0, 1 }, guest.Seats.Select(s => s.SeatIndex));
         Assert.Equal(new[] { "host", "guest" }, guest.Seats.Select(s => s.Callsign));
         Assert.Equal(Airframes, guest.Seats.Select(s => s.PlaneNode));
-        Assert.Equal(new[] { false, true }, guest.Seats.Select(s => s.IsLocal));
+        Assert.Equal(new[] { false, true }, guest.Seats.Select(s => s.FlownHere));
         Assert.Equal(new[] { 0, 1 }, guest.Seats.Select(s => s.PeerId));
     }
 
@@ -64,8 +64,57 @@ public sealed class NetSessionTests
         Assert.Equal(4, host.Sent);
         Assert.Equal(1, second.LocalSeat);
         Assert.Equal(2, third.LocalSeat);
-        Assert.Equal(new[] { false, true, false }, second.Seats.Select(s => s.IsLocal));
-        Assert.Equal(new[] { false, false, true }, third.Seats.Select(s => s.IsLocal));
+        Assert.Equal(new[] { false, true, false }, second.Seats.Select(s => s.FlownHere));
+        Assert.Equal(new[] { false, false, true }, third.Seats.Select(s => s.FlownHere));
+    }
+
+    // A co-op guest with two players at its machine. The handshake names its first seat and the run
+    // after it, so both entries are its own. A one-seat guest's handshake stays as it was.
+    [Fact]
+    public void A_guest_flying_two_seats_holds_both_and_the_one_seat_guest_beside_it_one()
+    {
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(19));
+        var seats = NetSeats.CoopField(mesh[0].LocalPeer, new[] { Airframes[0] },
+            new[] { (1, Airframes[1], "Lucy"), (1, Airframes[0], ""), (2, Airframes[1], "Ann") });
+        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
+        var pair = NetSession.Guest(mesh[1], Airframes);
+        var single = NetSession.Guest(mesh[2], Airframes);
+        var payload = new byte[HandshakeMessage.Size];
+        int length = new HandshakeMessage(Seed, 0.0, 3).Write(payload);
+
+        pair.Step(0.016);
+        single.Step(0.016);
+
+        Assert.True(pair.Joined);
+        Assert.Equal(1, pair.LocalSeat);
+        Assert.Equal(2, pair.LocalSeatCount);
+        Assert.Equal(new[] { false, true, true, false }, pair.Seats.Select(s => s.FlownHere));
+        Assert.Equal(new[] { "P1", "Lucy", "P3", "Ann" }, pair.Seats.Select(s => s.Callsign));
+        Assert.Equal(3, single.LocalSeat);
+        Assert.Equal(1, single.LocalSeatCount);
+        Assert.Equal(new[] { false, false, false, true }, single.Seats.Select(s => s.FlownHere));
+
+        // ABLE-TO-FAIL CONTROL: a one-seat handshake leaves its spare byte zero, as before.
+        Assert.Equal(HandshakeMessage.Size, length);
+        Assert.Equal(0, payload[21]);
+        Assert.True(HandshakeMessage.TryRead(payload, out var read));
+        Assert.Equal(0, read.Extra);
+        Assert.Equal(1, host.LocalSeatCount);
+    }
+
+    // A handshake whose run reaches past the seat tables is malformed, like a seat past them.
+    [Fact]
+    public void A_handshake_whose_seats_run_past_the_tables_is_malformed()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(23));
+        var guest = NetSession.Guest(mesh[1], Airframes);
+        var payload = new byte[HandshakeMessage.Size];
+        new HandshakeMessage(Seed, 0.0, 14, 2).Write(payload);
+
+        guest.OnPayload(0, 0, payload);
+
+        Assert.Equal(1, guest.Malformed);
+        Assert.Equal(NetMessage.NoSeat, guest.LocalSeat);
     }
 
     [Fact]
@@ -147,6 +196,54 @@ public sealed class NetSessionTests
         Assert.Equal(1, guest.Malformed);
         Assert.Equal(unknown, guest.DroppedUnknown);
         Assert.Equal(0, reached);
+    }
+
+    // A NaN clock throws out of the guest's slew, and a NaN position reaches the pose reset. So a
+    // non-finite float is bad bytes on a bound type, and no handler sees it.
+    [Fact]
+    public void A_clock_ping_or_aircraft_state_carrying_a_nan_is_malformed_not_handled()
+    {
+        var (_, guest) = Joined(18);
+        int reached = 0;
+        guest.On<ClockPingMessage>((_, _) => reached++);
+        guest.On<AircraftStateMessage>((_, _) => reached++);
+        var ping = new byte[ClockPingMessage.Size];
+        var state = new byte[AircraftStateMessage.Size];
+        new ClockPingMessage(1f, float.NaN).Write(ping);
+        State(new Vector3(0f, float.NaN, 0f)).Write(state);
+
+        guest.OnPayload(0, 0, ping);
+        guest.OnPayload(0, 0, state);
+
+        Assert.Equal(2, guest.Malformed);
+        Assert.Equal(0, reached);
+
+        // ABLE-TO-FAIL CONTROL: the same two messages with finite floats reach their handlers.
+        new ClockPingMessage(1f, 2f).Write(ping);
+        State(Vector3.One).Write(state);
+        guest.OnPayload(0, 0, ping);
+        guest.OnPayload(0, 0, state);
+
+        Assert.Equal(2, guest.Malformed);
+        Assert.Equal(2, reached);
+
+        static AircraftStateMessage State(Vector3 at) =>
+            new(0, 1, at, Quaternion.Identity, Vector3.Zero, 0.5f, 0f, 0f, 0f, false);
+    }
+
+    // The handshake's clock opens the guest's slew, which throws on an infinite offset.
+    [Fact]
+    public void A_handshake_carrying_a_non_finite_clock_is_malformed()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(24));
+        var guest = NetSession.Guest(mesh[1], Airframes);
+        var payload = new byte[HandshakeMessage.Size];
+        new HandshakeMessage(Seed, double.PositiveInfinity, 1).Write(payload);
+
+        guest.OnPayload(0, 0, payload);
+
+        Assert.Equal(1, guest.Malformed);
+        Assert.Equal(NetMessage.NoSeat, guest.LocalSeat);
     }
 
     [Fact]
@@ -292,6 +389,187 @@ public sealed class NetSessionTests
         Assert.Equal(0, host.Relayed);
     }
 
+    // A guest speaks for its own seats alone. Its death or pose report for another seat is
+    // dropped before the relay and the handler, and logged once per peer and type.
+    [Fact]
+    public void A_report_for_a_seat_the_sender_does_not_fly_is_neither_relayed_nor_handled()
+    {
+        var (host, first, second) = Star(41);
+        host.RequireSeatOwner<DeathMessage>(death => death.VictimSeat);
+        host.RequireSeatOwner<AircraftStateMessage>(sample => sample.Seat);
+        host.RelayToOthers<DeathMessage>();
+        host.RelayToOthers<AircraftStateMessage>();
+        var deaths = new List<DeathMessage>();
+        var samples = new List<AircraftStateMessage>();
+        int relayedDeaths = 0;
+        host.On<DeathMessage>((_, death) => deaths.Add(death));
+        host.On<AircraftStateMessage>((_, sample) => samples.Add(sample));
+        second.On<DeathMessage>((_, _) => relayedDeaths++);
+        second.On<AircraftStateMessage>((_, _) => { });
+        var lines = new List<string>();
+
+        using (CSVM.Utils.Log.PushConsoleSink(lines.Add))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                first.Send(first.HostPeer, new DeathMessage(0, 1, NetDeathCause.Killer, 0u), NetChannels.Events);
+                first.Send(first.HostPeer, new DeathMessage(2, 1, NetDeathCause.Killer, 0u), NetChannels.Events);
+            }
+
+            first.Send(first.HostPeer, new AircraftStateMessage(
+                2, ushort.MaxValue, Vector3.Up * 900f, Quaternion.Identity, default, 1f, 0f, 0f, 0f, false), NetChannels.ForSeat(2));
+            host.Step(0.016);
+            second.Step(0.016);
+        }
+
+        Assert.Empty(deaths);
+        Assert.Empty(samples);
+        Assert.Equal(0, relayedDeaths);
+        Assert.Equal(0, host.Relayed);
+        Assert.Equal(7, host.Forged);
+        Assert.Equal(2, lines.Count(line => line.Contains("from peer 1", StringComparison.Ordinal)));
+
+        // ABLE-TO-FAIL CONTROL: the same guest's report of its own seat's death is scored and relayed.
+        first.Send(first.HostPeer, new DeathMessage(1, 0, NetDeathCause.Killer, 0u), NetChannels.Events);
+        host.Step(0.016);
+        second.Step(0.016);
+
+        Assert.Single(deaths);
+        Assert.Equal(1, deaths[0].VictimSeat);
+        Assert.Equal(1, relayedDeaths);
+        Assert.Equal(1, host.Relayed);
+        Assert.Equal(7, host.Forged);
+    }
+
+    // A forwarded payload keeps the channel it arrived on, and a carrier's send throws past the
+    // layout's width. Out-of-range channels must die at the door, not inside the host's step.
+    [Fact]
+    public void A_payload_on_a_channel_past_the_layout_is_dropped_before_the_relay()
+    {
+        var wire = new StrictCarrier();
+        var host = NetSession.Host(wire, Roster()
+            .Append(new NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "second", PlaneNode = Airframes[0] })
+            .ToArray(), Seed, null, Airframes);
+        host.RelayToOthers<FireMessage>();
+        int handled = 0;
+        host.On<FireMessage>((_, _) => handled++);
+        var payload = new byte[NetSession.SendBufferBytes];
+        int length = new FireMessage(1, 7, 3, Vector3.Up, Vector3.Forward, NetMessage.NoSeat).Write(payload);
+        int unknown = host.DroppedUnknown;
+
+        host.OnPayload(1, 200, payload.AsSpan(0, length));
+        host.OnPayload(1, -1, payload.AsSpan(0, length));
+
+        Assert.Equal(unknown + 2, host.DroppedUnknown);
+        Assert.Equal(0, host.Relayed);
+        Assert.Equal(0, handled);
+
+        // ABLE-TO-FAIL CONTROL: the same bytes on the seat's own fire channel are relayed and handled.
+        host.OnPayload(1, NetChannels.ForFire(1), payload.AsSpan(0, length));
+
+        Assert.Equal(1, host.Relayed);
+        Assert.Equal(1, handled);
+        Assert.Throws<ArgumentOutOfRangeException>(() => wire.Send(2, payload.AsSpan(0, length), NetReliability.Reliable, 200));
+    }
+
+    // The host's bots share its peer and are flown there with no pane. A guest's copy reads them as
+    // the host's seats, flown elsewhere, with their skill. It still holds its own seat by the
+    // handshake although bots sit after it.
+    [Fact]
+    public void A_guest_sees_the_hosts_bots_as_host_seats_it_does_not_fly()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(29));
+        var seats = Roster()
+            .Append(NetSeats.Bot(0, 2, "Ace Bot", Airframes[1], NetBotSkill.Ace, team: 2))
+            .Append(NetSeats.Bot(0, 3, "Novice Bot", Airframes[0], NetBotSkill.Novice))
+            .ToArray();
+        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
+        var guest = NetSession.Guest(mesh[1], Airframes);
+
+        guest.Step(0.016);
+
+        Assert.True(guest.Joined);
+        Assert.Equal(1, guest.LocalSeat);
+        Assert.Equal(1, guest.LocalSeatCount);
+        Assert.Equal(new[] { NetPilot.Human, NetPilot.Human, NetPilot.Bot, NetPilot.Bot }, guest.Seats.Select(s => s.Pilot));
+        Assert.Equal(new[] { NetBotSkill.Ace, NetBotSkill.Novice }, guest.Seats.Skip(2).Select(s => s.Skill));
+        Assert.Equal(new[] { false, true, false, false }, guest.Seats.Select(s => s.FlownHere));
+        Assert.Equal(new[] { false, true, false, false }, guest.Seats.Select(s => s.HasPane));
+        Assert.Equal(new[] { 0, 1, 0, 0 }, guest.Seats.Select(s => s.PeerId));
+        Assert.Equal(new[] { "host", "guest", "Ace Bot", "Novice Bot" }, guest.Seats.Select(s => s.Callsign));
+        Assert.Equal(2, guest.Seats[2].TeamId);
+        NetSeats.Validate(guest.Seats);
+
+        // ABLE-TO-FAIL CONTROL: on the host the same bots are flown here, and still hold no pane.
+        Assert.Equal(new[] { true, false, true, true }, host.Seats.Select(s => s.FlownHere));
+        Assert.Equal(new[] { true, false, false, false }, host.Seats.Select(s => s.HasPane));
+        Assert.Equal(1, host.LocalSeatCount);
+        Assert.Equal(0, host.PeerOfSeat(2));
+        Assert.False(host.SendToSeat(2, new HitMessage(2, 1, 5, 1f, 0, Vector3.Zero)));
+        Assert.True(guest.SendToSeat(2, new HitMessage(2, 1, 5, 1f, 0, Vector3.Zero)));
+    }
+
+    // A bot's team does not put its host on that team's chat. A team line reaches the machines
+    // that seat a person on the typist's team.
+    [Fact]
+    public void A_hosts_bot_does_not_admit_the_host_to_its_teams_lines()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(31));
+        var seats = new[]
+        {
+            new NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, TeamId = 1, Callsign = "host" },
+            new NetSeat { PeerId = 1, SeatIndex = 1, TeamId = 2, Callsign = "guest" },
+            NetSeats.Bot(0, 2, "bot", Airframes[0], team: 2),
+        };
+        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
+
+        Assert.False(host.FliesOnTeam(0, 2));
+        Assert.True(host.FliesOnTeam(1, 2));
+
+        // ABLE-TO-FAIL CONTROL: the host's own person still admits it to its team.
+        Assert.True(host.FliesOnTeam(0, 1));
+    }
+
+    // A bot is flown by its host alone. A roster that seats one at 0, or names a guest's machine
+    // as its owner, is malformed and the guest keeps the field it had.
+    [Fact]
+    public void A_roster_with_a_bot_at_seat_0_or_off_the_host_is_malformed()
+    {
+        var (_, guest) = Joined(37);
+        var before = guest.Seats.Select(s => s.Callsign).ToArray();
+        var payload = new byte[SeatRosterMessage.SizeFor(2)];
+
+        new SeatRosterMessage(1u, new List<NetSeatEntry>
+        {
+            new(0, 0, 0, true, "bot", Pilot: NetPilot.Bot),
+            new(1, 0, 1, false, "guest"),
+        }).Write(payload);
+        guest.OnPayload(0, 0, payload);
+        new SeatRosterMessage(1u, new List<NetSeatEntry>
+        {
+            new(0, 0, 0, true, "host"),
+            new(1, 0, 1, false, "bot", Pilot: NetPilot.Bot),
+        }).Write(payload);
+        guest.OnPayload(0, 0, payload);
+
+        Assert.Equal(2, guest.Malformed);
+        Assert.Equal(before, guest.Seats.Select(s => s.Callsign));
+
+        // ABLE-TO-FAIL CONTROL: the host's own bot after the guest is taken.
+        var three = new byte[SeatRosterMessage.SizeFor(3)];
+        new SeatRosterMessage(1u, new List<NetSeatEntry>
+        {
+            new(0, 0, 0, true, "host"),
+            new(1, 0, 1, false, "guest"),
+            new(2, 0, 1, true, "bot", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
+        }).Write(three);
+        guest.OnPayload(0, 0, three);
+
+        Assert.Equal(2, guest.Malformed);
+        Assert.Equal(new[] { "host", "guest", "bot" }, guest.Seats.Select(s => s.Callsign));
+        Assert.True(guest.Seats[2] is { IsBot: true, FlownHere: false, Skill: NetBotSkill.Ace });
+    }
+
     // A guest talks to the host and to nobody else. It has no relay to register, and a send to
     // its own seat leaves the machine as nothing at all.
     [Fact]
@@ -309,7 +587,7 @@ public sealed class NetSessionTests
 
     private static NetSeat[] Roster() => new NetSeat[]
     {
-        new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+        new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
         new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
     };
 
@@ -338,6 +616,37 @@ public sealed class NetSessionTests
         var guest = NetSession.Guest(mesh[1], Airframes);
         guest.Step(0.016);
         return (host, guest);
+    }
+
+    // A host's carrier with two guests that refuses a channel past the layout, as the socket
+    // carriers do. It carries nothing.
+    private sealed class StrictCarrier : INetTransport
+    {
+        public int LocalPeer => 0;
+
+        public IReadOnlyList<int> Peers { get; } = new[] { 1, 2 };
+
+        public void Bind(INetTransportListener listener)
+        {
+            foreach (int peer in Peers)
+            {
+                listener.OnPeerConnected(peer);
+            }
+        }
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(channel);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(channel, NetChannels.Count);
+        }
+
+        public void Disconnect(int peer)
+        {
+        }
+
+        public void Step(double dt)
+        {
+        }
     }
 
     // A transport that keeps what it was handed instead of carrying it. A send's reliability

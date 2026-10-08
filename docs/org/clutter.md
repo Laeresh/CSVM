@@ -166,7 +166,8 @@ means skip the overlay, so the layer beneath stamps instead. C5's flagged ground
 `cblock4/5/6` (low-rise, ≤52 m) and its clear ground by `cblock1/2/3/7` (towers, ≤108 m). Measured
 over every `cblock1/2/3/7` polygon by exact XZ polygon-intersection area, odds ratio **1,036.8×**,
 and confirmed at the controls. Getting it backwards buries the pavement between the blocks under
-oversized towers.
+oversized towers. Flagged overlay with no coplanar base beneath it (7.6 % of C5's ground) is left
+undecorated, and the original leaves the same patches bare.
 
 ⚠ **The gate and any "these districts are buried, suppress them" exemption are ONE COUPLED
 CHANGE.** The gate alone empties C5's downtown (its ground *is* the flagged layer, whose dresser

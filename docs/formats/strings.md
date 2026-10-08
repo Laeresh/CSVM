@@ -102,7 +102,7 @@ Blocks are contiguous and stable, which is what makes the unnamed ranges usable:
 | 9–~60 | The font table (above) |
 | 100–199 | Common UI labels (`OK`, `Cancel`) |
 | 200–299 | Validation and confirmation messages |
-| 500–599 | Pilot names and skill ratings |
+| 500–599 | Save-game and settings strings: the default player name (`IDS_DEFAULTPLAYERNAME`, 500), the five quality words Poor to Excellent (`IDS_QUALITY`, 501–505), the campaign's named planes (511–517, "Gypsy Magic"), and format strings. No pilot-name pool: the character names are the message table's ([missions.md](missions.md#message-table)) |
 | 700–799 | Purchase / sell prompts |
 | 1000–1099 | Hangar and plane-customisation labels |
 | 1100–1199 | Options screens (graphics, audio, controls) |

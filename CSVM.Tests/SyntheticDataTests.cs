@@ -3,8 +3,8 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.Session.Launch;
 using CSVM.Tooling;
 using CSVM.UI.Menu.Original;
 using Xunit;
@@ -118,7 +118,7 @@ public class SyntheticDataTests
         string stray = Path.Combine(root, "extracted", "C1", "texture", "probe_stray.png");
         File.WriteAllBytes(stray, Array.Empty<byte>());
 
-        SyntheticData.Build(TestData.Fixture(), root);
+        SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);
 
         Assert.False(File.Exists(stray));
     }
@@ -131,7 +131,7 @@ public class SyntheticDataTests
         Directory.CreateDirectory(Path.GetDirectoryName(stamp)!);
         File.WriteAllText(stamp, $"{{ \"schema\": {ExtractionStamp.Schema} }}");
 
-        Assert.Throws<IOException>(() => SyntheticData.Build(TestData.Fixture(), root));
+        Assert.Throws<IOException>(() => SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies));
         Assert.True(File.Exists(stamp));
         Assert.False(SyntheticData.Marks(root));
     }
@@ -141,14 +141,14 @@ public class SyntheticDataTests
     {
         string root = Path.Combine(TestData.TempDir(), "root");
         Assert.Throws<DirectoryNotFoundException>(
-            () => SyntheticData.Build(Path.Combine(TestData.TempDir(), "absent"), root));
+            () => SyntheticData.Build(Path.Combine(TestData.TempDir(), "absent"), root, SyntheticShell.TreeFamilies));
         Assert.False(SyntheticData.Marks(root));
     }
 
     private static string Built()
     {
         string root = Path.Combine(TestData.TempDir(), "root");
-        SyntheticData.Build(TestData.Fixture(), root);
+        SyntheticData.Build(TestData.Fixture(), root, SyntheticShell.TreeFamilies);
         return root;
     }
 

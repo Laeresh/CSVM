@@ -69,19 +69,27 @@ public static class EffectCatalogue
     /// <summary>What a vehicle def naming no <c>stop_props_anim</c> winds them down with.</summary>
     public const string DefaultStopPropsAnim = "stopprops";
 
-    // The middle of damage_shakes.zrd.json's three `*_aishake` defs, the plane-rocking half of the
-    // camera shake a person at the controls gets instead. FlightController plays it on an AI's
-    // nitro engage, the one trigger of the three the executable's shake player is decoded on, and
-    // CrashRigAnimNames binds it beside the nitro defs.
-    // ⚠ Its authored NAME is `bloodhawk`, which resolves nothing in a per-plane rig, so it reaches
-    // the aircraft through Play's PlaneModel fallback exactly as those do.
+    // damage_shakes.zrd.json's three `*_aishake` defs: an AI's plane-rocking twin of the camera
+    // block a person gets. Indexed as the original's shake player indexes them (docs/org/shakes.md,
+    // "The seven component blocks and every kicker").
+    // ⚠ Their authored NAME `bloodhawk` resolves nothing in a per-plane rig. They reach the
+    // aircraft through Play's PlaneModel fallback, exactly as the nitro defs do.
+    public const string SmallAiShakeAnim = "small_aishake";
     public const string AiShakeAnim = "medium_aishake";
+    public const string LargeAiShakeAnim = "large_aishake";
+
+    /// <summary>Past this multiple of rated max, an AI's per-frame update rocks it with
+    /// <see cref="AiShakeAnim"/>. The literal 1.2 at <c>0x006040ac</c>, read at <c>0x0048d1ef</c>.</summary>
+    public const float AiOverspeedShakeRatio = 1.2f;
 
     // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i].
     // ⚠ Unlike the crash family it has no bare last-resort anim: an unanswerable slot plays
     // nothing, so TouchdownDefTable passes a null lastResort. Built once per level (a global),
     // where the crash vector is per-plane, mirrored here against the world program.
     public const string TouchdownDefPrefix = "touchdown_";
+
+    /// <summary>The three <c>*_aishake</c> defs in the original's index order, small first.</summary>
+    public static readonly string[] AiShakeAnims = { SmallAiShakeAnim, AiShakeAnim, LargeAiShakeAnim };
 
     // The impact/destruction/graze effect animation names the world-effects runtime binds; the
     // closure of these is staged and playable via PlayEffectAt.
@@ -333,6 +341,14 @@ public static class EffectCatalogue
         return false;
     }
 
+    /// <summary>The <c>*_aishake</c> def a round taken plays on an AI (<c>FUN_004b9bc0</c>,
+    /// <c>0x004b9c95</c>-<c>0x004b9d0e</c>). Small, except for a <c>HIGH_EXPLOSIVE</c> round. That
+    /// one goes by squared burst distance: medium inside 400, large inside 100.</summary>
+    public static string AiShakeForHit(bool highExplosive, float distanceSq) =>
+        !highExplosive || distanceSq > 400f ? SmallAiShakeAnim
+        : distanceSq > 100f ? AiShakeAnim
+        : LargeAiShakeAnim;
+
     /// <summary>Everything the per-player crash rig binds, which is every def that plays ON one
     /// aircraft. That is every playable crash-vector slot, since the struck surface is known only at
     /// impact. It adds the four damage shims, the prop choreography, both damage-stage menus and the
@@ -350,7 +366,7 @@ public static class EffectCatalogue
                 if (!names.Contains(prop, StringComparer.OrdinalIgnoreCase))
                     names.Add(prop);
         names.AddRange(NitroAnims);
-        names.Add(AiShakeAnim);
+        names.AddRange(AiShakeAnims);
         names.AddRange(DamageStageAnims);
         if (humanPiloted)
             names.AddRange(CanopyHoleAnims);

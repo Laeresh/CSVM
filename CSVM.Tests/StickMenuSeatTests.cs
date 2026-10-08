@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Bindings;
 using CSVM.Sticks;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
 using Xunit;

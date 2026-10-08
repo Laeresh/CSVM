@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM;
 using CSVM.Flight.Hangar;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
@@ -198,7 +199,7 @@ public class PlayerSetupFeatureTests
     {
         var custom = new CustomPlaneDef { Name = "Blue Streak", Airframe = 7 };
         var setup = new PlayerSetupFeature();
-        setup.SetRoster(PlayerSetupFeature.BuildRoster(Stock, new[] { custom }, PlanePickerRoster.AirframeNode));
+        setup.SetRoster(PlayerSetupFeature.BuildRoster(Stock, new[] { custom }, StockAirframes.Node));
         var a = setup.Join(new ScriptedMenuSeat())!;
         var b = setup.Join(new ScriptedMenuSeat())!;
         setup.Browse(a, 2);
@@ -217,7 +218,7 @@ public class PlayerSetupFeatureTests
         Assert.Same(a.Fit, choices[0].Fit);
         Assert.Null(choices[0].Custom);
         Assert.Empty(choices[0].Pads);
-        Assert.Equal(PlanePickerRoster.AirframeNode(7), choices[1].PlaneNode);
+        Assert.Equal(StockAirframes.Node(7), choices[1].PlaneNode);
         Assert.Null(choices[1].Fit);
         Assert.Same(custom, choices[1].Custom);
         Assert.Equal(new[] { 2 }, choices[1].Pads);
@@ -303,7 +304,7 @@ public class PlayerSetupFeatureTests
             new CustomPlaneDef { Name = "Minx", Airframe = 0 },
         };
 
-        var rows = PlayerSetupFeature.BuildRoster(Stock, customs, PlanePickerRoster.AirframeNode);
+        var rows = PlayerSetupFeature.BuildRoster(Stock, customs, StockAirframes.Node);
         var picker = PlanePickerRoster.Build(Stock, customs);
 
         Assert.Equal(picker.Select(p => p.Name), rows.Select(r => r.Name));
@@ -454,7 +455,7 @@ public class PlayerSetupFeatureTests
     private static PlayerSetupFeature Setup()
     {
         var setup = new PlayerSetupFeature();
-        setup.SetRoster(PlayerSetupFeature.BuildRoster(Stock, Array.Empty<CustomPlaneDef>(), PlanePickerRoster.AirframeNode));
+        setup.SetRoster(PlayerSetupFeature.BuildRoster(Stock, Array.Empty<CustomPlaneDef>(), StockAirframes.Node));
         return setup;
     }
 

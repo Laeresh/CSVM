@@ -70,6 +70,12 @@ or Teredo one; `LanIPv4()` is the private IPv4 address on an adapter with a gate
 `Choose`, `ChooseLan` and `ParseLinuxTable` take data, so a unit test supplies the candidates.
 `EnetTransport` binds the stable address, and `NetCarrier` hands both reads to the door.
 
+## src/Utils/MasterAddress.cs
+A master server's address as the options file and `--master-server=` spell it: `Parse` takes an
+http or https URL or a bare host name (which takes https), keeps a path prefix, and refuses a
+query or another scheme; `At` is the URL of a path under it, a socket's in the ws or wss scheme of
+the same security. Plain text work over `Uri`. Read `MasterWireTests.cs`.
+
 ## src/Utils/BuildVersion.cs
 The build's own version, read once from `application/config/version` in `project.godot`, which is
 the number's one home. Three surfaces state it back so a report names its build without being
@@ -108,7 +114,7 @@ up from a dark tone over about a second once the session reports the first frame
 meant to see. Owns the tone, the fade length, the clamp on the huge delta a blocking build hands
 the frame that closes over it, and the hold cap that releases a cover no session ever answers. A
 `--det` run builds a disabled ramp that covers nothing, so no pinned golden and no `--frames=N`
-shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Session/Launch/Launcher.cs` owns when
+shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Launch/Launcher.cs` owns when
 one is raised.
 
 ## src/Utils/HitchMonitor.cs
@@ -159,7 +165,7 @@ direct. Why the wait matters: `docs/verification.md` PERF-43.
 
 ## src/Utils/SceneCopy.cs
 A node subtree's copy for the three places that duplicate one in play: the splitscreen cloud decks
-(`Session/Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
+(`Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
 export (`Tooling/GltfExporter.cs`). `Duplicate()` builds each geometry node's property list, which
 under the separate render thread queues a call that writes into the caller's finished stack frame
 and kills the process. The copy reads a geometry node's properties off its class, then its
@@ -167,14 +173,13 @@ metadata, surface materials and blend shapes; other nodes copy through their own
 uniforms stay behind, as under `Duplicate()`.
 
 ## src/Utils/TextureUpload.cs
-New pixels for a texture the game repaints while it runs: the ground shadow's silhouette, the world
-light table, the cinema and the menu movies. Each upload builds its own `Image`, because under the
-separate render thread the update is queued and read later, and an Image refilled in place with
-`SetData` swaps its buffer under that reader. `Create` makes the texture and `Replace` hands it the
-next picture, holding each Image by a second native reference until the render thread lets go, so
-that thread never swaps the C# wrapper's GC handle, a swap that corrupts the managed heap when it
-races the main thread's. The live alpha-depth follow hands a finished mipmapped Image to the same
-holding `Replace`.
+Every hand-over of an `Image` to a texture: the archive's textures, generated cards and HUD art at
+creation, and the repaints (ground shadow, light table, movies, the alpha-depth follow). Under the
+separate render thread an update is queued and read later, and a headless run queues creation too,
+so each upload builds its own Image. `Create` makes a texture and `Replace` hands it the next
+picture, holding each Image by a second native reference until the render thread lets go, so that
+thread never swaps the C# wrapper's GC handle, a swap that races the main thread and the finalizer.
+`Create` takes `callerKeeps` for a picture the caller still owns.
 
 ## src/Utils/SwitchProfile.cs
 The live graphics-mode switch's stopwatch: `EnhancedLook.Switch` and `GameSession.ApplyGraphicsMode`
@@ -251,7 +256,8 @@ runs Verbose and adds a `[perf] gc-types` line naming the allocation sampler's m
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names
 are the `public const string` fields on `Rng` itself, each carrying the reason it is its own
-stream. `Reset(master, pinned)` runs once per session build, before anything draws; `Stream(name)`
+stream; `Bots` and `BotField` exist because only the host builds a network bot's pilot and seats
+its field, so those draws must stay off any stream both ends share. `Reset(master, pinned)` runs once per session build, before anything draws; `Stream(name)`
 is the shared generator, `SeedFor` / `IntSeedFor` the pure seed, and `NewIntSeed` /
 `NewSystemRandom` a per-instance stream off the subsystem's own. Unpinned, the master comes from
 `TimeSeed()` so the shipped game keeps its variety; a scripted flag implies `--det` and pins it.
@@ -273,7 +279,7 @@ a present key, else the caller's in-code `const` default, read through at the po
 are `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to
 dot-keys. Nothing writes the file and `config.json` is git-ignored, so the consts stay canonical;
 querying a key is also what registers it for `--dump-config`. `Config` names none of the modules
-that read it: the startup read of every key is `Session/Launch/TuningWarmup.cs`.
+that read it: the startup read of every key is `Launch/TuningWarmup.cs`.
 
 ## src/Utils/EffectsLevel.cs
 The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
@@ -293,30 +299,39 @@ session, refuses one. `--graphics=` beats the saved `graphicsMode` option (`Opti
 beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
 and falls back. `--det` drops both machine-state layers and keeps only an explicit `--graphics=`,
 which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is
-written up as a divergence in `docs/architecture/Root.md`.
+written up as a divergence in `docs/architecture/Spec.md`.
+
+## src/Utils/WordSetting.cs
+The source order the four word-valued graphics settings share (`AntiAliasingSetting`, `RenderScaleSetting`,
+`ShadowQualitySetting`, `ViewDistance`), each holding one instance as its `Lookup` over its words, key and flag. `Resolve`
+takes the flag where the setting has one, then the saved word, then the config key, then the fallback the setting hands
+it; a word outside the list falls through, a key spelling the fallback reads as it, and an unknown config word the lookup
+reaches warns. The result is a `ResolvedWord` carrying a `SettingSource`, and `SourceName` spells that source for a log
+line (`options.json`, the key, the flag, `default` or shadow quality's GPU rules). `ReadSaved` is the `--det` guard each
+setting's `SavedWord` goes through. `Spec/SessionSpec.cs` parses a setting's flag through its `Lookup`.
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
-`taa` or `fsr2`. `Resolve` layers the saved `antiAliasing` word, then the `graphics.antiAliasing` config key, then
-`DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced; an unknown config word warns and
-falls back. A chosen method is written whichever mode won, since only the default follows the mode. `SavedWord` holds the
+`taa` or `fsr2`. `Resolve` runs `WordSetting` over the saved `antiAliasing` word, then the `graphics.antiAliasing` config
+key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
+written whichever mode won, since only the default follows the mode. `SavedWord` holds the
 `--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
 ## src/Utils/ShadowQualitySetting.cs
-The Enhanced sun's shadow quality, a VIDEO page row over `Words`: `off`, `low`, `medium`, `high` or `ultra`.
-`Resolve` layers `--shadow-quality=`, the saved `shadowQuality` word, the `graphics.shadowQuality` config key, then
-`DefaultFor(det)`: `ultra`, or `high` where the GPU reports integrated (the Steam Deck), and `ultra` under `--det` everywhere;
-`SavedWord` holds the `--det` guard. Each word maps to a `SunShadowPlan`:
-whether the sun casts, its angular distance and blur, and the renderer-wide soft filter and atlas edge. `ApplyTo` is the one
-writer, re-runnable, called by `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing
-on the faithful path and bumps `Revision`, which the cockpit pass (`Flight/Hud/CockpitOverlay.cs`) re-copies the sun on. The
-split-screen panes share the world's one sun. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
+The Enhanced sun's shadow quality, a VIDEO page row over `Words` (`off` to `ultra`). `Resolve` runs `WordSetting` over `--shadow-quality=`,
+the saved `shadowQuality` word, the `graphics.shadowQuality` key, then `DefaultFor(det)`: `ultra` under `--det`, otherwise
+`FallbackFor(integrated, panes)`, which is `ultra` on a discrete GPU, `high` on an integrated one (the Steam Deck) and `off`
+there at three or four panes (source `default_integrated_gpu_panes`). `Pick` is the same lookup without the store; `SavedWord`
+holds the `--det` guard. `Launch/GameSession.cs` calls `ResolveForPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
+casts, its angular distance and blur, and the renderer's soft filter and atlas edge. `ApplyTo` is the one writer, called by
+`Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing on the faithful path and bumps
+`Revision`, which the cockpit pass re-copies the sun on. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
-there are four viewports to write them on: the root viewport `Session/Launch/Launcher.cs` owns, and the SubViewports
+there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports
 `Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` build. `Apply` runs once per viewport at
 construction and remembers it weakly; `ReapplyAll` writes the settings resolved now on every one still alive (a live mode switch, an Options apply). FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
 `Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
@@ -329,14 +344,14 @@ label table beside them, resolving to how much further the clutter draws than th
 mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
 haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
 the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
-is chosen. `Resolve` layers `--view-distance`, the saved word (never under `--det`), the
-`graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
+is chosen. `Resolve` runs `WordSetting` over `--view-distance`, the saved word (never under `--det`),
+the `graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
 cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
 
 ## src/Utils/SunShadow.cs
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
 plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
-graphics-mode switch, and `Session/Launch/EnhancedLook.cs` resets the session sun from a fresh light
+graphics-mode switch, and `Launch/EnhancedLook.cs` resets the session sun from a fresh light
 through it. Below Flight and Session so both share one field list.
 
 ## src/Utils/VSyncSetting.cs
@@ -347,7 +362,7 @@ config key (true turns it on), then off and uncapped; a word outside `DisplayWor
 reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
 `--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
 called, by `Launcher`'s startup and its Options apply, and logs the source that won. The cap is a
-render rate and reaches no simulation. Read `Session/Launch/Launcher.cs` next for both call sites.
+render rate and reaches no simulation. Read `Launch/Launcher.cs` next for both call sites.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
@@ -382,9 +397,8 @@ the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a windo
 ## src/Utils/RenderScaleSetting.cs
 The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at. Above native the
 image is resampled down, spending GPU headroom on edges; below native it is upscaled, buying frame rate on a machine
-without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` layers the
-saved `renderScale` word, then the `graphics.renderScale` config key, then native; an unknown word reads as never set and
-a key spelling native reads as the default. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
+without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` runs
+`WordSetting` over the saved `renderScale` word, then the `graphics.renderScale` config key, then native. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
 to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
@@ -397,12 +411,22 @@ block, where the same predicate drives both window hiding and the interactive ru
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
 display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
-independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
+independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
-distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
+distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes through `AtomicFile`. Under `--run-tests`, `UserOptions()` uses an emptied scratch
 directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` and those boxes' OK are its writers.
+
+## src/Utils/AtomicFile.cs
+Whole-file replacement for player data: `WriteAllText` writes BOM-less UTF-8 to `<path>.tmp`, then
+one `File.Move` with overwrite puts it over the target. A kill or a full disk mid-write therefore
+leaves the previous file, or none on a first save, never a truncated one, which `File.WriteAllText`
+on the target would. A temp file a killed write left is overwritten by the next. IO failures reach
+the caller, since each store keeps its own policy for a failed save. The writers are the player-data
+stores and the two UPnP memories. The options, keymap and stick-profile stores also read through
+`ReadAllText`: a failed read leaves the path unwritable until a reread succeeds, and `SetAside` moves
+a file their parser refuses to `.bad`, so defaults saved in its place never replace a hand edit.
 
 ## src/Utils/AudioBuses.cs
 The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`
@@ -410,7 +434,7 @@ and `Voice` sending into it. A resource rather than an `AudioServer.AddBus` call
 bus exists before the first node enters the tree. Every site that builds an `AudioStreamPlayer` or
 `AudioStreamPlayer3D` sets `Bus` from here at construction, because Godot resolves an unknown or
 unset bus name to Master with no error and a misplaced player is therefore silent about it. Bus 0
-carries the developer `--volume=` gain and the focus mute (`Session/Launch/Launcher.cs`); the three
+carries the developer `--volume=` gain and the focus mute (`Launch/Launcher.cs`); the three
 children carry the player's mix, written by `AudioMix`. The `audio-buses` suite holds both.
 
 ## src/Utils/AudioMix.cs
@@ -418,7 +442,7 @@ The player's mix: four 0..100 levels (Master, Music, Effects, Voice) into one li
 `category/100 x master/100`, floored at -80 dB so a level of 0 is silence rather than negative infinity. Master multiplies
 the other three instead of being a level of its own, so `Apply` writes only the three child buses and refuses index 0,
 which keeps `--volume=0` silencing a scripted run whatever the levels say. `Apply` takes a nullable level per category
-and falls back to the shipped default; it is the startup apply (`Session/Launch/Launcher.cs`), the live one, and idempotent.
+and falls back to the shipped default; it is the startup apply (`Launch/Launcher.cs`), the live one, and idempotent.
 `SavedLevels(det)` is the levels' one reader and answers four nulls under `--det`, so a mix saved at one machine's
 controls never reaches a scripted run. `Capture`/`Restore` take and put back the three child buses' gains verbatim, for
 the AUDIO page's preview, which owes back the mix it opened over. The arithmetic is pure and unit-tested.
@@ -427,7 +451,7 @@ the AUDIO page's preview, which owes back the mix it opened over. The arithmetic
 The developer output gain, the whole of what bus 0 carries: `Resolve` takes the command line's `--volume=` over the
 `audio.volume` config key over a default that is silence in a repo run and the resting gain in an exported one, and
 `VolumeDb` converts it with the same -80 dB floor `AudioMix` uses. The config key is read even where the flag beats it,
-so it self-registers for `--dump-config`. Resolution only: `Session/Launch/Launcher.cs` is the one caller that writes the bus,
+so it self-registers for `--dump-config`. Resolution only: `Launch/Launcher.cs` is the one caller that writes the bus,
 and is where a launch resolving to the resting gain writes nothing at all, keeping a full-volume launch byte-identical
 in output and console log. ⚠ The player's four saved levels are no part of this gain. They multiply on the three child
 buses underneath it (`AudioMix`), so the two reach the output as a product and a level saved at the controls cannot
@@ -444,8 +468,22 @@ older build wrote stays in the options file unread. Presentation names are plain
 The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the
 lighting rig builds it and belongs to no menu and no mission. `Black` writes flat black and `Sky`
 puts the sky back, leaving the sky material in place either way, and `IsBlack` is what a suite asks
-of a frame. `Session/Launch/Launcher.cs` owns every call: black on each menu show and at the quits that
+of a frame. `Launch/Launcher.cs` owns every call: black on each menu show and at the quits that
 still draw a frame, the sky at each launch, before a world or the cockpit pass's copy of the
 environment can read it. A menu frame with no presentation on screen is what this exists for: the
 apply's switch runs a frame after the exit that asked for it, and the presentation is already
-hidden. Read `Session/Launch/Launcher.cs` next for the three sites.
+hidden. Read `Launch/Launcher.cs` next for the three sites.
+
+## src/Utils/ScreenKeyboard.cs
+Steam's on-screen keyboard, raised through `OS.ShellOpen("steam://open/keyboard")` and lowered
+through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam shortcut gets it.
+`Available` is read once from the environment: `SteamDeck` or `SteamOS` set to 1, under
+`XDG_CURRENT_DESKTOP=gamescope`, which is Game Mode; Desktop Mode would open it behind the window.
+One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
+tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
+`Original/OriginalShell.cs`, `Screens/LaunchMenu.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
+
+## src/Utils/ScreenKeyboardField.cs
+One field the on-screen keyboard can be raised for: its owner and id, the label and the live text
+the echo strip repeats (masked where the field masks it), and whether the strip repeats it at all.
+The in-flight chat opts out, its line being drawn at the top left already. `ScreenKeyboard.cs` holds it.

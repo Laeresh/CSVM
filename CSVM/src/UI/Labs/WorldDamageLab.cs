@@ -80,9 +80,9 @@ public sealed partial class WorldDamageLab : Node
     public Func<AnimRuntime?>? EffectsSource { get; init; }
 
     /// <summary><c>--debug-damage=&lt;script&gt;</c>: open the panel at launch and run an ordered
-    /// script of <c>node=</c>, <c>pool=</c>, <c>hp=</c>, <c>kill</c>, <c>reset</c> and <c>tick=</c>
-    /// steps against it, the scripted stand-in for pressing H and dragging the slider, which live
-    /// input cannot do here.</summary>
+    /// script of steps against it. It stands in for pressing F19 and dragging the slider, which
+    /// live input cannot do here. The grammar is <see cref="Spec.SessionSpec.ParseDamageScript"/>,
+    /// so a bad step was reported at launch and never reaches this.</summary>
     public string? DebugSpec { get; init; }
 
     /// <summary>Pixels of window kept clear below the panel, the anim lab parks its timeline strip
@@ -92,38 +92,6 @@ public sealed partial class WorldDamageLab : Node
     /// <summary>Whether the panel is showing. Nothing is built until it first opens, so a capture
     /// without H, and without <c>--debug-damage</c>, renders as if this file did not exist.</summary>
     public bool IsOpen => _open;
-
-    /// <summary>Parses <c>--debug-damage[=script]</c>: a comma-separated, <b>ordered</b> list of
-    /// <c>node=&lt;cs_name&gt;</c>, <c>pool=&lt;n&gt;</c>, <c>hp=&lt;value&gt;</c>, <c>kill</c>,
-    /// <c>reset</c>, <c>tick=&lt;seconds&gt;</c> and <c>open</c>. Unknown steps are reported and
-    /// dropped rather than silently changing what the run does.</summary>
-    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
-    {
-        var kept = new List<string>();
-        foreach (string step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (step.Equals("open", StringComparison.OrdinalIgnoreCase)
-                || step.Equals("kill", StringComparison.OrdinalIgnoreCase)
-                || step.Equals("reset", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("node=", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("pool=", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("hp=", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("tick=", StringComparison.OrdinalIgnoreCase))
-            {
-                kept.Add(step);
-                continue;
-            }
-            // See NodeLab.ParseDebugSpec: a supplied list takes the rejects as data instead of
-            // logging them, so the spec can normalise a value engine-free.
-            if (rejected != null)
-            {
-                rejected.Add(step);
-                continue;
-            }
-            Log.Warn("ui", $"--debug-damage step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open, ignoring it");
-        }
-        return string.Join(",", kept);
-    }
 
     public override void _Ready()
     {

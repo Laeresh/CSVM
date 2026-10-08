@@ -128,7 +128,8 @@ public static class InstantAction
     /// <c>dogfight_ace</c>, matching <see cref="BuildDef"/>'s parse-time rule.</summary>
     public static InstantActionDef BuildFromWizard(InstantActionDef baseDef, string missionType,
         string playerPlane, int numWingmen, string wingmanPlane,
-        IReadOnlyList<InstantActionWave> waves, int lives)
+        IReadOnlyList<InstantActionWave> waves, int lives,
+        int raceWindowMinutes = InstantActionDef.DefaultRaceWindowMinutes)
     {
         bool ace = string.Equals(missionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase);
         var resolvedWaves = new List<InstantActionWave>(4);
@@ -156,6 +157,7 @@ public static class InstantAction
             AceAccentId = baseDef.AceAccentId,
             AceLivery = baseDef.AceLivery,
             Lives = Math.Max(0, lives),
+            RaceWindowMinutes = raceWindowMinutes > 0 ? raceWindowMinutes : InstantActionDef.DefaultRaceWindowMinutes,
         };
     }
 
@@ -340,6 +342,9 @@ public static class InstantAction
 /// <c>disallow_missions</c> bars that mission type and this milestone does not implement it.</summary>
 public sealed class InstantActionDef
 {
+    /// <summary>The race window a split screen stunt race opens with when nothing picks another.</summary>
+    public const int DefaultRaceWindowMinutes = 5;
+
     public required string MissionType { get; init; }
 
     public required IReadOnlyList<string> DisallowMissions { get; init; }
@@ -395,6 +400,11 @@ public sealed class InstantActionDef
 
     /// <summary>INVENTED, no <c>ia.json</c> key carries this. Default 1 is the faithful
     /// one-life run; N gives N-1 respawns on
-    /// the existing 3s <c>VersusRespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
+    /// the existing 3s <c>VersusDirector.RespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
     public int Lives { get; init; } = 1;
+
+    /// <summary>INVENTED, no <c>ia.json</c> key carries this. The split screen stunt race's
+    /// window in minutes, picked on the Original screen's time row. Only a <c>stunt_flying</c> run
+    /// with more than one seat reads it, and a file-loaded def keeps the default.</summary>
+    public int RaceWindowMinutes { get; init; } = DefaultRaceWindowMinutes;
 }

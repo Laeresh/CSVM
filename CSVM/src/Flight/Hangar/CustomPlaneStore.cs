@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using CSVM.Utils;
 
 namespace CSVM.Flight.Hangar;
 
@@ -270,7 +271,7 @@ public sealed class CustomPlaneStore
 
         Directory.CreateDirectory(_dir);
         var path = PathFor(def.Name);
-        File.WriteAllText(path, Serialize(def), new UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, Serialize(def));
         return path;
     }
 

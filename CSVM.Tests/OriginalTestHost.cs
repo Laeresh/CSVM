@@ -7,7 +7,7 @@ using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
-using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.Tests;
 
@@ -67,6 +67,8 @@ internal abstract class OriginalTestHost<TModule> : IOriginalScreenHost
     public int FocusBeforeDialog { get; private set; } = -1;
 
     public (float X, float Y)? Pointer { get; protected set; }
+
+    public CopyWay CopyWay { get; set; }
 
     public virtual CustomPlaneStore? CampaignPlanes => null;
 

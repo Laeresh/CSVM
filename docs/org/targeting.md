@@ -150,7 +150,13 @@ that one-frame step exactly.
 Class is decided per candidate in `FUN_004b5cd0`, in this order:
 
 1. The candidate's `Target` virtual at vtable `+0x14` (the aim assist's "dead / not yet live"
-   predicate) rejects it outright.
+   predicate) rejects it outright. For a `TargetStruct` (vtable `0x0060364c`, slot `0x00603660`)
+   that is `FUN_004a5ad0`, which returns true when the structure's `+0x8c` is 0, the scene node's
+   active bit walked up the parent chain ("The two targetable bytes" below). So a mission site whose
+   node or any ancestor is switched off is on no cycle at all, flagged or not: C1/M05's `.gw`
+   switches the nine `lifesaverNM` groups off, and `attack_wave1` calls a wave's second and third
+   entrances 7 and 12.5 s after the wake that flags all three, so neither is markable at its rest
+   pose on the water in between. Its entrance switches the group on and poses it in one tick walk.
 2. Entity `+0x4d` set → **Objective** class. This overrides everything, including aircraft.
 3. Entity `+0x4c` set → **Non-Aircraft** class. Also overrides the aircraft split.
 4. Otherwise, the candidate must be a `TargetVehicle` or a `TargetProjectile`; a `TargetTurret` or
@@ -431,7 +437,7 @@ hull to an aircraft or reads an airframe field off one, so a port that reaches t
 by registering a ship as an aircraft has ported the wrong mechanism. An AI pilot's own acquisition
 (`FUN_0041fe10`, [`aiPilot.md`](aiPilot.md) "Target acquisition") delegates to this same
 `FUN_0041f9c0`, so an aeroplane ranks a hull on the same terms; CSVM's
-`FlightController.SelectRankedTarget` reads each candidate's name and flags off its own source
+`GunnerAcquisition` reads each candidate's name and flags off its own source
 type for that reason.
 
 A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer `+0x210` whenever
@@ -956,30 +962,51 @@ green and every other seat in its identity colour.
 assigns the text into the `std::string` at entity `+0x10` at `0x0047c9c8`. A key the string table
 does not know is copied verbatim instead (`0x0047ca98`–`0x0047cafd`).
 
-⚠ **A block that authors an empty `title` gets no name line at all**, the branch at `0x0047c9a7`
-leaves the string empty. That is 239 of the install's 414 roster blocks, so most enemies in the
-original show a box and no name.
+⚠ **A block that authors an empty `title` keeps its vehicle definition's title.** The branch at
+`0x0047c9a7` skips the assign, so entity `+0x10` keeps what `FUN_00475820` (def to entity copy,
+called from the same spawn before the slot-20 read) put there: the def's `+0xc`, which the
+definition parser `FUN_00479240` fills with the def's `title` already resolved to display text
+(`FUN_0059cd40` then `_strdup`, `0x004792f6`–`0x00479305`). An unnamed CM10 patrol boat therefore
+reads `Patrol boat` (`MSG_VEH_PATROLBOAT`, the `patrolboat` def's own title), which the original
+shows at the controls.
 
-**Three authors write that string, and the vehicle definition is none of them.**
+**Five authors write that string.**
 
-- **The campaign roster**, as above: `aiv` slot 20 through the block struct's `+0xc`.
+- **The vehicle definition**, in `FUN_00475820`, first on every `FUN_0047c210` spawn: the def's
+  resolved `title` (`MSG_VEH_*`, `MSG_TRGT_*`) into entity `+0x10`.
+- **The campaign roster**, as above: `aiv` slot 20 through the block struct's `+0xc`, replacing the
+  def's title only when the block authors one.
 - **Instant Action**, in `FUN_0045a390`, which builds the same block struct three times and writes
   `+0xc` in each: the player's flight from five hardcoded string ids (`0x32c9`, `0x32cb`, `0x32cc`,
   `0x32cd`, `0x32e4`) at `0x0045a7ae`, the ace from `ia.zrd`'s `ace_name` at `0x0045ab0a`, and each
   enemy group from its own `enemy_name` at `0x0045ae73`. `ia.zrd`'s parser resolves both keys at
-  parse time (`0x0045946b`, `0x00458e36`), so they arrive as display text. This is why an Instant
-  Action Kestrel carries a name line while an unnamed campaign block does not.
+  parse time (`0x0045946b`, `0x00458e36`), so they arrive as display text.
 - **A template-less generator spawn**, in `FUN_00451bf0`, which assigns entity `+0x10` directly from
   the `egen.zrd` record's `vehicle`/`title` value at `0x004520ee`. That path takes the value RAW,
   with no string-table lookup, so whatever the file authors is displayed literally. The two are
   complementary: an `egen` record that resolved a roster block runs the roster path above instead.
+- **A network peer's aircraft**, in `FUN_00497990`, which runs on every machine once for each peer
+  that arrives. It copies the lobby player's name (lobby record `+0x10`, the callsign) into the
+  remote record's CString at `+0x34`, spawns the aircraft through `FUN_0047b650`, keeps the entity at
+  record `+0x30`, then reads record `+0x34` at `0x00497f20` and assigns it into entity `+0x10` at
+  `0x00497f90`, over the def's title. So another player's aircraft, the host's included, reads by
+  callsign, and Line 1 is untouched. The Capture the Flag handler `FUN_0049a300` rewrites the string
+  with the carrier tag and assigns record `+0x34` back when the flag leaves (`0x0049a47b`,
+  `0x0049abc1`, [`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers"). CSVM stamps a network seat's
+  callsign on its aircraft as `FlightController.PilotName`, the mode tag's fallback, and co-op
+  seats take it the same way. `FUN_00499c90` starts a record's name as row 6007 `MSG_UNKNOWN`
+  ("Unknown"), so a peer with no name reads "Unknown". CSVM's roster calls such a seat by a stand-in
+  ("guest N", or a co-op player number) for its own lines, and marks it `NetSeat.Unnamed`, which the
+  roster carries to every machine; the marker reads "Unknown" for it. A machine's further
+  splitscreen seats are not peers of their own, have no counterpart in the original, and keep their
+  player number on the marker.
 
-⚠ **The `vehicle.zrd` def's own `title` (`MSG_VEH_*`) is read by none of them.** `FUN_00479240`,
-the vehicle-definition parser, stores it at that definition's `+0xc` (`0x004792ca`–`0x00479305`),
-a different object. ⚠ "No fourth author exists" is NOT established: the sweep covered the entity
-constructor's site and all five of its callers, not the whole image.
+⚠ "No sixth author exists" is NOT established: the sweep covered the entity constructor's site, all
+five of its callers and the def copy, not the whole image, and the network author was found from the
+flag handler's restore, not by that sweep.
 
-**A surface hull is named by the same author, off its own block's slot 20.** `FUN_0047c210` is THE
+**A surface hull is named by the same two authors, its def's title then its block's slot 20.**
+`FUN_0047c210` is THE
 vehicle spawn and not the aeroplane's: it allocates the 0xa20-byte entity, links it into
 `VehicleList` and runs one body for every dynamics class. Its two arguments are the `vehicle.zrd`
 DEFINITION, matched by name out of the definition list `DAT_0071daac`…`DAT_0071dab0` with the
@@ -987,19 +1014,20 @@ record's trailing `_N` stripped, and the roster BLOCK; the campaign's record loo
 calls it once per mission vehicle record at `0x0047531e` with no class test on the way in. The
 definition's `mode` (def `+0xa4`, [`aiPilot.md`](aiPilot.md)) is read once inside, at `0x0047c2b4`,
 and its `ship`/`tank` arm (`0x0047c2ca`–`0x0047c2fa`) only prepares the model before rejoining the
-shared body at `0x0047c2fd`. The slot-20 read at `0x0047c9a2` and the assignment into entity
-`+0x10` sit in that shared body, so a boat reaches them exactly as an aeroplane does.
+shared body at `0x0047c2fd`. The def copy `FUN_00475820`, the slot-20 read at `0x0047c9a2` and the
+assignment into entity `+0x10` sit in that shared body, so a boat reaches them exactly as an
+aeroplane does.
 
 The reader is class-blind at the other end too: `FUN_004579e0` takes the player's selection
 `+0x948`, dereferences the target wrapper's `+4` (the wrapped entity, written by `FUN_004a6330`)
 and reads the length at entity `+0x18` and the pointer at `+0x14`, with no RTTI test and no virtual
 call on that path.
 
-So the name line's split is per BLOCK and never per class. Of the install's 23 `mode ship` blocks
+So the name line is never decided per class. Of the install's 23 `mode ship` blocks
 (`patrolboat_*`, `t_truck_*`) only C1B/M03's four author the slot, as `MSG_VEH_PATROLBOAT` and so
 "Patrol boat"; C1/M05's twelve, C5/M01's six and C2/M01's `patrolboat_eg0` generator template leave
-it empty and draw a box with no name over it, which is the same silence 239 of the 414 blocks ask
-for.
+it empty and keep their def's title, `patrolboat`'s "Patrol boat" or `t_truck`'s
+`MSG_TRGT_TURRET_TRUCK`.
 
 **Line 3** is the `%d o'clock` bearing. `FUN_0049d940` computes the hour and formats
 `MSG_N_OCLOCK` (`extracted/messages.json` id 132, `"%1!d! o'clock"`) into a 256-byte buffer, and
@@ -1051,7 +1079,7 @@ there.
 
 | | Original | CSVM today |
 |---|---|---|
-| Who picks the target | the player, from eleven bound actions | the pilot, from the same eleven, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `FlightController.StepTargeting`). The keys differ: the original's three class letters and their Shift and Ctrl forms are all spent on flight here, and a binding is one control, so the five class and class-less actions ship on `T`/`Y`/`U`/`I`/`O` and the six per-class Previous and Nearest on the digit row above them (`../controls.md`) |
+| Who picks the target | the player, from eleven bound actions | the pilot, from the same eleven, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `SeatTargeting.Step`). The keys differ: the original's three class letters and their Shift and Ctrl forms are all spent on flight here, and a binding is one control, so the five class and class-less actions ship on `T`/`Y`/`U`/`I`/`O` and the six per-class Previous and Nearest on the digit row above them (`../controls.md`) |
 | Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | the same, in `TargetSelection`, one instance per pane and owned by that pane's `FlightController` |
 | Candidate pool | four typed pools, rebuilt and re-sorted every frame | `TargetPool`, rebuilt every frame off `AimCandidateSet`'s aeroplanes and live ordnance plus two curated feeds, the mission's flagged sites and the zeppelin sub-parts (those only while the pilot's selected ordnance carries `LOCK_ON`). The structure and turret lists are never walked, since a mission's table is what decides |
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | the same three, `TargetClass`, with the objective flag on the ref (`TargetRef.Classify`) |
@@ -1064,13 +1092,14 @@ there.
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectFlagged` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle. A gun emplacement reaches no cycle at all, alive and hostile or not, because no shipped table names one; a loose destructible never reaches one either. The zeppelin sub-parts are the one stand-in for a flag nothing authors, a deliberate divergence narrowed to the capability it exists for: `TargetPool.Rebuild` offers them only while the pilot's selected ordnance carries `LOCK_ON`, so off the torpedo the cycle is the flagged list alone and a selected part is dropped rather than held. Instant Action and the multiplayer modes take the same feed with no director behind it |
+| A switched-off site | on no cycle while its node or any ancestor is inactive (`FUN_004a5ad0` reads `+0x8c`), flagged or not | the same: `ObjectiveSites.SwitchedOn` makes such a site not `Live`, except where a team mode places the site itself |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
 | "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, on one key per class (`TargetNearestEnemy`, `TargetNearestAlly`, `TargetNearestNonAircraft`) and reachable through `--target=nearest` |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |
 | Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | the same shape and the same gate, scaled through `HudMetrics` rather than fixed in pixels (see below) |
 | Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | the same, `TargetHud.LabelLines` and the flip-above test |
 | Label content | `<name> [<category>] -` / proper name / `%d o'clock` | the same three lines, off `TargetRef`'s own label halves and display name |
-| Name line's source | the roster block's `title` alone, aeroplane and surface hull alike; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there. A hull takes the same slot through `SurfaceVehicleRuntime`'s own resolve into `SurfaceVehicle.MarkerName` and prints NOTHING where its block authors none, which is the original exactly |
+| Name line's source | the roster block's `title`, else the vehicle def's own `title`, aeroplane and surface hull alike | the same pair: a campaign aeroplane takes the block's `title` (`AiSpawn.PilotName`), else its AI def's (`PlaneStats.AiTitleKey`), resolved in `AiFlightAssembler`. A hull resolves the same pair through `SurfaceVehicleRuntime` into `SurfaceVehicle.MarkerName`, the block's slot first and `VehicleDefs.TitleOf` second |
 | Colour | red hostile, green friendly, blue non-destructive objective | the same, `TargetHud.MarkerColor`, with the four destructive objective categories red and the rest blue |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same edge position, `EdgeMarker.Resolve`, with `TargetHud.EdgeLabelAnchor` hanging the three lines off it by the decoded +3 / -45; the per-line 3 px clamp is not ported |
 

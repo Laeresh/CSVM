@@ -59,6 +59,27 @@ public class CampaignFeatureTests
         Assert.Equal(Pilot, store.LastPlayed);
     }
 
+    [Theory]
+    [InlineData("{ \"version\": 3, \"na")]
+    [InlineData("{ \"version\": 99, \"name\": \"Zachary\" }")]
+    public void ContinueOnAProfileThatDoesNotLoadRefusesAndLeavesItsFile(string text)
+    {
+        var (feature, store, _) = Open();
+        string folder = Directory.CreateDirectory(store.DirFor(Pilot)).FullName;
+        string path = Path.Combine(folder, "profile.json");
+        File.WriteAllText(path, text);
+        byte[] before = File.ReadAllBytes(path);
+
+        string? refusal = feature.ContinuePlayer(Pilot);
+
+        Assert.Equal(store.LoadProblem(Pilot), refusal);
+        Assert.Contains(path, refusal!);
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(new[] { "profile.json" }, Names(Directory.GetFiles(folder)));
+        Assert.Null(feature.Profile);
+        Assert.Equal(string.Empty, store.LastPlayed);
+    }
+
     [Fact]
     public void RefusedNamesWriteNothing()
     {
@@ -603,6 +624,42 @@ public class CampaignFeatureTests
 
         // ABLE-TO-FAIL CONTROL: a guest's own campaign names no hangar.
         Assert.Empty(guest.CoopHangar());
+    }
+
+    // Two players at a guest's machine. The second picks out of the host's hangar and one stock
+    // Devastator, never its first player's plane, and the launch flies one seat each.
+    [Fact]
+    public void AGuestsSecondPlayerPicksItsOwnHangarPlaneAndTheLaunchFliesBoth()
+    {
+        var (feature, _, _) = Open();
+        var hangar = Words(("Gypsy Magic", 5, 0), ("Kestrel", 7, 1), ("Osprey", 2, Free));
+        hangar[2] = hangar[2] with { Build = new CSVM.Net.NetPlaneBuild { Airframe = 2, PaintPattern = 6 } };
+        feature.OpenGuest("Zachary", 4, hangar, 1, plane: 1);
+        feature.Field.SetPlayers(2);
+
+        var second = feature.Field.Guests[0];
+        Assert.Equal(new[] { "Gypsy Magic", "Kestrel", "Osprey" }, second.Choices.Take(3).Select(p => p.Name));
+        Assert.Equal(4, second.Choices.Count);
+        Assert.True(feature.Field.IsStock(second.Choices[^1]));
+        Assert.Equal(2, second.HangarPick);
+        Assert.True(feature.Field.Taken(1, 1));
+        Assert.Equal((2, CSVM.Net.CoopFit.Of(second.Plane.Ammo, second.Plane.Ordnance), 2), feature.GuestPickOf(1));
+        Assert.Equal(6, feature.GuestBuildOf(second.Plane)?.PaintPattern);
+
+        feature.SetMission(4);
+        var exit = feature.BuildExit(new IReadOnlyList<int>[] { new[] { 0 }, new[] { 1 } })!;
+        Assert.Equal(new[] { "node7", "node2" }, exit.Seats.Select(s => s.PlaneNode));
+        Assert.Equal(6, exit.Seats[1].Custom?.PaintPattern);
+
+        // An earlier seat taking the second player's plane at the same moment moves it on. The host
+        // gave its seat none, so it takes the first plane nobody holds.
+        Assert.Equal(0, feature.FollowHost(4, Words(("Gypsy Magic", 5, Free), ("Kestrel", 7, 1), ("Osprey", 2, 0))));
+        Assert.Equal((5, 0), (feature.GuestPickOf(1).Airframe, feature.GuestPickOf(1).Plane));
+        Assert.Equal(1, feature.GuestPlane);
+
+        // ABLE-TO-FAIL CONTROL: one player at the machine flies one seat however many pads it names.
+        feature.Field.SetPlayers(1);
+        Assert.Single(feature.BuildExit(new IReadOnlyList<int>[] { new[] { 0 }, new[] { 1 } })!.Seats);
     }
 
     [Fact]

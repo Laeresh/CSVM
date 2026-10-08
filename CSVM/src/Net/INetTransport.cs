@@ -41,6 +41,35 @@ public interface INetTransportListener
 }
 
 /// <summary>
+/// A listener that also hears which class carried each payload. A carrier that knows the class
+/// reports an arrival here in place of the plain <see cref="INetTransportListener.OnPayload"/>. Only
+/// a wrapper below the session needs it, since <see cref="ShapedTransport"/> treats the classes
+/// apart as the loopback does.
+/// </summary>
+public interface INetClassedListener : INetTransportListener
+{
+    /// <summary>Hands <paramref name="listener"/> one arrival, with its class when it asks for one
+    /// and through the plain call otherwise. The session's own listener does not ask, so it hears
+    /// an unshaped link unchanged.</summary>
+    public static void Deliver(INetTransportListener listener, int peer, int channel, NetReliability reliability, ReadOnlySpan<byte> payload)
+    {
+        if (listener is INetClassedListener classed)
+        {
+            classed.OnPayload(peer, channel, reliability, payload);
+        }
+        else
+        {
+            listener.OnPayload(peer, channel, payload);
+        }
+    }
+
+    /// <summary>One payload that arrived from <paramref name="peer"/> on <paramref name="channel"/>
+    /// under <paramref name="reliability"/>, with the carrier's own guarantees already applied.
+    /// </summary>
+    void OnPayload(int peer, int channel, NetReliability reliability, ReadOnlySpan<byte> payload);
+}
+
+/// <summary>
 /// A carrier that can name the network address a peer reached it from, the key a host's ban list
 /// holds a booted guest by. A carrier without addresses leaves a boot unable to refuse a return.
 /// </summary>
@@ -49,6 +78,24 @@ public interface INetPeerAddress
     /// <summary>The address <paramref name="peer"/> connected from, without a port, or null when
     /// the carrier does not know it.</summary>
     string? AddressOf(int peer);
+}
+
+/// <summary>
+/// A host carrier that lists its game on the master server. The door hands it the listing on every
+/// step. The carrier sends it when it changes and on the heartbeat. It reads back the code a guest
+/// joins by. A carrier with no master server has none of this.
+/// </summary>
+public interface INetListing
+{
+    /// <summary>The code the master server listed the game under, or null while it has not.</summary>
+    string? JoinCode { get; }
+
+    /// <summary>Why the game is not listed, as a player reads it, or "" while nothing went wrong.
+    /// </summary>
+    string ListingFault { get; }
+
+    /// <summary>The listing the game carries from now on.</summary>
+    void List(MasterGame listing);
 }
 
 /// <summary>

@@ -280,6 +280,10 @@ member, and it does not go here.
   tests on pool threads, so the item lands in the blocked thread's local queue, which other threads
   steal from only when the global queue is empty. Give such work its own thread.** The extraction
   worker's cancel test failed 4 of 13 full unit passes with the item never started after 10 s.
+- **DET-17**, **A lossy-loopback suite waits on every condition its checks read, since one seeded
+  loss draw serves every send on the mesh and one more message anywhere reshuffles which words
+  land together.** One added lobby message delivered the Cabbie's removal a step before its replayed
+  objective, and a window that waited on the removal alone failed its check.
 
 ## PERF, performance
 
@@ -454,10 +458,10 @@ member, and it does not go here.
   round trip, so a loop of them over a large MultiMesh costs about a microsecond each in waits. Keep
   the state you need to read in a mirror of your own, and fill a new MultiMesh with one `Buffer`
   write.** Reading C5's 199,685 clutter placements back took 290 to 440 ms of every graphics switch.
-- **PERF-47**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
-  world through the pane's cull mask, sun shadows included, on every frame a target is off screen,
-  and a flight with several players holds one most of the time.** In four-pane C5 flight the four
-  discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
+- **PERF-47**, **Count each pane's spyglass disc as a viewport of its own, off the `[perf] spyglass`
+  line: it renders the whole world through the pane's cull mask on every frame a target is off
+  screen, and a flight with several players holds one most of the time.** In four-pane C5 flight the
+  four discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
 - **PERF-48**, **Compare four-pane frame times only within one interleaved batch: the same build's
   `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
   apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
@@ -652,10 +656,18 @@ member, and it does not go here.
 - **SHELL-20**, **Under `$ErrorActionPreference = 'Stop'`, redirecting a native command's stderr
   makes its failure terminating, so a probe whose failure is the answer must lift the preference and
   read the exit code instead.**
-- **SHELL-21**, **Two new `global uniform` declarations in `csky_atmosphere.gdshaderinc` made every
-  headless `RunProbe.ps1` run save its screenshot and then never exit; the same declarations inside
-  one generated shader did not.** The cause is not decoded. Bisect a probe that hangs at exit
-  against the include first, and declare a global a single shader family needs in that family.
+- **SHELL-21**, **A run that saves its screenshot and then never exits is Godot's worker pool
+  deadlocking at exit over a queued low-priority task, so `Launcher._ExitTree` empties that queue
+  first; still read a "broken" golden's own `pixmd5=` line against the manifest before calling it a
+  move.** Godot 4.7's `WorkerThreadPool::exit_languages_threads` waits for every worker to count
+  itself idle, which a worker does only with both task queues empty; one that wakes to a waiting
+  low-priority task sleeps again uncounted, and nothing wakes it. Background pipeline compiles are
+  low-priority tasks, so a change to the compiled code of a shader most materials share (any edit
+  to `csky_atmosphere.gdshaderinc` that is not a comment) leaves a backlog at the quit of a short
+  shot. A hung `c1-crash`'s native stacks: the main thread in that wait, the render pump yielding,
+  every other worker idle. A killed hang also never saves the pipeline cache, so the same shots hang
+  on the next run too. With the drain, the shots that hung showed 0.3 to 6.4 s of backlog at quit
+  and exited; every other shot settles in about 1 ms.
 
 ## INSTR, building instruments
 
@@ -797,7 +809,7 @@ member, and it does not go here.
 - **INSTR-69**, **An input read off a device the test host does not have needs a pinned seam beside
   the live read, or the mechanism is only reachable by hand.** The mouse flight scheme reads an
   absolute cursor offset inside the viewport, which is zero in every headless suite, so
-  `FlightController.MouseStickForTest` supplies that offset and the live path stays the only reader
+  `SeatMouse.StickForTest` supplies that offset and the live path stays the only reader
   of the real pointer.
 - **INSTR-70**, **A new in-engine suite is not finished when it passes: `analysis/engine-suite-weights.json`
   must name it too, and a unit test fails until it does.** The balancer weighs every registered
@@ -969,6 +981,28 @@ member, and it does not go here.
   whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
   the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
   3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
+- **INSTR-98**, **Before calling a scripted trace a fault, read the same definition's own timed
+  events against it: an effect the data fires at a node at a given instant says where the author
+  put that node then.** C1/M05's attack-balloon trace reaches the sea at 57 s, which reads as a
+  hand-off fault until its own definition is read: it calls `sm_splash` at the lifeboat at 55, 56
+  and 57 s.
+- **INSTR-99**, **A RefCounted object whose only owner was a dropped C# wrapper must not be reached
+  by the engine (a signal it emits, a native `Ref` taken to it) between that wrapper's collection
+  and its finalizer: the binding is left with a released handle, and the finalizer then logs
+  `Handle is not initialized` from `SetGodotObjectPtr`. Hunt it with `--debug-finalizers`, which
+  holds the finalizer per suite (or `=run` across the run) so the error lands at a known boundary.**
+  A Resource reached through a node's signal after its wrapper was collected reproduced the release
+  check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
+  either way.
+- **INSTR-100**, **Read Godot's global `ObjectCount` only after finalizer drains have stopped changing
+  it, never after a fixed number: one drain can leave objects that only the next one frees, and any
+  collection inside the measured span frees earlier suites' objects into it.**
+  `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
+  drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
+  during it.
+- **INSTR-101**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
+  the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
+  bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.
 
 ## SRC, sources and documents
 
@@ -1026,6 +1060,10 @@ member, and it does not go here.
 - **SRC-22**, **When a reader leaves a global alone on a missing key, the value in play is the
   global's initialised bytes; read them from `.data` before quoting a default.** The rearm radius
   was written up as 624.0, and `0x628f10` holds 625.0, 25 m squared.
+- **SRC-23**, **An angle added to a rotation is not the pose; read the vector the rotation turns
+  before saying where the result points.** `thirdp_pitch` was written up as the chase camera's
+  0.29° elevation, and the vector it swings carries `thirdp_height` as a rise that puts the camera
+  7.57° above the tail.
 
 ## What this project cannot verify itself
 

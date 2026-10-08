@@ -6,7 +6,7 @@ namespace CSVM.Mech3;
 /// <summary>
 /// Enhanced Graphics only: the rendered cloud puff pools that stand in for the authored
 /// <c>cloud1</c>/<c>cloud2</c> masks. It also holds the material settings a cloud card shader
-/// drawing them takes. Our own Blender renders, not game data, shipped under <c>data/cloud_puffs/</c> with
+/// drawing them takes. Blender renders made for the remake, not game data, shipped under <c>data/cloud_puffs/</c> with
 /// the script that makes them. Two pools: the translucent deck set for the <c>fvol</c> cards and a
 /// fuller set for the placed cloud clusters. A card's puff, turn, mirror and size come from a hash of
 /// its own position in <c>shaders/csky_cloud_puffs.gdshaderinc</c>, so no stream is drawn from.

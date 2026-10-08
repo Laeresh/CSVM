@@ -24,20 +24,30 @@ public interface IContactEffects
     /// redirect off a dead one, or null when the plane carries no zones.</summary>
     PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage);
 
-    /// <summary>Applies the contact response (the decoded placement and, for a human pilot, the
-    /// normal-only impulse) and reports the pose it left behind.</summary>
+    /// <summary>Applies the contact response (the decoded placement and, on a person's contact
+    /// rule, the normal-only impulse) and reports the pose it left behind.</summary>
     ContactResponse ApplyResponse();
 }
 
 /// <summary>The striking aircraft's state entering one contact, the half
 /// <see cref="ContactReport"/> says nothing about.
-/// ⚠ <see cref="IsHumanPiloted"/> is the asymmetry the original keeps: a player skips entity
+/// ⚠ <see cref="IsHumanPiloted"/> is the asymmetry the original keeps. A player skips entity
 /// detection, so it never takes the 0.2 cut, never arms a grace window and is never doomed
-/// (docs/org/flightModel.md). Do not let it drift into a symmetric rule.</summary>
+/// (docs/org/flightModel.md). Do not let it drift into a symmetric rule. A bot seat is the one
+/// remake-only exception here, to the doom rule alone (<see cref="TakesPersonsContactRule"/>).</summary>
 public readonly record struct ContactConditions
 {
     /// <summary>Whether a person is flying this aircraft. See the type's warning.</summary>
     public bool IsHumanPiloted { get; init; }
+
+    /// <summary>A Dogfight's bot seat: AI-piloted, standing in a person's seat with a person's
+    /// hull (<see cref="FlightController.IsBotSeat"/>).</summary>
+    public bool IsBotSeat { get; init; }
+
+    /// <summary>Whether the doom rule spares this striker: a person or a bot seat. A bot then dies
+    /// to a world contact only where a person in the same plane would.
+    /// ⚠ The entity cut and both shakes stay on <see cref="IsHumanPiloted"/>.</summary>
+    public bool TakesPersonsContactRule => IsHumanPiloted || IsBotSeat;
 
     /// <summary>The striker's unit velocity, which sets the severity cosine against the contact
     /// normal.</summary>
@@ -104,7 +114,8 @@ public sealed class AircraftContactResolver
         // fallbacks in PlaneStats are what the original would stand on there too.
         var ranges = striker.Stats ?? DefaultCollideRanges;
         float severity = CollisionDamage.Severity(striker.VelocityDir, contact.Normal);
-        // Entity detection is the non-player branch only, and only against another aeroplane.
+        // Entity detection is the non-player branch only, and only against another aeroplane. A
+        // bot seat keeps the cut, which prices a mid-air, not a world contact.
         bool entityImpact = !striker.IsHumanPiloted && contact.StruckIsAircraft;
         float cut = entityImpact ? CollisionDamage.EntityCut : 1f;
         var outcome = new ContactOutcome
@@ -118,10 +129,11 @@ public sealed class AircraftContactResolver
             ShakeMagnitude = striker.IsHumanPiloted
                 ? CollisionDamage.ContactShake(striker.Speed, severity)
                 : 0f,
+            AiShake = !striker.IsHumanPiloted && severity > 0f,
             // local_11 (0x0048d79e): an AI that rammed anything OTHER than an aeroplane dies
             // outright, whatever health it has left. An AI that rammed an aeroplane survives on
-            // health as usual.
-            Dooms = !striker.IsHumanPiloted && !contact.StruckIsAircraft,
+            // health as usual. A bot seat is spared it, as a person is.
+            Dooms = !striker.TakesPersonsContactRule && !contact.StruckIsAircraft,
         };
         if (severity > 0f)
         {
@@ -203,7 +215,8 @@ public sealed class AircraftContactResolver
                 return outcome with { PushOut = pushOut };
             if (attempt >= EmbedTries)
             {
-                Log.Info("flight", $"embedded in terrain after a graze, destroyed");
+                // Named for what it grazed: the overlap test reads aeroplanes as well as the world.
+                Log.Info("flight", $"embedded in {contact.ColliderName} after a graze, destroyed");
                 return outcome with { PushOut = pushOut, Fate = ContactFate.Crash };
             }
 

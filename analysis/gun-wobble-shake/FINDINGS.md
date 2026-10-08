@@ -1,6 +1,6 @@
 # Gun-wobble shake: what `fire_bullet`'s `magnitude_factor` multiplies
 
-**Question** (`BL-266`): the authored `fire_bullet` oscillator (`shakes.zrd.json`: frequency 15,
+**Question**: the authored `fire_bullet` oscillator (`shakes.zrd.json`: frequency 15,
 damp 12.5, sawtooth, `magnitude_factor` 7e-5) scales *some* per-shot quantity — caliber, damage,
 or muzzle velocity. Which one, and in what units?
 
@@ -21,8 +21,8 @@ Chain: `shakes.zrd → camera+0x3c → (fire tick) CALIBER(weapon_ext+0x10) × i
 FUN_0042be10` (camera shake kick, see below).
 ⚠ The 2.80e-3 rad is a *rendered* measurement of the clip; it is **not** the oscillator's kick
 amplitude (a kick of that size renders ~0.28× itself at 8/s). It discriminates `7e-5 × CALIBER`
-from competing laws, but reading it as the engine's intended per-kick roll is the conflation
-`BL-266(a)` tracks — see the amplitude sections below.
+from competing laws, but reading it as the engine's intended per-kick roll is a conflation; see
+the amplitude sections below.
 
 ## Source clip
 
@@ -139,16 +139,17 @@ So, clip aside, the law renders **~0.28× its own literal number** (RMS/kick = 0
 **~0.20 px/frame** of wing motion under steady 8/s fire. That reduction is entirely oscillator
 geometry (sawtooth duty × damp decay between kicks); the render chain adds nothing.
 
-⚠ **This model is the remake's `PlaneShake.cs` oscillator** (that is why it validates against
+⚠ **This model is the remake's former `PlaneShake.cs` oscillator** (that is why it validates against
 `PlaneShakeTests`). The binary trace shows the ORIGINAL feeds `2.80e-3` through a *camera-shake
 component* first, and the per-shot kick law is closed-form and binary-derived:
 `FUN_0042be10(this=camera+0x18)` scales by `this[1]`, the block's **authored** frequency, and by
 the waveform factor its `sawtooth` word selects. `shakes.zrd` authors `fire_bullet` with
 `sawtooth 1` and `frequency 15.0`, so the selector takes the **`4.0`** branch (`0x00603514`) and
-`step = mag × 15 × 4 = 60·mag`, `Δroll/pitch = (rand01−0.5) × step × 1.2`,
-`Δyaw = (rand01−0.5) × step × 2.5`. For wep40 (`mag = 2.80e-3`): **Δroll is uniform in
-±0.101 rad/s per shot**, Δyaw in ±0.210 rad/s. The kicked triple is a **velocity**, not an angle,
-so what renders is the position the integrator builds out of it.
+`step = mag × 15 × 4 = 60·mag`, `Δ[3] = Δ[4] = (rand01−0.5) × step × 1.2`,
+`Δ[5] = (rand01−0.5) × step × 2.5`. The three components render as pitch, yaw and roll (the
+section "The rendered rotation" below), so for wep40 (`mag = 2.80e-3`) **the roll kick is uniform
+in ±0.210 rad/s per shot** and pitch and yaw in ±0.101 rad/s. The kicked triple is a **velocity**,
+not an angle, so what renders is twice the position the integrator builds out of it.
 
 ⚠ **Superseding an earlier reading of this same line.** It took `this[1]` for a fixed `2.0` gain
 and `*this == 0` for a `6.2832` sine branch, giving `fVar1 = mag × 2.0 × 6.2832 = 3.518e-2` and
@@ -159,11 +160,9 @@ authors, so that reading described an uninitialised camera. It is wrong wherever
 confirmed: it returns right after the three adds, with no decay/oscillation/render); the visible
 wobble is a separate camera function. **That consumer has now been found: `FUN_0042c0e0`** (see
 below) — the earlier "static-trace NEGATIVE" is a POSITIVE, missed because the reader walks the
-blocks indirectly. The remake's `_fire` source and the original's block 0 are **not reconciled**:
-the remake walks a displacement of ±7.54·mag per shot and decays it as an envelope, where the
-original kicks a velocity of ±36·mag into a sawtooth integrator, so the 0.284/0.20-px figure is
-the remake's render of a `2.80e-3` kick rather than the original's. `BL-266(a)` owns that
-reconciliation. Decode persisted: `.scratch/magnitude-factor-binary-decode.txt`.
+blocks indirectly. The 0.284/0.20-px figures above model the remake's former displacement walk
+(±7.54·mag per shot, decayed as an envelope), not the original's velocity kick; the remake now
+runs block 0 as decoded ("The port" below).
 
 The consumer trace — **how the fire block's roll accumulator `camera+0x24` becomes visible**
 (2026-08-19): the earlier search disassembled the mode dispatcher (`FUN_0042c5c0`), all seven
@@ -222,7 +221,7 @@ if (min < plane[0x24d]) {                  // overspeed gate: current speed > mi
   `frequency 15.0`, so the step is `mag × 15 × 4 = 60·mag` (the ctor's `[0]=0`/`[1]=2.0` are
   defaults `FUN_0042bc10` overwrites).
 - `FUN_0042be10(camera+0xc8, mag)` then kicks the **block-4 accumulators at
-  `camera+0xd4/+0xd8/+0xdc`** (roll/pitch ×1.2, yaw ×2.5) — the same per-axis random walk as fire,
+  `camera+0xd4/+0xd8/+0xdc`** (pitch/yaw ×1.2, roll ×2.5), the same per-axis random walk as fire,
   on all **three** axes (the user-visible high-speed wobble is multi-axis, matching observation,
   not roll-only).
 - Fire (`FUN_0042c070(0, …)`) and high_speed (`FUN_0042c070(4, …)`) are thus the **same algorithm**;
@@ -233,7 +232,7 @@ if (min < plane[0x24d]) {                  // overspeed gate: current speed > mi
 
 1. **The original's `high_speed` is a random-walk accumulator, NOT a damped sawtooth.** The
    remake's old `PlaneShake._speed` path (deterministic `Target → Amp → sawtooth`) was a
-   *different mechanism*, the root cause of `BL-266(d)`'s "overspeed rattle ~6× muted." `_speed`
+   *different mechanism*, the root cause of the "overspeed rattle ~6× muted" reading. `_speed`
    and `_nitro` now run the original's own component block instead, the velocity kick of
    `FUN_0042be10` plus the two-branch integrator of `FUN_0042bec0`, fed by the excess-over-gate
    `SetSpeedRatio` law and the authored nitro `magnitude`. The whole-block port is what the decode
@@ -274,15 +273,58 @@ amplitude). The clip is NOT needed to answer "does the engine render the law?" �
 engine-render is ~0.20 px/frame (~0.28× kick), settled above. All the clip enters is the
 separate fidelity question of how the original should look against that; the clip's own
 2.8e-3 figure reads ~6.5× over the decoded model, which is a flag on the OLD clip measurement
-(Nyquist-ish correction applied to a damped re-excited sawtooth), not on the law. `BL-266(a)`
-carries it; `magnitude_factor` must not change until the fidelity target (matching the clip
-look) is decided.
+(Nyquist-ish correction applied to a damped re-excited sawtooth), not on the law, and the
+original's own render is larger than the remake's model anyway (the next section).
+`magnitude_factor` is decode and does not change.
+
+## The rendered rotation: roll is the ×2.5 component, at twice its position
+
+Static trace of what `FUN_0042c0e0` does with the summed block positions `s` (method as above,
+instruction listings of each helper; constants and addresses in `docs/org/shakes.md`, "The
+rendered rotation"):
+
+- `FUN_0053fbf0` builds the quaternion `(cos|s|, sin|s|·ŝ)` with no halving, so the rotation it
+  encodes is by `2|s|`.
+- `FUN_0053fa40` (quaternion to column-major matrix) and `FUN_0053df30` (YXZ Euler readback,
+  `x = asin(−m[7])`, `y = atan2(m[6], m[8])`, `z = atan2(m[1], m[4])`) hand `FUN_004d1a30` the
+  node rotation, which for small angles is `(2·s[0], 2·s[1], 2·s[2])` about X, Y, Z.
+- In the engine's Y-up, nose-along-−Z frame that is pitch, yaw and roll. So the `×2.5`
+  component `[5]` is the roll, the two `×1.2` components are pitch and yaw, and every source,
+  nitro included, moves the nose as well as the wings.
+
+The clip agrees with that order: its wing-against-wing correlation of −0.86 with a small fuselage
+motion is a roll-dominated wobble, where equal pitch and roll weights would heave the fuselage as
+much as they tilt the wings.
+
+**The fire walk's decay.** The original does not decay a displacement at all: block 0's velocity
+coasts undamped between sawtooth reversals and the reversal alone scales it, by
+`e^(−damp/(2·freq))` = `e^(−12.5/30)` ≈ 0.66 per reversal (`FUN_00460410` at `0x0042c000`, the
+Taylor series of `e^(−x)` below 0.1).
+
+## The port
+
+`PlaneShake` now runs all seven blocks as decoded and writes the rendered rotation to the shake
+pivot (`docs/org/shakes.md`, "The rendered rotation"). Method (`port_sim.py`): a 200-trial Monte
+Carlo of the decoded chain (kick, 1/150 s integrator over the triple, quaternion with no halving, YXZ readback)
+at 60 Hz, independent of the C# code, with the shipped constants. Mean over trials:
+
+| event | roll RMS | roll mean peak | pitch, yaw mean peak | former port's roll |
+|---|---|---|---|---|
+| wep40 burst, 3 s at 8/s | 2.7e-3 | 8.4e-3 | 4.0e-3, 4.0e-3 | walk: RMS 6.1e-3, peak 1.8e-2 |
+| dive at 1.4× rated max, 3 s | 1.5e-2 | 5.1e-2 | 2.5e-2, 2.6e-2 | RMS 3.9e-3, peak 1.3e-2 |
+| nitro engage, 2 s | 1.8e-2 | 6.0e-2 | 3.1e-2, 2.9e-2 | RMS 4.2e-3, peak 1.4e-2 |
+| 40-calibre round taken | 4.8e-3 | 1.2e-2 | 6.5e-3, 5.5e-3 | envelope |
+| HE rocket 40/60, direct | 3.8e-2 | 1.05e-1 | 5.0e-2, 4.8e-2 | envelope |
+| saturated contact | 4.9e-2 | 1.41e-1 | 6.7e-2, 6.5e-2 | envelope |
+
+All in radians. The burst's 2.7e-3 rad RMS roll sits near the clip's 2.8e-3; that is consistency
+of the decoded chain with the clip, not a fit, since nothing was tuned to it. The dive and the
+engage roll about four times the former port, as the rotation's `2 × 2.5/1.2` predicts.
 
 ## Caveats
 
-- One plane (Bloodhawk), one gun (40-cal slug): plane-model/weight factors are unmeasured. A
-  second caliber on the same plane, and the same gun on a light vs heavy plane, would confirm the
-  pure-caliber law (owed capture, see `playtest.md`).
+- One plane (Bloodhawk), one gun (40-cal slug) in the clip. The decode needs neither: the kick at
+  `0x004b6e20`–`0x004b6e38` is `CALIBER × magnitude_factor` with no plane or weight term.
 - The fire-window spectrum peaks near 10.4 Hz, not 15: a damped sawtooth re-excited per shot
   and sampled at 30 fps does not yield a clean oscillator line. Frequency comes authored
   regardless; amplitude was the question.
@@ -291,22 +333,21 @@ look) is decided.
   (`docs/org/weaponFire.md`); the counter dropped 46 rounds at 8/s (~5.75 s) while the motion
   window only captured ~4.5 s, inflating the per-second reading. The two-guns-at-16/s guess is
   ruled out — one gun group, one round per tick.
-- **The `magnitude` law is a rendered quantity, not a kick amplitude** — see the conflation
-  section above: `7e-5 × caliber` was matched to the clip's rendered RMS, but a kick of that
-  size renders ~0.28× of itself at 8/s. The decoded engine-render is ~0.20 px/frame regardless
-  of the clip; the clip is only the eventual fidelity target. The clip's own ~6.5×-over-model
-  reading is a flag on that old clip measurement, not on the law.
-- **The `7e-5 × caliber` multiplicate is confirmed, but its downstream step is not yet
-  reconciled with the remake's.** The binary leaves the law intact and routes `2.80e-3` through
+- **The `magnitude` law is not a rendered angle.** `7e-5 × caliber` was matched to the clip's
+  rendered RMS, but it is a velocity magnitude fed through block 0. The ~0.28× and ~0.20 px/frame
+  figures above are the former port's walk; the decoded chain renders ~2.7e-3 rad RMS for the
+  same burst ("The port").
+- **The `7e-5 × caliber` multiplicand is confirmed, and the remake now runs its downstream
+  step.** The binary leaves the law intact and routes `2.80e-3` through
   the block's own authored law in `FUN_0042be10` (`sawtooth 1`, `frequency 15.0`, so the `4.0`
-  branch and `step = 60·mag`), giving a per-shot roll **velocity** uniform in ±0.101 rad/s. The
-  remake's `PlaneShake.cs` walks a displacement instead, so remake-vs-original amplitude equality
-  is an open question and `BL-266(a)` owns it. The `camera+0x24` consumer, the integrator that
+  branch and `step = 60·mag`), giving a per-shot roll **velocity** uniform in ±0.210 rad/s, which
+  `PlaneShake` kicks into its block 0. The `camera+0x24` consumer, the integrator that
   turns the random walk into wobble, is **`FUN_0042c0e0`**
   (render-layer): it walks the 7 component blocks, runs the per-block integrator `FUN_0042bec0`,
   sums their positions across blocks, and rocks the **plane node `DAT_0071c304`**, called
   **unconditionally by `FUN_0042e5e0` with no mode-byte gate**, so there is **no per-view (cockpit/
-nose) dampening**; plane-mounted first-person cameras inherit the wobble 1:1. The mode byte
+  nose) dampening**; the first-person camera itself is placed from the vehicle's matrix
+  (`FUN_0042d980`, `docs/org/shakes.md`), so the wobble reaches the interior rather than the view. The mode byte
   `+0x14c` is used only for FOV / interior-draw / head-lock / node-hiding — never to scale wobble.
   (The earlier negative was a missed indirect read — the consumer loads the blocks via a register-
   relative walk, not a direct `camera+0x24`.) ⚠ **That consumer is shared with `high_speed`:** the
@@ -314,6 +355,6 @@ nose) dampening**; plane-mounted first-person cameras inherit the wobble 1:1. Th
   `high_speed` drives the identical random-walk accumulator (component index 4, at
   `camera+0xd4/+0xd8/+0xdc`, not the searched `camera+0x24`) and visibly wobbles in the clips. Either
   way the original's shake is a random-walk accumulator (both sources). The remake's old `_speed`
-  path (deterministic damped sawtooth, no RNG) was a *different mechanism*, the root of
-  `BL-266(d)`'s muted dive, and `_speed` and `_nitro` now carry the original's own component block.
+  path (deterministic damped sawtooth, no RNG) was a *different mechanism*, the root of the
+  muted dive, and `_speed` and `_nitro` now carry the original's own component block.
   No live instrument is needed for any of this, every step is a static trace.

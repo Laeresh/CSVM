@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
@@ -525,8 +527,19 @@ internal static class LandingApproachSuites
             return;
         }
 
-        WithTrigger(ctx, world, director, armed, (trigger, cutscene, rig, graph) =>
-            RunAutoLandButton(ctx, world, graph, script, trigger, cutscene, rig, auto, report));
+        // The readout block is opt-in, and the realtime leg asserts the prompt never lands in it, so
+        // the rig has to be built with one.
+        bool textBlock = FlightHud.TextBlockEnabled;
+        FlightHud.TextBlockEnabled = true;
+        try
+        {
+            WithTrigger(ctx, world, director, armed, (trigger, cutscene, rig, graph) =>
+                RunAutoLandButton(ctx, world, graph, script, trigger, cutscene, rig, auto, report));
+        }
+        finally
+        {
+            FlightHud.TextBlockEnabled = textBlock;
+        }
     }
 
     private static void DriveCoopApproachRow(TestContext ctx, TestWorld world, CampaignDirector director,

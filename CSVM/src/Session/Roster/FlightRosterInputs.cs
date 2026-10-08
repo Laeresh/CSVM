@@ -10,10 +10,17 @@ using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
-using CSVM.UI.Screens;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Session.Roster;
+
+/// <summary>Builds the hidden results board a solo stunt run wakes when its last zone is cleared.
+/// It takes the run, the plane and context lines that head the board, and the key the best time is
+/// stored under. The rerun is what its Restart row calls, and the camera fills its photograph
+/// strip.</summary>
+internal delegate Control SoloStuntBoard(StuntMission run, string planeDisplay, string context,
+    string scoreKey, Action rerun, StuntCapture shots);
 
 internal sealed class FlightRosterPolicy
 {
@@ -47,7 +54,7 @@ internal sealed class FlightRosterPolicy
     /// off by default, which is the decoded head rule.</summary>
     public bool NearestAfterKill { get; init; }
     /// <summary>The saved automatic head turn
-    /// (<see cref="CSVM.Flight.Airframe.FlightController.AutoHeadTurn"/>), null where never set, which
+    /// (<see cref="CSVM.Flight.Camera.SeatLook.AutoHeadTurn"/>), null where never set, which
     /// leaves the <c>headLook.autohead</c> config key deciding.</summary>
     public bool? AutoHeadTurn { get; init; }
     public bool AutoFire { get; init; }
@@ -101,10 +108,10 @@ internal sealed class FlightRosterPolicy
         NoAssist = spec.NoAssist,
         WeaponLab = spec.WeaponLab,
         // The display is read here because it is a property of the launch, not of the seat. It
-        // answers for a headless host alone; the hidden test desktop is a real one, and the
-        // scripted arm is what keeps a suite's mouse mode its own.
+        // answers for a headless host alone; the hidden test desktop is a real one. The scripted
+        // arm, the launch's included, is what keeps a suite's mouse mode its own.
         MouseCaptureAllowed = MouseCapture.Allowed(
-            DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted),
+            DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
     };
 }
 
@@ -149,10 +156,17 @@ internal sealed class FlightWorldBindings
     public string MissionZrdrPath { get; init; } = "";
     public bool DebugCollision { get; init; }
 
-    /// <summary>The live fog band (near, far) the spyglass's range gate reads. A closure rather
-    /// than the pair itself: the zone apply rewrites it mid-mission, and the weather rig is built
-    /// after these bindings are.</summary>
-    public Func<Vector2>? FogRange { get; init; }
+    /// <summary>The live fog band (near, far) the spyglass's range gate reads, for one pane by its
+    /// <c>PlayerRig.Index</c>: each pane wears its own camera's zone. A closure rather than the
+    /// pair itself: the zone apply rewrites it mid-mission, and the weather rig is built after
+    /// these bindings are.</summary>
+    public Func<int, Vector2>? FogRange { get; init; }
+
+    /// <summary>The session's race flag: true wherever the session runs a race, whatever carries
+    /// it. Both assemblers stamp it on every aircraft (<c>FlightController.Racing</c>), and the human
+    /// one also builds the pilot unarmed, ghosted and labelled. False leaves every build as it was.
+    /// </summary>
+    public bool Racing { get; init; }
 }
 
 internal sealed class HumanRosterBindings
@@ -162,16 +176,17 @@ internal sealed class HumanRosterBindings
     public int RigCount { get; init; }
 
     /// <summary>The network match's seat roster, indexed by seat, empty outside one (which reads
-    /// as every seat local). A seat that is not <see cref="Net.NetSeat.IsLocal"/> is assembled
-    /// with an aircraft, a spawn slot, a score row and a marker colour. It gets no pane, HUD,
-    /// camera, listener or input device. Where a seat names an airframe, the roster's pick beats
-    /// this machine's launch flags: every peer has to build the same field.</summary>
+    /// as every seat local). A seat without <see cref="Net.NetSeat.HasPane"/> is assembled with an
+    /// aircraft, a spawn slot, a score row and a marker colour. It gets no pane, HUD, camera,
+    /// listener or input device. Where a seat names an airframe, the roster's pick beats this
+    /// machine's launch flags: every peer has to build the same field.</summary>
     public IReadOnlyList<Net.NetSeat> NetSeats { get; init; } = Array.Empty<Net.NetSeat>();
 
-    /// <summary>The fit a seat flown elsewhere carries, by seat, or null for its stock fit.</summary>
+    /// <summary>The fit a seat with no pane here carries, by seat, or null for its stock fit.
+    /// </summary>
     public Func<int, LoadoutChoice?>? SeatFit { get; init; }
 
-    /// <summary>The custom plane a seat flown elsewhere carries, by seat, or null for its stock
+    /// <summary>The custom plane a seat with no pane here carries, by seat, or null for its stock
     /// airframe. Its hit volumes and damage parts must match the owner's, since the shooter decides
     /// hits.</summary>
     public Func<int, CustomPlaneDef?>? SeatBuild { get; init; }
@@ -182,11 +197,9 @@ internal sealed class HumanRosterBindings
     public int[][]? PadAssignment { get; init; }
     public PauseState PauseState { get; init; } = null!;
 
-    /// <summary>The board reader for a roster seat. It maps the seat to the local player that sits
-    /// in it, so a guest's own seat drives its own cursor.</summary>
-    public Func<int, MenuInput> MenuInputFor { get; init; } = null!;
-    public bool ExitsToMenu { get; init; }
-    public Action ExitSession { get; init; } = null!;
+    /// <summary>Builds a solo stunt run's results board, the screen being the caller's to make. Null
+    /// builds none, so a seat flying a solo run has no board to hold it.</summary>
+    public SoloStuntBoard? StuntBoard { get; init; }
 
     /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
     /// leaves it inert.</summary>
@@ -194,7 +207,24 @@ internal sealed class HumanRosterBindings
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }
+
+    /// <summary>The count a stunt run reruns behind, solo or in a race, or null for none.
+    /// ⚠ Null under <c>--det</c>, so a scripted run stays byte-identical.</summary>
+    public IReadOnlyList<StartCountPhase>? RerunCount { get; init; }
+
+    /// <summary>The count a stunt run's first start runs: the rerun count solo, a race's
+    /// opening count in a race. Begun only on a seat that carries <see cref="RerunCount"/>.</summary>
+    public IReadOnlyList<StartCountPhase>? FirstStartCount { get; init; }
+
+    /// <summary>The rof tree's menu sound folder, whose shipped UI sounds a start count beeps
+    /// with. Null leaves the count silent.</summary>
+    public SoundArchive? MenuSounds { get; init; }
     public StuntRace? Race { get; init; }
+
+    /// <summary>A network race's feed off a local seat's run, in place of
+    /// <see cref="StuntRace.Follow"/>. The host follows the run, and a guest reports it to the host.
+    /// Null in split screen.</summary>
+    public Action<int, StuntMission>? RaceFeed { get; init; }
     public VersusMatch? VersusMatch { get; init; }
     public IReadOnlyList<PlayerRig> Rigs { get; init; } = Array.Empty<PlayerRig>();
     public string? InstantActionPlayerPlaneNode { get; init; }

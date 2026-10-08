@@ -19,6 +19,10 @@ internal sealed class FlightControllerBuild
     /// wherever there is no network roster.</summary>
     public int? LocalPlayer;
     public bool IsHumanPiloted;
+
+    /// <summary>A bot seat (<see cref="FlightController.IsBotSeat"/>), whose contacts take a
+    /// person's rule. Only the seat assembler sets it.</summary>
+    public bool IsBotSeat;
     public AiPilot? Pilot;
 
     /// <summary>When set, replaces keyboard input, used by automated screenshot runs. Each
@@ -67,7 +71,7 @@ internal sealed class FlightControllerBuild
     public bool UseKeyboard;
 
     /// <summary>Whether this seat may take the desktop mouse while it flies
-    /// (<see cref="FlightController.MouseCaptureAllowed"/>). The session resolves it once from its
+    /// (<see cref="SeatMouse.Allowed"/>). The session resolves it once from its
     /// own spec and the display it is on; an assembler that says nothing takes nothing.</summary>
     public bool MouseCaptureAllowed;
 
@@ -167,6 +171,7 @@ public partial class FlightController
         if (build.LocalPlayer is { } localPlayer)
             LocalPlayer = localPlayer;
         IsHumanPiloted = build.IsHumanPiloted;
+        IsBotSeat = build.IsBotSeat;
         Pilot = build.Pilot;
         _holdSegments = build.HoldSegments;
         _leverSteps = build.LeverSteps;
@@ -184,7 +189,7 @@ public partial class FlightController
         Projectiles = build.Projectiles;
         HumanPositions = build.HumanPositions;
         UseKeyboard = build.UseKeyboard;
-        MouseCaptureAllowed = build.MouseCaptureAllowed;
+        Mouse.Allowed = build.MouseCaptureAllowed;
         PadDevices = build.PadDevices;
         AllowPause = build.AllowPause;
         Inert = build.Inert;

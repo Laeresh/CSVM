@@ -1,9 +1,10 @@
 using System.Linq;
+using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
@@ -333,15 +334,15 @@ public class OriginalShellTests
 
         Click(shell, OriginalOptionsScreen.GameOptionsDoorKey);
         Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
-        Assert.Equal(OriginalOptionsScreen.DifficultyKey, shell.FocusedKey);
+        Assert.Equal(OriginalGameOptionsPage.DifficultyKey, shell.FocusedKey);
 
         // Down is the shell's own column walk over the page's rows. Right is the module's own
         // sideways step, which changes the value there and keeps the focus.
         shell.Step(Down);
-        Assert.Equal(OriginalOptionsScreen.DefaultViewKey, shell.FocusedKey);
+        Assert.Equal(OriginalGameOptionsPage.DefaultViewKey, shell.FocusedKey);
         shell.Step(Right);
-        Assert.Equal(OriginalOptionsScreen.DefaultViewKey, shell.FocusedKey);
-        Assert.Equal("Cockpit", Row(shell, OriginalOptionsScreen.DefaultViewKey).Label);
+        Assert.Equal(OriginalGameOptionsPage.DefaultViewKey, shell.FocusedKey);
+        Assert.Equal("Cockpit", Row(shell, OriginalGameOptionsPage.DefaultViewKey).Label);
 
         // Back on the page is the module's, answered the way that page's own CANCEL CHANGES is.
         Assert.Null(shell.Step(Back).Exit);
@@ -349,12 +350,12 @@ public class OriginalShellTests
 
         Click(shell, OriginalOptionsScreen.AudioDoorKey);
         Assert.Equal(OriginalScreen.Audio, shell.Screen);
-        Assert.Equal(OriginalOptionsScreen.AudioMasterKey, shell.FocusedKey);
+        Assert.Equal(OriginalAudioPage.MasterKey, shell.FocusedKey);
         shell.Step(Back);
 
         Click(shell, OriginalOptionsScreen.VideoDoorKey);
         Assert.Equal(OriginalScreen.Video, shell.Screen);
-        Assert.Equal(OriginalOptionsScreen.MonitorKey, shell.FocusedKey);
+        Assert.Equal(OriginalVideoPage.MonitorKey, shell.FocusedKey);
         shell.Step(Back);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
 
@@ -920,7 +921,7 @@ public class OriginalShellTests
             """);
         var shell = new OriginalShell(
             MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
-            hangar: new HangarFeature(strings, PlanePickerRoster.AirframeNode));
+            hangar: new HangarFeature(strings, StockAirframes.Node));
         shell.Open(OriginalScreen.Credits);
         return shell;
     }
@@ -937,7 +938,7 @@ public class OriginalShellTests
             var setup = new PlayerSetupFeature();
             setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
             setup.Join(new ScriptedMenuSeat());
-            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var hangar = new HangarFeature(UiStrings.Empty, StockAirframes.Node);
             var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
             instantAction.SelectPlayerPlane(HangarFeature.DefaultAirframe);
             var shell = new OriginalShell(
@@ -969,7 +970,7 @@ public class OriginalShellTests
             var setup = new PlayerSetupFeature();
             setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
             setup.Join(new ScriptedMenuSeat());
-            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var hangar = new HangarFeature(UiStrings.Empty, StockAirframes.Node);
             var campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
             var shell = new OriginalShell(
                 MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,

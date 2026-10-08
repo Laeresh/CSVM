@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using CSVM.Bindings;
 using CSVM.Utils;
 using Godot;
 
@@ -49,6 +50,7 @@ public sealed partial class StickPump : Node
         }
 
         roster.Update();
+        Claim(roster);
         Roster = roster;
         return new StickPump
         {
@@ -100,11 +102,13 @@ public sealed partial class StickPump : Node
         return true;
     }
 
-    // A roster change re-selects the profiles in the same frame, ahead of every reader.
+    // A roster change re-selects the profiles and re-claims the pads in the same frame, ahead of
+    // every reader.
     public override void _Process(double delta)
     {
         if (_roster?.Update() == true)
         {
+            Claim(_roster);
             _profiles?.Refresh();
         }
     }
@@ -114,6 +118,7 @@ public sealed partial class StickPump : Node
         if (ReferenceEquals(Roster, _roster))
         {
             Roster = null;
+            Pads.ClaimForSticks(Array.Empty<string>());
         }
 
         StickProfiles.Stop(_profiles);
@@ -136,6 +141,19 @@ public sealed partial class StickPump : Node
 
         Log.Info("core", $"sticks: {outcome}");
         return new StickRoster(native, GodotModels, () => Pads.InputBlocked, godotReadsGamepads: !windows);
+    }
+
+    // Takes every opened stick's model out of the pad roster, so a stick Godot also lists is not
+    // read a second time as a pad.
+    private static void Claim(StickRoster roster)
+    {
+        var models = new List<string>(roster.Sticks.Count);
+        foreach (var stick in roster.Sticks)
+        {
+            models.Add(stick.Model.Decimal);
+        }
+
+        Pads.ClaimForSticks(models);
     }
 
     // Godot's pad models, recomputed only when Pads hands back a new roster: GetJoyInfo marshals a

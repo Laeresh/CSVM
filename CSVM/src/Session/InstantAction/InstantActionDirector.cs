@@ -10,7 +10,7 @@ using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
-using CSVM.UI.Screens;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -53,8 +53,8 @@ public sealed class InstantActionDirector
     // subscription the end-condition block wires is in place. Null outside dogfight_ace.
     private FlightController? _ace;
 
-    // --debug-scoreboard (IA): single-fire, same shape as GameSession's
-    // _crashFired/_versusDebugKillFired.
+    // --debug-scoreboard (IA): single-fire, same shape as GameSession's _crashFired and the
+    // Dogfight director's own force.
     private bool _debugForceFired;
 
     // The militia -> paint-pattern table, loaded once per mission for the wave liveries.
@@ -81,13 +81,22 @@ public sealed class InstantActionDirector
     /// included, is set here where a suite can drive it.</summary>
     internal delegate FlightController? SpawnAuthoredAircraft(AiSpawn spawn);
 
-    /// <summary>GameSession.RegisterAiVoice: the voice runtime serves non-mission spawns too.</summary>
+    /// <summary>SessionVoices.RegisterAi: the voice runtime serves non-mission spawns too.</summary>
     internal delegate void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride,
         int? constitutionOverride);
 
     /// <summary>The engine-free mission runtime: the loaded def, the objective bookkeeping and
     /// the decoded actor rules. Never null on a built director.</summary>
     public InstantActionRuntime Runtime { get; }
+
+    /// <summary>The scenario key the mission's spawn walk reads: its own mission_type, so an
+    /// <c>--ia=</c> launch needs no scenario flag.</summary>
+    internal string Scenario => Runtime.Def.MissionType;
+
+    /// <summary>Whether the mission type is a stunt run. That type asks for the Danger Zones itself,
+    /// so <c>--stunt</c> is not the tester's flag to remember on an <c>--ia=</c> launch.</summary>
+    internal bool IsStuntRun =>
+        string.Equals(Runtime.Def.MissionType, "stunt_flying", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Every built wave member, across all four waves. 0 until BuildActors has run.</summary>
     private int WaveEnemyCount => _waveRosters?.Sum(r => r.Count) ?? 0;
@@ -112,7 +121,7 @@ public sealed class InstantActionDirector
             }
             catch (Exception e)
             {
-                GD.PushWarning($"--ia={spec.IaPath}: cannot load ({e.Message}), flying without a mission");
+                Log.Warn("core", $"--ia={spec.IaPath}: cannot load ({e.Message}), flying without a mission");
             }
         }
         return null;
@@ -150,6 +159,25 @@ public sealed class InstantActionDirector
         }
     }
 
+    /// <summary>The aircraft the mission forces on every human, or null to leave each pane the
+    /// aircraft its pilot selected. The def's player_plane overrides any <c>--plane=</c>; the
+    /// wizard's own def forces nothing, since its player_plane IS player 1's pick
+    /// (<see cref="HumanFieldPlanes.InstantActionOverride"/>).</summary>
+    internal string? PlayerPlaneOverride()
+    {
+        string? node = Mech3.InstantAction.PlaneNodeFor(Runtime.Def.PlayerPlane);
+        if (node == null)
+        {
+            Log.Warn("core", $"ia: player plane '{Runtime.Def.PlayerPlane}' is not one of the eleven airframes, flying '{_spec.PlaneName}' instead");
+        }
+
+        return HumanFieldPlanes.InstantActionOverride(_spec, node);
+    }
+
+    /// <summary>Hands a suite's seats to the director as <see cref="BuildActors"/> would, without
+    /// building the mission's actors, so <see cref="WireEndConditions"/> can run over real seats.</summary>
+    internal void SeatRigsForTest(List<PlayerRig> rigs) => _rigs = rigs;
+
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the
     /// wingmen, and every wave's inert roster, one contiguous phase of GameSession's
     /// BuildFlightRigs, called at the same point in its build order. Returns the build-summary
@@ -169,7 +197,7 @@ public sealed class InstantActionDirector
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
+            Log.Warn("core", $"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
         }
         if (iaPatrolNet is { Nodes.Count: 0 })
         {
@@ -198,13 +226,11 @@ public sealed class InstantActionDirector
             string? aceNode = Mech3.InstantAction.PlaneNodeFor(ia.Def.AcePlane);
             if (aceNode == null)
             {
-                GD.PushWarning($"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven " +
-                                "airframes, no ace spawned");
+                Log.Warn("core", $"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven airframes, no ace spawned");
             }
             else if (SpawnPoints.LoadIa(inputs.MissionZrdrPath, ia.Def.MissionType) is not { Count: > 0 } aceSpawns)
             {
-                GD.PushWarning($"ia: no '{ia.Def.MissionType}' spawn points for " +
-                                $"{_spec.Chapter}/{_spec.Mission}, no ace spawned");
+                Log.Warn("core", $"ia: no '{ia.Def.MissionType}' spawn points for {_spec.Chapter}/{_spec.Mission}, no ace spawned");
             }
             else
             {
@@ -241,8 +267,7 @@ public sealed class InstantActionDirector
             string? wingmanNode = Mech3.InstantAction.PlaneNodeFor(ia.Def.WingmanPlane);
             if (wingmanNode == null)
             {
-                GD.PushWarning($"ia: wingman plane '{ia.Def.WingmanPlane}' is not one of " +
-                                "the eleven airframes, no wingmen spawned");
+                Log.Warn("core", $"ia: wingman plane '{ia.Def.WingmanPlane}' is not one of the eleven airframes, no wingmen spawned");
             }
             else
             {
@@ -259,8 +284,7 @@ public sealed class InstantActionDirector
                     .Find(s => string.Equals(s.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase));
                 if (wingmanScheme == null)
                 {
-                    GD.PushWarning("ia: no 'player_fortune' entry in the paint catalog, wingmen " +
-                                    "fly unpainted/random");
+                    Log.Warn("core", $"ia: no 'player_fortune' entry in the paint catalog, wingmen fly unpainted/random");
                 }
                 var wmBasis = leadForWingmen.GlobalTransform.Basis;
                 var wmFwd = -wmBasis.Z;
@@ -292,8 +316,8 @@ public sealed class InstantActionDirector
                         continue;
                     SeatWalk(wingman);
                     // primary_target: 0, 1 and 3 escort the player; 2 and 4 escort
-                    // wingmen 1 and 3, FlightController.SelectRankedTarget's own by-name/"player"
-                    // match, the same seam the D12 ranking already reads.
+                    // wingmen 1 and 3. GunnerAcquisition.Select matches it by name or
+                    // "player", the same seam the D12 ranking already reads.
                     if (pilot.Gunner != null)
                     {
                         pilot.Gunner.PrimaryTargetName = slot.PrimaryTargetIsWingman is { } escortIdx
@@ -327,8 +351,7 @@ public sealed class InstantActionDirector
                 string? waveNode = Mech3.InstantAction.PlaneNodeFor(wave.EnemyPlane);
                 if (waveNode == null)
                 {
-                    GD.PushWarning($"ia: wave {w + 1} plane '{wave.EnemyPlane}' is not one " +
-                                    "of the eleven airframes, no wave enemies spawned");
+                    Log.Warn("core", $"ia: wave {w + 1} plane '{wave.EnemyPlane}' is not one of the eleven airframes, no wave enemies spawned");
                 }
                 else
                 {
@@ -457,8 +480,7 @@ public sealed class InstantActionDirector
             // ⚠ Do not invent a fallback spawn path: the original burns through every wave the
             // same way, its counter advancing whether or not the top-up lands
             // (docs/formats/instant-action.md).
-            GD.PushWarning($"ia: zeppelin '{objectiveZep}' carries no egen generator, no " +
-                            "wave will ever launch on this zeppelin run");
+            Log.Warn("core", $"ia: zeppelin '{objectiveZep}' carries no egen generator, no wave will ever launch on this zeppelin run");
         }
         else
         {
@@ -564,6 +586,12 @@ public sealed class InstantActionDirector
             // Reported by Step off InstantActionWaves.Finished, the sequencer owns "every
             // configured wave is cleared" and nothing here re-derives it.
         }
+        else if (objective == InstantActionObjective.ZonesFlown && inputs.Race != null)
+        {
+            // A multi-seat run is a time attack, ended by the window on the race's own board. No
+            // zone set wins it, and with no life spent it cannot be lost.
+            Log.Info("core", $"ia: stunt_flying with {inputs.Race.Racers.Count} pilots is a time attack, the race's window ends it");
+        }
         else if (objective == InstantActionObjective.ZonesFlown && inputs.StuntZones != null)
         {
             // ⚠ All-finished, never first past the post, and evaluated only over pilots who can
@@ -600,15 +628,23 @@ public sealed class InstantActionDirector
             // VersusMatch's disabled kill target/time limit already has, the mission still
             // flies and can still be lost.
             iaEnd.DisableObjective();
-            GD.PushWarning("ia: this mission has NO win condition, " + (objective switch
+            string why = objective switch
             {
                 null => $"mission type '{iaEnd.Def.MissionType}' has none in this build",
                 InstantActionObjective.AceDown => "no ace was spawned",
                 InstantActionObjective.WavesCleared => "no wave enemy is configured",
                 InstantActionObjective.ZonesFlown => "this mission ships no danger zones",
                 _ => "no zeppelin runtime was built",
-            }) + " (it can still be lost)");
+            };
+            Log.Warn("core", $"ia: this mission has NO win condition, {why} (it can still be lost)");
         }
+        // ⚠ A race waives the lives whatever the def holds. A crash there costs time alone, and
+        // only the race's own board may end it.
+        if (inputs.Race != null)
+        {
+            iaEnd.WaiveLives();
+        }
+
         // Lives are a remake-only rule; no ia.json key carries one. Every human seat joins the
         // ledger, and NotifyPilotDown decides whether the crash cam ends in a respawn.
         foreach (var rig in _rigs!)
@@ -622,9 +658,9 @@ public sealed class InstantActionDirector
             // human seat for splitscreen (ProjectilePool.ScoredShooters).
             inputs.Projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
             pilot.AutoRespawnAfter = inputs.RespawnDelay; // crash cam, then back in, R skips
-            // A mission with lives counts them, so R is the crash cam's skip and nothing else: a
-            // respawn taken while flying would repair, restock and refuel for free.
-            pilot.AllowLiveRespawn = false;
+            // Lives make R the crash cam's skip alone; a live respawn would repair, restock and
+            // refuel for free. A race's pilot restarts at will instead, the time attack's rule.
+            pilot.AllowLiveRespawn = inputs.Race != null;
             pilot.Downed += (victim, _) =>
             {
                 // ⚠ Ahead of the ledger: the ending settled the result, so a hull lost inside the
@@ -636,14 +672,17 @@ public sealed class InstantActionDirector
                 }
                 if (iaEnd.NotifyPilotDown(victim))
                 {
-                    Log.Info("core", $"ia: P{victim + 1} down, {(iaEnd.Def.Lives == 0 ? "unlimited lives" : Log.Format($"{iaEnd.LivesLeft(victim)} life/lives left"))}, respawning in {inputs.RespawnDelay:0.#} s");
+                    Log.Info("core", $"ia: P{victim + 1} down, {(iaEnd.UnlimitedLives ? "unlimited lives" : Log.Format($"{iaEnd.LivesLeft(victim)} life/lives left"))}, respawning in {inputs.RespawnDelay:0.#} s");
                     return;
                 }
                 BeginSpectate(rig);
             };
         }
         iaEnd.MissionEnded += outcome => Log.Info("core", $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")}, {iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s; holding the world {InstantActionRuntime.WrapupHoldS:0.#} s before the wrap-up board");
-        Log.Info("core", $"ia: {iaEnd.Def.MissionType}, win: {(iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none")}, loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : Log.Format($"{iaEnd.Def.Lives}"))} per pilot), {iaEnd.PilotCount} human seat(s)");
+        string loss = iaEnd.LivesWaived
+            ? "none, a race spends no lives"
+            : $"every human out of lives ({(iaEnd.UnlimitedLives ? "unlimited" : Log.Format($"{iaEnd.Def.Lives}"))} per pilot)";
+        Log.Info("core", $"ia: {iaEnd.Def.MissionType}, win: {(iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none")}, loss: {loss}, {iaEnd.PilotCount} human seat(s)");
 
         // The wrap-up board, shared over the WHOLE window like the race and dogfight boards,
         // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
@@ -651,35 +690,22 @@ public sealed class InstantActionDirector
         string context = $"{_spec.Chapter}   ·   {Mech3.InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}";
         // The Original presentation takes the ending onto its own menu page instead, so the board is
         // not built at all there: one wrap-up shows, never two.
-        IaWrapupBoard? wrapupBoard = null;
-        if (inputs.WrapupToMenu == null)
-        {
-            wrapupBoard = IaWrapupBoard.Build(
-                context, exitsToMenu: inputs.ExitsToMenu, inputs.PauseState, inputs.MenuInputFor);
-            wrapupBoard.Restart = inputs.RestartSession;
-            wrapupBoard.Exit = inputs.ExitSession;
-            // Player 1, for the same reason the race and dogfight boards are.
-            wrapupBoard.PhotoMode = () => inputs.EnterPhotoMode(0);
-            inputs.RegisterBoard(wrapupBoard);
-            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.Boards.HudLayers.Board };
-            wrapupLayer.AddChild(wrapupBoard);
-            inputs.WorldRoot.AddChild(wrapupLayer);
-        }
+        IIaWrapupBoard? wrapupBoard = inputs.WrapupToMenu == null ? inputs.BuildWrapupBoard(context) : null;
 
         // The four counters are read at the ENDING, not when the board appears: what the world does
         // through the hold is no longer this mission's score. The splits are flattened to text here
         // too, the menu page outliving the zones they are read off.
-        (UI.Menu.IaWrapupSnapshot Snapshot, StuntSummary? Stunt)? ended = null;
+        (IaWrapupSnapshot Snapshot, StuntSummary? Stunt)? ended = null;
         iaEnd.MissionEnded += outcome =>
         {
             var stunt = StuntSummary();
             ended = (
-                new UI.Menu.IaWrapupSnapshot(
+                new IaWrapupSnapshot(
                     outcome == InstantActionOutcome.Won, context, iaEnd.Elapsed, enemiesShotDown,
                     _rigs!.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0),
                     InstantActionRuntime.ShotPercent(
                         inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0),
-                    stunt is { } run ? StuntSplits.Lines(run) : null),
+                    stunt is { } run ? run.Lines() : null),
                 stunt);
             // A win is flown out: the original leaves the stick live for the whole hold, so only
             // the discrete commands go. A loss holds the seat whole, standing in for the crash
@@ -710,9 +736,7 @@ public sealed class InstantActionDirector
                 return;
             }
 
-            var shown = final.Snapshot;
-            wrapupBoard!.Present(shown.Won, shown.Elapsed, shown.EnemiesShotDown, shown.ZonesCompleted,
-                shown.ShotPercent, final.Stunt, camera);
+            wrapupBoard!.Present(final.Snapshot, final.Stunt, camera);
         };
     }
 
@@ -755,8 +779,7 @@ public sealed class InstantActionDirector
         }
         if (_waveSpawnList is not { Count: > 0 } spawns)
         {
-            GD.PushWarning($"ia: no spawn points for wave {waveNumber}, {roster.Count} " +
-                            "aircraft stay parked inert");
+            Log.Warn("core", $"ia: no spawn points for wave {waveNumber}, {roster.Count} aircraft stay parked inert");
             return;
         }
         var humanPositions = new List<Vector3>();
@@ -808,6 +831,10 @@ public sealed class InstantActionDirector
     // predicate the session runs. A no-op on every other mission type.
     private void CheckZoneSets()
     {
+        if (_end?.Race != null)
+        {
+            return; // a time attack's window ends it, never a zone set
+        }
         var pilots = new List<(bool OutOfLives, bool Finished)>(_rigs!.Count);
         foreach (var rig in _rigs)
         {
@@ -831,8 +858,8 @@ public sealed class InstantActionDirector
             return null;
         if (_rigs is not { Count: > 0 } || _rigs[0].Controller?.Stunt is not { } run)
             return null;
-        var store = ScoreStore.Load();
-        string key = $"{_spec.Chapter}/{_spec.Mission}/{PlaneRoster.PlaneFor(_spec, 0)}";
+        var store = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
+        string key = $"{_spec.Chapter}/{_spec.Mission}/{HumanFieldPlanes.PlaneFor(_spec, 0)}";
         return BuildStuntSummary(run, store, key);
     }
 
@@ -884,7 +911,7 @@ public sealed class InstantActionDirector
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ia: cannot read the militia paint patterns: {e.Message}");
+            Log.Warn("core", $"ia: cannot read the militia paint patterns: {e.Message}");
             _militiaPatterns = new Dictionary<string, string>();
         }
         return _militiaPatterns;
@@ -908,27 +935,28 @@ public sealed class InstantActionDirector
         public RegisterAiVoice RegisterVoice = null!;
     }
 
-    /// <summary>What the end-condition wiring, the spectate hand-off and the wrap-up board read
-    /// from the session: the shared runtimes' references, the board plumbing, and the tree root
+    /// <summary>What the end-condition wiring, the spectate hand-off and the wrap-up read from the
+    /// session. That is the shared runtimes' references, where the ending goes, and the tree root
     /// every node this mission builds parents under (the session's no-Teardown rule).</summary>
     internal sealed class EndConditionInputs
     {
         public StuntMission? StuntZones;
+
+        // A multi-seat stunt run's time attack, which ends the run in place of the zone sets.
+        public StuntRace? Race;
         public ZeppelinRuntime? Zeppelins;
         public ProjectilePool? Projectiles;
         public Node3D WorldRoot = null!;
         public List<SpectatorCamera> SpectatorCameras = null!;
         public Func<IReadOnlyList<Node3D>> LockCandidates = null!;
         public float RespawnDelay;
-        public bool ExitsToMenu;
-        public Action RestartSession = null!;
-        public Action ExitSession = null!;
-        public PauseState PauseState = null!;
-        public Func<int, UI.Screens.MenuInput> MenuInputFor = null!;
-        public Action<int> EnterPhotoMode = null!;
-        public Action<Control> RegisterBoard = null!;
+
+        // Builds the hidden in-flight board over the context line, parented and registered by the
+        // caller. Called once while the ending is wired, and only when WrapupToMenu is null.
+        public Func<string, IIaWrapupBoard> BuildWrapupBoard = null!;
+
         // Where the ending goes on a presentation with a wrap-up page of its own. The final numbers
         // leave for the menu and no board is built. Null keeps the in-flight board.
-        public Action<UI.Menu.IaWrapupSnapshot>? WrapupToMenu;
+        public Action<IaWrapupSnapshot>? WrapupToMenu;
     }
 }

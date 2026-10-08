@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Hud;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Net;
-using CSVM.Session.Launch;
 using CSVM.Session.World;
 using CSVM.Utils;
 
@@ -75,9 +75,9 @@ internal static class NetChatSuites
     // draws the entry too.
     private static void Panes(TestContext ctx, GameSession[] peers)
     {
-        string reading = string.Join(", ", peers.Select(p => $"{(p.NetChat != null ? "chat" : "none")}/{p.ChatPanels.Count} panel(s)"));
-        ctx.Check(peers.All(p => p.NetChat != null && p.ChatPanels.Count == 1
-                                 && ReferenceEquals(p.ChatPanels[0].Chat, p.NetChat.Chat) && p.ChatPanels[0].ShowsEntry),
+        string reading = string.Join(", ", peers.Select(p => $"{(p.Wire.Chat != null ? "chat" : "none")}/{p.Wire.ChatPanels.Count} panel(s)"));
+        ctx.Check(peers.All(p => p.Wire.Chat != null && p.Wire.ChatPanels.Count == 1
+                                 && ReferenceEquals(p.Wire.ChatPanels[0].Chat, p.Wire.Chat.Chat) && p.Wire.ChatPanels[0].ShowsEntry),
             $"every machine opens one chat, drawn in its pane with the entry ({reading})");
     }
 
@@ -87,12 +87,12 @@ internal static class NetChatSuites
         var guest = peers[1];
         var pilot = guest.SeatRigs[1].Controller!;
         ctx.Check(pilot.KeyboardHeld?.Invoke() == false, $"the guest's keyboard seat flies on its keys with no line open");
-        guest.NetChat!.Open(1, team: true);
-        ctx.Check(guest.NetChat.Chat is { Typing: true, ToTeam: true } && guest.NetChat.Chat.Prompt == strings.Get(NetChatLink.TeamPromptKey),
-            $"the team key opens the entry under {strings.Get(NetChatLink.TeamPromptKey)} ({guest.NetChat.Chat.Prompt})");
+        guest.Wire.Chat!.Open(1, team: true);
+        ctx.Check(guest.Wire.Chat.Chat is { Typing: true, ToTeam: true } && guest.Wire.Chat.Chat.Prompt == strings.Get(NetChatLink.TeamPromptKey),
+            $"the team key opens the entry under {strings.Get(NetChatLink.TeamPromptKey)} ({guest.Wire.Chat.Chat.Prompt})");
         ctx.Check(pilot.KeyboardHeld?.Invoke() == true,
             $"ABLE-TO-FAIL CONTROL: and while it is open the seat reads its keyboard idle");
-        guest.NetChat.Chat.Cancel();
+        guest.Wire.Chat.Chat.Cancel();
         ctx.Check(pilot.KeyboardHeld?.Invoke() == false, $"and has its keys back once the line is dropped");
     }
 
@@ -107,10 +107,10 @@ internal static class NetChatSuites
             $"the typist's own panel shows its echo ({Reading(peers)})");
         ctx.Check(Lines(peers[2]).Count == 0, $"and the other team's machine shows nothing ({Reading(peers)})");
 
-        int posted = peers[1].NetChat!.Chat.Posted;
+        int posted = peers[1].Wire.Chat!.Chat.Posted;
         Say(peers, 2, team: true, "alone");
         ctx.Check(Lines(peers[0]).Count == 1 && Lines(peers[1]).Count == 1 && Lines(peers[2]).Count == 1
-                  && peers[1].NetChat!.Chat.Posted == posted,
+                  && peers[1].Wire.Chat!.Chat.Posted == posted,
             $"ABLE-TO-FAIL CONTROL: team 2's line reaches no machine but its own ({Reading(peers)})");
     }
 
@@ -121,12 +121,12 @@ internal static class NetChatSuites
         string want = FlightChat.Received(peers[0].NetSeats[2].Callsign, "gg");
         ctx.Check(Lines(peers[0]).Count(l => l == want) == 1 && Lines(peers[1]).Count(l => l == want) == 1,
             $"an all-chat reaches the host and the other team's guest once each as {want} ({Reading(peers)})");
-        ctx.Check(peers.All(p => p.NetChat!.Chat.Shown), $"and every machine's panel is up");
+        ctx.Check(peers.All(p => p.Wire.Chat!.Chat.Shown), $"and every machine's panel is up");
     }
 
     private static void Say(GameSession[] peers, int seat, bool team, string text)
     {
-        var link = peers[seat].NetChat!;
+        var link = peers[seat].Wire.Chat!;
         link.Open(seat, team);
         foreach (char c in text)
         {
@@ -137,7 +137,7 @@ internal static class NetChatSuites
         Lockstep(SettleSteps, peers);
     }
 
-    private static IReadOnlyList<string> Lines(GameSession peer) => peer.NetChat!.Chat.Lines;
+    private static IReadOnlyList<string> Lines(GameSession peer) => peer.Wire.Chat!.Chat.Lines;
 
     private static string Reading(GameSession[] peers) =>
         string.Join(" | ", peers.Select((p, i) => $"m{i}: {string.Join(" / ", Lines(p))}"));

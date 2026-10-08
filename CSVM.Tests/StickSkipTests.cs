@@ -1,9 +1,11 @@
 using System;
 using System.Linq;
 using CSVM.Bindings;
+using CSVM.Session.Campaign;
 using CSVM.Sticks;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
+using CSVM.Video;
 using Godot;
 using Xunit;
 
@@ -154,13 +156,13 @@ public sealed class StickSkipTests : IDisposable
     public void AStickPressEndsExactlyTheCinemasAPadButtonEnds()
     {
         Assert.Equal(CinemaPress.PadButton, CinemaSkips.StickPress);
-        foreach (var set in new[] { CinemaScreen.ChapterKeys, CinemaScreen.ClosingKeys, CinemaScreen.BootKeys, CinemaSkip.Escape, CinemaSkip.None })
+        foreach (var set in new[] { ChapterCinema.Keys, ClosingCinema.Keys, CinemaScreen.BootKeys, CinemaSkip.Escape, CinemaSkip.None })
         {
             Assert.Equal(set.Skips(CinemaPress.PadButton), set.Skips(CinemaSkips.StickPress));
         }
 
-        Assert.True(CinemaScreen.ChapterKeys.Skips(CinemaSkips.StickPress));
-        Assert.True(CinemaScreen.ClosingKeys.Skips(CinemaSkips.StickPress));
+        Assert.True(ChapterCinema.Keys.Skips(CinemaSkips.StickPress));
+        Assert.True(ClosingCinema.Keys.Skips(CinemaSkips.StickPress));
         Assert.True(CinemaScreen.BootKeys.Skips(CinemaSkips.StickPress));
     }
 

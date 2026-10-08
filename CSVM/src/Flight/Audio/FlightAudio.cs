@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -24,6 +25,15 @@ public partial class FlightAudio : Node
     /// <summary>The state of <see cref="CockpitLoopPitched"/> where nothing is saved: pitched, the
     /// remake-only rule rather than the original's flat loop.</summary>
     public const bool CockpitLoopPitchedDefault = true;
+
+    /// <summary>A start count's beat, one per figure: the menu's typing-error cue. It is the one
+    /// shipped UI sound that is a plain tone (about 1.56 kHz, 25 ms). Under the rof tree's
+    /// <c>ASSETS/SOUNDS</c>. TUNE at the controls.</summary>
+    public const string CountBeatFile = "ENTERTEXT_ERROR.WAV";
+
+    /// <summary>A start count's GO: the menu's click, louder, longer and higher (its energy peaks
+    /// near 4.1 kHz) than the beat. TUNE at the controls.</summary>
+    public const string CountGoFile = "MOUSECLICK.WAV";
 
     /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
     /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
@@ -60,7 +70,8 @@ public partial class FlightAudio : Node
     private float _propStopVol = 1f;
     private AudioStreamPlayer? _dzCamera;
     private float _dzCameraVol = 1f;
-    private float _engineGain;       // the linear gain Update last wrote to the engine slot
+    private AudioStreamPlayer? _countBeat, _countGo;
+    private float _engineGain;      // the linear gain Update last wrote to the engine slot
 
     // Gun firing: kept references so the looped firing sound + empty-clip cue can be built
     // on demand from any caliber's LOOPED_SOUND_NAME. Own-ship, non-positional (like the engine).
@@ -128,7 +139,7 @@ public partial class FlightAudio : Node
         }
         else
         {
-            GD.PushWarning($"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
+            Log.Warn("sound", $"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
         }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
@@ -384,6 +395,25 @@ public partial class FlightAudio : Node
         Log.Info("sound", $"stunt capture: snd_dangerzone_camera MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
+    /// <summary>Builds the start count's two cue players over <paramref name="menuSounds"/>, the rof
+    /// tree's menu sound folder. Null, or a file the folder lacks, leaves that cue silent.</summary>
+    public void BindStartCount(SoundArchive? menuSounds)
+    {
+        _countBeat = MenuCuePlayer(menuSounds, CountBeatFile);
+        _countGo = MenuCuePlayer(menuSounds, CountGoFile);
+    }
+
+    /// <summary>A start count's cue, at full level under MixGain, so split screen seats counting
+    /// together do not sum into a wall of beeps.</summary>
+    public void OnStartCount(StartCountCue cue)
+    {
+        var player = cue == StartCountCue.Go ? _countGo : cue == StartCountCue.Beat ? _countBeat : null;
+        if (player == null)
+            return;
+        PlayOneShot(player, MixGain);
+        Log.Info("sound", $"start count: {cue} {(cue == StartCountCue.Go ? CountGoFile : CountBeatFile)} vol={MixGain:0.00}");
+    }
+
     /// <summary>Engine wind-down: plays snd_propstop and kills the loops. It layers over the crash
     /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it. FlightController calls
     /// both at the same moment, snd_propstop right after the boom, so the loops end on the cue.
@@ -434,7 +464,7 @@ public partial class FlightAudio : Node
         baseVolume = 1f;
         if (!defs.TryGetValue(sndName, out var def))
         {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            Log.Warn("sound", $"sound def not found in sounds.json: {sndName}");
             return null;
         }
         baseVolume = def.Volume;
@@ -449,7 +479,7 @@ public partial class FlightAudio : Node
         group = null;
         if (groups == null || !groups.TryGetValue(name, out var found))
         {
-            GD.PushWarning($"sound group not found in sounds.json: {name}");
+            Log.Warn("sound", $"sound group not found in sounds.json: {name}");
             return null;
         }
         group = found;
@@ -582,13 +612,26 @@ public partial class FlightAudio : Node
         baseVolume = 1f;
         if (!defs.TryGetValue(sndName, out var def))
         {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            Log.Warn("sound", $"sound def not found in sounds.json: {sndName}");
             return null;
         }
         var stream = archive.Find(def.WavName, looped: false);
         if (stream == null)
             return null;
         baseVolume = def.Volume; // unscaled, same convention as MakeLoop above
+        var player = new AudioStreamPlayer { Stream = stream, Bus = AudioBuses.Effects };
+        AddChild(player);
+        return player;
+    }
+
+    // A one-shot over a menu sound file, outside sounds.json, so it has no authored volume.
+    private AudioStreamPlayer? MenuCuePlayer(SoundArchive? menuSounds, string file)
+    {
+        if (menuSounds?.Find(file, looped: false, warn: false) is not { } stream)
+        {
+            Log.Info("sound", $"start count: {file} not in the menu sounds, that cue is silent");
+            return null;
+        }
         var player = new AudioStreamPlayer { Stream = stream, Bus = AudioBuses.Effects };
         AddChild(player);
         return player;

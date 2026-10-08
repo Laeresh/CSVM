@@ -53,6 +53,11 @@ public sealed record MenuCommands
     /// <summary>Confirm the focused thing (edge).</summary>
     public bool Accept { get; init; }
 
+    /// <summary>Whether <see cref="Accept"/> came from no keyboard key: a pad, a stick or a pointer.
+    /// A text field answers such a press with the on-screen keyboard where one exists
+    /// (<see cref="Utils.ScreenKeyboard"/>). A key's press stays the field's own Enter.</summary>
+    public bool KeylessAccept { get; init; }
+
     /// <summary>Leave the current screen or modal (edge).</summary>
     public bool Back { get; init; }
 
@@ -79,4 +84,9 @@ public sealed record MenuCommands
 
     /// <summary>This seat's pointer, or null when its devices have none.</summary>
     public MenuPointer? Pointer { get; init; }
+
+    /// <summary>Whether this seat's hints name its pad rather than its keyboard: the side its last
+    /// real press came from (<see cref="Bindings.ActiveDevice"/>). It commands nothing; a screen
+    /// reads it only to word a hint.</summary>
+    public bool OnPad { get; init; }
 }

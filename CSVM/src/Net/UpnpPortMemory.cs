@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Text;
+using CSVM.Utils;
 
 namespace CSVM.Net;
 
@@ -62,7 +62,7 @@ public sealed class UpnpPortMemory
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, port.ToString(CultureInfo.InvariantCulture), new UTF8Encoding(false));
+            AtomicFile.WriteAllText(_path, port.ToString(CultureInfo.InvariantCulture));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

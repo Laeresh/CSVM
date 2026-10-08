@@ -34,6 +34,39 @@ public class ControlsFeatureTests
         Assert.Equal("Use Nitro-Booster is now M.", feature.Status);
     }
 
+    /// <summary>A capture on a held slot replaces that binding where it stands. So a capture on
+    /// Control A leaves Control B as it was.</summary>
+    [Fact]
+    public void ACaptureOnTheFirstSlotReplacesItInPlace()
+    {
+        var (feature, _) = Flight();
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        var second = feature.Bindings(InputAction.Nitro)[1];
+
+        Assert.True(feature.Offer(Key(Godot.Key.M)));
+
+        Assert.Equal(new[] { Key(Godot.Key.M), second }, feature.Bindings(InputAction.Nitro));
+        Assert.Equal(0, feature.Slot);
+    }
+
+    [Fact]
+    public void ACaptureOnAMiddleSlotKeepsTheBindingsAroundIt()
+    {
+        var (feature, _) = Flight();
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(9);
+        feature.Offer(Key(Godot.Key.M));
+        var before = feature.Bindings(InputAction.Nitro).ToArray();
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(1);
+
+        feature.Offer(Key(Godot.Key.Y));
+
+        Assert.Null(feature.Pending);
+        Assert.Equal(new[] { before[0], Key(Godot.Key.Y), before[2] }, feature.Bindings(InputAction.Nitro));
+        Assert.Equal(1, feature.Slot);
+    }
+
     [Fact]
     public void AcceptWritesTheStagedEditIntoTheMapThePollingSiteHolds()
     {
@@ -157,18 +190,17 @@ public class ControlsFeatureTests
     [Fact]
     public void AHeldControlNamesEveryOwnerAndMovesNothingUntilItIsConfirmed()
     {
-        var (feature, _) = Flight();
+        var feature = SharedFlight();
         feature.Focus(IndexOf(feature, InputAction.Respawn));
         feature.MoveSlot(9);
 
-        // Numpad 7 is deliberately on two flight actions: it is Look Up and Look Left at once.
         Assert.True(feature.Offer(Key(Godot.Key.Kp7)));
 
         var pending = Assert.IsType<RebindSteal>(feature.Pending);
         Assert.Equal(
-            new[] { InputAction.LookUp, InputAction.LookLeft },
+            new[] { InputAction.LookUp, InputAction.LookUpLeft },
             pending.Losers);
-        Assert.Contains("Look Up and Look Left", feature.Status);
+        Assert.Contains("Look Up and Look Up/Left", feature.Status);
         Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUp));
         Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.Respawn));
     }
@@ -176,7 +208,7 @@ public class ControlsFeatureTests
     [Fact]
     public void ConfirmingTheStealTakesTheControlFromEveryOwner()
     {
-        var (feature, _) = Flight();
+        var feature = SharedFlight();
         feature.Focus(IndexOf(feature, InputAction.Respawn));
         feature.MoveSlot(9);
         feature.Offer(Key(Godot.Key.Kp7));
@@ -185,7 +217,7 @@ public class ControlsFeatureTests
 
         Assert.Null(feature.Pending);
         Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUp));
-        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookLeft));
+        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUpLeft));
         Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.Respawn));
         Assert.Contains("lost it", feature.Status);
     }
@@ -193,7 +225,7 @@ public class ControlsFeatureTests
     [Fact]
     public void DiscardingTheStealLeavesEveryActionsControlsAlone()
     {
-        var (feature, _) = Flight();
+        var feature = SharedFlight();
         var before = new List<Binding>(feature.Bindings(InputAction.LookUp));
         feature.Focus(IndexOf(feature, InputAction.Respawn));
         feature.MoveSlot(9);
@@ -341,14 +373,14 @@ public class ControlsFeatureTests
     [Fact]
     public void UnbindingDropsOneControlAndTouchesNoOtherAction()
     {
-        var (feature, _) = Flight();
+        var feature = SharedFlight();
         feature.Focus(IndexOf(feature, InputAction.LookUp));
-        var dropped = feature.Bindings(InputAction.LookUp)[0];
+        feature.MoveSlot(feature.Bindings(InputAction.LookUp).ToList().IndexOf(Key(Godot.Key.Kp7)));
 
         feature.UnbindSlot();
 
-        Assert.DoesNotContain(dropped, feature.Bindings(InputAction.LookUp));
-        Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookLeft));
+        Assert.DoesNotContain(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUp));
+        Assert.Contains(Key(Godot.Key.Kp7), feature.Bindings(InputAction.LookUpLeft));
         Assert.Contains("lost", feature.Status);
     }
 
@@ -775,6 +807,18 @@ public class ControlsFeatureTests
     {
         var (feature, profile, _) = FlightSeat();
         return (feature, profile.Map(InputContext.Flight));
+    }
+
+    // A flight seat whose keymap has Numpad 7 on two actions, so a steal has two owners to name.
+    // Look Up/Left holds it as shipped, and Look Up as a hand-edited file can put it.
+    private static ControlsFeature SharedFlight()
+    {
+        var feature = new ControlsFeature();
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        profile.Map(InputContext.Flight).Add(InputAction.LookUp, Key(Godot.Key.Kp7));
+        feature.AddSeat(1, profile, new FakeCaptureDevices(_ => Pad), true);
+        feature.Context = InputContext.Flight;
+        return feature;
     }
 
     private static (ControlsFeature Feature, BindingProfile Profile, FakeCaptureDevices Devices) FlightSeat()

@@ -58,8 +58,8 @@ public static class PilotVoices
 
 /// <summary>
 /// What the original asks before a network game opens, engine-free so both presentations and a
-/// unit test share it. Game Information names the game, its optional password and its seat cap,
-/// and Player Information names the player's callsign and voice. The limits and the cap's range are
+/// unit test share it. Game Information names the game, its optional password, its seat cap and
+/// the remake's Public or Private choice. Player Information names the player's callsign and voice. The limits and the cap's range are
 /// the scripts' own (<c>docs/org/multiplayer-messages.md</c>, "Game and Player Information"). The
 /// callsign, the voice and the game name are remembered in the options for the next session.
 /// </summary>
@@ -92,6 +92,12 @@ public sealed class NetPlayerInfo
     /// <summary>The Maximum # of Players spinner's value, before any cap.</summary>
     public int MaxPlayers { get; set; } = DefaultPlayers;
 
+    /// <summary>A host's Public or Private choice: true keeps the game off the master server's
+    /// games list, so internet guests need its join code. Null takes the kind's
+    /// <see cref="DefaultPrivate"/>. Never remembered, so every host starts on its kind's default.
+    /// </summary>
+    public bool? Private { get; set; }
+
     /// <summary>The name this player goes by in every list, line and roster.</summary>
     public string Callsign { get; set; } = "";
 
@@ -102,6 +108,11 @@ public sealed class NetPlayerInfo
     /// campaign flown together, sixteen for a Dogfight.</summary>
     public static int PlayerCap(NetSessionKind kind) =>
         kind == NetSessionKind.CampaignCoop ? NetPlayFeature.CoopHumans : NetSeats.MaxPlayers;
+
+    /// <summary>Whether a host of <paramref name="kind"/> starts Private. A campaign flown together
+    /// does, since its guests are friends given the code; a Dogfight starts Public, open to anyone
+    /// on the games list.</summary>
+    public static bool DefaultPrivate(NetSessionKind kind) => kind == NetSessionKind.CampaignCoop;
 
     /// <summary><paramref name="players"/> held inside the spinner's range and the kind's cap.</summary>
     public static int ClampPlayers(NetSessionKind kind, int players) => Math.Clamp(players, MinPlayers, PlayerCap(kind));

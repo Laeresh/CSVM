@@ -18,13 +18,12 @@ namespace CSVM.Session.Roster;
 public sealed class StartGrid : IFlightStarts
 {
     /// <summary>TUNE: default metres between neighbouring grid slots, measured across the line;
-    /// overridable as <c>startGrid.slotSpacing</c>. Not yet judged at the playtest
-    /// (this module's docs/architecture.md entry).</summary>
+    /// overridable as <c>startGrid.slotSpacing</c>. Judged at the controls in splitscreen.</summary>
     public const float SlotSpacingDefault = 60f;
 
     /// <summary>TUNE: default metres of air the lowest slot must have under it before the field
     /// is left alone; overridable as <c>startGrid.groundClearance</c>. Deliberately loose against
-    /// the known airframe-collision overhang; dial it at the playtest.</summary>
+    /// the known airframe-collision overhang; judged at the controls with the grid.</summary>
     public const float GroundClearanceDefault = 100f;
 
     private readonly SpawnPicker _picker;

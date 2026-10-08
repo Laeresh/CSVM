@@ -6,12 +6,11 @@ namespace CSVM.Flight.Camera;
 
 /// <summary>
 /// One <c>shakes.json</c> oscillator source: the law (frequency, damping, waveform) plus one
-/// magnitude term whose kind varies by source, a per-event <see cref="MagnitudeFactor"/>
-/// (fire_bullet × caliber, the impact trio × their event quantity), a speed law
-/// (<see cref="MagnitudeQuotient"/> + <see cref="MinSpeed"/>, high_speed only), or an absolute
-/// <see cref="Magnitude"/> (nitro only). See
-/// <see href="../../../../docs/formats/shakes.md">shakes.md</see>. Magnitudes are radians of roll
-/// applied to the plane node (measured, `analysis/gun-wobble-shake/`).
+/// magnitude term whose kind varies by source. The per-event <see cref="MagnitudeFactor"/> scales
+/// caliber or the larger damage figure. The speed law is <see cref="MagnitudeQuotient"/> with
+/// <see cref="MinSpeed"/> (high_speed), and the absolute kick <see cref="Magnitude"/> (nitro). The
+/// key the original reads for explosion is <see cref="MaxMagnitude"/>, which the file never
+/// authors. See <see href="../../../../docs/formats/shakes.md">shakes.md</see>.
 /// </summary>
 public sealed class ShakeSource
 {
@@ -24,6 +23,7 @@ public sealed class ShakeSource
     public float? MinSpeed;           // speed gate (high_speed)
     public float? MagnitudeQuotient;  // magnitude = speed / quotient (high_speed)
     public float? Magnitude;          // absolute magnitude (nitro)
+    public float? MaxMagnitude;       // explosion's falloff scale; shakes.zrd authors none
 
     /// <summary>Keys this reader does not map, empty for every source in this install; a
     /// non-empty list means the data grew a key and the reader must learn it.</summary>
@@ -41,6 +41,7 @@ public sealed class ShakeDefs
     {
         "frequency", "damp", "sawtooth",
         "magnitude_factor", "he_factor", "min_speed", "magnitude_quotient", "magnitude",
+        "max_magnitude",
     };
 
     private readonly Dictionary<string, ShakeSource> _byId = new(StringComparer.OrdinalIgnoreCase);
@@ -90,6 +91,7 @@ public sealed class ShakeDefs
             MinSpeed = F("min_speed"),
             MagnitudeQuotient = F("magnitude_quotient"),
             Magnitude = F("magnitude"),
+            MaxMagnitude = F("max_magnitude"),
         };
 
         List<string>? unhandled = null;

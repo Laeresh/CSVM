@@ -4,9 +4,9 @@ using CSVM.Mech3;
 namespace CSVM.Flight.Weapons;
 
 /// <summary>Which hand-authored burst stands in for an impact when no authored asset renders it.
-/// <c>None</c> means nothing stands in: an authored gamez model was instanced, or the original's
-/// own row resolves to nothing; <c>Spark</c> is the single-sprite base case every surface falls
-/// back to.</summary>
+/// <c>None</c> means nothing stands in: an authored gamez model was instanced, the original's own
+/// row resolves to nothing, or the struck surface is an aircraft. <c>Spark</c> is the single-sprite
+/// base case every other surface falls back to.</summary>
 public enum ImpactStandIn { None, Spark, Explosion }
 
 /// <summary>The mask a weapon's impact hook returns to <c>FUN_005ac7a0</c>, each bit removing one
@@ -47,6 +47,11 @@ public readonly record struct ImpactOutcome
     /// <summary>Which stand-in burst applies, <c>None</c> once an authored model has rendered.</summary>
     public ImpactStandIn StandIn { get; init; }
 
+    /// <summary>Whether a caller hands <see cref="EffectName"/> to the world-effects runtime. It is
+    /// owed wherever a stand-in is, and on a struck aircraft, where the row's own <c>*_gunhit</c>
+    /// plays with nothing beside it. Never once an authored model has rendered.</summary>
+    public bool EffectOwed { get; init; }
+
     /// <summary>The weapon's <c>HEALTH_DAMAGE</c>, 0 when it carries none.</summary>
     public float Damage { get; init; }
 
@@ -78,26 +83,29 @@ public readonly record struct ImpactOutcome
         // weapon that authored ANIMATION_ALWAYS would be the only exception and nothing does. The
         // crater IS the ground effect on the six CRATER weapons (docs/org/craters.md).
         string? name = cratered ? null : animation ?? effect?.SurfaceAnimation;
+        var standIn = cratered
+            ? ImpactStandIn.None
+            : StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime, effectBound);
+        // `player`(6) means a struck aircraft: no chapter material carries it (SurfaceIdOf).
+        bool aircraft = surfaceId == SurfaceRegistry.Player && !modelResolved;
 
         return new ImpactOutcome
         {
             EffectName = name,
             SurfaceOriented = name != null && animation == null,
             Sound = (suppression & ImpactSuppression.Sound) != 0 ? null : effect?.Sound,
-            StandIn = cratered
-                ? ImpactStandIn.None
-                : StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime, effectBound),
+            StandIn = standIn,
+            EffectOwed = name != null && (standIn != ImpactStandIn.None || aircraft),
             Damage = weapon.HealthDamage ?? 0f,
             BlastRadius = weapon.ImpactProximity ?? 0f,
         };
     }
 
-    // The stand-in ladder, ordered: model beats all; a hardpoint weapon with no scene gets the
-    // explosion; a gun on `buildings` whose name renders nowhere draws nothing; everything else
-    // gets the single spark. Ground has no arm of its own but must still return non-`None`:
-    // `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
-    // ⚠ Do not stand anything in for the guns' install-missing `bld_damage.flt`: the original
-    // leaves that slot null and draws nothing there (docs/org/weaponImpact.md).
+    // The stand-in ladder, ordered. A model beats all, and a hardpoint weapon with no scene gets
+    // the explosion. An aircraft, and a gun on `buildings` whose name renders nowhere, draw nothing.
+    // Everything else gets the single spark. Ground must return non-`None`: `EffectOwed` reads it.
+    // ⚠ Do not stand anything in on an aircraft or for the guns' install-missing `bld_damage.flt`:
+    // the original draws only the row there (docs/org/weaponImpact.md, vehicleDamage.md).
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime, bool effectBound)
     {
@@ -105,6 +113,8 @@ public readonly record struct ImpactOutcome
             return ImpactStandIn.None;
         if (!weapon.IsGun && !hasEffectsRuntime)
             return ImpactStandIn.Explosion;
+        if (surfaceId == SurfaceRegistry.Player)
+            return ImpactStandIn.None;
         if (surfaceId == SurfaceRegistry.Buildings && weapon.IsGun && !effectBound)
             return ImpactStandIn.None;
         return ImpactStandIn.Spark;

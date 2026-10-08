@@ -9,6 +9,7 @@ using CSVM.UI.Campaign;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.Testing;
 
@@ -125,7 +126,7 @@ internal static class MenuCampaignSuites
     {
         menu.ShowMenu();
         WalkTo(menu, LaunchMenu.CampaignRow);
-        Is(ctx, "the Mode screen's fourth row is the campaign door", LaunchMenu.CampaignRow, menu.ShownRowText);
+        Is(ctx, "the Mode screen's fifth row is the campaign door", LaunchMenu.CampaignRow, menu.ShownRowText);
         menu.Drive(Accept);
         Is(ctx, "Accept on the door opens the Campaign screen", "Campaign", menu.ShownScreen);
         Is(ctx, "on the roster", "SELECT PLAYER", menu.ShownHeading);
@@ -548,7 +549,7 @@ internal static class MenuCampaignSuites
         ctx.Check(exit.Profile == Pilot && exit.MissionSeq == FlownBefore && exit.Seats.Count == 1,
             $"for the seated profile at its next story position with one seat ({exit.Profile}, {exit.MissionSeq}, {exit.Seats.Count})");
         var seat = exit.Seats[0];
-        ctx.Check(seat.PlaneNode == PlanePickerRoster.AirframeNode(3) && seat.Fit != null && seat.Custom == null && seat.Pads.Count == 0,
+        ctx.Check(seat.PlaneNode == StockAirframes.Node(3) && seat.Fit != null && seat.Custom == null && seat.Pads.Count == 0,
             $"seat 0 flies the picked Bloodhawk's node with its campaign fit, no build and no pad ({seat.PlaneNode}, fit {seat.Fit != null}, custom {seat.Custom != null})");
         ctx.Check(menu.Campaign == null && menu.ShownScreen == "Mode", $"the flow is closed and the screen stands on Mode for the return ({menu.ShownScreen})");
         ctx.Check(File.ReadAllText(Path.Combine(store.DirFor(Pilot), "profile.json")) == CampaignProfileStore.Serialize(profile),

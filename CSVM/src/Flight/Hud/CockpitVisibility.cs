@@ -1,35 +1,39 @@
 using System;
-using System.Collections.Generic;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Flight.Hud;
 
 /// <summary>
-/// The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person
-/// view is on the screen (docs/org/cameraViews.md, "Mode 6 = Cockpit" / "Mode 7 = Nose"): Cockpit
-/// draws the <c>cockpit1</c> interior, Nose draws none of it and additionally drops the
-/// <c>markers</c> and <c>dontmove</c> groups, and both hide the <c>healthy</c> body. Every other
-/// view, and every other aircraft, is untouched.
-/// <see cref="Rules"/> is the decision and is pure, so it unit-tests without an engine;
-/// <see cref="Apply"/> is the thin write of that decision onto the four nodes
-/// <see cref="Bind"/> found in one built plane model.
+/// The per-mode hiding the original applies to the pilot's OWN aircraft in a first-person view
+/// (docs/org/cameraViews.md, "Mode 6 = Cockpit" / "Mode 7 = Nose"). Cockpit draws the
+/// <c>cockpit1</c> interior and hides the <c>healthy</c> body. Nose draws no interior and hides
+/// the body, <c>markers</c> and <c>dontmove</c>. Every other view and aircraft is untouched.
+/// The pure decision is <see cref="Rules"/>, and <see cref="Apply"/> writes it onto the four nodes
+/// <see cref="Bind"/> found in one built plane model, for that pilot's own pane alone.
 /// </summary>
 public sealed class CockpitVisibility
 {
     private readonly Node3D? _interior, _body, _markers, _dontmove;
 
-    // What ShowForPhotograph changed, so EndPhotograph restores exactly that and nothing else.
-    private readonly List<(VisualInstance3D Instance, uint Layers)> _photoLayers = new();
-    private readonly List<Node3D> _photoShown = new();
+    // The pilot's airframe stamp and the layer a hidden group trades it for.
+    private readonly uint _own, _out;
 
-    private CockpitVisibility(Node3D? interior, Node3D? body, Node3D? markers, Node3D? dontmove)
+    // Which airframe groups the last Apply moved out of the pilot's own view, so a frame that
+    // changes nothing walks no subtree.
+    private (bool Body, bool Markers, bool Dontmove) _hidden;
+
+    private CockpitVisibility(Node3D? interior, Node3D? body, Node3D? markers, Node3D? dontmove,
+        int pilot)
     {
         _interior = interior;
         _body = body;
         _markers = markers;
         _dontmove = dontmove;
+        _own = SplitScreen.OwnAirframeLayer(pilot);
+        _out = SplitScreen.FirstPersonLayer(pilot);
     }
 
     /// <summary>The decoded rule. <paramref name="firstPerson"/> is whether THIS FRAME's camera
@@ -43,70 +47,47 @@ public sealed class CockpitVisibility
             ? new Shown(Interior: false, Body: false, Markers: false, Dontmove: false)
             : new Shown(Interior: true, Body: false, Markers: true, Dontmove: true);
 
-    /// <summary>Finds the four groups in one built plane model, or null when the model carries no
-    /// interior at all, an AI plane, or any build that did not ask <see cref="PlaneBuilder"/> for
-    /// one, which is every build outside a human rig.</summary>
-    public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior)
+    /// <summary>Finds the four groups in one built plane model. Null for a model with no interior,
+    /// which is any build that did not ask <see cref="PlaneBuilder"/> for one.
+    /// <paramref name="pilot"/> is the seat whose <see cref="SplitScreen.OwnAirframeLayer"/> the
+    /// model wears.</summary>
+    public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior, int pilot)
     {
         if (planeModel == null || interior == null)
         {
             return null;
         }
         return new CockpitVisibility(interior, FindGroup(planeModel, "healthy"),
-            FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"));
+            FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"), pilot);
     }
 
-    /// <summary>Write this frame's rule onto the four nodes. Called every frame the rig owns its
-    /// camera, so nothing else has to remember to undo a hide.
-    /// ⚠ Splitscreen shares one scene tree: visibility is a property of the node, not of a
-    /// viewport, so a pilot in the cockpit hides that plane's body in EVERY pane. Each rig owns its
-    /// own plane model, which makes the rule per-pilot; a per-pane rule needs render layers.</summary>
+    /// <summary>Write this frame's rule, every frame the rig owns its camera. The interior takes
+    /// <c>Visible</c>. A hidden airframe group moves off <see cref="SplitScreen.OwnAirframeLayer"/>
+    /// onto <see cref="SplitScreen.FirstPersonLayer"/>, which only this pilot's own pane drops.
+    /// ⚠ Never hide those groups through <c>Visible</c>. Every pane shares one scene tree, so a
+    /// hidden node is gone from every pilot's view.</summary>
     public void Apply(PilotViewMode mode, bool firstPerson)
     {
         var shown = Rules(mode, firstPerson);
         Set(_interior, shown.Interior);
-        Set(_body, shown.Body);
-        Set(_markers, shown.Markers);
-        Set(_dontmove, shown.Dontmove);
-    }
-
-    /// <summary>For the one frame the Danger Zone camera draws (<see cref="Modes.DangerZonePhotograph"/>):
-    /// every group this frame's rule hides but an external view draws is shown, moved onto
-    /// <paramref name="layer"/>, which no pane's camera draws, so the photograph sees the whole
-    /// airframe while every pane draws what it drew. The interior needs nothing: the shipped path
-    /// draws it in a world of its own (<see cref="CockpitOverlay"/>), which the photograph's camera
-    /// never sees. <see cref="EndPhotograph"/> puts every write back.</summary>
-    public void ShowForPhotograph(uint layer)
-    {
-        EndPhotograph();
-        var external = Rules(PilotViewMode.Chase, firstPerson: false);
-        Reveal(_body, external.Body, layer);
-        Reveal(_markers, external.Markers, layer);
-        Reveal(_dontmove, external.Dontmove, layer);
-    }
-
-    /// <summary>Undoes <see cref="ShowForPhotograph"/>: each group's own visibility and every mesh's
-    /// own layers as they were. Nothing to do when no photograph is being drawn.</summary>
-    public void EndPhotograph()
-    {
-        // Newest first, so a mesh a nested group stamped twice ends on its first recorded layers.
-        for (int i = _photoLayers.Count - 1; i >= 0; i--)
+        var hidden = (Body: !shown.Body, Markers: !shown.Markers, Dontmove: !shown.Dontmove);
+        if (hidden == _hidden)
         {
-            var (instance, layers) = _photoLayers[i];
-            if (GodotObject.IsInstanceValid(instance))
-            {
-                instance.Layers = layers;
-            }
+            return;
         }
-        foreach (var node in _photoShown)
-        {
-            if (GodotObject.IsInstanceValid(node))
-            {
-                node.Visible = false;
-            }
-        }
-        _photoLayers.Clear();
-        _photoShown.Clear();
+
+        // Everything back first, then each hidden group out, so a group nested in another hidden
+        // one stays out of view whichever of the two changed.
+        _hidden = hidden;
+        Move(_body, _out, _own);
+        Move(_markers, _out, _own);
+        Move(_dontmove, _out, _own);
+        if (hidden.Body)
+            Move(_body, _own, _out);
+        if (hidden.Markers)
+            Move(_markers, _own, _out);
+        if (hidden.Dontmove)
+            Move(_dontmove, _own, _out);
     }
 
     private static void Set(Node3D? node, bool visible)
@@ -114,6 +95,24 @@ public sealed class CockpitVisibility
         if (node != null && node.Visible != visible)
         {
             node.Visible = visible;
+        }
+    }
+
+    // Trades one layer bit for another on every drawable in the subtree that carries it. Only the
+    // airframe stamp's own bit moves, so a layer anything else gave a mesh is left as it was.
+    private static void Move(Node? node, uint from, uint to)
+    {
+        if (node == null || !GodotObject.IsInstanceValid(node))
+        {
+            return;
+        }
+        if (node is VisualInstance3D instance && (instance.Layers & from) != 0)
+        {
+            instance.Layers = (instance.Layers & ~from) | to;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            Move(child, from, to);
         }
     }
 
@@ -142,30 +141,6 @@ public sealed class CockpitVisibility
 
     private static bool IsInterior(Node3D node) =>
         AnimRuntime.NameOf(node).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase);
-
-    private void Reveal(Node3D? node, bool shownOutside, uint layer)
-    {
-        if (node == null || !shownOutside || node.Visible || !GodotObject.IsInstanceValid(node))
-        {
-            return;
-        }
-        Restamp(node, layer);
-        node.Visible = true;
-        _photoShown.Add(node);
-    }
-
-    private void Restamp(Node node, uint layer)
-    {
-        if (node is VisualInstance3D instance)
-        {
-            _photoLayers.Add((instance, instance.Layers));
-            instance.Layers = layer;
-        }
-        foreach (var child in node.GetChildren())
-        {
-            Restamp(child, layer);
-        }
-    }
 
     /// <summary>Which of the four groups render this frame. All four true is the built state,
     /// which is what every external view and every AI plane keeps.</summary>

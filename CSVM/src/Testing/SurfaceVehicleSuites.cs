@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
@@ -27,8 +28,8 @@ internal static class SurfaceVehicleSuites
     private const int BoatGroup = 3;
     private const string BoatDef = "patrolboat";
 
-    // What the four blocks' slot-20 MSG_VEH_PATROLBOAT resolves to in the shipped string table,
-    // lowercase b and all. The only mode ship blocks in the install that author the slot.
+    // What MSG_VEH_PATROLBOAT resolves to in the shipped string table, lowercase b and all. It is
+    // the four blocks' own slot 20 and the def's title every other boat falls back to.
     private const string BoatTitle = "Patrol boat";
 
     private const float StepDt = 1f / 30f;
@@ -62,8 +63,8 @@ internal static class SurfaceVehicleSuites
         + "through the chapter's destructible pool; CM12's eshipg31 "
         + "launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 on the "
         + "host's first take-off point kilometres from the world origin, runs the path "
-        + "westward at the taxi speed, never asks for an aircraft, draws no name line at all "
-        + "since its template block authors no slot 20, and a realtime simulation "
+        + "westward at the taxi speed, never asks for an aircraft, draws the def's 'Patrol boat' "
+        + "title since its template block authors no slot 20, and a realtime simulation "
         + "request advances it once through the shared session owner")]
     internal static void CampaignSurfaceVehicles(TestContext ctx)
     {
@@ -402,32 +403,31 @@ internal static class SurfaceVehicleSuites
                 $"the hull launches on the host's first take-off point, not at the host node");
             ctx.Check(at.Length() > OriginClearanceM, $"the hull is nowhere near the world origin: {at.Length():0} m");
 
-            // The blank half of the name line. This generator's own template block authors no
-            // slot 20, so the original draws a box with no name over it and so must CSVM: a
-            // fallback to the def's title or to the block name would invent one.
-            var blankCandidates = new AimCandidateSet();
-            vessels.CollectVehicles(blankCandidates);
-            var blankPool = new TargetPool();
-            blankPool.Rebuild(blankCandidates, subParts: null, AimAssist.PlayerTeam, self: null);
-            var blankLines = new List<string>();
+            // The def's half of the name line. This generator's template block authors no slot
+            // 20, so the def's title stands, as on CM10's twelve blocks. The block name is never
+            // drawn.
+            var fallbackCandidates = new AimCandidateSet();
+            vessels.CollectVehicles(fallbackCandidates);
+            var fallbackPool = new TargetPool();
+            fallbackPool.Rebuild(fallbackCandidates, subParts: null, AimAssist.PlayerTeam, self: null);
+            var fallbackLines = new List<string>();
             bool onCycle = false;
-            foreach (var t in blankPool.Enemy)
+            foreach (var t in fallbackPool.Enemy)
             {
                 if (ReferenceEquals(t.Source, boat))
                 {
                     onCycle = true;
-                    TargetHud.LabelLines(t, null, blankLines, keepSlots: false);
-                    ctx.Check(t.DisplayName.Length == 0,
-                        $"'{GenLaunch}' authors no slot 20 and so prints no name: '{t.DisplayName}'");
+                    TargetHud.LabelLines(t, null, fallbackLines, keepSlots: false);
+                    ctx.Check(t.DisplayName == BoatTitle,
+                        $"'{GenLaunch}' authors no slot 20 and so prints its def's title: '{t.DisplayName}'");
                     ctx.Check(t.Name == GenLaunch,
                         $"'{GenLaunch}' still keeps its launch name as its identity: '{t.Name}'");
                 }
             }
-            report.AppendLine($"{GenLaunch}: marker '{boat.MarkerName}' lines [{string.Join("|", blankLines)}]");
-            ctx.Check(boat.MarkerName.Length == 0,
-                $"'{GenLaunch}' carries no marker name off its template block: '{boat.MarkerName}'");
+            report.AppendLine($"{GenLaunch}: marker '{boat.MarkerName}' lines [{string.Join("|", fallbackLines)}]");
             ctx.Check(onCycle, $"'{GenLaunch}' is on the Enemy cycle to be labelled at all");
-            ctx.Same(0, blankLines.Count, $"'{GenLaunch}' draws no label line at all");
+            ctx.Check(fallbackLines.Count == 1 && fallbackLines[0] == BoatTitle,
+                $"'{GenLaunch}' draws the def's title as the box's only label line");
 
             // The realtime adapter and the shared session simulation together must still advance
             // one step. A concrete runtime callback here would make every interactive hull run 2x.

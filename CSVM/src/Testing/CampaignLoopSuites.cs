@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
@@ -11,9 +13,8 @@ using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.UI.Campaign;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
-using CSVM.UI.Screens;
+using CSVM.Video;
 using Godot;
 
 namespace CSVM.Testing;
@@ -282,7 +283,7 @@ internal static class CampaignLoopSuites
         ctx.ExtraPrewarmSoundNames = script.SoundGroupNames();
 
         var plane = profile.Planes[Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1)];
-        string planeNode = PlanePickerRoster.AirframeNode(plane.Airframe);
+        string planeNode = StockAirframes.Node(plane.Airframe);
         try
         {
             ctx.WithWorld(chapter, collision: false, missionFolder, world =>
@@ -698,7 +699,7 @@ internal static class CampaignLoopSuites
     {
         var recorder = new FilmRecorder();
         var feature = new CampaignFeature(
-            strings, PlanePickerRoster.AirframeNode, closingCinema: new ClosingCinema(recorder.Play));
+            strings, StockAirframes.Node, closingCinema: new ClosingCinema(recorder.Play));
         feature.Open(new CampaignProfileStore(dir), null, null, ctx.DataRoot);
         var flow = new CampaignFlow(feature);
 

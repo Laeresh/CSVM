@@ -63,6 +63,12 @@ public sealed class AiPilot
     /// done, and stunned holds the controls neutral. Mutable like every other order.</summary>
     public AiModeMachine? Machine;
 
+    /// <summary>The rearm standing order, or null for a pilot that never breaks off to a base: only a
+    /// bot seat is given one. While its run stands the gunner is disengaged and no quarry is chased.
+    /// The run replaces patrol in the dispatch, so a stun, avoid crash or an evasive maneuver still
+    /// comes first. The base runtime starts and ends the run.</summary>
+    public AiRearmOrder? RearmOrder;
+
     /// <summary>The mission's <c>dzpathN</c> ribbons, or null for a session with none: with a
     /// <see cref="Machine"/> and a <see cref="Patrol"/>, reaching a net node carrying the
     /// danger-zone tag starts a run on the ribbon the node names (docs/org/aiPilot.md "The
@@ -282,13 +288,56 @@ public sealed class AiPilot
             machine.Enter(AiMode.Patrol, "respawned");
     }
 
+    /// <summary>A seat pilot's one reset on a return, so any standing order added later is cleared
+    /// here too. No quarry, mode, stun, rearm run or danger-zone run survives the aeroplane it lost.
+    /// It holds the new placement's course and lever until its gunner finds a quarry. What a mission
+    /// or a launch ordered (net, escort, primary target, auto-targeting, ratings) stays.</summary>
+    public void ResetForSpawn(Vector3 pos, Vector3 lookAt, float throttle)
+    {
+        TargetHeadingDeg = HeadingDegOf(lookAt - pos);
+        TargetAltitude = pos.Y;
+        Throttle = throttle;
+        _bareStunRemainingS = 0f;
+        ZoneRun?.Release();
+        ZoneRun = null;
+        _rail = null;
+        _zoneEntryLegFrom = -1;
+        _zoneEntryLegTo = -1;
+        RailPose = null;
+        RailSpeed = 0f;
+        SteeringPatrol = false;
+        if (Gunner is { } gunner)
+        {
+            gunner.Target = null;
+            gunner.TargetRank = default;
+            gunner.TargetRankFor = null;
+            gunner.TargetHoldUntil = 0d;
+            gunner.HoldFire();
+        }
+
+        Rocketeer?.Reset();
+        Machine?.Reset("respawned");
+        RearmOrder?.Reset();
+        if (Gunner is { } freed)
+        {
+            freed.Disengaged = false;
+        }
+    }
+
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
     /// state and this instance's fields (no clocks, and the only randomness is
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic. The
     /// one node read is a turret or structure quarry's position, which lives on its node alone.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        var quarry = PursuitQuarry.Of(Gunner?.Target, Gunner);
+        // A rearm run takes no quarry, so the machine reverts any chase on this step.
+        var rearm = RearmOrder is { Flying: true } run ? run : null;
+        if (Gunner is { } held)
+        {
+            held.Disengaged = rearm != null;
+        }
+
+        var quarry = rearm != null ? null : PursuitQuarry.Of(Gunner?.Target, Gunner);
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
         RailPose = null;          // set again below only while the rail writes the pose
 
@@ -347,7 +396,9 @@ public sealed class AiPilot
                 case AiMode.LayOff when quarry is { } pursuer:
                     return FlyLayOff(model, dt, machine, pursuer);
 
-                default: // patrol, and any mode whose quarry went away
+                default: // patrol, and any mode whose quarry went away; a rearm run replaces patrol
+                    if (rearm != null)
+                        return FlyRearm(model, dt, rearm);
                     var input = FlyPatrol(model, dt);
                     if (mode == AiMode.Patrol && Patrol is { ArrivedNode: { EntersDangerZone: true } node })
                         TryStartDangerZone(node.DangerZonePath, model, machine);
@@ -365,6 +416,8 @@ public sealed class AiPilot
         if (Escort is { Leader.InPlay: true } escort)
             return FlyEscort(model, dt, escort, quarry);
 
+        if (rearm != null)
+            return FlyRearm(model, dt, rearm);
         return quarry is { } bare ? FlyPursuit(model, dt, bare) : FlyPatrol(model, dt);
     }
 
@@ -513,6 +566,18 @@ public sealed class AiPilot
         var aim = patrol.LegStart is { } legStart
             ? PatrolAim(model.Position, legStart, node)
             : node;
+        return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
+    }
+
+    // The rearm run: the order's aim point, on the cruise table the combat driver flies while breaking
+    // off. Heading and altitude follow it, so a run that ends leaves the pilot holding its last course.
+    private FlightInput FlyRearm(FlightModel model, float dt, AiRearmOrder run)
+    {
+        var aim = run.Aim(model.Position);
+        var toAim = aim - model.Position;
+        if (new Vector2(toAim.X, toAim.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toAim);
+        TargetAltitude = aim.Y;
         return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
     }
 

@@ -4,6 +4,7 @@ using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -53,6 +54,12 @@ public sealed partial class TargetHud : Control
     /// </summary>
     public bool MarkAll;
 
+    /// <summary>A race pane's pilot labels. Every other live race pilot in <see cref="HostilePool"/>
+    /// carries the marker's name line (<see cref="TargetPool.AircraftDisplayName"/>) in the friendly
+    /// colour, on screen or at the edge. None of them is a target, so none takes brackets or the
+    /// spyglass. Off everywhere but a race session.</summary>
+    public bool RaceMarks;
+
     /// <summary>This pane's own aircraft: the side every team test here runs against
     /// (<see cref="OwnTeam"/>), and the plane excluded from <see cref="MarkAll"/>'s sweep. Null
     /// marks everything the pool lists, which is what the suite wants and what a pane with no
@@ -73,7 +80,6 @@ public sealed partial class TargetHud : Control
     internal static readonly Color HudGreen = new(0.6f, 1f, 0.6f);
 
     // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
-    private const int RefMarkerFont = 14;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
     private const float RefStaggerStep = 18f;  // --debug-markers: gap between two edge tags on one bearing
 
@@ -108,6 +114,10 @@ public sealed partial class TargetHud : Control
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
 
+    // The label's size, the chrome type scale's marker rung in the 1440p reference. The decoded
+    // 15-pixel pitch below is what bounds it: a larger rung runs the three lines into each other.
+    private static readonly float RefMarkerFont = ChromeType.InReference(ChromeSize.Label, HudMetrics.ReferenceHeight);
+
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
     /// <summary>The four objective categories the original draws RED, the rest blue
@@ -121,6 +131,7 @@ public sealed partial class TargetHud : Control
 
     private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
     private readonly List<(TargetRef Target, bool Friendly)> _marks = new(); // --debug-markers
+    private readonly List<FlightController> _racePilots = new(); // RaceMarks, refilled per draw
 
     private Camera3D _camera = null!;
     private SpyglassView? _spyglass;
@@ -259,6 +270,21 @@ public sealed partial class TargetHud : Control
         }
     }
 
+    /// <summary>Every live race pilot in <paramref name="scan"/> but <paramref name="own"/>, the ones
+    /// <see cref="RaceMarks"/> labels: a human-piloted aircraft carrying the session's race flag. An
+    /// AI aircraft is left to the hostile marker and the target cycle, which still reach it.</summary>
+    public static void CollectRacePilots(object? own, AimCandidateSet scan, List<FlightController> into)
+    {
+        foreach (var c in scan.Vehicles)
+        {
+            if (c.Live && !ReferenceEquals(c.Source, own)
+                && c.Source is FlightController { Racing: true, IsHumanPiloted: true } pilot)
+            {
+                into.Add(pilot);
+            }
+        }
+    }
+
     /// <summary>A marked plane's current AI mode in the ENGINE's own vocabulary
     /// (<see cref="AiModeMachine.NameOf"/>: patrol / pursue / lay off / evade / evasive maneuver /
     /// stunned / avoid crash), or empty for anything without a mode machine (a human seat, or an
@@ -276,6 +302,12 @@ public sealed partial class TargetHud : Control
         return head.Length > 0 ? head.ToUpperInvariant() : "AI";
     }
 
+    /// <summary>The tracked hostile's tag: the pilot's name where its seat gives one, else
+    /// <see cref="HostileTag"/> of the node name. A bot then reads by its callsign, as on the name
+    /// line.</summary>
+    public static string TrackedTag(FlightController plane) =>
+        plane.PilotName is { Length: > 0 } callsign ? callsign : HostileTag(plane.Name);
+
     /// <summary><c>--debug-markers</c>' own tag: <c>AI1 Fury 640 m H78 A91 pursue</c>. The one
     /// marker that keeps the FULL identity string rather than the shipped marker's plane-type-alone
     /// label, plus the plane type, the slant range, health then armor as whole percentages with no
@@ -290,7 +322,7 @@ public sealed partial class TargetHud : Control
             tag.Append(' ').Append(name);
         }
 
-        tag.Append(' ').Append(Mathf.RoundToInt(rangeM)).Append(" m");
+        tag.Append(' ').Append(ChromeType.Metres(rangeM));
         if (target.Health is { } health)
         {
             tag.Append(" H").Append(Mathf.RoundToInt(health * 100f));
@@ -466,7 +498,7 @@ public sealed partial class TargetHud : Control
             return;
         if (next != null)
         {
-            _hostileTag = HostileTag(next.Name);
+            _hostileTag = TrackedTag(next);
             Utils.Log.Info("flight",
                 $"targeting hud: P{PlayerIndex + 1} tracking {next.Name} at {PlanePos.DistanceTo(next.WorldPosition):0} m");
         }
@@ -535,7 +567,7 @@ public sealed partial class TargetHud : Control
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
 
         // The shipped marker, drawn in BOTH modes unlike the hostile tracker below: --debug-markers
@@ -566,6 +598,21 @@ public sealed partial class TargetHud : Control
             return;
         }
 
+        if (RaceMarks && HostilePool != null)
+        {
+            _racePilots.Clear();
+            CollectRacePilots(Own, _hostileScan, _racePilots);
+            int stagger = 0;
+            foreach (var pilot in _racePilots)
+            {
+                if (!GodotObject.IsInstanceValid(pilot) || !pilot.IsInsideTree())
+                    continue;
+                var at = FlightController.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
+                DrawOpponent(font, at, HudGreen, TargetPool.AircraftDisplayName(pilot, OwnTeam) ?? pilot.Name,
+                    s, markerFont, stagger++);
+            }
+        }
+
         // The tracked AI hostile, a FALLBACK: a pilot who has a selection marks that one target and
         // nothing else, so this draws only where no selection exists at all. The validity guard
         // covers a hostile freed between UpdateHostile's scan and this draw.
@@ -585,7 +632,7 @@ public sealed partial class TargetHud : Control
             return 0f;
         }
 
-        return UI.Overlays.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
+        return Flight.Camera.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
     }
 
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in

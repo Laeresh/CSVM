@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Bindings;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.Utils;
@@ -15,10 +17,11 @@ namespace CSVM.UI.Screens;
 /// </summary>
 public interface IJoinRoster
 {
-    /// <summary>Whether a pad has signed onto that entry, 0 to 3.</summary>
+    /// <summary>Whether that entry, 0 to 3, is taken: by the captain's pad on entry 0, by any seat
+    /// on the rest, a device-less one included.</summary>
     bool SignedOn(int entry);
 
-    /// <summary>The name of the device on that entry, empty where none has signed on.</summary>
+    /// <summary>The name of the device on that entry, empty where the entry is open.</summary>
     string Device(int entry);
 
     /// <summary>Gives every signed-on pad back, the way off the board that keeps nobody: the
@@ -33,15 +36,13 @@ public interface IJoinRoster
 public readonly record struct BoardScan(bool Moved, bool Cast, bool Pressed);
 
 /// <summary>
-/// The pad side of the shared player setup, for any presentation: which pad seat 0 claimed by
-/// steering with it, the join gesture (Start on an unclaimed pad, edge-detected per device),
-/// hotplug (a pad gone past <see cref="DeviceGrace"/> unjoins its seat, one back at another index
-/// keeps it, seat 0's poller is handed every pad nobody holds)
-/// and the flight binding a seat's source carries. A joined pad becomes a
-/// <see cref="BuiltInSeat"/> over a poller bound to that one pad. The feature never sees a pad
-/// index; this is where a source's own detail is read. ⚠ Seat 0 reads every unclaimed pad until
-/// it claims one, never <c>pads[0]</c>: phantom devices occupy the early slots.
-/// It is also the join board's roster (<see cref="IJoinRoster"/>) and the board's three gestures.
+/// The pad side of the shared player setup, for any presentation. It is the join board's roster
+/// (<see cref="IJoinRoster"/>) and its three gestures, the only way a pad takes a seat or the
+/// captain's chair. It also carries hotplug: a pad gone past <see cref="DeviceGrace"/> unjoins its
+/// seat, and one back at another index keeps it. A joined pad becomes a <see cref="BuiltInSeat"/>
+/// over a poller bound to that one pad, and its source carries the flight binding. The feature
+/// never sees a pad index. ⚠ Seat 0's poller reads every pad nobody holds, never <c>pads[0]</c>:
+/// phantom devices occupy the early slots.
 /// </summary>
 public sealed class MenuSeatDevices : IJoinRoster
 {
@@ -53,13 +54,10 @@ public sealed class MenuSeatDevices : IJoinRoster
 
     private readonly MenuInput _player1;
     private readonly PlayerSetupFeature _setup;
-    // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
+    // Previous-frame state of the board's three buttons per pad, for edge-detecting the gestures on
     // pads that have no seat (and therefore no poller) yet.
-    private readonly Dictionary<int, bool> _joinPrev = new();
-    // Previous-frame state of the board's three buttons per pad. Held apart from _joinPrev because
-    // the board's Start means cast off, not join, and reads on its own screen.
     private readonly Dictionary<int, (bool On, bool Off, bool Cast)> _boardPrev = new();
-    // The pads already reported by ReportButton since joining opened, so the report is one line per
+    // The pads already reported by ReportButton since the board opened, so the report is one line per
     // pad rather than one per frame.
     private readonly HashSet<int> _reported = new();
     // The stable guid of the device behind each pad a seat holds, seat 0's claim included. Godot
@@ -77,8 +75,8 @@ public sealed class MenuSeatDevices : IJoinRoster
         _setup = setup ?? throw new ArgumentNullException(nameof(setup));
     }
 
-    /// <summary>The pad seat 0 claimed by driving a screen with it, or -1 while it is on the
-    /// keyboard and every connected pad is still free to join.</summary>
+    /// <summary>The captain's pad, the first to sign on at the join board, or -1 while seat 0 is the
+    /// keyboard plus every pad nobody holds.</summary>
     public int P1Pad { get; private set; } = -1;
 
     /// <summary>The single pad a seat's source is bound to, or -1: a pad seat is a
@@ -104,8 +102,8 @@ public sealed class MenuSeatDevices : IJoinRoster
         return pad >= 0 ? new[] { pad } : Array.Empty<int>();
     }
 
-    /// <summary>Whether a pad already belongs to a seat: seat 0's claimed pad or a joined pad.
-    /// Before the claim, seat 0 only borrows its pads, so any of them can still join.</summary>
+    /// <summary>Whether a pad already belongs to a seat: the captain's pad or a joined pad. Before a
+    /// captain signs on, seat 0 only borrows its pads, so any of them can still sign on.</summary>
     public bool IsClaimed(int pad)
     {
         if (pad == P1Pad)
@@ -207,55 +205,7 @@ public sealed class MenuSeatDevices : IJoinRoster
         {
             _player1.Pads = free.ToArray();
             _player1.Prime();
-            // ⚠ The last-active reading dies with the set it was taken from: it names a pad seat 0
-            // was only BORROWING, and a guest steering the menu before they press Start leaves
-            // theirs in it, which a later claim would pin seat 0 to.
-            _player1.LastActivePad = -1;
             dirty = true;
-        }
-
-        return dirty;
-    }
-
-    /// <summary>Seeds the per-pad join edges from the current state, so a Start held while a
-    /// screen with joining appears does not join a seat at once.</summary>
-    public void PrimeJoins()
-    {
-        _joinPrev.Clear();
-        _reported.Clear();
-        foreach (int pad in Pads.Connected())
-        {
-            _joinPrev[pad] = MenuInput.JoinPressed(pad);
-        }
-    }
-
-    /// <summary>Start on an unclaimed pad joins a seat over that pad, primed, while a seat is
-    /// free. Returns whether anyone joined. The caller decides on which screens joining is open.</summary>
-    public bool ScanJoins()
-    {
-        bool dirty = false;
-        foreach (int pad in Pads.Connected())
-        {
-            bool pressed = MenuInput.JoinPressed(pad);
-            _joinPrev.TryGetValue(pad, out bool prev);
-            _joinPrev[pad] = pressed;
-            ReportButton(pad);
-            if (!pressed || prev || IsClaimed(pad) || _setup.Seats.Count >= PlayerSetupFeature.MaxSeats)
-            {
-                ReportRefusal(pad, pressed && !prev);
-                continue;
-            }
-
-            var input = new MenuInput { Pads = new[] { pad } };
-            input.Prime();
-            if (_setup.Join(new BuiltInSeat(input)) != null)
-            {
-                // After the join, which is what decides the seat's player number and therefore
-                // which saved keymap this pad navigates on.
-                input.LoadSavedKeymap(_setup.Seats.Count);
-                Log.Info("ui", $"launchscreen: P{_setup.Seats.Count} joined on pad {pad} \"{Input.GetJoyName(pad)}\"");
-                dirty = true;
-            }
         }
 
         return dirty;
@@ -267,7 +217,7 @@ public sealed class MenuSeatDevices : IJoinRoster
 
     /// <inheritdoc/>
     public bool SignedOn(int entry) =>
-        entry == 0 ? P1Pad >= 0 : entry > 0 && entry < _setup.Seats.Count && PadOf(_setup.Seats[entry].Source) >= 0;
+        entry == 0 ? P1Pad >= 0 : entry > 0 && entry < _setup.Seats.Count;
 
     /// <inheritdoc/>
     public string Device(int entry)
@@ -424,24 +374,6 @@ public sealed class MenuSeatDevices : IJoinRoster
         return new BoardScan(dirty, cast, pressed);
     }
 
-    /// <summary>Pins seat 0 to whichever pad it is steering with, once, so by the time joining
-    /// opens every other pad is unambiguously a joiner. Steering with the keyboard claims nothing,
-    /// and neither does a pad another seat already holds: two seats on one pad fly both planes off
-    /// it and leave the other player's own pad bound to nobody. Returns whether a claim was made.
-    /// </summary>
-    public bool ClaimP1Pad()
-    {
-        int pad = _player1.LastActivePad;
-        if (P1Pad >= 0 || pad < 0 || IsClaimed(pad))
-        {
-            return false;
-        }
-
-        P1Pad = pad;
-        Log.Info("ui", $"launchscreen: P1 claimed pad {pad} \"{Input.GetJoyName(pad)}\" (other pads join at aircraft select)");
-        return true;
-    }
-
     private static bool SameSet(List<int> free, int[] bound)
     {
         if (free.Count != bound.Length)
@@ -536,9 +468,9 @@ public sealed class MenuSeatDevices : IJoinRoster
         _away.Remove(pad);
     }
 
-    // Which button a pad is actually sending while joining is open, one line per pad per screen. A
-    // device whose Start arrives on another index (a Steam Input or DirectInput mapping the platform
-    // has no entry for) joins nobody and leaves no other trace, which reads exactly like a refusal.
+    // Which button a pad is actually sending while the board is open, one line per pad per visit. A
+    // device whose A arrives on another index signs nobody on and leaves no other trace, which reads
+    // exactly like a refusal. That is a Steam Input or DirectInput mapping the platform lacks.
     private void ReportButton(int pad)
     {
         if (_reported.Contains(pad) || Pads.InputBlocked)
@@ -554,24 +486,8 @@ public sealed class MenuSeatDevices : IJoinRoster
             }
 
             _reported.Add(pad);
-            Log.Info("ui", $"launchscreen: pad {pad} \"{Input.GetJoyName(pad)}\" sends {(JoyButton)button} ({button}) while joining is open");
+            Log.Info("ui", $"join board: pad {pad} \"{Input.GetJoyName(pad)}\" sends {(JoyButton)button} ({button})");
             return;
         }
-    }
-
-    // Why a Start that could have joined did not. The join is the only thing logged otherwise, so a
-    // refused gesture and a button that never arrived are indistinguishable from the log.
-    private void ReportRefusal(int pad, bool edge)
-    {
-        if (!edge)
-        {
-            return;
-        }
-
-        string why = pad == P1Pad ? "seat 0 claimed it"
-            : IsClaimed(pad) ? "another seat holds it"
-            : _setup.Seats.Count >= PlayerSetupFeature.MaxSeats ? $"all {PlayerSetupFeature.MaxSeats} seats are taken"
-            : "the seat itself refused the claim";
-        Log.Info("ui", $"launchscreen: Start on pad {pad} \"{Input.GetJoyName(pad)}\" joined nobody, {why}");
     }
 }

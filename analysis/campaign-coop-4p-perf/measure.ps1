@@ -2,35 +2,38 @@
 PLAN-campaign-coop D33: the 4P cost of a heavy campaign mission.
 
 Runs --perf over CM18 (C4/M03, "Deceit at Devil's Horn", seq 17 -- chosen by roster_census.py,
-see FINDINGS.md) at 1 and 4 players, with and without cockpit view, following the same protocol
-docs/tooling.md's perf stage uses: 3 launches per config, drop the first launch (cold-cache
-warmup, PERF-7) and each kept launch's first perf window (shader compile), then report the
-median of the remaining windows.
+see FINDINGS.md) at each player count in -Players, with and without cockpit view, following the
+same protocol docs/tooling.md's perf stage uses: -Launches launches per config, drop the first
+launch (cold-cache warmup, PERF-7) and each kept launch's first perf window (shader compile),
+then report the median of the remaining windows.
 
-Needs a real campaign profile on disk (a scripted --campaign= entry with no profile "flies
-without a mission" -- CampaignDirector.TryCreate, no roster/objectives/generators at all). This
-script writes one to user://Profiles/d33-perf/ (CSVM's own userdata dir), missionsCompleted=17
-so CM18 (seq 17) is reachable; it does not touch any of the user's own profiles.
+Needs a real campaign profile (a scripted --campaign= entry with no profile "flies without a
+mission" -- CampaignDirector.TryCreate, no roster/objectives/generators at all). This script
+seeds one in a store under .scratch\d33-perf\profiles and points every launch at it with
+--profiles=, missionsCompleted=17 so CM18 (seq 17) is reachable; it never reads or writes
+user://Profiles. Every launch goes through RunProbe.ps1, so no window reaches the screen.
 
 Run from the repo root with CSVM_DATA_ROOT set to the primary tree in a worktree:
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\campaign-coop-4p-perf\measure.ps1
+    .\analysis\campaign-coop-4p-perf\measure.ps1 -Players 1,2,3,4 -Launches 2
 #>
+param(
+    [int[]]$Players = @(1, 4),
+    [int]$Launches = 3,
+    [int]$Frames = 600
+)
 
 $ErrorActionPreference = "Continue"  # native stderr lines must not abort the run (PS 5.1 NativeCommandError)
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $scratch = Join-Path $repoRoot ".scratch\d33-perf"
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+$probe = Join-Path $repoRoot "RunProbe.ps1"
 
-$dataRoot = if ($env:CSVM_DATA_ROOT) { $env:CSVM_DATA_ROOT } else { $repoRoot }
-$godot = Join-Path $repoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
-if (-not (Test-Path $godot)) { $godot = Join-Path $dataRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe" }
-if (-not (Test-Path $godot)) { throw "no Godot exe at $godot -- set CSVM_DATA_ROOT to the primary tree" }
-
-# --- the profile the CM18 launch needs (CampaignDirector.TryCreate warns and flies without a
-# mission -- no roster, no objectives, no generators -- when the named profile does not exist) ---
-$profileDir = Join-Path $env:APPDATA "Godot\app_userdata\CSVM\Profiles\d33-perf"
+# --- the profile the CM18 launch needs, in a store of this run's own ---
+$store = Join-Path $scratch "profiles"
+$profileDir = Join-Path $store "d33-perf"
 New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
-@'
+$profileJson = @'
 {
   "version": 2,
   "name": "d33-perf",
@@ -45,20 +48,20 @@ New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
   "grantedAircraft": [],
   "missionResults": []
 }
-'@ | Set-Content -Path (Join-Path $profileDir "profile.json") -Encoding utf8
+'@
+[System.IO.File]::WriteAllText((Join-Path $profileDir "profile.json"), $profileJson, (New-Object System.Text.UTF8Encoding($false)))
 
-$configs = @(
-    @{ name = "1p-external"; players = 1; extra = @() },
-    @{ name = "4p-external"; players = 4; extra = @() },
-    @{ name = "1p-cockpit";  players = 1; extra = @("--view=cockpit") },
-    @{ name = "4p-cockpit";  players = 4; extra = @("--view=cockpit") }
-)
-
-$frames = 600
-$launchesPerConfig = 3
+$configs = @()
+foreach ($view in @("external", "cockpit")) {
+    foreach ($n in $Players) {
+        $extra = if ($view -eq "cockpit") { @("--view=cockpit") } else { @() }
+        $configs += @{ name = "${n}p-$view"; players = $n; extra = $extra }
+    }
+}
 
 function Get-PerfWindows($logPath) {
     $windows = @()
+    if (-not (Test-Path $logPath)) { return $windows }
     foreach ($line in Get-Content $logPath) {
         if ($line -match '\[perf\] window (.+)$') {
             $fields = @{}
@@ -82,27 +85,26 @@ function Get-Median($nums) {
 $results = @{}
 
 foreach ($cfg in $configs) {
-    $planeArg = if ($cfg.players -eq 1) { "--plane=player_bhawk" } else {
-        "--plane=" + (@("player_bhawk") * $cfg.players -join ",")
-    }
+    $planeArg = "--plane=" + (@("player_bhawk") * $cfg.players -join ",")
     $allWindows = @()
     $hitchTotal = 0
-    for ($i = 0; $i -lt $launchesPerConfig; $i++) {
+    for ($i = 0; $i -lt $Launches; $i++) {
         $shot = Join-Path $scratch "$($cfg.name)-$i.png"
-        $args = @(
-            "--campaign=d33-perf:17", "--players=$($cfg.players)", $planeArg,
-            "--det", "--perf", "--no-vsync", "--mute", "--frames=$frames", "--screenshot=$shot"
+        $launchArgs = @(
+            "--campaign=d33-perf:17", "--profiles=$store", "--players=$($cfg.players)", $planeArg,
+            "--det", "--perf", "--no-vsync", "--mute", "--frames=$Frames", "--screenshot=$shot"
         ) + $cfg.extra
-        $logOut = Join-Path $scratch "$($cfg.name)-$i.out.log"
-        Write-Host "[$($cfg.name) $i/$launchesPerConfig] $godot -- $($args -join ' ')"
-        & $godot --path (Join-Path $repoRoot "CSVM") -- @args *> $logOut
-        if ($i -eq 0) { continue }  # cold-cache warmup launch, discarded (PERF-7)
+        $logBase = Join-Path $scratch "$($cfg.name)-$i"
+        Write-Host "[$($cfg.name) $i/$Launches] $($launchArgs -join ' ')"
+        & $probe -TimeoutSec 600 -EngineArgs '--log-file', $logBase @launchArgs | Out-Null
+        if ($Launches -gt 1 -and $i -eq 0) { continue }  # cold-cache warmup launch, discarded (PERF-7)
 
+        $logOut = "$logBase.out"
         $windows = Get-PerfWindows $logOut
         if ($windows.Count -gt 1) { $windows = $windows[1..($windows.Count - 1)] }  # drop first window (shader compile)
         $allWindows += $windows
 
-        $logLine = Get-Content $logOut | Where-Object { $_ -match '\[core\] log file=(.+?) mode=' } | Select-Object -First 1
+        $logLine = Get-Content $logOut -ErrorAction SilentlyContinue | Where-Object { $_ -match '\[core\] log file=(.+?) mode=' } | Select-Object -First 1
         if ($logLine -match '\[core\] log file=(.+?) mode=') {
             $hitchPath = [System.IO.Path]::ChangeExtension($matches[1], $null).TrimEnd('.') + ".hitches.jsonl"
             if (Test-Path $hitchPath) {
@@ -122,7 +124,7 @@ foreach ($cfg in $configs) {
     $results[$cfg.name] = $metrics
 }
 
-Write-Host "`n=== D33 4P perf census: CM18 (C4/M03), $frames sim frames x $launchesPerConfig launches (first dropped) ===`n"
+Write-Host "`n=== D33 4P perf census: CM18 (C4/M03), $Frames sim frames x $Launches launches ===`n"
 "{0,-14}{1,10}{2,10}{3,9}{4,9}{5,10}{6,9}{7,9}" -f "config", "render_cpu", "gpu_ms", "draws", "nodes", "frame_ms", "mem_mb", "hitches" | Write-Host
 foreach ($name in $configs.name) {
     $m = $results[$name]

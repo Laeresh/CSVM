@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;

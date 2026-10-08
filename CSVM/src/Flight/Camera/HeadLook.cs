@@ -24,19 +24,18 @@ public enum LookMode
 
 /// <summary>One frame of look input, in the head's own conventions (docs/controls.md); the
 /// optional members default off, so a forced path leaves no stale deflection. A snap direction is
-/// a composed (x, y), +x right and +y forward; a free-look direction and the pad's absolute aim
-/// are +right and +up. Both relative directions are read for DIRECTION only, so a half-deflected
-/// input pans as fast as a full one, as the original's hat switch does. The
-/// <paramref name="PadRight"/> and <paramref name="PadUp"/> pair is exempt: it carries a
-/// MAGNITUDE, because the pad aims absolutely. A held <paramref name="Looking"/> claims the pan,
-/// so a still mouse holds the pose rather than reading as idle. The
-/// <paramref name="TogglePadlock"/> flag is Track Target; <paramref name="ForceSnap"/> writes
-/// snap, so the cockpit's look-back reaches dead astern and returns in either mode.</summary>
+/// a composed (x, y), +x right and +y forward; a free-look direction and the pad are +right and
+/// +up. Both relative directions are read for DIRECTION only, as the original's hat switch is. The
+/// pad carries a MAGNITUDE, an angle in snap and a rate in free-look, the rate alone under
+/// <paramref name="PadRatesOnly"/>. A held <paramref name="Looking"/> claims the pan, so a still
+/// mouse holds the pose rather than reading as idle. Track Target is
+/// <paramref name="TogglePadlock"/>, and <paramref name="ForceSnap"/> writes snap so the cockpit's
+/// look-back reaches dead astern in either mode.</summary>
 public readonly record struct HeadLookInput(
     float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
     float PadRight = 0f, float PadUp = 0f, bool Looking = false,
     bool SelectSnapMode = false, bool SelectFreeLookMode = false, bool TogglePadlock = false,
-    bool ForceSnap = false);
+    bool ForceSnap = false, bool PadRatesOnly = false);
 
 /// <summary>The pilot's head, in the two first-person views and on the chase camera alike,
 /// engine-free apart from <see cref="Mathf"/>. It holds the TARGET angles it is told to look at,
@@ -45,12 +44,13 @@ public readonly record struct HeadLookInput(
 /// view from them. Elevation is 0 at level and +π/2 straight up, clamped to
 /// <see cref="ElevationFloor"/>..π/2, the floor the placing view sets. Azimuth is 0 straight ahead
 /// and positive to the left, CLAMPED to ±π, the original's own stop at dead astern. Both bounds
-/// bind the relative paths (snap, free-look, center); the absolute pad aim carries its own
-/// envelope, see <see cref="PadAimTargets"/>.</summary>
+/// bind the relative paths (snap, free-look and its pad rate, center); the snap mode's absolute pad
+/// aim carries its own envelope, see <see cref="PadAimTargets"/>.</summary>
 public sealed class HeadLook
 {
     /// <summary>Free-look pan rate, rad/s, in whichever direction the input points
-    /// (docs/org/cameraViews.md, head-look controller: <c>angle += 2·dt·…</c>).</summary>
+    /// (docs/org/cameraViews.md, head-look controller: <c>angle += 2·dt·…</c>). A fully deflected
+    /// look stick turns at it too, and a partial one at that share of it.</summary>
     public const float FreeLookRate = 2f;
 
     /// <summary>Exponential catch-up rate of the shown elevation toward its target, 1/s
@@ -77,8 +77,8 @@ public sealed class HeadLook
     /// <summary>The snap elevation for a diagonal direction: 45° up (<c>0.7853982</c>).</summary>
     public const float DiagonalElevation = Mathf.Pi / 4f;
 
-    /// <summary>The pad look envelope: where a fully deflected right stick aims, left/right and
-    /// up/down. NOT decoded, since the original binds no absolute stick; a UX call for this port.
+    /// <summary>The pad look envelope: where a fully deflected right stick aims in snap mode,
+    /// left/right and up/down. NOT decoded, since the original binds no absolute stick; a UX call for this port.
     /// Shared with <see cref="CameraController.PadSwing"/> so the chase camera and the first-person
     /// head cannot drift apart.</summary>
     public const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
@@ -142,6 +142,11 @@ public sealed class HeadLook
     /// both obey whichever mode the keys chose.</summary>
     public LookMode Mode { get; private set; }
 
+    /// <summary>Whether the look stick turns this head at a rate rather than aiming it: true in
+    /// <see cref="LookMode.FreeLook"/> alone. The chase swing reads it and stands aside while it
+    /// holds, since the stick then turns that view through this head.</summary>
+    public bool PadRates => Mode == LookMode.FreeLook;
+
     /// <summary>The lowest elevation this head may be told to look at:
     /// <see cref="FirstPersonElevationFloor"/> in the cockpit and <see cref="ChaseElevationFloor"/>
     /// on the chase camera. Settable rather than fixed because the original's one head serves both
@@ -194,11 +199,11 @@ public sealed class HeadLook
         return (elevation, Wrap(-angle));
     }
 
-    /// <summary>The absolute pad mapping: stick position IS head position, scaled by the shared
+    /// <summary>The snap mode's pad mapping: stick position IS head position, scaled by the shared
     /// <see cref="PadLookYawMaxDeg"/>/<see cref="PadLookPitchMaxDeg"/> envelope. Deliberately
-    /// ignores <see cref="ElevationFloor"/>: that floor bounds the original's relative controls,
-    /// and first person floors it at level, which would leave the lower half of an absolute
-    /// stick's travel inert. Pure; <paramref name="right"/> is +right, <paramref name="up"/> +up,
+    /// ignores <see cref="ElevationFloor"/>, which bounds the original's relative controls. First
+    /// person floors those at level, which would leave the lower half of an absolute stick's travel
+    /// inert. Pure; <paramref name="right"/> is +right, <paramref name="up"/> +up,
     /// both expected in [−1, 1].</summary>
     public static (float Elevation, float Azimuth) PadAimTargets(float right, float up) =>
         (Mathf.Clamp(up, -1f, 1f) * Mathf.DegToRad(PadLookPitchMaxDeg),
@@ -263,8 +268,8 @@ public sealed class HeadLook
     /// alone, then chase it. Padlock owns the whole frame and reads no look control, the centre key
     /// included. Otherwise the centre key beats everything. Snap runs the direction table, the pad,
     /// the mouse pan, or the idle frame <see cref="IdleAim"/> owns. Free-look integrates the numpad
-    /// direction, else the pad, else the mouse pan, else holds. A centred pad claims no frame.
-    /// </summary>
+    /// direction, else the pad's rate, else the mouse pan, else holds. A centred pad claims no
+    /// frame.</summary>
     public void Step(float dt, in HeadLookInput input)
     {
         bool direction = input.SnapX != 0f || input.SnapY != 0f;
@@ -301,7 +306,9 @@ public sealed class HeadLook
         }
         else if (_padFilter.Active)
         {
-            PadAim();
+            // Gated on the raw stick: a let-go stick adds nothing from its first frame back inside
+            // the band. The targets stay where it turned them.
+            PadRate(dt);
         }
         else if (panning)
         {
@@ -331,8 +338,8 @@ public sealed class HeadLook
         Mode = LookMode.Snap;
     }
 
-    // This frame's mode, in writer order: the keys on their press edge, then the forced snap. ⚠ No
-    // device writes the mode. A numpad direction writing Snap would make the free-look pan
+    // This frame's mode, in writer order: the keys on their press edge, then the forced snap.
+    // ⚠ No device writes the mode. A numpad direction writing Snap would make the free-look pan
     // impossible, and a mouse pan writing FreeLook would stop the head springing back in snap.
     private void SelectMode(in HeadLookInput input)
     {
@@ -399,7 +406,7 @@ public sealed class HeadLook
         {
             SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
         }
-        else if (_padFilter.Active)
+        else if (_padFilter.Active && !input.PadRatesOnly)
         {
             PadAim();
         }
@@ -418,14 +425,24 @@ public sealed class HeadLook
         }
     }
 
-    // The pad's absolute aim, this port's own path: a standing instruction, so it sits below the
-    // discrete commands and above the pan. Read off the filter rather than the raw pair, and
-    // assigned rather than SetTargets'd, since it owns its own bounds.
+    // The pad's absolute aim, snap mode's own path in this port: a standing instruction, so it sits
+    // below the discrete commands and above the pan. Read off the filter rather than the raw pair,
+    // and assigned rather than SetTargets'd, since it owns its own bounds.
     private void PadAim()
     {
         var (elevation, azimuth) = PadAimTargets(_padFilter.X, _padFilter.Y);
         TargetElevation = elevation;
         TargetAzimuth = azimuth;
+    }
+
+    // Free-look's pad law: the filtered deflection scales the decoded pan rate, inside the pan's own
+    // bounds. Capped at full length, so a square gate's corner turns no faster than its edge.
+    private void PadRate(float dt)
+    {
+        float right = _padFilter.X, up = _padFilter.Y;
+        float length = Mathf.Sqrt((right * right) + (up * up));
+        float step = FreeLookRate * dt / Mathf.Max(1f, length);
+        SetTargets(TargetElevation + (step * up), TargetAzimuth - (step * right));
     }
 
     // Integrate the targets at the fixed pan rate along the input direction. The direction is
@@ -453,10 +470,8 @@ public sealed class HeadLook
 /// a first-order lag at <see cref="HeadLook.PadAimSmoothRate"/> on each component. The pair is the
 /// stick's own: the head reads it as right and up, the chase swing as right and down.
 /// ⚠ Ask <see cref="Active"/> whether the stick is being used, never the filtered pair. The lag
-/// never lands on its input exactly, so a held stick's pair is never its raw one. Without release
-/// rates the band zeroes the state, so a reader with its own return starts it on the frame the stick
-/// was let go. With them the pair itself eases home, for a reader that has no return of its own.
-/// </summary>
+/// never lands on its input exactly, so a held stick's pair is never its raw one. A let-go pair is
+/// zeroed with no release rates, or eased home with them.</summary>
 public sealed class StickLookFilter
 {
     // Below this a returning component is put on 0 exactly, about 0.015° of swing. A reader's
@@ -488,7 +503,7 @@ public sealed class StickLookFilter
     public bool Swinging => X != 0f || Y != 0f;
 
     /// <summary>Advance one frame over the raw pair. Inside the band the pair is released: zeroed,
-    /// or eased home at the release rates. A stick taken again mid-return resumes from there.
+    /// or eased home at the release rates. A stick taken again resumes from wherever the pair is.
     /// </summary>
     public void Step(float dt, float x, float y)
     {

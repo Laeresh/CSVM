@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Bindings;
@@ -117,31 +118,40 @@ public sealed class BindingStore
     /// cannot read all leave the action at its default. A control the file names is taken off any
     /// action still holding it by default. A file naming no mouse-flying flag leaves the seat on the
     /// keyboard and pad schemes, and one naming no sensitivity leaves it unscaled.</summary>
-    public static BindingProfile Deserialize(string json, DeviceId pad, bool readsKeyboard)
+    public static BindingProfile Deserialize(string json, DeviceId pad, bool readsKeyboard) =>
+        Deserialize(json, pad, readsKeyboard, out _) ?? BindingProfile.Defaults(pad, readsKeyboard);
+
+    /// <summary>The same read, but null with the reason in <paramref name="error"/> for text that is
+    /// no JSON object at all. That is the one failure <see cref="Load"/> moves a file aside for; a
+    /// bad row still costs only its row.</summary>
+    public static BindingProfile? Deserialize(string json, DeviceId pad, bool readsKeyboard, out string error)
     {
         var profile = BindingProfile.Defaults(pad, readsKeyboard);
+        error = string.Empty;
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            if (root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty(MouseFlyingField, out var flying)
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                error = "not a JSON object";
+                return null;
+            }
+
+            if (root.TryGetProperty(MouseFlyingField, out var flying)
                 && flying.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
                 profile.MouseFlying = flying.GetBoolean();
             }
 
-            if (root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty(MouseSensitivityField, out var sensitivity)
+            if (root.TryGetProperty(MouseSensitivityField, out var sensitivity)
                 && sensitivity.ValueKind == JsonValueKind.Number
                 && sensitivity.TryGetSingle(out float scale))
             {
                 profile.MouseSensitivity = scale;
             }
 
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("contexts", out var contexts)
-                || contexts.ValueKind != JsonValueKind.Object)
+            if (!root.TryGetProperty("contexts", out var contexts) || contexts.ValueKind != JsonValueKind.Object)
             {
                 return profile;
             }
@@ -154,9 +164,10 @@ public sealed class BindingStore
                 }
             }
         }
-        catch (JsonException)
+        catch (JsonException e)
         {
-            return BindingProfile.Defaults(pad, readsKeyboard);
+            error = e.Message;
+            return null;
         }
 
         return profile;
@@ -241,24 +252,24 @@ public sealed class BindingStore
     }
 
     /// <summary>That player's stored keymap, or the shipped defaults when the file is absent,
-    /// unreadable or malformed. A read failure is never the caller's problem to handle.</summary>
+    /// unreadable or malformed. A read failure is never the caller's problem to handle. A file that
+    /// is no JSON object is moved aside to <c>.bad</c>. An unreadable one is not saved over this
+    /// session, as <see cref="AtomicFile"/> rules.</summary>
     public BindingProfile Load(int player, DeviceId pad, bool readsKeyboard)
     {
-        try
-        {
-            var path = Path.Combine(_dir, FileNameFor(player));
-            return File.Exists(path)
-                ? Deserialize(File.ReadAllText(path), pad, readsKeyboard)
-                : BindingProfile.Defaults(pad, readsKeyboard);
-        }
-        catch (IOException)
+        var path = Path.Combine(_dir, FileNameFor(player));
+        if (AtomicFile.ReadAllText(path) is not { } text)
         {
             return BindingProfile.Defaults(pad, readsKeyboard);
         }
-        catch (UnauthorizedAccessException)
+
+        if (Deserialize(text, pad, readsKeyboard, out string error) is { } profile)
         {
-            return BindingProfile.Defaults(pad, readsKeyboard);
+            return profile;
         }
+
+        AtomicFile.SetAside(path, error);
+        return BindingProfile.Defaults(pad, readsKeyboard);
     }
 
     /// <summary>Writes that player's keymap atomically: the JSON lands in a sibling temp file and a
@@ -267,10 +278,7 @@ public sealed class BindingStore
     public void Save(int player, BindingProfile profile)
     {
         Directory.CreateDirectory(_dir);
-        var path = Path.Combine(_dir, FileNameFor(player));
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, Serialize(player, profile), new UTF8Encoding(false));
-        File.Move(temp, path, overwrite: true);
+        AtomicFile.WriteAllText(Path.Combine(_dir, FileNameFor(player)), Serialize(player, profile));
     }
 
     // Every readable row is cleared before any is added, and full axes go in last. A full axis
@@ -281,7 +289,7 @@ public sealed class BindingStore
         var saved = new List<(InputAction Action, List<Binding> Bindings)>();
         foreach (var entry in element.EnumerateObject())
         {
-            if (!Enum.TryParse(entry.Name, ignoreCase: true, out InputAction action)
+            if (!TryAction(entry.Name, out var action)
                 || DefaultBindings.ContextOf(action) != context
                 || entry.Value.ValueKind != JsonValueKind.Array
                 || !TryRow(entry.Value, action, pad, out var bindings))
@@ -292,6 +300,7 @@ public sealed class BindingStore
             saved.Add((action, bindings));
         }
 
+        SnapLookRows.MigrateSaved(saved);
         foreach (var (action, _) in saved)
         {
             map.Clear(action);
@@ -314,11 +323,23 @@ public sealed class BindingStore
         TakeControlsTheFileClaims(map, saved);
     }
 
+    // An action's row name, including the one token a renamed action was saved under.
+    private static bool TryAction(string name, out InputAction action)
+    {
+        if (string.Equals(name, SnapLookRows.LegacyRearToken, StringComparison.OrdinalIgnoreCase))
+        {
+            action = InputAction.LookRear;
+            return true;
+        }
+
+        return Enum.TryParse(name, ignoreCase: true, out action);
+    }
+
     // A control the file names belongs to the action the file gives it, so a default row left over
     // on that control loses it. Otherwise a shipped table that moves a control between actions puts
     // it on two at once, which the map's steal rule forbids. Rows the file names keep sharing a
-    // control, since a saved snap-look diagonal is deliberately two actions. A full axis's partner
-    // row holds the same binding, so it is not a loser either.
+    // control, since a hand-edited file may put one on two actions as the defaults may. A full
+    // axis's partner row holds the same binding, so it is not a loser either.
     private static void TakeControlsTheFileClaims(
         ActionMap map, List<(InputAction Action, List<Binding> Bindings)> saved)
     {

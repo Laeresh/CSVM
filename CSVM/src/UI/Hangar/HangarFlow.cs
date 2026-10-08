@@ -142,7 +142,7 @@ public sealed class HangarFlow
     public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null,
         StockLoadouts? stockFits = null, string? zrdrPath = null, CampaignWallet? campaign = null,
         Random? nameRng = null)
-        : this(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => stockFits, zrdrPath),
+        : this(new HangarFeature(strings, StockAirframes.Node, () => stockFits, zrdrPath),
             store, dataRoot, campaign, nameRng)
     {
     }

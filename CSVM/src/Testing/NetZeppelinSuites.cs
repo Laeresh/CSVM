@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Mech3;
@@ -41,9 +42,9 @@ internal static class NetZeppelinSuites
     private static readonly (string Name, LoopbackConditions Link)[] Matrix =
     {
         ("clean", LoopbackConditions.Perfect),
-        ("50ms/5%", new LoopbackConditions(0.05, 0.01, 0.05)),
-        ("100ms/10%", new LoopbackConditions(0.10, 0.02, 0.10)),
-        ("200ms/20%", new LoopbackConditions(0.20, 0.04, 0.20)),
+        ("50ms/5%", SoakCells.Broadband),
+        ("100ms/10%", SoakCells.Congested),
+        ("200ms/20%", SoakCells.PoorWireless),
     };
 
     [Suite("net-zeppelin-path",
@@ -67,7 +68,7 @@ internal static class NetZeppelinSuites
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(MeshSeed));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = "player_pfighter" },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = "player_pfighter" },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = "player_fbrand" },
         };
         NetSeats.Validate(roster);

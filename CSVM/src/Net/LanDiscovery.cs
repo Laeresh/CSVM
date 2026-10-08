@@ -16,10 +16,12 @@ public interface ILanSocket : IDisposable
     byte[]? Receive(out string address, out int port);
 }
 
-/// <summary>One open door a LAN search heard: where it answered from and the game port a join
-/// aims at. It also carries the advert it answered with and the host build's version.</summary>
+/// <summary>One row of the games list: where it answered from and the game port a join aims at.
+/// It also carries the advert it answered with and the host build's version. A game the master
+/// server listed carries its join <paramref name="Code"/> as both the code and the address, and
+/// port 0; a LAN answer's code is null.</summary>
 public readonly record struct LanGame(
-    string Address, int Port, SessionAdvertMessage Advert, NetBuildVersion Version = default);
+    string Address, int Port, SessionAdvertMessage Advert, NetBuildVersion Version = default, string? Code = null);
 
 /// <summary>
 /// The LAN discovery wire, engine-free. A query and a reply share a 12-byte header: the magic

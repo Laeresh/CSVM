@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using CSVM.Flight.Modes;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Screens;
@@ -95,7 +96,7 @@ public sealed partial class ShotViewer : Control
 
         var image = Read(shot.Path) ?? shot.Thumb!;
         ImageSize = image.GetSize();
-        _picture.Texture = ImageTexture.CreateFromImage(image);
+        _picture.Texture = TextureUpload.Create(image, callerKeeps: true);
         float scale = IsInsideTree() ? Mathf.Max(1f, GetViewportRect().Size.Y / 720f) : 1f;
         _caption.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(CaptionFont * scale));
         _caption.Text = $"{shot.DzName}   ·   {StuntMission.FormatTime(shot.At)}   ·   Esc (pad B) close";

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Screens;
@@ -122,7 +123,7 @@ public sealed partial class StuntShotStrip : VBoxContainer
 
     private static void Fill(TextureRect picture, Image thumb, float width)
     {
-        picture.Texture = ImageTexture.CreateFromImage(thumb);
+        picture.Texture = TextureUpload.Create(thumb, callerKeeps: true);
         picture.CustomMinimumSize = new Vector2(width, width * thumb.GetHeight() / Mathf.Max(1, thumb.GetWidth()));
     }
 

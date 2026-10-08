@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.UI.Screens;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Boards;
@@ -408,7 +409,7 @@ public sealed partial class ComposedBoardView : Control
                 Mathf.Max(1f, fit.Length(2f)));
         }
 
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         _marqueeMoving = false;
         foreach (var line in board.Lines)
         {
@@ -817,7 +818,7 @@ public sealed partial class ComposedBoardView : Control
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(13f)));
         float baseline = plaque.LabelBaseline > 0f
             ? at.Y + fit.Length(plaque.LabelBaseline)
-            : at.Y + (span.Y / 2f) + (points * 0.38f);
+            : at.Y + (span.Y / 2f) + (points * BoardLine.CapsMiddle);
         DrawString(font, new Vector2(at.X + 1f, baseline + 1f), plaque.Label,
             HorizontalAlignment.Center, span.X, points, Colors.Black);
         DrawString(font, new Vector2(at.X, baseline), plaque.Label,
@@ -1111,7 +1112,7 @@ public sealed partial class ComposedBoardView : Control
             {
                 NormalizeGamma(image, gamma);
             }
-            texture = ImageTexture.CreateFromImage(image);
+            texture = TextureUpload.Create(image);
         }
 
         _textures[path] = texture;
@@ -1129,7 +1130,7 @@ public sealed partial class ComposedBoardView : Control
 
         if (!_held.TryGetValue(pixels, out var texture))
         {
-            texture = ImageTexture.CreateFromImage(pixels);
+            texture = TextureUpload.Create(pixels, callerKeeps: true);
             _held[pixels] = texture;
         }
 

@@ -403,6 +403,6 @@ public sealed class EmptyStage
             }
         }
         img.GenerateMipmaps();
-        return ImageTexture.CreateFromImage(img);
+        return TextureUpload.Create(img);
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight.Camera;
-using CSVM.Flight.Hud;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.Utils;
@@ -37,7 +36,6 @@ public sealed partial class DangerZonePhotograph : SubViewport
     private readonly List<GeometryInstance3D> _filled = new();
     private Camera3D _camera = null!;
     private Camera3D? _pane;
-    private CockpitVisibility? _cockpit;
     private Node? _airframe;
     private Func<Transform3D> _aircraft = null!;
     private Func<float> _unit = null!;
@@ -69,7 +67,7 @@ public sealed partial class DangerZonePhotograph : SubViewport
     /// <paramref name="random"/> answers a uniform draw in [0, 1); <paramref name="airframe"/> is
     /// the subtree the photograph's fill light reaches, the pilot's own aircraft. Add it anywhere
     /// in the tree the pane's world is reachable from.</summary>
-    public static DangerZonePhotograph Build(Camera3D? pane, CockpitVisibility? cockpit,
+    public static DangerZonePhotograph Build(Camera3D? pane,
         Func<Transform3D> aircraft, float dist, Func<float> random, Node? airframe = null)
     {
         var view = new DangerZonePhotograph
@@ -83,7 +81,6 @@ public sealed partial class DangerZonePhotograph : SubViewport
                 "rendering/anti_aliasing/quality/msaa_3d", 0).AsInt32(),
         };
         view._pane = pane;
-        view._cockpit = cockpit;
         view._airframe = airframe;
         view._aircraft = aircraft;
         view._dist = dist;
@@ -182,8 +179,8 @@ public sealed partial class DangerZonePhotograph : SubViewport
         _camera.Far = _pane.Far;
         _camera.Environment = _pane.Environment;
         _camera.Attributes = _pane.Attributes;
-        _camera.CullMask = _pane.CullMask | SplitScreen.PhotographLayer;
-        _cockpit?.ShowForPhotograph(SplitScreen.PhotographLayer);
+        // Outside every aeroplane, so it draws the airframe a first-person pilot hides from the pane.
+        _camera.CullMask = SplitScreen.OutsideCullMask(_pane.CullMask);
         Fill(_camera.Transform.Origin);
         RenderTargetUpdateMode = UpdateMode.Once;
         _drawing = true;
@@ -195,7 +192,6 @@ public sealed partial class DangerZonePhotograph : SubViewport
     {
         if (_drawing)
         {
-            _cockpit?.EndPhotograph();
             Unfill();
         }
         Land(null);
@@ -251,7 +247,6 @@ public sealed partial class DangerZonePhotograph : SubViewport
     // drew, and the readback starts off the frame path. Both queue behind a draw still running.
     private void Drawn()
     {
-        _cockpit?.EndPhotograph();
         Unfill();
         var landed = _pending;
         _pending = null;

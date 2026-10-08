@@ -117,9 +117,9 @@ public sealed class TargetPool
 
     /// <summary>The IDENTITY name for a source: the plain node/label name. What <c>--target=</c>
     /// matches and what the breadcrumbs print, see <see cref="TargetRef.DisplayName"/> for what the
-    /// marker prints instead. Internal rather than private: <c>FlightController.SelectRankedTarget</c>
-    /// (D12/D36) reuses this same identity for every candidate's <c>rating_biases</c> name match,
-    /// hull and turret and structure alike, rather than growing a second name-of-source switch.</summary>
+    /// marker prints instead. Internal rather than private: <c>GunnerAcquisition</c>
+    /// matches every candidate's <c>rating_biases</c> name against this same identity. That holds
+    /// for hull, turret and structure alike, with no second name-of-source switch.</summary>
     internal static string NameOf(object? source) => source switch
     {
         FlightController fc => fc.Name,
@@ -132,6 +132,15 @@ public sealed class TargetPool
             GodotObject.IsInstanceValid(inst.Anchor) ? AnchorNameOf(inst) : inst.Def.Name,
         _ => "",
     };
+
+    /// <summary>The name line an aircraft's marker prints for a pane on <paramref name="ownTeam"/>.
+    /// A mode's tag (a flag carrier's) wins while it stands, read by that pane's side. Under it a
+    /// network seat reads by its callsign. Under that is the airframe's common name (plane type
+    /// alone, decision 10), never the node name the selection is held by. Null with no airframe
+    /// bound. The race's pilot labels print the same line.</summary>
+    internal static string? AircraftDisplayName(FlightController? plane, int ownTeam) =>
+        plane?.MarkerName?.Invoke(ownTeam) ?? plane?.PilotName
+        ?? (plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null);
 
     /// <summary>Every name a candidate ALSO answers to, nearest first, appended to
     /// <paramref name="into"/>: a zeppelin zone's owning airship, then each node above the pool's
@@ -232,21 +241,13 @@ public sealed class TargetPool
         switch (kind)
         {
             case AimTargetKind.Vehicle when c.Source is SurfaceVehicle hull:
-                // ⚠ The hull's own block slot 20 alone, and an EMPTY one draws no name line: most
-                // ship blocks author none and the original then labels nothing there (docs/org/
+                // The hull's block slot 20, else its def's own title, resolved at spawn (docs/org/
                 // targeting.md). Never the airframe-style fallback the aeroplane arm takes below.
                 return TargetRef.ForHull(c, cls, name, hull.MarkerName, objective: objective);
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;
-                // A mode's tag (a flag carrier's) replaces the name line while it stands, read by
-                // the selecting pane's own side.
-                string? tag = plane?.MarkerName?.Invoke(ownTeam);
-                // The MARKER prints the airframe's common name (plane type alone, decision 10),
-                // not the node name the selection is held and pinned by. A rig with no flight model
-                // bound has no airframe to name, and falls back to that node name.
-                return TargetRef.ForAircraft(c, cls, name,
-                    tag ?? (plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null),
+                return TargetRef.ForAircraft(c, cls, name, AircraftDisplayName(plane, ownTeam),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax),
                     objective, plane?.ObjectiveTypeLabel, plane?.ObjectiveCategory);
@@ -290,6 +291,13 @@ public sealed class TargetPool
         bool objectiveTarget = false)
     {
         if (c.Source == null || ReferenceEquals(c.Source, self))
+        {
+            return;
+        }
+
+        // Another race pilot is never a target, so no cycle, --target= or spyglass reaches it. Its
+        // label is TargetHud.RaceMarks' instead. An AI aircraft in a race session stays selectable.
+        if (c.Source is FlightController { Racing: true, IsHumanPiloted: true })
         {
             return;
         }

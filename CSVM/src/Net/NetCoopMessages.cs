@@ -6,16 +6,21 @@ namespace CSVM.Net;
 /// <summary>
 /// A co-op host's boards as one guest follows them. It names the screen and mission, the round of
 /// picks under way and which humans are Ready. Once a mission ends it carries the result. The host
-/// sends one to each guest on every change, since the slot differs per guest. Like the advert it
-/// stays in the lobby and never reaches a session. Reliable, since each is a whole state.</summary>
+/// sends one to each guest on every change, since the slot differs per guest. Its
+/// <see cref="Extra"/> is how many seats after <see cref="Slot"/> that guest's other players got.
+/// It stays in the lobby, never reaches a session, and is reliable, since each is a whole state.</summary>
 public readonly record struct CoopFlowMessage(
     NetCoopScreen Screen, byte MissionSeq, byte Epoch, byte Slot,
     byte ReadyMask, byte Humans, byte Progress, bool Won,
-    ushort Airframes, int Objectives, int Cash, byte Locals = 1)
+    ushort Airframes, int Objectives, int Cash, byte Locals = 1, byte Extra = 0)
     : INetMessage<CoopFlowMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = 24;
+
+    /// <summary>How many player numbers <see cref="ReadyMask"/> holds, one bit each; a human past
+    /// them is never shown Ready.</summary>
+    public const int ReadySlots = 8;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.CoopFlow;
@@ -24,7 +29,7 @@ public readonly record struct CoopFlowMessage(
     public static NetReliability Reliability => NetReliability.Reliable;
 
     /// <summary>Whether the human at player number <paramref name="slot"/> is Ready.</summary>
-    public bool IsReady(int slot) => slot is >= 0 and < 8 && (ReadyMask & (1 << slot)) != 0;
+    public bool IsReady(int slot) => slot is >= 0 and < ReadySlots && (ReadyMask & (1 << slot)) != 0;
 
     /// <summary>Whether the host's hangar holds airframe <paramref name="airframe"/>.</summary>
     public bool Offers(int airframe) => airframe is >= 0 and < 16 && (Airframes & (1 << airframe)) != 0;
@@ -47,14 +52,14 @@ public readonly record struct CoopFlowMessage(
         byte flags = reader.ReadByte();
         ushort airframes = reader.ReadUInt16();
         byte locals = reader.ReadByte();
-        _ = reader.ReadByte();
+        byte extra = reader.ReadByte();
         int objectives = reader.ReadInt32();
         int cash = reader.ReadInt32();
         var known = screen is >= (byte)NetCoopScreen.Cabin and <= (byte)NetCoopScreen.Debrief
             ? (NetCoopScreen)screen
             : NetCoopScreen.Unknown;
         message = new CoopFlowMessage(known, seq, epoch, slot, ready, humans, progress,
-            (flags & 1) != 0, airframes, objectives, cash, locals);
+            (flags & 1) != 0, airframes, objectives, cash, locals, extra);
         return true;
     }
 
@@ -72,7 +77,7 @@ public readonly record struct CoopFlowMessage(
         writer.WriteByte((byte)(Won ? 1 : 0));
         writer.WriteUInt16(Airframes);
         writer.WriteByte(Locals);
-        writer.WriteByte(0);
+        writer.WriteByte(Extra);
         writer.WriteInt32(Objectives);
         writer.WriteInt32(Cash);
         return writer.Close();
@@ -170,14 +175,19 @@ public readonly record struct CoopFit(uint Ammo, ulong Ordnance)
 /// flies, its fit, the guest's callsign, its chosen pilot voice and whether it is Ready. On a
 /// campaign it also names the plane of the host's hangar it picked (<see cref="Plane"/>). A host
 /// counts a Ready only under its own current round, so a Ready from before a mission change never
-/// launches the next one. The Left flag says the guest walked out of the flight under way. It is
-/// kept in the lobby, so a flight's end cannot carry it into the next session.
+/// launches the next one. The Left flag says the guest walked out, kept in the lobby so no session
+/// carries it on. A guest flying several seats sends one per seat, each with its place
+/// (<see cref="Local"/>) and whether another follows (<see cref="More"/>).
 /// </summary>
 public readonly record struct CoopPickMessage(
     byte Epoch, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
-    byte Plane = CoopPickMessage.NoPlane, byte Voice = CoopPickMessage.NoVoice)
+    byte Plane = CoopPickMessage.NoPlane, byte Voice = CoopPickMessage.NoVoice, byte Local = 0, bool More = false)
     : INetMessage<CoopPickMessage>
 {
+    /// <summary>The largest <see cref="Local"/> the flags byte carries: two bits above the voice,
+    /// four seats at one machine, which an older reader ignores.</summary>
+    public const byte MaxLocal = 3;
+
     /// <summary>The <see cref="Voice"/> of a player that chose none, as an older build's pick reads.
     /// Any other value is the voice's place in the Voice list plus one, 1 to 7.</summary>
     public const byte NoVoice = 0;
@@ -199,6 +209,8 @@ public readonly record struct CoopPickMessage(
     public const byte StockPlane = 0xFF;
 
     private const int VoiceShift = 2;
+    private const int LocalShift = 5;
+    private const int MoreBit = 0x80;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.CoopPick;
@@ -239,7 +251,9 @@ public readonly record struct CoopPickMessage(
         var fit = CoopFit.Read(ref reader);
         string name = reader.ReadText(NameBytes);
         byte voice = (byte)((flags >> VoiceShift) & MaxVoice);
-        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0, plane, voice);
+        byte local = (byte)((flags >> LocalShift) & MaxLocal);
+        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0, plane, voice,
+            local, (flags & MoreBit) != 0);
         return true;
     }
 
@@ -249,7 +263,9 @@ public readonly record struct CoopPickMessage(
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Epoch);
         int voice = Voice <= MaxVoice ? Voice : NoVoice;
-        writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0) | (voice << VoiceShift)));
+        int local = Math.Min((int)Local, MaxLocal);
+        writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0) | (voice << VoiceShift) | (local << LocalShift)
+            | (More ? MoreBit : 0)));
         writer.WriteByte(Airframe);
         writer.WriteByte(Plane);
         Fit.Write(ref writer);

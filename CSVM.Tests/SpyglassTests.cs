@@ -200,7 +200,7 @@ public class SpyglassTests
     {
         uint own = SplitScreen.OwnAirframeLayer(0);
         uint pane = SplitScreen.PlayerCullMask(0);
-        uint disc = SpyglassView.DiscMask(pane, own);
+        uint disc = SpyglassView.DiscMask(pane, own, enhanced: false);
 
         Assert.Equal(0u, disc & own);
         Assert.NotEqual(0u, pane & own);            // the control: the pane itself still draws it
@@ -212,6 +212,44 @@ public class SpyglassTests
             // picture; only the aircraft the eye sits inside is taken out.
             Assert.NotEqual(0u, disc & SplitScreen.OwnAirframeLayer(other));
         }
+    }
+
+    [Fact]
+    public void TheSunLayersAreTheirOwnAndOnlyTheDiscDrawsTheCopy()
+    {
+        uint[] taken =
+        {
+            1u, ZoneGate.LayerBand,
+            SplitScreen.FirstPersonLayer(0) | SplitScreen.FirstPersonLayer(1)
+                | SplitScreen.FirstPersonLayer(2) | SplitScreen.FirstPersonLayer(3),
+            SplitScreen.OwnAirframeLayer(0) | SplitScreen.OwnAirframeLayer(1)
+                | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
+            SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)
+                | SplitScreen.PlayerVisualLayer(2) | SplitScreen.PlayerVisualLayer(3),
+        };
+        foreach (uint band in taken)
+        {
+            Assert.Equal(0u, band & SplitScreen.SunLayer);
+            Assert.Equal(0u, band & SplitScreen.SpyglassSunLayer);
+        }
+        Assert.NotEqual(SplitScreen.SunLayer, SplitScreen.SpyglassSunLayer);
+
+        for (int i = 0; i < SplitScreen.MaxPlayers; i++)
+        {
+            uint pane = ZoneGate.CullMask(SplitScreen.PlayerCullMask(i), 1);
+            uint own = SplitScreen.OwnAirframeLayer(i);
+            uint disc = SpyglassView.DiscMask(pane, own, enhanced: true);
+            Assert.NotEqual(0u, pane & SplitScreen.SunLayer);
+            Assert.Equal(0u, pane & SplitScreen.SpyglassSunLayer);
+            Assert.Equal(0u, disc & SplitScreen.SunLayer);
+            Assert.NotEqual(0u, disc & SplitScreen.SpyglassSunLayer);
+            // Nothing else moves: the world, the zone gate and every other airframe stay as the pane has them.
+            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer, disc & ~SplitScreen.SpyglassSunLayer);
+        }
+
+        // The single-player camera, whose mask the launcher's fresh camera starts at all 20 layers.
+        Assert.Equal(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.SpyglassSunLayer);
+        Assert.NotEqual(0u, SplitScreen.PaneCullMask(0xFFFFF) & SplitScreen.SunLayer);
     }
 
     [Fact]

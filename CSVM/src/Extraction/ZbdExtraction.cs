@@ -5,7 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading;
-using CSVM.Session.Launch;
 
 namespace CSVM.Extraction;
 
@@ -102,7 +101,7 @@ public static class ZbdExtraction
         else
         {
             report(ZbdStep.Extracting, outRel, mode.Mode, null, null);
-            var run = UnzbdTool.Run(unzbd, new[] { "cs", mode.Mode, zbd, output }, cancel);
+            var run = RunOrDiscard(unzbd, new[] { "cs", mode.Mode, zbd, output }, output, cancel);
             if (run.ExitCode != 0)
             {
                 result.Failures.Add($"{rel} (exit {run.ExitCode.ToString(CultureInfo.InvariantCulture)})");
@@ -199,7 +198,7 @@ public static class ZbdExtraction
 
         Directory.CreateDirectory(extractedDir);
         report(ZbdStep.Extracting, outRel, "messages", null, null);
-        var run = UnzbdTool.Run(unzbd, new[] { "cs", "messages", strings, output }, cancel);
+        var run = RunOrDiscard(unzbd, new[] { "cs", "messages", strings, output }, output, cancel);
         if (run.ExitCode != 0)
         {
             result.Failures.Add($"{Path.GetFileName(strings)} -> {outRel} (exit {run.ExitCode.ToString(CultureInfo.InvariantCulture)})");
@@ -209,6 +208,38 @@ public static class ZbdExtraction
 
         result.Extracted++;
         report(ZbdStep.Extracted, outRel, "messages", null, null);
+    }
+
+    // A cut-short output is newer than its archive, so a later unforced run would count it up to
+    // date. The delete is best effort: the unfinished-run marker forces the retry regardless.
+    private static UnzbdRun RunOrDiscard(string unzbd, string[] arguments, string output, CancellationToken cancel)
+    {
+        try
+        {
+            var run = UnzbdTool.Run(unzbd, arguments, cancel);
+            if (run.ExitCode != 0)
+            {
+                Discard(output);
+            }
+
+            return run;
+        }
+        catch (OperationCanceledException)
+        {
+            Discard(output);
+            throw;
+        }
+    }
+
+    private static void Discard(string output)
+    {
+        try
+        {
+            File.Delete(output);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static DateTime? WriteTime(string path, bool file)

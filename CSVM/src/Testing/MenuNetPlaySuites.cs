@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Net;
 using CSVM.UI;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
 
@@ -30,7 +31,8 @@ internal static class MenuNetPlaySuites
 
     [Suite("menu-net-door",
         "Built-in's multiplayer door driven as a player drives it: the Mode screen's last row "
-        + "opens a ten-row board, its cap and voice rows step inside their ranges, the port row steps, "
+        + "opens an eleven-row board, its cap and voice rows step inside their ranges, its listing row "
+        + "flips Public and Private, the port row steps, "
         + "Host remembers the voice and opens a real ENet socket on the "
         + "loopback address and the status line reports it, Continue walks on to the Dogfight map "
         + "screen with one pilot seated, and Back off the board hangs up")]
@@ -64,6 +66,76 @@ internal static class MenuNetPlaySuites
             ctx.Host.RemoveChild(menu);
             menu.QueueFree();
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-screen-keyboard",
+        "Steam's on-screen keyboard on Built-in's multiplayer board, its URLs recorded: off a "
+        + "SteamOS device a pad's Accept on the address row raises nothing, on one it raises the "
+        + "keyboard there without leaving the row, the echo strip repeats the address and masks the "
+        + "password, focus moving off the field lowers it and coming back alone raises nothing, and "
+        + "a key's Enter in the field lowers it")]
+    internal static void TheOnScreenKeyboard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        var door = host.Features.Get<NetPlayFeature>();
+        var echo = new ScreenKeyboardEcho();
+        ctx.Host.AddChild(menu);
+        ctx.Host.AddChild(echo);
+        var keyboard = new ScreenKeyboardRecorder();
+        try
+        {
+            var pad = new MenuCommands { Accept = true, KeylessAccept = true };
+            menu.ShowMenu();
+            OpenBoard(ctx, menu);
+            menu.Drive(Up);
+            ctx.Check(menu.ShownRow == 1, $"Up from Host stands on the address row ({menu.ShownRow}, {menu.ShownRowText})");
+            CSVM.Utils.ScreenKeyboard.Available = false;
+            menu.Drive(pad);
+            ctx.Check(keyboard.Urls.Count == 0, $"ABLE-TO-FAIL CONTROL: off a SteamOS device the pad's Accept raises nothing ({keyboard.Said})");
+            CSVM.Utils.ScreenKeyboard.Available = true;
+
+            menu.Drive(pad);
+            ctx.Check(keyboard.Said == CSVM.Utils.ScreenKeyboard.OpenUrl && CSVM.Utils.ScreenKeyboard.Shown?.Id == "address",
+                $"on one the pad's Accept raises the keyboard for the address ({keyboard.Said}, {CSVM.Utils.ScreenKeyboard.Shown?.Id})");
+            ctx.Check(menu.ShownScreen == "Network" && menu.ShownRow == 1, $"and the press is spent there ({menu.ShownScreen}, {menu.ShownRow})");
+            echo._Process(0);
+            ctx.Check(echo.Line == $"Address:  {door.Address}_", $"the echo strip repeats the address with a caret ({echo.Line})");
+
+            menu.Drive(Down);
+            echo._Process(0);
+            ctx.Check(keyboard.Urls.Count == 2 && keyboard.Urls[1] == CSVM.Utils.ScreenKeyboard.CloseUrl && echo.Line.Length == 0,
+                $"the cursor leaving the field lowers it and the strip goes ({keyboard.Said}, '{echo.Line}')");
+            menu.Drive(Up);
+            ctx.Check(keyboard.Urls.Count == 2, $"coming back onto the field alone raises nothing ({keyboard.Said})");
+
+            menu.Drive(pad);
+            menu.Drive(Accept);
+            ctx.Check(keyboard.Urls.Count == 4 && keyboard.Urls[3] == CSVM.Utils.ScreenKeyboard.CloseUrl && menu.ShownRow == 1,
+                $"a key's Enter in the field lowers it ({keyboard.Said}, {menu.ShownRow})");
+
+            door.Password = "abc";
+            for (int i = 0; i < 5; i++)
+            {
+                menu.Drive(Down);
+            }
+
+            menu.Drive(pad);
+            echo._Process(0);
+            ctx.Check(CSVM.Utils.ScreenKeyboard.Shown?.Id == "password" && echo.Line == "Password:  ***_",
+                $"the password raises it masked ({CSVM.Utils.ScreenKeyboard.Shown?.Id}, {echo.Line})");
+        }
+        finally
+        {
+            keyboard.Dispose();
+            door.Discard();
+            ctx.Host.RemoveChild(echo);
+            echo.QueueFree();
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
         }
     }
 
@@ -153,8 +225,8 @@ internal static class MenuNetPlaySuites
             $"and its description says what it is for ({menu.ShownDetail})");
 
         menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Network" && menu.ShownRowCount == 10,
-            $"Accept opens the board, ten rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Network" && menu.ShownRowCount == 11,
+            $"Accept opens the board, eleven rows ({menu.ShownScreen}, {menu.ShownRowCount})");
         ctx.Check(menu.ShownHeading == "MULTIPLAYER"
                   && menu.ShownBreadcrumb == $"{LaunchMenu.NetworkRow}  ›  Map  ›  Aircraft",
             $"its heading and breadcrumb ({menu.ShownHeading}, {menu.ShownBreadcrumb})");
@@ -196,6 +268,12 @@ internal static class MenuNetPlaySuites
         ctx.Check(menu.ShownRowText == "Voice           Nathan Zachary", $"the voice opens on the list's first ({menu.ShownRowText})");
         menu.Drive(Right);
         ctx.Check(door.Voice == 1 && menu.ShownRowText == "Voice           Jack", $"and Right picks the next ({door.Voice}, {menu.ShownRowText})");
+        menu.Drive(Down);
+        ctx.Check(menu.ShownRowText == "Listing         Public" && !door.Private, $"the listing opens on a Dogfight's Public ({menu.ShownRowText})");
+        menu.Drive(Right);
+        bool flipped = door.Private && menu.ShownRowText == "Listing         Private";
+        menu.Drive(Right);
+        ctx.Check(flipped && !door.Private, $"and Right flips it to Private and back ({flipped}, {door.Private})");
         for (int i = 0; i < 3; i++)
         {
             menu.Drive(Down);
@@ -251,7 +329,7 @@ internal static class MenuNetPlaySuites
         // ABLE-TO-FAIL CONTROL. The fields belong to the player, not to the socket, so an open
         // door refuses to move the port under itself. A board that let this through would host
         // on one port and tell the player another. Down from the last row wraps onto the first.
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
         {
             menu.Drive(Down);
         }

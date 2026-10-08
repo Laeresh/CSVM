@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Net;
-using CSVM.Session.Launch;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -185,10 +187,10 @@ internal static class NetZeppelinVersusSuites
     // Both hulls on every machine, each on its side's team, and every seat beside its own hull.
     private static bool Sides(TestContext ctx, GameSession[] peers)
     {
-        ctx.Check(peers.All(p => p.ZvzPlay is { } zvz && zvz.Rules.TeamOfHull(0) == 2 && zvz.Rules.TeamOfHull(1) == 1
+        ctx.Check(peers.All(p => p.Dogfight?.ZvzPlay is { } zvz && zvz.Rules.TeamOfHull(0) == 2 && zvz.Rules.TeamOfHull(1) == 1
                                  && p.ZeppelinHulls?.NodeAt(0) == "multiplayer1zep" && p.ZeppelinHulls.NodeAt(1) == "multiplayer2zep"),
-            $"every machine flies multiplayer1zep for team 2, first in seat order, and multiplayer2zep for team 1 ({string.Join(" | ", peers.Select(p => p.ZvzPlay == null ? "none" : $"{p.ZeppelinHulls?.NodeAt(0)}:{p.ZvzPlay.Rules.TeamOfHull(0)} {p.ZeppelinHulls?.NodeAt(1)}:{p.ZvzPlay.Rules.TeamOfHull(1)}"))})");
-        if (peers.Any(p => p.ZvzPlay == null))
+            $"every machine flies multiplayer1zep for team 2, first in seat order, and multiplayer2zep for team 1 ({string.Join(" | ", peers.Select(p => p.Dogfight?.ZvzPlay == null ? "none" : $"{p.ZeppelinHulls?.NodeAt(0)}:{p.Dogfight?.ZvzPlay.Rules.TeamOfHull(0)} {p.ZeppelinHulls?.NodeAt(1)}:{p.Dogfight?.ZvzPlay.Rules.TeamOfHull(1)}"))})");
+        if (peers.Any(p => p.Dogfight?.ZvzPlay == null))
         {
             return false;
         }
@@ -258,44 +260,44 @@ internal static class NetZeppelinVersusSuites
     // An enemy bag scores, a cannon scores its bound bag once, and a side's own bag costs.
     private static void GasBags(TestContext ctx, GameSession[] peers)
     {
-        var scores = peers[0].Versus!.Scores;
+        var scores = peers[0].Dogfight!.Match.Scores;
         Kill(peers, "multiplayer1zep", "gasbag1", seat: 2);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == scores.GasbagKill && p.Versus!.KillsOf(2) == 0),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(2) == scores.GasbagKill && p.Dogfight!.Match.KillsOf(2) == 0),
             $"team 1's seat downing multiplayer1zep's gasbag1 scores it {scores.GasbagKill} on every machine ({Scores(peers)})");
         ctx.Check(peers.All(p => Pool(p, "multiplayer1zep", "gasbag1") is { Status: DestructibleRegistry.State.Destroyed }),
             $"and the bag is destroyed on every machine ({string.Join(", ", peers.Select(p => Pool(p, "multiplayer1zep", "gasbag1")?.Status.ToString() ?? "none"))})");
-        ctx.Check(peers[0].ZvzPlay!.Spoken.Contains("snd_Zep_GBlost") && peers[1].ZvzPlay!.Spoken.Contains("snd_Zep_GBlost")
-                  && peers[2].ZvzPlay!.Spoken.Contains("snd_Zep_GBdest") && !peers[2].ZvzPlay!.Spoken.Contains("snd_Zep_GBlost"),
+        ctx.Check(peers[0].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_GBlost") && peers[1].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_GBlost")
+                  && peers[2].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_GBdest") && !peers[2].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_GBlost"),
             $"team 2's machines hear their gas bag lost and team 1's hears it destroyed ({Spoken(peers)})");
 
         Kill(peers, "multiplayer2zep", "lbroad1", seat: 0);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == scores.GasbagKill),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(0) == scores.GasbagKill),
             $"a broadside cannon of multiplayer2zep scores its killer its bound gasbag1 on every machine ({Scores(peers)})");
         Kill(peers, "multiplayer2zep", "gasbag1", seat: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(1) == 0 && Pool(p, "multiplayer2zep", "gasbag1") is { Status: DestructibleRegistry.State.Destroyed }),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(1) == 0 && Pool(p, "multiplayer2zep", "gasbag1") is { Status: DestructibleRegistry.State.Destroyed }),
             $"ABLE-TO-FAIL CONTROL: the bag itself then dies and scores nobody, its count spent by the cannon ({Scores(peers)})");
 
         Kill(peers, "multiplayer1zep", "gasbag2", seat: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(1) == scores.OwnGasbagKill),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(1) == scores.OwnGasbagKill),
             $"a team 2 seat downing its own hull's gasbag2 costs it {-scores.OwnGasbagKill} on every machine ({Scores(peers)})");
-        ctx.Check(peers.All(p => !p.Versus!.Completed && p.ZeppelinHulls!.SurvivorsOf("multiplayer1zep") == 3),
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.ZeppelinHulls!.SurvivorsOf("multiplayer1zep") == 3),
             $"ABLE-TO-FAIL CONTROL: with three of five bags standing multiplayer1zep flies on and the match runs ({string.Join(", ", peers.Select(p => p.ZeppelinHulls!.SurvivorsOf("multiplayer1zep")))})");
     }
 
     // A downed seat comes back by its hull, above anything the spawn table holds.
     private static void Returns(TestContext ctx, GameSession[] peers)
     {
-        int before = peers[0].SpawnsTaken;
+        int before = peers[0].Dogfight!.SpawnsTaken;
         var owner = peers[2];
         owner.SeatRigs[2].Controller!.DebugForceCrash(owner.SeatRigs[0].Controller!.PlayerIndex);
-        for (int step = 0; step < GrantSteps && peers[0].SpawnsTaken == before; step++)
+        for (int step = 0; step < GrantSteps && peers[0].Dogfight!.SpawnsTaken == before; step++)
         {
             Lockstep(1, peers);
         }
 
         Lockstep(PartSteps, peers);
         var at = peers.Select(p => p.SeatRigs[2].Controller!.WorldPosition).ToArray();
-        ctx.Check(peers[0].SpawnsTaken > before && at.All(p => p.Y >= ZeppelinVersus.RespawnFloor - 50f) && at.All(p => p.DistanceTo(at[0]) < 50f),
+        ctx.Check(peers[0].Dogfight!.SpawnsTaken > before && at.All(p => p.Y >= ZeppelinVersus.RespawnFloor - 50f) && at.All(p => p.DistanceTo(at[0]) < 50f),
             $"the downed seat returns at the respawn ring's height on every machine, over the table's 800 m top ({string.Join(" | ", at.Select(p => $"({p.X:0},{p.Y:0},{p.Z:0})"))})");
     }
 
@@ -303,7 +305,7 @@ internal static class NetZeppelinVersusSuites
     // machine as cause 3. Event 9 sets team 2's term and charges the victim nothing.
     private static void HullKill(TestContext ctx, GameSession[] peers)
     {
-        var scores = peers[0].Versus!.Scores;
+        var scores = peers[0].Dogfight!.Match.Scores;
         var round = WeaponDefs.Load(ctx.ZrdrPath).Get(ZeppelinRuntime.BroadsideWeaponId);
         if (round == null)
         {
@@ -311,8 +313,8 @@ internal static class NetZeppelinVersusSuites
             return;
         }
 
-        int scoreBefore = peers[0].Versus!.ScoreOf(2);
-        int deathsBefore = peers[0].Versus!.DeathsOf(2);
+        int scoreBefore = peers[0].Dogfight!.Match.ScoreOf(2);
+        int deathsBefore = peers[0].Dogfight!.Match.DeathsOf(2);
         var copy = peers[0].SeatRigs[2].Controller!;
         var owned = peers[2].SeatRigs[2].Controller!;
         for (int shot = 0; shot < BroadsideShots && !owned.Crashed; shot++)
@@ -322,11 +324,11 @@ internal static class NetZeppelinVersusSuites
         }
 
         Lockstep(PartSteps, peers);
-        ctx.Check(peers.All(p => p.Versus!.DeathsOf(2) == deathsBefore + 1 && p.Versus!.ScoreOf(2) == scoreBefore),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.DeathsOf(2) == deathsBefore + 1 && p.Dogfight!.Match.ScoreOf(2) == scoreBefore),
             $"a pilot downed by multiplayer1zep's broadside takes a death and no score on every machine ({Scores(peers)})");
-        ctx.Check(peers.All(p => p.Versus!.TeamTermOf(2) == scores.ZeppelinKill && p.Versus!.TeamScoreOf(2) == p.Versus!.TeamTotalOf(2) - scores.ZeppelinKill),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamTermOf(2) == scores.ZeppelinKill && p.Dogfight!.Match.TeamScoreOf(2) == p.Dogfight!.Match.TeamTotalOf(2) - scores.ZeppelinKill),
             $"and team 2, whose hull fired, has its term set to {scores.ZeppelinKill} on every board, never in the Score limit's total ({Scores(peers)})");
-        ctx.Check(peers.All(p => p.Versus!.TeamTermOf(1) == 0),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamTermOf(1) == 0),
             $"ABLE-TO-FAIL CONTROL: the victim's own side's term stays 0 ({Scores(peers)})");
 
         // Back in the air before the last bag, so the ending finds every seat flying.
@@ -341,22 +343,22 @@ internal static class NetZeppelinVersusSuites
     // The third bag of multiplayer1zep takes it below three standing and ends the match.
     private static void HullLost(TestContext ctx, GameSession[] peers)
     {
-        var scores = peers[0].Versus!.Scores;
+        var scores = peers[0].Dogfight!.Match.Scores;
         Kill(peers, "multiplayer1zep", "gasbag3", seat: 2);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == 2 * scores.GasbagKill),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(2) == 2 * scores.GasbagKill),
             $"the third bag scores its killer before the hull goes ({Scores(peers)})");
-        ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Objective && p.Versus!.ObjectiveWinner == 1),
-            $"multiplayer1zep lost ends the match on its objective for team 1 on every machine ({string.Join(", ", peers.Select(p => $"{p.MatchEnd}/{p.Versus!.ObjectiveWinner}"))})");
-        ctx.Check(peers.All(p => p.Versus!.TeamTotalOf(1) == p.Versus!.TeamScoreOf(1) + scores.HullLoss
-                                 && p.Versus!.TeamTotalOf(2) == p.Versus!.TeamScoreOf(2) + scores.ZeppelinKill),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Objective && p.Dogfight!.Match.ObjectiveWinner == 1),
+            $"multiplayer1zep lost ends the match on its objective for team 1 on every machine ({string.Join(", ", peers.Select(p => $"{p.Dogfight!.End}/{p.Dogfight!.Match.ObjectiveWinner}"))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamTotalOf(1) == p.Dogfight!.Match.TeamScoreOf(1) + scores.HullLoss
+                                 && p.Dogfight!.Match.TeamTotalOf(2) == p.Dogfight!.Match.TeamScoreOf(2) + scores.ZeppelinKill),
             $"and team 1 takes the lost hull's {scores.HullLoss} on every board, the losing side only its own term ({Scores(peers)})");
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) < ScoreTarget && p.Versus!.TeamTotalOf(1) >= ScoreTarget),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamScoreOf(1) < ScoreTarget && p.Dogfight!.Match.TeamTotalOf(1) >= ScoreTarget),
             $"ABLE-TO-FAIL CONTROL: the bonus carries team 1 past the {ScoreTarget}-point limit only on the board, which the limit never reads ({Scores(peers)})");
-        var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();
+        var titles = peers.Select(p => VersusBoard.Title(p.Dogfight!.Match)).ToArray();
         ctx.Check(titles.All(t => t == "RED SQUADRON WINS"),
             $"every machine's board names the side whose hull survived ({string.Join(" | ", titles)})");
-        ctx.Check(peers.All(p => p.ZvzPlay!.LinesPosted > 0) && peers[2].ZvzPlay!.Spoken.Contains("snd_Zep_dest")
-                  && peers[0].ZvzPlay!.Spoken.Contains("snd_Zep_lost") && peers[1].ZvzPlay!.Spoken.Contains("snd_Zep_lost"),
+        ctx.Check(peers.All(p => p.Dogfight!.ZvzPlay!.LinesPosted > 0) && peers[2].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_dest")
+                  && peers[0].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_lost") && peers[1].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_lost"),
             $"and every machine posts the ending, the winners hearing a zeppelin destroyed and the losers theirs lost ({Spoken(peers)})");
     }
 
@@ -369,8 +371,8 @@ internal static class NetZeppelinVersusSuites
         Lockstep(SettleSteps, peers);
         ctx.Check(exits[2] == 1 && exits[0] == 1 && exits[1] == 0,
             $"the Restart of a guest and of the host each takes that machine to the lobby, and no other ({string.Join(",", exits)} exits)");
-        ctx.Check(peers.All(p => p.Versus!.Completed && p.ZeppelinHulls!.IsDead("multiplayer1zep")),
-            $"ABLE-TO-FAIL CONTROL: nothing reruns in place, every machine's match still ended on its lost hull ({string.Join(", ", peers.Select(p => $"{p.Versus!.Completed}/{p.ZeppelinHulls!.IsDead("multiplayer1zep")}"))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.ZeppelinHulls!.IsDead("multiplayer1zep")),
+            $"ABLE-TO-FAIL CONTROL: nothing reruns in place, every machine's match still ended on its lost hull ({string.Join(", ", peers.Select(p => $"{p.Dogfight!.Match.Completed}/{p.ZeppelinHulls!.IsDead("multiplayer1zep")}"))})");
     }
 
     // The lobby's next launch, a fresh session on every machine. Both hulls fly whole with every
@@ -378,7 +380,7 @@ internal static class NetZeppelinVersusSuites
     private static void WholeAgain(TestContext ctx, GameSession[] peers)
     {
         var hulls = new[] { "multiplayer1zep", "multiplayer2zep" };
-        var parts = peers.Select(p => p.NetWorld?.World?.Destructibles.All
+        var parts = peers.Select(p => p.Wire.World?.World?.Destructibles.All
             .Where(inst => hulls.Any(h => string.Equals(inst.Owner, h, StringComparison.OrdinalIgnoreCase))).ToList()
             ?? new List<DestructibleRegistry.Instance>()).ToArray();
         ctx.Check(peers.All(p => hulls.All(h => !p.ZeppelinHulls!.IsDead(h) && p.ZeppelinHulls.SurvivorsOf(h) == 5)),
@@ -388,11 +390,11 @@ internal static class NetZeppelinVersusSuites
         ctx.Check(peers.All(p => Pool(p, "multiplayer1zep", "gasbag3") is { Status: DestructibleRegistry.State.Healthy }
                                  && Pool(p, "multiplayer2zep", "lbroad1") is { Status: DestructibleRegistry.State.Healthy }),
             $"ABLE-TO-FAIL CONTROL: the bag that lost the last match and the cannon downed in it are found and whole ({string.Join(", ", peers.Select(p => $"{Pool(p, "multiplayer1zep", "gasbag3")?.Status.ToString() ?? "none"}/{Pool(p, "multiplayer2zep", "lbroad1")?.Status.ToString() ?? "none"}"))})");
-        ctx.Check(peers.All(p => p.RearmPlay is { BaseCount: 2 } r && r.BaseAt(0)?.Team == 2 && r.BaseAt(1)?.Team == 1),
-            $"both hulls' rearm bases stand again, each serving its side ({string.Join(" | ", peers.Select(p => p.RearmPlay is { } r ? $"{r.BaseAt(0)?.Team}/{r.BaseAt(1)?.Team}" : "none"))})");
-        ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running && p.Versus!.ObjectiveWinner == 0
-                                 && Enumerable.Range(0, 3).All(s => p.Versus!.ScoreOf(s) == 0)
-                                 && new[] { 1, 2 }.All(t => p.Versus!.TeamTermOf(t) == 0 && p.Versus!.TeamTotalOf(t) == 0)),
+        ctx.Check(peers.All(p => p.Dogfight?.RearmPlay is { BaseCount: 2 } r && r.BaseAt(0)?.Team == 2 && r.BaseAt(1)?.Team == 1),
+            $"both hulls' rearm bases stand again, each serving its side ({string.Join(" | ", peers.Select(p => p.Dogfight?.RearmPlay is { } r ? $"{r.BaseAt(0)?.Team}/{r.BaseAt(1)?.Team}" : "none"))})");
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running && p.Dogfight!.Match.ObjectiveWinner == 0
+                                 && Enumerable.Range(0, 3).All(s => p.Dogfight!.Match.ScoreOf(s) == 0)
+                                 && new[] { 1, 2 }.All(t => p.Dogfight!.Match.TeamTermOf(t) == 0 && p.Dogfight!.Match.TeamTotalOf(t) == 0)),
             $"and the match runs from zero on every machine, every seat's score and both sides' terms ({Scores(peers)})");
     }
 
@@ -400,7 +402,7 @@ internal static class NetZeppelinVersusSuites
     private static void Kill(GameSession[] peers, string hull, string part, int seat)
     {
         var host = peers[0];
-        if (Pool(host, hull, part) is { } pool && host.NetWorld?.World is { } world)
+        if (Pool(host, hull, part) is { } pool && host.Wire.World?.World is { } world)
         {
             world.DamageAt(pool.Anchor, Overkill, host.SeatRigs[seat].Controller!.PlayerIndex);
         }
@@ -409,7 +411,7 @@ internal static class NetZeppelinVersusSuites
     }
 
     private static DestructibleRegistry.Instance? Pool(GameSession peer, string hull, string part) =>
-        peer.NetWorld?.World?.Destructibles.All.FirstOrDefault(inst =>
+        peer.Wire.World?.World?.Destructibles.All.FirstOrDefault(inst =>
             string.Equals(inst.Owner, hull, StringComparison.OrdinalIgnoreCase)
             && string.Equals(AnimRuntime.NameOf(inst.Anchor), part, StringComparison.OrdinalIgnoreCase));
 
@@ -425,9 +427,9 @@ internal static class NetZeppelinVersusSuites
     }
 
     private static string Spoken(GameSession[] peers) =>
-        string.Join(" | ", peers.Select(p => string.Join(",", p.ZvzPlay!.Spoken)));
+        string.Join(" | ", peers.Select(p => string.Join(",", p.Dogfight!.ZvzPlay!.Spoken)));
 
     private static string Scores(GameSession[] peers) =>
-        string.Join(" | ", peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf))
-            + $" teams {p.Versus!.TeamScoreOf(1)}({p.Versus!.TeamTotalOf(1)})/{p.Versus!.TeamScoreOf(2)}({p.Versus!.TeamTotalOf(2)})"));
+        string.Join(" | ", peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf))
+            + $" teams {p.Dogfight!.Match.TeamScoreOf(1)}({p.Dogfight!.Match.TeamTotalOf(1)})/{p.Dogfight!.Match.TeamScoreOf(2)}({p.Dogfight!.Match.TeamTotalOf(2)})"));
 }

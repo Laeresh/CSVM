@@ -4,17 +4,15 @@ using Godot;
 namespace CSVM.Session.Roster;
 
 /// <summary>One airframe a mission can put the player into mid-flight: the authored
-/// <c>CALLBACK</c> value, the vehicle def the stats and the stock fit come from (<c>pbalmoral</c>),
-/// and the planes.zbd node the model is built from (<c>player_balmoral</c>). That pair is the one
-/// every other player-airframe path already uses (<c>PlaneStats.DefName</c> /
-/// <c>UI.Hangar.PlanePickerRoster.AirframeNode</c>), so a swap needs no table of its own.
-/// <c>AwardAirframe</c> names the special-plane template the code's own case writes by hand
-/// (965 fits the Blue Streak: twin 40 and twin 30, two pylons, 20 armour a zone, the injector),
-/// null for a code that hands over the stock fit. <c>ShippedSkins</c> says the rebuild draws the
-/// airframe's shipped skin textures with no scheme composited over them, which is what the
-/// original does for a def that authors no <c>paint_pattern</c> (965's <c>pbloodhawk</c>: the
-/// vehicle build skips the scheme outright on the empty pattern string); false draws the pilot's
-/// own paint.</summary>
+/// <c>CALLBACK</c> value, the vehicle def and the planes.zbd node. Every other player-airframe
+/// path reads that pair
+/// (<c>PlaneStats.DefName</c>, <see cref="Flight.Hangar.StockAirframes.Node"/>), so a swap needs no
+/// table of its own. <c>AwardAirframe</c> names the special-plane template the code's own case
+/// writes by hand, and is null for a code that hands over the stock fit. Code 965's template is the
+/// Blue Streak: twin 40 and twin 30, two pylons, 20 armour a zone, and the injector.
+/// <c>ShippedSkins</c> draws the airframe's shipped skins with no scheme over them, as the original
+/// does for a def with an empty <c>paint_pattern</c> (965's <c>pbloodhawk</c>). False draws the
+/// pilot's own paint.</summary>
 public readonly record struct AirframeSwapCode(int Code, string Def, string PlaneNode,
     int? AwardAirframe = null, bool ShippedSkins = false);
 
@@ -148,8 +146,7 @@ public static class AirframeHandover
     }
 
     /// <summary>Whether this code paints the new hull in the captured aircraft's livery (966 and
-    /// 967). Neither is in the executable: both are the user's own reading of the original at the
-    /// controls (docs/formats/anim-definitions/cutscenes.md).</summary>
+    /// 967). The rule is in docs/formats/anim-definitions/cutscenes.md.</summary>
     public static bool CarriesCapturedPaint(AirframeSwapCode airframe) =>
         airframe.Code is CaptureCode or WarhawkCode;
 

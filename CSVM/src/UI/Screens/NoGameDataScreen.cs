@@ -3,8 +3,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
-using CSVM.Session.Launch;
 using CSVM.UI.Boards;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Screens;
@@ -28,6 +28,9 @@ public sealed partial class NoGameDataScreen : CanvasLayer
     /// <summary>The progress view's body.</summary>
     public const string RunningBody =
         "CSVM is reading your Crimson Skies install and writing the game data into the folder below. This takes about a minute. The install is only read, never changed.";
+
+    /// <summary>The owner the folder field raises the on-screen keyboard under.</summary>
+    public const string KeyboardOwner = "no-game-data";
 
     /// <summary>The failure view's body; the failures themselves follow it.</summary>
     public const string FailedBody =
@@ -211,7 +214,11 @@ public sealed partial class NoGameDataScreen : CanvasLayer
         }
     }
 
-    public override void _ExitTree() => _flow.Cancel();
+    public override void _ExitTree()
+    {
+        _flow.Cancel();
+        ScreenKeyboard.Hide(KeyboardOwner);
+    }
 
     // The nearest existing folder at or above a typed path, so the picker opens somewhere near it.
     private static string? NearestFolder(string typed)
@@ -344,7 +351,13 @@ public sealed partial class NoGameDataScreen : CanvasLayer
             CustomMinimumSize = new Vector2(0, ButtonSize.Y),
         };
         _path.TextChanged += text => _flow.InstallPath = text;
-        _path.TextSubmitted += _ => Extract();
+        _path.TextSubmitted += _ =>
+        {
+            ScreenKeyboard.Hide(KeyboardOwner);
+            Extract();
+        };
+        _path.GuiInput += RaiseKeyboard;
+        _path.FocusExited += () => ScreenKeyboard.Hide(KeyboardOwner);
         _chooseButton = Press("Choose folder...", () => OpenPicker());
         var field = new HBoxContainer();
         field.AddThemeConstantOverride("separation", 12);
@@ -387,6 +400,20 @@ public sealed partial class NoGameDataScreen : CanvasLayer
         view.AddChild(_failures);
         view.AddChild(Row(RetryButton, Press("Choose another folder", () => OpenPicker()), Press("Quit", () => _quit())));
         return view;
+    }
+
+    // A pad's A or a tap on the folder field raises the on-screen keyboard. Focus alone never does:
+    // the d-pad crosses the field on its way to Extract.
+    private void RaiseKeyboard(InputEvent @event)
+    {
+        bool press = @event is InputEventJoypadButton { Pressed: true } && @event.IsActionPressed("ui_accept")
+            || @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }
+            || @event is InputEventScreenTouch { Pressed: true };
+        if (press && ScreenKeyboard.Show(new ScreenKeyboardField(KeyboardOwner, "install-folder",
+            "Crimson Skies install folder", () => _path.Text)))
+        {
+            _path.AcceptEvent();
+        }
     }
 
     // Runs the launcher's continuation at most once, whichever way the screen is left.

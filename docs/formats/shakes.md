@@ -1,9 +1,10 @@
 # Screen-shake readers - `shakes.json` and `damage_shakes.json`
 
 Part of the [format documentation](README.md). These shared zrdr readers define aircraft wobble
-and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` applies five of its six
-sources as visual-only roll. `damage_shakes.json`'s `ON_CALL` defs are played by the exe's own
-shake player, one arm of it wired here (below).
+and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` runs its sources as the
+original's component blocks and turns the plane model by their rendered rotation, visual only.
+`damage_shakes.json`'s `ON_CALL` defs are played by the exe's own shake player on AI aircraft
+(below).
 
 ⚠ Where the original **consumes** these laws, the per-shot/per-frame shake magnitudes, the
 random-walk accumulator they feed, the camera-attachment rule, and the engine's fidelity gap, is
@@ -20,7 +21,7 @@ law, frequency, damping, waveform, and a magnitude term:
 | `fire_bullet` | 15.0 | 12.5 | 1 | `magnitude_factor` 7e-5 |
 | `bullet_impact` | 2.2 | 14.0 | 0 | `magnitude_factor` 5e-4 |
 | `missile_impact` | 2.2 | 6.5 | 0 | `magnitude_factor` 1e-3, `he_factor` 2.0 |
-| `explosion` | 2.2 | 8.0 | 0 | `magnitude_factor` 5e-4 |
+| `explosion` | 2.2 | 8.0 | 0 | `magnitude_factor` 5e-4 (the original reads `max_magnitude` here, so this term is never used) |
 | `high_speed` | 15.0 | 12.5 | 1 | `magnitude_quotient` 70.0, `min_speed` 1.0 |
 | `nitro` | 4.0 | 3.0 | 1 | `magnitude` 0.05 (absolute) |
 
@@ -57,18 +58,21 @@ half.
 The triggers are decoded, and they are the AI half of the camera shake rather than script calls:
 one player (`FUN_00473430`) plays the three defs by index on any vehicle that is not the player's,
 from the same five sites that kick the player's own oscillator blocks (a round fired, a round
-taken, overspeed, a collision contact, a nitro engage). The decode, with the addresses and the
-one-at-a-time handle, is in [`../org/shakes.md`](../org/shakes.md), "The seven component blocks and
-every kicker". CSVM wires the nitro engage; the other four sites are not wired.
+taken, overspeed, a collision contact, a nitro engage), of which the round-fired site can never
+play. The decode, with the addresses, the index each site picks and the one-at-a-time handle, is in
+[`../org/shakes.md`](../org/shakes.md), "The seven component blocks and every kicker". CSVM wires
+the four live sites.
 
 ## Weapon camera-shake flag
 
 Exactly **one** of the 48 weapons carries it: `wep_26` "FW" (`MSG_WEAP_FAKE_WEAPON`), a
 zero-damage scripted rocket with `IMPACT_PROXIMITY` 100 ([weapons.md](weapons.md)). No player
 loadout mounts it. So the flag is **not** the player-gunfire shake mechanism (that would be the
-`fire_bullet` source above, which no flag gates), it reads as "this scripted weapon's
-detonation shakes the camera", presumably through the `explosion`/`missile_impact` source, for
-missions that rattle the player without hurting them.
+`fire_bullet` source above, which no flag gates). It routes a round that is not
+`HIGH_EXPLOSIVE` and reaches the player to the `explosion` source instead of `missile_impact`, and
+that source's magnitude never fills (the parser asks for `max_magnitude`, which this file does not
+author), so the flag rocks the player by nothing ([`../org/shakes.md`](../org/shakes.md), "What a
+round taken kicks").
 
 ## Evidence & limits
 

@@ -114,11 +114,11 @@ public class PlaneDamageTests
         Assert.Equal(30f, damage.WholeHealth, 4);
     }
 
-    /// <summary>Which quotient the injure staging must read (BL-384 items 1 and 2, from BL-297's
-    /// decode). FUN_004b3d70 divides health only, and while a zone's armor stands its health
-    /// cannot move, so no per-part threshold is crossed. The combined progression crosses them
-    /// early: a Bloodhawk zone stripped of armor sits at combined 0.5, which is already the
-    /// shipped leftwing pdpanel5 threshold, with the airframe untouched. DamageVisuals.OnPartDamage
+    /// <summary>Which quotient the injure staging must read (BL-384 items 1 and 2, decoded in
+    /// `git log --grep=BL-297`). FUN_004b3d70 divides health only, and while a zone's armor
+    /// stands its health cannot move, so no per-part threshold is crossed. The combined progression crosses them
+    /// early. A Bloodhawk zone stripped of armor sits at combined 0.5 with the airframe untouched,
+    /// already the shipped leftwing pdpanel5 threshold. DamageVisuals.OnPartDamage
     /// takes HealthFraction for exactly this reason; feeding it Fraction tears panels early.</summary>
     [Fact]
     public void StrippingAZonesArmorCrossesAShippedPanelThresholdOnTheCombinedScaleButNotOnHealth()
@@ -339,6 +339,68 @@ public class PlaneDamageTests
         Assert.Equal("hull a50% h100% · nose a0%", damage.Summary());
         damage.Apply("nose", 10f);
         Assert.Equal("hull a50% h75% · nose a0% h50%", damage.Summary());
+    }
+
+    // The owner's network send reads the flag once a step, so every writer must raise it and a
+    // spend of nothing must not.
+    [Fact]
+    public void EveryWriterRaisesTheChangedFlagAndTakingItLowersIt()
+    {
+        var damage = FourZones();
+        Assert.False(damage.Changed);
+
+        damage.Apply("nose", 0f, 0f);
+        Assert.False(damage.TakeChanged());
+        damage.Apply("nose", 1f, 1f);
+        Assert.True(damage.TakeChanged());
+        Assert.False(damage.TakeChanged());
+
+        damage.ScalePools(0.5f, 0.5f);
+        Assert.True(damage.TakeChanged());
+        damage.SetWholePools(10f, 10f);
+        Assert.True(damage.TakeChanged());
+        damage.Reset();
+        Assert.True(damage.TakeChanged());
+    }
+
+    // A mirror writes another machine's numbers, the whole pair and each zone apart. It runs no
+    // recompute and no death test, and raises no Changed flag, since the copy never sends.
+    [Fact]
+    public void AMirrorWritesTheFractionsAsGivenAndRaisesNothing()
+    {
+        var damage = FourZones();
+        damage.MirrorWhole(0.25f, 0.5f);
+        damage.MirrorZone(2, 0f, 0.3f);
+
+        Assert.Equal(20f, damage.WholeArmor, 4);
+        Assert.Equal(40f, damage.WholeHealth, 4);
+        Assert.Equal(0f, damage.Zones[2].Armor, 4);
+        Assert.Equal(6f, damage.Zones[2].Hp, 4);
+        Assert.Equal("leftwing", damage.Zones[2].Def.Name);
+        Assert.Equal(20f, damage.Zones[0].Hp, 4);
+        Assert.False(damage.Changed);
+
+        damage.MirrorWhole(0f, 0f);
+        Assert.True(damage.IsDestroyed);
+        Assert.False(damage.Changed);
+    }
+
+    [Fact]
+    public void IsFullReadsEveryPoolAndAResetRestoresIt()
+    {
+        var damage = FourZones();
+        Assert.True(damage.IsFull);
+
+        damage.MirrorZone(3, 0.99f, 1f);
+        Assert.False(damage.IsFull);
+        damage.Reset();
+        Assert.True(damage.IsFull);
+
+        damage.MirrorWhole(1f, 0.99f);
+        Assert.False(damage.IsFull);
+        damage.MirrorWhole(1f, 1f);
+        Assert.True(damage.IsFull);
+        Assert.True(Unarmored().IsFull);
     }
 
     // Kills a zone with exact spends (armor stripped, then its health spent with no

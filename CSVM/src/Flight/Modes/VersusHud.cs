@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Camera;
@@ -29,13 +30,15 @@ public sealed partial class VersusHud : Control
     public IReadOnlyList<PlayerRig>? Rigs;
 
     // 1440p reference metrics (scaled by HudMetrics, matches TargetHud's calibration).
-    private const int RefStatusFont = 19;
-    private const int RefMarkerFont = 14;
     private const float RefStatusY = 100f;    // same slot as StuntRunHud's run-status line
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
     private const float RefTextGap = 8f;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
+
+    // The status line's and the markers' sizes, chrome type scale rungs in the same reference.
+    private static readonly float RefStatusFont = ChromeType.InReference(ChromeSize.Readout, HudMetrics.ReferenceHeight);
+    private static readonly float RefMarkerFont = ChromeType.InReference(ChromeSize.Label, HudMetrics.ReferenceHeight);
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
@@ -49,6 +52,19 @@ public sealed partial class VersusHud : Control
 
     /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
+
+    /// <summary>What sends the status line away while it answers true: the pane's held scores, whose
+    /// Original text runs across the top of the pane. The opponent markers stay. Null keeps it.
+    /// </summary>
+    public Func<bool>? StatusHiddenWhile { get; set; }
+
+    /// <summary>A seat's callsign when a bot flies it, else null. The status line then names a bot
+    /// leader by callsign and a person by player tag, as the death line does. Null names every seat
+    /// by tag.</summary>
+    public Func<int, string?>? BotName { get; set; }
+
+    /// <summary>Whether the status line draws this frame.</summary>
+    public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
 
     /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
     /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
@@ -75,6 +91,27 @@ public sealed partial class VersusHud : Control
         ownTeam is { } own && AimAssist.Friendly(own, seatTeam) ? TargetHud.HudGreen
             : SplitScreen.PlayerColor(seatIndex);
 
+    /// <summary>The sole rank-1 seat's name, or TIED while nobody leads (including 0-0 before the
+    /// first kill). A team match names pane <paramref name="playerIndex"/>'s team and its total,
+    /// then the leading team. <paramref name="botName"/> is <see cref="BotName"/>.</summary>
+    public static string LeaderText(VersusMatch match, int playerIndex, Func<int, string?>? botName)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        if (match.Teamed)
+        {
+            int own = match.TeamOf(playerIndex);
+            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
+            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
+            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
+        }
+
+        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
+        if (leaders.Count != 1)
+            return "LEADER TIED";
+        int seat = leaders[0].PlayerIndex;
+        return $"LEADER {botName?.Invoke(seat) ?? SplitScreen.PlayerTag(seat)}";
+    }
+
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame, the
@@ -90,11 +127,11 @@ public sealed partial class VersusHud : Control
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         float cx = Size.X / 2f;
 
-        if (_match is { } match)
+        if (_match is { } match && StatusShown)
             DrawCentered(font, new Vector2(cx, RefStatusY * s), StatusLine(match), statusFont, HudBlue);
 
         if (Rigs == null)
@@ -126,23 +163,7 @@ public sealed partial class VersusHud : Control
     {
         string time = match.TimeLimit > 0f ? $"{FormatTime(match.TimeRemaining)}   " : "";
         string kd = $"K/D {match.KillsOf(PlayerIndex)}/{match.DeathsOf(PlayerIndex)}";
-        return $"{time}{kd}   {LeaderText(match)}";
-    }
-
-    // The sole rank-1 player's tag, or TIED while nobody leads (including 0-0 before the
-    // first kill). A team match names this pane's team and its total, then the leading team.
-    private string LeaderText(VersusMatch match)
-    {
-        if (match.Teamed)
-        {
-            int own = match.TeamOf(PlayerIndex);
-            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
-            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
-            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
-        }
-
-        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
-        return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER TIED";
+        return $"{time}{kd}   {LeaderText(match, PlayerIndex, BotName)}";
     }
 
     // One opponent's marker: on screen, their tag floats just above the projected

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
@@ -12,6 +13,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -98,8 +100,6 @@ internal static class AiSuites
                     RigCount = 2,
                     Rigs = rigs,
                     PauseState = pauseState,
-                    MenuInputFor = _ => new UI.Screens.MenuInput(),
-                    ExitSession = () => { },
                 }, new FixedFlightStarts());
             humanRoster.SetTargetSubParts(targetSource);
             int humanChildrenBefore = ctx.Host.GetChildCount();
@@ -133,7 +133,7 @@ internal static class AiSuites
                       && rigs[1].Controller?.PlayerIndex == 1,
                 $"successful human batch preserves player identity and order");
             ctx.Check(rigs.All(rig => rig.Controller?.PauseState == pauseState
-                                      && rig.Controller.TargetSubParts == targetSource
+                                      && rig.Controller.TargetInput.SubParts == targetSource
                                       && rig.Controller.SmokeScreens == null),
                 $"finished humans publish pause and target bindings while optional smoke stays absent");
             var humanControllers = rigs.Select(rig => rig.Controller!).ToArray();
@@ -1736,7 +1736,8 @@ internal static class AiSuites
     // frame is invisible to the rounds' space queries (INSTR-13).
     [Suite("ai-gunnery",
         "the D14 AI gunner + D12 acquisition: acquires through the decoded target ranking " +
-        "as mutable state (0.7 player weight, primary_target override, a 'player' assignment " +
+        "as mutable state (0.7 player weight, and none for a gunner that prefers no player, " +
+        "primary_target override, a 'player' assignment " +
         "resolving to the NEAREST human of several, 1e21 activation " +
         "cutoff, all live in the engine), refuses the shot " +
         "when the residual after the ±11° traverse clamp exceeds the gun's 10° aim gate, and " +
@@ -2017,6 +2018,22 @@ internal static class AiSuites
             Step(1);
             ctx.Check(ReferenceEquals(gunner.Target, target),
                 $"equal geometry: the player's 0.7 weight out-ranks the AI rival (360 rank units)");
+
+            // A Dogfight bot's gunner prefers no player. The rival 100 m nearer loses to the human under
+            // the preference and wins without it. That shows the acquisition passes the setting through.
+            var nearerRivalPos = targetPos + new Vector3(200f, 0f, 800f - Mathf.Sqrt(700f * 700f - 200f * 200f));
+            rival.PlaceHeld(nearerRivalPos, nearerRivalPos + Vector3.Forward);
+            gunner.Target = null;
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, target),
+                $"ABLE-TO-FAIL CONTROL: preferring players, the human at 800 m out-ranks the rival at 700 m");
+            gunner.PlayersPreferred = false;
+            gunner.Target = null;
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, rival),
+                $"preferring no player, the nearer rival wins: a human weighs what an AI does");
+            gunner.PlayersPreferred = true;
+            rival.PlaceHeld(rivalPos, rivalPos + Vector3.Forward);
             gunner.Target = null;
             gunner.PrimaryTargetName = "rival_hostile";
             Step(1);

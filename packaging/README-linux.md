@@ -25,7 +25,7 @@ terminal in the folder holding it and run this, with the name replaced by the ar
 actually have:
 
 ```
-sha256sum CSVM-v0.2.0-linux-x64.tar.gz
+sha256sum CSVM-v0.3.0-linux-x64.tar.gz
 ```
 
 The printed hash must match the one on the release page (upper and lower case do not
@@ -48,7 +48,8 @@ project published, rather than something a third party rebuilt or altered.
   most desktop distributions install it already; elsewhere it is the `SDL2` or
   `libsdl2-2.0-0` package. Without it CSVM runs as usual and reads no flight stick, and the
   log says so on its `sticks: off` line. Gamepads, the keyboard and the mouse do not need it.
-  Flight sticks on Linux are untested, so a report from anyone who flies with one is welcome.
+  Flight sticks on Linux have been tried on few models, so a report from anyone who flies with
+  one is welcome.
 - Nothing else. The .NET runtime this engine needs is inside the download and does not use
   the system's ICU library, so there is no runtime or framework to install.
 
@@ -59,7 +60,7 @@ CSVM first and unpack into it. From a terminal:
 
 ```
 mkdir CSVM
-tar -xzf CSVM-v0.2.0-linux-x64.tar.gz -C CSVM
+tar -xzf CSVM-v0.3.0-linux-x64.tar.gz -C CSVM
 ```
 
 `tar` keeps the executable permission that `CSVM.x86_64` and `tools/unzbd` carry in the
@@ -182,6 +183,12 @@ custom planes and the install folder you last extracted from are kept outside it
 those two folders removes everything CSVM has written; your copy of the original game is
 never modified.
 
+Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
+model. The Controls screen writes those files for you. To edit one by hand, for example to
+set a deadzone, fly two sticks together, or stop a keypad being read as a stick, follow
+<https://github.com/Laeresh/CSVM/blob/main/docs/stick-profiles.md>, which links an example
+file that binds every action.
+
 ## What else is in this folder
 
 - `CSVM.x86_64` and the `data_CSVM_linuxbsd_x86_64` folder beside it are the engine. They
@@ -194,6 +201,8 @@ never modified.
   runtime, and the Rust libraries inside `tools/unzbd`. It also carries the notice for
   `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from, and the SIL Open
   Font License for PromptFont, the font the controller button pictures are drawn from.
+- `libwebrtc_native.linux.template_release.x86_64.so` is the WebRTC library internet games run
+  over, and `LICENSE-webrtc/` holds its licences.
 - `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
   Quote it in a bug report when you are not sure which build you have.
 
@@ -201,7 +210,7 @@ never modified.
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by
 Microsoft or Zipper Interactive**. "Crimson Skies" and all related names, marks and
-artwork are the property of their respective owners.
+artwork are the property of their respective owners. Crimson Skies © Microsoft Corporation.
 
 No game content is distributed in this archive. The engine requires, and reads at runtime,
 game files from your own legally-obtained copy of Crimson Skies. Nothing in this archive

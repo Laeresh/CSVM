@@ -137,6 +137,13 @@ public sealed class ObjectiveSites
     public static bool LiveDespiteState(DestructibleRegistry.State? state) =>
         state != DestructibleRegistry.State.Destroyed;
 
+    /// <summary>Whether a site's node and every ancestor are switched on: the structure's
+    /// <c>+0x8c</c> byte. The original's liveness slot reads it before any flag
+    /// (<c>docs/org/targeting.md</c>, "The class model"). Null (unresolved) is on.
+    /// ⚠ Do not offer a switched-off site. A hidden wave would be marked at its rest pose on the water
+    /// until its entrance switches it on.</summary>
+    public static bool SwitchedOn(Node3D? node) => node == null || node.IsVisibleInTree();
+
     /// <summary>Where a target sits: the bare <c>TRAVELERS</c> point of the objective that edits
     /// that target, where the mission gives one, and null to fall back to the world node.
     /// ⚠ Prefer the point over the node. C3/M01's village target names a node standing at the world
@@ -276,11 +283,10 @@ public sealed class ObjectiveSites
     }
 
     // The world-frame box of everything `node` and its subtree draw, hidden parts included: the
-    // original's own bounding box is the authored one over every child, and a wave that has not
-    // been switched on yet still has to be marked where it stands.
-    // ⚠ Walk by index rather than GetChildren(). This runs once per site per pane per frame, and
-    // the Godot array GetChildren() allocates costs 1.4 ms of the 1.9 ms a 380-mesh zeppelin site
-    // took before the change.
+    // original's own bounding box is the authored one over every child. Whether the site itself is
+    // switched on is SwitchedOn's question, not this box's.
+    // ⚠ Walk by index rather than GetChildren(). This runs once per site per pane per frame.
+    // GetChildren()'s Godot array cost 1.4 ms of the 1.9 ms a 380-mesh zeppelin site once took.
     private static void CollectMeshBoxes(Node node, ref Aabb? merged)
     {
         if (node is MeshInstance3D { Mesh: not null } mesh)
@@ -348,7 +354,10 @@ public sealed class ObjectiveSites
             Team = side?.Team ?? (resolved is { } site
                 ? DestructibleRegistry.MissionStructureTeamOf(site)
                 : null) ?? AimAssist.NeutralTeam,
-            Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null),
+            // A mode that places a site itself owns whether it is there, since a carried flag's
+            // site is not its node.
+            Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null)
+                && (side?.At != null || SwitchedOn(resolved)),
             ConeOverride = AimAssist.NoConeOverride,
             Source = SiteFor(node, graph, at, objective, side),
         });

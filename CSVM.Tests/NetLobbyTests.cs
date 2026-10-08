@@ -276,8 +276,8 @@ public class NetLobbyTests
 
         var roster = NetSeats.Field(hostLobby.LocalPeer, new[] { "player_bhawk" }, hostLobby.Peers, "player_bhawk");
         Assert.Equal(2, roster.Length);
-        Assert.True(roster[0].IsLocal);
-        Assert.False(roster[1].IsLocal);
+        Assert.True(roster[0].FlownHere);
+        Assert.False(roster[1].FlownHere);
         Assert.Equal(1, roster[1].PeerId);
 
         _ = NetSession.Host(hostLobby, roster, seed: 99);

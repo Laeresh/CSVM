@@ -10,7 +10,6 @@ using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
-using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
@@ -28,7 +27,8 @@ internal static class MenuOriginalCoopFlowSuites
     private const int SpareAirframe = 7;
 
     [Suite("menu-original-coop-flow",
-        "The Original co-op session flow over the loopback: a joined guest lands on the host's cabin "
+        "The Original co-op session flow over the loopback: a listed host's band names its code, "
+        + "Private, and no address, a joined guest lands on the host's cabin "
         + "with every navigation button greyed and dead and is seated under its own last pilot's name, "
         + "follows the host into the briefing and the flight check, where its hangar is the host's, "
         + "the host's own plane is refused to it, and its pick of the host's free spare carries that "
@@ -51,9 +51,11 @@ internal static class MenuOriginalCoopFlowSuites
             return;
         }
 
+        // The host's carrier is listed under the aids' code, so its band shows the code; the guest
+        // still joins over the loopback end beneath it.
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(11));
         var hostDoor = new NetPlayFeature(
-            (_, _, _) => mesh[0],
+            (_, _, _) => NetDoorAid.Listed(mesh[0]),
             (_, _) => throw new InvalidOperationException("the host does not join"),
             new RouterAccess(
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
@@ -99,6 +101,7 @@ internal static class MenuOriginalCoopFlowSuites
             ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
             MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), "Zachary", CampaignAidProfiles.Pilot);
             AwaitMapping(hostDoor);
+            BandShowsTheCode(ctx, host, hostDoor);
             Join(ctx, host, guest);
             FollowTheBoards(ctx, host, guest);
             ReadyGatesTheLaunch(ctx, host, guest);
@@ -120,6 +123,128 @@ internal static class MenuOriginalCoopFlowSuites
         var after = Snapshot(guestDir);
         ctx.Check(after.Count == before.Count && after.All(f => before.TryGetValue(f.Key, out var was) && was.SequenceEqual(f.Value)),
             $"the guest's own profile store is byte-identical after the session ({before.Count} files before, {after.Count} after)");
+    }
+
+    [Suite("menu-original-coop-guest-seats",
+        "The Original co-op flow with two players at the guest's machine, over the loopback: the host "
+        + "seats both, the guest's strip marks both chips its own, its READY marks the first player's "
+        + "check and walks onto the second's while the host's FLY MISSION stays greyed, the second's "
+        + "READY makes it live, CANCEL READY takes both marks back and starts the walk again, and the "
+        + "guest launches one seat per player on the host's opener")]
+    internal static void TheGuestsTwoPlayers(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(13));
+        var hostDoor = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => throw new InvalidOperationException("the host does not join"));
+        var guestDoor = new NetPlayFeature((_, _, _) => throw new InvalidOperationException("a guest does not host"), (_, _) => mesh[1]);
+        string guestDir = Path.Combine(Path.GetTempPath(), "CSVM", "coop-guest-seats",
+            Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(guestDir);
+        var exits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        End? host = null;
+        End? guest = null;
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-coop-guest-seats");
+        try
+        {
+            host = Open(ctx, layout, hostDoor, CampaignAidProfiles.Store(seeded: true, progressed: true), exits);
+            guest = Open(ctx, layout, guestDoor, new CampaignProfileStore(guestDir), guestExits);
+            if (host == null || guest == null)
+            {
+                return;
+            }
+
+            host.Shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            host.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+            MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), "Zachary", CampaignAidProfiles.Pilot);
+            guest.Host.Features.Get<PlayerSetupFeature>().Join(new ScriptedSeat());
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            guest.Door.OpenJoin();
+            Pump(host, guest, frames: 6);
+            ClickRow(ctx, host, nameof(BoardButton.NextMission));
+            Pump(host, guest, frames: 3);
+            ClickRow(ctx, host, nameof(BoardButton.GoToFlightCheck));
+            Pump(host, guest, frames: 4);
+
+            var field = guest.Host.Features.Get<CampaignFeature>().Field;
+            ctx.Check(guest.Shell.Screen == OriginalScreen.CampaignFlightCheck && guest.Door.CoopSeats == 2 && field.Players == 2
+                      && host.Door.CoopGuests.Select(g => g.Slot).SequenceEqual(new[] { 1, 2 }),
+                $"the host seats both of the guest's players and the guest's check walks two ({guest.Door.CoopSeats} seat(s), {field.Players} player(s), {guest.Shell.Screen})");
+            WalkTheReadies(ctx, host, guest, field);
+
+            ClickRow(ctx, host, nameof(BoardButton.FlyMission));
+            if (exits.LastOrDefault() is not CampaignMissionExit { Net: { } wire })
+            {
+                ctx.Check(false, $"the host's FLY MISSION leaves as a networked campaign launch ({exits.Count})");
+                return;
+            }
+
+            var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
+            var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+                host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
+            ctx.Check(roster.Length == 3 && roster[1].PeerId == roster[2].PeerId && roster[1].PeerId != roster[0].PeerId,
+                $"the host's launch field seats the guest's machine at seats 1 and 2 ({roster.Length} seat(s))");
+            _ = NetSession.Host(wire.Transport, roster, seed: 7);
+            for (int i = 0; i < 6 && guestExits.Count == 0; i++)
+            {
+                wire.Transport.Step(Dt);
+                host.Door.Step(Dt);
+                guest.Host.Tick(Dt);
+            }
+
+            ctx.Check(guestExits.LastOrDefault() is CampaignMissionExit { Seats.Count: 2, Net: not null, Profile: "" },
+                $"on the host's opener the guest launches one seat per player ({(guestExits.LastOrDefault() as CampaignMissionExit)?.Seats.Count} seat(s))");
+        }
+        finally
+        {
+            host?.Host.Deactivate();
+            guest?.Host.Deactivate();
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // READY on each of the guest's two checks in turn, the host's launch waiting until the last.
+    private static void WalkTheReadies(TestContext ctx, End host, End guest, CampaignFlightField field)
+    {
+        ctx.Check(Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: false } && field.Current == 0,
+            $"ABLE-TO-FAIL CONTROL: before any Ready the host's FLY MISSION is greyed, the guest on its first check");
+        var chips = guest.Shell.Compose().Overlays.SelectMany(panel => panel.Lines).Select(line => line.Text).ToArray();
+        string hostChip = host.Door.PlayerName + CSVM.UI.Screens.LaunchMenu.RemoteChipMark;
+        ctx.Check(host.Door.PlayerName.Length > 0 && chips.Contains("P2") && chips.Contains("P3") && chips.Contains(hostChip),
+            $"the guest's strip marks P2 and P3 its own and names the host's seat by its callsign ({string.Join(" | ", chips)})");
+        ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+        Pump(host, guest, frames: 4);
+        ctx.Check(field.Current == 1 && guest.Shell.Screen == OriginalScreen.CampaignFlightCheck,
+            $"the first player's READY walks the guest onto the second's check ({field.Current})");
+        ctx.Check(host.Door.CoopGuests.Select(g => g.Ready).SequenceEqual(new[] { true, false }) && !host.Door.CoopAllReady
+                  && Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: false },
+            $"and the host's FLY MISSION stays greyed on one Ready of two ({string.Join(", ", host.Door.CoopGuests.Select(g => g.Ready))})");
+        ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+        Pump(host, guest, frames: 4);
+        ctx.Check(host.Door.CoopAllReady && Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: true } && guest.Door.CoopSeatsReady,
+            $"the second player's READY makes the host's FLY MISSION live");
+
+        ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+        Pump(host, guest, frames: 4);
+        ctx.Check(field.Current == 0 && !guest.Door.CoopReadyAt(0) && !guest.Door.CoopReadyAt(1) && !host.Door.CoopAllReady,
+            $"CANCEL READY takes both marks back and starts the walk again ({field.Current})");
+        ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+        Pump(host, guest, frames: 4);
+        ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+        Pump(host, guest, frames: 4);
+        ctx.Check(host.Door.CoopAllReady, $"and READY on both checks again opens the launch");
     }
 
     // The guest opens the Connection page and joins; the host's word takes it onto the cabin.
@@ -270,7 +395,7 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(picked != CoopGuestPick.StarterAirframe && fit.AmmoAt(0) == 3,
             $"ABLE-TO-FAIL CONTROL: the pick the guest flew is not a fresh join's starter and stock fit ({picked}, {fit.AmmoAt(0)})");
         var guestWire = guest.Door.BuildLaunch();
-        var relaunch = CSVM.Session.Launch.Launcher.CoopRelaunch(host.Door);
+        var relaunch = CSVM.Launch.Launcher.CoopRelaunch(host.Door);
         ctx.Check(guestWire != null && relaunch != null, $"the guest flies and the host's Restart relaunches its door");
         if (guestWire == null || relaunch == null)
         {
@@ -278,12 +403,12 @@ internal static class MenuOriginalCoopFlowSuites
         }
 
         GuestFliesItsPick(ctx, host, relaunch, (picked, fit), "the restart's field builds the guest on the pick it flew");
-        for (int i = 0; i < 20 && !CSVM.Session.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
+        for (int i = 0; i < 20 && !CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
         {
             StepInFlight(host, guest, relaunch, guestWire);
         }
 
-        ctx.Check(CSVM.Session.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's new round ends the guest's flight");
+        ctx.Check(CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's new round ends the guest's flight");
         GuestReturns(ctx, host, guest, relaunch, (picked, fit), "after the restart");
         ctx.Check(((NetLobby)relaunch.Transport).Picks.Values.All(pick => pick.Epoch == host.Door.CoopEpoch),
             $"and it answers under the restart's round, which the host waits for");
@@ -379,14 +504,14 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(host.Door.Reclaim(), $"the host takes its wire back after the lost mission");
         int seq = Math.Max(0, CampaignAidProfiles.MissionsFlown - 1);
         host.Host.Show(new DebriefReturn(CampaignAidProfiles.Pilot, seq, MissionWon: false));
-        for (int i = 0; i < 20 && !CSVM.Session.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
+        for (int i = 0; i < 20 && !CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
         {
             host.Host.Tick(Dt);
             guestWire.Transport.Step(Dt);
             guest.Door.Step(Dt);
         }
 
-        ctx.Check(CSVM.Session.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's lost debrief ends the guest's flight");
+        ctx.Check(CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's lost debrief ends the guest's flight");
         GuestReturns(ctx, host, guest, hostWire, remembered, "after the lost mission");
         Pump(host, guest, frames: 4);
         byte debriefRound = host.Door.CoopEpoch;
@@ -427,10 +552,10 @@ internal static class MenuOriginalCoopFlowSuites
     // The host's launch field for the guest's seat, over the host's wire.
     private static void GuestFliesItsPick(TestContext ctx, End host, MenuNetLaunch launch, (byte Airframe, CoopFit Fit) pick, string what)
     {
-        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
-        var (roster, seatFits) = CSVM.Session.Launch.Launcher.CoopLaunchField(
+        var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
+        var (roster, seatFits) = CSVM.Launch.Launcher.CoopLaunchField(
             host.Door, launch.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
-        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == UI.Hangar.PlanePickerRoster.AirframeNode(pick.Airframe) && seatFits[1] == pick.Fit,
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == Flight.Hangar.StockAirframes.Node(pick.Airframe) && seatFits[1] == pick.Fit,
             $"{what} ({(roster.Length == 2 ? roster[1].PlaneNode : "-")}, ammo {(seatFits.Length == 2 ? seatFits[1].AmmoAt(0) : -9)})");
     }
 
@@ -470,6 +595,19 @@ internal static class MenuOriginalCoopFlowSuites
         }
 
         return files;
+    }
+
+    // A listed co-op host's band names its code and that it is Private, and shows no address. The
+    // router's mapped address is a guest's way in only when there is no code.
+    private static void BandShowsTheCode(TestContext ctx, End host, NetPlayFeature door)
+    {
+        host.Host.Tick(Dt);
+        var lines = host.Shell.Compose().Lines.Select(line => line.Text).ToList();
+        ctx.Check(door.Private && lines.Any(text => text.Contains($"CODE {NetDoorAid.SampleCode}", StringComparison.Ordinal))
+                  && lines.Any(text => text.StartsWith("PRIVATE", StringComparison.Ordinal)),
+            $"the host's band names its code and that the game is Private ({door.Private}, {CoopDoorText.HostBand(door)})");
+        ctx.Check(!lines.Any(text => text.Contains(NetDoorAid.ExternalAddress, StringComparison.Ordinal)),
+            $"and leaves out the router's address, which it shows without a code ({door.Router.PortMap?.ExternalAddress})");
     }
 
     // The mapping lands on a worker thread, so the wait is on the wall clock rather than a count.

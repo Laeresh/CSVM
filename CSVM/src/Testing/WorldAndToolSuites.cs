@@ -1,12 +1,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.UI.Boards;
 using CSVM.UI.Labs;
@@ -318,7 +321,9 @@ internal static class WorldAndToolSuites
             return;
         }
 
-        double before = Performance.GetMonitor(Performance.Monitor.ObjectCount);
+        // A collection during the build lets earlier suites' finalizers free their objects, so both
+        // readings are taken once the count has stopped moving.
+        long? before = FinalizerGate.SettledObjectCount();
         bool threw = false;
         try
         {
@@ -330,9 +335,13 @@ internal static class WorldAndToolSuites
         {
             threw = true;
         }
-        double after = Performance.GetMonitor(Performance.Monitor.ObjectCount);
+        long? after = FinalizerGate.SettledObjectCount();
         ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
-        ctx.Same((long)before, (long)after, $"objects alive across the failed build of {parent.Name}");
+        ctx.Check(before != null && after != null, $"the object count settled on both sides of the build");
+        if (before is long b && after is long a)
+        {
+            ctx.Same(b, a, $"objects alive across the failed build of {parent.Name}");
+        }
     }
 
     // The distinct Shader resources every ShaderMaterial in the subtree points at, by reference:
@@ -368,7 +377,7 @@ internal static class WorldAndToolSuites
     // marker. Able to fail: without the Skip arm the interior build finds no cockpit1; without the
     // mount it sits at the plane origin at authored (~20x) scale.
     [Suite("cockpit-interior",
-        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11), while the Danger Zone photograph's frame shows the hidden airframe on a layer no pane draws and puts it back after")]
+        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11) in that pilot's own pane alone, while another pane and the Danger Zone photograph still draw the whole airframe")]
     internal static void CockpitInterior(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -422,7 +431,9 @@ internal static class WorldAndToolSuites
                 ctx.Check(!AnimRuntime.NameOf(node).StartsWith("pcdp", System.StringComparison.OrdinalIgnoreCase),
                     $"DamagePanels holds no cockpit panel name={AnimRuntime.NameOf(node)}");
 
-            var cockpit = CockpitVisibility.Bind(withInterior, interior);
+            // Seated as a human rig is: P1's airframe through P1's pane, with P2's pane beside it.
+            SplitScreen.SeatAirframe(withInterior, null, 0);
+            var cockpit = CockpitVisibility.Bind(withInterior, interior, 0);
             ctx.Check(cockpit != null, $"the visibility rig binds to the built model");
             if (cockpit == null)
                 return;
@@ -436,19 +447,26 @@ internal static class WorldAndToolSuites
             ctx.Check(markers != null && FindNamed(markers, "cockpit_camera") != null,
                 $"the bound markers group is the airframe's, not a gauge's");
 
+            uint ownPane = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(0), 0);
+            uint otherPane = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1), 1);
+            uint photo = SplitScreen.OutsideCullMask(ownPane);
+            ctx.Check(DrawnBy(body, ownPane).Shown > 0, $"the body carries drawables {DrawnBy(body, ownPane)}");
             cockpit.Apply(PilotViewMode.Cockpit, firstPerson: true);
-            ctx.Check(interior.Visible && body is { Visible: false }
-                && markers is { Visible: true } && dontmove is { Visible: true },
-                $"Cockpit: interior in, body out, markers/dontmove kept");
+            ctx.Check(interior.Visible && DrawsNone(body, ownPane) && DrawsAll(dontmove, ownPane),
+                $"Cockpit: interior in, body out of the pilot's own pane, dontmove kept {DrawnBy(body, ownPane)}");
             cockpit.Apply(PilotViewMode.Nose, firstPerson: true);
-            ctx.Check(!interior.Visible && body is { Visible: false }
-                && markers is { Visible: false } && dontmove is { Visible: false },
-                $"Nose: interior out, body out, markers/dontmove out");
-            PhotographFrame(ctx, cockpit, interior, body, markers, dontmove);
+            ctx.Check(!interior.Visible && DrawsNone(body, ownPane) && DrawsNone(markers, ownPane)
+                && DrawsNone(dontmove, ownPane),
+                $"Nose: interior out, body out, markers/dontmove out of the pilot's own pane {DrawnBy(markers, ownPane)} {DrawnBy(dontmove, ownPane)}");
+            ctx.Check(DrawsAll(body, otherPane) && DrawsAll(dontmove, otherPane),
+                $"…while another pane still draws the body and dontmove {DrawnBy(body, otherPane)}");
+            ctx.Check(DrawsAll(body, photo) && DrawsAll(dontmove, photo),
+                $"…and so does the Danger Zone photograph taken off that pilot's own pane {DrawnBy(body, photo)}");
+            ctx.Check(new[] { body, markers, dontmove }.All(g => g is { Visible: true }),
+                $"…none of it by node visibility, which every pane shares");
             cockpit.Apply(PilotViewMode.Cockpit, firstPerson: false);
-            ctx.Check(!interior.Visible && body is { Visible: true }
-                && markers is { Visible: true } && dontmove is { Visible: true },
-                $"a held external view restores the aircraft while Cockpit stays selected");
+            ctx.Check(!interior.Visible && DrawsAll(body, ownPane) && DrawsAll(dontmove, ownPane),
+                $"a held external view restores the aircraft while Cockpit stays selected {DrawnBy(body, ownPane)}");
 
             // The gauge drive needs an authored panel. A tree without one has nothing to drive;
             // the install always carries one.
@@ -585,11 +603,11 @@ internal static class WorldAndToolSuites
             ctx.Host.AddChild(paneView);
 
             var shaders = ShadersUnder(controller);
-            int gated = shaders.Count(s => s.Code.Contains("csky_sun_fill_rgb : csky_sun_ambient_rgb", System.StringComparison.Ordinal)
+            int gated = shaders.Count(s => s.Code.Contains("sun_fill_rgb : sun_ambient_rgb", System.StringComparison.Ordinal)
                 && s.Code.Contains("distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz)", System.StringComparison.Ordinal));
             ctx.Check(gated > 0, $"the aircraft's faithful shaders swap the ambient half at an armed eye gated={gated} of {shaders.Count}");
 
-            photo = DangerZonePhotograph.Build(pane, null, () => controller.GlobalTransform, 18.5f, () => 0.5f,
+            photo = DangerZonePhotograph.Build(pane, () => controller.GlobalTransform, 18.5f, () => 0.5f,
                 airframe: controller);
             controller.AddChild(photo);
             ctx.Check(photo.Request(_ => { }), $"the photograph takes the request");
@@ -687,13 +705,17 @@ internal static class WorldAndToolSuites
             new CameraController(probeCam, new CamParams(), _ => false, -1).RestoreExternalFov();
             ctx.Check(Mathf.Abs(probeCam.Fov - CameraController.ExternalFovDeg) < 0.001f,
                 $"an external pose takes the decoded base fov={probeCam.Fov:0.##}");
-            // The wobble the interior inherited below the shake pivot has to reach the pass. The
-            // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by
-            // exactly r, and a pass that forgot the wobble leaves it at 0.
-            float rolled = CockpitOverlay.WobbledMount(mountBasis, 0.3f).X.AngleTo(mountBasis.X);
-            ctx.Check(Mathf.Abs(rolled - 0.3f) < 0.001f,
-                $"the shake pivot's roll reaches the panel in the pass angle={rolled:0.###} rad");
-            ctx.Check(CockpitOverlay.WobbledMount(mountBasis, 0f).IsEqualApprox(mountBasis),
+            // The pivot's wobble has to reach the pass on every axis it turns. The pass's basis is
+            // the pivot's own basis over the mount; a pass that forgot it leaves the mount alone.
+            var wobble = new Vector3(0.05f, -0.04f, 0.3f);
+            var wobbled = CockpitOverlay.WobbledMount(mountBasis, wobble);
+            float rolled = wobbled.X.AngleTo(mountBasis.X);
+            var pivotProbe = new Node3D { Rotation = wobble };
+            var pivotBasis = pivotProbe.Basis;
+            pivotProbe.Free();
+            ctx.Check(wobbled.IsEqualApprox(pivotBasis * mountBasis) && rolled > 0.29f,
+                $"the shake pivot's pitch, yaw and roll reach the panel in the pass (right axis turned {rolled:0.###} rad)");
+            ctx.Check(CockpitOverlay.WobbledMount(mountBasis, Vector3.Zero).IsEqualApprox(mountBasis),
                 $"no wobble leaves the mount basis untouched");
             // The pass keeps the world's orientation, so a muzzle flash 11 m right of a yawed plane's
             // eye at (1000, 50, -2000) lands at that same world offset from the pass's origin; a
@@ -979,6 +1001,38 @@ internal static class WorldAndToolSuites
         }
         return null;
     }
+
+    // A subtree's shown drawables (visible down from its root), and how many of those a camera on
+    // this cull mask draws. A drawable a damage state or a variant switched off counts in neither,
+    // so the pair reads the layers alone. Null counts as empty.
+    internal static (int Shown, int Drawn) DrawnBy(Node? root, uint mask)
+    {
+        int total = 0, drawn = 0;
+        if (root == null)
+            return (0, 0);
+        var pending = new Stack<(Node Node, bool Shown)>();
+        pending.Push((root, true));
+        while (pending.Count > 0)
+        {
+            var (node, shownAbove) = pending.Pop();
+            bool shown = shownAbove && node is not Node3D { Visible: false };
+            if (shown && node is VisualInstance3D instance)
+            {
+                total++;
+                if ((instance.Layers & mask) != 0)
+                    drawn++;
+            }
+            foreach (var child in node.GetChildren())
+                pending.Push((child, shown));
+        }
+        return (total, drawn);
+    }
+
+    // Whether that camera draws every one of the subtree's shown drawables, of which it has some.
+    internal static bool DrawsAll(Node? root, uint mask) => DrawnBy(root, mask) is var d && d.Shown > 0 && d.Drawn == d.Shown;
+
+    // Whether that camera draws none of them.
+    internal static bool DrawsNone(Node? root, uint mask) => DrawnBy(root, mask).Drawn == 0;
 
     // How many MeshInstance3D in the subtree carry a material with an albedo
     // texture, the glTF importer hands each surface back a StandardMaterial3D.
@@ -1861,7 +1915,7 @@ internal static class WorldAndToolSuites
             var cam = new CameraController(camera, new CamParams(), _ => false, -1,
                 PilotViewMode.Cockpit);
 
-            pass.Sync(Basis.Identity, cam, 0f);
+            pass.Sync(Basis.Identity, cam, Vector3.Zero);
             var world = -sun.GlobalBasis.Z;
             var beam = -clone.GlobalBasis.Z;
             // C1's ZONE1 authors -25° pitch / 90° yaw, and the expected beam is the binary's own
@@ -1876,7 +1930,7 @@ internal static class WorldAndToolSuites
                 $"and is not left at Godot's default -Z off={beam.AngleTo(Vector3.Forward):0.000} rad");
             // The pass keeps the world's orientation, so a banked plane must not carry the sun
             // round with it: a mirror re-based into the interior's frame would swing by the yaw.
-            pass.Sync(new Basis(Vector3.Up, Mathf.Pi / 2f), cam, 0f);
+            pass.Sync(new Basis(Vector3.Up, Mathf.Pi / 2f), cam, Vector3.Zero);
             ctx.Check((-clone.GlobalBasis.Z).AngleTo(world) < 0.001f,
                 $"a yawed airframe leaves the interior's sun where the world has it");
 
@@ -1996,7 +2050,7 @@ internal static class WorldAndToolSuites
             }
             var cam = new CameraController(camera0, new CamParams(), _ => false, -1,
                 PilotViewMode.Cockpit);
-            pass.Sync(Basis.Identity, cam, 0f);
+            pass.Sync(Basis.Identity, cam, Vector3.Zero);
             int whiteoutLayer = (rigs[0].Whiteout?.GetParent() as CanvasLayer)?.Layer ?? 0;
             ctx.Check(pass.Visible && pass.Layer > whiteoutLayer,
                 $"in cockpit view the interior draws over the full whiteout pass={pass.Layer} whiteout={whiteoutLayer}");
@@ -2314,6 +2368,101 @@ internal static class WorldAndToolSuites
             }
             ctx.Check(!main.Disable3D == mainDrew,
                 $"{players}P: and draws it again as it did once the panes are gone");
+        }
+    }
+
+    // Two pilots in their cockpits, each pane's camera read against both airframes, seated through
+    // the same call a human rig's assembly makes. Able to fail: a hide through Visible takes the body
+    // out of the other pane too. A pane that never drops its own bit shows its pilot the inside of
+    // their own fuselage. The 1P half pins the main camera's path alone.
+    [Suite("splitscreen-cockpit-body",
+        "with two pilots in the cockpit each pane's camera leaves out its own pilot's body and draws the other pilot's, each spyglass disc likewise, and Nose takes markers/dontmove out of the own pane alone; one pilot on the main camera hides the body as before")]
+    internal static void SplitscreenCockpitBody(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        var made = new List<Node>();
+        try
+        {
+            var seats = new List<(Node3D Model, CockpitVisibility Cockpit, Node3D? Body, Node3D? Markers, Node3D? Dontmove, Camera3D Pane)>();
+            for (int i = 0; i < 2; i++)
+            {
+                var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true, cockpitInterior: true);
+                var model = builder.Build(ctx.PlaneName);
+                var pane = new Camera3D { Name = $"camera{i + 1}", CullMask = SplitScreen.PlayerCullMask(i) };
+                made.Add(model);
+                made.Add(pane);
+                var cockpit = CockpitVisibility.Bind(model, builder.CockpitInterior, i);
+                SplitScreen.SeatAirframe(model, pane, i);
+                if (cockpit == null)
+                {
+                    ctx.Check(false, $"P{i + 1}'s visibility rig binds to its built model");
+                    return;
+                }
+                seats.Add((model, cockpit, FindNamed(model, "healthy"), FindNamed(model, "markers"),
+                    FindNamed(model, "dontmove"), pane));
+            }
+
+            var (p1, p2) = (seats[0], seats[1]);
+            ctx.Check(DrawnBy(p1.Body, p1.Pane.CullMask).Shown > 0 && DrawnBy(p2.Body, p2.Pane.CullMask).Shown > 0,
+                $"both bodies carry drawables {DrawnBy(p1.Body, p1.Pane.CullMask)} {DrawnBy(p2.Body, p2.Pane.CullMask)}");
+            ctx.Check(seats.All(s => DrawsAll(p1.Body, s.Pane.CullMask) && DrawsAll(p2.Body, s.Pane.CullMask)),
+                $"CONTROL: both pilots outside, every pane draws both bodies");
+
+            foreach (var seat in seats)
+                seat.Cockpit.Apply(PilotViewMode.Cockpit, firstPerson: true);
+            for (int i = 0; i < 2; i++)
+            {
+                var (own, other) = (seats[i], seats[1 - i]);
+                ctx.Check(DrawsNone(own.Body, own.Pane.CullMask),
+                    $"both in the cockpit: P{i + 1}'s pane leaves out P{i + 1}'s own body {DrawnBy(own.Body, own.Pane.CullMask)}");
+                ctx.Check(DrawsAll(other.Body, own.Pane.CullMask),
+                    $"…and draws P{2 - i}'s whole body, though P{2 - i} sits in a cockpit too {DrawnBy(other.Body, own.Pane.CullMask)}");
+                foreach (bool enhanced in new[] { false, true })
+                {
+                    uint disc = SpyglassView.DiscMask(own.Pane.CullMask, SplitScreen.OwnAirframeLayer(i), enhanced);
+                    ctx.Check(DrawsNone(own.Body, disc) && DrawsAll(other.Body, disc),
+                        $"…and P{i + 1}'s spyglass disc ({(enhanced ? "enhanced" : "faithful")}) shows P{2 - i}'s body and none of its own pilot's");
+                }
+            }
+            ctx.Check(new[] { p1.Body, p2.Body }.All(b => b is { Visible: true }),
+                $"neither body is hidden through Visible, which every pane shares");
+
+            p1.Cockpit.Apply(PilotViewMode.Nose, firstPerson: true);
+            ctx.Check(DrawsNone(p1.Markers, p1.Pane.CullMask) && DrawsNone(p1.Dontmove, p1.Pane.CullMask)
+                      && DrawsAll(p1.Dontmove, p2.Pane.CullMask),
+                $"P1 in Nose: markers/dontmove leave P1's pane and stay in P2's {DrawnBy(p1.Markers, p2.Pane.CullMask)} {DrawnBy(p1.Dontmove, p2.Pane.CullMask)}");
+            ctx.Check(DrawsAll(p2.Dontmove, p2.Pane.CullMask) && DrawsAll(p2.Dontmove, p1.Pane.CullMask),
+                $"…while P2, still in the Cockpit view, keeps its dontmove group in both panes");
+            p1.Cockpit.Apply(PilotViewMode.Nose, firstPerson: false);
+            ctx.Check(DrawsAll(p1.Body, p1.Pane.CullMask) && DrawsAll(p1.Dontmove, p1.Pane.CullMask)
+                      && DrawsNone(p2.Body, p2.Pane.CullMask),
+                $"P1's held external view brings P1's airframe back to P1's pane, and P2's own pane still leaves P2's body out");
+
+            // One pilot. The Launcher's camera outlives a session and arrives carrying the last
+            // one's seat bit, which the rig's own reset gives back.
+            p1.Cockpit.Apply(PilotViewMode.Chase, firstPerson: false);
+            var main = new Camera3D { Name = "main_camera", CullMask = SplitScreen.OwnViewCullMask(0xFFFFF, 3) };
+            made.Add(main);
+            main.CullMask = SplitScreen.PaneCullMask(ZoneGate.OpenCullMask(main.CullMask));
+            uint reset = main.CullMask;
+            SplitScreen.SeatAirframe(p1.Model, main, 0);
+            ctx.Check((reset ^ main.CullMask) == SplitScreen.FirstPersonLayer(0),
+                $"1P: seating takes exactly the pilot's own first-person bit off the main camera 0x{reset:X5} to 0x{main.CullMask:X5}");
+            ctx.Check(DrawsAll(p1.Body, main.CullMask), $"1P outside: the main camera draws the body");
+            p1.Cockpit.Apply(PilotViewMode.Cockpit, firstPerson: true);
+            ctx.Check(DrawsNone(p1.Body, main.CullMask) && DrawsAll(p1.Dontmove, main.CullMask),
+                $"1P in the cockpit: the body leaves the view and dontmove stays, as before");
+        }
+        finally
+        {
+            foreach (var node in made)
+                node.Free();
+            textures.Dispose();
         }
     }
 
@@ -3033,7 +3182,7 @@ internal static class WorldAndToolSuites
     {
         rigs[0].Camera.Position = at;
         rig.Tick(rigs);
-        pass.Sync(Basis.Identity, cam, 0f);
+        pass.Sync(Basis.Identity, cam, Vector3.Zero);
         var beam = -clone.GlobalBasis.Z;
         return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
     }
@@ -3100,30 +3249,6 @@ internal static class WorldAndToolSuites
         byArm.Count == 0 ? "none"
         : string.Join(" ", byArm.OrderBy(p => p.Key, System.StringComparer.Ordinal)
             .Select(p => $"{p.Key}={p.Value}"));
-
-    // The Danger Zone camera's frame over a Nose view, which hides the most. Every hidden airframe
-    // group shows for the photograph on a layer no pane draws, and the interior stays out. The end
-    // of the frame puts every group's visibility and every mesh's layers back exactly.
-    private static void PhotographFrame(TestContext ctx, CockpitVisibility cockpit, Node3D interior,
-        Node3D? body, Node3D? markers, Node3D? dontmove)
-    {
-        var groups = new[] { body, markers, dontmove }.OfType<Node3D>().ToList();
-        var before = groups.SelectMany(Meshes).Distinct().ToDictionary(m => m, m => m.Layers);
-        uint layer = SplitScreen.PhotographLayer;
-
-        cockpit.ShowForPhotograph(layer);
-        var drawn = groups.SelectMany(Meshes).ToList();
-        ctx.Check(groups.Count == 3 && groups.All(g => g.Visible) && !interior.Visible,
-            $"the photograph frame shows body, markers and dontmove and leaves the interior out");
-        ctx.Check(drawn.Count > 0 && drawn.All(m => m.Layers == layer),
-            $"…every one of their {drawn.Count} meshes on the photograph layer alone");
-
-        cockpit.EndPhotograph();
-        ctx.Check(groups.All(g => !g.Visible),
-            $"the end of the frame hides the three groups again");
-        ctx.Check(before.All(kv => kv.Key.Layers == kv.Value),
-            $"…and gives every mesh back its own layers");
-    }
 
     private static IEnumerable<VisualInstance3D> Meshes(Node root)
     {

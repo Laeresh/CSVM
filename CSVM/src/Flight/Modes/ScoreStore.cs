@@ -1,34 +1,42 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Modes;
 
 /// <summary>
-/// Best-time persistence for stunt runs. One JSON object in
-/// <c>user://stunt_scores.json</c>, the engine's writable user dir, never the repo (the hard
-/// no-assets rule and, besides, scores are per-player), keyed <c>chapter/mission/plane</c>
-/// (e.g. <c>C1/IA1/player_bhawk</c>) → <c>{ best: seconds, date: "YYYY-MM-DD" }</c>.
+/// Best-time persistence for stunt runs. The player's record is one JSON object in
+/// <c>user://stunt_scores.json</c>, the engine's writable user dir, never the repo. It is keyed
+/// <c>chapter/mission/plane</c> (e.g. <c>C1/IA1/player_bhawk</c>) →
+/// <c>{ best: seconds, date: "YYYY-MM-DD" }</c>. A pinned or scripted run records into a
+/// throwaway store instead (<see cref="ForSession(string, bool)"/>).
 ///
-/// Read/written through Godot's <see cref="FileAccess"/> + <see cref="Json"/> rather than
-/// System.Text.Json: only the Godot API resolves the <c>user://</c> scheme, and
-/// <see cref="Json.Stringify"/> is locale-neutral where <c>ToString()</c> is not. A missing or
-/// corrupt file is an empty store (a first run has no best), never an exception, a persistence
-/// hiccup must not break the scoreboard.
+/// Read through Godot's <see cref="FileAccess"/>, written through <see cref="AtomicFile"/>, and
+/// encoded by <see cref="Json.Stringify"/>, which is locale-neutral where <c>ToString()</c> is not.
+/// A missing or corrupt file is an empty store, never an exception that breaks the scoreboard.
 /// </summary>
 public sealed class ScoreStore
 {
     private const string DefaultStorePath = "user://stunt_scores.json";
 
-    private readonly string _storePath;
+    // Null for a throwaway store, which records in memory and never writes a file.
+    private readonly string? _storePath;
     private readonly Godot.Collections.Dictionary _data;
 
-    private ScoreStore(string storePath, Godot.Collections.Dictionary data)
+    private ScoreStore(string? storePath, Godot.Collections.Dictionary data)
     {
         _storePath = storePath;
         _data = data;
     }
 
-    /// <summary>Loads the store, or an empty one if the file is absent/unreadable/malformed.</summary>
-    public static ScoreStore Load() => Load(DefaultStorePath);
+    /// <summary>Whether this store writes nothing, which a scripted run's store does.</summary>
+    public bool Throwaway => _storePath == null;
+
+    /// <summary>The store a session's boards record into, from the spec's <c>ScoresPath</c> and
+    /// <c>ScoresThrowaway</c>. That is the <c>--scores=</c> file when a launch named one, an empty
+    /// throwaway when <paramref name="throwaway"/> holds, else the player's own
+    /// <c>user://stunt_scores.json</c>.</summary>
+    public static ScoreStore ForSession(string? scoresPath, bool throwaway) =>
+        ForSession(scoresPath, throwaway, DefaultStorePath);
 
     /// <summary>The stored best total, seconds, for this run key, or null if none is recorded yet.</summary>
     public float? GetBest(string key)
@@ -60,9 +68,24 @@ public sealed class ScoreStore
         return true;
     }
 
-    /// <summary>Loads a store at an alternate <paramref name="storePath"/>, for a suite that must
-    /// not touch the player's own <c>user://stunt_scores.json</c>, point it at a throwaway path
-    /// (e.g. under the suite's own scratch directory) instead.</summary>
+    /// <summary><see cref="ForSession(string, bool)"/> over another player store, so a suite can
+    /// prove which file a run writes without reading the real one. ⚠ Every session call site goes
+    /// through this choice. A session that loads the player path itself lets a scripted run's
+    /// synthetic time into the player's record.</summary>
+    internal static ScoreStore ForSession(string? scoresPath, bool throwaway, string playerStorePath)
+    {
+        if (!string.IsNullOrWhiteSpace(scoresPath))
+        {
+            return Load(scoresPath.Contains("://") ? scoresPath : System.IO.Path.GetFullPath(scoresPath));
+        }
+        return throwaway
+            ? new ScoreStore(null, new Godot.Collections.Dictionary())
+            : Load(playerStorePath);
+    }
+
+    /// <summary>Loads the store at <paramref name="storePath"/>, or an empty one if the file is
+    /// absent, unreadable or malformed. A suite points it at a path under its own scratch
+    /// directory, never at the player's own <c>user://stunt_scores.json</c>.</summary>
     internal static ScoreStore Load(string storePath)
     {
         if (FileAccess.FileExists(storePath))
@@ -75,19 +98,23 @@ public sealed class ScoreStore
                     return new ScoreStore(storePath, parsed.AsGodotDictionary());
             }
             else
-                GD.PushWarning($"stunt scores: could not read {storePath}: {FileAccess.GetOpenError()}");
+                Log.Warn("flight", $"stunt scores: could not read {storePath}: {FileAccess.GetOpenError()}");
         }
         return new ScoreStore(storePath, new Godot.Collections.Dictionary());
     }
 
     private void Save()
     {
-        using var f = FileAccess.Open(_storePath, FileAccess.ModeFlags.Write);
-        if (f == null)
-        {
-            GD.PushWarning($"stunt scores: could not write {_storePath}: {FileAccess.GetOpenError()}");
+        if (_storePath == null)
             return;
+        string path = _storePath.Contains("://") ? ProjectSettings.GlobalizePath(_storePath) : _storePath;
+        try
+        {
+            AtomicFile.WriteAllText(path, Json.Stringify(_data, "  "));
         }
-        f.StoreString(Json.Stringify(_data, "  "));
+        catch (System.Exception e) when (e is System.IO.IOException or System.UnauthorizedAccessException)
+        {
+            Log.Warn("flight", $"stunt scores: could not write {_storePath}: {e.Message}");
+        }
     }
 }

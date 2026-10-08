@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Net;
+using CSVM.Spec;
 using CSVM.UI;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
@@ -34,14 +35,18 @@ internal static class MenuOriginalConnectionSuites
     // The password the boot suite's host asks.
     private const string LobbyPassword = "swordfish";
 
+    // The suite whose scratch store holds the plane the Connection page builds.
+    private const string BuildSuite = "menu-original-connection-build";
+
     [Suite("menu-original-connection",
         "The Original presentation's network doors over the loopback and an in-process LAN: the "
-        + "cabin's HOST CO-OP asks GAME INFORMATION, whose Cancel opens nothing and whose cap of "
-        + "sixteen is held to four, and then opens the carrier, the router mapping and the LAN answer, and CLOSE "
-        + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, its "
-        + "Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
-        + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, the host's chips "
-        + "name both guests by their callsigns, a fourth human is seated and a fifth is "
+        + "cabin's HOST CO-OP asks GAME INFORMATION, which opens on Private, whose Cancel opens nothing and whose cap of "
+        + "sixteen is held to four, and then opens the carrier, the router mapping and the LAN answer a "
+        + "Private host still gives, and CLOSE "
+        + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, which with no "
+        + "master server greys its Join by code way and says why, its Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
+        + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, every machine's chips "
+        + "name the host and both guests by their callsigns, a fourth human is seated and a fifth is "
         + "refused as full, a silent drop tells a guest the host left, and CLOSE NETWORK tells the "
         + "other the host closed the game and puts it back on the Connection page")]
     internal static void TheConnectionPage(TestContext ctx)
@@ -112,6 +117,9 @@ internal static class MenuOriginalConnectionSuites
             Pump(ends.ToArray());
             ctx.Check(DrawsOver(host.Shell.Compose(), "Nathan" + LaunchMenu.RemoteChipMark) && DrawsOver(host.Shell.Compose(), "Sheila" + LaunchMenu.RemoteChipMark),
                 $"the host's chips name each guest by its callsign ({string.Join(", ", hostDoor.CoopGuests.Select(g => g.Name))})");
+            ChipsNamed(ctx, host, "the host", "Zachary", "Nathan" + LaunchMenu.RemoteChipMark, "Sheila" + LaunchMenu.RemoteChipMark);
+            ChipsNamed(ctx, told, "the first guest", "Zachary" + LaunchMenu.RemoteChipMark, "Nathan", "Sheila" + LaunchMenu.RemoteChipMark);
+            ChipsNamed(ctx, dropped, "the second guest", "Zachary" + LaunchMenu.RemoteChipMark, "Nathan" + LaunchMenu.RemoteChipMark, "Sheila");
             FillTheGame(ctx, ends, hostDoor, doors[3], doors[4]);
             DropOne(ctx, dropped, mesh[0], mesh[2].LocalPeer);
             CloseTheGame(ctx, host, told, ends, hostDoor, unmapped);
@@ -374,6 +382,243 @@ internal static class MenuOriginalConnectionSuites
             JoinTheTeam(ctx, host, guest, ends, team);
             RestrictTheTeams(ctx, host, guest, ends);
             LaunchOnTeams(ctx, host, guest, ends, hostExits, team);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-lobby-bots",
+        "The Multiplayer Lobby's bot rows over the loopback: the host's Add Bot lists a bot named "
+        + "from the shipped pilot names after the guest, on both ends, with the guest's bot controls "
+        + "greyed and its list holding no row it can pick. Fill to, its count stepped down to five, "
+        + "fills the field to five pilots and then greys. A press on a bot's row opens Select Plane "
+        + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, and "
+        + "Remove takes a row out. With the host, the guest and both bots on one team, LAUNCH! "
+        + "raises langui 10519 and hands nothing out. With no team standing it launches, the "
+        + "host's field seats the bots after the guest, the Random plane drawn on the host, and "
+        + "the guest joins that match reading both bots on real stock planes")]
+    internal static void TheLobbyBots(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.MessagesPath, $"message table");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(97));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-bots");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends))
+            {
+                return;
+            }
+
+            var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+            AddAndFillBots(ctx, host, guest, ends, pool);
+            EditTheBots(ctx, host, guest, ends);
+            LaunchWithBots(ctx, host, guest, ends, hostExits, guestExits);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-lobby-stunt-race",
+        "The Multiplayer Lobby's Stunt Race over the loopback: the host's Type list offers Stunt Race as its "
+        + "fourth row, and picking it on Above the Clouds moves the Environment off that greyed row onto "
+        + "Hawai'ian Islands with the Time box at 5 on both ends. Every chapter without Danger Zones greys in the "
+        + "Environment list, every Mission Option but the Time box greys on the host, and both ends describe "
+        + "the race under the Type box. A typed Time reaches the guest, and both LAUNCH! and the "
+        + "guest's launch leave as stunt launches on the chapter with the race type and that window, which "
+        + "the menu's own spec turns into the chapter's IA1. Back on a Deathmatch every option is live again")]
+    internal static void TheLobbyStuntRace(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(93));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-stunt-race");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends))
+            {
+                return;
+            }
+
+            if (PickTheStuntRace(ctx, host, guest, ends))
+            {
+                GreyedForTheRace(ctx, host, guest, ends);
+                _ = LaunchTheRace(ctx, host, guest, ends, hostExits, guestExits);
+            }
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-lobby-race-end",
+        "A Stunt Race's end in the Multiplayer Lobby over the loopback: an ended race lands both ends on "
+        + "Game Scores with its table, the race board's columns, a pilot who left on the scores page's grey "
+        + "row and the Dogfight headers gone, where a race still running lands nowhere and a guest leaving "
+        + "after the end lands unflagged. A second race then "
+        + "launches from that lobby, and the host leaving it ends the guest's flight as it ends a "
+        + "Dogfight's, onto the Connection page")]
+    internal static void TheLobbyRaceEnd(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(97));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-race-end");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends)
+                || !PickTheStuntRace(ctx, host, guest, ends))
+            {
+                return;
+            }
+
+            GreyedForTheRace(ctx, host, guest, ends);
+            if (LaunchTheRace(ctx, host, guest, ends, hostExits, guestExits) == null)
+            {
+                return;
+            }
+
+            LandTheRace(ctx, host, guest, ends);
+            ClickRow(ctx, host, OriginalLobbyScreen.MissionTabKey);
+            if (LaunchTheRace(ctx, host, guest, ends, hostExits, guestExits) is { Guest: { } guestWire } wires)
+            {
+                HostLeavesTheRace(ctx, host, guest, ends, wires.Host, guestWire);
+            }
         }
         finally
         {
@@ -668,6 +913,165 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-screen-keyboard",
+        "Steam's on-screen keyboard on the Original Connection page, its URLs recorded: taps on "
+        + "plaques raise nothing, a tap in the IP Address box raises it without connecting, the "
+        + "echo strip repeats the box's words, the focus leaving the box lowers it and coming back "
+        + "alone raises nothing, a pad's Accept in the box raises it without connecting, and a key's "
+        + "Enter lowers it and is the box's own Connect")]
+    internal static void TheOnScreenKeyboard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var door = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) => throw new InvalidOperationException("an empty address is never joined"));
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-screen-keyboard");
+        var echo = new ScreenKeyboardEcho();
+        ctx.Host.AddChild(echo);
+        var keyboard = new ScreenKeyboardRecorder();
+        try
+        {
+            var guest = Open(ctx, layout, door, ends);
+            if (guest == null)
+            {
+                return;
+            }
+
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, guest, OriginalConnectionScreen.InternetKey);
+            ctx.Check(keyboard.Urls.Count == 0, $"ABLE-TO-FAIL CONTROL: taps on plaques raise nothing ({keyboard.Said})");
+            ClickRow(ctx, guest, OriginalConnectionScreen.AddressKey);
+            ctx.Check(keyboard.Said == CSVM.Utils.ScreenKeyboard.OpenUrl
+                      && CSVM.Utils.ScreenKeyboard.Shown?.Id == OriginalConnectionScreen.AddressKey,
+                $"a tap in the IP Address box raises the keyboard for it ({keyboard.Said}, {CSVM.Utils.ScreenKeyboard.Shown?.Id})");
+            ctx.Check(guest.Shell.Screen == OriginalScreen.Connection && guest.Shell.Dialog == null && door.Stage == NetDoorStage.Shut,
+                $"and does not connect ({guest.Shell.Screen}, {guest.Shell.Dialog?.Message}, {door.Stage})");
+            echo._Process(0);
+            ctx.Check(echo.Line == $"{door.Address}_", $"the echo strip repeats the box's words with a caret ({echo.Line})");
+
+            Press(guest, new MenuCommands { MoveY = 1 });
+            echo._Process(0);
+            ctx.Check(keyboard.Urls.Count == 2 && keyboard.Urls[1] == CSVM.Utils.ScreenKeyboard.CloseUrl && echo.Line.Length == 0,
+                $"the focus leaving the box lowers it and the strip goes ({guest.Shell.FocusedKey}, {keyboard.Said})");
+            Press(guest, new MenuCommands { MoveY = -1 });
+            ctx.Check(guest.Shell.FocusedKey == OriginalConnectionScreen.AddressKey && keyboard.Urls.Count == 2,
+                $"coming back onto the box alone raises nothing ({guest.Shell.FocusedKey}, {keyboard.Said})");
+
+            Press(guest, new MenuCommands { Accept = true, KeylessAccept = true });
+            ctx.Check(keyboard.Urls.Count == 3 && guest.Shell.Dialog == null,
+                $"a pad's Accept in the box raises it and does not connect ({keyboard.Said}, {guest.Shell.Dialog?.Message})");
+
+            for (int i = 0; i < 64 && door.Address.Length > 0; i++)
+            {
+                Press(guest, new MenuCommands { Erase = true });
+            }
+
+            Press(guest, new MenuCommands { Accept = true });
+            ctx.Check(keyboard.Urls.Count == 4 && keyboard.Urls[3] == CSVM.Utils.ScreenKeyboard.CloseUrl && guest.Shell.Dialog != null,
+                $"a key's Enter lowers it and is the box's Connect, refusing the emptied address ({keyboard.Said}, {guest.Shell.Dialog?.Message})");
+        }
+        finally
+        {
+            keyboard.Dispose();
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            door.Discard();
+            ctx.Host.RemoveChild(echo);
+            echo.QueueFree();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-connection-build",
+        "The Original Connection page's Build Custom Plane over a scratch plane store: it is live, the "
+        + "keyboard's walk reaches it under the IP Address box and Enter opens the wallet-free name "
+        + "screen, Back and the hub's CANCEL each land back on the Connection page on the button with "
+        + "nothing saved, and a purchase saves an exported build on the default airframe and lands back "
+        + "there too. Host then opens a lobby with Allow Custom Planes ticked, whose Custom Planes tab "
+        + "offers the plane and picks it, and the host's untick greys that tab again")]
+    internal static void BuildCustomPlaneFromTheConnectionPage(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var door = new NetPlayFeature(
+            (_, _, _) => LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(115))[0],
+            (_, _) => throw new InvalidOperationException("the host does not join"));
+        door.BindAddress = Loopback;
+        door.SearchAddress = Loopback;
+        var ends = new List<End>();
+        var store = MenuSuiteHost.ScratchPlanes(ctx, BuildSuite);
+        string? options = MenuSuiteHost.ScratchOptions(ctx, BuildSuite);
+        try
+        {
+            var end = Open(ctx, layout, door, ends, planes: store);
+            if (end == null || !BuildFromTheConnectionPage(ctx, end, store, "Lobby Hornet"))
+            {
+                return;
+            }
+
+            ClickRow(ctx, end, OriginalConnectionScreen.HostKey);
+            Answer(ctx, end, "Zachary", LobbyGame);
+            Pump(end);
+            if (door.Dogfight is not { IsHost: true } lobby || end.Shell.Screen != OriginalScreen.Lobby)
+            {
+                ctx.Check(false, $"Host opens the lobby as a Dogfight's host ({end.Shell.Screen}, {door.Stage})");
+                return;
+            }
+
+            ctx.Check(lobby.Rules.AllowCustom, $"the new lobby opens with Allow Custom Planes ticked, as the original's host open ticks it ({lobby.Rules})");
+            ClickRow(ctx, end, OriginalLobbyScreen.PlaneTabKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.CustomTabKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.PlaneKey);
+            var offered = end.Shell.Rows.FirstOrDefault(row => row.Key.StartsWith(OriginalLobbyScreen.PlaneKey + ":", StringComparison.Ordinal)
+                                                               && row.Label == "Lobby Hornet");
+            ctx.Check(offered != null, $"the Custom Planes tab offers the plane built from the Connection page ({string.Join(", ", end.Shell.Rows.Select(r => r.Label))})");
+            if (offered != null)
+            {
+                ClickRow(ctx, end, offered.Key);
+                ctx.Check(lobby.Build?.Name == "Lobby Hornet" && lobby.Refusal == PlaneRefusal.None,
+                    $"and picks it, refused nothing ({lobby.Build?.Name ?? "stock"}, {lobby.Refusal})");
+            }
+
+            ClickRow(ctx, end, OriginalLobbyScreen.MissionTabKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.CustomPlanesKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.PlaneTabKey);
+            ctx.Check(!lobby.Rules.AllowCustom && Row(end.Shell, OriginalLobbyScreen.CustomTabKey) is { Enabled: false },
+                $"ABLE-TO-FAIL CONTROL: the host's untick of Allow Custom Planes greys the Custom Planes tab ({lobby.Rules})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            door.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+            MenuSuiteHost.DropScratchPlanes(ctx, BuildSuite);
+        }
+    }
+
     [Suite("lan-discovery",
         "The shipped LAN discovery socket on the loopback: a responder bound on the discovery port "
         + "answers a search sent to 127.0.0.1 by unicast with the advert and game port it was "
@@ -735,8 +1139,10 @@ internal static class MenuOriginalConnectionSuites
     }
 
     [Suite("menu-original-boot",
-        "The Multiplayer Lobby's password and Boot over the loopback: a host types a password into "
-        + "GAME INFORMATION and its own PLAYER INFORMATION keeps the join's Password greyed. The games "
+        "The Multiplayer Lobby's password and Boot over the loopback: a host's GAME INFORMATION with no "
+        + "master server greys its Listing chooser on Public, which neither a click nor a sideways step "
+        + "flips; the host types a password into it and its "
+        + "own PLAYER INFORMATION keeps the join's Password greyed. The games "
         + "list reads Need Password, and Join Game leaves PLAYER INFORMATION's Password live. A wrong "
         + "password is refused with Invalid Password on the Connection page before the host lists the "
         + "guest, and the right one lands it in the lobby. Boot is greyed until the host picks the "
@@ -938,6 +1344,625 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-master-list",
+        "The games list with a master server set and no LAN socket: Connect over LAN TCP/IP opens the "
+        + "list on the master server's one Dogfight, its row reads the listing's five columns, and "
+        + "Join Game after PLAYER INFORMATION opens the join through the code opener with that game's "
+        + "code rather than an address, landing the guest on the host's Dogfight. The host's GAME "
+        + "INFORMATION Listing chooser is live and flips both ways, its lobby "
+        + "pins the code its listed carrier was given, and the copy key copies the code. A second guest's "
+        + "Connection page stands Join by code live as its third way, in the cursor's walk after the IP "
+        + "Address box; Ctrl+V pastes the code into its box in small letters with no dash, and Enter there "
+        + "asks PLAYER INFORMATION with its Password live and joins the code's written form through the "
+        + "code opener, landing that guest on the Dogfight too. The server is a canned list and the wire "
+        + "the loopback")]
+    internal static void TheMasterServersGames(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string listed = "{\"games\":[{\"code\":\"K7Q-X3M\",\"name\":\"Pirates\",\"kind\":\"dogfight\",\"players\":1,"
+            + "\"cap\":8,\"status\":\"waiting\",\"version\":\"unknown\"}]}";
+        // The host's end is gated, so each guest reaches it only when that guest joins.
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(17));
+        var gate = new ArrivalGate(mesh[0]);
+        var copied = new List<string>();
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => NetDoorAid.Listed(gate), (_, _) => throw new InvalidOperationException("the host does not join"))
+        {
+            CopyText = copied.Add,
+            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
+        };
+        var opened = new List<string>();
+        var guestDoor = CodeGuest(listed, opened, gate, mesh[1]);
+        var typedOpened = new List<string>();
+        var coderDoor = CodeGuest(listed, typedOpened, gate, mesh[2]);
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-master-list");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends);
+            var guest = Open(ctx, layout, guestDoor, ends);
+            var coder = Open(ctx, layout, coderDoor, ends);
+            if (host == null || guest == null || coder == null)
+            {
+                return;
+            }
+
+            ShowTheCode(ctx, host, copied);
+
+            var shell = guest.Shell;
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+            ctx.Check(shell.Screen == OriginalScreen.ConnectionGames,
+                $"Connect opens the games list with no LAN socket, the master server standing for the search ({shell.Screen})");
+            for (int frame = 0; frame < 6 && shell.Connection.Listed.Count == 0; frame++)
+            {
+                hostDoor.Step(Dt);
+                Pump(ends.ToArray());
+            }
+
+            var rows = shell.Connection.Listed;
+            ctx.Check(rows.Count == 1 && rows[0].Code == "K7Q-X3M", $"the list carries the master server's one game ({rows.Count})");
+            if (rows.Count != 1)
+            {
+                return;
+            }
+
+            var cells = shell.Connection.Cells(rows[0]);
+            ctx.Check(cells.Count == 5 && cells[0] == "Pirates" && cells[1] == "1/8" && cells[2] == "Dogfight" && cells[4] == "Waiting",
+                $"its row reads the listing's five columns ({string.Join(" | ", cells)})");
+            ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
+            ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+            Answer(ctx, guest, "Nathan");
+            for (int frame = 0; frame < 6; frame++)
+            {
+                hostDoor.Step(Dt);
+                Pump(ends.ToArray());
+            }
+
+            ctx.Check(opened.SequenceEqual(new[] { "K7Q-X3M" }), $"Join Game opens the join by the game's code ({string.Join(", ", opened)})");
+            ctx.Check(guestDoor.IsDogfightGuest && guestDoor.JoinName == "K7Q-X3M",
+                $"and lands the guest on the host's Dogfight ({guestDoor.Stage}, {guestDoor.JoinName}, {guestDoor.Fault})");
+            JoinByTheTypedCode(ctx, coder, ends, hostDoor, typedOpened);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            guestDoor.Discard();
+            coderDoor.Discard();
+            hostDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-lobby-network",
+        "A Dogfight host's lobby names its address only once it is known no internet code will come. Four "
+        + "hosts open through the Connection page's Host, each with a stable IPv6 address to name: one the "
+        + "master server listed under a code, one with a master server set but no WebRTC carrier, one with "
+        + "no master server, and one whose master server has not answered yet. The listed host's Network "
+        + "rows pin the code alone; the next two pin the address, the WebRTC one with its reason under it; "
+        + "the unanswered one pins only the wait, with no address and no COPY, and the code alone once it "
+        + "lands. None posts a chat note. The server is a canned list and the wire the loopback")]
+    internal static void TheLobbysNetworkRows(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string stable = "2001:db8::7";
+        var coded = NamedHost(NetDoorAid.Listed, true, stable, 21);
+        var offline = NamedHost(end => end, true, stable, 22);
+        var lan = NamedHost(end => end, false, stable, 23);
+        AwaitedListing? pending = null;
+        var asking = NamedHost(end => pending = new AwaitedListing(end), true, stable, 24);
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-network");
+        try
+        {
+            // Each host is opened by pointer clicks, so its lines name no copy key (CopyWay.Pointer).
+            string[]? codeRows = HostTheLobby(ctx, layout, coded, ends);
+            string code = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
+            ctx.Check(codeRows != null && codeRows.SequenceEqual(new[] { code }),
+                $"with a code the Network rows pin the code alone ({Joined(codeRows)})");
+            ctx.Check(codeRows != null && !codeRows.Any(row => row.Contains(stable, StringComparison.Ordinal)),
+                $"and name no address");
+
+            // The harness's port base is not the default port, so the address is written bracketed.
+            string address = $"IPv6  [{stable}]:{offline.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            string[]? offlineRows = HostTheLobby(ctx, layout, offline, ends);
+            ctx.Check(offlineRows != null && offlineRows.SequenceEqual(new[] { address, $"No internet code: {CoopDoorText.NoWebRtc}" }),
+                $"without WebRTC they pin the address with the reason under it ({Joined(offlineRows)})");
+
+            string[]? lanRows = HostTheLobby(ctx, layout, lan, ends);
+            ctx.Check(lanRows != null && lanRows.SequenceEqual(new[] { address }),
+                $"with no master server they pin the address ({Joined(lanRows)})");
+
+            string[]? askingRows = HostTheLobby(ctx, layout, asking, ends);
+            ctx.Check(askingRows != null && askingRows.SequenceEqual(new[] { CoopDoorText.AwaitingCode }),
+                $"while the master server is still answering they pin only the wait, no address ({Joined(askingRows)})");
+            ctx.Check(askingRows != null && Row(ends[^1].Shell, OriginalLobbyScreen.CopyKey) == null,
+                $"and offer no {CoopDoorText.CopyButton}, since the row names nothing to copy");
+            if (askingRows != null && pending != null)
+            {
+                pending.JoinCode = NetDoorAid.SampleCode;
+                Pump(ends[^1]);
+                string[] answered = ends[^1].Shell.Lobby.NetworkRows.ToArray();
+                ctx.Check(answered.SequenceEqual(new[] { code }),
+                    $"and the code replaces the wait once it lands, still with no address ({Joined(answered)})");
+            }
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            coded.Discard();
+            offline.Discard();
+            lan.Discard();
+            asking.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-copy-code",
+        "A host copies its join code without a keyboard, in a Dogfight host's lobby and on a co-op host's "
+        + "cabin band. The code's line carries a COPY control at its end. A click on the code copies it, a "
+        + "tap with no hover before it copies it, and a pad's cursor walk reaches COPY, whose Accept copies "
+        + "it. Each goes through the door's own copy and draws the line's copied state. The hint names "
+        + "Ctrl+C after a key moved the cursor and no key after a pointer or a pad did. A cabin whose master "
+        + "server has not answered names the wait alone, with no address and no COPY, until the code lands. "
+        + "The listed carrier stands for the master server and the wire is the loopback")]
+    internal static void TheCopyControl(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var copied = new List<string>();
+        var dogfightEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(41))[0];
+        var dogfight = new NetPlayFeature(
+            (_, _, _) => NetDoorAid.Listed(dogfightEnd), (_, _) => throw new InvalidOperationException("the host does not join"))
+        {
+            CopyText = copied.Add,
+            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")),
+        };
+        var coopEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(42))[0];
+        var coop = new NetPlayFeature(
+            (_, _, _) => NetDoorAid.Listed(coopEnd),
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }))
+        {
+            CopyText = copied.Add,
+        };
+        const string stable = "2001:db8::7";
+        AwaitedListing? pending = null;
+        var askingEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(43))[0];
+        var asking = new NetPlayFeature(
+            (_, _, _) => pending = new AwaitedListing(askingEnd),
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }))
+        {
+            CopyText = copied.Add,
+            StableIpv6 = () => stable,
+        };
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-copy-code");
+        try
+        {
+            var lobby = Open(ctx, layout, dogfight, ends);
+            var cabin = Open(ctx, layout, coop, ends);
+            if (lobby == null || cabin == null)
+            {
+                return;
+            }
+
+            ClickRow(ctx, lobby, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, lobby, OriginalConnectionScreen.HostKey);
+            Answer(ctx, lobby, "Zachary", "Pirates");
+            Pump(lobby);
+            ctx.Check(lobby.Shell.Screen == OriginalScreen.Lobby && dogfight.JoinCode == NetDoorAid.SampleCode,
+                $"Host opens the lobby under the listed code ({lobby.Shell.Screen}, {dogfight.JoinCode})");
+            string listed = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
+            CopyEveryWay(ctx, lobby, copied, OriginalLobbyScreen.CopyKey, "the lobby",
+                $"{listed} {CoopDoorText.CopyPress} copies it.", listed, $"{listed} It is copied.");
+
+            cabin.Shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            cabin.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            OpenForTheMatch(ctx, cabin, coop);
+            string band = $"NETWORK OPEN  0 guests  CODE {NetDoorAid.SampleCode}";
+            CopyEveryWay(ctx, cabin, copied, OriginalCampaignScreen.CoopCopyKey, "the cabin's band",
+                $"{band}  {CoopDoorText.CopyPress}", band, $"{band}  copied");
+
+            var waiting = Open(ctx, layout, asking, ends);
+            if (waiting == null)
+            {
+                return;
+            }
+
+            waiting.Shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            waiting.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            OpenForTheMatch(ctx, waiting, asking);
+            var asked = waiting.Shell.Compose();
+            ctx.Check(asking.AwaitingCode && DrawsExactly(asked, CoopDoorText.AwaitingCode) && !Draws(asked, stable),
+                $"while the master server is still answering the cabin's band names the wait alone, no address ({asking.AwaitingCode}, {Lines(waiting, "NETWORK")})");
+            ctx.Check(Row(waiting.Shell, OriginalCampaignScreen.CoopCopyKey) == null,
+                $"and offers no {CoopDoorText.CopyButton}, since that line names nothing to copy");
+            if (pending != null)
+            {
+                pending.JoinCode = NetDoorAid.SampleCode;
+                Pump(waiting);
+                var answered = waiting.Shell.Compose();
+                ctx.Check(Draws(answered, $"NETWORK OPEN  0 guests  CODE {NetDoorAid.SampleCode}") && !Draws(answered, CoopDoorText.AwaitingCode)
+                          && Row(waiting.Shell, OriginalCampaignScreen.CoopCopyKey) != null,
+                    $"ABLE-TO-FAIL CONTROL: the code replaces the wait once it lands, its {CoopDoorText.CopyButton} with it ({Lines(waiting, "NETWORK")})");
+            }
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            dogfight.Discard();
+            coop.Discard();
+            asking.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-master-outdated",
+        "The games list with a master server set and no LAN socket, against a server whose list says it "
+        + "no longer serves this build's protocol version: the list stays empty of its one game, a box says "
+        + "this version of CSVM is too old for the master server, and after OK the next answer raises it no "
+        + "more. A server serving this build's version lists the same game. The server is a canned list")]
+    internal static void TheOutdatedMasterServer(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string game = "{\"code\":\"K7Q-X3M\",\"name\":\"Pirates\",\"kind\":\"dogfight\",\"players\":1,"
+            + "\"cap\":8,\"status\":\"waiting\",\"version\":\"unknown\"}";
+        int asked = 0;
+        int past = MasterWire.ProtocolVersion + 1;
+        var outdated = Lister(() => asked++, $"{{\"games\":[{game}],\"protocol\":{past},\"oldest\":{past}}}");
+        var served = Lister(() => { }, $"{{\"games\":[{game}],\"protocol\":{MasterWire.ProtocolVersion},\"oldest\":{MasterWire.ProtocolVersion}}}");
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-master-outdated");
+        try
+        {
+            var guest = Open(ctx, layout, outdated, ends);
+            var control = Open(ctx, layout, served, ends);
+            if (guest == null || control == null)
+            {
+                return;
+            }
+
+            var shell = guest.Shell;
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+            for (int frame = 0; frame < 6 && shell.Dialog == null; frame++)
+            {
+                Pump(guest);
+            }
+
+            ctx.Check(shell.Dialog?.Message == CoopDoorText.MasterOutdated && shell.Screen == OriginalScreen.ConnectionGames,
+                $"the games list raises the update box ({shell.Dialog?.Message}, {shell.Screen})");
+            ctx.Check(shell.Connection.Listed.Count == 0, $"and lists none of the server's games ({shell.Connection.Listed.Count})");
+            ClickRow(ctx, guest, OriginalShell.DialogOkKey);
+            int before = asked;
+            for (int frame = 0; frame < (int)((MasterDirectory.RefreshSeconds + 1.0) / Dt); frame++)
+            {
+                Pump(guest);
+            }
+
+            ctx.Check(asked > before && shell.Dialog == null,
+                $"after OK a later answer raises no second box ({asked - before} more asked, {shell.Dialog?.Message})");
+
+            ClickRow(ctx, control, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, control, OriginalConnectionScreen.ConnectKey);
+            for (int frame = 0; frame < 6 && control.Shell.Connection.Listed.Count == 0; frame++)
+            {
+                Pump(control);
+            }
+
+            ctx.Check(control.Shell.Connection.Listed.Count == 1 && control.Shell.Dialog == null,
+                $"ABLE-TO-FAIL CONTROL: a server serving this build lists its game with no box ({control.Shell.Connection.Listed.Count}, {control.Shell.Dialog?.Message})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            outdated.Discard();
+            served.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // A guest door whose only search is a canned master server list, counting each fetch.
+    private static NetPlayFeature Lister(Action fetched, string listed) => new(
+        (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+        (_, _) => throw new InvalidOperationException("this guest joins nothing"))
+    {
+        Master = new MasterDirectory(_ =>
+        {
+            fetched();
+            return System.Threading.Tasks.Task.FromResult(listed);
+        }),
+    };
+
+    // One host's code line through every way. A key's step names Ctrl+C and a pointer's or a pad's
+    // names none. The pad walks to COPY and accepts, then a click and a tap on the code's words each
+    // copy again. Every copy is the door's, so the clipboard seam gains the code each time.
+    private static void CopyEveryWay(
+        TestContext ctx, End end, List<string> copied, string key, string where, string keysLine, string bareLine, string copiedLine)
+    {
+        string code = NetDoorAid.SampleCode;
+        var row = Row(end.Shell, key);
+        var neighbour = end.Shell.Rows.FirstOrDefault(other => row != null && other.Column == row.Column && other.Enabled && other.Visible && other.Key != key);
+        ctx.Check(row != null && neighbour != null, $"{where} carries its {CoopDoorText.CopyButton} row beside another in its column ({neighbour?.Key})");
+        if (row == null || neighbour == null)
+        {
+            return;
+        }
+
+        Press(end, new MenuCommands { MoveY = 1 });
+        ctx.Check(end.Shell.CopyWay == CopyWay.Keys && DrawsExactly(end.Shell.Compose(), keysLine),
+            $"after a key's step {where} names {CoopDoorText.CopyPress} ({end.Shell.CopyWay}, {Lines(end, code)})");
+
+        // The pointer comes to rest on a row of the control's column, which is where the pad starts.
+        Press(end, new MenuCommands { Pointer = Window(ctx, neighbour.X + (neighbour.Width / 2f), neighbour.Y + (neighbour.Height / 2f)) });
+        ctx.Check(end.Shell.CopyWay == CopyWay.Pointer && DrawsExactly(end.Shell.Compose(), bareLine),
+            $"after the pointer moved {where} names no key ({end.Shell.CopyWay}, {Lines(end, code)})");
+        Press(end, new MenuCommands { MoveY = 1, OnPad = true });
+        var board = end.Shell.Compose();
+        ctx.Check(end.Shell.CopyWay == CopyWay.Pad && DrawsExactly(board, bareLine) && DrawsExactly(board, CoopDoorText.CopyButton),
+            $"after a pad's step it names no key, its {CoopDoorText.CopyButton} control drawn ({end.Shell.CopyWay}, {Lines(end, code)})");
+
+        // The walk leaves the control first when it starts there, so reaching it is the column's own.
+        int steps = 0;
+        int limit = end.Shell.Rows.Count + 2;
+        do
+        {
+            Press(end, new MenuCommands { MoveY = 1, OnPad = true });
+            steps++;
+        }
+        while (end.Shell.FocusedKey != key && steps < limit);
+        ctx.Check(end.Shell.FocusedKey == key, $"the pad's cursor walk reaches {where}'s {CoopDoorText.CopyButton} ({end.Shell.FocusedKey}, {steps} steps)");
+        int start = copied.Count;
+        Press(end, new MenuCommands { Accept = true, KeylessAccept = true, OnPad = true });
+        ctx.Check(copied.Count == start + 1 && copied[^1] == code && DrawsExactly(end.Shell.Compose(), copiedLine),
+            $"the pad's Accept on it copies the code and the line says so ({string.Join(", ", copied)})");
+
+        // A point on the drawn line's own words, read off the board rather than the row. The press
+        // lands on the code itself, not only on the control.
+        var words = end.Shell.Compose().Lines.FirstOrDefault(line => line.Text == copiedLine);
+        ctx.Check(words != null, $"{where} draws the code's line ({Lines(end, code)})");
+        if (words == null)
+        {
+            return;
+        }
+
+        // The board measures no text, so the code's place is its index at half an em per character.
+        float wordsX = words.X + (words.Text.IndexOf(code, StringComparison.Ordinal) * words.Size * 0.5f) + words.Size;
+        float wordsY = words.Y + (words.Size / 2f);
+        int before = copied.Count;
+        var at = Window(ctx, wordsX, wordsY);
+        Press(end, new MenuCommands { Pointer = at });
+        Press(end, new MenuCommands { Pointer = at with { Pressed = true, Clicked = true } });
+        Press(end, new MenuCommands { Pointer = at });
+        ctx.Check(copied.Count == before + 1 && copied[^1] == code && DrawsExactly(end.Shell.Compose(), copiedLine),
+            $"a click on the code's words copies it ({copied.Count - before} copies, {Lines(end, code)})");
+
+        Press(end, new MenuCommands { Pointer = Window(ctx, 2f, 598f) });
+        var tap = Window(ctx, wordsX + 6f, wordsY);
+        Press(end, new MenuCommands { Pointer = tap with { Pressed = true, Clicked = true } });
+        Press(end, new MenuCommands { Pointer = tap });
+        ctx.Check(copied.Count == before + 2 && copied[^1] == code && DrawsExactly(end.Shell.Compose(), copiedLine),
+            $"a tap on them, the press landing where no hover stood, copies it again ({copied.Count - before} copies)");
+    }
+
+    // An authored point as the seat's pointer reports it, in window pixels.
+    private static MenuPointer Window(TestContext ctx, float x, float y)
+    {
+        var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        return new MenuPointer(fit.X(x), fit.Y(y), false, false, 0);
+    }
+
+    private static bool DrawsExactly(ComposedBoard board, string text) => board.Lines.Any(line => line.Text == text);
+
+    // The drawn lines naming the code, for a failure's message.
+    private static string Lines(End end, string code) =>
+        string.Join(" | ", end.Shell.Compose().Lines.Select(line => line.Text).Where(text => text.Contains(code, StringComparison.Ordinal)));
+
+    // A Dogfight host door on its own loopback end, wrapped by carrier, naming a stable IPv6 address.
+    // With master it has a master server set, an empty canned list.
+    private static NetPlayFeature NamedHost(Func<INetTransport, INetTransport> carrier, bool master, string ipv6, int seed)
+    {
+        var end = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(seed))[0];
+        return new NetPlayFeature((_, _, _) => carrier(end), (_, _) => throw new InvalidOperationException("the host does not join"))
+        {
+            Master = master ? new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")) : null,
+            StableIpv6 = () => ipv6,
+        };
+    }
+
+    // The Connection page's Host on its own Original end. Returns the lobby's pinned Network rows as
+    // drawn, or null when no lobby opened.
+    private static string[]? HostTheLobby(TestContext ctx, MenuLayout layout, NetPlayFeature door, List<End> ends)
+    {
+        var host = Open(ctx, layout, door, ends);
+        if (host == null)
+        {
+            return null;
+        }
+
+        ClickRow(ctx, host, OriginalShell.MultiplayerKey);
+        ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
+        Answer(ctx, host, "Zachary", "Pirates");
+        Pump(host);
+        Pump(host);
+        var lobby = door.Dogfight;
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && lobby != null, $"Host opens the lobby ({host.Shell.Screen}, {door.Stage})");
+        if (lobby == null)
+        {
+            return null;
+        }
+
+        var notes = lobby.Chat.Where(line => line.Name == CoopDoorText.NoteName).Select(line => line.Text).ToList();
+        ctx.Check(notes.Count == 0, $"the host's chat carries no {CoopDoorText.NoteName} note ({string.Join(" | ", notes)})");
+        var board = host.Shell.Compose();
+        var rows = host.Shell.Lobby.NetworkRows.ToArray();
+        ctx.Check(rows.Length > 0 && board.Lines.Any(line => line.Text == CoopDoorText.NoteName) && rows.All(row => board.Lines.Any(line => line.Text == row)),
+            $"the lobby draws its {CoopDoorText.NoteName} rows over the chat ({Joined(rows)})");
+        ctx.Check(rows.Any(row => row.Contains(door.HostIpv6 ?? "-", StringComparison.Ordinal))
+                  == board.Lines.Any(line => line.Text.Contains(door.HostIpv6 ?? "-", StringComparison.Ordinal)),
+            $"and names the address nowhere else on the board");
+        return rows;
+    }
+
+    private static string Joined(string[]? rows) => rows == null ? "no lobby" : string.Join(" | ", rows);
+
+    // The Connection page's Host on a carrier the master server listed. The lobby pins the code over
+    // its chat, and the copy key copies the code rather than an address.
+    private static void ShowTheCode(TestContext ctx, End host, List<string> copied)
+    {
+        ClickRow(ctx, host, OriginalShell.MultiplayerKey);
+        ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
+        var box = host.Shell.NetInfo;
+        ctx.Check(Row(host.Shell, OriginalNetInfoBox.ListingKey) is { Enabled: true, Label: CoopDoorText.PublicWord },
+            $"with a master server set the Listing chooser is live, on Public ({Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Enabled})");
+        ClickRow(ctx, host, OriginalNetInfoBox.ListingKey);
+        bool flipped = box.Draft.Private == true && Row(host.Shell, OriginalNetInfoBox.PrivateKey) is { Enabled: false };
+        ClickRow(ctx, host, OriginalNetInfoBox.PublicKey);
+        ctx.Check(flipped && box.Draft.Private == false && Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Label == CoopDoorText.PublicWord,
+            $"it flips to Private and its up arrow back to Public ({flipped}, {box.Draft.Private})");
+        Answer(ctx, host, "Zachary", "Pirates");
+        Pump(host);
+        var door = host.Door;
+        // Opened by clicks, so the line names no copy key.
+        string pinned = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && Draws(host.Shell.Compose(), pinned),
+            $"the host's lobby pins its code over the chat ({host.Shell.Screen}, {CoopDoorText.HostCodeLine(door)})");
+        bool took = door.CopyForGuests();
+        Pump(host);
+        ctx.Check(took && copied.SequenceEqual(new[] { NetDoorAid.SampleCode }) && Draws(host.Shell.Compose(), "It is copied."),
+            $"the copy key copies the code and the line says so ({string.Join(", ", copied)})");
+    }
+
+    // A guest door over the canned master server whose code opener records the code and lets its
+    // own end through the host's gate.
+    private static NetPlayFeature CodeGuest(string listed, List<string> opened, ArrivalGate gate, INetTransport end) => new(
+        (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+        (_, _) => throw new InvalidOperationException("a guest with a master server joins by code"))
+    {
+        Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
+        OpenCode = code =>
+        {
+            opened.Add(code);
+            gate.Arrive(end.LocalPeer);
+            return end;
+        },
+    };
+
+    // The third way, end to end. The cursor reaches it after the IP Address box. Ctrl+V pastes the
+    // code without its dash, and Enter in the box joins the code's written form.
+    private static void JoinByTheTypedCode(TestContext ctx, End guest, List<End> ends, NetPlayFeature hostDoor, List<string> opened)
+    {
+        var shell = guest.Shell;
+        ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+        ctx.Check(Row(shell, OriginalConnectionScreen.CodeKey) is { Enabled: true } && Row(shell, OriginalConnectionScreen.CodeBoxKey) is { Enabled: true }
+                  && Draws(shell.Compose(), OriginalConnectionScreen.CodeWayDescription) && Draws(shell.Compose(), OriginalConnectionScreen.CodeWayName),
+            $"with a master server set the Connection page stands Join by code live under its description ({shell.Screen}, {shell.Connection.CodeFault})");
+        ClickRow(ctx, guest, OriginalConnectionScreen.LanKey);
+        var walked = new List<string> { shell.FocusedKey };
+        for (int step = 0; step < 4; step++)
+        {
+            TypeInto(guest, new MenuCommands { MoveY = 1 });
+            walked.Add(shell.FocusedKey);
+        }
+
+        string[] order =
+        {
+            OriginalConnectionScreen.LanKey, OriginalConnectionScreen.InternetKey, OriginalConnectionScreen.AddressKey,
+            OriginalConnectionScreen.CodeKey, OriginalConnectionScreen.CodeBoxKey,
+        };
+        ctx.Check(walked.SequenceEqual(order) && shell.Connection.CapturingText,
+            $"the cursor walks LAN TCP/IP, Internet, its box, Join by code and into the code box, which takes the keyboard ({string.Join(", ", walked)})");
+
+        var pilots = MenuInput.Clipboard;
+        var cues = new List<string>();
+        try
+        {
+            MenuInput.Clipboard = () => " k7qx3m\r\n";
+            shell.Connection.TypeText(new MenuCommands { Paste = true }, cues);
+        }
+        finally
+        {
+            MenuInput.Clipboard = pilots;
+        }
+
+        ctx.Check(shell.Connection.TypedCode == "K7QX3M" && shell.Connection.Way == OriginalConnectionScreen.CodeKey
+                  && cues.SequenceEqual(new[] { OriginalCues.Text }),
+            $"Ctrl+V pastes the clipboard's code into the box, trimmed and in capitals, and picks the way ('{shell.Connection.TypedCode}', {shell.Connection.Way}, {string.Join(" ", cues)})");
+        TypeInto(guest, new MenuCommands { Accept = true });
+        ctx.Check(shell.NetInfo.Page == NetInfoPage.Player && Row(shell, OriginalNetInfoBox.PlayerPasswordKey) is { Enabled: true } && opened.Count == 0,
+            $"Enter in the code box asks PLAYER INFORMATION first, its Password live, before anything opens ({shell.NetInfo.Page}, {opened.Count})");
+        Answer(ctx, guest, "Sheila");
+        for (int frame = 0; frame < 6; frame++)
+        {
+            hostDoor.Step(Dt);
+            Pump(ends.ToArray());
+        }
+
+        var door = guest.Door;
+        ctx.Check(opened.SequenceEqual(new[] { NetDoorAid.SampleCode }) && door.Address == NetPlayFeature.DefaultAddress,
+            $"the join opens through the code opener under the code's written form, the IP Address box left as it was ({string.Join(", ", opened)}, '{door.Address}')");
+        ctx.Check(door.IsDogfightGuest && door.JoinName == NetDoorAid.SampleCode && hostDoor.Peers == 2,
+            $"and lands that guest on the host's Dogfight beside the first ({door.Stage}, {door.JoinName}, {door.Fault}, {hostDoor.Peers} guests)");
+    }
+
     // The Connection page's Host with a password typed into GAME INFORMATION. The host's own PLAYER
     // INFORMATION keeps the join's Password greyed. True when the lobby opened.
     private static bool HostWithAPassword(TestContext ctx, End host)
@@ -946,6 +1971,16 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
         var box = host.Shell.NetInfo;
         box.Draft.GameName = LobbyGame;
+        // No master server is set on this door, so the chooser stands greyed and takes nothing.
+        var listing = Row(host.Shell, OriginalNetInfoBox.ListingKey);
+        ctx.Check(listing is { Enabled: false, Label: CoopDoorText.PublicWord } && Row(host.Shell, OriginalNetInfoBox.PrivateKey) is { Enabled: false },
+            $"a Dogfight's GAME INFORMATION with no master server greys its Listing chooser on Public ({listing?.Enabled}, {listing?.Label})");
+        ClickRow(ctx, host, OriginalNetInfoBox.ListingKey);
+        var rows = new List<OriginalRow>();
+        box.Rows(rows);
+        bool stepped = box.StepSideways(rows, rows.FindIndex(row => row.Key == OriginalNetInfoBox.ListingKey), 1);
+        ctx.Check(box.Draft.Private == false && !stepped,
+            $"and neither a click nor a sideways step flips it ({box.Draft.Private}, {stepped})");
         ClickRow(ctx, host, OriginalNetInfoBox.PasswordKey);
         TypeInto(host, new MenuCommands { Typed = LobbyPassword });
         ctx.Check(box.Draft.Password == LobbyPassword && Row(host.Shell, OriginalNetInfoBox.PasswordKey)?.Label == new string('*', LobbyPassword.Length),
@@ -957,8 +1992,9 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
         Pump(host);
         var door = host.Door;
-        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Password == LobbyPassword,
-            $"Host opens the lobby and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password})");
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Password == LobbyPassword
+                  && !door.Private,
+            $"Host opens the lobby Public and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password}, {door.Private})");
         return host.Shell.Screen == OriginalScreen.Lobby && door.Dogfight != null;
     }
 
@@ -1134,6 +2170,67 @@ internal static class MenuOriginalConnectionSuites
         return host.Shell.Screen == OriginalScreen.Lobby;
     }
 
+    // Build Custom Plane from the Connection page: the keyboard walk and Enter, Back, the hub's
+    // CANCEL and a purchase, each landing back on the page. True once the plane is in the store.
+    private static bool BuildFromTheConnectionPage(TestContext ctx, End end, CustomPlaneStore store, string name)
+    {
+        var shell = end.Shell;
+        var hangar = end.Host.Features.Get<HangarFeature>();
+        ClickRow(ctx, end, OriginalShell.MultiplayerKey);
+        ctx.Check(shell.Screen == OriginalScreen.Connection && Row(shell, OriginalConnectionScreen.BuildKey) is { Enabled: true },
+            $"Build Custom Plane is live on the Connection page ({shell.Screen}, {Row(shell, OriginalConnectionScreen.BuildKey)?.Enabled})");
+        ClickRow(ctx, end, OriginalConnectionScreen.InternetKey);
+        var walked = new List<string>();
+        for (int step = 0; step < 4 && shell.FocusedKey != OriginalConnectionScreen.BuildKey; step++)
+        {
+            Press(end, new MenuCommands { MoveY = 1 });
+            walked.Add(shell.FocusedKey ?? "none");
+        }
+
+        ctx.Check(shell.FocusedKey == OriginalConnectionScreen.BuildKey && walked.Contains(OriginalConnectionScreen.AddressKey),
+            $"the keyboard's walk reaches it under the IP Address box ({string.Join(" > ", walked)})");
+        Press(end, new MenuCommands { Accept = true });
+        ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet == null,
+            $"Enter on it opens the name screen over a wallet-free build ({shell.Screen}, {hangar.IsOpen})");
+        Press(end, new MenuCommands { Back = true });
+        ctx.Check(shell.Screen == OriginalScreen.Connection && !hangar.IsOpen && shell.FocusedKey == OriginalConnectionScreen.BuildKey,
+            $"Back drops the build and lands back on the Connection page on the button ({shell.Screen}, {shell.FocusedKey})");
+
+        if (!NameTheBuild(ctx, end, name))
+        {
+            return false;
+        }
+
+        ClickRow(ctx, end, OriginalHangarScreen.CancelBuildKey);
+        ctx.Check(shell.Screen == OriginalScreen.Connection && !hangar.IsOpen && store.List().Count == 0,
+            $"the hub's CANCEL lands back on the Connection page with nothing saved ({shell.Screen}, {store.List().Count})");
+
+        if (!NameTheBuild(ctx, end, name))
+        {
+            return false;
+        }
+
+        ClickRow(ctx, end, OriginalHangarScreen.ReadyKey);
+        ClickRow(ctx, end, OriginalHangarScreen.PurchaseNowKey);
+        var saved = store.Load(name);
+        ctx.Check(shell.Screen == OriginalScreen.Connection && !hangar.IsOpen && shell.FocusedKey == OriginalConnectionScreen.BuildKey,
+            $"a purchase lands back on the Connection page on the button ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(saved is { AwaitingExport: false } && saved.Airframe == HangarFeature.DefaultAirframe,
+            $"and saves an exported build on the default airframe ({saved?.Airframe}, {saved?.AwaitingExport})");
+        return saved != null;
+    }
+
+    // The Connection page's Build Custom Plane, a typed name and OK, standing on the hub.
+    private static bool NameTheBuild(TestContext ctx, End end, string name)
+    {
+        ClickRow(ctx, end, OriginalConnectionScreen.BuildKey);
+        Press(end, new MenuCommands { Typed = name });
+        ClickRow(ctx, end, OriginalHangarScreen.NameOkKey);
+        bool hub = end.Shell.Screen == OriginalScreen.HangarAirframe && end.Shell.Hangar?.HangarName == name;
+        ctx.Check(hub, $"a click, a typed name and OK stand on the hub over that name ({end.Shell.Screen}, {end.Shell.Hangar?.HangarName})");
+        return hub;
+    }
+
     // PLAYER INFORMATION's OK is greyed while the callsign is empty, and a callsign of spaces alone
     // raises the original's refusal. Then the callsign is typed into its box.
     private static void RefuseTheEmptyCallsign(TestContext ctx, End end, string callsign)
@@ -1292,8 +2389,8 @@ internal static class MenuOriginalConnectionSuites
                   && Row(guest.Shell, OriginalLobbyScreen.TimeRadioKey) is { Enabled: false }
                   && guest.Door.Dogfight!.SetEnvironment(3) == false,
             $"a guest's option controls are greyed and its option set is refused");
-        ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType((DogfightMissionType)3) == false,
-            $"the host's Type box is live but a type past the box's three is refused");
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType((DogfightMissionType)DogfightLobby.TypeCount) == false,
+            $"the host's Type box is live but a type past the box's four is refused");
         TypeDescriptions(ctx, host, guest, ends);
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
         ctx.Check(host.Shell.Lobby.OpenDropdown == OriginalLobbyScreen.EnvironmentKey, $"the Environment box opens its list ({host.Shell.Lobby.OpenDropdown})");
@@ -1507,12 +2604,12 @@ internal static class MenuOriginalConnectionSuites
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
         var stock = StockLoadouts.Load();
-        var (roster, seatFits) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, stock);
-        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == PlanePickerRoster.AirframeNode(1)
+        var (roster, seatFits) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, stock);
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(1)
                   && slot >= 0 && seatFits[1].AmmoAt(slot) == 2,
             $"the host's roster builds the guest's seat on its pick and fit ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
         var bare = ((NetLobby)wire.Transport).Inner;
-        var (withheld, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(bare, planes, fits, stock);
+        var (withheld, _) = CSVM.Launch.Launcher.VersusLaunchField(bare, planes, fits, stock);
         ctx.Check(withheld.Length == 2 && withheld[1].PlaneNode == planes[0],
             $"ABLE-TO-FAIL CONTROL: with the pick withheld the seat takes the local airframe ({withheld.LastOrDefault()?.PlaneNode})");
         return roster;
@@ -1532,7 +2629,7 @@ internal static class MenuOriginalConnectionSuites
         var launch = exits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
         ctx.Check(launch is { Mode: MenuMode.Versus, Net.IsHost: false, Match: { TimeLimitMinutes: 5, Lives: DogfightLobby.DefaultLives } }
                   && launch.Chapter == DogfightLobby.ChapterOf(3) && launch.Seats.Count == 1
-                  && launch.Seats[0].PlaneNode == PlanePickerRoster.AirframeNode(1),
+                  && launch.Seats[0].PlaneNode == StockAirframes.Node(1),
             $"the guest launches behind the host on the same chapter and rules in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 
@@ -1551,12 +2648,12 @@ internal static class MenuOriginalConnectionSuites
             heard.ApplyScore(line.PlayerIndex, line.Score, line.Kills, line.Deaths);
         }
 
-        ctx.Check(CSVM.Session.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played) == null,
+        ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played) == null,
             $"ABLE-TO-FAIL CONTROL: a match still running lands nowhere near the lobby");
         played.Advance(60f);
         heard.ApplyState(0, 60f, 0f, ended: true);
-        var hostLanding = CSVM.Session.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played);
-        var guestLanding = CSVM.Session.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, heard);
+        var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played);
+        var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, heard);
         ctx.Check(hostLanding != null && guestLanding != null, $"a completed match lands both ends on their lobby");
         ctx.Check(host.Door.Reclaim() && guest.Door.Reclaim(), $"and both doors take their wire back");
         if (hostLanding == null || guestLanding == null)
@@ -1617,7 +2714,7 @@ internal static class MenuOriginalConnectionSuites
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
-        var (roster, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
+        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
         GuestLaunch(ctx, wire, roster, guest, guestExits);
     }
 
@@ -1845,6 +2942,225 @@ internal static class MenuOriginalConnectionSuites
     }
 
     // One team refuses LAUNCH!; the guest's own team lets it go, each seat carrying its team.
+    // The Type list's fourth row, picked on Above the Clouds. The race moves to the next environment
+    // with a course and arms the Time box at its default on both ends.
+    private static bool PickTheStuntRace(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        lobby.SetEnvironment(0);
+        ClickRow(ctx, host, OriginalLobbyScreen.TypeKey);
+        string race = OriginalLobbyScreen.TypeKey + ":" + ((int)DogfightMissionType.StuntRace).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ctx.Check(host.Shell.Lobby.OpenDropdown == OriginalLobbyScreen.TypeKey
+                  && Row(host.Shell, race) is { Enabled: true, Label: DogfightLobby.StuntRaceName }
+                  && Row(host.Shell, OriginalLobbyScreen.TypeKey + ":4") == null,
+            $"the Type list offers Stunt Race as its fourth and last row ('{Row(host.Shell, race)?.Label}')");
+        ClickRow(ctx, host, race);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var heard = guest.Door.Dogfight!.Options;
+        bool picked = DogfightLobby.IsStuntRace(lobby.Options) && DogfightLobby.IsStuntRace(heard);
+        ctx.Check(picked && lobby.Options is { Environment: 1, TimeMinutes: DogfightLobby.StuntRaceDefaultMinutes, Victory: DogfightVictory.Time }
+                  && heard is { Environment: 1, TimeMinutes: DogfightLobby.StuntRaceDefaultMinutes },
+            $"Stunt Race leaves Above the Clouds for Hawai'ian Islands with Time at 5, on both ends ({lobby.Options.MissionType}/{heard.MissionType}, environment {heard.Environment}, time {heard.TimeMinutes})");
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.TypeKey) is { Label: DogfightLobby.StuntRaceName }
+                  && Draws(host.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
+                  && Draws(guest.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
+                  && !Draws(guest.Shell.Compose(), "Dogfight to the death."),
+            $"both ends name the race in the Type box and describe it under it ('{Row(guest.Shell, OriginalLobbyScreen.TypeKey)?.Label}')");
+        return picked;
+    }
+
+    // The Environment list greys the chapters with no Danger Zones, and every Mission Option but the
+    // Time box greys on the host. A typed Time reaches the guest.
+    private static void GreyedForTheRace(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
+        var offered = new List<string>();
+        bool matches = true;
+        for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
+        {
+            var row = Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":" + environment.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            matches &= row != null && row.Enabled == MenuChapters.DangerZonesFor(DogfightLobby.ChapterOf(environment));
+            offered.Add($"{DogfightLobby.ChapterOf(environment)} {(row?.Enabled == true ? "live" : "greyed")}");
+        }
+
+        ctx.Check(matches && Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0") is { Enabled: false },
+            $"the Environment list greys Above the Clouds and offers every chapter with a course ({string.Join(", ", offered)})");
+        ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey + ":4");
+
+        string[] greyed =
+        {
+            OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ScoreRadioKey, OriginalLobbyScreen.ScoreKey,
+            OriginalLobbyScreen.TeamsKey, OriginalLobbyScreen.LimitedLivesKey, OriginalLobbyScreen.LivesKey,
+            OriginalLobbyScreen.AutoRespawnKey, OriginalLobbyScreen.CustomPlanesKey, OriginalLobbyScreen.OutlawKey,
+            OriginalLobbyScreen.SelectKey,
+        };
+        var live = greyed.Where(key => Row(host.Shell, key) is not { Enabled: false }).ToList();
+        ctx.Check(live.Count == 0 && Row(host.Shell, OriginalLobbyScreen.TimeKey) is { Enabled: true }
+                  && Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && Row(host.Shell, OriginalLobbyScreen.EnvironmentKey) is { Enabled: true },
+            $"every Mission Option but the Time box greys on the host (still live: {string.Join(", ", live)})");
+
+        // ABLE-TO-FAIL CONTROL: on a Deathmatch the same rows and Above the Clouds are live.
+        var lobby = host.Door.Dogfight!;
+        lobby.SetMissionType(DogfightMissionType.Deathmatch);
+        Pump(host);
+        var dead = greyed.Where(key => key != OriginalLobbyScreen.ScoreKey && key != OriginalLobbyScreen.LivesKey
+                                       && key != OriginalLobbyScreen.SelectKey && Row(host.Shell, key) is not { Enabled: true }).ToList();
+        ctx.Check(dead.Count == 0 && lobby.SetEnvironment(0) && lobby.SetEnvironment(4),
+            $"ABLE-TO-FAIL CONTROL: on a Deathmatch the same options and Above the Clouds are live (still greyed: {string.Join(", ", dead)})");
+        lobby.SetMissionType(DogfightMissionType.StuntRace);
+        ClickRow(ctx, host, OriginalLobbyScreen.TimeKey);
+        TypeInto(host, new MenuCommands { Erase = true }, new MenuCommands { Erase = true }, new MenuCommands { Typed = "7" });
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var heard = guest.Door.Dogfight!.Options;
+        ctx.Check(heard is { Environment: 4, TimeMinutes: 7 } && DogfightLobby.IsStuntRace(heard),
+            $"NW Boeing Field and a typed Time of 7 reach the guest ({heard.Environment}, {heard.TimeMinutes})");
+    }
+
+    // Both ends Ready, LAUNCH! and the host's opener. Each end leaves as a stunt launch on the chapter
+    // with the race and its window. The menu's own spec flies it as the chapter's IA1.
+    private static (MenuNetLaunch Host, MenuNetLaunch? Guest)? LaunchTheRace(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> hostExits, List<MenuExit> guestExits)
+    {
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        int before = hostExits.Count;
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        var launch = hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(launch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: true, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7, KillTarget: 0, Lives: 0 } },
+            $"LAUNCH! hands out a stunt launch on C1 with the race and its window ({launch?.Mode}, {launch?.Chapter}, {launch?.Match})");
+        if (launch?.Net is not { } wire)
+        {
+            return null;
+        }
+
+        var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
+        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, launch.Seats.Select(s => s.Fit).ToList(), StockLoadouts.Load());
+        int guestBefore = guestExits.Count;
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
+        for (int frame = 0; frame < 4 && guestExits.Count == guestBefore; frame++)
+        {
+            Pump(guest);
+        }
+
+        var guestLaunch = guestExits.Skip(guestBefore).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(guestLaunch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: false, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7 } },
+            $"the guest launches behind the host on the same race ({guestLaunch?.Mode}, {guestLaunch?.Chapter}, {guestLaunch?.Match})");
+
+        var cli = SessionSpec.Parse(new[] { "--mission=MP1" });
+        var spec = SessionSpec.FromMenu(cli, launch.Chapter, planes, launch.Mode, vsTimeMinutes: launch.Match!.TimeLimitMinutes,
+            missionType: launch.Match.MissionType);
+        ctx.Check(spec is { Stunt: true, Versus: false, Mission: SessionSpec.StuntRaceMission, MissionType: DogfightMissionType.StuntRace, StuntRaceMinutes: 7 },
+            $"and the menu's own spec flies C1's IA1 as a 7 minute race whatever --mission says ({spec.Mission}, {spec.MissionType}, {spec.StuntRaceMinutes} min)");
+        return (wire, guestLaunch?.Net);
+    }
+
+    // An ended race's Exit on both ends, as the launcher runs it. Each door takes its wire back. The
+    // lobby comes back on Game Scores with the race's table, the guest who left on a grey row.
+    private static void LandTheRace(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var names = host.Door.Dogfight!.LaunchNames;
+        var race = FlownRace(names);
+        ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: race) == null,
+            $"ABLE-TO-FAIL CONTROL: a race still running lands nowhere near the lobby");
+        race.MarkLeft(1);
+        race.Advance(421f);
+        var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: race);
+        var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, null, race: race);
+        ctx.Check(hostLanding is { Scores.Count: 0, Race.Count: 2 } && guestLanding is { Race.Count: 2 } && hostLanding.Race![0].Left,
+            $"an ended race lands both ends on their lobby with its table, the guest who left first ({hostLanding?.Race?.Count} rows)");
+
+        // A guest who flew the whole window and leaves from the finished board did not leave the race.
+        var flown = FlownRace(names);
+        flown.Advance(421f);
+        bool marked = flown.MarkLeft(1);
+        var flownLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: flown);
+        ctx.Check(!marked && flownLanding?.Race is { Count: 2 } table && !table[0].Left && !table[1].Left,
+            $"a guest leaving after the end lands unflagged ({marked}, {string.Join(" | ", flownLanding?.Race?.Select(r => $"{r.Pilot} {r.Left}") ?? Array.Empty<string>())})");
+        ctx.Check(host.Door.Reclaim() && guest.Door.Reclaim(), $"and both doors take their wire back");
+        if (hostLanding == null || guestLanding == null)
+        {
+            return;
+        }
+
+        host.Host.Show(hostLanding);
+        guest.Host.Show(guestLanding);
+        for (int frame = 0; frame < 6; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var here = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        ctx.Check(host.Shell is { Screen: OriginalScreen.Lobby, Lobby.Tab: LobbyTab.Scores }
+                  && guest.Shell is { Screen: OriginalScreen.Lobby, Lobby.Tab: LobbyTab.Scores }
+                  && Row(host.Shell, OriginalLobbyScreen.ScoresTabKey) is { Enabled: true },
+            $"both ends stand in the lobby on a live Game Scores ({host.Shell.Screen}/{host.Shell.Lobby.Tab}, {guest.Shell.Screen}/{guest.Shell.Lobby.Tab})");
+        ctx.Check(here.RaceScores.Count == 2 && here.RaceScores.SequenceEqual(there.RaceScores) && here.Scores.Count == 0,
+            $"and both hold the race's table ({string.Join(" | ", here.RaceScores.Select(r => $"{r.Pilot} {r.Best}"))})");
+        var board = host.Shell.Compose();
+        var left = board.Lines.FirstOrDefault(l => l.Text == $"1st  {names[1]}");
+        var stayed = board.Lines.FirstOrDefault(l => l.Text == $"2nd  {names[0]}");
+        ctx.Check(left?.Colour == new BoardTint(0xbb, 0xbb, 0xbb) && stayed?.Colour == new BoardTint(0, 0, 0)
+                  && Draws(board, "0:08.0") && !Draws(board, "Hits %"),
+            $"the page draws the race board's columns, the pilot who left grey and the other black, and no Dogfight header ({left?.Colour}, {stayed?.Colour})");
+    }
+
+    // Both seats fly one whole run in a 7 minute window, the guest's faster; the window still runs.
+    private static StuntRace FlownRace(IReadOnlyList<string> names)
+    {
+        var race = new StuntRace(420f, 3);
+        race.Add(0, "Devastator").Callsign = names[0];
+        race.Add(1, "Firebrand").Callsign = names[1];
+        race.BeginOpening(0f);
+        foreach (var (seat, finish) in new[] { (1, 8f), (0, 9.5f) })
+        {
+            race.RunStarted(seat);
+            for (int zone = 0; zone < 3; zone++)
+            {
+                race.ZoneCleared(seat, zone, finish * (zone + 1) / 3f);
+            }
+
+            race.RunFinished(seat, finish);
+        }
+
+        return race;
+    }
+
+    // The host walks out of a race in flight, and its door closes with the notice. The guest's door
+    // reads that as the end of its flight, as a Dogfight guest's does.
+    private static void HostLeavesTheRace(TestContext ctx, End host, End guest, List<End> ends, MenuNetLaunch hostWire, MenuNetLaunch guestWire)
+    {
+        Pump(ends.ToArray());
+        ctx.Check(!CSVM.Launch.Launcher.VersusGuestFlightOver(guest.Door),
+            $"ABLE-TO-FAIL CONTROL: while the host flies, the guest's flight goes on ({guest.Door.Stage})");
+        CSVM.Launch.Launcher.EndNetWire(host.Door, hostWire.Transport, keepLobby: false);
+        for (int frame = 0; frame < 6 && !CSVM.Launch.Launcher.VersusGuestFlightOver(guest.Door); frame++)
+        {
+            // The launcher's in-flight upkeep steps a lobby guest's door, as the session steps its wire.
+            guestWire.Transport.Step(Dt);
+            guest.Door.Step(Dt);
+            Pump(host);
+        }
+
+        ctx.Check(CSVM.Launch.Launcher.VersusGuestFlightOver(guest.Door) && guest.Door.Fault is CoopDoorText.HostClosed or CoopDoorText.HostLeft,
+            $"the host leaving the race ends the guest's flight ({guest.Door.Stage}, {guest.Door.Fault})");
+        guest.Host.Show(new LobbyReturn(Array.Empty<DogfightScore>()));
+        Pump(guest);
+        ctx.Check(guest.Shell.Screen == OriginalScreen.Connection, $"onto the Connection page ({guest.Shell.Screen})");
+    }
+
     private static void LaunchOnTeams(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> exits, byte team)
     {
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
@@ -1895,10 +3211,157 @@ internal static class MenuOriginalConnectionSuites
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
-        var (roster, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), null,
+        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), null,
             host.Door.Dogfight!.TeamOfPeer);
         ctx.Check(roster.Length == 2 && roster[0].TeamId == team && roster[1].TeamId == theirs,
             $"the host's field carries each seat's team ({string.Join(", ", roster.Select(s => s.TeamId))})");
+    }
+
+    // Add Bot lists a bot named from the pilot names on both ends, the guest's controls greyed. Fill
+    // to, stepped down to five, fills the field to five pilots and then greys.
+    private static void AddAndFillBots(TestContext ctx, End host, End guest, List<End> ends, IReadOnlyList<string> pool)
+    {
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.AddBotKey) is { Enabled: false } && Row(guest.Shell, OriginalLobbyScreen.FillKey) is { Enabled: false }
+                  && Row(host.Shell, OriginalLobbyScreen.AddBotKey) is { Enabled: true },
+            $"ABLE-TO-FAIL CONTROL: Add Bot and Fill to are live on the host and greyed on the guest");
+        var before = host.Shell.Compose();
+        ctx.Check(!before.Lines.Any(line => line.Text == OriginalLobbyScreen.BotTag || line.Text.EndsWith(" bots", StringComparison.Ordinal)),
+            $"ABLE-TO-FAIL CONTROL: with no bot row the list draws no bot tag and its header names no bots");
+        ClickRow(ctx, host, OriginalLobbyScreen.AddBotKey);
+        SettleEnds(ends);
+        var lobby = host.Door.Dogfight!;
+        var heard = guest.Door.Dogfight!.Players;
+        string name = lobby.Bots.Count > 0 ? lobby.Bots[0].Callsign : string.Empty;
+        ctx.Check(lobby.Bots.Count == 1 && pool.Contains(name) && heard.Count == 3 && heard[2].IsBot && heard[2].Name == name
+                  && Draws(guest.Shell.Compose(), name),
+            $"Add Bot lists a bot named from the pilot names after the guest, on both ends ({name}, {string.Join(", ", heard.Select(r => r.Name))})");
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.PlayerKey(2)) == null && Row(host.Shell, OriginalLobbyScreen.PlayerKey(2)) != null,
+            $"and only the host's list offers the bot's row to pick");
+        for (int press = 0; press < DogfightLobby.DefaultFillTo - 5; press++)
+        {
+            ClickRow(ctx, host, OriginalLobbyScreen.FillArrowPrefix + "-");
+        }
+
+        ClickRow(ctx, host, OriginalLobbyScreen.FillKey);
+        SettleEnds(ends);
+        ctx.Check(host.Shell.Lobby.FillCount == 5 && lobby.FieldSeats == 5 && lobby.Bots.Count == 3 && guest.Door.Dogfight!.Players.Count == 5
+                  && Row(host.Shell, OriginalLobbyScreen.FillKey) is { Enabled: false },
+            $"Fill to with its count stepped to five fills the field to five pilots and greys ({host.Shell.Lobby.FillCount}, {lobby.FieldSeats}, {guest.Door.Dogfight!.Players.Count})");
+        foreach (var (end, who) in new[] { (host, "host"), (guest, "guest") })
+        {
+            var board = end.Shell.Compose();
+            int tags = board.Lines.Count(line => line.Text == OriginalLobbyScreen.BotTag);
+            string header = board.Lines.Select(line => line.Text).FirstOrDefault(text => text.StartsWith("Players (", StringComparison.Ordinal)) ?? "<none>";
+            ctx.Check(tags == 3 && header.StartsWith("Players (2 of ", StringComparison.Ordinal) && header.EndsWith(") + 3 bots", StringComparison.Ordinal),
+                $"the {who}'s list tags each of the three bots in its Ready column and its header counts the two people apart from them ({tags} tag(s), '{header}')");
+        }
+    }
+
+    // A press on the first bot's row opens Select Plane on it. Its boxes set the Fury, ace, a typed
+    // callsign and the host's team, which reach the guest. Remove takes the third row out.
+    private static void EditTheBots(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        int first = lobby.Bots[0].Id;
+        ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(2));
+        ctx.Check(host.Shell.Lobby is { Tab: LobbyTab.Plane } && host.Shell.Lobby.PickedBot == first
+                  && Row(host.Shell, OriginalLobbyScreen.BotPlaneKey) is { Enabled: true } && Row(host.Shell, OriginalLobbyScreen.PlaneKey) == null,
+            $"a press on the bot's row opens Select Plane on that bot ({host.Shell.Lobby.Tab}, {host.Shell.Lobby.PickedBot})");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.BotPlaneKey + ":8");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.BotSkillKey + ":2");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotNameKey);
+        TypeInto(host, Erasing(CSVM.Session.Roster.BotSeats.CallsignLimit).Append(new MenuCommands { Typed = "Red Ace" }).ToArray());
+        ctx.Check(lobby.CreateTeam("Aces"), $"the host creates a team");
+        ClickRow(ctx, host, OriginalLobbyScreen.BotTeamKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.BotTeamKey + ":1");
+        SettleEnds(ends);
+        var bot = lobby.BotById(first);
+        var row = guest.Door.Dogfight!.Players[2];
+        ctx.Check(bot is { Airframe: 7, Skill: NetBotSkill.Ace, Callsign: "Red Ace" } && bot.Value.Team == lobby.OwnTeam && lobby.OwnTeam != 0,
+            $"the boxes set the Fury, ace, the typed callsign and the host's team ({bot})");
+        ctx.Check(row is { IsBot: true, Airframe: 7, Skill: NetBotSkill.Ace, Name: "Red Ace" } && row.Team == lobby.OwnTeam,
+            $"and the guest's row reads them ({row})");
+        ctx.Check(lobby.Bots[1].Team == 0, $"ABLE-TO-FAIL CONTROL: a bot added before the team stood stays off it ({lobby.Bots[1].Team})");
+
+        int third = lobby.Bots[2].Id;
+        ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(4));
+        ClickRow(ctx, host, OriginalLobbyScreen.RemoveBotKey);
+        SettleEnds(ends);
+        ctx.Check(lobby.Bots.Count == 2 && lobby.BotById(third) == null && guest.Door.Dogfight!.Players.Count == 4 && host.Shell.Lobby.PickedBot == -1,
+            $"Remove takes the picked bot's row out on both ends ({lobby.Bots.Count}, {guest.Door.Dogfight!.Players.Count})");
+    }
+
+    // Every pilot on one team refuses LAUNCH! with langui 10519. With no team the launch goes, the
+    // host seats the bots after the guest, and the guest reads them off the match's roster.
+    private static void LaunchWithBots(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> hostExits, List<MenuExit> guestExits)
+    {
+        var lobby = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        ctx.Check(there.JoinTeam(lobby.OwnTeam), $"the guest asks to join the host's team");
+        SettleEnds(ends);
+        ctx.Check(lobby.SetBotTeam(lobby.Bots[1].Id, lobby.OwnTeam), $"and the host moves the second bot onto it");
+        ClickRow(ctx, host, OriginalLobbyScreen.MissionTabKey);
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
+        ctx.Check(lobby.CanLaunch && lobby.Players.All(p => p.Team == lobby.OwnTeam) && lobby.LaunchRefusal == TeamLaunchRefusal.TooFewTeams,
+            $"with the host, the guest and both bots on one team the lobby refuses it as one team ({string.Join(",", lobby.Players.Select(p => p.Team))}, {lobby.LaunchRefusal})");
+        int before = hostExits.Count;
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        ctx.Check(hostExits.Count == before && host.Shell.Dialog?.Message == "Each player must be on one of two teams to play.",
+            $"and LAUNCH! raises the original's refusal and hands nothing out ({host.Shell.Dialog?.Message})");
+        ClickRow(ctx, host, OriginalShell.DialogOkKey);
+
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ctx.Check(lobby.LeaveTeam(), $"the host's leave disbands the team");
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
+        ctx.Check(!lobby.Teamed && lobby.Bots.All(b => b.Team == 0) && lobby.CanLaunch,
+            $"ABLE-TO-FAIL CONTROL: with no team standing the bots fly the free-for-all ({string.Join(",", lobby.Players.Select(p => p.Team))})");
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        var launch = hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(launch?.Net != null, $"and LAUNCH! hands out the launch ({launch?.Chapter})");
+        if (launch?.Net is not { } wire)
+        {
+            return;
+        }
+
+        var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
+        var fits = launch.Seats.Select(s => s.Fit).ToList();
+        var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
+        var (roster, seatFits) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), lobby.Rules,
+            lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
+        string random = roster.Length == 4 ? roster[3].PlaneNode : string.Empty;
+        ctx.Check(roster.Length == 4 && seatFits.Length == 4 && !roster[1].IsBot && roster[2] is { IsBot: true, Skill: NetBotSkill.Ace, Callsign: "Red Ace" }
+                  && roster[2].PlaneNode == StockAirframes.Node(7) && roster[3].IsBot && StockAirframes.Nodes.Contains(random),
+            $"the host's field seats the bots after the guest, the Random plane drawn on a stock node ({string.Join(", ", roster.Select(s => $"{s.Callsign}:{s.PlaneNode}"))})");
+
+        int heard = guestExits.Count;
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, null, StockAirframes.Nodes);
+        for (int frame = 0; frame < 4 && guestExits.Count == heard; frame++)
+        {
+            Pump(guest);
+        }
+
+        var followed = guestExits.Skip(heard).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(followed?.Net != null, $"the guest follows the host's launch");
+        if (followed?.Net is not { } guestWire)
+        {
+            return;
+        }
+
+        var session = NetSession.Guest(guestWire.Transport, StockAirframes.Nodes);
+        for (int step = 0; step < 8 && !session.Joined; step++)
+        {
+            session.Step(Dt);
+        }
+
+        var seats = session.Seats;
+        ctx.Check(session.Joined && seats.Count == 4 && seats[2] is { IsBot: true, Skill: NetBotSkill.Ace, FlownHere: false } && seats[3].IsBot
+                  && seats[2].PlaneNode == StockAirframes.Node(7) && seats[3].PlaneNode == random,
+            $"and joins that match reading both bots on real stock planes ({string.Join(", ", seats.Select(s => $"{s.Callsign}:{s.PlaneNode}"))})");
     }
 
     private static void ReadyGuest(TestContext ctx, End host, End guest, List<End> ends, string when)
@@ -1933,10 +3396,10 @@ internal static class MenuOriginalConnectionSuites
             return;
         }
 
-        var planes = new[] { PlanePickerRoster.AirframeNode(0) };
+        var planes = new[] { StockAirframes.Node(0) };
         var fits = new LoadoutChoice?[] { null };
-        var (roster, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
-        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == PlanePickerRoster.AirframeNode(2),
+        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(2),
             $"the host's roster builds the guest's seat on its pick ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
         ctx.Check(roster.Length == 2 && roster[0].Callsign == SplitScreen.PlayerTag(0),
             $"a host whose advert names nobody is seated under its player tag ({roster.FirstOrDefault()?.Callsign})");
@@ -1950,7 +3413,7 @@ internal static class MenuOriginalConnectionSuites
         var launch = guestExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
         ctx.Check(launch is { Mode: MenuMode.Versus, Net.IsHost: false, Match.TimeLimitMinutes: 5 }
                   && launch.Chapter == chapter && launch.Seats.Count == 1
-                  && launch.Seats[0].PlaneNode == PlanePickerRoster.AirframeNode(2),
+                  && launch.Seats[0].PlaneNode == StockAirframes.Node(2),
             $"the guest launches behind the Built-in host on its map and time in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 
@@ -2078,7 +3541,7 @@ internal static class MenuOriginalConnectionSuites
             viewport.PushInput(new Godot.InputEventKey { Keycode = Godot.Key.V, PhysicalKeycode = Godot.Key.V, CtrlPressed = true, Pressed = false });
             var frame = reader.Poll(Dt);
             var cues = new List<string>();
-            guest.Shell.Connection.TypeAddress(frame, cues);
+            guest.Shell.Connection.TypeText(frame, cues);
             ctx.Check(frame.Paste && frame.Typed.Length == 0 && door.Address == Reported && cues.SequenceEqual(new[] { OriginalCues.Text }),
                 $"ABLE-TO-FAIL CONTROL: Ctrl+V pastes the clipboard's address into the box, trimmed, with one keystroke cue ({frame.Paste}, '{frame.Typed}', '{door.Address}', {string.Join(" ", cues)})");
 
@@ -2088,7 +3551,7 @@ internal static class MenuOriginalConnectionSuites
             viewport.PushInput(new Godot.InputEventKey { Keycode = Godot.Key.Insert, PhysicalKeycode = Godot.Key.Insert, Pressed = false });
             frame = reader.Poll(Dt);
             cues.Clear();
-            guest.Shell.Connection.TypeAddress(frame, cues);
+            guest.Shell.Connection.TypeText(frame, cues);
             ctx.Check(frame.Paste && door.Address == "::1128" && cues.SequenceEqual(new[] { OriginalCues.TextError }),
                 $"Shift+Insert pastes too, the '/' an address is never written with left out under the reject cue ('{door.Address}', {string.Join(" ", cues)})");
         }
@@ -2256,8 +3719,9 @@ internal static class MenuOriginalConnectionSuites
     }
 
     // One Original presentation over its own host, door and scripted seat, shown on the top level.
-    // A launch it hands out is added to exits when given.
-    private static End? Open(TestContext ctx, MenuLayout layout, NetPlayFeature door, List<End> ends, List<MenuExit>? exits = null)
+    // A launch it hands out is added to exits when given, and its saved planes are planes' when given.
+    private static End? Open(
+        TestContext ctx, MenuLayout layout, NetPlayFeature door, List<End> ends, List<MenuExit>? exits = null, CustomPlaneStore? planes = null)
     {
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
@@ -2267,6 +3731,7 @@ internal static class MenuOriginalConnectionSuites
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
             CampaignProfiles = CampaignAidProfiles.Store(seeded: true, progressed: true),
+            Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exit => exits?.Add(exit));
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
@@ -2298,13 +3763,16 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
         ctx.Check(host.Shell.NetInfo.Page == NetInfoPage.Game && door.Stage == NetDoorStage.Shut,
             $"HOST CO-OP asks Game Information over the cabin before the door opens ({host.Shell.NetInfo.Page}, {door.Stage})");
+        ctx.Check(Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Label == CoopDoorText.PrivateWord,
+            $"and its Listing chooser opens on Private, a campaign's default ({Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Label})");
         ClickRow(ctx, host, OriginalNetInfoBox.CancelKey);
         ctx.Check(!host.Shell.NetInfo.IsOpen && door.Stage == NetDoorStage.Shut && host.Shell.Screen == OriginalScreen.CampaignCabin,
             $"ABLE-TO-FAIL CONTROL: its Cancel leaves the cabin with the door shut ({door.Stage}, {host.Shell.Screen})");
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
         host.Shell.NetInfo.Draft.MaxPlayers = NetSeats.MaxPlayers;
         Answer(ctx, host, "Zachary", CampaignAidProfiles.Pilot);
-        ctx.Check(door.IsCoopHost && door.Answering, $"HOST CO-OP opens the carrier as a campaign host answering the LAN ({door.Stage}, {door.Answering})");
+        ctx.Check(door.IsCoopHost && door.Answering && door.Private,
+            $"HOST CO-OP opens the carrier as a Private campaign host still answering the LAN ({door.Stage}, {door.Answering}, {door.Private})");
         ctx.Check(door.Advertising?.Cap == NetPlayFeature.CoopHumans,
             $"a cap of sixteen asked for a campaign is held to four humans ({door.Advertising?.Cap})");
         AwaitMapping(door);
@@ -2340,6 +3808,11 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
         ctx.Check(shell.Screen == OriginalScreen.Connection && shell.Connection.Way == OriginalConnectionScreen.LanKey,
             $"a click on it opens the Connection page on LAN TCP/IP ({shell.Screen}, {shell.Connection.Way})");
+        if (players == 1)
+        {
+            CodeWayShut(ctx, guest);
+        }
+
         ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
         ctx.Check(shell.Screen == OriginalScreen.ConnectionGames && Row(shell, OriginalConnectionScreen.CancelKey) != null,
             $"Connect opens the games list behind the Searching box ({shell.Screen})");
@@ -2378,6 +3851,22 @@ internal static class MenuOriginalConnectionSuites
             $"and stands it on the host's cabin as a guest ({shell.Screen}, {shell.Dialog?.Message})");
     }
 
+    // A door with no master server greys Join by code and says why in its description line. The
+    // cursor passes over it, and a click on its radio picks nothing.
+    private static void CodeWayShut(TestContext ctx, End guest)
+    {
+        var shell = guest.Shell;
+        string why = CoopDoorText.CodeJoinUnavailable(CoopDoorText.NoMasterServer);
+        ctx.Check(Row(shell, OriginalConnectionScreen.CodeKey) is { Enabled: false } && Row(shell, OriginalConnectionScreen.CodeBoxKey) is { Enabled: false }
+                  && Draws(shell.Compose(), why) && !Draws(shell.Compose(), OriginalConnectionScreen.CodeWayDescription),
+            $"with no master server Join by code stands greyed and its description says why ({shell.Connection.CodeFault})");
+        ClickRow(ctx, guest, OriginalConnectionScreen.CodeKey);
+        ClickRow(ctx, guest, OriginalConnectionScreen.AddressKey);
+        TypeInto(guest, new MenuCommands { MoveY = 1 });
+        ctx.Check(shell.Connection.Way == OriginalConnectionScreen.LanKey && shell.FocusedKey == OriginalConnectionScreen.BuildKey,
+            $"ABLE-TO-FAIL CONTROL: a click on its radio picks nothing, and the cursor steps from the IP Address box past it to Build Custom Plane ({shell.Connection.Way}, {shell.FocusedKey})");
+    }
+
     // Two plain doors take the last seat and knock past it: four humans fit, the fifth hears why.
     private static void FillTheGame(TestContext ctx, List<End> ends, NetPlayFeature hostDoor, NetPlayFeature fourth, NetPlayFeature fifth)
     {
@@ -2398,6 +3887,16 @@ internal static class MenuOriginalConnectionSuites
             $"and the advert reads full ({hostDoor.Advertising?.Status}, {hostDoor.Advertising?.Players})");
         ctx.Check(fifth.Stage == NetDoorStage.Failed && fifth.Fault == CoopDoorText.GameFull,
             $"a fifth human is refused as full ({fifth.Stage}, {fifth.Fault})");
+    }
+
+    // Every machine's strip names all three pilots by the callsigns Player Information gave them,
+    // its own unmarked. A tag in place of a name means a callsign never crossed the wire.
+    private static void ChipsNamed(TestContext ctx, End end, string who, params string[] chips)
+    {
+        var drawn = end.Shell.Compose().Overlays.SelectMany(panel => panel.Lines).Select(line => line.Text).ToList();
+        var tags = drawn.Where(text => text.StartsWith('P') && text.Length > 1 && char.IsDigit(text[1])).ToList();
+        ctx.Check(chips.All(drawn.Contains) && tags.Count == 0,
+            $"{who}'s strip names every pilot by its callsign ({string.Join(" | ", chips.Where(drawn.Contains))}; tags {string.Join(" | ", tags)})");
     }
 
     // A link cut with no close notice reads as the host leaving. The page takes the guest back to
@@ -2472,12 +3971,51 @@ internal static class MenuOriginalConnectionSuites
 
     private static OriginalRow? Row(OriginalShell shell, string key) => shell.Rows.FirstOrDefault(row => row.Key == key);
 
+    // One scripted frame on an end.
+    private static void Press(End end, MenuCommands commands)
+    {
+        end.Seat.Enqueue(commands);
+        end.Host.Tick(Dt);
+    }
+
     private static bool Draws(ComposedBoard board, string text) =>
         board.Lines.Any(line => line.Text.Contains(text, StringComparison.Ordinal));
 
     // A line in one of the panels standing over the page, where the seat strip is drawn.
     private static bool DrawsOver(ComposedBoard board, string text) =>
         board.Overlays.SelectMany(panel => panel.Lines).Any(line => line.Text == text);
+
+    // A host carrier whose master server has not answered: no code and no fault until the suite
+    // hands it a code. A WebRTC host stands so between its listing and the server's reply.
+    private sealed class AwaitedListing : INetTransport, INetListing, IDisposable
+    {
+        private readonly INetTransport _inner;
+
+        public AwaitedListing(INetTransport inner) => _inner = inner;
+
+        public string? JoinCode { get; set; }
+
+        public string ListingFault => "";
+
+        public int LocalPeer => _inner.LocalPeer;
+
+        public IReadOnlyList<int> Peers => _inner.Peers;
+
+        public void List(MasterGame listing)
+        {
+        }
+
+        public void Bind(INetTransportListener listener) => _inner.Bind(listener);
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0) =>
+            _inner.Send(peer, payload, reliability, channel);
+
+        public void Disconnect(int peer) => _inner.Disconnect(peer);
+
+        public void Step(double dt) => _inner.Step(dt);
+
+        public void Dispose() => (_inner as IDisposable)?.Dispose();
+    }
 
     // One end of the wire: its menu host, the seat the suite drives, and the shell it shows.
     private sealed record End(MenuHost Host, ScriptedSeat Seat, OriginalShell Shell)

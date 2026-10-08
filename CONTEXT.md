@@ -207,6 +207,11 @@ race, the dogfight and a free flight do. Distinct from a respawn, which returns 
 air mid-run.
 _Avoid_: restart (that is the other mechanism, below), soft restart, reset
 
+**Race window**:
+The shared time a race runs for, numbered from zero and one more for each rerun; every run, report
+and line names its window.
+_Avoid_: round (the lobby's match)
+
 **Restart**:
 Freeing the session and building a fresh one from the same settings, behind the load screen. What
 an Instant Action mission does, because its opposition lives in the world and cannot be put back
@@ -234,6 +239,15 @@ _Avoid_: o'clock value, clock direction, relative bearing in hours
 The round live picture of the selected target drawn at its edge marker while the target is off
 screen and inside the range gate. The picture alone is the **disc**.
 _Avoid_: zoom window, magnifier, picture-in-picture, scope
+
+## Code layout
+
+**Family**:
+A ranked group of namespaces in the family order `CSVM.Tests/FamilyOrderTests.cs` enforces: a
+top-level namespace such as `Flight` or `Session`, or `UI.Boards`, which ranks apart from the rest
+of `UI`. A type names only types in its own family or a lower one. Distinct from a **Format
+family**, which groups data formats.
+_Avoid_: layer, tier, module (a module is one file's entry in `docs/architecture/`)
 
 ## Format documentation
 

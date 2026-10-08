@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
+using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
-using CSVM.Session.Launch;
+using CSVM.Launch;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -33,7 +36,7 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-live-switch",
         "a whole flight session switched Enhanced to Original to Enhanced reads as a fresh Enhanced "
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
-        + "field, volumetric banks, wind streaks, heat shimmer) are built or gone and the ground "
+        + "field, wind streaks, heat shimmer) are built or gone and the ground "
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
         + "with ranges under Enhanced, a crater-flattened and a hidden stamp stay down through both switches with every drawn clutter buffer holding what the world last wrote, "
         + "the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
@@ -109,6 +112,82 @@ internal static class GraphicsSwitchSuites
             {
                 enhanced.Close();
             }
+        }
+        finally
+        {
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("spyglass-sun",
+        "under Enhanced the world sun sits on the layer every pane camera draws and the spyglass disc's "
+        + "camera leaves out, and one shadowless copy on the disc's own layer, which no pane draws, "
+        + "matches the sun's bearing, colour and energy: in a two-pane flight with one disc per pane, "
+        + "at every Shadow Quality level including Off, across a zone crossing the weather rig lights, "
+        + "and after a live switch to Original (copy freed, sun back on layer 1, each disc the pane's "
+        + "view less its own airframe) and back; a fresh Original flight builds no copy and moves no layer")]
+    internal static void SpyglassSunLayers(TestContext ctx)
+    {
+        RequireData(ctx);
+        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
+        ctx.RequireData(crossZrdr, $"C2/MP2 mission zrdr");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            var original = Open(ctx, enhanced: false, players: 2);
+            try
+            {
+                if (!original.Built)
+                {
+                    ctx.Check(false, $"the Original two-pane session builds");
+                    return;
+                }
+                ctx.Check(original.Session.SpyglassSun == null && Count<SpyglassSun>(original.Session) == 0,
+                    $"a fresh Original flight builds no spyglass sun");
+                ctx.Check(original.Sun.Layers == 1u, $"and its sun stays on layer 1 (0x{original.Sun.Layers:X5})");
+                DiscMasks(ctx, original, false, "fresh Original");
+            }
+            finally
+            {
+                original.Close();
+            }
+
+            var enhanced = Open(ctx, enhanced: true, players: 2);
+            try
+            {
+                if (!enhanced.Built)
+                {
+                    ctx.Check(false, $"the Enhanced two-pane session builds");
+                    return;
+                }
+                SunCopied(ctx, enhanced, "fresh Enhanced");
+                DiscMasks(ctx, enhanced, true, "fresh Enhanced");
+                foreach (string word in ShadowQualitySetting.Words)
+                {
+                    var plan = ShadowQualitySetting.PlanFor(word);
+                    ShadowQualitySetting.ApplyTo(enhanced.Sun, plan, true, false, (_, _) => { });
+                    var copy = enhanced.Session.SpyglassSun;
+                    copy?._Process(0.0);
+                    ctx.Check(copy != null && SpyglassSun.Matches(enhanced.Sun, copy) && enhanced.Sun.ShadowEnabled == plan.Cast,
+                        $"Shadow Quality {word}: the copy matches the sun with no shadow of its own while the sun casts={enhanced.Sun.ShadowEnabled} ({Light(enhanced.Sun)} against {(copy != null ? Light(copy) : "no copy")})");
+                }
+                ShadowQualitySetting.ApplyTo(enhanced.Sun, ShadowQualitySetting.Sun, true, false, (_, _) => { });
+
+                Switch(enhanced, false);
+                ctx.Check(enhanced.Session.SpyglassSun == null && Count<SpyglassSun>(enhanced.Session) == 0,
+                    $"switched to Original, the copy is freed");
+                ctx.Check(enhanced.Sun.Layers == 1u, $"and the sun is back on layer 1 (0x{enhanced.Sun.Layers:X5})");
+                DiscMasks(ctx, enhanced, false, "switched to Original");
+                Switch(enhanced, true);
+                SunCopied(ctx, enhanced, "switched back to Enhanced");
+                DiscMasks(ctx, enhanced, true, "switched back to Enhanced");
+            }
+            finally
+            {
+                enhanced.Close();
+            }
+
+            ZoneCrossing(ctx, crossZrdr);
         }
         finally
         {
@@ -537,6 +616,113 @@ internal static class GraphicsSwitchSuites
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
     }
 
+    // One copy for the whole session, matching the session's sun after one frame of its own. The
+    // sun stands on the layer the disc leaves out.
+    private static void SunCopied(TestContext ctx, Rig rig, string label)
+    {
+        var copy = rig.Session.SpyglassSun;
+        copy?._Process(0.0);
+        ctx.Check(copy is { } built && built.IsInsideTree() && Count<SpyglassSun>(rig.Session) == 1,
+            $"{label}: one spyglass sun serves the session's {rig.Session.Rigs.Count} panes ({Count<SpyglassSun>(rig.Session)} found)");
+        ctx.Check(copy != null && ReferenceEquals(copy.Source, rig.Sun) && SpyglassSun.Matches(rig.Sun, copy),
+            $"{label}: it matches the sun's bearing, colour and energy with no shadow, on the disc's layer alone ({Light(rig.Sun)} against {(copy != null ? Light(copy) : "no copy")})");
+        ctx.Check(rig.Sun.Layers == UI.Boards.SplitScreen.SunLayer && rig.Sun.ShadowEnabled,
+            $"{label}: the sun casts, on its own layer (0x{rig.Sun.Layers:X5})");
+    }
+
+    // Every pane draws the sun's layer and not the copy's. Each disc, aimed as a frame aims it, draws
+    // its pane's view less its airframe, with the copy in place of the sun under Enhanced.
+    private static void DiscMasks(TestContext ctx, Rig rig, bool enhanced, string label)
+    {
+        var panes = rig.Session.Rigs;
+        var views = new List<SpyglassView>();
+        Walk(rig.Session, node =>
+        {
+            if (node is SpyglassView view)
+                views.Add(view);
+        });
+        ctx.Check(panes.Count == 2 && views.Count == panes.Count,
+            $"{label}: one disc per pane ({views.Count} disc(s), {panes.Count} pane(s))");
+        foreach (var pane in panes)
+        {
+            uint mask = pane.Camera.CullMask;
+            ctx.Check((mask & UI.Boards.SplitScreen.SpyglassSunLayer) == 0 && (mask & UI.Boards.SplitScreen.SunLayer) != 0,
+                $"{label}: pane {pane.Index + 1} draws the sun's layer and not the copy's (0x{mask:X5})");
+        }
+        foreach (var view in views)
+        {
+            view.Aim(Transform3D.Identity, 30f, 96);
+            uint disc = view.DiscCullMask;
+            view.Idle();
+            bool fromPane = panes.Any(p =>
+                disc == SpyglassView.DiscMask(p.Camera.CullMask, UI.Boards.SplitScreen.OwnAirframeLayer(p.Index), enhanced));
+            bool sun = (disc & UI.Boards.SplitScreen.SunLayer) != 0;
+            bool copy = (disc & UI.Boards.SplitScreen.SpyglassSunLayer) != 0;
+            ctx.Check(fromPane && sun != enhanced && copy == enhanced,
+                $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun" : "the sun itself")} (0x{disc:X5}: sun {sun}, copy {copy})");
+        }
+    }
+
+    // A zone the weather rig lights, crossed under Enhanced. C2/MP2's two zones disagree about the
+    // bearing, so a copy that took the sun once at build would be left behind.
+    private static void ZoneCrossing(TestContext ctx, string zrdr)
+    {
+        GraphicsMode.Set(true);
+        var root = new Node3D { Name = "spyglass-sun-zone" };
+        var sun = new DirectionalLight3D { Name = "spyglass-sun-zone-sun" };
+        var camera = new Camera3D { Name = "spyglass-sun-zone-camera" };
+        ctx.Host.AddChild(root);
+        root.AddChild(sun);
+        root.AddChild(camera);
+        try
+        {
+            EnhancedLook.ApplySun(sun, true, EnhancedPasses.None);
+            var rigs = new List<Flight.Camera.PlayerRig> { new() { Index = 0, Camera = camera, HudParent = root } };
+            var weather = new WeatherRig(SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" }), root, sun);
+            weather.Build(zrdr, rigs, Array.Empty<Mech3.HorizonZone>(), _ => { });
+            var copy = SpyglassSun.Build(sun);
+            root.AddChild(copy);
+            var below = Crossed(weather, rigs, Vector3.Zero, copy, sun);
+            var inside = Crossed(weather, rigs, new Vector3(0f, 25000f, 0f), copy, sun);
+            ctx.Same(1, below.State, $"a camera under C2/MP2's cloud band is in weather state 1");
+            ctx.Same(2, inside.State, $"and one at 25,000 m is in state 2");
+            ctx.Check(below.Beam.AngleTo(inside.Beam) > 0.6f,
+                $"the crossing moved the sun by {Mathf.RadToDeg(below.Beam.AngleTo(inside.Beam)):0.#} degrees");
+            ctx.Check(below.Matches && inside.Matches,
+                $"and the copy matched the sun in both zones (below {below.Matches}, inside {inside.Matches}: {Light(sun)} against {Light(copy)})");
+        }
+        finally
+        {
+            root.QueueFree();
+        }
+    }
+
+    // One crossing as a frame makes it: the rig resolves the camera's state and lights the zone,
+    // then the copy takes its own frame.
+    private static (Vector3 Beam, bool Matches, int State) Crossed(WeatherRig weather,
+        List<Flight.Camera.PlayerRig> rigs, Vector3 at, SpyglassSun copy, DirectionalLight3D sun)
+    {
+        rigs[0].Camera.Position = at;
+        weather.Tick(rigs);
+        copy._Process(0.0);
+        return (-copy.GlobalBasis.Z, SpyglassSun.Matches(sun, copy), rigs[0].CameraWeatherState);
+    }
+
+    private static int Count<T>(Node root)
+        where T : Node
+    {
+        int count = 0;
+        Walk(root, node =>
+        {
+            if (node is T)
+                count++;
+        });
+        return count;
+    }
+
+    private static string Light(DirectionalLight3D light) => string.Create(CultureInfo.InvariantCulture,
+        $"layers 0x{light.Layers:X5} casts {light.ShadowEnabled} energy {light.LightEnergy:0.###} colour {light.LightColor.ToHtml(false)} specular {light.LightSpecular:0.###} angular {light.LightAngularDistance:0.##} beam {-light.GlobalBasis.Z}");
+
     private static void RequireData(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -560,13 +746,13 @@ internal static class GraphicsSwitchSuites
 
     // One flight session in its own pane, lit as the launcher lights one. The sun and the
     // Environment are the launcher's, dressed by EnhancedLook when the session opens under Enhanced.
-    private static Rig Open(TestContext ctx, bool enhanced)
+    private static Rig Open(TestContext ctx, bool enhanced, int players = 1)
     {
         GraphicsMode.Set(enhanced);
         Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
-        var spec = SessionSpec.Parse(new[] { $"--chapter={ctx.Chapter}", "--players=1", "--mute", "--no-pads" });
+        var spec = SessionSpec.Parse(new[] { $"--chapter={ctx.Chapter}", $"--players={players}", "--mute", "--no-pads" });
         var pane = new SubViewport
         {
             Size = new Vector2I(640, 480),
@@ -611,7 +797,7 @@ internal static class GraphicsSwitchSuites
             CaptureDirector = new CaptureDirector(spec),
             MasterSeed = 1,
             Camera = camera,
-            Orbit = new UI.Overlays.OrbitCamera(camera),
+            Orbit = new Flight.Camera.OrbitCamera(camera),
             Sun = sun,
             Env = env,
             MenuDriven = false,
@@ -642,7 +828,7 @@ internal static class GraphicsSwitchSuites
         Walk(rig.Session, node =>
         {
             string name = node.Name.ToString();
-            if (name is "scorch_field" or "fog_volume_banks" or "wind_streaks" or "heat_shimmer" or "ground_shadows")
+            if (name is "scorch_field" or "wind_streaks" or "heat_shimmer" or "ground_shadows")
                 layers[name] = layers.GetValueOrDefault(name) + 1;
             switch (node)
             {

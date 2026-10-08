@@ -23,20 +23,146 @@ global uniform vec2 csky_fog_range;      // x = near (clear), y = far (full fog)
 global uniform vec2 csky_fog_alt;        // fragment altitude: full fog below x, fades to none at y
 global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (M2-polish item 6)
 
+// The per-view fog table (Session/World/FogViewTable.cs). Splitscreen panes and spyglass pictures
+// each sit in their own camera weather state, so each wears its own zone's fog, world light and
+// vertex light.
+// One mat4 per view, by column: xyz = eye, w = world light; rgb = fog colour; xy = range,
+// zw = altitude. A fragment reads the view whose eye stands nearest its own camera.
+// ⚠ Read the plain globals above whenever csky_view_count < 2. The table is published only while
+// views disagree, and that branch is what keeps a single view's render the one it always was.
+global uniform int csky_view_count;
+global uniform mat4 csky_view_0;
+global uniform mat4 csky_view_1;
+global uniform mat4 csky_view_2;
+global uniform mat4 csky_view_3;
+global uniform mat4 csky_view_4;
+global uniform mat4 csky_view_5;
+global uniform mat4 csky_view_6;
+global uniform mat4 csky_view_7;
+
+// The same views' vertex light, one mat4 each at the same index, by column: xyz = direction
+// toward the sun, w = SUNLIGHT_AMBIENT; rgb = ambient triple, w = SUNLIGHT_DIFFUSE; rgb = diffuse
+// triple; rgb = the photograph's fill triple. The plain csky_sun_* globals below carry them for
+// a single view.
+// ⚠ Change this layout only together with FogViewTable.Publish; a mismatch reads the wrong column
+// silently.
+global uniform mat4 csky_view_sun_0;
+global uniform mat4 csky_view_sun_1;
+global uniform mat4 csky_view_sun_2;
+global uniform mat4 csky_view_sun_3;
+global uniform mat4 csky_view_sun_4;
+global uniform mat4 csky_view_sun_5;
+global uniform mat4 csky_view_sun_6;
+global uniform mat4 csky_view_sun_7;
+
+// One view of the table by index; globals cannot be arrays.
+mat4 csky_view(int i) {
+    if (i == 0) return csky_view_0;
+    if (i == 1) return csky_view_1;
+    if (i == 2) return csky_view_2;
+    if (i == 3) return csky_view_3;
+    if (i == 4) return csky_view_4;
+    if (i == 5) return csky_view_5;
+    if (i == 6) return csky_view_6;
+    return csky_view_7;
+}
+
+// One view's vertex light by index, as csky_view.
+mat4 csky_view_sun(int i) {
+    if (i == 0) return csky_view_sun_0;
+    if (i == 1) return csky_view_sun_1;
+    if (i == 2) return csky_view_sun_2;
+    if (i == 3) return csky_view_sun_3;
+    if (i == 4) return csky_view_sun_4;
+    if (i == 5) return csky_view_sun_5;
+    if (i == 6) return csky_view_sun_6;
+    return csky_view_sun_7;
+}
+
+// The index of the view standing nearest `camera_world`, ties to the lower index. Only reached
+// with two or more views published.
+int csky_view_index(vec3 camera_world) {
+    int best = 0;
+    vec3 d0 = csky_view_0[0].xyz - camera_world;
+    float best_d = dot(d0, d0);
+    for (int i = 1; i < min(csky_view_count, 8); i++) {
+        vec3 d = csky_view(i)[0].xyz - camera_world;
+        float dd = dot(d, d);
+        if (dd < best_d) {
+            best_d = dd;
+            best = i;
+        }
+    }
+    return best;
+}
+
+// The fog row of the view standing nearest `camera_world`.
+mat4 csky_view_at(vec3 camera_world) {
+    return csky_view(csky_view_index(camera_world));
+}
+
+// The fog colour of the view drawing from `camera_world`. Pass CAMERA_POSITION_WORLD; a user
+// function cannot read it itself.
+vec3 csky_fog_color_at(vec3 camera_world) {
+    if (csky_view_count > 1) {
+        return csky_view_at(camera_world)[1].rgb;
+    }
+    return csky_fog_color;
+}
+
+// The SUNLIGHT world dimming of the view drawing from `camera_world`, as csky_fog_color_at.
+float csky_world_light_at(vec3 camera_world) {
+    if (csky_view_count > 1) {
+        return csky_view_at(camera_world)[0].w;
+    }
+    return csky_world_light;
+}
+
 // The same SUNLIGHT uncollapsed, for the one surface the collapse cannot describe: a camera-facing
 // card, whose authored normals turn with the view instead of holding the world's mean N.L
 // (docs/org/vertexLighting.md). csky_sun_dir points FROM a surface TOWARD the light, the sense
 // max(N.L, 0) wants; the pair is the zone's authored SUNLIGHT_AMBIENT and SUNLIGHT_DIFFUSE.
 global uniform vec3 csky_sun_dir = vec3(0.0, 1.0, 0.0);
 global uniform vec2 csky_sun_light = vec2(1.0, 0.0);
+// The same pair with its colours (WeatherRig.SunVertexLight) for the faithful aircraft, and the
+// Danger Zone photograph's ambient half (WeatherRig.PhotographFill).
+global uniform vec3 csky_sun_ambient_rgb;
+global uniform vec3 csky_sun_diffuse_rgb;
+global uniform vec3 csky_sun_fill_rgb;
 
-// The original's per-vertex directional term on one world-space normal. The caller multiplies it
-// onto the AUTHORED vertex colour and clamps the PRODUCT, which is where the original clamps and
-// the collapse does not.
+// The original's per-vertex directional term on one world-space normal, under the light of the
+// view drawing from `camera_world`. The caller multiplies it onto the AUTHORED vertex colour and
+// clamps the PRODUCT, which is where the original clamps and the collapse does not.
 // ⚠ Colourless on purpose, not a simplification of the light: every chapter authoring a lit cloud
 // card writes white for both SUNLIGHT colours, so the triples the binary multiplies are identity.
-float csky_sun_vertex_light(vec3 world_normal) {
-    return csky_sun_light.x + csky_sun_light.y * max(dot(normalize(world_normal), csky_sun_dir), 0.0);
+float csky_sun_vertex_light_at(vec3 world_normal, vec3 camera_world) {
+    vec3 sun_dir = csky_sun_dir;
+    vec2 sun_light = csky_sun_light;
+    if (csky_view_count > 1) {
+        mat4 sun = csky_view_sun(csky_view_index(camera_world));
+        sun_dir = sun[0].xyz;
+        sun_light = vec2(sun[0].w, sun[1].w);
+    }
+    return sun_light.x + sun_light.y * max(dot(normalize(world_normal), sun_dir), 0.0);
+}
+
+// The coloured vertex light of the view drawing from `camera_world`: the direction toward the sun
+// and the ambient, diffuse and photograph-fill triples. A model drawn in a frame of its own (the
+// cockpit pass) adds that frame's world origin to CAMERA_POSITION_WORLD.
+void csky_sun_rgb_at(vec3 camera_world, out vec3 sun_dir, out vec3 ambient_rgb, out vec3 diffuse_rgb,
+        out vec3 fill_rgb) {
+    if (csky_view_count > 1) {
+        mat4 sun = csky_view_sun(csky_view_index(camera_world));
+        sun_dir = sun[0].xyz;
+        ambient_rgb = sun[1].rgb;
+        diffuse_rgb = sun[2].rgb;
+        fill_rgb = sun[3].rgb;
+        return;
+    }
+    sun_dir = csky_sun_dir;
+    ambient_rgb = csky_sun_ambient_rgb;
+    diffuse_rgb = csky_sun_diffuse_rgb;
+    fill_rgb = csky_sun_fill_rgb;
 }
 
 // How much fog covers a fragment. `fog_world` is the fragment in WORLD space (under
@@ -60,12 +186,19 @@ float csky_sun_vertex_light(vec3 world_normal) {
 // so no render in seven of eight chapters can tell one altitude curve from another. Changing it
 // would be a guess dressed as a symmetry.
 float csky_fog_amount(vec3 fog_world, vec3 camera_world) {
+    vec2 fog_range = csky_fog_range;
+    vec2 fog_alt = csky_fog_alt;
+    if (csky_view_count > 1) {
+        vec4 view = csky_view_at(camera_world)[2];
+        fog_range = view.xy;
+        fog_alt = view.zw;
+    }
     float d = distance(fog_world.xz, camera_world.xz);
     // max() only guards the divisor: no shipped FOG_RANGES has near == far (and the no-fog range
     // is 1e8/1e9), but a divide-by-zero here would NaN the whole world, not one surface.
-    float span = max(csky_fog_range.y - csky_fog_range.x, 0.001);
-    float ramp = clamp((d - csky_fog_range.x) / span, 0.0, 1.0);
-    return ramp * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));
+    float span = max(fog_range.y - fog_range.x, 0.001);
+    float ramp = clamp((d - fog_range.x) / span, 0.0, 1.0);
+    return ramp * (1.0 - smoothstep(fog_alt.x, fog_alt.y, fog_world.y));
 }
 
 #endif

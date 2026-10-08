@@ -3,9 +3,9 @@ using System.Globalization;
 using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Net;
-using CSVM.Session.Launch;
-using CSVM.UI.Hangar;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.Utils;
 
@@ -114,13 +114,16 @@ internal static class NetCustomPlaneSuites
             }
 
             var build = CustomPlaneWire.Build(GuestPlane())!;
+            ctx.Check(guest.Rules.AllowCustom, $"[gates] a shown host's new lobby allows custom planes, as the original's opens ({guest.Rules})");
+            host.SetAllowCustomPlanes(false);
+            StepDoors(SettleSteps, hostDoor, guestDoor);
             guest.Pick(1, default);
             ctx.Check(guest.Refusal == PlaneRefusal.None && guest.SetReady(true),
-                $"ABLE-TO-FAIL CONTROL: [gates] a stock pick is Ready in a new lobby ({guest.Refusal})");
+                $"ABLE-TO-FAIL CONTROL: [gates] a stock pick is Ready with custom planes barred ({guest.Refusal})");
             guest.PickCustom(build, default);
             StepDoors(SettleSteps, hostDoor, guestDoor);
             ctx.Check(!guest.Rules.AllowCustom && guest.Refusal == PlaneRefusal.CustomBarred && !guest.SetReady(true),
-                $"[gates] a new lobby allows no custom planes, so the guest's custom pick is refused at Ready ({guest.Refusal})");
+                $"[gates] with Allow Custom Planes cleared the guest's custom pick is refused at Ready ({guest.Refusal})");
             StepDoors(SettleSteps, hostDoor, guestDoor);
             ctx.Check(host.Players.Count == 2 && !host.Players[1].Ready,
                 $"[gates] and the host's row for the guest is not Ready ({Rows(host)})");
@@ -218,7 +221,7 @@ internal static class NetCustomPlaneSuites
             }
 
             // The launcher's host half: the field, each seat's fit and plane, then the opener.
-            var planes = new[] { PlanePickerRoster.AirframeNode(hostPlane.Airframe) };
+            var planes = new[] { StockAirframes.Node(hostPlane.Airframe) };
             var customs = new CustomPlaneDef?[] { hostPlane };
             var (roster, seatFits) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null },
                 StockLoadouts.Load(), rules);
@@ -228,7 +231,7 @@ internal static class NetCustomPlaneSuites
             ctx.Check(roster.Length == 2 && builds[1] != null && builds[1]!.Equals(guest.Build),
                 $"[flight] the host's field takes the guest's custom plane off its pick ({builds[1]?.Name ?? "stock"})");
             hostEnd = NetCombatSuites.Ends.Open(ctx, spec.WithSeatedAircraft(planes[0], hostPlane, null),
-                hostLaunch.Transport, isHost: true, HostSeed, roster, PlanePickerRoster.StockAirframes,
+                hostLaunch.Transport, isHost: true, HostSeed, roster, StockAirframes.Nodes,
                 seatBuild: s => Launcher.SeatBuildFor(s, builds, null));
             for (int i = 0; i < OpenerSteps && !guestDoor.DogfightLaunchDue; i++)
             {
@@ -247,8 +250,8 @@ internal static class NetCustomPlaneSuites
             // hands it over.
             var own = CustomPlaneWire.Def(guest.Build);
             guestEnd = NetCombatSuites.Ends.Open(ctx,
-                spec.WithSeatedAircraft(PlanePickerRoster.AirframeNode(guest.Airframe), own, null),
-                guestLaunch.Transport, isHost: false, HostSeed + 1, null, PlanePickerRoster.StockAirframes,
+                spec.WithSeatedAircraft(StockAirframes.Node(guest.Airframe), own, null),
+                guestLaunch.Transport, isHost: false, HostSeed + 1, null, StockAirframes.Nodes,
                 seatBuild: s => Launcher.SeatBuildFor(s, null, guestDoor));
             ctx.Check(hostEnd.Built && guestEnd.Built, $"[flight] both sessions build ({hostEnd.Built}, {guestEnd.Built})");
             if (!hostEnd.Built || !guestEnd.Built)
