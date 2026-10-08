@@ -1,7 +1,7 @@
 # Which in-engine suites can run without an extraction
 
 **Question.** Of the 495 `[Suite]` bodies in `CSVM/src/Testing/`, which could run on CI, where no
-install is present, and what would unblock the rest? `PLAN-ci-engine-suites` is built on the answer.
+install is present, and what would unblock the rest? The ci tier (`SuiteCatalog.CiTier`) and the `--synthetic-data` tree are built on the answer.
 
 **Instrument.** `suites.tsv`, one row per suite: file, suite name, bucket, and a one-line reason
 naming the install input the suite needs or what it uses a chapter world for. Classified by reading

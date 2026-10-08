@@ -409,7 +409,7 @@ internal static class WorldAndToolSuites
                 $"scaled to the port's interior scale scale={interior.Scale.X:0.###}");
             ctx.Check(builder.MeshInstanceCount > plain.MeshInstanceCount,
                 $"the interior adds meshes plain={plain.MeshInstanceCount} with={builder.MeshInstanceCount}");
-            // The two torn-skin panels B12 drives, both hidden.
+            // The two torn-skin panels the pdpanel4/pdpanel6 injure entries drive, both hidden.
             foreach (var panel in new[] { "pcdp4", "pcdp6" })
             {
                 var node = FindNamed(interior, panel);
