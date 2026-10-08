@@ -63,6 +63,13 @@
             "command": "$here = git rev-parse --show-toplevel 2>$null; if (-not $here) { exit 0 }; $s = Join-Path $here 'CheckCommentCaps.ps1'; if (-not (Test-Path -LiteralPath $s)) { exit 0 }; & $s -Hook; exit $LASTEXITCODE",
             "timeout": 30,
             "statusMessage": "comment caps on the edited file..."
+          },
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$here = git rev-parse --show-toplevel 2>$null; if (-not $here) { exit 0 }; $s = Join-Path $here 'CheckEncoding.ps1'; if (-not (Test-Path -LiteralPath $s)) { exit 0 }; & $s -Hook; exit $LASTEXITCODE",
+            "timeout": 15,
+            "statusMessage": "script encoding on the edited file..."
           }
         ]
       }

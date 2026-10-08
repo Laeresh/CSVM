@@ -198,42 +198,9 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 **Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both, F19 in `--viewer` drives a parked plane's visuals, F19 in `--fly` drives the flown plane's real HP, so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
 
-The day-to-day subset; `docs/cli.md` is the description of record. **[`docs/cli.md`](docs/cli.md) opens with an index of every flag, grouped**, covering the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
+Every flag is in [`docs/cli.md`](docs/cli.md), which opens with an index of every flag, grouped. Look a flag up there by name (`Grep "--screenshot" docs/cli.md`) rather than reading the file whole. The flags a scripted check leans on most are `--screenshot=`/`--frames=`/`--shots=` (frames are a sim coordinate, not a wall-clock delay), `--det` (implied by every flag that ends a session by itself), `--run-tests[=filter]`, `--pos=`/`--direction=` (quote comma args in PowerShell), `--no-pads` and `--log=`.
 
-⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.**  Adding a row is rarely right, the index is one file away.
-
-| Flag | Does |
-|---|---|
-| `--chapter[=C1]` | which chapter world (`C1`/`C1B`/`C1C`/`C2`/`C2B`/`C3`/`C4`/`C5`); flown by default |
-| `--stage=empty` | no *chapter* gamez: a collidable grid ground plane + the plane, booting in ~2 s, the flight/ballistics test stage |
-| `--node=<cs_name>` | `--viewer`/`--anim-lab` build only that gamez subtree, auto-framed; multiple matches build the first, a miss lists candidates |
-| `--plane=` | which aircraft; comma-separated gives one per splitscreen player |
-| `--fly` | free flight (the default): world + skydome + plane + arcade controls; also hosts the damage lab (F19) on the flown plane |
-| `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
-| `--vs` | "Dogfight": splitscreen free-for-all deathmatch on the `dogfight_ace` spawns; beats `--stunt` by fixed precedence |
-| `--viewer` | the static inspection view; hosts the damage (F19), livery (L) and mesh (M) labs |
-| `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera, click-selection |
-| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow the selection |
-| `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
-| `--pos=x,y,z` | place the mode's **subject**: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt` (bypassing the mission spawn list) |
-| `--direction=x,y,z` | which way it faces there, view direction or nose. `--lookat=x,y,z` is the point form (and the `--viewer` orbit pivot). Quote comma args in PowerShell |
-| `--view=1-9` | hold a numpad head-look snap direction for the run (2 dead ahead, 4/6 flanks, 8 belly); `--fly`/`--stunt` only. Swings the chase camera around the plane at the shared dynamic radius, or aims the head in first person, [`docs/cli.md`](docs/cli.md) |
-| `--look=x,y` | hold a right-stick look deflection for the run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and the only way a headless run aims it. Aims the chase swing and the first-person head alike, so one run compares the two; a live stick beats it while deflected |
-| `--screenshot=<path>` | render a few frames, save PNG, quit, the automated-verification workhorse |
-| `--frames=N` / `--shots=N` | which sim frame the shot lands on (default 15), **a sim coordinate, not a wall-clock delay** / capture N consecutive frames |
-| `--debug-anim` | log every live animation's pose and sound emitters once a second; conditions only when a verdict **flips** (a repeat line means a change) |
-| `--perf` | log the frame-cost/draw-count split every 60 frames (the headless profiler stand-in) |
-| `--run-tests[=filter]` | run the in-engine assertion suites, print the PASS/FAIL/SKIP table + `.scratch/test-report.json`, **exit nonzero on any failure** |
-| `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` (`logs/` in an exported build) regardless |
-| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by every flag that drives and ends a session by itself**, `--screenshot=`, the `--dump-*` reports, `--damage-test`, `--effects-test`, `--weapon-test`, `--run-tests`, and announced as a `det …` log line |
-| `--no-det` | opt back out, wall-clock sim and live randomness, **beating both the implication and an explicit `--det`** (`--det --no-det` runs on the wall clock) |
-| `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
-| `--tex-override=<name>[=<color>]` | the named texture resolves flat magenta (or your colour) everywhere it is used, "is this thing drawing at all?" |
-| `--tex-census[=names]` | every texture resolves to its own flat colour; map to `.scratch/tex_census.json`, per-texture pixel counts for a `--screenshot` beside it. **Pair with `--no-fog`**; counts are lower bounds, see [`docs/cli.md`](docs/cli.md) |
-| `--collision[=show]` | build the world's colliders in a mode that builds none (freecam/anim-lab/viewer); `=show` opens the **C** wireframe overlay, but only in freecam/anim-lab, since C in `--viewer` is the mesh lab's cull cycler |
-| `--no-pads` | ignore every gamepad, a drifting stick silently ruins a scripted run |
-| `--mute` | skip flight audio, a **load-time** switch, so nothing plays *and nothing is counted or logged*; a muted baseline is blind to sound errors |
-| `--volume=N` | master gain 0–1 (default 0 in a repo run and 1 in an exported build, `RunGame.ps1`/`RunDev.ps1` pass `--volume=1.0` so interactive play sounds). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
+Every run writes every `Log` line to `.scratch/logs/<mode>-<stamp>.log`, whatever `--log=` sets for the console, and that includes a debug line for each discrete flight command a player presses (`press P1 Respawn`). Tools beside the repo: ffmpeg comes with Python's `imageio_ffmpeg` (`python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`), and Godot is under `tools/godot/` in the main checkout.
 
 the player controls during development are in `docs/controls.md`. **change them if the player input changes**
 

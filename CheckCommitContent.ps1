@@ -433,6 +433,11 @@ function Invoke-SelfTest {
         Write-Chars -File (Join-Path $fx 'CSVM/src/Bad.cs.uid') -Codes ([int[]][char[]]'uid://fixture')
         Assert-Row 'row 10 the same .cs with its .uid passes' (
             @(Invoke-Checks -Roots @($fx) | Where-Object { $_.Check -eq 'uid sidecars' }).Count -eq 0)
+        Write-Chars -File (Join-Path $fx 'docs/verification.md') -Codes ([int[]][char[]](
+            '- **SHOT-1**, one' + [char]10 + '- **SHOT-1**, two' + [char]10))
+        $idsOut = @(Invoke-Checks -Roots @($fx) | Where-Object { $_.Check -eq 'item IDs' } |
+            ForEach-Object { $_.Output -join [char]10 }) -join [char]10
+        Assert-Row 'row 10 a rule defined twice in verification.md blocks' ($idsOut -match 'SHOT-1 \(2 times\)')
 
         # Row 11: CheckDocEntries.ps1 as the fifth check. A minimal architecture split (one
         # namespace file, one index bullet, one matching CSVM/src file) so the existence and
