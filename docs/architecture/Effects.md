@@ -58,8 +58,8 @@ grid with a Gerstner swell in its vertex stage and drifting noise in its fragmen
 sheet, which steps aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. It
 draws a priority level below the lowest base sheet, one grid per zone-gate group; a spyglass disc
 (`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the wave tables, a still field bending the crests out of a
-lattice, the noise detail, the foam and up to 16 ship calm zones (`OceanCalmZone.cs`, `OceanMovers.cs`), nearest
-the eye first, all on `csky_time`. Off the mask's shore distance the swell fades on a long ramp and the look on a
+lattice, the noise detail, the foam where the swell's Jacobian bunches the surface, and up to 16 ship calm zones
+(`OceanCalmZone.cs`, `OceanMovers.cs`), nearest the eye first, all on `csky_time`. Off the mask's shore distance the swell fades on a long ramp and the look on a
 short one, so it shades as the flat sheet at the shore and in fog. `GameSession.FollowOcean` builds and drops it.
 
 ## src/Effects/OceanCalmZone.cs

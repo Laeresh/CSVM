@@ -96,9 +96,30 @@ public sealed partial class Ocean : Node3D
     private const float FootprintFadeFrom = 4f;
     private const float FootprintFadeFull = 9f;
 
-    // TUNE. Foam's crest reference in standard deviations of the swell height, so the share of
-    // whitecaps does not move with the wave count.
-    private const float CrestSigmas = 3.13f;
+    // TUNE. Foam forms where the swell bunches the surface: the Jacobian of its horizontal
+    // displacement falls below 1. The gate runs between these standard deviations of that
+    // Jacobian, wide so a whitecap grows and fades as its crest passes instead of popping.
+    private const float FoamFromSigmas = 1.3f;
+    private const float FoamFullSigmas = 2.3f;
+
+    // TUNE. How far the patch field moves a crest's threshold, in the same standard deviations.
+    private const float FoamPatchShift = 1.2f;
+
+    // TUNE. The foam's own shape. A breakup splits a crest's foam into whitecaps. Up close each
+    // whitecap is a sheet with round holes FoamCellFine apart, longer along the wind; a coarse
+    // noise thins it and warps the holes. All of it rides the water (the grid parameter), so a
+    // passing crest uncovers it instead of dragging it along.
+    private const float FoamBreakupCell = 12f;
+    private const float FoamCellCoarse = 3.2f;
+    private const float FoamCellFine = 1.4f;
+    private const float FoamStretch = 1.8f;
+
+    // TUNE. Up close a whitecap's sheet covers about this share of it, at foam_strength over the
+    // share. Its mean is the far foam, so the sheet's fade-in moves little brightness.
+    private const float FoamCover = 0.3f;
+
+    // TUNE. Foam's roughness, which it takes in the share it covers, so it reflects no sky.
+    private const float FoamRoughness = 0.6f;
 
     private static readonly StringName ParamName = Param;
     private static readonly string[] Chapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" };
@@ -122,6 +143,11 @@ public sealed partial class Ocean : Node3D
         new(-38f, 6f, 2.2f), new(57f, 3.4f, 1.6f), new(-71f, 1.9f, 1.2f), new(14f, 1.05f, 0.9f),
         new(-20f, 0.58f, 0.6f),
     };
+
+    // TUNE. The foam's patch field, which decides where whitecaps can form: two gradient-noise
+    // octaves drifting with the wind. Cell in metres, weight, drift in m/s, rounded so the
+    // csky_time wrap lands on a whole period of cells.
+    private static readonly FoamPatch[] FoamPatches = { new(230f, 0.65f, 1.5f), new(71f, 0.35f, 1.5f) };
 
     private readonly Func<IEnumerable<Node3D>> _ships;
     private readonly List<Node3D> _wakes;
@@ -363,6 +389,20 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine($"const vec2 DETAIL_G[{g.Count}] = vec2[{g.Count}]({string.Join(", ", g)});");
     }
 
+    // The patch field's octaves as shader terms. Each drifts one whole period of cells per csky_time
+    // wrap, so the hourly rollover lands on an identical field.
+    private static string FoamPatchTerms()
+    {
+        var sb = new StringBuilder();
+        foreach (var o in FoamPatches)
+        {
+            float period = (float)Math.Max(1.0, Math.Round(o.Speed * ShaderTime.RolloverSecs / o.Cell));
+            string perSec = $"({Literal(period)} / {Literal((float)ShaderTime.RolloverSecs)})";
+            sb.Append(CultureInfo.InvariantCulture, $" + {Literal(o.Weight)} * foam_noise(pw * {Literal(1f / o.Cell)} - vec2(csky_time * {perSec}, 0.0), {Literal(period)})");
+        }
+        return sb.ToString();
+    }
+
     // vec4(dir.x, dir.z, k, A) and vec2(Q, omega) per wave. Omega is rounded to a whole number of
     // cycles per csky_time wrap, so the hourly rollover lands on an identical frame.
     // Also vec4 _MOD per wave: the height field's weights, then the phase field's. Each wave's weights
@@ -410,11 +450,9 @@ public sealed partial class Ocean : Node3D
 
     private static string ShaderCode(int level, bool zoned)
     {
-        // The height foam measures a crest against.
-        float variance = 0f;
-        foreach (var w in Swell)
-            variance += 0.5f * Mathf.Pow(w.Steepness * w.Length / Mathf.Tau, 2f);
-        float crestRef = CrestSigmas * Mathf.Sqrt(variance);
+        // The Jacobian's standard deviation below 1 at full swell. Each wave's crest bunches the
+        // surface by Q k A = Choppiness / waves, so the share holds with the wave count.
+        float jacSigma = Choppiness / Mathf.Sqrt(2f * Swell.Length);
         var sb = new StringBuilder();
         sb.AppendLine("shader_type spatial;");
         sb.AppendLine("render_mode skip_vertex_transform, cull_disabled;");
@@ -441,7 +479,7 @@ public sealed partial class Ocean : Node3D
         }
         EmitWaves(sb, "SWELL", Swell);
         EmitDetail(sb);
-        sb.AppendLine($"const float SWELL_CREST = {Literal(crestRef)};");
+        sb.AppendLine($"const float FOAM_JAC_SIGMA = {Literal(jacSigma)};");
         sb.AppendLine("varying vec2 v_param;");
         sb.AppendLine(@"
 vec2 ocean_mask(vec2 p) {
@@ -455,19 +493,6 @@ float shore_swell(float g) {
 
 float shore_look(float g) {
     return smoothstep(" + Literal(LookCalm / OceanMaskRaster.ShoreReach) + @", " + Literal(LookFull / OceanMaskRaster.ShoreReach) + @", g);
-}
-
-float foam_hash(vec2 c) {
-    return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-// Smooth value noise in [0, 1]; the cell is integer, so it stays exact far from the origin.
-float foam_noise(vec2 p) {
-    vec2 c = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(foam_hash(c), foam_hash(c + vec2(1.0, 0.0)), f.x),
-        mix(foam_hash(c + vec2(0.0, 1.0)), foam_hash(c + vec2(1.0, 1.0)), f.x), f.y);
 }
 
 // Two hashes in [0, 1] per integer cell, without sin, so it costs little per wave sum.
@@ -558,6 +583,43 @@ vec3 detail_noise(vec2 q) {
         ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
 }
 
+// Gradient noise at q, about -0.7 to 0.7, smooth across its cells. The cell's x repeats every
+// period cells. The half cell keeps the modulo exact, so no corner hashes differently in two cells.
+float foam_noise(vec2 q, float period) {
+    vec2 i = floor(q);
+    vec2 f = fract(q);
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    vec2 x = vec2(i.x, i.x + 1.0);
+    x -= period * floor((x + 0.5) / period);
+    float a = dot(sea_hash(vec2(x.x, i.y)) * 2.0 - 1.0, f);
+    float b = dot(sea_hash(vec2(x.y, i.y)) * 2.0 - 1.0, f - vec2(1.0, 0.0));
+    float c = dot(sea_hash(vec2(x.x, i.y + 1.0)) * 2.0 - 1.0, f - vec2(0.0, 1.0));
+    float d = dot(sea_hash(vec2(x.y, i.y + 1.0)) * 2.0 - 1.0, f - vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The holes in a sheet of foam: one round hole per jittered cell, each its own size. Returns the
+// distance from q to the nearest hole's centre in that hole's radii, so under 1 inside a hole.
+float foam_holes(vec2 q) {
+    vec2 i = floor(q);
+    vec2 f = fract(q);
+    float s = 9.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 o = vec2(float(x), float(y));
+            vec2 h = sea_hash(i + o);
+            vec2 r = o + h * 0.8 + 0.1 - f;
+            s = min(s, length(r) / (0.35 + 0.4 * fract(h.x * 7.31 + h.y * 3.17)));
+        }
+    }
+    return s;
+}
+
+// Where whitecaps can form, about 0 to 1, at pw (metres along and across the wind).
+float foam_patches(vec2 pw) {
+    return 0.5" + FoamPatchTerms() + @";
+}
+
 // One wave's height factor and phase shift from its weights on both fields.
 vec2 sea_mod(vec4 coarse_w, vec4 fine_w, vec2 group, vec2 warp, vec4 fine) {
     return vec2(clamp(1.0 + dot(coarse_w.xy, group) + dot(fine_w.xy, fine.xy), 0.0, 1.8),
@@ -633,9 +695,11 @@ void fragment() {
     vec2 fw = fwidth(p);
     float footprint = max(max(fw.x, fw.y), 0.001);
     vec3 n = vec3(0.0, 1.0, 0.0);
-    // The full swell height here, independent of how much of it the grid displaced, so the
-    // foam reads the same at every distance.
-    float h = 0.0;
+    // The horizontal displacement's slope (columns: along x, along z), for the foam's Jacobian.
+    // Summed from the fragment's own waves, not the grid's, so the foam reads the same at every
+    // distance the waves are drawn.
+    vec2 bx = vec2(0.0);
+    vec2 bz = vec2(0.0);
     // The warp's slope is in each wave's normal, as the vertex stage's fade reads it. The grouping
     // and fine fields' slopes are left out: they bend a crest by a few per cent at most.
     vec2 group = sea_group(p);
@@ -656,9 +720,12 @@ void fragment() {
         float f = amp * fade * sm.x;
         float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
         float ka = w.z * w.w * f;
+        float s = sin(th);
         n.xz -= kv * (w.w * f * cos(th));
-        n.y -= SWELL_QW[i].x * ka * sin(th);
-        h += w.w * f * sin(th);
+        n.y -= SWELL_QW[i].x * ka * s;
+        float qs = SWELL_QW[i].x * w.w * f * s;
+        bx += w.xy * (kv.x * qs);
+        bz += w.xy * (kv.y * qs);
     }
     // The detail layers run longest first (EmitDetail checks), so the first faded layer ends the sum.
     // A layer's height is DetailSlope times its cell times the noise, the same slope at every cell
@@ -689,19 +756,40 @@ void fragment() {
     // the sheet's own mapping, so C25's seam holds.
     vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb;
     vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
-    // Crest height alone spreads whitecaps too evenly. A drifting patch field decides where they
-    // can form and moves each crest's threshold.
-    vec2 drift = SWELL_DKA[0].xy * (csky_time * 1.5);
-    float patches = foam_noise((p - drift) / 230.0) * 0.65 + foam_noise((p - drift) / 71.0) * 0.35;
-    float breakup = foam_noise((p - drift * 2.0) / 9.0);
-    float crest = smoothstep(0.5, 0.85, h / max(SWELL_CREST * wave_scale, 0.01) + (patches - 0.55) * 0.5);
-    float foam = crest * smoothstep(0.55, 0.8, patches) * smoothstep(0.25, 0.85, breakup);
-    col = mix(col, vec3(0.6, 0.65, 0.68), foam * foam_strength * (1.0 - sheet));
+    // Foam forms where the swell bunches the surface, its Jacobian below 1, which rides each crest.
+    // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
+    float bunch = (1.0 - ((1.0 - bx.x) * (1.0 - bz.y) - bz.x * bx.y)) / FOAM_JAC_SIGMA;
+    float foam = 0.0;
+    if (bunch > " + Literal(FoamFromSigmas - (0.75f * FoamPatchShift)) + @") {
+        vec2 wind = SWELL_DKA[0].xy;
+        vec2 pw = vec2(dot(p, wind), dot(p, vec2(-wind.y, wind.x)));
+        float patches = foam_patches(pw);
+        float crest = smoothstep(" + Literal(FoamFromSigmas) + @", " + Literal(FoamFullSigmas) + @", bunch + (patches - 0.5) * " + Literal(FoamPatchShift) + @")
+            * smoothstep(0.5, 0.75, patches);
+        crest *= smoothstep(0.42, 0.62, 0.5 + foam_noise(pw * " + Literal(1f / FoamBreakupCell) + @", 65536.0));
+        foam = crest;
+        // Up close a whitecap breaks into patches whose mean is the crest's foam. They fade in with
+        // the footprint as the detail layers do; their edge widens with it, so none shimmers.
+        float near = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", " + Literal(FoamCellFine) + @" / footprint);
+        if (near > 0.0) {
+            vec2 q = pw * vec2(" + Literal(1f / (FoamCellCoarse * FoamStretch)) + @", " + Literal(1f / FoamCellCoarse) + @");
+            vec2 warp = vec2(foam_noise(q, 65536.0), foam_noise(q + vec2(17.0, 9.0), 65536.0));
+            float cover = " + Literal(FoamCover) + @" * crest * clamp(1.0 + 2.5 * warp.x, 0.0, 2.0);
+            float s = foam_holes(q * " + Literal(FoamCellCoarse / FoamCellFine) + @" + warp * 1.2 + vec2(31.0, -17.0));
+            float hole = 1.3 - 1.6 * cover;
+            float edge = max(0.04, " + Literal(2f / FoamCellFine) + @" * footprint);
+            float lump = smoothstep(hole - edge, hole + edge + 0.35, s) * min(cover * 20.0, 1.0);
+            foam = mix(crest, lump * " + Literal(1f / FoamCover) + @", near);
+        }
+    }
+    float foam_mix = min(foam * foam_strength, 1.0) * (1.0 - sheet);
+    col = mix(col, vec3(0.6, 0.65, 0.68), foam_mix);
     ALBEDO = col;
     METALLIC = 0.0;
     SPECULAR = " + Literal(SceneBuilder.WaterSpecular) + @";
     // Lost slope detail turns into roughness, so the far sea keeps a glossy sheen, not a mirror.
-    ROUGHNESS = mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + Literal(SceneBuilder.WaterRoughness) + @", sheet);
+    // Foam is matte where it covers the water.
+    ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), " + Literal(SceneBuilder.WaterRoughness) + @", sheet), " + Literal(FoamRoughness) + @", foam_mix);
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
 }");
         return sb.ToString();
@@ -909,4 +997,7 @@ void fragment() {
 
     // One fine-detail noise layer: drift direction off the wind, cell size in metres, drift in m/s.
     private readonly record struct Detail(float AngleDeg, float Cell, float Speed);
+
+    // One octave of the foam's patch field: cell size in metres, weight, drift along the wind in m/s.
+    private readonly record struct FoamPatch(float Cell, float Weight, float Speed);
 }

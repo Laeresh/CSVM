@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, A3's look findings
 
 31. ☑ Break up the swell's wave lattice
-32. ☐ Foam that reads as foam up close
+32. ☑ Foam that reads as foam up close
 33. ☑ A gradual fade to flat water at the coast
 
 ## Dependency and parallelism notes
@@ -1057,7 +1057,47 @@ grid from crawling; a warp changes the effective wavelength locally, so keep the
 length. A warp evaluated differently in the vertex and fragment stages swims the normals against
 the surface.
 
-## D32 ☐ Foam that reads as foam up close
+## D32 ☑ Foam that reads as foam up close
+
+**Landed.** The glitch was the foam's hash. `foam_hash` was `fract(sin(dot(c, k)) * 43758.5453)` on
+world-scale cells (dot products of 5e4 to 4e5 at C1B), so the GPU's rounding of a corner computed from
+its two neighbouring cells differed, and the 43758 gain turned that into a different value: the value
+noise jumped at cell boundaries. Foam alone at the low-pass hold showed straight-edged quads and cut
+blobs from the 230 m and 71 m patch octaves (they stay with the 9 m breakup off); the same frame with a
+sine-free hash has none. In motion those blocks slide through the view on the patch drift
+(`.scratch\d32\strip-d32-low-foam.png`, `strip-d32-low-before-consecutive.png`); they are also D33's
+blocky whitecaps beside the C1B rocks. No frame-to-frame flicker was found: consecutive frames match.
+
+Changes in `Effects/Ocean.cs`'s fragment stage:
+- Foam forms where the swell bunches the surface. The swell loop sums the horizontal displacement's
+  slope (`bx`, `bz`, from each wave's local wavevector and its footprint fade) and the foam reads the
+  Jacobian's drop below 1 in standard deviations (`FOAM_JAC_SIGMA` = Choppiness / sqrt(2 x waves)),
+  gated between 1.3 and 2.3 of them (`FoamFromSigmas`, `FoamFullSigmas`), so a whitecap grows and
+  fades with its crest. Crest height (`SWELL_CREST`, `CrestSigmas`) is gone.
+- All foam noise is gradient noise on `sea_hash` (`foam_noise`): the patch field (230 m and 71 m,
+  weights 0.65 and 0.35, shifting the threshold by up to 1.2 sigmas) and a 12 m breakup. The patch
+  field drifts along the wind by one whole period of cells per `csky_time` wrap (23 and 76 cells,
+  1.47 and 1.50 m/s; `FoamPatches`, `FoamPatchTerms`), its modulo offset by half a cell so no corner
+  hashes differently in two cells. The breakup and the near shape ride the grid parameter, the water.
+- Up close (cell of 1.4 m at 4 to 9 pixels, the detail layers' footprint fade) a whitecap becomes a
+  sheet with round holes (`foam_holes`, one hole per jittered cell, radii 0.35 to 0.75 cells), warped
+  and thinned by 3.2 m noise stretched 1.8 times along the wind. It covers about 30 % of the crest's
+  foam at `foam_strength` / 0.3 (`FoamCover`), so its mean is the far foam. Foam takes roughness 0.6
+  in the share it covers. It stays off at the shore look ramp (`1 - sheet`).
+
+Far share: foam alone over the C1B cruise frame's upper half averages 2.92 levels, against 2.66 before
+and 3.03 before D31, with brighter, larger flecks than before. `gpu_ms` at the low-pass hold,
+1920x1080, ocean minus `--no-ocean` in the same round, two quiet-gated rounds (`.scratch\d32\ab.ps1`):
+before +0.98 and +0.99 ms, after +1.03 and +1.02 ms (Decision 11's budget is 1.5). Montages in the D32
+tree's `.scratch\d32\`: `montage-d32.png` (flat, before, after at the low-pass hold, 10 m over the
+water, C1B cruise and the C1B coast), `montage-d32-near.png`, `montage-d32-cruise.png` (with the
+pre-D31 foam), `montage-d32-coast.png` and `montage-d32-coast-foam.png`; strips `strip-d32-near.png`
+(every sixth frame over half a second) and `strip-d32-near-consecutive.png`. Noticed, not changed: at
+10 m a nearer crest's faceted silhouette cuts the foam behind it along a grid edge.
+
+**Verified.** The user accepted the montage; the motion judgement comes at the Wave D re-check flight. In the D32 tree: units 6338 passed, 3 skipped; `graphics-ocean-switch` and `graphics-water-quality` pass, engine errors clean. Owed: the complete battery with the Wave D re-pins.
+
+**Original approach (kept for reference).**
 
 **Goal.** Close to the water the foam reads as foam (broken, streaky whitecaps on the crests) and
 does not flicker or pop; from a distance it keeps the look the user approved.
