@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using CSVM.UI.Boards;
+using CSVM.UI.Menu;
 using CSVM.Utils;
 using Godot;
 
@@ -70,13 +71,22 @@ public sealed partial class BuildStamp : Node
 
     /// <summary>Gets or sets what an icon's click runs, given the folder and its log name.
     /// <see cref="FolderOpener.Open"/> by default; a suite swaps it so no window opens.</summary>
-    public Func<string, string, string?> Opener { get; set; } = FolderOpener.Open;
+    public Func<string, string, FolderOpenResult> Opener { get; set; } = FolderOpener.Open;
+
+    /// <summary>Gets or sets the screen's own messagebox: it stands the words there and answers true,
+    /// or false where the screen has none. <see cref="DesktopModeNotice"/> carries them then. The
+    /// launcher sets it to the Original menu's warning box.</summary>
+    public Func<string, bool>? Messagebox { get; set; }
 
     /// <summary>Gets the logs folder icon.</summary>
     public Button LogsButton { get; private set; } = null!;
 
     /// <summary>Gets the user folder icon.</summary>
     public Button UserButton { get; private set; } = null!;
+
+    /// <summary>Gets the dialog an icon raises when Game Mode refused its folder and the screen has
+    /// no messagebox of its own (<see cref="FolderButtonText.DesktopModeOnly"/>).</summary>
+    public AcceptDialog DesktopModeNotice { get; private set; } = null!;
 
     /// <summary>Gets a value indicating whether the stamp is on screen.</summary>
     public bool Shown => _layer.Visible;
@@ -97,6 +107,7 @@ public sealed partial class BuildStamp : Node
         if (!shown)
         {
             _holding = false;
+            DesktopModeNotice.Hide();
             return;
         }
         int size = Mathf.RoundToInt(ReferenceFontSize * WindowScale());
@@ -134,8 +145,14 @@ public sealed partial class BuildStamp : Node
         _row.OffsetBottom = -CornerInsetPx;
         _row.OffsetTop = _row.OffsetBottom;
 
-        LogsButton = Icon(LogsGlyph, "logs", LogsTooltip, () => Opener(LogsFolder, "logs folder"));
-        UserButton = Icon(UserGlyph, "user", UserTooltip, () => Opener(UserFolder, "user folder"));
+        LogsButton = Icon(LogsGlyph, "logs", LogsTooltip, () => Open(LogsFolder, "logs folder"));
+        UserButton = Icon(UserGlyph, "user", UserTooltip, () => Open(UserFolder, "user folder"));
+
+        // Godot's own dialog, embedded in the game window as the install picker is. Its OK takes the
+        // focus, so A, B and Escape reach it through Godot's GUI. ⚠ A menu that polls the pad must
+        // stand still while it shows (MenuHost.Held), or the A that closes it presses a row too.
+        DesktopModeNotice = new AcceptDialog { Title = "CSVM", DialogText = FolderButtonText.DesktopModeOnly };
+        AddChild(DesktopModeNotice);
 
         // ⚠ Keep the CSVM prefix on every presentation. A bare version number in the corner of the
         // Original menu is read as the original game's own, and a bug report has to name the build.
@@ -158,6 +175,17 @@ public sealed partial class BuildStamp : Node
         root.AddChild(_row);
         _layer.AddChild(root);
         AddChild(_layer);
+    }
+
+    // An icon's press. Only Game Mode's refusal says anything, in the screen's own messagebox where
+    // it has one; a failed open is the log's.
+    private void Open(string folder, string what)
+    {
+        if (Opener(folder, what).Outcome == FolderOpenOutcome.Refused
+            && Messagebox?.Invoke(FolderButtonText.DesktopModeOnly) != true)
+        {
+            DesktopModeNotice.PopupCentered();
+        }
     }
 
     // One icon. ⚠ Keep FocusMode None. A focusable icon takes the focus on a click. Enter or A on

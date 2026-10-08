@@ -917,6 +917,20 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
     }
 
+    /// <summary>Stands <paramref name="message"/> in the shell's warning box and redraws. False while
+    /// the menu is not on screen, where nothing would show it.</summary>
+    public bool RaiseWarning(string message)
+    {
+        if (!_shown || _shell == null)
+        {
+            return false;
+        }
+
+        _shell.RaiseWarning(message);
+        Redraw();
+        return true;
+    }
+
     public void Hide()
     {
         _shown = false;

@@ -124,6 +124,30 @@ public class MenuHostTests
         Assert.False(host.OnMainMenu);
     }
 
+    /// <summary>A dialog over the menu owns the pad, so the presentation stands still under it. The
+    /// seats are primed once it goes, so the press that closed it is not the menu's.</summary>
+    [Fact]
+    public void AHeldMenuDoesNotTickAndPrimesItsSeatsWhenReleased()
+    {
+        var host = Host(out var seat, out _);
+        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        host.Show(MenuReturnDestination.TopLevel);
+        bool held = true;
+        host.Held = () => held;
+        int primes = seat.Primes;
+
+        seat.Enqueue(new MenuCommands { Accept = true });
+        host.Tick(1f / 60f);
+        host.Tick(1f / 60f);
+        Assert.Equal("wizard-chapter", ((FakeWizardPresentation)host.Active!).Screen);
+        Assert.Equal(primes, seat.Primes);
+
+        held = false;
+        host.Tick(1f / 60f);
+        host.Tick(1f / 60f);
+        Assert.Equal(primes + 1, seat.Primes);
+    }
+
     [Fact]
     public void DeactivateEndsThePresentationAndDiscardsTransientFeatureState()
     {

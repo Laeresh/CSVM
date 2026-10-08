@@ -52,8 +52,11 @@ path: [../org/logging.md](../org/logging.md). `HitchSidecar.cs` shares this sink
 ## src/Utils/FolderOpener.cs
 Shows a folder in the system file browser: `Open` creates it if missing, hands it to
 `OS.ShellOpen` (a directory path opens the file browser on Windows and Linux alike) and logs the
-open or the failure under `core`. The two folder icons in `UI/Screens/BuildStamp.cs` and
-`Sticks/StickScreens.cs`'s profiles folder button go through it.
+open or the failure under `core`. In Game Mode (`SteamOs.cs`) it refuses before the shell and logs
+the refusal, since gamescope shows no file browser and the shell still answers `Ok`. It returns a
+`FolderOpenResult` (opened, failed or refused, and the path), so a caller's screen tells a refusal
+from a failure; `Shell` is the seam a suite records. The two folder icons in
+`UI/Screens/BuildStamp.cs` and `Sticks/StickScreens.cs`'s profiles folder button go through it.
 
 ## src/Utils/LocalNetworks.cs
 The IPv4 networks this machine sits on, for the LAN search: `Ipv4()` lists the address and mask of
@@ -486,8 +489,7 @@ hidden. Read `Launch/Launcher.cs` next for the three sites.
 ## src/Utils/ScreenKeyboard.cs
 Steam's on-screen keyboard, raised through `OS.ShellOpen("steam://open/keyboard")` and lowered
 through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam shortcut gets it.
-`Available` is read once from the environment: `SteamDeck` or `SteamOS` set to 1, under
-`XDG_CURRENT_DESKTOP=gamescope`, which is Game Mode; Desktop Mode would open it behind the window.
+`Available` starts as `SteamOs.InGameMode`; Desktop Mode would open it behind the window.
 One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
 tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
 `Original/OriginalShell.cs`, `Screens/LaunchMenu.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
@@ -496,3 +498,9 @@ tap, never on focus, and calls `Follow` each frame so leaving its field lowers i
 One field the on-screen keyboard can be raised for: its owner and id, the label and the live text
 the echo strip repeats (masked where the field masks it), and whether the strip repeats it at all.
 The in-flight chat opts out, its line being drawn at the top left already. `ScreenKeyboard.cs` holds it.
+
+## src/Utils/SteamOs.cs
+Whether the run is in SteamOS Game Mode: `InGameMode` is read once from the environment
+(`SteamDeck` or `SteamOS` set to 1, under `XDG_CURRENT_DESKTOP=gamescope`) and is settable, so a
+suite takes either branch. `ScreenKeyboard.cs` raises its keyboard only there, and
+`FolderOpener.cs` refuses to open a folder there.

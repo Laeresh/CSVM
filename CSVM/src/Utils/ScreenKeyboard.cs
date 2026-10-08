@@ -20,9 +20,9 @@ public static class ScreenKeyboard
     /// <summary>Asks the running Steam client to hide its keyboard.</summary>
     public const string CloseUrl = "steam://close/keyboard";
 
-    /// <summary>Whether this run can raise the keyboard, read once from the environment Steam
-    /// launched it with (<see cref="Detect"/>). A suite sets it to drive the fields.</summary>
-    public static bool Available { get; set; } = Detect(System.Environment.GetEnvironmentVariable);
+    /// <summary>Whether this run can raise the keyboard: Game Mode (<see cref="SteamOs.InGameMode"/>),
+    /// since Desktop Mode opens it behind a fullscreen window. A suite sets it to drive the fields.</summary>
+    public static bool Available { get; set; } = SteamOs.InGameMode;
 
     /// <summary>Hands a URL to the system's handler. A seam, so a suite records the calls rather
     /// than opening anything.</summary>
@@ -30,15 +30,6 @@ public static class ScreenKeyboard
 
     /// <summary>The field the keyboard was raised for, or null while it is down.</summary>
     public static ScreenKeyboardField? Shown { get; private set; }
-
-    /// <summary>Whether <paramref name="env"/> names a SteamOS device in Game Mode. Desktop Mode is
-    /// excluded because the keyboard opens behind a fullscreen window there.</summary>
-    public static bool Detect(Func<string, string?> env)
-    {
-        ArgumentNullException.ThrowIfNull(env);
-        bool steamOs = env("SteamDeck") == "1" || env("SteamOS") == "1";
-        return steamOs && string.Equals(env("XDG_CURRENT_DESKTOP"), "gamescope", StringComparison.OrdinalIgnoreCase);
-    }
 
     /// <summary>Raises the keyboard for <paramref name="field"/>, or does nothing where none can be
     /// raised. Raising it again for the field already holding it is the way back after the player

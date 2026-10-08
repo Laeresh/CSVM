@@ -891,6 +891,8 @@ public partial class Launcher : Node3D
         // build a capture came from is a fact about the binary, not about a presentation.
         _buildStamp = new UI.Screens.BuildStamp(_repoRoot, _exported);
         AddChild(_buildStamp);
+        // A Game Mode refusal stands in the Original menu's own warning box, the stamp's dialog elsewhere.
+        _buildStamp.Messagebox = words => _menuHost?.Active is UI.Menu.Original.OriginalPresentation original && original.RaiseWarning(words);
 
         // The strip over Steam's on-screen keyboard, process-wide because the menus, the extraction
         // screen and the flight chat all raise it. It draws nothing on any other machine.
@@ -2570,6 +2572,7 @@ public partial class Launcher : Node3D
             });
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
         host.Availability = OriginalAvailable;
+        host.Held = () => _buildStamp?.DesktopModeNotice?.Visible == true;
         host.Features.Add(new FreeFlightFeature());
         host.Features.Add(InstantActionFeature.ForDataRoot(_dataRoot));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,

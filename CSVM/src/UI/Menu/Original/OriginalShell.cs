@@ -708,6 +708,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// text. The presentation calls it after every frame.</summary>
     public void FollowKeyboard() => ScreenKeyboard.Follow(KeyboardOwner, CapturingText ? FocusedKey : null);
 
+    /// <summary>Stands a one-answer warning box over whatever screen shows. It carries a refusal from
+    /// outside the screen modules, such as the version stamp's folder icons in Game Mode.</summary>
+    public void RaiseWarning(string message) => RaiseDialog(message, DialogIcon.Warning, Ok());
+
     /// <summary>One menu frame of the network door, whatever screen shows: the door is stepped, the
     /// cabin's co-op offer renewed and the Connection pages kept current. Returns whether the
     /// picture changed. It has whenever the door's <see cref="NetPlayFeature.Revision"/> moved,

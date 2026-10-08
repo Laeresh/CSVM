@@ -528,6 +528,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list with the host's bot rows, picks and Ready, chat, and the launch gate.
 - `src/UI/Menu/DogfightBots.cs`, the bot rows a Dogfight host keeps and their rules, shared by the network lobby and the local join board: add, fill, rename, edit, the newest yielding, the launch entries.
 - `src/UI/Menu/CoopDoorText.cs`, the words the campaign's network door is drawn in: the host's band, the advertised session's name, the join and waiting boards' status lines.
+- `src/UI/Menu/FolderButtonText.cs`, the words a folder button's screen shows when SteamOS Game Mode refused the open.
 - `src/UI/Menu/NetDoorAid.cs`, the loopback multiplayer doors the screenshot aids stand on: no socket, no router, a campaign host already advertising.
 - `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, its three partials below, and the dialog and cheats it holds.
 - `src/UI/Menu/Original/OriginalShellDialog.cs`, the standing messagebox the shell holds: the box raised and taken down, the `DIALOG:*` answer keys, its rows and how it composes over the screen.
@@ -585,7 +586,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/DisplayModeSetting.cs`, the window's display mode: the saved word against the shipped borderless default, and the one place the window mode is set.
 - `src/Utils/EffectPools.cs`, the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs`, the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
-- `src/Utils/FolderOpener.cs`, creates a folder if missing and shows it in the system file browser, logging the open or the failure; the stamp's icons and the profiles folder button use it.
+- `src/Utils/FolderOpener.cs`, creates a folder if missing and shows it in the system file browser, logging the open or the failure, and refuses in SteamOS Game Mode, answering which of the three happened; the stamp's icons and the profiles folder button use it.
 - `src/Utils/GameClock.cs`, the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
 - `src/Utils/GraphicsMode.cs`, the opt-in enhanced-lighting setting, resolved at launch into the one boolean every scene builder reads, and switched live after it.
 - `src/Utils/HitchMonitor.cs`, the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record; it logs nothing itself.
@@ -632,6 +633,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/WorldBackdrop.cs`, the persistent environment's background: flat black while the menu owns the screen, the sky again at every launch.
 - `src/Utils/ScreenKeyboard.cs`, Steam's on-screen keyboard by `steam://` URL, raised for a field a pad press or a tap armed, in SteamOS Game Mode only.
 - `src/Utils/ScreenKeyboardField.cs`, one field the on-screen keyboard can be raised for: owner, id, label, live text and whether it is echoed.
+- `src/Utils/SteamOs.cs`, whether the run is in SteamOS Game Mode, read once from the environment and settable for a suite.
 
 ### `src/Testing/`, the in-engine assertion harness
 

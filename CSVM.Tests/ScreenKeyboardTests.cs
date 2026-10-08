@@ -33,26 +33,6 @@ public sealed class ScreenKeyboardTests : IDisposable
         ScreenKeyboard.Available = _available;
     }
 
-    [Theory]
-    [InlineData("1", null, "gamescope", true)]
-    [InlineData(null, "1", "gamescope", true)]
-    [InlineData("1", "1", "GameScope", true)]
-    [InlineData("1", null, "KDE", false)]
-    [InlineData("1", null, null, false)]
-    [InlineData(null, null, "gamescope", false)]
-    [InlineData("0", null, "gamescope", false)]
-    public void OnlyASteamOsDeviceInGameModeRaisesIt(string? deck, string? steamOs, string? desktop, bool expected)
-    {
-        var env = new Dictionary<string, string?>
-        {
-            ["SteamDeck"] = deck,
-            ["SteamOS"] = steamOs,
-            ["XDG_CURRENT_DESKTOP"] = desktop,
-        };
-
-        Assert.Equal(expected, ScreenKeyboard.Detect(name => env.GetValueOrDefault(name)));
-    }
-
     [Fact]
     public void ARunWithoutItOpensNothing()
     {

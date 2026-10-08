@@ -698,10 +698,10 @@ The build's version as `CSVM v<version>` in the menu's bottom-right corner, so a
 stranger sends carries the build it was taken on and the number is not read as the original
 game's own. Two PromptFont icons left of it open the logs folder (the open log file's directory)
 and Godot's user folder through `Utils/FolderOpener.cs`. They are mouse-only, never focusable,
-and `Launcher` keeps their clicks from Original's polled pointer. Built once by `Launcher` beside
-`PerfHud`, shown only while `MenuHost.OnMainMenu` holds or `NoGameDataScreen.cs` is up: deeper
-screens have bottom-edge plaques it overlaps at a Steam Deck's aspect. It draws on
-`HudLayers.PerfReadout`, above the boards. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+and `Launcher` keeps their clicks from Original's polled pointer. A Game Mode refusal shows in
+`Messagebox` (Original's box) or `DesktopModeNotice`. Built once by `Launcher` beside `PerfHud`,
+shown only while `MenuHost.OnMainMenu` holds or `NoGameDataScreen.cs` is up: deeper screens have
+bottom-edge plaques it overlaps at a Steam Deck's aspect. It draws on `HudLayers.PerfReadout`, above the boards. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs
 A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its
@@ -915,8 +915,8 @@ presentation runs through `PresentationResolution.Resolve` over registration plu
 availability answer from the two command-line flags alone, keeps the pre-availability request for the startup log, and answers a
 blank, unknown or unavailable request with a fallback reason rather than a throw. `Show` creates
 the selected presentation once and re-activates that instance on every later call, so a return
-from flight lands on the screens as they were left; `Tick` runs it only while `Shown`, and
-`Deactivate` ends it and discards the features' transient state, the first half of a switch.
+from flight lands on the screens as they were left; `Tick` runs it only while `Shown` and not
+`Held` (a dialog owning the pad, every seat primed once it goes), and `Deactivate` ends it and discards the features' transient state, the first half of a switch.
 
 ## src/UI/Menu/BuiltIn/BuiltInPresentation.cs
 The Built-in presentation (`CSVM.UI.Menu.BuiltIn`): `LaunchMenu` registered under
@@ -1549,6 +1549,11 @@ count, then `HostFallbackLines`, which waits for the master server's outcome: th
 guest types (`HostAddressStatus` on the board), an advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
 `WaitingStatus`, naming a join by code by its code), why a guest cannot join by code (`NoMasterServer`, `NoWebRtc`, `CodeJoinUnavailable`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both
 versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in as a delegate, since only the caller holds the langui table.
+
+## src/UI/Menu/FolderButtonText.cs
+The words a folder button's screen shows, CSVM's own: `DesktopModeOnly`, which the version stamp's
+icons and the Controls screen's stick profiles button show when `Utils/FolderOpener.cs` refused
+the open in SteamOS Game Mode.
 
 ## src/UI/Menu/NetDoorAid.cs
 The multiplayer doors the `--menu=` screenshot aids stand on: a host door over a loopback wire with
