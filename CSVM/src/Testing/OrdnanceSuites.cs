@@ -845,20 +845,18 @@ internal static class OrdnanceSuites
             textures.Dispose();
         }
 
-        // --- the same thing through a REAL hit ray, which needs a real flyout body ---------------
-        // The box is built over the round's instanced FLYOUT MODEL, so this half wants a chapter
-        // gamez; C1 carries a_torpedo. Built without collision, so nothing but the round is solid.
-        if (!ctx.RunsChapterWorld("C1"))
-            return;
-        ctx.WithWorld("C1", collision: false, world =>
+        // --- the same thing through a REAL hit ray, over a real flyout body ---------------------
+        // The box is built over the round's instanced FLYOUT MODEL. C1's a_torpedo carries one, and so
+        // does the synthetic templates' body. Nothing but the round is solid.
+        EffectStageSuiteHelper.WithAnimSource(ctx, "C1", source =>
         {
             var worldTextures = new TextureArchive(texturesPath);
             ProjectilePool? live = null;
             try
             {
                 live = new ProjectilePool(worldTextures, null, null,
-                    flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
-                    flyoutAnims: world.Session.Program);
+                    flyoutGamez: source.Gamez, flyoutScene: source.Scene,
+                    flyoutAnims: source.Program);
                 ctx.Host.AddChild(live);
 
                 var origin = new Vector3(6000f, 3000f, 0f);
@@ -914,14 +912,14 @@ internal static class OrdnanceSuites
                 // Inside RANGE_MINIMUM the intersect bit is clear, so gunfire passes through the
                 // drawn body.
                 float early = ShootIt();
-                ctx.Check(Mathf.IsEqualApprox(early, 10f),
+                ctx.Check(Mathf.IsEqualApprox(early, pool0),
                     $"a torpedo still inside RANGE_MINIMUM takes nothing from a round straight through it health={early}");
 
                 for (int i = 0; i < 60 * 6; i++)
                     live.SimStep(1f / 60f);
                 float after = ShootIt();
-                ctx.Check(after >= 0f && after < 10f,
-                    $"once revealed, the same shot spends {10f - after} of its 10 points through the real hit ray health={after}");
+                ctx.Check(after >= 0f && after < pool0,
+                    $"once revealed, the same shot spends {pool0 - after} of its {pool0:0} points through the real hit ray health={after}");
 
                 int hits = 1;
                 while (flyouts.Count > 0 && !flyouts[0].Destroyed && hits < 40)
@@ -930,7 +928,7 @@ internal static class OrdnanceSuites
                     hits++;
                 }
                 ctx.Check(flyouts.Count > 0 && flyouts[0].Destroyed
-                          && hits == Mathf.CeilToInt(10f / (gun.HealthDamage ?? 1f)),
+                          && hits == Mathf.CeilToInt(pool0 / (gun.HealthDamage ?? 1f)),
                     $"and {hits} hits of {gun.Id} empty the pool, the count its HEALTH_DAMAGE {gun.HealthDamage} predicts");
                 live.SimStep(1f / 60f);
                 flyouts.Clear();
@@ -2179,8 +2177,7 @@ internal static class OrdnanceSuites
             textures.Dispose();
         }
 
-        if (ctx.RunsChapterWorld(ctx.Chapter))
-            UpperRingPlacement(ctx);
+        UpperRingPlacement(ctx);
     }
 
     // The enhanced burst light, driven end to end: a wep_06 dropped onto a plate, the effect sink
@@ -2604,17 +2601,14 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        // ponytail: no synthetic gun authors an impact ANIMATION, so that run notes the gun leg
-        // and skips it. An invented gunhit gun in weapons.json would close the gap.
-        var gun = PickWeapon(ctx, weapons, "wep_30", w => w.IsGun
-            && w.ImpactFor(SurfaceRegistry.Player)?.Animation is { } hit && w.ImpactFor(SurfaceRegistry.Default)?.Animation == hit);
         if (PickWeapon(ctx, weapons, "wep_10", w => w.BeeperTime != null) is not { } beeper
             || PickWeapon(ctx, weapons, "wep_11", w => w.BeeperSeeker) is not { } seeker
             || PickWeapon(ctx, weapons, "wep_07", w => ProjectilePool.CarriesLockOn(w) && w.DetonationDistance is > 0f
                 && !ProjectilePool.AircraftDamageDiscarded(w)
                 && w.ImpactFor(SurfaceRegistry.Default) is { Animation: { } fx } && w.ImpactFor(SurfaceRegistry.Player) is { Animation: { } own }
                 && fx != own) is not { } flak
-            || (gun == null && !ctx.SyntheticData))
+            || PickWeapon(ctx, weapons, "wep_30", w => w.IsGun
+                && w.ImpactFor(SurfaceRegistry.Player)?.Animation is { } hit && w.ImpactFor(SurfaceRegistry.Default)?.Animation == hit) is not { } gun)
         {
             ctx.Check(false, $"wep_07, wep_10, wep_11 and wep_30 resolve");
             return;
@@ -2645,12 +2639,12 @@ internal static class OrdnanceSuites
                 $"wep_11's default row authors ballflare.flt + snd_missile_seeker (the white ground flare)");
             ctx.Check(seeker.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball" },
                 $"wep_11's player row authors large_fireball");
-            ctx.Check(gun!.ImpactFor(SurfaceRegistry.Player) is { Animation: "3040slug_gunhit" }
+            ctx.Check(gun.ImpactFor(SurfaceRegistry.Player) is { Animation: "3040slug_gunhit" }
                     && gun.ImpactFor(SurfaceRegistry.Default) is { Animation: "3040slug_gunhit" },
                 $"wep_30's player and default rows both author 3040slug_gunhit");
         }
 
-        string? gunHit = gun?.ImpactFor(SurfaceRegistry.Player)?.Animation;
+        string? gunHit = gun.ImpactFor(SurfaceRegistry.Player)?.Animation;
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -2737,26 +2731,19 @@ internal static class OrdnanceSuites
 
             // A gun round striking the airframe: the player row's gunhit reaches the runtime and no
             // stand-in sprite draws beside it. CONTROL: the same round on a plate keeps its spark.
-            if (gun == null)
-            {
-                ctx.Note($"gun leg left out: no weapon in the synthetic tree is a gun whose player and default rows author one ANIMATION");
-            }
-            else
-            {
-                ctx.SyncPhysics();
-                var fuselage = victim.WorldPosition
-                    + (victim.Collider?.Parts.Where(p => p.Name == "fuselage").Select(p => p.Local.Origin).FirstOrDefault() ?? Vector3.Zero);
-                var onAirframe = Strike(gun, fuselage + new Vector3(0f, 0f, -30f), fuselage);
-                ctx.Check(onAirframe.Name == gunHit && onAirframe.Sprites == 0,
-                    $"a {gun.Id} round on an aircraft hands the player row's {gunHit} to the effects runtime and draws no stand-in sprite (played={onAirframe.Name ?? "nothing"} sprites={onAirframe.Sprites})");
-                var groundAt = origin + new Vector3(-4000f, 0f, 0f);
-                plate = CombatSuites.Plate("impact-fx-ground", new Vector3(40f, 0.2f, 40f), groundAt);
-                ctx.Host.AddChild(plate);
-                ctx.SyncPhysics();
-                var onGround = Strike(gun, groundAt + new Vector3(0f, 30f, 0f), groundAt);
-                ctx.Check(onGround.Name == gunHit && onGround.Sprites == 1,
-                    $"and the same round on the ground hands the default row's gunhit over and still draws its one stand-in sprite (played={onGround.Name ?? "nothing"} sprites={onGround.Sprites})");
-            }
+            ctx.SyncPhysics();
+            var fuselage = victim.WorldPosition
+                + (victim.Collider?.Parts.Where(p => p.Name == "fuselage").Select(p => p.Local.Origin).FirstOrDefault() ?? Vector3.Zero);
+            var onAirframe = Strike(gun, fuselage + new Vector3(0f, 0f, -30f), fuselage);
+            ctx.Check(onAirframe.Name == gunHit && onAirframe.Sprites == 0,
+                $"a {gun.Id} round on an aircraft hands the player row's {gunHit} to the effects runtime and draws no stand-in sprite (played={onAirframe.Name ?? "nothing"} sprites={onAirframe.Sprites})");
+            var groundAt = origin + new Vector3(-4000f, 0f, 0f);
+            plate = CombatSuites.Plate("impact-fx-ground", new Vector3(40f, 0.2f, 40f), groundAt);
+            ctx.Host.AddChild(plate);
+            ctx.SyncPhysics();
+            var onGround = Strike(gun, groundAt + new Vector3(0f, 30f, 0f), groundAt);
+            ctx.Check(onGround.Name == gunHit && onGround.Sprites == 1,
+                $"and the same round on the ground hands the default row's gunhit over and still draws its one stand-in sprite (played={onGround.Name ?? "nothing"} sprites={onGround.Sprites})");
 
             // Steps one round from `from` toward `at` until it draws or plays, then reads both. The
             // idle steps first let the per-name gun-effect throttle lapse between two strikes.
@@ -2782,18 +2769,16 @@ internal static class OrdnanceSuites
             textures.Dispose();
         }
 
-        // --- the seeker's ground flare needs the chapter gamez, where ballflare.flt is BOTH a
-        // template root and a bound def: the def must win, or a bare 1 m disc stands in.
-        if (!ctx.RunsChapterWorld("C1"))
-            return;
-        ctx.WithWorld("C1", collision: false, world =>
+        // --- the seeker's ground flare needs a gamez where ballflare.flt is BOTH a template root
+        // and a bound def, C1's or the synthetic templates. The def must win, or a bare disc stands in.
+        EffectStageSuiteHelper.WithAnimSource(ctx, "C1", source =>
         {
-            var bound = EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
-            var sub = world.Session.Program.Subset(bound);
+            var bound = EffectCatalogue.WorldEffectAnimNames(source.Program);
+            var sub = source.Program.Subset(bound);
             ctx.Check(sub.ByAnimName("ballflare.flt").Count > 0,
                 $"the world-effects bind carries the ballflare.flt def");
-            ctx.Check(world.Gamez.FindByName("ballflare.flt") != null,
-                $"and C1's gamez carries a same-named template root (the name collision under test)");
+            ctx.Check(source.Gamez.FindByName("ballflare.flt") != null,
+                $"and the gamez carries a same-named template root (the name collision under test)");
 
             var worldTextures = new TextureArchive(texturesPath);
             ProjectilePool? live = null;
@@ -2802,8 +2787,8 @@ internal static class OrdnanceSuites
             {
                 var plays = new List<string>();
                 live = new ProjectilePool(worldTextures, null, null,
-                    flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
-                    flyoutAnims: world.Session.Program)
+                    flyoutGamez: source.Gamez, flyoutScene: source.Scene,
+                    flyoutAnims: source.Program)
                 {
                     EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
                     // The production predicate (AnimRuntime.Handles over the bound subset).
@@ -3121,12 +3106,12 @@ internal static class OrdnanceSuites
         "a pooled effect copy is re-reset on checkout: the sonic burst played five times over a four-slot pool draws its rings on the fifth play exactly as on the first (BL-406)")]
     internal static void EffectPoolReset(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             const int slots = 4;
             const int plays = slots + 1;
             const string anim = "sonic_ground_effect";
-            var stage = StageBurstRoots(ctx, world, anim, slots);
+            var stage = StageBurstRoots(ctx, source, anim, slots);
             var runtime = AnimRuntime.ForEffects(
                 AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
                 1, new CountingEmitterFactory(), false, SuiteConstants.BurstTtl,
@@ -3136,7 +3121,7 @@ internal static class OrdnanceSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                runtime.Bind(stage, source.Program.Subset(anim));
                 var slot0 = stage.GetNode<Node3D>("pool0");
                 var readings = new List<List<RingReading>>();
                 // A burst crosses the fade threshold once per ring, and a console line costs about
@@ -3285,13 +3270,13 @@ internal static class OrdnanceSuites
         "a pooled effect copy is restored to its SPAWN POSE on checkout: the HE burst played five times over a four-slot pool, overlapping so the fifth play takes the first's still-live copy, launches its debris from the same pose the first did (BL-511)")]
     internal static void EffectPoolSpawnPose(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             const int slots = 4;
             const int plays = slots + 1;
             const int gapFrames = 30;
             const string anim = "he_ground_effect";
-            var stage = StageBurstRoots(ctx, world, anim, slots);
+            var stage = StageBurstRoots(ctx, source, anim, slots);
             // A TTL past the whole run, so no instance retires and the wrap lands on a copy the
             // pool still counts as live. The stock BurstTtl retires each play before play 5.
             var runtime = AnimRuntime.ForEffects(
@@ -3303,7 +3288,7 @@ internal static class OrdnanceSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                runtime.Bind(stage, source.Program.Subset(anim));
                 var slot0 = stage.GetNode<Node3D>("pool0");
                 var readings = new List<List<(string Node, Vector3 Origin)>>();
                 var handedOut = new List<List<(string Node, Vector3 Origin)>>();
@@ -3354,10 +3339,14 @@ internal static class OrdnanceSuites
     // closure against the chapter gamez, the production derivation, so an unresolvable anchor
     // throws here naming itself) built once per pool slot, each copy hidden, exactly as
     // WorldEffectsFactory stages them. The caller frees the returned stage.
-    internal static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots)
+    internal static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots) =>
+        StageBurstRoots(ctx, AnimSource.Of(world), animName, slots);
+
+    /// <inheritdoc cref="StageBurstRoots(TestContext, TestWorld, string, int)"/>
+    internal static Node3D StageBurstRoots(TestContext ctx, AnimSource source, string animName, int slots)
     {
-        var roots = Flight.Airframe.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
-            Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez));
+        var roots = Flight.Airframe.EffectCatalogue.StageRootsFor(source.Program, new[] { animName },
+            Session.World.WorldEffectsFactory.StageRootResolver(source.Gamez));
         ctx.Check(roots.Count > 0,
             $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
         var stage = new Node3D { Name = $"BurstStage_{animName}" };
@@ -3366,8 +3355,8 @@ internal static class OrdnanceSuites
             var pool = new Node3D { Name = $"pool{slot}" };
             pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
             stage.AddChild(pool);
-            int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                world.Session.Builder.Scene, pool, roots);
+            int built = Session.World.WorldEffectsFactory.BuildEffectStage(source.Gamez,
+                source.Scene, pool, roots);
             ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez (slot {slot})");
             foreach (var child in pool.GetChildren())
             {
@@ -3520,10 +3509,10 @@ internal static class OrdnanceSuites
     // would leave the ring on its authored axis and report nothing at all.
     private static void UpperRingPlacement(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             const string anim = "he_ground_effect";
-            var stage = StageBurstRoots(ctx, world, anim, 1);
+            var stage = StageBurstRoots(ctx, source, anim, 1);
             var runtime = AnimRuntime.ForEffects(
                 AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
                 1, new CountingEmitterFactory(), false, SuiteConstants.BurstTtl,
@@ -3535,7 +3524,7 @@ internal static class OrdnanceSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                runtime.Bind(stage, source.Program.Subset(anim));
                 var slot0 = stage.GetNode<Node3D>("pool0");
                 var site = ctx.Camera.GlobalPosition;
                 static float Degrees(Vector3 a, Vector3 b) =>
@@ -3567,8 +3556,7 @@ internal static class OrdnanceSuites
                 }
                 ctx.Check(handed != null && runtime.PlayEffectAt(anim, site + new Vector3(80f, 0f, 0f), callOrient: handed),
                     $"the enhanced burst played");
-                var enhancedNormal = DiscNormalOf(upper);
-                ctx.Check(enhancedNormal is { } en && Mathf.Min(Degrees(en, -flight), Degrees(-en, -flight)) < 0.5f,
+                var enhancedNormal = DiscNormalOf(upper); ctx.Check(enhancedNormal is { } en && Mathf.Min(Degrees(en, -flight), Degrees(-en, -flight)) < 0.5f,
                     $"handed one, the drawn disc faces back along the flight (disc={enhancedNormal} against {-flight})");
                 ctx.Check(ground != null && Degrees(ground.GlobalBasis.Y, Vector3.Up) < 0.5f,
                     $"the ground ring under it is left on its own axis (Y={ground?.GlobalBasis.Y})");

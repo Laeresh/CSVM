@@ -10,7 +10,8 @@
         ["snd_probe_avenger_engine", "probe_avenger_engine.wav", "LOOPED", "3D", "FREQUENCY", "SFX", "RANGE", [140, 1000]],
         ["snd_probe_engine_cp", "probe_engine_cp.wav", "LOOPED", "SFX", "VOLUME", [0.8]],
         ["snd_probe_engine_damaged", "probe_engine_damaged.wav", "LOOPED", "3D", "SFX", "RANGE", [100, 500]],
-        ["snd_probe_rattle", "probe_rattle.wav", "LOOPED", "SFX", "VOLUME", [0.6]]
+        ["snd_probe_rattle", "probe_rattle.wav", "LOOPED", "SFX", "VOLUME", [0.6]],
+        ["snd_propstart", "probe_propstart.wav", "3D", "SFX", "RANGE", [40, 400]]
       ],
       "probe_weapons",
       [

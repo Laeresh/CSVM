@@ -7,6 +7,7 @@
     { "name": "probe_engine_cp.wav", "seconds": 1.0, "hz": 82 },
     { "name": "probe_engine_damaged.wav", "seconds": 1.0, "hz": 0 },
     { "name": "probe_rattle.wav", "seconds": 0.5, "hz": 0 },
+    { "name": "probe_propstart.wav", "seconds": 1.2, "hz": 64 },
     { "name": "probe_gunloop.wav", "seconds": 0.5, "hz": 330 },
     { "name": "probe_emptyclip.wav", "seconds": 0.1, "hz": 1200 },
     { "name": "probe_fire.wav", "seconds": 0.2, "hz": 0 },

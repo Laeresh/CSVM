@@ -1,0 +1,67 @@
+{
+  "materials": [
+    {"Colored": {"color": {"r": 230.0, "g": 150.0, "b": 60.0}, "alpha": 255.0, "soil": "Default"}},
+    {"Colored": {"color": {"r": 90.0, "g": 90.0, "b": 96.0}, "alpha": 255.0, "soil": "Default"}},
+    {"Colored": {"color": {"r": 200.0, "g": 210.0, "b": 230.0}, "alpha": 255.0, "soil": "Default"}},
+    {"Colored": {"color": {"r": 120.0, "g": 96.0, "b": 70.0}, "alpha": 255.0, "soil": "Default"}},
+    {"Colored": {"color": {"r": 40.0, "g": 36.0, "b": 32.0}, "alpha": 255.0, "soil": "Default"}}
+  ],
+  "nodes": [
+    {"name": "he_ring", "children": [
+      {"name": "he_ringer", "box": [[-3.5, 0.0, -3.5], [3.5, 0.25, 3.5]], "material": 0}
+    ]},
+    {"name": "he_ring1", "children": [
+      {"name": "he_ringer1", "box": [[-2.5, -2.5, -0.2], [2.5, 2.5, 0.2]], "material": 0}
+    ]},
+    {"name": "he_trails", "children": [
+      {"name": "fly_trail1", "at": [1.0, 0.5, 0.0], "box": [[-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]], "material": 1},
+      {"name": "fly_trail2", "at": [-1.0, 0.5, 0.0], "box": [[-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]], "material": 1},
+      {"name": "fly_trail3", "at": [0.0, 0.5, 1.0], "box": [[-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]], "material": 1},
+      {"name": "fly_trail4", "at": [0.0, 0.5, -1.0], "box": [[-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]], "material": 1},
+      {"name": "fly_trail5", "at": [0.0, 1.2, 0.0], "box": [[-0.3, -0.3, -0.3], [0.3, 0.3, 0.3]], "material": 1}
+    ]},
+    {"name": "ballflare.flt", "children": [
+      {"name": "flare_disc", "box": [[-0.5, -0.5, -0.05], [0.5, 0.5, 0.05]], "material": 2}
+    ]},
+    {"name": "dum_gunhit", "children": [
+      {"name": "gunhit_chunk", "box": [[-0.4, 0.0, -0.4], [0.4, 0.6, 0.4]], "material": 1}
+    ]},
+    {"name": "planeflakes", "children": [
+      {"name": "flake1", "at": [0.3, 0.0, 0.0], "box": [[-0.15, -0.02, -0.1], [0.15, 0.02, 0.1]], "material": 1},
+      {"name": "flake2", "at": [-0.3, 0.1, 0.0], "box": [[-0.12, -0.02, -0.12], [0.12, 0.02, 0.12]], "material": 1},
+      {"name": "flake3", "at": [0.0, -0.1, 0.2], "box": [[-0.1, -0.02, -0.15], [0.1, 0.02, 0.15]], "material": 1}
+    ]},
+    {"name": "sonic_effect", "children": [
+      {"name": "sonic_emit1", "at": [0.0, 0.5, 0.0]}
+    ]},
+    {"name": "sonic_ring1", "children": [
+      {"name": "sonic_ring", "box": [[-2.0, 0.0, -2.0], [2.0, 0.15, 2.0]], "material": 2}
+    ]},
+    {"name": "sonic_ring2", "children": [
+      {"name": "sonic_ring", "box": [[-1.5, 0.0, -1.5], [1.5, 0.15, 1.5]], "material": 2}
+    ]},
+    {"name": "probe_torpbody", "children": [
+      {"name": "atbody", "box": [[-0.3, -0.3, -1.6], [0.3, 0.3, 1.6]], "material": 1},
+      {"name": "rightwing", "at": [0.6, 0.0, 0.4], "box": [[-0.3, -0.03, -0.2], [0.3, 0.03, 0.2]], "material": 1},
+      {"name": "leftwing", "at": [-0.6, 0.0, 0.4], "box": [[-0.3, -0.03, -0.2], [0.3, 0.03, 0.2]], "material": 1},
+      {"name": "atprop", "at": [0.0, 0.0, 1.7], "box": [[-0.35, -0.35, -0.02], [0.35, 0.35, 0.02]], "material": 4}
+    ]},
+    {"name": "huge_splash_model", "children": [
+      {"name": "splash_polys", "box": [[-3.0, 0.0, -3.0], [3.0, 2.0, 3.0]], "material": 2},
+      {"name": "sp_1", "at": [0.0, 0.5, 0.0]},
+      {"name": "ripple1", "box": [[-4.0, 0.0, -4.0], [4.0, 0.05, 4.0]], "material": 2}
+    ]},
+    {"name": "m_bld_healthy", "box": [[-5.0, 0.0, -5.0], [5.0, 6.0, 5.0]], "material": 3},
+    {"name": "carnage_trails"},
+    {"name": "large_fire"},
+    {"name": "white_water_impact"},
+    {"name": "probe_shed", "at": [40.0, 0.0, -30.0], "children": [
+      {"name": "healthy", "box": [[-4.0, 0.0, -3.0], [4.0, 5.0, 3.0]], "material": 3},
+      {"name": "destroyed", "box": [[-4.5, 0.0, -3.5], [4.5, 1.2, 3.5]], "material": 4}
+    ]},
+    {"name": "probe_tank", "at": [-40.0, 0.0, 30.0], "children": [
+      {"name": "healthy", "box": [[-2.5, 0.0, -2.5], [2.5, 7.0, 2.5]], "material": 3},
+      {"name": "destroyed", "box": [[-3.0, 0.0, -3.0], [3.0, 1.0, 3.0]], "material": 4}
+    ]}
+  ]
+}

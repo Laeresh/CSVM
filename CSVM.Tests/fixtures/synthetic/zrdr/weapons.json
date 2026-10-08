@@ -57,6 +57,7 @@
         "FLYOUT_HEALTH", [12],
         "PROJECTILE_BBOX", [0],
         "DESTROY_ANIMATION", ["probe_torpedo_shotdown"],
+        "FLYOUT", ["MODEL", ["probe_torpbody"], "MODEL_ANIMATION", ["probe_torpedo_trail"]],
         "FIRE_RATE", [1],
         "VELOCITY", [50],
         "RANGE", [1100],
@@ -271,6 +272,27 @@
         "DETONATION_DISTANCE", [11],
         "FIRE", ["SOUND", ["snd_probe_launch"]],
         "IMPACT", ["default", ["SOUND", ["snd_probe_boom"]]]
+      ],
+      "wep_probe_gunhit",
+      [
+        "DESC", ["MSG_PROBE_GUNHIT"],
+        "NAME", ["probestrike"],
+        "CALIBER", [30],
+        "CLUSTER_SIZE", [300],
+        "AMMO_LIMIT", [600],
+        "FIRE_RATE", [6],
+        "VELOCITY", [650],
+        "RANGE", [900],
+        "GRAVITY", [0],
+        "CANNON_SPREAD", [2],
+        "ARMOR_DAMAGE", [3],
+        "HEALTH_DAMAGE", [3],
+        "CANNON", null,
+        "FIRE", ["SOUND", ["snd_probe_fire"]],
+        "IMPACT", [
+          "default", ["ANIMATION", ["3040slug_gunhit"], "SOUND", ["snd_probe_hit"]],
+          "player", ["ANIMATION", ["3040slug_gunhit"], "SOUND", ["snd_probe_hit"]]
+        ]
       ],
       "wep_30",
       [

@@ -1264,6 +1264,71 @@ build, not a path this change runs.
 `--run-tests=tier:ci --synthetic-data` on the real checkout should pass all 160 (with the anim half's
 additions, more).
 
+**Anim and effect half landed.** `Tooling/SyntheticEffects.cs` is the `effects` family. It writes
+`extracted/probe_effects/gamez/`, a template gamez generated from the compact tree in
+`fixtures/synthetic/probe_effects/templates.json`, and `probe_effects/cam_anim/`, a compiled anim
+archive in the extraction's shape split out of `cam_anim.json`. It copies three reader files into
+`zrdr/`: two `PERSIST_LOG` destructibles (`probe_world.json`) and the puffers code names,
+`flame_ball.json`'s `fierypuffer` and `pufftrails.json`'s `smokepuffer`/`firepuffer`. The archive is
+compiled rather than reader-form because the reader front-end drops call offsets, start times and
+ranged launches, which the panel, burst and debris suites need. No session loader reads
+`probe_effects/`. The suites reach it through two helpers in `Testing/EffectStageSuiteHelper.cs`:
+`WithAnimSource` (program, gamez, scene builder) and `WithAnimWorld` (a root and a bound runtime).
+On an extraction both are the chapter world exactly as before; under the switch they are the invented
+records, the world a private one of the program's destructible roots. Records carry the names the
+engine's effect catalogue or a suite plays (`he_ground_effect`, `call_he_ring1`, `planeflakes`,
+`snd_propstart`, ...) over invented content, and every motion drives a child node, since a placement
+moves the root and a checkout restores a touched root's rest pose. The synthetic `weapons.json` gains
+`wep_probe_gunhit` (both rows `3040slug_gunhit`) and a `FLYOUT` body for the torpedo, `messages.json`
+its name (id 76) and `sounds.json` `snd_propstart`. `TestContext.RunsChapterWorld` is gone: its
+three halves now run on the source.
+
+Fourteen suites join `tier:ci` (165). Each passed three runs in a row by name with the switch and
+went red on one broken input, then restored: `effect-template-mesh` (the upper-ring call renamed),
+`effect-pool-spawn-pose` (the debris def renamed, so nothing launches), `effect-pool-reset` (the
+ring's `reset_state` removed), `wait-for-completion` (the `wait_for_completion` flag dropped),
+`emitter-host-deactivation` (`sparkout3` switches another part off), `first-person-condition` (the
+`Else` removed), `damage-template-pool` (`pdpanel4` tears at `pdp5`), `damage-template-freed-anchor`
+(`pdpanel4` calls nothing), `repeat-call-slots` (the -2 m offsets zeroed), `puffer-idle-process-gate`
+(`fierypuffer` lives 3 to 4 s), `start-state-swap-pool` (both deaths swap no roles),
+`carried-state-silent` (one destructible loses `PERSIST_LOG`), `nodelab-visibility` (no
+`RESET_STATE`) and `spawn-props-silent` (`startprops` sounds nothing). Three tier members now run
+their chapter-world halves on the source, each red on its own input: `impact-orientation`'s upper-ring
+placement (the callee renamed off `ImpactUpperRingAnimNames`), `ordnance-impact-effects`' gun leg (the
+player row plays another effect) and ballflare half (the template root renamed), and
+`shootable-flyout`'s real-hit-ray half (no `FLYOUT` model).
+
+Retargeted checks, each old literal kept on the install: `spawn-props-silent` flies the root's plane
+under the switch (`player_warhawk` on an extraction), and `spawn-props-by-def` now
+`RequirePlane`s the autogyro and Warhawk. `shootable-flyout`'s half reads the torpedo's own pool,
+`IsEqualApprox(early, 10f)`, `after < 10f` and `CeilToInt(10f / HealthDamage)` becoming `pool0`, which
+the suite already pins to 10 off the synthetic tree. `ordnance-impact-effects` requires the gun on
+both trees now and lost its synthetic-only note.
+
+Left off, with the reason: `trail-world-anchor` and `clutter-cells` are `headlessOnly` (each reads
+MultiMesh instance transforms back); the first now runs and FAILs headless with the switch where it
+skipped, which no extraction ever reached. `puffer-modes` pins the shipped readers' numbers and C1's
+and C4's `speed_cue.json` throughout, and `puffer-blend-flag` the shipped textures' render flags;
+both stay local. `flyout-rack-pose` pins the shipped flare's prototypes and ramp timings and gates on
+C1's gamez (bucket E). `spawn-props-by-def` needs `player_autogyro`, `sonic-ground-ring`,
+`fbfx-flash` and `callback-events` pin authored geometry, colours or shipped destroy defs, so none
+was attempted.
+
+Counts, Windows headless, empty data root, port base 52000. On this base the catalog holds 548
+suites, so the hand-off's 159/17/324 (a 500-suite catalog) was re-measured from a pristine copy of
+the base commit: with the switch 180 PASS, 24 FAIL, 344 SKIP before and 194, 25, 329 after (the
+fourteen SKIP to PASS, `trail-world-anchor` SKIP to FAIL); without it 63, 1 (`build-stamp-focus`),
+484 before and after, suite by suite. `tier:ci` with the switch passes 165/0/0, its 37 engine error
+lines all the text-server pattern. A no-switch full run from this worktree's checkout exits
+0xC0000005 in a .NET finalizer after writing its report, with the base commit's sources as well as
+these; the same sources in a fresh copy exit cleanly, so it is the checkout's environment.
+
+**Still owed to the Windows run.** The full `RunTests.ps1` battery should show the same PASS/FAIL/SKIP
+per suite: every helper's extraction branch is the chapter world the suites built before, the three
+halves that sat out under `RunsChapterWorld` always ran on an install, and each relational check
+reduces to its literal there. Optionally `--run-tests=tier:ci --synthetic-data` on the real
+checkout should pass all 165.
+
 **Goal.** The remaining bucket D suites (anim and effect defs, weather and sun, puffer records,
 one-off records) run on invented records.
 

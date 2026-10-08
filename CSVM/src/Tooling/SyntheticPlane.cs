@@ -104,13 +104,26 @@ public static class SyntheticPlane
     public static byte[] Models(string boxListPath)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(boxListPath));
+        var boxes = new List<(float[] Lo, float[] Hi, int Material)>();
+        foreach (var box in doc.RootElement.EnumerateArray())
+        {
+            boxes.Add((Corner(box, "min"), Corner(box, "max"), box.GetProperty("material").GetInt32()));
+        }
+
+        return Models(boxes);
+    }
+
+    /// <summary>The legacy-shape <c>models.json</c> for boxes given as corners, one closed box of
+    /// six quads each, in mesh-index order.</summary>
+    internal static byte[] Models(IEnumerable<(float[] Lo, float[] Hi, int Material)> boxes)
+    {
         using var stream = new MemoryStream();
         using (var json = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
             json.WriteStartArray();
-            foreach (var box in doc.RootElement.EnumerateArray())
+            foreach (var (lo, hi, material) in boxes)
             {
-                WriteBox(json, Corner(box, "min"), Corner(box, "max"), box.GetProperty("material").GetInt32());
+                WriteBox(json, lo, hi, material);
             }
 
             json.WriteEndArray();

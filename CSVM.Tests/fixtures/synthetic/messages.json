@@ -50,6 +50,7 @@
     { "key": "MSG_PROBE_CAL50", "id": 72, "value": "Probe heavy gun" },
     { "key": "MSG_PROBE_CAL60", "id": 73, "value": "Probe cannon" },
     { "key": "MSG_PROBE_CAL70", "id": 74, "value": "Probe great cannon" },
-    { "key": "MSG_PROBE_PYLON_HE", "id": 75, "value": "Probe pylon rocket" }
+    { "key": "MSG_PROBE_PYLON_HE", "id": 75, "value": "Probe pylon rocket" },
+    { "key": "MSG_PROBE_GUNHIT", "id": 76, "value": "Probe Strike Gun" }
   ]
 }

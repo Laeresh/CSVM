@@ -107,8 +107,9 @@ public class SyntheticPlaneTests
 
         var weapons = WeaponDefs.Load(zrdr, messages);
         var gun = weapons.Get("wep_probe_gun");
-        var rocket = weapons.Get("wep_probe_rocket");
         Assert.NotNull(gun);
+        Assert.True(gun.IsGun);
+        var rocket = weapons.Get("wep_probe_rocket");
         Assert.NotNull(rocket);
         Assert.Equal("Probe Gun", gun.DisplayName);
         Assert.Equal("Probe Rocket", rocket.DisplayName);

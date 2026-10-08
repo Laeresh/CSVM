@@ -1422,12 +1422,12 @@ internal static class AnimationAndEffectsSuites
         "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)")]
     internal static void WaitForCompletion(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             const string animName = "player_crash_water";
             const string flagged = "plane_big_splash";
             const string held = "large_steam_spray";
-            var program = world.Session.Program.Subset(animName);
+            var program = source.Program.Subset(animName);
             var defs = program.ByAnimName(animName);
             ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
             if (defs.Count == 0)
@@ -1515,18 +1515,18 @@ internal static class AnimationAndEffectsSuites
         "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)")]
     internal static void EmitterHostDeactivation(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            SplashSurvivesItsOwnInstant(ctx, world);
-            DebrisTrailStillEndsWithItsHost(ctx, world);
+            SplashSurvivesItsOwnInstant(ctx, source);
+            DebrisTrailStillEndsWithItsHost(ctx, source);
         });
     }
 
-    internal static void SplashSurvivesItsOwnInstant(TestContext ctx, TestWorld world)
+    internal static void SplashSurvivesItsOwnInstant(TestContext ctx, AnimSource source)
     {
         const string animName = "plane_big_splash";
         const string pufferName = "splasher";
-        var program = world.Session.Program.Subset(animName);
+        var program = source.Program.Subset(animName);
         var defs = program.ByAnimName(animName);
         ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
         if (defs.Count == 0)
@@ -1565,13 +1565,13 @@ internal static class AnimationAndEffectsSuites
             asCrashRig: true);
     }
 
-    internal static void DebrisTrailStillEndsWithItsHost(TestContext ctx, TestWorld world)
+    internal static void DebrisTrailStillEndsWithItsHost(TestContext ctx, AnimSource source)
     {
         const string animName = "m_build01";
         const string pufferName = "trailpuffer3";
         const string host = "part3";
         const string offSequence = "sparkout3";   // where part3's own deactivation is authored
-        var program = world.Session.Program.Subset(animName);
+        var program = source.Program.Subset(animName);
         var defs = program.ByAnimName(animName);
         ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
         if (defs.Count == 0)
@@ -1698,16 +1698,16 @@ internal static class AnimationAndEffectsSuites
         "an effect's template meshes show at the call site (including a CALLED template's) and go dark when it ends (BL-061)")]
     internal static void EffectTemplateMesh(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            CalledTemplateShowsItsMesh(ctx, world);
-            EndedEffectLeavesNoMeshLit(ctx, world);
+            CalledTemplateShowsItsMesh(ctx, source);
+            EndedEffectLeavesNoMeshLit(ctx, source);
         });
     }
 
-    internal static void CalledTemplateShowsItsMesh(TestContext ctx, TestWorld world)
+    internal static void CalledTemplateShowsItsMesh(TestContext ctx, AnimSource source)
     {
-        EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+        EffectStageSuiteHelper.WithEffectStage(ctx, source, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
             (stage, runtime, point) =>
         {
             ctx.Check(Probes.MeshCensus.VisibleMeshes(stage) == 0,
@@ -1728,9 +1728,9 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
-    internal static void EndedEffectLeavesNoMeshLit(TestContext ctx, TestWorld world)
+    internal static void EndedEffectLeavesNoMeshLit(TestContext ctx, AnimSource source)
     {
-        EffectStageSuiteHelper.WithEffectStage(ctx, world, "3040ap_gunhit", new[] { "dum_gunhit" }, (stage, runtime, point) =>
+        EffectStageSuiteHelper.WithEffectStage(ctx, source, "3040ap_gunhit", new[] { "dum_gunhit" }, (stage, runtime, point) =>
         {
             runtime.PlayEffectAt("3040ap_gunhit", point, null, 0.3f);
             runtime.Advance(1f / 60f);

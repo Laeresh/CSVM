@@ -2185,7 +2185,7 @@ internal static class WorldAndToolSuites
     [Suite("nodelab-visibility", "the node lab's tree row follows live Visible, not the hide button's last action")]
     internal static void NodeLabVisibility(TestContext ctx)
     {
-        ctx.WithWorld("C2", collision: false, world =>
+        EffectStageSuiteHelper.WithAnimWorld(ctx, "C2", world =>
         {
             DestructibleRegistry.Instance? chosen = null;
             Node3D? healthy = null;
@@ -2209,9 +2209,9 @@ internal static class WorldAndToolSuites
                 return;
             }
 
-            var selection = new SelectionService(world.Session.Root, ctx.Camera);
-            var lab = new NodeLab(world.Session.Root, selection, world.Runtime, world.Session.Program,
-                world.Session.Builder.Scene, collisionBuilt: false);
+            var selection = new SelectionService(world.Root, ctx.Camera);
+            var lab = new NodeLab(world.Root, selection, world.Runtime, world.Program,
+                world.Scene, collisionBuilt: false);
             ctx.Host.AddChild(selection);
             ctx.Host.AddChild(lab);
             try

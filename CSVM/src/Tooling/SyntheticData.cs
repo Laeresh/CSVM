@@ -40,6 +40,7 @@ public static class SyntheticData
         new("sounds", SyntheticSounds.WriteArchive),
         new("voice", SyntheticSounds.WriteVoice),
         new("mission", SyntheticMission.WriteMission),
+        new("effects", SyntheticEffects.Write),
     };
 
     /// <summary>Where the hand-authored records sit in a repo checkout. An exported build has no

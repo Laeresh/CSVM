@@ -21,7 +21,7 @@ scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and 
 chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
 `TestContext.ScratchDir` (its `syntheticData` names a synthetic data root), and the exit code.
 Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
-(a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one, where `RunsChapterWorld` also notes a suite's chapter-world half as not run.
+(a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
 cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
@@ -117,6 +117,10 @@ Builds a test pane camera at a supplied world position for suites that exercise 
 
 ## src/Testing/EffectStageSuiteHelper.cs
 Builds and frees a production-shaped, pooled effect-template stage for mesh-visibility suites.
+`WithAnimSource` hands an effect suite its anim program, template gamez and scene builder, and
+`WithAnimWorld` a destructible suite its world root and bound runtime. On an extraction both are the
+chapter world; under `--synthetic-data` they are the `effects` family's invented records
+(`Tooling/SyntheticEffects.cs`), the world a private one of its destructible roots.
 
 ## src/Testing/BotSuiteHelper.cs
 The readings the bot suites share: lifting a pilot clear of the ground, the spawn-table entry a

@@ -77,7 +77,7 @@ internal static class DamageSuites
         "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)")]
     internal static void DamageTemplatePool(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var stage = new Node3D { Name = "DamagePoolStage" };
             var pdp5 = PoolAnchorNode("pdp5", new Vector3(-10, 0, 0));
@@ -90,8 +90,8 @@ internal static class DamageSuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                int built = Session.World.WorldEffectsFactory.BuildEffectStage(source.Gamez,
+                    source.Scene, pool, new[] { "planeflakes" });
                 ctx.Check(built == 1, $"slot {slot} staged its planeflakes copy");
                 foreach (var child in pool.GetChildren())
                 {
@@ -115,7 +115,7 @@ internal static class DamageSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
+                runtime.Bind(stage, source.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
                 runtime.Play("pdpanel5", stage, applyReset: false);
                 for (int i = 0; i < 6; i++)
                 {
@@ -163,7 +163,7 @@ internal static class DamageSuites
         + "takes its own copy through the rebuilt maps")]
     internal static void DamageTemplateFreedAnchor(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var stage = new Node3D { Name = "FreedAnchorStage" };
             var pdp5 = PoolAnchorNode("pdp5", new Vector3(-10, 0, 0));
@@ -176,8 +176,8 @@ internal static class DamageSuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                Session.World.WorldEffectsFactory.BuildEffectStage(source.Gamez,
+                    source.Scene, pool, new[] { "planeflakes" });
                 foreach (var child in pool.GetChildren())
                 {
                     if (child is Node3D copy)
@@ -199,7 +199,7 @@ internal static class DamageSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
+                runtime.Bind(stage, source.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
                 runtime.Play("pdpanel5", stage, applyReset: false);
                 for (int i = 0; i < 6; i++)
                 {
