@@ -1592,7 +1592,7 @@ the bans a chapter and stunt flying impose, the eleven airframes, the militias w
 aircraft and wave accent, the skills and the preset table. The setup is typed state with semantic
 operations: select and confirm an environment (which re-fits the mission type and loads the chapter's own base def), the mission type, the lives,
 the race window (3, 5, 10 or 15 minutes, offered by `OffersRaceWindow` to a stunt run with more than one seat, the same answer that hides both presentations' lives control, since a race spends none), the four waves, the wingmen, both plane
-picks and a preset. `Refusal`/`CanLaunch`, `BuildDef`, `LaunchWingmanFit` and `BuildExit` are the gate and the launch.
+picks and a preset. `TakesNoWaves` answers for the ace duel and for that race, whose AI would fly armed through its weapons-off rule: both presentations blank or skip the wave and wingman controls, and `BuildDef` leaves them out while keeping the cursors, so a solo run gets them back. `Refusal`/`CanLaunch`, `BuildDef`, `LaunchWingmanFit` and `BuildExit` are the gate and the launch.
 `Discard` resets every field. Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Boards/MovieSurface.cs

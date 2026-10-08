@@ -1746,10 +1746,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                     if (i == 0)
                     {
                         // Player 1 backing out returns everyone to whichever screen fed the Plane
-                        // screen this time, mirroring the forward skip of Waves/Wingmen for
-                        // Instant Action's ace duel.
+                        // screen this time, mirroring the ace duel's and race's forward skip of
+                        // Waves/Wingmen.
                         _screen = _mode != MenuMode.Stunt ? Screen.Chapter
-                            : _ia.IsAceDuel ? Screen.MissionType
+                            : _ia.TakesNoWaves(_setup.Seats.Count) ? Screen.MissionType
                             : Screen.Wingmen;
                         _setup.ResetPicks(fits: false);
                         return true;
@@ -2092,10 +2092,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _ia.ConfirmEnvironment();
                 break;
             case Screen.MissionType:
-                if (_ia.IsAceDuel)
+                if (_ia.TakesNoWaves(_setup.Seats.Count))
                 {
                     // Dogfighting an Ace takes no wave or wingman configuration, the decoded
                     // setup screen's own behaviour (mission type 0 hides every enemy control).
+                    // The race takes none either, since its AI would not keep weapons off.
                     _screen = Screen.Plane;
                 }
                 else

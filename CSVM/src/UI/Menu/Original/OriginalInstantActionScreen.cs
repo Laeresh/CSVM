@@ -805,8 +805,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         {
             int setup = rows.Count;
             AddDropdown(screen, rows, PlayerPlaneKey);
-            AddDropdown(screen, rows, WingmenKey);
-            AddDropdown(screen, rows, WingmanPlaneKey, live: _instantAction.NumWingmen > 0);
+            // The race blanks the wingman boxes too: its AI would not keep weapons off.
+            AddDropdown(screen, rows, WingmenKey, live: !RaceTimeShown);
+            AddDropdown(screen, rows, WingmanPlaneKey, live: !RaceTimeShown && _instantAction.NumWingmen > 0);
             AddLives(screen, rows);
             AddDropdown(screen, rows, MissionKey);
             AddDropdown(screen, rows, EnvironmentKey);
@@ -942,11 +943,12 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return new DropdownList(items, ia.Lives, _ => true, i => ia.StepLives(i - ia.Lives));
     }
 
-    // One wave's four boxes. The ace duel takes no wave configuration at all, so even the count
-    // goes blank. An empty wave still offers its count and blanks only what a militia would fill.
+    // One wave's four boxes. The ace duel and the race take no wave configuration at all, so even
+    // the count goes blank. An empty wave still offers its count and blanks only what a militia
+    // would fill.
     private void AddWave(MenuLayoutScreen screen, List<OriginalRow> rows, int wave)
     {
-        bool counted = !_instantAction.IsAceDuel;
+        bool counted = !_instantAction.TakesNoWaves(_setup.Seats.Count);
         bool configured = counted && _instantAction.Waves[wave].Count > 0;
         string n = wave.ToString(CultureInfo.InvariantCulture);
         AddDropdown(screen, rows, WaveKeyPrefixes[0] + n, live: counted);
