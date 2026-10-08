@@ -116,6 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☐ An ocean lab and a shipped sea state per chapter
 42. ☑ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
+43. ☐ No raised water triangle shows or shadows over the ocean in a harbour
 
 ## Dependency and parallelism notes
 
@@ -1356,3 +1357,39 @@ shard-3 list clean; the complete battery green, goldens 25/25.
 
 **⚠ Traps.** The minimal set is GC-timing dependent; prove the fix on the exact failing list, not on a
 smaller one that happens to pass. Original graphics output must not change.
+
+## E43 ☐ No raised water triangle shows or shadows over the ocean in a harbour
+
+**Goal.** In an Enhanced waves session, no original water surface shows through or above the ocean
+as a flat patch, and no water surface casts a shadow onto the ocean.
+
+**Evidence (confidence: the user's screenshot and the freecam log; the cause is a reading, not
+measured).** A C2 (Hollywood) freecam at the harbour, defaults sea: a large V-shaped patch in the
+harbour draws the flat original water look with a sun streak, and a dark wedge lies on the ocean
+beside it, on the side away from the sun. The user's words: "there seems to be tiles that have some
+part of water texture that is not detected. and the triangular field (consisting of two nodes)
+throws a shadow somehow". The clicked nodes: `g36352` (centre (-6400, 10.1, -3968), size 512.6 x 20.3
+x 256) and `g36353` (centre (-6272, 12.0, -3714), size 256 x 24 x 260), with `g36351` beside them;
+clicks on the patch hit at y 0.5, clicks on the ocean beside it at y 0.0. The likely cause is a water
+triangle sloping from the sea up toward the quay. `OceanMask.Read` takes a water triangle as base
+only within 0.5 m of y = 0, and as edge only when its foot is; the hide drops the old sheet only
+below 0.25 m; so the rising part draws its original material above the swell. A raised water
+surface then casts onto the ocean (the "sun shadow: 155 terrain/water mesh instance(s) cast none"
+rule may miss merged or mixed instances).
+
+**Approach.** Measure first: the triangles, textures, heights and shadow settings of `g36351` to
+`g36353` as built in an Enhanced session, and whether the shadow comes from them. Then fix at the
+cause, for example treating a water ramp rising off the sea as sea out to where it meets solid
+ground, and keeping every water surface from casting onto the ocean. Find every such harbour in the
+sea chapters (C1, C1B, C1C, C2, C2B, C3, C5) with a scan, not by eye.
+
+**Model recommendation.** high: geometry classification against authored data, and a visible
+result the user judges.
+
+**Verify.** A before/after montage at the user's pose (camera near (-6200, 280, -3600) looking
+at the harbour) and at any other harbour the scan finds, for the user to judge. An engine
+assertion that no water surface over the sea casts a shadow, and that the classified ramp counts as
+sea. The complete battery green; golden re-pins only for an intended change, each named.
+
+**⚠ Traps.** Colliders at y = 0 never change. Original graphics output must not change. A quay
+wall or land triangle must not become sea.
