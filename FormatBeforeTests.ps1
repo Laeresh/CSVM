@@ -16,7 +16,9 @@
 # THE TREE IS THE ONE THE COMMAND NAMES. dotnet format WRITES, so formatting the wrong tree is
 # worse than checking it. The runner's own path names a tree (an absolute RunTests.ps1 lives in
 # one), a "git -C <tree>" names one, and only when neither does is the process directory used.
-# A Set-Location inside the same command cannot be honoured: a pre-tool hook runs before it.
+# A Set-Location inside the same command cannot be honoured: a pre-tool hook runs before it. A
+# tree written as a variable is read from a quoted literal assigned to it in the same command, and
+# an invocation naming its tree any other way through a variable or expression is BLOCKED.
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md). Exit code 2 blocks the tool call.
 #
@@ -105,22 +107,56 @@ function Resolve-Toplevel {
     return (([string]$top) -replace '[\\/]', $sep).TrimEnd($sep)
 }
 
-# The tree to format and build, or empty when the command invokes nothing. The invocation's own
-# tree wins; a "git -C <tree>" anywhere in the command is next, which keeps the documented
-# "git -C <tree> rev-parse; .\RunTests.ps1" form working; the process directory is the fallback.
-function Get-TargetRoot {
+# A tree written as a variable ("git -C $wt commit", "& $wt\RunTests.ps1") names no path this
+# hook can see, and falling back to the process directory formats a tree the command never named.
+# So a variable is resolved only from a quoted literal assigned to it in the same command, and
+# anything else returns $null for the caller to refuse. Any other token comes back unchanged.
+function Resolve-CommandVariable {
+    param([string]$CommandLine, [string]$Token)
+    if ($Token.StartsWith('(')) { return $null }
+    if (-not $Token.StartsWith('$')) { return $Token }
+    $m = [regex]::Match($Token, '^\$(?:\{([^}]+)\}|((?:env:)?\w+))(.*)$')
+    if (-not $m.Success) { return $null }
+    $name = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
+    $rest = $m.Groups[3].Value
+    if ($rest -and $rest -notmatch '^[\\/][^$(]*$') { return $null }
+    $n = [regex]::Escape($name)
+    $assign = '(?:^|[;\r\n{(|&])\s*\$(?:\{' + $n + '\}|' + $n + ')\s*=\s*("[^"$`]*"|' +
+        $q + '[^' + $q + ']*' + $q + ')\s*(?=$|[;\r\n|&}])'
+    $found = $null
+    foreach ($a in [regex]::Matches($CommandLine, $assign, 'IgnoreCase')) {
+        $found = Get-UnquotedPath -Raw $a.Groups[1].Value
+    }
+    if ($null -eq $found) { return $null }
+    return $found + $rest
+}
+
+# The tree to format and build as Root, empty when the command invokes nothing, or Unresolved when
+# the command names its tree through a variable or expression; the caller blocks that case. The
+# invocation's own tree wins; a "git -C <tree>" anywhere in the command is next, which keeps the
+# documented "git -C <tree> rev-parse; .\RunTests.ps1" form working; the process directory is last.
+function Resolve-TargetTree {
     param([string]$CommandLine, [string]$From)
     if (-not $From) { $From = (Get-Location).Path }
+    $none = [pscustomobject]@{ Root = ''; Unresolved = '' }
     $inv = Get-Invocation -CommandLine $CommandLine
-    if (-not $inv) { return '' }
-    $top = Resolve-Toplevel -Path $inv.Tree
-    if ($top) { return $top }
+    if (-not $inv) { return $none }
+    $candidates = @()
+    if ($inv.Tree) { $candidates += $inv.Tree }
     $c = [regex]::Match($CommandLine, '(?:^|\s)-C\s+' + $tokenGroup)
-    if ($c.Success) {
-        $top = Resolve-Toplevel -Path (Get-UnquotedPath -Raw $c.Groups[1].Value)
-        if ($top) { return $top }
+    if ($c.Success) { $candidates += (Get-UnquotedPath -Raw $c.Groups[1].Value) }
+    foreach ($candidate in $candidates) {
+        $path = Resolve-CommandVariable -CommandLine $CommandLine -Token $candidate
+        if ($null -eq $path) { return [pscustomobject]@{ Root = ''; Unresolved = $candidate } }
+        $top = Resolve-Toplevel -Path $path
+        if ($top) { return [pscustomobject]@{ Root = $top; Unresolved = '' } }
     }
-    return (Resolve-Toplevel -Path $From)
+    return [pscustomobject]@{ Root = (Resolve-Toplevel -Path $From); Unresolved = '' }
+}
+
+function Get-TargetRoot {
+    param([string]$CommandLine, [string]$From)
+    return (Resolve-TargetTree -CommandLine $CommandLine -From $From).Root
 }
 
 # Formats, rebuilds, and returns the StyleCop lines dotnet format left behind (SA0001 excluded).
@@ -219,11 +255,35 @@ function Invoke-SelfTest {
         $r7 = Get-TargetRoot -CommandLine 'git -c user.email=x commit -m x' -From $main
         Assert-Row 'tree     -c is a config key and names no tree' ($r7 -ieq $main)
 
+        # A tree written as a variable: a quoted literal assigned in the same command is read, and
+        # anything else is unresolved, which blocks rather than formatting the process directory.
+        $r8 = Get-TargetRoot -CommandLine ('$wt = ' + $q + $other + $q + '; git -C $wt commit -m x') -From $main
+        Assert-Row 'tree     a -C variable assigned a literal resolves' ($r8 -ieq $other)
+        $r9 = Get-TargetRoot -CommandLine ('$wt="' + $other + '"; & "$wt\RunTests.ps1" -Quick') -From $main
+        Assert-Row 'tree     a runner path through an assigned variable resolves' ($r9 -ieq $other)
+        $r10 = Get-TargetRoot -CommandLine ('$wt = ' + $q + $other + $q + '; git -C $wt rev-parse; .\RunTests.ps1') -From $main
+        Assert-Row 'tree     a leading git -C variable reaches a relative runner' ($r10 -ieq $other)
+        foreach ($case in @(
+                @('an unassigned -C variable', 'git -C $wt commit -m x', '$wt'),
+                @('a -C expression', 'git -C (Get-Tree) commit -m x', '(Get-Tree)'),
+                @('a runner under an unassigned variable', '& "$wt\RunTests.ps1" -Quick', '$wt'),
+                @('a variable assigned a non-literal', '$wt = Join-Path a b; git -C $wt commit -m x', '$wt'))) {
+            $t = Resolve-TargetTree -CommandLine $case[1] -From $main
+            Assert-Row ('tree     ' + $case[0] + ' is unresolved') ($t.Unresolved -eq $case[2] -and -not $t.Root)
+        }
+        $t = Resolve-TargetTree -CommandLine 'git -C $wt status' -From $main
+        Assert-Row 'tree     a variable on a non-invocation is never unresolved' (-not $t.Unresolved -and -not $t.Root)
+
         # The entry point, end to end. A mention exits 0 having printed nothing under -ShowRoot.
         $shown = @(& (Join-Path $scriptRoot 'FormatBeforeTests.ps1') -ShowRoot -Command 'Get-Content .\RunTests.ps1')
         Assert-Row 'entry    -ShowRoot on a mention prints nothing' ($LASTEXITCODE -eq 0 -and $shown.Count -eq 0)
         $shown = @(& (Join-Path $scriptRoot 'FormatBeforeTests.ps1') -ShowRoot -Command ($other + '\RunTests.ps1'))
         Assert-Row 'entry    -ShowRoot on an invocation prints its tree' ($shown.Count -eq 1 -and $shown[0] -ieq $other)
+        # The refusal exits before anything is formatted, so the entry point is safe to drive here.
+        & (Join-Path $scriptRoot 'FormatBeforeTests.ps1') -Command 'git -C $nowhere commit -m x' | Out-Null
+        Assert-Row 'entry    an unresolved -C variable blocks a commit' ($LASTEXITCODE -eq 2)
+        & (Join-Path $scriptRoot 'FormatBeforeTests.ps1') -Command 'git -C $nowhere status' | Out-Null
+        Assert-Row 'entry    an unresolved variable on a non-invocation passes' ($LASTEXITCODE -eq 0)
     }
     finally {
         if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
@@ -245,10 +305,21 @@ if (-not $Command -and [Console]::IsInputRedirected) {
 }
 if (-not $Command) { exit 0 }
 
-$root = Get-TargetRoot -CommandLine $Command
+$target = Resolve-TargetTree -CommandLine $Command
+$root = $target.Root
 if ($ShowRoot) {
+    if ($target.Unresolved) {
+        [Console]::Error.WriteLine('unresolved: ' + $target.Unresolved + ' (this invocation is blocked)')
+    }
     if ($root) { Write-Output $root }
     exit 0
+}
+# Only a command Get-Invocation has already called an invocation reaches this refusal.
+if ($target.Unresolved) {
+    [Console]::Error.WriteLine('BLOCKED: this command names its tree through ' + $target.Unresolved + ', which the')
+    [Console]::Error.WriteLine('format gate cannot resolve, and dotnet format writes to the tree it picks. Write')
+    [Console]::Error.WriteLine('the path literally, or assign it a quoted literal in the same command first.')
+    exit 2
 }
 if (-not $root) { exit 0 }
 

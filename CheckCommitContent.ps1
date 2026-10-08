@@ -9,11 +9,14 @@
 # corrupted character reached main that way. Two shapes move the target tree away from the process
 # directory, and each is read off the command rather than guessed: the command naming another tree
 # (git -C, --work-tree, --git-dir), and a directory change inside the same command
-# (Set-Location <path>; git commit), which the hook cannot observe because it runs first but which
-# is written in the command string it is handed.
+# (Set-Location, Push-Location, cd or pushd <path>; git commit), which the hook cannot observe
+# because it runs first but which is written in the command string it is handed.
 #
 # So the target is the tree that command will write to: the named tree, else the directory it
-# changes to first, else the tree the hook stands in. ONE tree, never a sweep of all of them.
+# changes to first, else the tree the hook stands in. ONE tree, never a sweep of all of them. A
+# tree or directory written as a variable is read from a quoted literal assigned to it earlier in
+# the same command; when there is none, the commit is BLOCKED, because falling back to the hook's
+# own tree checks a tree the commit does not write to.
 #
 # DO NOT WIDEN THIS BACK TO EVERY WORKTREE. A sweep blocks a commit on a file in a tree the
 # session cannot fix, which with a dozen live worktrees means another session's UNCOMMITTED work
@@ -133,8 +136,8 @@ function Get-ChangedDirectory {
     $q = [char]39
     $pathGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s;|&]+)'
     # Anchored on a statement boundary so a bare "cd" inside a word or a flag value never matches,
-    # and the optional -Path/-LiteralPath is how Set-Location is spelled when it is spelled out.
-    $pattern = '(?:^|[;|&]|^\s*)\s*(?:Set-Location|chdir|sl|cd)\s+(?:-(?:Literal)?Path\s+)?' + $pathGroup
+    # and the optional -Path/-LiteralPath is how Set-Location and Push-Location are spelled out.
+    $pattern = '(?:^|[;|&]|^\s*)\s*(?:Set-Location|Push-Location|chdir|pushd|sl|cd)\s+(?:-(?:Literal)?Path\s+)?' + $pathGroup
     $found = ''
     foreach ($m in [regex]::Matches($upTo, $pattern)) {
         $candidate = Get-UnquotedPath -Raw $m.Groups[1].Value
@@ -143,26 +146,79 @@ function Get-ChangedDirectory {
     return $found
 }
 
-function Get-TargetRoots {
+# The command up to its commit invocation, which is where an assignment the commit reads must be.
+function Get-TextBeforeCommit {
+    param([string]$CommandLine)
+    $commit = [regex]::Match($CommandLine, $commitInvocation)
+    if ($commit.Success) { return $CommandLine.Substring(0, $commit.Index) }
+    return $CommandLine
+}
+
+# A tree written as a variable ("git -C $wt commit") names no path the hook can see, and the old
+# fallback to the hook's own tree checked the wrong one. So a variable is resolved only from a
+# literal assignment earlier in the same command, and anything else returns $null for the caller
+# to refuse. A token that is not a variable or an expression comes back unchanged.
+function Resolve-CommandVariable {
+    param([string]$Before, [string]$Token)
+    if ($Token.StartsWith('(')) { return $null }
+    if (-not $Token.StartsWith('$')) { return $Token }
+    $m = [regex]::Match($Token, '^\$(?:\{([^}]+)\}|((?:env:)?\w+))(.*)$')
+    if (-not $m.Success) { return $null }
+    $name = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
+    $rest = $m.Groups[3].Value
+    if ($rest -and $rest -notmatch '^[\\/][^$(]*$') { return $null }
+    $q = [char]39
+    $n = [regex]::Escape($name)
+    $assign = '(?:^|[;\r\n{(|&])\s*\$(?:\{' + $n + '\}|' + $n + ')\s*=\s*("[^"$`]*"|' +
+        $q + '[^' + $q + ']*' + $q + ')\s*(?=$|[;\r\n|&}])'
+    $found = $null
+    foreach ($a in [regex]::Matches($Before, $assign, 'IgnoreCase')) {
+        $found = Get-UnquotedPath -Raw $a.Groups[1].Value
+    }
+    if ($null -eq $found) { return $null }
+    return $found + $rest
+}
+
+# The tree this command writes to, as Roots, or as Unresolved when the command names it through a
+# variable or expression this gate cannot read; the caller blocks a commit in that case.
+function Resolve-Target {
     param([string]$CommandLine, [string]$From)
     if (-not $From) { $From = $scriptRoot }
+    $before = Get-TextBeforeCommit -CommandLine $CommandLine
     # In precedence order, each read off the command itself. A candidate that does not resolve to
     # a tree is not a reason to wave the commit through, so the next one is tried and the hook's
     # own tree is the floor.
     $named = Get-NamedTree -CommandLine $CommandLine
     if ($named) {
-        $top = Resolve-Toplevel -Path $named
-        if ($top) { return @($top) }
+        $path = Resolve-CommandVariable -Before $before -Token $named
+        if ($null -eq $path) { return [pscustomobject]@{ Roots = @(); Unresolved = $named } }
+        $top = Resolve-Toplevel -Path $path
+        if ($top) { return [pscustomobject]@{ Roots = @($top); Unresolved = '' } }
     }
     $moved = Get-ChangedDirectory -CommandLine $CommandLine
     if ($moved) {
-        if (-not [IO.Path]::IsPathRooted($moved)) { $moved = Join-Path $From $moved }
-        $top = Resolve-Toplevel -Path $moved
-        if ($top) { return @($top) }
+        $path = Resolve-CommandVariable -Before $before -Token $moved
+        if ($null -eq $path) { return [pscustomobject]@{ Roots = @(); Unresolved = $moved } }
+        if (-not [IO.Path]::IsPathRooted($path)) { $path = Join-Path $From $path }
+        $top = Resolve-Toplevel -Path $path
+        if ($top) { return [pscustomobject]@{ Roots = @($top); Unresolved = '' } }
     }
     $own = Resolve-Toplevel -Path $From
-    if ($own) { return @($own) }
-    return @()
+    if ($own) { return [pscustomobject]@{ Roots = @($own); Unresolved = '' } }
+    return [pscustomobject]@{ Roots = @(); Unresolved = '' }
+}
+
+function Get-TargetRoots {
+    param([string]$CommandLine, [string]$From)
+    return @((Resolve-Target -CommandLine $CommandLine -From $From).Roots)
+}
+
+function Write-Unresolved {
+    param([string]$Token)
+    [Console]::Error.WriteLine('BLOCKED: this commit names its tree through ' + $Token + ', which the')
+    [Console]::Error.WriteLine('content gate cannot resolve, so it cannot tell which tree to check. Write the')
+    [Console]::Error.WriteLine('path literally (git -C <path> commit, or Set-Location <path> first), or assign')
+    [Console]::Error.WriteLine('it a quoted literal in the same command ($wt = ' + [char]39 + '<path>' + [char]39 + '; git -C $wt commit).')
 }
 
 # The commit's arguments as the shell will hand them to git: the tokens after the commit
@@ -210,8 +266,12 @@ function Get-CommitMessage {
     $base = $From
     $dashC = [regex]::Match($invocation, '(?:^|\s)-C\s+("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s]+)')
     $moved = Get-ChangedDirectory -CommandLine $CommandLine
-    if ($dashC.Success) { $base = Get-UnquotedPath -Raw $dashC.Groups[1].Value }
-    elseif ($moved) { $base = $moved }
+    $before = Get-TextBeforeCommit -CommandLine $CommandLine
+    $dir = ''
+    if ($dashC.Success) { $dir = Get-UnquotedPath -Raw $dashC.Groups[1].Value }
+    elseif ($moved) { $dir = $moved }
+    if ($dir) { $dir = Resolve-CommandVariable -Before $before -Token $dir }
+    if ($dir) { $base = $dir }
     if (-not [IO.Path]::IsPathRooted($base)) { $base = Join-Path $From $base }
 
     $parts = @()
@@ -410,6 +470,39 @@ function Invoke-SelfTest {
         $quoted = Get-NamedTree -CommandLine ('git -C "' + $wt + '" commit -m x')
         Assert-Row 'row 2  a quoted -C path is unquoted' ($quoted -ieq $wt)
 
+        # Row 13: a tree written as a variable. A literal assigned earlier in the same command is
+        # read; anything else is unresolved, which blocks rather than checking the hook's tree.
+        $mainNormal = ConvertTo-NormalPath -Path $main
+        $r13 = @(Get-TargetRoots -CommandLine ('$wt="' + $wt + '"; git -C $wt commit -m x') -From $main)
+        Assert-Row 'row 13 a -C variable assigned a literal resolves' ($r13.Count -eq 1 -and $r13[0] -ieq $wtNormal)
+        $r13b = @(Get-TargetRoots -CommandLine ('$t = ' + $q + $wt + $q + '; Set-Location $t; git commit -m x') -From $main)
+        Assert-Row 'row 13 a Set-Location variable assigned a literal resolves' ($r13b.Count -eq 1 -and $r13b[0] -ieq $wtNormal)
+        $r13c = @(Get-TargetRoots -CommandLine ('${wt} = ' + $q + $base + $q + '; git -C ${wt}\wt commit -m x') -From $main)
+        Assert-Row 'row 13 a braced variable with a path tail resolves' ($r13c.Count -eq 1 -and $r13c[0] -ieq $wtNormal)
+        foreach ($case in @(
+                @('an unassigned -C variable', 'git -C $wt commit -m x', '$wt'),
+                @('a -C expression', 'git -C (Get-Tree) commit -m x', '(Get-Tree)'),
+                @('a variable assigned a non-literal', '$wt = Join-Path a b; git -C $wt commit -m x', '$wt'),
+                @('a variable assigned only after the commit', ('git -C $wt commit -m x; $wt = ' + $q + $wt + $q), '$wt'),
+                @('an interpolated double-quoted assignment', ('$wt = "$base\wt"; git -C $wt commit -m x'), '$wt'),
+                @('an unassigned --work-tree variable', 'git --work-tree=$wt commit -m x', '$wt'),
+                @('an unassigned Push-Location variable', 'Push-Location $wt; git commit -m x', '$wt'))) {
+            $t13 = Resolve-Target -CommandLine $case[1] -From $main
+            Assert-Row ('row 13 ' + $case[0] + ' is unresolved') (
+                $t13.Unresolved -eq $case[2] -and @($t13.Roots).Count -eq 0)
+        }
+
+        # Row 14: Push-Location and pushd move the commit like Set-Location and cd do.
+        $r14 = @(Get-TargetRoots -CommandLine ('Push-Location ' + $wt + '; git commit -m x') -From $main)
+        Assert-Row 'row 14 same-call Push-Location names the tree moved to' ($r14.Count -eq 1 -and $r14[0] -ieq $wtNormal)
+        $r14b = @(Get-TargetRoots -CommandLine ('pushd "' + $wt + '"; git commit -m x') -From $main)
+        Assert-Row 'row 14 a quoted pushd is the same move' ($r14b.Count -eq 1 -and $r14b[0] -ieq $wtNormal)
+        $r14c = @(Get-TargetRoots -CommandLine ('Push-Location -LiteralPath ' + $wt + '; git commit -m x') -From $main)
+        Assert-Row 'row 14 Push-Location -LiteralPath is the same move' ($r14c.Count -eq 1 -and $r14c[0] -ieq $wtNormal)
+        $r14d = @(Get-TargetRoots -CommandLine ('git commit -m x; Push-Location ' + $wt) -From $main)
+        Assert-Row 'row 14 a Push-Location AFTER the commit is not the commit tree' (
+            $r14d.Count -eq 1 -and $r14d[0] -ieq $mainNormal)
+
         # Row 7: content that arrived by merge rather than by an edit is simply present in the
         # tree that merged it, so that tree's own next commit is where it blocks.
         Assert-Row 'row 7  merged-in content blocks at the next commit in its own tree' (
@@ -546,6 +639,20 @@ function Invoke-SelfTest {
         & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command (
             'git --work-tree=' + $wt + ' commit -m x') | Out-Null
         Assert-Row 'guard  a --work-tree-scoped commit is checked end to end' ($LASTEXITCODE -eq 2)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command (
+            '$w = ' + $q + $wt + $q + '; git -C $w commit -m x') | Out-Null
+        Assert-Row 'guard  a resolved -C variable checks that tree end to end' ($LASTEXITCODE -eq 2)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command (
+            '$w = ' + $q + $main + $q + '; git -C $w commit -m x') | Out-Null
+        Assert-Row 'guard  a resolved -C variable naming a clean tree passes' ($LASTEXITCODE -eq 0)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command 'git -C $nowhere commit -m x' | Out-Null
+        Assert-Row 'guard  an unresolved -C variable blocks a commit' ($LASTEXITCODE -eq 2)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command 'git -C $nowhere status' | Out-Null
+        Assert-Row 'guard  an unresolved -C variable on a non-commit does not block' ($LASTEXITCODE -eq 0)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command ('Push-Location ' + $wt + '; git commit -m x') | Out-Null
+        Assert-Row 'guard  a Push-Location commit is checked end to end' ($LASTEXITCODE -eq 2)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command ('pushd ' + $wt + '; git commit -m x') | Out-Null
+        Assert-Row 'guard  a pushd commit is checked end to end' ($LASTEXITCODE -eq 2)
 
         # The trigger itself. It is the single point of failure for the whole gate: every harness
         # calls this script unconditionally and this pattern decides whether anything runs, so the
@@ -604,7 +711,13 @@ if (-not $Command -and [Console]::IsInputRedirected) {
 }
 
 if ($ShowRoots) {
-    if (-not $Root) { $Root = Get-TargetRoots -CommandLine $Command }
+    if (-not $Root) {
+        $target = Resolve-Target -CommandLine $Command
+        if ($target.Unresolved) {
+            [Console]::Error.WriteLine('unresolved: ' + $target.Unresolved + ' (a commit naming its tree this way is blocked)')
+        }
+        $Root = $target.Roots
+    }
     foreach ($r in $Root) { Write-Output $r }
     exit 0
 }
@@ -619,7 +732,13 @@ if (-not $Root) {
         [Console]::Error.WriteLine('CSVM_SKIP_CONTENT_CHECKS is set: content checks skipped.')
         exit 0
     }
-    $Root = Get-TargetRoots -CommandLine $Command
+    # Only a command the trigger above has already called a commit reaches this refusal.
+    $target = Resolve-Target -CommandLine $Command
+    if ($target.Unresolved) {
+        Write-Unresolved -Token $target.Unresolved
+        exit 2
+    }
+    $Root = $target.Roots
 }
 
 $message = ''

@@ -48,9 +48,15 @@
     Worktree safety rules, in order:
       * Only worktrees under .claude/worktrees/ are ever considered. The main
         worktree and the one you are standing in are never touched.
-      * A worktree with uncommitted changes is SPARED and reported, unless you
-        pass -IncludeDirtyWorktrees. Deleting one destroys work that exists
-        nowhere else.
+      * A worktree whose own git files (index, HEAD, logs/HEAD) were written in
+        the last 12 hours is SPARED as active: another session may be using it
+        before it has edited anything. -IncludeDirtyWorktrees does not override
+        this.
+      * A worktree with uncommitted changes, or one whose `git status` fails, is
+        SPARED and reported, unless you pass -IncludeDirtyWorktrees. Deleting one
+        destroys work that exists nowhere else.
+      * Each worktree to be removed is listed with the number of files in its
+        .scratch/, which is git-ignored and goes with it.
       * Removing a worktree does NOT delete its branch, so committed work always
         survives. Leftover branches are reported; -PruneBranches deletes the ones
         already merged into main, using `git branch -d`, which refuses unmerged
@@ -76,7 +82,9 @@
     abandoned roots kept, e.g. to read a failed run's fixtures.
 
 .PARAMETER IncludeDirtyWorktrees
-    Also remove worktrees with uncommitted changes. Destroys uncommitted work.
+    Also remove worktrees with uncommitted changes, or whose `git status` fails.
+    Destroys uncommitted work. A worktree active in the last 12 hours is still
+    spared.
 
 .PARAMETER PruneBranches
     Delete every local branch already merged into main, except main itself, the
@@ -137,6 +145,12 @@ $TestTempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-tests"
 
 # Backups parked in .scratch/ are safety nets, not probe output. Protected unless asked for.
 $BackupPatterns = @('*.bundle', '*.worktree-backup')
+
+# A worktree whose git files (index, HEAD, logs/HEAD) changed within this many hours is taken to
+# be in use by another session, even with no edits yet, and is spared. Not a switch on purpose:
+# -IncludeDirtyWorktrees does not override it either, since removing a live session's checkout
+# out from under it is never what a sweep means.
+$ActiveWorktreeHours = 12
 
 $cutoff = if ($OlderThanDays -gt 0) { (Get-Date).AddDays(-$OlderThanDays) } else { $null }
 
@@ -247,6 +261,26 @@ foreach ($f in $all) {
     }
 }
 
+# The newest write among a worktree's own git files: the index, HEAD and logs/HEAD, which a
+# checkout, an add or a commit there rewrites. $null when none can be read. Read BEFORE any
+# `git status`, which may rewrite the index and would make every worktree look active.
+function Get-WorktreeLastActivity([string]$Path) {
+    # Local to this function: under the script's Stop, PS 5.1 turns git's redirected stderr into
+    # a terminating error.
+    $ErrorActionPreference = 'Continue'
+    $newest = $null
+    $paths = @(& git -C $Path rev-parse --git-path index --git-path HEAD --git-path logs/HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0) { return $null }
+    foreach ($p in $paths) {
+        if (-not $p) { continue }
+        $full = if ([System.IO.Path]::IsPathRooted($p)) { $p } else { Join-Path $Path $p }
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+        $t = (Get-Item -LiteralPath $full -Force).LastWriteTime
+        if (-not $newest -or $t -gt $newest) { $newest = $t }
+    }
+    return $newest
+}
+
 function Format-Size([long]$bytes) {
     if ($bytes -ge 1MB) { return "{0:N1} MB" -f ($bytes / 1MB) }
     if ($bytes -ge 1KB) { return "{0:N0} KB" -f ($bytes / 1KB) }
@@ -296,20 +330,54 @@ if ($isGitRepo) {
 
         $exists = Test-Path $w.Path
         $dirty  = $false
+        $dirtyReason = "uncommitted changes"
+        $active = $false
         if ($exists) {
-            $status = & git -C $w.Path status --porcelain
-            $dirty  = [bool]$status
+            # Activity first: a status run may refresh the index, and that write would read as
+            # activity on every later sweep.
+            $last   = Get-WorktreeLastActivity $w.Path
+            $active = $last -and $last -gt (Get-Date).AddHours(-$ActiveWorktreeHours)
+
+            # A status that fails says nothing about the worktree's changes, so it counts as
+            # dirty rather than clean. --no-optional-locks keeps it from rewriting the index.
+            # Continue for the call: under Stop, PS 5.1 turns redirected stderr into a throw.
+            $code   = 1
+            $status = $null
+            $eap    = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $status = & git --no-optional-locks -C $w.Path status --porcelain 2>$null
+                $code   = $LASTEXITCODE
+            } catch { $code = 1 } finally { $ErrorActionPreference = $eap }
+            if ($code -ne 0) {
+                $dirty = $true
+                $dirtyReason = "git status failed"
+            } else {
+                $dirty = [bool]$status
+            }
         }
 
         # Junctions inside the worktree are unlinked before removal so no
         # recursive delete -- git's or anyone's -- can reach their targets.
         $wtJunctions = if ($exists) { Get-ReparseDirectory $w.Path } else { @() }
 
-        if ($dirty -and -not $IncludeDirtyWorktrees) {
-            $wtSpared.Add([pscustomobject]@{ WT = $w; Reason = "uncommitted changes" })
+        if ($active) {
+            $wtSpared.Add([pscustomobject]@{
+                WT = $w; Reason = "active in the last ${ActiveWorktreeHours}h"; Hint = ""
+            })
+        } elseif ($dirty -and -not $IncludeDirtyWorktrees) {
+            $wtSpared.Add([pscustomobject]@{
+                WT = $w; Reason = $dirtyReason; Hint = "pass -IncludeDirtyWorktrees to remove"
+            })
         } else {
+            # Git-ignored evidence (montages, logs) lives in the worktree's .scratch and goes
+            # with it, so its size is shown before anything is removed.
+            $scratchFiles = if ($exists) {
+                (Get-SweepInventory (Join-Path $w.Path ".scratch")).Files.Count
+            } else { 0 }
             $wtDoomed.Add([pscustomobject]@{
                 WT = $w; Exists = $exists; Dirty = $dirty; Junctions = $wtJunctions
+                ScratchFiles = $scratchFiles
             })
         }
     }
@@ -376,7 +444,8 @@ if ($wtSpared.Count -gt 0) {
     Write-Host "Keeping $($wtSpared.Count) worktree(s):" -ForegroundColor Green
     foreach ($s in $wtSpared) {
         $name = Split-Path $s.WT.Path -Leaf
-        Write-Host ("  {0,-28} {1}  (pass -IncludeDirtyWorktrees to remove)" -f $name, $s.Reason)
+        $hint = if ($s.Hint) { "  ($($s.Hint))" } else { "" }
+        Write-Host ("  {0,-28} {1}{2}" -f $name, $s.Reason, $hint)
     }
 }
 
@@ -393,6 +462,7 @@ if ($wtDoomed.Count -gt 0) {
         $name  = Split-Path $d.WT.Path -Leaf
         $notes = @()
         if (-not $d.Exists) { $notes += "already gone, metadata only" }
+        if ($d.Exists)      { $notes += "$($d.ScratchFiles) file(s) in .scratch" }
         if ($d.Dirty)       { $notes += "DIRTY -- uncommitted work will be lost" }
         if ($d.WT.Branch)   { $notes += "branch $($d.WT.Branch)" }
         if ($d.Junctions.Count -gt 0) {
