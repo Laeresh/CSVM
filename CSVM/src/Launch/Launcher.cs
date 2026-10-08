@@ -3730,4 +3730,9 @@ public sealed class LauncherContext
     /// outlives every session. Null when the sound archive or the sound definitions would not
     /// load, which leaves the game silent rather than refusing to launch.</summary>
     public MusicPlayer? Music { get; init; }
+
+    /// <summary>A decode store shared with other builds in this process, or null to decode afresh.
+    /// The test harness hands its own in, so a suite's sessions decode a chapter once. A launch
+    /// leaves it null, so a session retains nothing of a chapter it has left.</summary>
+    public Mech3.DecodeCache? Decode { get; init; }
 }
