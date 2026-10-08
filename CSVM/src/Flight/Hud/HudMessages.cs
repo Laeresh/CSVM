@@ -2,6 +2,7 @@ using System;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -388,7 +389,8 @@ public sealed partial class HudMessages : Control
         // VersusHud does, since both anchor off the pane's own size.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        Advance((float)delta);
+        // Sim time, so a pause freezes the line and a slow --det frame cannot spend it early.
+        Advance(GameClock.Current?.FrameDt ?? (float)delta);
     }
 
     public override void _Draw()

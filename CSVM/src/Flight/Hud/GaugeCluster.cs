@@ -462,10 +462,11 @@ public sealed partial class GaugeCluster : Control
 
     public override void _Process(double delta)
     {
-        _time += delta;
-        // ⚠ Both animated cues advance on SIM dt, never the raw frame delta: their rates are
-        // video-decoded in sim seconds, and the wall figures would run them 39% fast.
+        // ⚠ Every animated cue advances on SIM dt, never the raw frame delta. The arrow rates are
+        // video-decoded in sim seconds, and wall figures would run them 39% fast. A wall-timed blink
+        // would also run on through a halt and shift with a slow --det frame.
         float simDt = GameClock.Current?.FrameDt ?? (float)delta;
+        _time += simDt;
         if (GunGauge is { } gg)
             _gunArrow.Advance(TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
         if (MissileGauge is { } mg)
@@ -475,7 +476,7 @@ public sealed partial class GaugeCluster : Control
         _nitroBoostNeedle.Advance(NitroBoosting ? -NitroNeedleSweepDeg : 0f, simDt);
         _nitroChargeNeedle.Advance((1f - Mathf.Clamp(NitroChargeFrac, 0f, 1f)) * NitroNeedleSweepDeg, simDt);
         foreach (var z in _zones)
-            z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
+            z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - simDt);
         QueueRedraw();
     }
 

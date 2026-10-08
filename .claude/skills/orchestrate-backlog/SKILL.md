@@ -132,8 +132,8 @@ Every step in order, for one agent at a time:
    - A moved golden the agent re-pinned is fine when the agent proved confinement (pixel diff
      inside the mechanism's footprint) and the manifest carries the new hash.
    - A moved golden nobody re-pinned: re-run goldens alone with two workers on a quiet machine.
-     `c1-flight-kill` flakes under load and reads back at its pinned hash; a reproducible move from
-     a change that cannot reach the shot is bisected before landing, never re-pinned to pass.
+     A reproducible move from a change that cannot reach the shot is bisected before landing,
+     never re-pinned to pass.
    - Two items moving the same shots: take HEAD's hashes, run goldens (expect exactly those shots
      MOVED), `-RegenGoldens`, re-check 18/18, note it in the commit message.
    - "Cannot instantiate C# script" or "no PNG" on shots: the assembly was rebuilt under a running

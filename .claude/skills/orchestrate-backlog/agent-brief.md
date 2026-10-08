@@ -53,8 +53,7 @@ If your change can move a pinned golden (anything under `CSVM/src` that draws, s
 changes pools or seeds), also run `.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only) and
 report which shots moved and why; re-pin with `-RegenGoldens` ONLY when the move is the intended
 effect, prove it by differencing against a render from HEAD's sources, and name the shots and the
-mechanism in your report. `c1-flight-kill` flakes under load: re-run before believing a move and
-never re-pin it for that. Do NOT run the complete `.\RunTests.ps1` battery; the orchestrator runs
+mechanism in your report. Do NOT run the complete `.\RunTests.ps1` battery; the orchestrator runs
 it on the merged tree.
 
 A red result is fixed, or proved not yours (red on your base commit without your change) and

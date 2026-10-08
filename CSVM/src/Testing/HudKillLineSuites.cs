@@ -12,6 +12,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
 using CSVM.Spec;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -36,7 +37,9 @@ internal static class HudKillLineSuites
         "death is the profile the store last used and an empty store keeps the fall-through, " +
         "the stack keeps four lines a fifth of the way down with an " +
         "18 px pitch, a newer line pushes the older ones down carrying their own remaining time, " +
-        "a repeat refreshes rather than duplicates, every line clears after five seconds, and the " +
+        "a repeat refreshes rather than duplicates, every line clears after five seconds of sim " +
+        "time (a halted clock keeps it, a slow fixed-step frame spends one step, and the damage " +
+        "dial's post-hit blink runs on the same sim step), and the " +
         "same stack takes the crash notice in the player's own colour and the mission clock's " +
         "'Mission LOST!' over 'Time Expired' in the default one, and a hull flown into the world " +
         "posts that notice alone with no kill line behind it")]
@@ -103,6 +106,8 @@ internal static class HudKillLineSuites
             ctx.Host.AddChild(stack);
             Stack(ctx, stack);
             Notices(ctx, stack, strings);
+            SimClock(ctx, stack);
+            GaugeBlinkClock(ctx, planesGamez, textures);
 
             // The session's own seam: the roster reports a death, and a death the hull was spent in
             // puts the line composed for that pane into the reading pane's stack.
@@ -289,6 +294,92 @@ internal static class HudKillLineSuites
                 $"a Dogfight kill reads the victim over its killer, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
         }
         stack.Clear();
+    }
+
+    // A frame ages the stack by the session clock's step, never by its wall delta. A halted clock
+    // keeps a line whole; a fixed-step frame spends one step however long it took.
+    private static void SimClock(TestContext ctx, HudMessages stack)
+    {
+        const float SlowFrame = HudMessages.LineLife * 2f;
+        var saved = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.FixedStep, Halted = true };
+        GameClock.Current = clock;
+        try
+        {
+            stack.Post("held", HudMessages.Side.Enemy);
+            clock.BeginFrame(SlowFrame);
+            stack._Process(SlowFrame);
+            ctx.Check(stack.LineAt(0) == "held" && Mathf.IsEqualApprox(stack.LifeAt(0), HudMessages.LineLife),
+                $"a halted clock keeps the line whole through a {SlowFrame:0} s frame life={stack.LifeAt(0):0.000}");
+
+            clock.Halted = false;
+            clock.BeginFrame(SlowFrame);
+            stack._Process(SlowFrame);
+            ctx.Check(stack.LineAt(0) == "held"
+                      && Mathf.IsEqualApprox(stack.LifeAt(0), HudMessages.LineLife - GameClock.FixedDt),
+                $"…and a running fixed-step clock spends one sim step of it, not the frame's wall time life={stack.LifeAt(0):0.000}");
+
+            // ABLE-TO-FAIL CONTROL: with no session clock the same frame falls back to its wall delta.
+            GameClock.Current = null;
+            stack._Process(SlowFrame);
+            ctx.Check(stack.LineAt(0) == null,
+                $"ABLE-TO-FAIL CONTROL: with no session clock the wall delta spends the line: '{stack.LineAt(0) ?? "<none>"}'");
+        }
+        finally
+        {
+            GameClock.Current = saved;
+            stack.Clear();
+        }
+    }
+
+    // The damage dial's post-hit blink on the same clock. A 0.2 s step from phase 0 lands in the
+    // blink's dark half. A 10 s wall step would spend the 5 s window.
+    private static void GaugeBlinkClock(TestContext ctx, GameZ planesGamez, TextureArchive textures)
+    {
+        const float WallFrame = 10f;
+        var parts = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).DestroyableParts;
+        var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, parts);
+        if (cluster == null)
+        {
+            ctx.Check(false, $"a real gauge cluster was built for '{ctx.PlaneName}'");
+            return;
+        }
+        var saved = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.FixedStep, Halted = true, Scale = 12f };
+        GameClock.Current = clock;
+        ctx.Host.AddChild(cluster);
+        try
+        {
+            foreach (var part in parts)
+            {
+                cluster.OnPartDamage(part.Name);
+            }
+            bool Dark() => parts.Any(p => cluster.ZoneTier(p.Name) < 0);
+
+            clock.BeginFrame(WallFrame);
+            cluster._Process(WallFrame);
+            clock.Halted = false;
+            clock.BeginFrame(WallFrame);
+            cluster._Process(WallFrame);
+            ctx.Check(Dark(),
+                $"after a halted and a running {WallFrame:0} s frame, the struck zone blinks in its dark half: one {clock.FrameDt:0.00} s sim step aged it, the wall time did not");
+
+            clock.Halted = true;
+            clock.BeginFrame(WallFrame);
+            cluster._Process(WallFrame);
+            ctx.Check(Dark(), $"…and a halted clock holds the blink where it is");
+
+            // ABLE-TO-FAIL CONTROL: with no session clock the same frame falls back to its wall delta.
+            GameClock.Current = null;
+            cluster._Process(WallFrame);
+            ctx.Check(!Dark(),
+                $"ABLE-TO-FAIL CONTROL: with no session clock the wall delta spends the blink window");
+        }
+        finally
+        {
+            GameClock.Current = saved;
+            cluster.Free();
+        }
     }
 
     // The three colour arms, tested in the decoded order: the enemy test runs first, so a pane on
