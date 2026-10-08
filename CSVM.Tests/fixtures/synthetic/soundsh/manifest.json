@@ -2,6 +2,8 @@
   "wavs": [
     { "name": "probe_engine.wav", "seconds": 1.0, "hz": 110 },
     { "name": "probe_fighter_engine.wav", "seconds": 1.0, "hz": 146 },
+    { "name": "probe_brand_engine.wav", "seconds": 1.0, "hz": 128 },
+    { "name": "probe_avenger_engine.wav", "seconds": 1.0, "hz": 92 },
     { "name": "probe_engine_cp.wav", "seconds": 1.0, "hz": 82 },
     { "name": "probe_engine_damaged.wav", "seconds": 1.0, "hz": 0 },
     { "name": "probe_rattle.wav", "seconds": 0.5, "hz": 0 },

@@ -6,11 +6,12 @@ using System.Text.Json;
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The synthetic tree's two stand-in aircraft, <see cref="Plane"/> and <see cref="Fighter"/>, in
-/// two families. The plane family is their models under <c>planes/</c>, box-built airframes each
-/// carrying the marker rig. It also holds the <c>vehicle.json</c>, <c>engines.json</c> and
-/// <c>player.json</c> records and the maneuver library. The armament family is
-/// one gun and one rocket in <c>weapons.json</c>, the shake sources and the message table. Every
+/// The synthetic tree's stand-in aircraft, <see cref="Plane"/>, <see cref="Fighter"/>,
+/// <see cref="Firebrand"/> and <see cref="Avenger"/>, in two families. The plane family is their
+/// models under <c>planes/</c>, box-built airframes each carrying the marker rig. It also holds the
+/// <c>vehicle.json</c>, <c>engines.json</c> and <c>player.json</c> records and the maneuver
+/// library. The armament family is the weapons in <c>weapons.json</c>, the shake sources and the
+/// message table. Every
 /// record is hand-authored from <c>docs/formats/</c>; only <c>models.json</c> is generated, from
 /// the box list beside the nodes.
 /// </summary>
@@ -23,6 +24,14 @@ public static class SyntheticPlane
     /// door seats this starter airframe from <c>PlanePickerRoster.StockAirframes</c>. A suite that
     /// needs two distinct airframes finds it there. Everything under the name is invented.</summary>
     public const string Fighter = "player_pfighter";
+
+    /// <summary>The custom-plane suites' host airframe (id 6), invented under the code's name like
+    /// <see cref="Fighter"/>. A custom build composes the code's weapon ids (<c>wep_30</c>..<c>wep_70</c>,
+    /// <c>wep_06</c>), so <c>weapons.json</c> carries invented records under those too.</summary>
+    public const string Firebrand = "player_fbrand";
+
+    /// <summary>The custom-plane suites' guest airframe (id 1), invented under the code's name.</summary>
+    public const string Avenger = "player_avenger";
 
     // A record written for the tree keeps its path under extracted/ beneath this fixtures folder.
     private const string Records = "synthetic/";

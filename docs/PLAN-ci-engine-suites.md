@@ -668,15 +668,17 @@ loader's own checks become the thing under test.
 
 ## B15 ☐ Bring the plane-only suites onto the tier
 
-**Open work (read this first).** `tier:ci` holds 151 suites and passes headless with
-`--synthetic-data` and no extraction. With the switch the full catalog shows 159 PASS, 17 FAIL, 324
-SKIP; without it 58 PASS, 2 FAIL, 440 SKIP. What remains, each with its owner:
+**Open work (read this first).** `tier:ci` holds 154 suites and passes headless with
+`--synthetic-data` and no extraction. Over the 548-suite catalog the switch shows 183 PASS, 22 FAIL,
+343 SKIP; without it 63 PASS, 1 FAIL, 484 SKIP. What remains, each with its owner:
 
-- **Two more invented airframes, author-approved:** `player_fbrand` and `player_avenger` as stand-ins
-  under the code's names, like `player_pfighter` (geometry, stats, markers, fit and sounds invented).
-  They unblock `net-custom-planes` and `net-seats`.
 - **C24** (below): anim, effect and weather records, plus an invented `voice.json` family for
   `ai-voice`, `voice-runtime` and `net-player-voice`.
+- **Shipped airframes the tree lacks:** with the switch `versus-local-bot` (`player_bhawk` and
+  `player_peacemaker`; its menu-launch leg also reads a C1 file), `versus-local-bot-graze` (`player_fury`), `net-bot-yield`
+  (`player_bhawk`) and `graze-bounce-bot` (`player_autogyro`) FAIL building a session. A
+  `RequirePlane` gate would make each SKIP naming the airframe; a stand-in under another shipped name
+  needs the author's approval of that name first.
 - **Off the tier by design or judgement:** `wingman-station` (the nitro leg rests on the shipped
   airframe's speed margin; retuning the shared stand-in would move other suites), `ground-shadow` and
   `flyout-rack-pose` (C1 terrain and FLYOUT models), `menu-original-hangar` and
@@ -861,6 +863,32 @@ before, each relational line reduces to the shipped row and each literal still r
 `RunTests.ps1` battery should show the same PASS/FAIL/SKIP per suite, plus `campaign-layout-core`
 passing. The network suites each carry a few more check sites, and `campaign-layout-parity` one
 fewer per aid, its source check having moved to the core.
+
+**FBRAND and AVENGER landed: the custom-plane airframes as invented stand-ins.** The synthetic tree
+carries `player_fbrand` and `player_avenger` under the code's names (airframe ids 6 and 1, the
+custom-plane suites' host and guest), like `player_pfighter`: each is the fighter's invented subtree
+rescaled (long and narrow, broad and heavy) on its own colour, with its own player def, dynamics,
+zones, collision probes, engine sound, jet flavour and supplement fit (`fixtures/README.md`). A
+custom build reads more than the airframe: `engines.json` gains the six registry rows
+`CustomPlaneBuild.EngineRegistryBase` composes for the two (19 to 21, 31 to 33), and `weapons.json`
+gains invented records under the ids the build composes, the slug guns `wep_30` to `wep_70` and the
+pylons' `wep_06`, appended after every `wep_probe_*` record so `OrdnanceSuites.PickWeapon` still takes
+the probe ones. Those six weapon ids are code names beyond the two the author approved; without them
+`net-custom-planes` binds no gun or pylon on either seat. `net-seats` now opens on
+`NetCombatSuites.Arena`, the empty stage's ring when the root carries no `C1/MP1` and the map's
+`net.zrd` otherwise, as `net-guest-keymap` does. No check was retargeted. Three suites join
+`tier:ci` (154), each passing three runs in a row by name with the switch and SKIPping as before
+without it: `net-custom-planes` (red with `wep_06` renamed, both seats then hang no pylon),
+`net-seats` (red with the `pprobebrand` def's `nodename` broken) and `net-bot-respawn`, which flies
+the `player_pfighter`/`player_fbrand` pair outright (red the same way, neither session building).
+`net-ai-world`, `net-ai-voice` and `net-lobby-deathmatch-mp1` still SKIP on C1's gamez (the standing
+destructible pool and `MP1` itself), not on an airframe. Full catalog over an empty root on Windows,
+headless, against the same base: with the switch 183 PASS, 22 FAIL, 343 SKIP against 180, 24, 344,
+the only changes the three above; without it 63, 1, 484 both, suite by suite. The base is 548 suites
+where the hand-off counted 500, and its 24 FAILs include the four airframe ones in the open work above.
+**Still owed to the Windows run.** On the install `net-seats` reads `C1/MP1` as before and the
+supplement fits and invented weapons are never read, so the full `RunTests.ps1` battery should show
+the same PASS/FAIL/SKIP per suite.
 
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).

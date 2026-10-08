@@ -139,6 +139,134 @@
       "mode", ["wingman"],
       "dare_devil", [3],
       "steady_hand", [7]
+    ],
+    "pprobebrand",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_fbrand"],
+      "title", ["MSG_PROBE_BRAND"],
+      "engine_sound", ["snd_probe_brand_engine"],
+      "engine", [31],
+      "fuel", [80],
+      "dynamics",
+      [
+        "pitch_torque", [2.3],
+        "roll_torque", [5.6],
+        "rudder_torque", [1.4],
+        "return_rate", [2.9],
+        "ang_momentum_damp", [4.9],
+        "rec_moments_inertia", [0.85, 0.6, 1.15],
+        "fd_speed", [128],
+        "drag_factor", [0.85],
+        "veh_weight", [2800],
+        "ref_area", [240]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 26, 26, "critical", "engine",
+         "injure_anims", [[0.28, "pdpanel7", "player_fbrand"]]],
+        ["tail", 18, 18,
+         "injure_anims", [[0.28, "pdpanel8", "player_fbrand"]]],
+        ["leftwing", 20, 20,
+         "injure_anims", [[0.5, "pdpanel3", "player_fbrand"], [0.3, "pdpanel2", "player_fbrand"], [0.12, "pdpanel5", "player_fbrand"]]],
+        ["rightwing", 20, 20,
+         "injure_anims", [[0.5, "pdpanel4", "player_fbrand"], [0.3, "pdpanel1", "player_fbrand"], [0.12, "pdpanel6", "player_fbrand"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -4.5],
+        [0.0, -0.1, 4.7],
+        [5.4, -0.2, -0.3],
+        [0.0, 0.7, -0.3],
+        [-5.4, -0.2, -0.3],
+        [0.0, -0.45, 2.6]
+      ]
+    ],
+    "probebrand",
+    [
+      "title", ["MSG_PROBE_BRAND"],
+      "mode", ["jet"],
+      "armor", [50],
+      "health", [50],
+      "dare_devil", [6],
+      "natural_touch", [5],
+      "sixth_sense", [6],
+      "dead_eye", [5],
+      "quick_draw", [6],
+      "steady_hand", [5],
+      "stun_recovery", [5],
+      "talker", [4],
+      "constitution", [5],
+      "weapons",
+      [
+        ["wep_probe_gun", 350, 0.45, 0, 750],
+        ["wep_probe_rocket", 2, 5, 180, 1300]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "pprobeavenger",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_avenger"],
+      "title", ["MSG_PROBE_AVENGER"],
+      "engine_sound", ["snd_probe_avenger_engine"],
+      "engine", [19],
+      "fuel", [110],
+      "dynamics",
+      [
+        "pitch_torque", [1.8],
+        "roll_torque", [4.4],
+        "rudder_torque", [1.1],
+        "return_rate", [2.2],
+        "ang_momentum_damp", [4.2],
+        "rec_moments_inertia", [1.0, 0.8, 1.25],
+        "fd_speed", [112],
+        "drag_factor", [1.1],
+        "veh_weight", [3600],
+        "ref_area", [340]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 34, 34, "critical", "engine",
+         "injure_anims", [[0.22, "pdpanel7", "player_avenger"]]],
+        ["tail", 24, 24,
+         "injure_anims", [[0.22, "pdpanel8", "player_avenger"]]],
+        ["leftwing", 28, 28,
+         "injure_anims", [[0.6, "pdpanel3", "player_avenger"], [0.35, "pdpanel2", "player_avenger"], [0.1, "pdpanel5", "player_avenger"]]],
+        ["rightwing", 28, 28,
+         "injure_anims", [[0.6, "pdpanel4", "player_avenger"], [0.35, "pdpanel1", "player_avenger"], [0.1, "pdpanel6", "player_avenger"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -4.0],
+        [0.0, -0.1, 4.1],
+        [8.2, -0.25, -0.2],
+        [0.0, 1.0, -0.2],
+        [-8.2, -0.25, -0.2],
+        [0.0, -0.6, 2.3]
+      ]
+    ],
+    "probeavenger",
+    [
+      "title", ["MSG_PROBE_AVENGER"],
+      "mode", ["jet"],
+      "armor", [70],
+      "health", [70],
+      "dare_devil", [4],
+      "natural_touch", [4],
+      "sixth_sense", [5],
+      "dead_eye", [7],
+      "quick_draw", [4],
+      "steady_hand", [6],
+      "stun_recovery", [7],
+      "talker", [5],
+      "constitution", [7],
+      "weapons",
+      [
+        ["wep_probe_gun", 450, 0.55, 0, 850],
+        ["wep_probe_rocket", 6, 3, 150, 1600]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
     ]
   ]
 ]

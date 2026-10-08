@@ -21,6 +21,30 @@
          "markers": ["firepoint1", "firepoint2"]}
       ],
       "hardpoints": {"count": 4, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobebrand": {
+      "model": "player_fbrand",
+      "display": "Probe Lancer",
+      "guns": [
+        {"slot": 2, "mount": "Lancer Wing Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint5", "firepoint6"]},
+        {"slot": 3, "mount": "Lancer Cowl Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint3", "firepoint4"]}
+      ],
+      "hardpoints": {"count": 2, "stock": ["wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobeavenger": {
+      "model": "player_avenger",
+      "display": "Probe Bulwark",
+      "guns": [
+        {"slot": 1, "mount": "Bulwark Outer Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint7", "firepoint8"]},
+        {"slot": 2, "mount": "Bulwark Inner Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint5", "firepoint6"]},
+        {"slot": 4, "mount": "Bulwark Nose Gun", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint1"]}
+      ],
+      "hardpoints": {"count": 6, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
     }
   }
 }

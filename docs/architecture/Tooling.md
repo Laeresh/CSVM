@@ -86,13 +86,13 @@ code. The shape is what `Mech3/TextureArchive.cs` reads, from the header fields 
 [../org/textures.md](../org/textures.md).
 
 ## src/Tooling/SyntheticPlane.cs
-The synthetic tree's two stand-in aircraft, in two families: `probe_plane`, the default, and
-`player_pfighter`, named for the lobby door's starter airframe in `PlanePickerRoster` with every record
-invented. `plane` writes `planes/` (the fixture `nodes.json` and `materials.json`, and a `models.json`
-generated from `boxes.json`, one outward-wound box per entry) and the `vehicle.json`, `engines.json`,
-`player.json` and `maneuvers.json` records under `zrdr/`. `armament` writes one gun and one rocket in
-`weapons.json`, `shakes.json` and `messages.json`. The fits are read in place as `StockLoadouts.Supplement`
-and `SessionSpec.DefaultPlane` names the probe, both set by `Launcher` under the switch. Shapes:
+The synthetic tree's stand-in aircraft: `probe_plane`, the default, and three under the code's names,
+every record invented: `player_pfighter` (the lobby door's starter), `player_fbrand` and `player_avenger`
+(the custom-plane suites' airframes). `plane` writes `planes/` (`nodes.json`, `materials.json`, and a
+`models.json` generated from `boxes.json`, one outward-wound box per entry) and `vehicle.json`,
+`engines.json`, `player.json` and `maneuvers.json` under `zrdr/`. `armament` writes the invented weapons
+(the ids a custom build composes among them), `shakes.json` and `messages.json`. `Launcher` sets the
+fits as `StockLoadouts.Supplement` and the probe as `SessionSpec.DefaultPlane` under the switch. Shapes:
 [gamez](../formats/gamez.md), [markers](../formats/markers.md), [vehicle](../formats/vehicle.md), [weapons](../formats/weapons.md).
 
 ## src/Tooling/SyntheticImages.cs

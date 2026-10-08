@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
@@ -19,6 +20,10 @@ namespace CSVM.Tests;
 /// </summary>
 public class SyntheticPlaneTests
 {
+    // The ids a custom plane's build composes: each calibre's slug gun and the pylons' stock ordnance.
+    private static readonly string[] CustomPlaneIds = Enumerable.Range(0, CustomPlaneDef.MaxCalibre + 1)
+        .Select(c => StockLoadouts.GunWeaponId(30 + (10 * c), "slug")).Append(Loadout.StockOrdnance).ToArray();
+
     [Fact]
     public void TheModelCarriesTheRootTheMarkerRigAndTheCockpit()
     {
@@ -101,14 +106,17 @@ public class SyntheticPlaneTests
         var messages = Messages.Load(Path.Combine(root, "extracted", "messages.json"));
 
         var weapons = WeaponDefs.Load(zrdr, messages);
-        var gun = Assert.Single(weapons.All, w => w.IsGun);
+        var gun = weapons.Get("wep_probe_gun");
         var rocket = weapons.Get("wep_probe_rocket");
+        Assert.NotNull(gun);
         Assert.NotNull(rocket);
         Assert.Equal("Probe Gun", gun.DisplayName);
         Assert.Equal("Probe Rocket", rocket.DisplayName);
 
         // The ordnance records beside them are invented too, and each names itself through the table.
-        Assert.All(weapons.All, w => Assert.StartsWith("wep_probe_", w.Id, System.StringComparison.Ordinal));
+        // Only the ids a custom plane composes carry the code's names.
+        Assert.All(weapons.All, w => Assert.True(w.Id.StartsWith("wep_probe_", System.StringComparison.Ordinal)
+                                                 || CustomPlaneIds.Contains(w.Id), w.Id));
         Assert.All(weapons.All, w => Assert.NotEqual(w.DescKey, w.DisplayName));
         // The fused blast rocket: a trigger distance past 8 m and a radius over twice it.
         var blast = weapons.Get("wep_probe_blastrocket");
@@ -168,6 +176,50 @@ public class SyntheticPlaneTests
         Assert.All(fit.Guns, g => Assert.Equal("wep_probe_gun", g.WeaponId));
         Assert.Equal(4, fit.Hardpoints!.Count);
         Assert.Equal(12, stock.All.Count);
+    }
+
+    [Fact]
+    public void TheCustomPlaneAirframesAreDistinctAndArmTheIdsACustomBuildComposes()
+    {
+        string root = Built();
+        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter)!;
+        var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
+        var stock = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
+        stock.Overlay(SyntheticPlane.LoadoutsUnder(TestData.Fixture()));
+
+        foreach (var (node, def, ai) in new[] { (SyntheticPlane.Firebrand, "pprobebrand", "probebrand"),
+                     (SyntheticPlane.Avenger, "pprobeavenger", "probeavenger") })
+        {
+            var rig = MarkerRig.Extract(gamez, node);
+            Assert.NotNull(rig);
+            Assert.Equal(8, rig.Markers.Count(m => m.Kind == MarkerRig.MarkerKind.Firepoint));
+            Assert.Equal(8, rig.Markers.Count(m => m.Kind == MarkerRig.MarkerKind.Pylon));
+            Assert.NotEqual(Marker(fighterRig, "pylon1"), Marker(rig, "pylon1"));
+
+            var stats = PlaneStats.Load(zrdr, node);
+            Assert.Equal(def, stats.DefName);
+            Assert.NotEqual(fighter.RollTorque, stats.RollTorque);
+            Assert.NotEqual(fighter.EngineSound, stats.EngineSound);
+            Assert.Equal(ai, PlaneStats.LoadForAi(zrdr, node).AiDefName);
+
+            // The engine pick's registry rows exist, so a custom engine reads its own power.
+            int airframe = StockAirframes.IdOf(node)!.Value;
+            for (int tier = 0; tier < 3; tier++)
+            {
+                Assert.NotNull(CustomPlaneBuild.EnginePowerFor(zrdr, new CustomPlaneDef { Airframe = airframe, Engine = tier }));
+            }
+
+            var fit = stock.ForModel(node);
+            Assert.Equal(def, fit?.Def);
+            Assert.All(fit!.Guns, g => Assert.Equal("wep_probe_gun", g.WeaponId));
+        }
+
+        Assert.Equal(12, stock.All.Count);
+        var weapons = WeaponDefs.Load(zrdr, null);
+        Assert.All(CustomPlaneIds, id => Assert.NotNull(weapons.Get(id)));
+        Assert.True(weapons.Get(Loadout.StockOrdnance)!.HighExplosive);
     }
 
     private static Vector3 Marker(MarkerRig rig, string name) => rig.Markers.Single(m => m.Name == name).Local;

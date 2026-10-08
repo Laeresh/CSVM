@@ -4,5 +4,7 @@
   {"Colored": {"color": {"r": 40.0, "g": 40.0, "b": 44.0}, "alpha": 255.0, "soil": "Default"}},
   {"Textured": {"texture": "probe_panel", "soil": "Default"}},
   {"Colored": {"color": {"r": 170.0, "g": 60.0, "b": 40.0}, "alpha": 255.0, "soil": "Default"}},
-  {"Colored": {"color": {"r": 92.0, "g": 108.0, "b": 70.0}, "alpha": 255.0, "soil": "Default"}}
+  {"Colored": {"color": {"r": 92.0, "g": 108.0, "b": 70.0}, "alpha": 255.0, "soil": "Default"}},
+  {"Colored": {"color": {"r": 52.0, "g": 70.0, "b": 128.0}, "alpha": 255.0, "soil": "Default"}},
+  {"Colored": {"color": {"r": 178.0, "g": 152.0, "b": 98.0}, "alpha": 255.0, "soil": "Default"}}
 ]

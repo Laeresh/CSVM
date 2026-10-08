@@ -42,6 +42,14 @@
     { "key": "MSG_FLAG_CAP_BY", "id": 64, "value": "%1 probe pennant lifted by %2" },
     { "key": "MSG_YOUR_FLAG_FLOAT", "id": 65, "value": "Our probe pennant adrift" },
     { "key": "MSG_ENEMY_FLAG_FLOAT", "id": 66, "value": "Rival probe pennant adrift" },
-    { "key": "MSG_HOLDS_FLAG", "id": 67, "value": "%1 flies %2 probe pennant" }
+    { "key": "MSG_HOLDS_FLAG", "id": 67, "value": "%1 flies %2 probe pennant" },
+    { "key": "MSG_PROBE_BRAND", "id": 68, "value": "Probe Lancer" },
+    { "key": "MSG_PROBE_AVENGER", "id": 69, "value": "Probe Bulwark" },
+    { "key": "MSG_PROBE_CAL30", "id": 70, "value": "Probe light gun" },
+    { "key": "MSG_PROBE_CAL40", "id": 71, "value": "Probe medium gun" },
+    { "key": "MSG_PROBE_CAL50", "id": 72, "value": "Probe heavy gun" },
+    { "key": "MSG_PROBE_CAL60", "id": 73, "value": "Probe cannon" },
+    { "key": "MSG_PROBE_CAL70", "id": 74, "value": "Probe great cannon" },
+    { "key": "MSG_PROBE_PYLON_HE", "id": 75, "value": "Probe pylon rocket" }
   ]
 }
