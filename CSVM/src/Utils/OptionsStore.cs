@@ -414,22 +414,35 @@ public sealed class OptionsStore
     /// missing one rather than invalidating the whole file, and a field the file does not carry
     /// at all reads as never set, so a file written before a field existed still loads. Only the
     /// version gate rejects a whole file.</summary>
-    public static OptionsDef? Deserialize(string json)
+    public static OptionsDef? Deserialize(string json) => Deserialize(json, out _);
+
+    /// <summary>The same read, with the reason a null came back in <paramref name="error"/>, which is
+    /// what <see cref="Load"/> logs.</summary>
+    public static OptionsDef? Deserialize(string json, out string error)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                error = "not a JSON object";
+                return null;
+            }
+
             int version = root.TryGetProperty("version", out var v)
                 && v.ValueKind == JsonValueKind.Number
                 && v.TryGetInt32(out int value)
                     ? value
                     : -1;
-            if (root.ValueKind != JsonValueKind.Object || version != Version)
+            if (version != Version)
             {
+                error = "version " + version.ToString(CultureInfo.InvariantCulture) + ", this build reads "
+                    + Version.ToString(CultureInfo.InvariantCulture);
                 return null;
             }
 
+            error = string.Empty;
             return new OptionsDef
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
@@ -464,8 +477,9 @@ public sealed class OptionsStore
                 NetMasterServer = ReadShaped(root, "netMasterServer", static v => MasterAddress.Parse(v) != null),
             };
         }
-        catch (JsonException)
+        catch (JsonException e)
         {
+            error = e.Message;
             return null;
         }
     }
@@ -506,22 +520,24 @@ public sealed class OptionsStore
     }
 
     /// <summary>The stored options, or an empty <see cref="OptionsDef"/> when the file is absent,
-    /// unreadable or malformed. A read failure is never the caller's problem to handle.</summary>
+    /// unreadable or malformed. A read failure is never the caller's problem to handle. A malformed
+    /// file is moved aside to <c>options.json.bad</c>. An unreadable one is not saved over this
+    /// session, as <see cref="AtomicFile"/> rules.</summary>
     public OptionsDef Load()
     {
-        try
-        {
-            var path = Path.Combine(_dir, FileName);
-            return File.Exists(path) ? Deserialize(File.ReadAllText(path)) ?? new OptionsDef() : new OptionsDef();
-        }
-        catch (IOException)
+        var path = Path.Combine(_dir, FileName);
+        if (AtomicFile.ReadAllText(path) is not { } text)
         {
             return new OptionsDef();
         }
-        catch (UnauthorizedAccessException)
+
+        if (Deserialize(text, out string error) is { } def)
         {
-            return new OptionsDef();
+            return def;
         }
+
+        AtomicFile.SetAside(path, error);
+        return new OptionsDef();
     }
 
     /// <summary>Writes <paramref name="def"/> atomically: the JSON lands in a sibling temp file

@@ -186,7 +186,8 @@ public sealed class StickProfileStore
 
     /// <summary>Every <c>*.json</c> file directly in <paramref name="directory"/>, in ordinal name
     /// order; empty when the directory does not exist. A file that cannot be read is logged and
-    /// left out.</summary>
+    /// left out, and no save replaces it this session (<see cref="AtomicFile.ReadAllText"/>).
+    /// </summary>
     public static IReadOnlyList<StickProfileText> ReadDirectory(string directory)
     {
         var texts = new List<StickProfileText>();
@@ -199,13 +200,9 @@ public sealed class StickProfileStore
         Array.Sort(paths, StringComparer.Ordinal);
         foreach (var path in paths)
         {
-            try
+            if (AtomicFile.ReadAllText(path) is { } text)
             {
-                texts.Add(new StickProfileText(Path.GetFileName(path), File.ReadAllText(path)));
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                Log.Warn("core", $"stick profile {path}: skipped, {e.Message}");
+                texts.Add(new StickProfileText(Path.GetFileName(path), text));
             }
         }
 
@@ -213,12 +210,14 @@ public sealed class StickProfileStore
     }
 
     /// <summary>Every usable profile file, shipped first, then the user's, each set in the order its
-    /// source lists it. Unusable files are logged and left out.</summary>
+    /// source lists it. Unusable files are logged and left out. An unusable user file is also moved
+    /// to <c>.bad</c>, since a save under its name would otherwise replace the player's edit.
+    /// </summary>
     public IReadOnlyList<StickProfileFile> LoadAll()
     {
         var files = new List<StickProfileFile>();
-        Collect(files, StickProfileSource.Shipped, _shipped());
-        Collect(files, StickProfileSource.User, ReadDirectory(UserDirectory));
+        Collect(files, StickProfileSource.Shipped, _shipped(), null);
+        Collect(files, StickProfileSource.User, ReadDirectory(UserDirectory), UserDirectory);
         return files;
     }
 
@@ -239,13 +238,19 @@ public sealed class StickProfileStore
         return new StickProfileFile(StickProfileSource.User, Path.GetFileName(name), profile);
     }
 
-    private static void Collect(List<StickProfileFile> files, StickProfileSource source, IEnumerable<StickProfileText> texts)
+    // A shipped file has no directory to move it in, and nothing ever writes over it.
+    private static void Collect(
+        List<StickProfileFile> files, StickProfileSource source, IEnumerable<StickProfileText> texts, string? directory)
     {
         foreach (var text in texts)
         {
             if (Deserialize(text.Text, out string error) is { } profile)
             {
                 files.Add(new StickProfileFile(source, text.FileName, profile));
+            }
+            else if (directory is not null)
+            {
+                AtomicFile.SetAside(Path.Combine(directory, text.FileName), "stick profile skipped, " + error);
             }
             else
             {

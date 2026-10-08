@@ -227,7 +227,7 @@ reinterprets an old save. `Encode` and `Decode` are the token grammar (version 3
 stick hat tokens, the lever row reusing the full-axis token); an older file loads whole, so the
 reader checks no version. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
 Shape, tokens and unreadable rows: [../org/input.md](../org/input.md). `DirectoryOverride` keeps a
-suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`.
+suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`. A file that is no JSON object is moved to `.bad`.
 
 ## src/Bindings/SnapLookRows.cs
 The original's Views 2 snap-look rows: eight directions round Look Forward, one numpad key each, the

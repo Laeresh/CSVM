@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Utils;
@@ -54,5 +55,47 @@ public sealed class AtomicFileTests
 
         Assert.ThrowsAny<System.Exception>(() => AtomicFile.WriteAllText(path, "new"));
         Assert.Equal("old", File.ReadAllText(path));
+    }
+
+    /// <summary>A store answers defaults when its read fails, so saving them would erase the file it
+    /// could not read. The write is skipped until a read of the path succeeds again.</summary>
+    [Fact]
+    public void AFileWhoseReadFailedIsNotWrittenUntilARereadSucceeds()
+    {
+        string path = Path.Combine(TestData.TempDir(), "save.json");
+        File.WriteAllText(path, "the player's");
+        var lines = new List<string>();
+
+        using (Log.PushConsoleSink(lines.Add))
+        {
+            using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                Assert.Null(AtomicFile.ReadAllText(path));
+            }
+
+            AtomicFile.WriteAllText(path, "defaults");
+            Assert.Equal("the player's", File.ReadAllText(path));
+
+            Assert.Equal("the player's", AtomicFile.ReadAllText(path));
+            AtomicFile.WriteAllText(path, "edited");
+        }
+
+        Assert.Equal("edited", File.ReadAllText(path));
+        Assert.Contains(lines, l => l.Contains("unreadable") && l.Contains(path));
+        Assert.Contains(lines, l => l.Contains("not saved") && l.Contains(path));
+    }
+
+    [Fact]
+    public void ASetAsideFileReplacesAnOlderBadCopyAndFreesThePath()
+    {
+        string path = Path.Combine(TestData.TempDir(), "save.json");
+        File.WriteAllText(path + ".bad", "older");
+        File.WriteAllText(path, "{ broken");
+
+        AtomicFile.SetAside(path, "test");
+        AtomicFile.WriteAllText(path, "fresh");
+
+        Assert.Equal("{ broken", File.ReadAllText(path + ".bad"));
+        Assert.Equal("fresh", File.ReadAllText(path));
     }
 }
