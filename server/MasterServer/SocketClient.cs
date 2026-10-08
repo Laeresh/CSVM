@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -34,6 +35,10 @@ public sealed class SocketClient : IMasterClient
     private double _tokens;
     private DateTimeOffset _filled;
 
+    // Set by Close. A sender may have more messages on the wire behind the one that closed it, and
+    // none of them reaches the hub, so a burst of guessed codes still costs one socket per guess.
+    private volatile bool _closed;
+
     private SocketClient(WebSocket socket, string address, MasterHub hub, MasterOptions options, TimeProvider time)
     {
         _socket = socket;
@@ -64,7 +69,21 @@ public sealed class SocketClient : IMasterClient
         finally
         {
             hub.Closed(client);
-            open.AddOrUpdate(address, 0, (_, count) => Math.Max(0, count - 1));
+            Release(open, address);
+        }
+    }
+
+    /// <summary>Takes one socket off <paramref name="address"/>'s count in <paramref name="open"/>,
+    /// and the address off the map once it holds none, so the map stays as large as the addresses
+    /// connected now.</summary>
+    public static void Release(ConcurrentDictionary<string, int> open, string address)
+    {
+        ArgumentNullException.ThrowIfNull(open);
+
+        // The removal names the zero it saw, so a socket opened in between keeps its count.
+        if (open.AddOrUpdate(address, 0, (_, count) => Math.Max(0, count - 1)) == 0)
+        {
+            open.TryRemove(KeyValuePair.Create(address, 0));
         }
     }
 
@@ -80,6 +99,7 @@ public sealed class SocketClient : IMasterClient
     /// <inheritdoc/>
     public void Close(string why)
     {
+        _closed = true;
         _outbox.Writer.TryWrite(MasterWire.Write(new MasterMessage { T = MasterWire.Error, Why = why }));
         _outbox.Writer.TryComplete();
     }
@@ -137,6 +157,11 @@ public sealed class SocketClient : IMasterClient
             if (frame.End == MasterFrameEnd.Closed)
             {
                 return (WebSocketCloseStatus.NormalClosure, "bye");
+            }
+
+            if (_closed)
+            {
+                break;
             }
 
             if (frame.Type != WebSocketMessageType.Text || !Spend())

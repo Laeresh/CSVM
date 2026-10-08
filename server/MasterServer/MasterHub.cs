@@ -39,6 +39,24 @@ public sealed class MasterHub
     /// <summary>What a build below <see cref="Oldest"/> is told on every message it sends.</summary>
     public const string OutdatedWhy = "This version of CSVM is too old for the master server. Update CSVM to host or join internet games.";
 
+    /// <summary>What a join naming no hosted game is told as its socket closes.</summary>
+    public const string NoGameWhy = "no game is listed under that code";
+
+    /// <summary>What a join is told when its game has as many guests from its address negotiating as
+    /// <see cref="MasterOptions.MaxPendingGuestsPerAddress"/> allows.</summary>
+    public const string AddressPendingWhy = "too many players from your address are joining that game at once; try again in a moment";
+
+    /// <summary>What a join is told when its address has used up
+    /// <see cref="MasterOptions.TurnMintsPerHour"/>.</summary>
+    public const string TurnSpentWhy = "too many joins from your address in the last hour; try again later";
+
+    /// <summary>The TURN credentials one join mints: the guest's, and the host's for that guest.
+    /// </summary>
+    public const int MintsPerJoin = 2;
+
+    /// <summary>The span <see cref="MasterOptions.TurnMintsPerHour"/> counts over.</summary>
+    public static readonly TimeSpan MintWindow = TimeSpan.FromHours(1);
+
     private readonly object _gate = new();
     private readonly Dictionary<string, Game> _games = new(StringComparer.Ordinal);
     private readonly Dictionary<IMasterClient, Role> _roles = new(ReferenceEqualityComparer.Instance);
@@ -48,6 +66,9 @@ public sealed class MasterHub
     // its lobby on the update request rather than on "only a host updates its game".
     private readonly HashSet<IMasterClient> _outdated = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, int> _seen = new();
+
+    // When each TURN credential an address caused was minted, oldest first, within the last hour.
+    private readonly Dictionary<string, Queue<DateTimeOffset>> _mints = new(StringComparer.Ordinal);
     private readonly MasterOptions _options;
     private readonly TimeProvider _time;
     private readonly TurnCredentials _ice;
@@ -211,12 +232,31 @@ public sealed class MasterHub
                 }
             }
 
+            foreach (var (address, times) in _mints.ToList())
+            {
+                if (Recent(times, now) == 0)
+                {
+                    _mints.Remove(address);
+                }
+            }
+
             return silent.Count;
         }
     }
 
     private static void Refuse(IMasterClient to, string why) =>
         to.Send(new MasterMessage { T = MasterWire.Error, Why = why });
+
+    // Forgets the mints older than the window and says how many are left.
+    private static int Recent(Queue<DateTimeOffset> times, DateTimeOffset now)
+    {
+        while (times.Count > 0 && now - times.Peek() >= MintWindow)
+        {
+            times.Dequeue();
+        }
+
+        return times.Count;
+    }
 
     private void Register(IMasterClient from, MasterGame? listing)
     {
@@ -276,15 +316,32 @@ public sealed class MasterHub
             return;
         }
 
+        // Closing makes each guess at a private code cost a socket, which the per-address socket
+        // rate bounds, instead of one message on a socket that stays open. The game ends a join at
+        // the first error anyway.
         if (!MasterWire.TryCode(typed, out string code) || !_games.TryGetValue(code, out var game))
         {
-            Refuse(from, "no game is listed under that code");
+            from.Close(NoGameWhy);
             return;
         }
 
         if (game.Guests.Count >= _options.MaxPendingGuests)
         {
             Refuse(from, "too many players are joining that game at once; try again");
+            return;
+        }
+
+        if (game.Guests.Values.Count(guest => guest.Address == from.Address) >= Math.Max(1, _options.MaxPendingGuestsPerAddress))
+        {
+            Refuse(from, AddressPendingWhy);
+            return;
+        }
+
+        // The host's credential is charged to the guest, who caused it. Charged to the host, any
+        // stranger joining its public game could spend its allowance and lock its own guests out.
+        if (_ice.Mints && !TakeMints(from.Address))
+        {
+            Refuse(from, TurnSpentWhy);
             return;
         }
 
@@ -345,6 +402,30 @@ public sealed class MasterHub
         {
             game.Host.Close(why);
         }
+    }
+
+    // All of one join's mints or none, so a refused join never half-spends the allowance.
+    private bool TakeMints(string address)
+    {
+        var now = _time.GetUtcNow();
+        int allowed = Math.Max(MintsPerJoin, _options.TurnMintsPerHour);
+        if (!_mints.TryGetValue(address, out var times))
+        {
+            times = new Queue<DateTimeOffset>();
+            _mints.Add(address, times);
+        }
+
+        if (Recent(times, now) + MintsPerJoin > allowed)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < MintsPerJoin; i++)
+        {
+            times.Enqueue(now);
+        }
+
+        return true;
     }
 
     private string NewCode()
