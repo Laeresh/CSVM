@@ -333,10 +333,12 @@ internal static class HudKillLineSuites
     }
 
     // The damage dial's post-hit blink on the same clock. A 0.2 s step from phase 0 lands in the
-    // blink's dark half. A 10 s wall step would spend the 5 s window.
+    // 0.32 s blink's dark half. A wall frame is ten periods and an eighth. Two of them would spend
+    // the 5 s window. Two or three put a wall-timed phase in the lit half. So a wall-timed blink
+    // window or blink phase each fails the check alone.
     private static void GaugeBlinkClock(TestContext ctx, GameZ planesGamez, TextureArchive textures)
     {
-        const float WallFrame = 10f;
+        const float WallFrame = 10f * GaugeCluster.DamageBlinkPeriod + GaugeCluster.DamageBlinkPeriod / 8f;
         var parts = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).DestroyableParts;
         var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, parts);
         if (cluster == null)
@@ -356,24 +358,27 @@ internal static class HudKillLineSuites
             }
             bool Dark() => parts.Any(p => cluster.ZoneTier(p.Name) < 0);
 
+            string State() => $"blinkLeft={cluster.BlinkLeftAt(parts[0].Name):0.000} "
+                + $"phase={cluster.BlinkPhase:0.000} tier={cluster.ZoneTier(parts[0].Name)}";
+
             clock.BeginFrame(WallFrame);
             cluster._Process(WallFrame);
             clock.Halted = false;
             clock.BeginFrame(WallFrame);
             cluster._Process(WallFrame);
             ctx.Check(Dark(),
-                $"after a halted and a running {WallFrame:0} s frame, the struck zone blinks in its dark half: one {clock.FrameDt:0.00} s sim step aged it, the wall time did not");
+                $"after a halted and a running {WallFrame:0.00} s frame, the struck zone blinks in its dark half: one {clock.FrameDt:0.00} s sim step aged it, the wall time did not {State()}");
 
             clock.Halted = true;
             clock.BeginFrame(WallFrame);
             cluster._Process(WallFrame);
-            ctx.Check(Dark(), $"…and a halted clock holds the blink where it is");
+            ctx.Check(Dark(), $"…and a halted clock holds the blink where it is {State()}");
 
-            // ABLE-TO-FAIL CONTROL: with no session clock the same frame falls back to its wall delta.
+            // ABLE-TO-FAIL CONTROL: with no session clock a frame falls back to its wall delta.
             GameClock.Current = null;
-            cluster._Process(WallFrame);
+            cluster._Process(2 * WallFrame);
             ctx.Check(!Dark(),
-                $"ABLE-TO-FAIL CONTROL: with no session clock the wall delta spends the blink window");
+                $"ABLE-TO-FAIL CONTROL: with no session clock the wall delta spends the blink window {State()}");
         }
         finally
         {

@@ -106,8 +106,8 @@ public sealed partial class GaugeCluster : Control
     internal const float LowAltAglM = 60f;              // 0x006076fc
     internal const float LowAltBlinkBaseS = 0.14f;      // 0x006076f4
     internal const float LowAltBlinkPerMetreS = 0.006f; // 0x006076f8
+    internal const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
-    private const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
     // full cockpit.gw cycle) over the data's three *_damage_* injure thresholds, each
     // threshold steps to the NEXT color: green above the "green" anim's 0.72, yellow
@@ -207,6 +207,9 @@ public sealed partial class GaugeCluster : Control
 
     /// <inheritdoc cref="GunArrowAngleDeg"/>
     public float MissileArrowAngleDeg => _missileArrow.Angle;
+
+    // Read-only views of the damage blink's two timers (this and BlinkLeftAt), for the clock suite.
+    internal double BlinkPhase => _time;
 
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
 
@@ -561,6 +564,9 @@ public sealed partial class GaugeCluster : Control
                 DrawGaugePoly(_nitroBoostPoly, c, r, -_nitroBoostNeedle.Angle);
         }
     }
+
+    internal float BlinkLeftAt(string part) =>
+        _zones.Find(z => z.Part.Equals(part, StringComparison.OrdinalIgnoreCase))?.BlinkLeft ?? 0f;
 
     // ---- extraction ----
 
