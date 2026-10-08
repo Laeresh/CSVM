@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E, per-chapter seas
 
 41. ☐ An ocean lab and a shipped sea state per chapter
-42. ☐ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
+42. ☑ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
 
 ## Dependency and parallelism notes
 
@@ -1278,7 +1278,7 @@ rebaked. The values are shipped data, so a network peer and a `--det` capture ag
 load the same file. Shift+F1 sits beside `ControlCapture`'s bindable F1 to F12; the lab exists only in
 `--freecam`, where no flight controls are read.
 
-## E42 ☐ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
+## E42 ☑ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
 
 **Landed.** `ShaderTwins.RetextInPlace` puts every shader it rewrites on a `ShaderMaterial` of its
 own (`Pin`, which asks for the material's RID so the server material exists), and `Regenerate` and
@@ -1310,7 +1310,12 @@ the 40-suite shard-4 prefix ran clean twice. Complete battery: units 6517 passed
 shard, where its TAA frame builds the advanced group for every shader the shard has made (PERF-45);
 its weight is the shard figure.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the plan tree is green: units 6517 passed, 3 skipped; engine
+545 passed, 2 skipped, engine errors clean on all six shards, `net-pause-overlay`'s shard included
+and `graphics-retext-compiles` passing in s4 (17.5 s); goldens 25/25 hash-identical. The
+in-place rewrite racing a pipeline compile still in flight is not fixed in production code; any
+`Shader.Code` edit can meet it, the ocean lab's text edits included, and its cost is
+`free_rid` error lines and leaked variants.
 
 **Original approach (kept for reference).**
 
