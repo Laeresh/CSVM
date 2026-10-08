@@ -71,9 +71,9 @@ public enum DogfightMissionType : byte
     StuntRace = 3,
 }
 
-/// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
-/// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
-/// rendering one pose per closed door until the pattern goes. Reaches
+/// <summary>The enhanced presentation's screen-space passes and world layers, as doors a run can
+/// close one at a time. Each can lay a pattern of its own over the frame. Bisecting a full-screen
+/// artefact means rendering one pose per closed door until the pattern goes. Reaches
 /// <c>--graphics=enhanced</c> alone, the faithful path running none of them.</summary>
 [Flags]
 public enum EnhancedPasses
@@ -92,6 +92,10 @@ public enum EnhancedPasses
     /// <summary><c>--no-soft-shadows</c>: the sun's penumbra, angular distance and blur both 0,
     /// leaving a hard shadow edge rather than no shadow.</summary>
     SoftShadows = 8,
+
+    /// <summary><c>--no-ocean</c>: the wave ocean (<c>Effects.Ocean</c>), so the flat sea-level
+    /// sheet draws as it does without one.</summary>
+    Ocean = 16,
 }
 
 /// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
@@ -460,6 +464,10 @@ public sealed record SessionSpec
     /// See <c>docs/cli.md</c>.</summary>
     public EnhancedPasses SkippedPasses { get; private set; }
 
+    /// <summary><c>--dump-ocean-mask=&lt;path&gt;</c>: where the wave ocean writes its baked shore
+    /// mask as a PNG when it builds; empty for none. See <c>docs/cli.md</c>.</summary>
+    public string OceanMaskPath { get; private set; } = "";
+
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
     ///, flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
@@ -509,7 +517,12 @@ public sealed record SessionSpec
 
     // ---- The aircraft -------------------------------------------------------------------------
 
-    public string PlaneName { get; private set; } = "player_bhawk";
+    /// <summary>The aircraft a spec flies when <c>--plane=</c> names none, set once at startup.
+    /// <c>--synthetic-data</c> points it at the stand-in, the one aircraft its tree carries. A spec
+    /// a suite builds without naming a plane then flies what the data holds.</summary>
+    public static string DefaultPlane { get; set; } = "player_bhawk";
+
+    public string PlaneName { get; private set; } = DefaultPlane;
     /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named.</summary>
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
     /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
@@ -949,6 +962,10 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
     /// <see cref="ParseDamageScript"/>.</summary>
     public string? DebugDamage { get; private set; }
+    /// <summary>Resolved. <c>--debug-ocean=&lt;field&gt;:&lt;value&gt;,...[,open]</c>: the ocean
+    /// lab's overrides for this launch, filtered through <see cref="Effects.SeaState.FilterOverrides"/>
+    /// and null outside <c>--freecam</c>, the only mode the lab exists in.</summary>
+    public string? DebugOcean { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
     /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
@@ -1037,6 +1054,12 @@ public sealed record SessionSpec
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
 
+    /// <summary><c>--synthetic-data</c>: write an invented extraction tree into the scratch folder
+    /// and read it in place of the data root. Off unless given, and dropped with a note beside
+    /// <c>--extract</c>, which would otherwise write an extraction into that tree. See
+    /// <see cref="Tooling.SyntheticData"/>.</summary>
+    public bool SyntheticData { get; private set; }
+
     /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
     /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
     /// the install check refuses; null when the flag was absent.</summary>
@@ -1081,6 +1104,11 @@ public sealed record SessionSpec
     /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
     /// the saved option and the config key, including under <c>--det</c>.</summary>
     public string? ViewDistance { get; private set; }
+
+    /// <summary><c>--water-quality=flat|waves</c>, whether Enhanced draws the wave ocean or the flat
+    /// sea. Null when not given, and for an unknown word with a warning. Beats the saved option and the
+    /// config key, including under <c>--det</c>. <c>--no-ocean</c> still wins over waves.</summary>
+    public string? WaterQuality { get; private set; }
 
     /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
     /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
@@ -1402,6 +1430,8 @@ public sealed record SessionSpec
             }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
             else if (arg.StartsWith("--debug-damage=")) { s.DebugDamage = arg["--debug-damage=".Length..]; }
+            else if (arg == "--debug-ocean") { s.DebugOcean ??= ""; }
+            else if (arg.StartsWith("--debug-ocean=")) { s.DebugOcean = arg["--debug-ocean=".Length..]; }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }
             else if (arg == "--dump-markers") { s.DumpMarkers = true; }
             else if (arg.StartsWith("--dump-markers=")) { s.DumpMarkers = true; s.DumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -1640,6 +1670,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
+            else if (arg == "--synthetic-data") { s.SyntheticData = true; }
             else if (arg == "--extract") { s.ExtractInstall = ""; }
             else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
             else if (arg == "--extract-force") { s.ExtractForce = true; }
@@ -1660,6 +1691,8 @@ public sealed record SessionSpec
             else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
             else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
+            else if (arg == "--no-ocean") { s.SkippedPasses |= EnhancedPasses.Ocean; }
+            else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {
@@ -1680,6 +1713,10 @@ public sealed record SessionSpec
             else if (TryWordFlag(arg, Utils.ViewDistance.Lookup, notes, out string? viewWord))
             {
                 s.ViewDistance = viewWord ?? s.ViewDistance;
+            }
+            else if (TryWordFlag(arg, Utils.WaterQualitySetting.Lookup, notes, out string? waterWord))
+            {
+                s.WaterQuality = waterWord ?? s.WaterQuality;
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
@@ -1818,6 +1855,16 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", $"{name} does nothing without --extract=<install>, ignoring it"));
                 }
             }
+        }
+        else if (s.SyntheticData)
+        {
+            notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
+            s.SyntheticData = false;
+        }
+
+        if (s.SyntheticData && s.PlaneNames.Count == 0)
+        {
+            s.PlaneName = Tooling.SyntheticPlane.Plane;
         }
 
         if (netHost != null)
@@ -2522,6 +2569,11 @@ public sealed record SessionSpec
             Warn("ui", "--debug-damage is a --freecam/--anim-lab tool; ignoring it here (--damage-test is the headless twin)");
             DebugDamage = null;
         }
+        if (DebugOcean != null && Mode != SessionMode.Freecam)
+        {
+            Warn("ui", "--debug-ocean is the --freecam ocean lab's twin; ignoring it here");
+            DebugOcean = null;
+        }
         // A preset with nothing to apply to would otherwise be a silent no-op, and a run that shows
         // no damage would read as the staging being broken rather than as the flag being unused.
         if (AiHullDamage != null && AiPlanes == null)
@@ -2542,6 +2594,8 @@ public sealed record SessionSpec
             "is not deps/dest/open/all/node=<cs_name>");
         DebugDamage = FilterSpec(DebugDamage, ParseDamageScript, "--debug-damage step",
             "is not node=/pool=/hp=/kill/reset/tick=/open");
+        DebugOcean = FilterSpec(DebugOcean, Effects.SeaState.FilterOverrides, "--debug-ocean token",
+            "is not open or <field>:<number> over a SeaState field");
 
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
@@ -2697,13 +2751,17 @@ public sealed record SessionSpec
         {
             Warn("core", "--direction ignored: flight steers the nose from the spawn override, which needs --pos");
         }
-        // The empty stage has no mission spawn list to draw from, so the subject starts over the
-        // grid origin, through the same fields --pos resolves into, so an explicit placement wins.
+        // The empty stage has no mission spawn list, so the subject starts over the grid origin. It
+        // goes through the fields --pos resolves into, so an explicit placement wins. A Dogfight
+        // walks the stage's own spawn ring instead, which a default here would beat.
         if (EmptyStage)
         {
             if (Fly)
             {
-                SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                if (!Versus)
+                {
+                    SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                }
             }
             else
             {

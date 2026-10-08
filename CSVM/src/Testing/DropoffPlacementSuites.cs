@@ -80,6 +80,7 @@ internal static class DropoffPlacementSuites
     internal static void DropoffPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -122,6 +123,7 @@ internal static class DropoffPlacementSuites
     internal static void CutsceneHandoffUnposed(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), UnposedMissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {UnposedMissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

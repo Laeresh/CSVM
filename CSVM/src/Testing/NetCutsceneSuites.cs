@@ -50,6 +50,7 @@ internal static class NetCutsceneSuites
     internal static void RemoteOwner(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == FirstSeq)

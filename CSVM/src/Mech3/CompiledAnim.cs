@@ -463,6 +463,25 @@ public sealed class AnimEvent
         ev.WaitsForCompletion = ev.Kind == "CallAnimation" && ev.Data.Has("wait_for_completion");
         return ev;
     }
+
+    /// <summary>The single-node <c>ObjectMotionSiScript</c> events an
+    /// <see cref="AnimDefinition.AllNamesKind"/> event plays at once, one per decoded record and
+    /// scheduled as this event; none for any other kind.</summary>
+    public IEnumerable<AnimEvent> AllNamesMotions()
+    {
+        if (Kind != AnimDefinition.AllNamesKind)
+            yield break;
+        foreach (var motion in Data.Objects("motions"))
+        {
+            yield return new AnimEvent
+            {
+                Kind = "ObjectMotionSiScript",
+                Data = motion,
+                StartOffset = StartOffset,
+                StartTime = StartTime,
+            };
+        }
+    }
 }
 
 /// <summary>

@@ -52,6 +52,70 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
 `Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
+## src/Effects/Ocean.cs
+The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
+grid with a Gerstner swell in its vertex stage and drifting noise in its fragment normals replaces the sea-level base
+sheet, which steps aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. It
+draws a priority level below the lowest base sheet, one grid per zone-gate group; a spyglass disc
+(`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the grids, the sea's uniforms and up to 16 ship calm zones
+(`OceanCalmZone.cs`, `OceanMovers.cs`), nearest the eye first; the swell, bent crests, noise detail, foam and coast
+ramps are the shader text `OceanShader.cs` writes from the chapter's `SeaState.cs`, all on `csky_time`. `Apply`
+takes a new sea live, recompiling only when the text changes. `GameSession.FollowOcean` builds and drops it.
+
+## src/Effects/OceanSeas.cs
+The shipped per-chapter seas, `CSVM/data/ocean_seas.json`, read through `res://` at each sea chapter's build: one
+object per chapter (`Chapters`, which `Ocean.Covers` reads) holding only the fields that differ from the defaults.
+A missing entry or field takes the default; an unknown chapter or field, a non-number and a clamped value are each
+a `world` warning. `WithEntry` rewrites one chapter's entry in place for the ocean lab's Save, keeping every other
+key and its order, skipping comments as the read does, and refusing a file it cannot parse rather than replacing it;
+`SourceTreePath` is null in an exported build. `OceanSeasTests`. Read `SeaState.cs` next.
+
+## src/Effects/OceanShader.cs
+The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
+tables, the bending field, the coast ramps and the open sea's tint, written as literals. At the defaults the text is
+byte-identical to the ocean's tune (`OceanShaderTests` against hashes and a fixture), so nothing moves until a sea
+is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
+setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`.
+
+## src/Effects/SeaState.cs
+One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
+with the ocean's tune as its default, and `Fields` naming each one's key, label, group, range and slider step for the
+file, the flag and the lab. `Clamped`, which every path into the shader takes, holds each value in range, sharpness
+times height at the fold limit (at the base group gain, so a grouped crest can still fold), and each coast ramp at
+least 4 m wide within the mask's 160 m reach. `Written` is the sea at the file's precision, rounded toward a bound
+it would otherwise pass. `WithOverrides` reads `--debug-ocean`. `SeaStateTests`. Read `OceanShader.cs` next.
+
+## src/Effects/OceanCalmZone.cs
+One ship's calm zone on the wave ocean: a box on the water along the hull's heading, grown over
+world-space footprints (a mesh AABB under its global transform, or a point), with no engine object
+touched. `Distance` and `Calm` are the shader's `ship_calm` in C#: no waves within a margin of the
+box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold the box and the fade.
+
+## src/Effects/OceanMask.cs
+The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`), reused by every
+rebuild. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the sheet's baked tint, each texel's
+zone group where the sheet spans zone-gate layers, and the ramps: base-sheet triangles rising from sea level to under
+`RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp). A ramp is
+open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wakes, tile size and
+lowest priority; hulls (`OceanMovers.cs`) stay out. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
+the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. `--dump-ocean-mask=` writes the mask and the tint.
+Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
+
+## src/Effects/OceanMaskRaster.cs
+The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint, R8 zone and R8 ramp lift bytes out, with no engine
+object touched. Owns the triangle fill, the shore distance pass and the off-sheet tint, and runs
+in row bands on the thread pool. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
+not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`
+hold the banded bytes to a plain single pass.
+
+## src/Effects/OceanMovers.cs
+The rule for the boats an animation carries across the sea, with no engine object touched. A mover is the target
+of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an OBJECT_TRANSLATE_STATE; reset
+states, spins and ballistic debris are not. `GameSession.AnimatedMovers` asks `AnimRuntime.TargetsOf` for the
+nodes `MovingEvents` moves, resolved by the dispatch's own rule. `OceanMask`'s walk judges each: a hull has its origin within 3 m of
+sea level over the world's own sea-level water and meshes within 2 m of it; one hidden at the bake is judged by
+`Ocean` once it shows. `Nearest` picks the zones when more hulls float than there are slots. `OceanMoversTests`.
+
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh
 whose shader derives each quad's position from a per-instance seed, `csky_time` and

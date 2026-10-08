@@ -409,8 +409,7 @@ internal static class WorldAndToolSuites
                 $"scaled to the port's interior scale scale={interior.Scale.X:0.###}");
             ctx.Check(builder.MeshInstanceCount > plain.MeshInstanceCount,
                 $"the interior adds meshes plain={plain.MeshInstanceCount} with={builder.MeshInstanceCount}");
-            // The panel the pilot reads and the two torn-skin panels B12 drives, both hidden.
-            ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+            // The two torn-skin panels the pdpanel4/pdpanel6 injure entries drive, both hidden.
             foreach (var panel in new[] { "pcdp4", "pcdp6" })
             {
                 var node = FindNamed(interior, panel);
@@ -420,34 +419,12 @@ internal static class WorldAndToolSuites
             // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true. An
             // unparked build renders white splats across the sky on a pristine plane. The parking
             // follows reset_bulletholes: the bulNx quads dark, the bulletN groups over them drawn.
-            foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
+            ParkedStates(ctx, interior);
+            bool gauged = FindNamed(interior, "gauges") != null;
+            if (!ctx.SyntheticData)
             {
-                var node = FindNamed(interior, lamp);
-                ctx.Check(node != null, $"the interior carries {lamp}");
-                ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+                CockpitNamedSet(ctx, interior);
             }
-            foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
-            {
-                var node = FindNamed(interior, group);
-                ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
-                if (node == null)
-                    continue;
-                int quads = 0, lit = 0;
-                foreach (var child in node.GetChildren())
-                {
-                    if (child is not Node3D quad)
-                        continue;
-                    quads++;
-                    if (quad.Visible)
-                        lit++;
-                }
-                ctx.Check(quads >= 3 && lit == 0,
-                    $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
-            }
-            // …and the panel geometry beside them is NOT parked: the states are a named set, not a
-            // blanket hide, so a wrong predicate that hid the dashboard would fail here.
-            foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
-                ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
 
             // The exterior panels stay DamageVisuals' alone: the interior pair must not join them.
             foreach (var node in builder.DamagePanels)
@@ -491,8 +468,13 @@ internal static class WorldAndToolSuites
             ctx.Check(!interior.Visible && DrawsAll(body, ownPane) && DrawsAll(dontmove, ownPane),
                 $"a held external view restores the aircraft while Cockpit stays selected {DrawnBy(body, ownPane)}");
 
-            DrivenPanel(ctx, interior);
-            DrivenBelts(ctx, interior, builder, planesGamez, textures);
+            // The gauge drive needs an authored panel. A tree without one has nothing to drive;
+            // the install always carries one.
+            if (gauged || !ctx.SyntheticData)
+            {
+                DrivenPanel(ctx, interior);
+                DrivenBelts(ctx, interior, builder, planesGamez, textures);
+            }
         }
         finally
         {
@@ -500,6 +482,78 @@ internal static class WorldAndToolSuites
             withInterior?.Free();
             textures.Dispose();
         }
+    }
+
+    // The parked set as the builder's own predicate names it in whatever interior was loaded. Each
+    // named node is dark, the group over each hole quad is drawn, and meshes outside the set render.
+    // Able to fail: a pass that misses a named node, hides a hole group, or hides everything.
+    internal static void ParkedStates(TestContext ctx, Node3D interior)
+    {
+        var parked = new List<Node3D>();
+        var drawnMeshes = new List<Node3D>();
+        void Walk(Node3D node)
+        {
+            if (PlaneBuilder.IsInteriorDrivenState(AnimRuntime.NameOf(node)))
+                parked.Add(node);
+            else if (node is MeshInstance3D && node.Visible
+                     && !AnimRuntime.NameOf(node).StartsWith("pcdp", System.StringComparison.OrdinalIgnoreCase))
+                drawnMeshes.Add(node);
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d)
+                    Walk(n3d);
+            }
+        }
+        Walk(interior);
+        ctx.Check(parked.Count > 0, $"the interior names {parked.Count} driven-state node(s) for the parking pass");
+        foreach (var node in parked)
+        {
+            string name = AnimRuntime.NameOf(node);
+            ctx.Check(!node.Visible, $"{name} is parked hidden on a pristine plane");
+            if (!name.EndsWith("_on", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Check(node.GetParent() is Node3D { Visible: true },
+                    $"…and the hole group over {name} is drawn ({(node.GetParent() as Node3D)?.Name.ToString() ?? "-"})");
+            }
+        }
+        ctx.Check(drawnMeshes.Count > 0,
+            $"the panel geometry outside the set still renders, so the parking is not a blanket hide ({drawnMeshes.Count} meshes)");
+    }
+
+    // The shipped interior's own named set, which only the install carries. It holds the gauges
+    // panel and the two warning lamps. It also holds five bullet-hole groups of three or more quads
+    // each, and the panel parts that must keep rendering.
+    internal static void CockpitNamedSet(TestContext ctx, Node3D interior)
+    {
+        ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+        foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
+        {
+            var node = FindNamed(interior, lamp);
+            ctx.Check(node != null, $"the interior carries {lamp}");
+            ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+        }
+        foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
+        {
+            var node = FindNamed(interior, group);
+            ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
+            if (node == null)
+                continue;
+            int quads = 0, lit = 0;
+            foreach (var child in node.GetChildren())
+            {
+                if (child is not Node3D quad)
+                    continue;
+                quads++;
+                if (quad.Visible)
+                    lit++;
+            }
+            ctx.Check(quads >= 3 && lit == 0,
+                $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
+        }
+        // …and the panel geometry beside them is NOT parked. The states are a named set, not a
+        // blanket hide, so a wrong predicate that hid the dashboard would fail here.
+        foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
+            ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
     }
 
     // The photograph's fill light, proved in the three things the pixels follow from, since a
@@ -515,9 +569,12 @@ internal static class WorldAndToolSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireZrdrEntry(missionZrdr, "weather.json");
 
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
-        ctx.Check(weather != null, $"C1 IA1's weather loads");
+        var weather = WeatherState.Load(missionZrdr);
+        ctx.Check(weather != null, $"{chapter} {mission}'s weather loads");
         if (weather != null)
         {
             var zone = weather.Zone("zone1");
@@ -1244,8 +1301,13 @@ internal static class WorldAndToolSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         using var textures = new TextureArchive(texturesPath);
+        // The synthetic archive carries none of the shipped samples, so it flattens every texture
+        // its own manifest lists, all of them without alpha.
+        IReadOnlyList<string> samples = ctx.SyntheticData ? ManifestTextureNames(texturesPath) : DropInSamples;
+        ctx.Check(samples.Count > 0, $"the archive has sample textures count={samples.Count}");
+
         var colors = new Dictionary<string, Color>();
-        foreach (string name in DropInSamples)
+        foreach (string name in samples)
         {
             var img = textures.FindImage(name);
             ctx.Check(img != null, $"sample texture resolves texture={name}");
@@ -1301,6 +1363,17 @@ internal static class WorldAndToolSuites
                 $"census colour is full brightness texture={name} colour={key}");
         }
         ctx.Note($"{colors.Count} sample textures flattened, {seen.Count} distinct colours");
+    }
+
+    // Every texture an unpacked archive's extraction manifest lists, empty when it lists none.
+    internal static List<string> ManifestTextureNames(string archive)
+    {
+        string manifest = Path.Combine(archive, "manifest.json");
+        if (!File.Exists(manifest))
+            return new List<string>();
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest));
+        return doc.RootElement.GetProperty("texture_infos").EnumerateArray()
+            .Select(info => info.GetProperty("name").GetString() ?? "").ToList();
     }
 
     // templates.zrd's substitute and scale_range, asserted as an A/B against the build that does not
@@ -1592,6 +1665,7 @@ internal static class WorldAndToolSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(plane);
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         using var textures = new TextureArchive(texturesPath);
@@ -1694,8 +1768,16 @@ internal static class WorldAndToolSuites
         "the world's light wears the flown zone's authored SUNLIGHT_ORIENTATION, and follows it across a zone change (BL-324)")]
     internal static void SunOrientation(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
-        ctx.RequireData(zrdr, $"C2/MP2 mission zrdr");
+        var (chapter, mission) = WeatherMission(ctx, "C2", "MP2");
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
+        var zone1 = AuthoredBearing(ctx, zrdr, "zone1", -65f, 90f);
+        var zone2 = AuthoredBearing(ctx, zrdr, "zone2", -25f, 90f);
+        if (ctx.SyntheticData)
+        {
+            ctx.Check(!Mathf.IsEqualApprox(zone1.Pitch, zone2.Pitch) || !Mathf.IsEqualApprox(zone1.Yaw, zone2.Yaw),
+                $"{chapter}/{mission}'s two zones author different bearings, so a zone change can show ({zone1} against {zone2})");
+        }
 
         var sun = new DirectionalLight3D { Name = "sun-orientation-probe" };
         ctx.Host.AddChild(sun);
@@ -1706,29 +1788,29 @@ internal static class WorldAndToolSuites
             // No --sky-zone: an explicit one disarms the state machine outright, which
             // would make the zone change below unobservable. The default request is zone2, and with
             // no horizon geometry to correct it that is what the flight builds with.
-            var spec = SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" });
+            var spec = SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}" });
             var rig = new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host };
             var rigs = new List<PlayerRig> { rig };
 
             var weatherRig = new WeatherRig(spec, ctx.Host, sun);
             weatherRig.Build(zrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
-            ctx.Check(NearDegrees(sun.RotationDegrees, -25f, 90f),
-                $"C2/MP2 builds at ZONE2's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
+            ctx.Check(NearDegrees(sun.RotationDegrees, zone2.Pitch, zone2.Yaw),
+                $"{chapter}/{mission} builds at ZONE2's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
-            // Below the cloud band (19024–20124 m) the camera is in weather state 1, so the edge
-            // trigger swaps to ZONE1, and the light must ride along. Ticked twice: the first Tick
+            // Below the cloud band (19024–20124 m in C2/MP2) the camera is in weather state 1. The
+            // edge trigger swaps to ZONE1, and the light must ride along. Ticked twice: the first Tick
             // publishes the rig's new state, and the swap is asserted after it has settled.
             camera.Position = new Vector3(0f, 0f, 0f);
             weatherRig.Tick(rigs);
             ctx.Same(1, rig.CameraWeatherState, $"camera below the band is in weather state 1");
-            ctx.Check(NearDegrees(sun.RotationDegrees, -65f, 90f),
+            ctx.Check(NearDegrees(sun.RotationDegrees, zone1.Pitch, zone1.Yaw),
                 $"a zone change carries the sun to ZONE1's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
             // ...and back. A one-way test would pass on a light that moved once and stuck.
             camera.Position = new Vector3(0f, 25000f, 0f);
             weatherRig.Tick(rigs);
             ctx.Same(2, rig.CameraWeatherState, $"camera above the band is in weather state 2");
-            ctx.Check(NearDegrees(sun.RotationDegrees, -25f, 90f),
+            ctx.Check(NearDegrees(sun.RotationDegrees, zone2.Pitch, zone2.Yaw),
                 $"and back to ZONE2's on the return crossing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
             // The other half, asserted where it would regress: shadow mapping stays off, so this
@@ -1747,6 +1829,22 @@ internal static class WorldAndToolSuites
     // not "this is bit-identical to a round trip through Basis".
     internal static bool NearDegrees(Vector3 rotationDegrees, float pitch, float yaw)
         => Mathf.Abs(rotationDegrees.X - pitch) < 0.1f && Mathf.Abs(rotationDegrees.Y - yaw) < 0.1f;
+
+    // The mission a weather suite flies: the shipped one on an install, the invented PROBE1
+    // scope on the synthetic tree, which carries no shipped mission.
+    internal static (string Chapter, string Mission) WeatherMission(TestContext ctx, string chapter, string mission)
+        => ctx.SyntheticData ? (SyntheticMission.Chapter, SyntheticMission.Mission) : (chapter, mission);
+
+    // A zone's sun bearing in degrees: the shipped literal on an install, the record's own on the
+    // synthetic tree. The CSVM.Tests units pin the reader, so the suite's question stays the wiring.
+    internal static (float Pitch, float Yaw) AuthoredBearing(TestContext ctx, string zrdr, string zone,
+        float pitch, float yaw)
+    {
+        if (!ctx.SyntheticData)
+            return (pitch, yaw);
+        var authored = WeatherState.Load(zrdr)?.Zone(zone).SunOrientation ?? Vector3.Zero;
+        return (Mathf.RadToDeg(authored.X), Mathf.RadToDeg(authored.Y));
+    }
 
     // The world's light takes the flown zone's authored SUNLIGHT as its ENERGY, not only its
     // bearing. The CSVM.Tests units pin both mappings; neither can see the write missing from the
@@ -1824,10 +1922,15 @@ internal static class WorldAndToolSuites
         "the cockpit pass's own sun is aimed where the mission's SUNLIGHT_ORIENTATION points, in the pass's world basis, and follows the session sun across a zone change (BL-684)")]
     internal static void CockpitSunBearing(TestContext ctx)
     {
-        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
-        ctx.RequireData(litZrdr, $"C1/IA1 mission zrdr");
-        ctx.RequireData(crossZrdr, $"C2/MP2 mission zrdr");
+        var lit = WeatherMission(ctx, "C1", "IA1");
+        var cross = WeatherMission(ctx, "C2", "MP2");
+        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, lit.Chapter, lit.Mission);
+        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, cross.Chapter, cross.Mission);
+        ctx.RequireData(litZrdr, $"{lit.Chapter}/{lit.Mission} mission zrdr");
+        ctx.RequireData(crossZrdr, $"{cross.Chapter}/{cross.Mission} mission zrdr");
+        var litBearing = AuthoredBearing(ctx, litZrdr, "zone1", -25f, 90f);
+        var below1 = AuthoredBearing(ctx, crossZrdr, "zone1", -65f, 90f);
+        var inside2 = AuthoredBearing(ctx, crossZrdr, "zone2", -25f, 90f);
 
         var sun = new DirectionalLight3D { Name = "cockpit-bearing-sun" };
         var camera = new Camera3D { Name = "cockpit-bearing-camera" };
@@ -1840,7 +1943,7 @@ internal static class WorldAndToolSuites
         {
             var env = new Godot.Environment();
             var litSpec = SessionSpec.Parse(
-                new[] { "--chapter=C1", "--mission=IA1", "--sky-zone=zone1" });
+                new[] { $"--chapter={lit.Chapter}", $"--mission={lit.Mission}", "--sky-zone=zone1" });
             var litRig = new WeatherRig(litSpec, ctx.Host, sun, env: env);
             litRig.Build(litZrdr, System.Array.Empty<PlayerRig>(),
                 System.Array.Empty<HorizonZone>(), _ => { });
@@ -1859,10 +1962,10 @@ internal static class WorldAndToolSuites
             var beam = -clone.GlobalBasis.Z;
             // C1's ZONE1 authors -25° pitch / 90° yaw, and the expected beam is the binary's own
             // euler→direction law rather than the reader's, so a wrong reader cannot agree with it.
-            var authored = SunBeam(Mathf.DegToRad(-25f), Mathf.DegToRad(90f));
-            ctx.Note($"C1/IA1 zone1: session sun {world}, interior sun {beam}");
+            var authored = SunBeam(Mathf.DegToRad(litBearing.Pitch), Mathf.DegToRad(litBearing.Yaw));
+            ctx.Note($"{lit.Chapter}/{lit.Mission} zone1: session sun {world}, interior sun {beam}");
             ctx.Check(world.AngleTo(authored) < 0.001f,
-                $"the session sun takes C1's authored -25°/90° bearing off={world.AngleTo(authored):0.0000} rad");
+                $"the session sun takes {lit.Chapter}'s authored {litBearing.Pitch:0.#}°/{litBearing.Yaw:0.#}° bearing off={world.AngleTo(authored):0.0000} rad");
             ctx.Check(beam.AngleTo(world) < 0.001f,
                 $"the interior's own sun is aimed the same way off={beam.AngleTo(world):0.0000} rad");
             ctx.Check(beam.AngleTo(Vector3.Forward) > 0.5f,
@@ -1878,20 +1981,20 @@ internal static class WorldAndToolSuites
             // bearing, -65°/90° below the band against -25°/90° inside it.
             var rigs = new List<PlayerRig>
                 { new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host } };
-            var crossSpec = SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" });
+            var crossSpec = SessionSpec.Parse(new[] { $"--chapter={cross.Chapter}", $"--mission={cross.Mission}" });
             var crossRig = new WeatherRig(crossSpec, ctx.Host, sun, env: env);
             crossRig.Build(crossZrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
             crossRig.RegisterExtraLighting(clone, pass.Env);
             var below = CrossedBeam(crossRig, pass, cam, rigs, Vector3.Zero, clone, sun);
             var inside = CrossedBeam(crossRig, pass, cam, rigs, new Vector3(0f, 25000f, 0f),
                 clone, sun);
-            ctx.Same(1, below.State, $"a camera under C2/MP2's 19,024-20,124 m band is in weather state 1");
+            ctx.Same(1, below.State, $"a camera under {cross.Chapter}/{cross.Mission}'s cloud band is in weather state 1");
             ctx.Same(2, inside.State, $"and one at 25,000 m is in state 2");
-            ctx.Note($"C2/MP2 below band {below.Beam}, inside band {inside.Beam}");
-            ctx.Check(below.Beam.AngleTo(SunBeam(Mathf.DegToRad(-65f), Mathf.DegToRad(90f))) < 0.001f,
-                $"below the band the interior wears ZONE1's -65°/90°");
-            ctx.Check(inside.Beam.AngleTo(SunBeam(Mathf.DegToRad(-25f), Mathf.DegToRad(90f))) < 0.001f,
-                $"inside it the interior wears ZONE2's -25°/90°");
+            ctx.Note($"{cross.Chapter}/{cross.Mission} below band {below.Beam}, inside band {inside.Beam}");
+            ctx.Check(below.Beam.AngleTo(SunBeam(Mathf.DegToRad(below1.Pitch), Mathf.DegToRad(below1.Yaw))) < 0.001f,
+                $"below the band the interior wears ZONE1's {below1.Pitch:0.#}°/{below1.Yaw:0.#}°");
+            ctx.Check(inside.Beam.AngleTo(SunBeam(Mathf.DegToRad(inside2.Pitch), Mathf.DegToRad(inside2.Yaw))) < 0.001f,
+                $"inside it the interior wears ZONE2's {inside2.Pitch:0.#}°/{inside2.Yaw:0.#}°");
             ctx.Check(below.Beam.AngleTo(inside.Beam) > 0.6f,
                 $"the crossing moved the bearing by {Mathf.RadToDeg(below.Beam.AngleTo(inside.Beam)):0.#}°");
             ctx.Check(below.Off < 0.001f && inside.Off < 0.001f,
@@ -1917,8 +2020,11 @@ internal static class WorldAndToolSuites
         "the cloud-band whiteout draws under each pane's own cockpit pass, so a full-opacity band whites the window out and leaves the canopy, panel and gauges clear, in cockpit view and in chase view alike, while --no-fog clears it")]
     internal static void WeatherCockpitWhiteout(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(zrdr, $"C1/IA1 mission zrdr");
+        var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
+        // C1/IA1's band is 970-1124 m, so its centre is 1047 m.
+        float core = ctx.SyntheticData ? WeatherState.Load(zrdr)?.CloudBandCentre ?? 0f : 1047f;
 
         // The order the picture is composed in, asserted on the constants themselves: the flare
         // and the whiteout are the sky, the pass is the cockpit in front of it, and the HUD is the
@@ -1943,7 +2049,7 @@ internal static class WorldAndToolSuites
         CockpitOverlay? pass = null;
         try
         {
-            var spec = SessionSpec.Parse(new[] { "--chapter=C1", "--mission=IA1" });
+            var spec = SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}" });
             var rigs = new List<PlayerRig>
             {
                 new PlayerRig { Index = 0, Camera = camera0, HudParent = pane0 },
@@ -1966,7 +2072,7 @@ internal static class WorldAndToolSuites
 
             // C1/IA1's band is 970-1124 m with a 1032-1062 m opaque core, so the centre is a
             // total whiteout and the flicker's own guard leaves it there untouched.
-            camera0.Position = new Vector3(0f, 1047f, 0f);
+            camera0.Position = new Vector3(0f, core, 0f);
             camera1.Position = Vector3.Zero;
             weather.Tick(rigs);
             float inside = rigs[0].Whiteout?.Color.A ?? -1f;
@@ -2002,7 +2108,7 @@ internal static class WorldAndToolSuites
 
             // --no-fog covers the whiteout as it covers the fog, at the same altitude.
             var clearSpec = SessionSpec.Parse(
-                new[] { "--chapter=C1", "--mission=IA1", "--no-fog" });
+                new[] { $"--chapter={chapter}", $"--mission={mission}", "--no-fog" });
             var clearRigs = new List<PlayerRig>
                 { new PlayerRig { Index = 0, Camera = camera0, HudParent = pane1 } };
             var clearWeather = new WeatherRig(clearSpec, ctx.Host, sun);
@@ -2079,7 +2185,7 @@ internal static class WorldAndToolSuites
     [Suite("nodelab-visibility", "the node lab's tree row follows live Visible, not the hide button's last action")]
     internal static void NodeLabVisibility(TestContext ctx)
     {
-        ctx.WithWorld("C2", collision: false, world =>
+        EffectStageSuiteHelper.WithAnimWorld(ctx, "C2", world =>
         {
             DestructibleRegistry.Instance? chosen = null;
             Node3D? healthy = null;
@@ -2103,9 +2209,9 @@ internal static class WorldAndToolSuites
                 return;
             }
 
-            var selection = new SelectionService(world.Session.Root, ctx.Camera);
-            var lab = new NodeLab(world.Session.Root, selection, world.Runtime, world.Session.Program,
-                world.Session.Builder.Scene, collisionBuilt: false);
+            var selection = new SelectionService(world.Root, ctx.Camera);
+            var lab = new NodeLab(world.Root, selection, world.Runtime, world.Program,
+                world.Scene, collisionBuilt: false);
             ctx.Host.AddChild(selection);
             ctx.Host.AddChild(lab);
             try

@@ -344,8 +344,10 @@ through an `OptionsApplyExit` carrying every choice, whichever page it was sent 
 keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
 the running world at once (`Launcher.SwitchGraphicsMode`), so neither description owes a restart.
 Built-in's screen adds a View Distance row under its chooser (`Utils/ViewDistance.cs`), live the
-same way and marked as Enhanced only. The Original VIDEO page has no line for it and hands the
-saved word back unchanged. The
+same way and marked as Enhanced only, and a Water Quality row under its shadow quality
+(`Utils/WaterQualitySetting.cs`), dead under Original, whose apply builds or drops the wave ocean
+on the flying world. The Original VIDEO page has no line for either and hands both saved words
+back unchanged. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 **What an Options page focuses with, and what it draws focus as.** Two choices on these pages are

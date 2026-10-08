@@ -268,7 +268,8 @@ read. Schema, offsets, the per-chapter census and the keying rules: [../formats/
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
 `LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
-`ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+`ne0*` nets), `HasFile` (whether an entry is there, under either stored name), and `ZrdrDict`, the
+key/[values…] view over a reader's alternating list.
 
 ## src/Mech3/GamePath.cs
 Splits a path the game's data names (`..\data\c1\m02\zrdr\cutscenes\cabpickup.zrd`) on `\` and `/`
@@ -622,12 +623,12 @@ edits the prototype material the rack copies share. The fade shader itself is
 ## src/Mech3/Anim/NameResolver.cs
 Name to node resolution as one public module, generic over the node type (`NameResolver<TNode>`):
 the index, the wildcard `Matcher`, the memoized `FindAll` (an answer extends over appended rows
-rather than being voided by them), the scoped tier chain
-(`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
+rather than being voided by them), the scoped tier chain (`Resolve`/`ResolveScoped`, and `PeekScoped` for read-only queries), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
 copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
-the world holds several instances of. `Claimed` hears each node a `FindAll` answer or `Anchors` first hands out. Decode: [../org/sequences.md](../org/sequences.md).
+the world holds several instances of. `Claimed` hears each node a `FindAll` answer or `Anchors` first hands out. Inside `Peek` (with `PeekScoped` and
+`PeekAnchors`) a query claims nothing and writes no memo, so a later real query still claims what it finds. Decode: [../org/sequences.md](../org/sequences.md).
 
 ## src/Mech3/Anim/CutsceneFastForward.cs
 The rate one cutscene episode's own definitions run at while the player holds a key through a scene
@@ -813,8 +814,9 @@ Callers are serial by construction. An instance lives as long as its holder.
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
 for a chapter world so flight and ballistics runs boot in about 2 s with nothing else in the frame.
-It also carries the one patrol net a session on this stage has: `PatrolNet`, a closed eight-node ring
-of 1000 m about the grid origin at the spawn altitude, authoring 2500/1500/700 m volumes so a vehicle
-put on it runs on a net's gates rather than the mode machine's defaults. `--ai=<plane>:grid` and
-`--zep=...:net=grid` reach it through `ResolveNet`, which answers before the chapter `neindex` lookup
-on a name no shipped index carries. Built in code, like the grid texture: no chapter assets are here.
+Its patrol net, `PatrolNet`, is a closed eight-node 1000 m ring at the spawn altitude with its own
+2500/1500/700 m volumes, which `--ai=<plane>:grid` and `--zep=...:net=grid` reach through `ResolveNet`.
+A `--vs` match walks `SpawnRing` in place of `net.zrd`, sixteen entries 600 m out and aimed in, and a
+team match `SpawnTable`, that ring plus four team blocks at the teams' bases. `Build(arena: true)`
+stands `ArenaNodes`, two bases' `ctf_n`, `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`, which
+`ArenaNode` finds by name; `ArenaTargets` lists the flag markers. All of it is built in code.

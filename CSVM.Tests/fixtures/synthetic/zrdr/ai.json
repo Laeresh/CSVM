@@ -1,0 +1,48 @@
+[
+  [
+    "TURRET",
+    [
+      [
+        "TITLE", ["MSG_TUR_PROBE_REAR_G3"],
+        "CREATE_STANDALONE", [0],
+        "ACTIVATED", [1],
+        "HEALTHY_NODE", ["probe_kestrel_turret1"],
+        "PARTS", ["pturret", "pgun", "pfirepoint"],
+        "WEAPON", ["NAME", ["wep_probe_gun"], "AMMO", [7000], "DETECTION_RANGE", [520], "FIRE_RATE", [0.35]],
+        "INACCURACY", [4.5],
+        "ATTACK_INTERVAL", [3.5],
+        "BORED_INTERVAL", [2.5],
+        "PITCH", [15, 65],
+        "YAW", [125, 255],
+        "SOUNDS", ["CANNON", ["snd_probe_gunloop"]]
+      ],
+      [
+        "TITLE", ["MSG_TUR_PROBE_DORSAL_G3"],
+        "CREATE_STANDALONE", [0],
+        "ACTIVATED", [1],
+        "HEALTHY_NODE", ["probe_brand_turret1"],
+        "PARTS", ["pturret", "pgun", "pfirepoint"],
+        "WEAPON", ["NAME", ["wep_probe_gun"], "AMMO", [7000], "DETECTION_RANGE", [460], "FIRE_RATE", [0.3]],
+        "INACCURACY", [5],
+        "ATTACK_INTERVAL", [4.5],
+        "BORED_INTERVAL", [2],
+        "PITCH", [-20, 70],
+        "YAW", [0, 0],
+        "SOUNDS", ["CANNON", ["snd_probe_gunloop"]]
+      ],
+      [
+        "TITLE", ["MSG_TUR_PROBE_AA"],
+        "ACTIVATED", [0],
+        "NODES", [["aagun**"]],
+        "PARTS", ["turret", "gun", "firepoint"],
+        "WEAPON", ["NAME", ["wep_probe_gun"], "AMMO", [7000], "DETECTION_RANGE", [780], "FIRE_RATE", [0.8, 1.6]],
+        "INACCURACY", [9],
+        "ATTACK_INTERVAL", [3, 6],
+        "BORED_INTERVAL", [2, 4],
+        "PITCH", [5, 80],
+        "YAW", [0, 0],
+        "SOUNDS", ["CANNON", ["snd_probe_gunloop"]]
+      ]
+    ]
+  ]
+]

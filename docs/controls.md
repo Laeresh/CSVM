@@ -268,4 +268,5 @@ by about 1.15; Built-in prints the value as a multiplier, `1.00x`.
 | `F20` | show the built colliders, coloured by the surface id they resolve to (see `--collision`), also bound in `--fly`/`--stunt` | `--debug-colliders` |
 | `F21` | colour world objects by class (destructible/facade/clutter/scenery), also bound in `--fly`/`--stunt` | `--debug-classoverlay` |
 | `F19` | damage lab on the selected destructible | `--debug-damage=` |
+| `Shift+F1` | ocean lab: the chapter's sea on sliders, live, with Save into `CSVM/data/ocean_seas.json`. `--freecam` on a sea chapter only, where no flight control reads `F1`. Outside the F13 to F24 debug range so the lab works without the extended keypad | `--debug-ocean=` |
 | `F18` | anim lab: the def picker. Moved off `F`, which the camera's lock key now owns, the camera polls raw key state, so one key could not serve both (`BL-428`) | |

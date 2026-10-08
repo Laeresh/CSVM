@@ -1,0 +1,870 @@
+[
+  {
+    "id": 9000,
+    "symbol": "IDS_AF_TITLE",
+    "font": null,
+    "text": "A) PICK A SHELL",
+    "dll": "langui"
+  },
+  {
+    "id": 9001,
+    "symbol": "IDS_AP_EVOLUME_DESC",
+    "font": null,
+    "text": "Probe the effects' level.",
+    "dll": "langui"
+  },
+  {
+    "id": 9002,
+    "symbol": "IDS_AP_EVOLUME_TITLE",
+    "font": null,
+    "text": "Effect Level",
+    "dll": "langui"
+  },
+  {
+    "id": 9003,
+    "symbol": "IDS_AP_MUSIC_DESC",
+    "font": null,
+    "text": "Probe the score in flight.",
+    "dll": "langui"
+  },
+  {
+    "id": 9004,
+    "symbol": "IDS_AP_MUSIC_TITLE",
+    "font": null,
+    "text": "Score On",
+    "dll": "langui"
+  },
+  {
+    "id": 9005,
+    "symbol": "IDS_AP_MVOLUME_DESC",
+    "font": null,
+    "text": "Probe the score's level.",
+    "dll": "langui"
+  },
+  {
+    "id": 9006,
+    "symbol": "IDS_AP_MVOLUME_TITLE",
+    "font": null,
+    "text": "Score Level",
+    "dll": "langui"
+  },
+  {
+    "id": 9007,
+    "symbol": "IDS_AP_TITLE",
+    "font": null,
+    "text": "LOUDNESS",
+    "dll": "langui"
+  },
+  {
+    "id": 9008,
+    "symbol": "IDS_AP_VVOLUME_DESC",
+    "font": null,
+    "text": "Probe the speech level.",
+    "dll": "langui"
+  },
+  {
+    "id": 9009,
+    "symbol": "IDS_AP_VVOLUME_TITLE",
+    "font": null,
+    "text": "Speech Level",
+    "dll": "langui"
+  },
+  {
+    "id": 9010,
+    "symbol": "IDS_AR_LEFT_TITLE",
+    "font": null,
+    "text": "Port",
+    "dll": "langui"
+  },
+  {
+    "id": 9011,
+    "symbol": "IDS_AR_NOSE_TITLE",
+    "font": null,
+    "text": "Front",
+    "dll": "langui"
+  },
+  {
+    "id": 9012,
+    "symbol": "IDS_AR_RIGHT_TITLE",
+    "font": null,
+    "text": "Starboard",
+    "dll": "langui"
+  },
+  {
+    "id": 9013,
+    "symbol": "IDS_AR_TAIL_TITLE",
+    "font": null,
+    "text": "Rear",
+    "dll": "langui"
+  },
+  {
+    "id": 9014,
+    "symbol": "IDS_AR_TITLE",
+    "font": null,
+    "text": "C) PICK PLATING",
+    "dll": "langui"
+  },
+  {
+    "id": 9015,
+    "symbol": "IDS_CANCEL",
+    "font": null,
+    "text": "Back Out",
+    "dll": "langui"
+  },
+  {
+    "id": 9016,
+    "symbol": "IDS_CP_JOYSTICK_DESC",
+    "font": null,
+    "text": "Probe the device kind.",
+    "dll": "langui"
+  },
+  {
+    "id": 9017,
+    "symbol": "IDS_CP_JOYSTICK_TITLE",
+    "font": null,
+    "text": "Device Kind",
+    "dll": "langui"
+  },
+  {
+    "id": 9018,
+    "symbol": "IDS_CP_KEYS_DESC",
+    "font": null,
+    "text": "Probe each action's key and button.",
+    "dll": "langui"
+  },
+  {
+    "id": 9019,
+    "symbol": "IDS_CP_MOUSE_DESC",
+    "font": null,
+    "text": "Probe the pointer's speed.",
+    "dll": "langui"
+  },
+  {
+    "id": 9020,
+    "symbol": "IDS_CP_MOUSE_TITLE",
+    "font": null,
+    "text": "Pointer Speed",
+    "dll": "langui"
+  },
+  {
+    "id": 9021,
+    "symbol": "IDS_CP_TITLE",
+    "font": null,
+    "text": "HANDS ON",
+    "dll": "langui"
+  },
+  {
+    "id": 9022,
+    "symbol": "IDS_EN_TITLE",
+    "font": null,
+    "text": "B) PICK A MOTOR",
+    "dll": "langui"
+  },
+  {
+    "id": 9023,
+    "symbol": "IDS_GN_TITLE",
+    "font": null,
+    "text": "D) PICK CANNONS",
+    "dll": "langui"
+  },
+  {
+    "id": 9024,
+    "symbol": "IDS_GO_DIFF_DESC",
+    "font": null,
+    "text": "Probe challenge for a story run.",
+    "dll": "langui"
+  },
+  {
+    "id": 9025,
+    "symbol": "IDS_GO_DIFF_TITLE",
+    "font": null,
+    "text": "Challenge",
+    "dll": "langui"
+  },
+  {
+    "id": 9026,
+    "symbol": "IDS_GO_HEAD_DESC",
+    "font": null,
+    "text": "Probe the head following a turn.",
+    "dll": "langui"
+  },
+  {
+    "id": 9027,
+    "symbol": "IDS_GO_HEAD_TITLE",
+    "font": null,
+    "text": "Head Follows Turn",
+    "dll": "langui"
+  },
+  {
+    "id": 9028,
+    "symbol": "IDS_GO_TITLE",
+    "font": null,
+    "text": "PLAY RULES",
+    "dll": "langui"
+  },
+  {
+    "id": 9029,
+    "symbol": "IDS_GO_VIEW_DESC",
+    "font": null,
+    "text": "Probe the view a flight opens on.",
+    "dll": "langui"
+  },
+  {
+    "id": 9030,
+    "symbol": "IDS_GO_VIEW_TITLE",
+    "font": null,
+    "text": "Opening View",
+    "dll": "langui"
+  },
+  {
+    "id": 9031,
+    "symbol": "IDS_HA_SELLEXPORT",
+    "font": null,
+    "text": "Probe a craft to trade or send.",
+    "dll": "langui"
+  },
+  {
+    "id": 9032,
+    "symbol": "IDS_HA_TITLE",
+    "font": null,
+    "text": "STOCKROOM",
+    "dll": "langui"
+  },
+  {
+    "id": 9033,
+    "symbol": "IDS_HP_POINT1_TITLE",
+    "font": null,
+    "text": "Pylon A",
+    "dll": "langui"
+  },
+  {
+    "id": 9034,
+    "symbol": "IDS_HP_POINT2_TITLE",
+    "font": null,
+    "text": "Pylon B",
+    "dll": "langui"
+  },
+  {
+    "id": 9035,
+    "symbol": "IDS_HP_TITLE",
+    "font": null,
+    "text": "E) PICK PYLONS",
+    "dll": "langui"
+  },
+  {
+    "id": 9036,
+    "symbol": "IDS_IAWU_DESTROYED_TITLE",
+    "font": null,
+    "text": "Downed",
+    "dll": "langui"
+  },
+  {
+    "id": 9037,
+    "symbol": "IDS_IAWU_SHOTS_TITLE",
+    "font": null,
+    "text": "Snaps",
+    "dll": "langui"
+  },
+  {
+    "id": 9038,
+    "symbol": "IDS_IAWU_TIME_TITLE",
+    "font": null,
+    "text": "Clock",
+    "dll": "langui"
+  },
+  {
+    "id": 9039,
+    "symbol": "IDS_IAWU_TITLE",
+    "font": null,
+    "text": "SORTIE TALLY",
+    "dll": "langui"
+  },
+  {
+    "id": 9040,
+    "symbol": "IDS_IAWU_ZONES_TITLE",
+    "font": null,
+    "text": "Gates",
+    "dll": "langui"
+  },
+  {
+    "id": 9041,
+    "symbol": "IDS_IA_TABLE_TITLE",
+    "font": null,
+    "text": "Tally",
+    "dll": "langui"
+  },
+  {
+    "id": 9042,
+    "symbol": "IDS_KB_COMMAND_TITLE",
+    "font": null,
+    "text": "Deed",
+    "dll": "langui"
+  },
+  {
+    "id": 9043,
+    "symbol": "IDS_KB_CONTA_TITLE",
+    "font": null,
+    "text": "First Input",
+    "dll": "langui"
+  },
+  {
+    "id": 9044,
+    "symbol": "IDS_KB_CONTB_TITLE",
+    "font": null,
+    "text": "Second Input",
+    "dll": "langui"
+  },
+  {
+    "id": 9045,
+    "symbol": "IDS_KB_DEFAULT_DESC",
+    "font": null,
+    "text": "Probe: pick an input, then press its key.",
+    "dll": "langui"
+  },
+  {
+    "id": 9046,
+    "symbol": "IDS_KB_TITLE",
+    "font": null,
+    "text": "KEY SHEET",
+    "dll": "langui"
+  },
+  {
+    "id": 9047,
+    "symbol": "IDS_OK",
+    "font": null,
+    "text": "Agreed",
+    "dll": "langui"
+  },
+  {
+    "id": 9048,
+    "symbol": "IDS_OL_AMMODESC_TITLE",
+    "font": null,
+    "text": "About the Shell",
+    "dll": "langui"
+  },
+  {
+    "id": 9049,
+    "symbol": "IDS_OL_AMMO_CAPTION",
+    "font": null,
+    "text": "Probe a shell per cannon.",
+    "dll": "langui"
+  },
+  {
+    "id": 9050,
+    "symbol": "IDS_OL_AMMO_TITLE",
+    "font": null,
+    "text": "Shells",
+    "dll": "langui"
+  },
+  {
+    "id": 9051,
+    "symbol": "IDS_OL_ROCKETDESC_TITLE",
+    "font": null,
+    "text": "About the Store",
+    "dll": "langui"
+  },
+  {
+    "id": 9052,
+    "symbol": "IDS_OL_ROCKET_CAPTION",
+    "font": null,
+    "text": "Probe a store per pylon.",
+    "dll": "langui"
+  },
+  {
+    "id": 9053,
+    "symbol": "IDS_OL_ROCKET_TITLE",
+    "font": null,
+    "text": "Pylon Stores",
+    "dll": "langui"
+  },
+  {
+    "id": 9054,
+    "symbol": "IDS_OL_TITLE",
+    "font": null,
+    "text": "ARMS RACK",
+    "dll": "langui"
+  },
+  {
+    "id": 9055,
+    "symbol": "IDS_PF_AUDIO_DESC",
+    "font": null,
+    "text": "Probe loudness levels.",
+    "dll": "langui"
+  },
+  {
+    "id": 9056,
+    "symbol": "IDS_PF_CONTROLS_DESC",
+    "font": null,
+    "text": "Probe stick, keys and pointer.",
+    "dll": "langui"
+  },
+  {
+    "id": 9057,
+    "symbol": "IDS_PF_GO_DESC",
+    "font": null,
+    "text": "Probe rules for play and the opening view.",
+    "dll": "langui"
+  },
+  {
+    "id": 9058,
+    "symbol": "IDS_PF_TITLE",
+    "font": null,
+    "text": "SETUP DESK",
+    "dll": "langui"
+  },
+  {
+    "id": 9059,
+    "symbol": "IDS_PF_VIDEO_DESC",
+    "font": null,
+    "text": "Probe picture settings.",
+    "dll": "langui"
+  },
+  {
+    "id": 9060,
+    "symbol": "IDS_PI_CONTINUED",
+    "font": null,
+    "text": "[onward ...]",
+    "dll": "langui"
+  },
+  {
+    "id": 9061,
+    "symbol": "IDS_PI_ENEMY",
+    "font": null,
+    "text": "Foes:",
+    "dll": "langui"
+  },
+  {
+    "id": 9062,
+    "symbol": "IDS_PI_ENV",
+    "font": null,
+    "text": "Setting:",
+    "dll": "langui"
+  },
+  {
+    "id": 9063,
+    "symbol": "IDS_PI_FLY",
+    "font": null,
+    "text": "Launch",
+    "dll": "langui"
+  },
+  {
+    "id": 9064,
+    "symbol": "IDS_PI_GOBACK",
+    "font": null,
+    "text": "[return ...]",
+    "dll": "langui"
+  },
+  {
+    "id": 9065,
+    "symbol": "IDS_PI_MISSION",
+    "font": null,
+    "text": "Sortie:",
+    "dll": "langui"
+  },
+  {
+    "id": 9066,
+    "symbol": "IDS_PI_PILOT",
+    "font": null,
+    "text": "Flyer",
+    "dll": "langui"
+  },
+  {
+    "id": 9067,
+    "symbol": "IDS_PI_PLANE",
+    "font": null,
+    "text": "Craft:",
+    "dll": "langui"
+  },
+  {
+    "id": 9068,
+    "symbol": "IDS_PI_STORYINSTR",
+    "font": null,
+    "text": "Probe the details below.",
+    "dll": "langui"
+  },
+  {
+    "id": 9069,
+    "symbol": "IDS_PI_TABLE",
+    "font": null,
+    "text": "Sorties",
+    "dll": "langui"
+  },
+  {
+    "id": 9070,
+    "symbol": "IDS_PI_TABLEINSTR",
+    "font": null,
+    "text": "Probe a sortie below.",
+    "dll": "langui"
+  },
+  {
+    "id": 9071,
+    "symbol": "IDS_PI_VIEW",
+    "font": null,
+    "text": "Read",
+    "dll": "langui"
+  },
+  {
+    "id": 9072,
+    "symbol": "IDS_PI_WEAPONS",
+    "font": null,
+    "text": "Arms",
+    "dll": "langui"
+  },
+  {
+    "id": 9073,
+    "symbol": "IDS_PI_WINGMEN",
+    "font": null,
+    "text": "Escorts",
+    "dll": "langui"
+  },
+  {
+    "id": 9074,
+    "symbol": "IDS_PM_CHANGEPLANE",
+    "font": null,
+    "text": "Swap Craft",
+    "dll": "langui"
+  },
+  {
+    "id": 9075,
+    "symbol": "IDS_PN_DEFAULTLOADOUT",
+    "font": null,
+    "text": "Stock Fit",
+    "dll": "langui"
+  },
+  {
+    "id": 9076,
+    "symbol": "IDS_PN_TITLE",
+    "font": null,
+    "text": "CRAFT LABEL",
+    "dll": "langui"
+  },
+  {
+    "id": 9077,
+    "symbol": "IDS_PS_B_EXPORT",
+    "font": null,
+    "text": "Send Out",
+    "dll": "langui"
+  },
+  {
+    "id": 9078,
+    "symbol": "IDS_PS_B_SELL",
+    "font": null,
+    "text": "Trade Away",
+    "dll": "langui"
+  },
+  {
+    "id": 9079,
+    "symbol": "IDS_PT_COLOR_TITLE",
+    "font": null,
+    "text": "Tint",
+    "dll": "langui"
+  },
+  {
+    "id": 9080,
+    "symbol": "IDS_PT_DECAL_TITLE",
+    "font": null,
+    "text": "Badges",
+    "dll": "langui"
+  },
+  {
+    "id": 9081,
+    "symbol": "IDS_PT_PATTERN_TITLE",
+    "font": null,
+    "text": "Scheme",
+    "dll": "langui"
+  },
+  {
+    "id": 9082,
+    "symbol": "IDS_PT_SHADE_TITLE",
+    "font": null,
+    "text": "Tone",
+    "dll": "langui"
+  },
+  {
+    "id": 9083,
+    "symbol": "IDS_PT_TITLE",
+    "font": null,
+    "text": "F) PICK COLOURS",
+    "dll": "langui"
+  },
+  {
+    "id": 9084,
+    "symbol": "IDS_PUR_B_PURCHASE",
+    "font": null,
+    "text": "Buy It",
+    "dll": "langui"
+  },
+  {
+    "id": 9085,
+    "symbol": "IDS_PUR_COST_TITLE",
+    "font": null,
+    "text": "Price",
+    "dll": "langui"
+  },
+  {
+    "id": 9086,
+    "symbol": "IDS_PUR_ITEM_TITLE",
+    "font": null,
+    "text": "Part",
+    "dll": "langui"
+  },
+  {
+    "id": 9087,
+    "symbol": "IDS_PUR_TITLE",
+    "font": null,
+    "text": "G) TALLY",
+    "dll": "langui"
+  },
+  {
+    "id": 9088,
+    "symbol": "IDS_PUR_TOTALS_TITLE",
+    "font": null,
+    "text": "Sum",
+    "dll": "langui"
+  },
+  {
+    "id": 9089,
+    "symbol": "IDS_PUR_WEIGHT_TITLE",
+    "font": null,
+    "text": "Mass",
+    "dll": "langui"
+  },
+  {
+    "id": 9090,
+    "symbol": "IDS_PX_AIRFRAME_TITLE",
+    "font": null,
+    "text": "SHELL: %1!s!",
+    "dll": "langui"
+  },
+  {
+    "id": 9091,
+    "symbol": "IDS_PX_B_AIRFRAME",
+    "font": null,
+    "text": "Shell",
+    "dll": "langui"
+  },
+  {
+    "id": 9092,
+    "symbol": "IDS_PX_B_ARMOR",
+    "font": null,
+    "text": "Plating",
+    "dll": "langui"
+  },
+  {
+    "id": 9093,
+    "symbol": "IDS_PX_B_ENGINE",
+    "font": null,
+    "text": "Motor",
+    "dll": "langui"
+  },
+  {
+    "id": 9094,
+    "symbol": "IDS_PX_B_GUNS",
+    "font": null,
+    "text": "Cannons",
+    "dll": "langui"
+  },
+  {
+    "id": 9095,
+    "symbol": "IDS_PX_B_HARDPOINTS",
+    "font": null,
+    "text": "Pylons",
+    "dll": "langui"
+  },
+  {
+    "id": 9096,
+    "symbol": "IDS_PX_B_PAINT",
+    "font": null,
+    "text": "Colours",
+    "dll": "langui"
+  },
+  {
+    "id": 9097,
+    "symbol": "IDS_PX_CASH_TITLE",
+    "font": null,
+    "text": "Purse:",
+    "dll": "langui"
+  },
+  {
+    "id": 9098,
+    "symbol": "IDS_PX_CURRENTWEIGHT_TITLE",
+    "font": null,
+    "text": "LIFT USED: %1!d!",
+    "dll": "langui"
+  },
+  {
+    "id": 9099,
+    "symbol": "IDS_PX_PLANECOST_TITLE",
+    "font": null,
+    "text": "CRAFT PRICE: %1!d!",
+    "dll": "langui"
+  },
+  {
+    "id": 9100,
+    "symbol": "IDS_PX_PLANENAME_TITLE",
+    "font": null,
+    "text": "CRAFT LABEL:",
+    "dll": "langui"
+  },
+  {
+    "id": 9101,
+    "symbol": "IDS_PX_WEIGHTCAPACITY_TITLE",
+    "font": null,
+    "text": "LIFT LIMIT: %1!d!",
+    "dll": "langui"
+  },
+  {
+    "id": 9102,
+    "symbol": "IDS_VP_CLUTTER_DESC",
+    "font": null,
+    "text": "Probe ground litter.",
+    "dll": "langui"
+  },
+  {
+    "id": 9103,
+    "symbol": "IDS_VP_CLUTTER_TITLE",
+    "font": null,
+    "text": "Ground Litter",
+    "dll": "langui"
+  },
+  {
+    "id": 9104,
+    "symbol": "IDS_VP_DEVICE_DESC",
+    "font": null,
+    "text": "Probe the renderer.",
+    "dll": "langui"
+  },
+  {
+    "id": 9105,
+    "symbol": "IDS_VP_DEVICE_TITLE",
+    "font": null,
+    "text": "Renderer",
+    "dll": "langui"
+  },
+  {
+    "id": 9106,
+    "symbol": "IDS_VP_DISPLAY_DESC",
+    "font": null,
+    "text": "Probe the screen size.",
+    "dll": "langui"
+  },
+  {
+    "id": 9107,
+    "symbol": "IDS_VP_DISPLAY_TITLE",
+    "font": null,
+    "text": "Screen Size",
+    "dll": "langui"
+  },
+  {
+    "id": 9108,
+    "symbol": "IDS_VP_EFFECTS_DESC",
+    "font": null,
+    "text": "Probe the detail of fire and smoke.",
+    "dll": "langui"
+  },
+  {
+    "id": 9109,
+    "symbol": "IDS_VP_EFFECTS_TITLE",
+    "font": null,
+    "text": "Effect Detail",
+    "dll": "langui"
+  },
+  {
+    "id": 9110,
+    "symbol": "IDS_VP_LIGHT_DESC",
+    "font": null,
+    "text": "Probe the detail of lights.",
+    "dll": "langui"
+  },
+  {
+    "id": 9111,
+    "symbol": "IDS_VP_LIGHT_TITLE",
+    "font": null,
+    "text": "Light Detail",
+    "dll": "langui"
+  },
+  {
+    "id": 9112,
+    "symbol": "IDS_VP_OBJECTS_DESC",
+    "font": null,
+    "text": "Probe the detail of objects.",
+    "dll": "langui"
+  },
+  {
+    "id": 9113,
+    "symbol": "IDS_VP_OBJECTS_TITLE",
+    "font": null,
+    "text": "Object Detail",
+    "dll": "langui"
+  },
+  {
+    "id": 9114,
+    "symbol": "IDS_VP_SHADOWS_DESC",
+    "font": null,
+    "text": "Probe cast shade.",
+    "dll": "langui"
+  },
+  {
+    "id": 9115,
+    "symbol": "IDS_VP_SHADOWS_TITLE",
+    "font": null,
+    "text": "Cast Shade",
+    "dll": "langui"
+  },
+  {
+    "id": 9116,
+    "symbol": "IDS_VP_TEXTURE_DESC",
+    "font": null,
+    "text": "Probe the detail of surfaces.",
+    "dll": "langui"
+  },
+  {
+    "id": 9117,
+    "symbol": "IDS_VP_TEXTURE_TITLE",
+    "font": null,
+    "text": "Surface Detail",
+    "dll": "langui"
+  },
+  {
+    "id": 9118,
+    "symbol": "IDS_VP_TITLE",
+    "font": null,
+    "text": "PICTURE",
+    "dll": "langui"
+  },
+  {
+    "id": 9119,
+    "symbol": "IDS_VP_VIEW_DESC",
+    "font": null,
+    "text": "Probe how far the eye reaches.",
+    "dll": "langui"
+  },
+  {
+    "id": 9120,
+    "symbol": "IDS_VP_VIEW_TITLE",
+    "font": null,
+    "text": "Sight Distance",
+    "dll": "langui"
+  },
+  {
+    "id": 10123,
+    "symbol": null,
+    "font": null,
+    "text": "Probe deathmatch: last flyer up wins.",
+    "dll": "langui"
+  },
+  {
+    "id": 10124,
+    "symbol": null,
+    "font": null,
+    "text": "Probe flag run: carry the far banner home.",
+    "dll": "langui"
+  },
+  {
+    "id": 10125,
+    "symbol": null,
+    "font": null,
+    "text": "Probe airship duel: guard your own hull.",
+    "dll": "langui"
+  }
+]

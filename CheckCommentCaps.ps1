@@ -93,7 +93,7 @@ function Get-Scope {
         }
     }
     # Generated trees are not ours.
-    $files | Where-Object { $_.FullName -notmatch '\\(obj|bin|\.godot)\\' } | ForEach-Object { $_.FullName }
+    $files | Where-Object { $_.FullName -notmatch '[\\/](obj|bin|\.godot)[\\/]' } | ForEach-Object { $_.FullName }
 }
 
 # Which cap applies to the block ending at $end, and what it is attached to.

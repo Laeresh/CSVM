@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -31,6 +32,13 @@ public sealed class StockLoadouts
     /// where <c>GlobalizePath</c> + System.IO cannot reach it.</summary>
     public static string DefaultPath => "res://data/stock_loadouts.json";
 
+    /// <summary>A second file of the same shape, set once at startup. Its planes join the
+    /// committed ones when <see cref="DefaultPath"/> is loaded, replacing any committed plane on
+    /// the same model (<see cref="Overlay"/>). The synthetic-data switch names the stand-ins' fits
+    /// here, since their invented aircraft are in no committed table. Null, the default, reads the
+    /// committed file alone.</summary>
+    public static string? Supplement { get; set; }
+
     public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
 
     /// <summary>The Ammo Selection screen's dropdown rosters, empty when the file omits them.</summary>
@@ -56,49 +64,11 @@ public sealed class StockLoadouts
             return loadouts;
         }
         using var doc = JsonDocument.Parse(viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path));
-        if (!doc.RootElement.TryGetProperty("planes", out var planes) || planes.ValueKind != JsonValueKind.Object)
+        ReadPlanes(doc.RootElement, path, loadouts._byDef);
+        if (path == DefaultPath && Supplement is { } extra)
         {
-            throw new InvalidDataException($"stock loadouts: no 'planes' object in {path}");
-        }
-        foreach (var plane in planes.EnumerateObject())
-        {
-            var body = plane.Value;
-            var def = new LoadoutDef
-            {
-                Def = plane.Name,
-                Model = Str(body, "model"),
-                Display = Str(body, "display"),
-            };
-            if (body.TryGetProperty("guns", out var guns) && guns.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var g in guns.EnumerateArray())
-                {
-                    var spec = new GunSpec
-                    {
-                        Slot = Int(g, "slot"),
-                        Mount = Str(g, "mount"),
-                        Caliber = Int(g, "caliber"),
-                        Ammo = Str(g, "ammo"),
-                        Turret = g.TryGetProperty("turret", out var t) && t.ValueKind == JsonValueKind.True,
-                    };
-                    if (g.TryGetProperty("markers", out var markers) && markers.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var m in markers.EnumerateArray())
-                        {
-                            if (m.GetString() is { } name)
-                            {
-                                spec.Markers.Add(name);
-                            }
-                        }
-                    }
-                    def.Guns.Add(spec);
-                }
-            }
-            if (body.TryGetProperty("hardpoints", out var hp) && hp.ValueKind == JsonValueKind.Object)
-            {
-                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Strings(hp, "stock") };
-            }
-            loadouts._byDef[def.Def] = def;
+            // ⚠ Never skip a missing supplement silently: a run that set one expects its planes armed.
+            loadouts.Overlay(extra);
         }
 
         if (doc.RootElement.TryGetProperty("selectable", out var selectable)
@@ -129,6 +99,80 @@ public sealed class StockLoadouts
             }
         }
         return null;
+    }
+
+    /// <summary>Lays a supplement file's planes over the loaded ones. A supplement plane replaces any
+    /// loaded def flying its model, so a lookup by model (the menus' <see cref="ForModel"/>) finds
+    /// the supplement's fit. It never finds the one the supplement stands in for.</summary>
+    internal void Overlay(string path)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+        var added = new Dictionary<string, LoadoutDef>(StringComparer.OrdinalIgnoreCase);
+        ReadPlanes(doc.RootElement, path, added);
+        foreach (var def in added.Values)
+        {
+            foreach (var shadowed in _byDef.Values
+                         .Where(d => string.Equals(d.Model, def.Model, StringComparison.OrdinalIgnoreCase))
+                         .Select(d => d.Def)
+                         .ToList())
+            {
+                _byDef.Remove(shadowed);
+            }
+
+            _byDef[def.Def] = def;
+        }
+    }
+
+    private static void ReadPlanes(JsonElement root, string path, Dictionary<string, LoadoutDef> into)
+    {
+        if (!root.TryGetProperty("planes", out var planes) || planes.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException($"stock loadouts: no 'planes' object in {path}");
+        }
+        foreach (var plane in planes.EnumerateObject())
+        {
+            var body = plane.Value;
+            var def = new LoadoutDef
+            {
+                Def = plane.Name,
+                Model = Str(body, "model"),
+                Display = Str(body, "display"),
+            };
+            if (body.TryGetProperty("guns", out var guns) && guns.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var g in guns.EnumerateArray())
+                {
+                    var spec = new GunSpec
+                    {
+                        Slot = Int(g, "slot"),
+                        Mount = Str(g, "mount"),
+                        Caliber = Int(g, "caliber"),
+                        Ammo = Str(g, "ammo"),
+                        Turret = g.TryGetProperty("turret", out var t) && t.ValueKind == JsonValueKind.True,
+                        // A weapon outside the caliber matrix is named outright (docs/formats/loadouts.md).
+                        WeaponId = g.TryGetProperty("weapon", out var w) && w.ValueKind == JsonValueKind.String
+                            ? w.GetString()
+                            : null,
+                    };
+                    if (g.TryGetProperty("markers", out var markers) && markers.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var m in markers.EnumerateArray())
+                        {
+                            if (m.GetString() is { } name)
+                            {
+                                spec.Markers.Add(name);
+                            }
+                        }
+                    }
+                    def.Guns.Add(spec);
+                }
+            }
+            if (body.TryGetProperty("hardpoints", out var hp) && hp.ValueKind == JsonValueKind.Object)
+            {
+                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Strings(hp, "stock") };
+            }
+            into[def.Def] = def;
+        }
     }
 
     private static string Str(JsonElement e, string key) =>
@@ -539,12 +583,41 @@ public sealed class Loadout
     /// keeps its weapon; one it does not defaults to the stock's first gun weapon.
     /// ⚠ Every synthesized group is fireable, even a stock turret slot, a deliberate lab-only
     /// difference. Binds through the same <see cref="Bind"/> every other loadout uses.</summary>
-    public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock)
+    public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock) =>
+        Bind(RigDef(CollectMarkers(plane).Keys, stock), plane, weapons);
+
+    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
+    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
+    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
+    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
+    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
+    public void ApplyRocketOverride(WeaponDefs weapons, string wepId, bool verbose)
     {
-        var markerNodes = CollectMarkers(plane);
+        if (weapons.Get(wepId) is not { } weapon)
+        {
+            Log.Warn("weapons", $"--rocket='{wepId}' is not a known weapon id, hardpoints keep their stock ordnance");
+            return;
+        }
+        int per = weapon.ClusterSize ?? 0;
+        foreach (var hp in Hardpoints)
+        {
+            hp.Weapon = weapon;
+            hp.Capacity = per;
+            hp.Ammo = per;
+        }
+        if (verbose)
+        {
+            Log.Info("core", $"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
+        }
+    }
+
+    /// <summary>The node-free half of <see cref="ForRig"/>: the def it binds, built from the rig's
+    /// marker names alone. A unit pins it without a live plane.</summary>
+    internal static LoadoutDef RigDef(IEnumerable<string> markerNames, LoadoutDef? stock)
+    {
         var firepoints = new SortedSet<int>();
         var pylons = new SortedSet<int>();
-        foreach (var name in markerNodes.Keys)
+        foreach (var name in markerNames)
         {
             if (MarkerRig.Classify(name, out var kind, out int ord))
             {
@@ -601,6 +674,9 @@ public sealed class Loadout
                 Mount = stockSpec?.Mount ?? $"Gun Group {slot}",
                 Caliber = stockSpec?.Caliber ?? firstStockGun?.Caliber ?? 30,
                 Ammo = stockSpec?.Ammo ?? firstStockGun?.Ammo ?? "slug",
+                // A named weapon sits outside the caliber matrix, so Caliber and Ammo cannot rebuild
+                // it. Null, which every shipped fit carries, leaves Bind composing the matrix id.
+                WeaponId = stockSpec != null ? stockSpec.WeaponId : firstStockGun?.WeaponId,
                 Markers = markers,
                 Turret = false,
             });
@@ -621,32 +697,7 @@ public sealed class Loadout
             };
         }
 
-        return Bind(def, plane, weapons);
-    }
-
-    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
-    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
-    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
-    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
-    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
-    public void ApplyRocketOverride(WeaponDefs weapons, string wepId, bool verbose)
-    {
-        if (weapons.Get(wepId) is not { } weapon)
-        {
-            Log.Warn("weapons", $"--rocket='{wepId}' is not a known weapon id, hardpoints keep their stock ordnance");
-            return;
-        }
-        int per = weapon.ClusterSize ?? 0;
-        foreach (var hp in Hardpoints)
-        {
-            hp.Weapon = weapon;
-            hp.Capacity = per;
-            hp.Ammo = per;
-        }
-        if (verbose)
-        {
-            Log.Info("core", $"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
-        }
+        return def;
     }
 
     // The hardpoint list read in physical mount order: list positions sorted by pylon number.

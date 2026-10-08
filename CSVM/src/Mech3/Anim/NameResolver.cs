@@ -47,7 +47,7 @@ public sealed class NameResolver<TNode>
 
     /// <summary>Called for each node a name query hands out. That is a <see cref="FindAll"/> answer
     /// as it is computed or extended, never a memo hit, and every <see cref="Anchors"/> result. A node
-    /// may arrive more than once.</summary>
+    /// may arrive more than once. Nothing inside <see cref="Peek{T}"/> calls it.</summary>
     public Action<TNode>? Claimed;
 
     private const int CensusCap = 12;
@@ -112,6 +112,10 @@ public sealed class NameResolver<TNode>
     private readonly List<string> _censusMissingTargets = new();
 
     private bool _censusOpen;
+
+    // Above zero while a Peek runs. FindAll then neither fires Claimed nor writes its memo. A memo
+    // written unclaimed would answer the later real query as a hit, so its nodes would never be claimed.
+    private int _peeking;
 
     private int _censusAnchored, _censusNarrowed, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
 
@@ -354,6 +358,7 @@ public sealed class NameResolver<TNode>
             return hit.Result;
         }
 
+        bool peek = _peeking > 0;
         // ⚠ Copy before growing: a caller may still hold the list an earlier query returned.
         var match = Matcher(pattern);
         var result = cached ? hit.Result : new List<TNode>();
@@ -379,11 +384,45 @@ public sealed class NameResolver<TNode>
                     copied = true;
                 }
                 result.Add(row.Node);
-                Claimed?.Invoke(row.Node);
+                if (!peek)
+                {
+                    Claimed?.Invoke(row.Node);
+                }
             }
         }
-        _findCache[key] = new FindEntry(result, _index.Count);
+        if (!peek)
+        {
+            _findCache[key] = new FindEntry(result, _index.Count);
+        }
         return result;
+    }
+
+    /// <summary>Runs <paramref name="query"/> as a read-only question: every <see cref="FindAll"/>
+    /// inside it, the owner's hooks included, reads the memo but neither writes it nor fires
+    /// <see cref="Claimed"/>. A later real query then computes and claims as if the peek never ran.</summary>
+    public T Peek<T>(Func<T> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        _peeking++;
+        try
+        {
+            return query();
+        }
+        finally
+        {
+            _peeking--;
+        }
+    }
+
+    /// <summary><see cref="Anchors"/> as a read-only question, inside <see cref="Peek{T}"/>: the same
+    /// anchors, with no claim, no census entry and no root-lift record.</summary>
+    public List<TNode?> PeekAnchors(AnimDefinition def)
+    {
+        if (string.IsNullOrEmpty(def.Name))
+        {
+            return def.MultiTargets.Count == 0 ? new List<TNode?>() : Peek(() => MultiTargetAnchors(def));
+        }
+        return Peek(() => ComputeAnchors(def).Anchors);
     }
 
     /// <summary>Resolves a single node name for one definition, the compiled symbol table first
@@ -409,28 +448,19 @@ public sealed class NameResolver<TNode>
     /// compose it differently. Callers must treat the result as read-only.</summary>
     public List<TNode> ResolveScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
     {
-        if (anchor == null || !_isLive(anchor))
+        var found = ScopedTiers(path, def, anchor, out bool refused);
+        if (refused)
         {
-            return AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, null);
-        }
-        var found = AdmissibleStaging(ResolvePath(path, anchor, localOnly: true), def, anchor);
-        if (found.Count == 0)
-        {
-            found = ResolveInOwnRoot(path, def, anchor);
-        }
-        if (found.Count == 0 && !def.LocalNodesOnly)
-        {
-            if (RefusesGlobalTier(def, path))
-            {
-                GlobalTierRefused++;
-            }
-            else
-            {
-                found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
-            }
+            GlobalTierRefused++;
         }
         return found;
     }
+
+    /// <summary><see cref="ResolveScoped"/> for a read-only query: the same tiers in the same order,
+    /// inside <see cref="Peek{T}"/> and without the <see cref="GlobalTierRefused"/> tally. Callers
+    /// must treat the result as read-only.</summary>
+    public List<TNode> PeekScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor) =>
+        Peek(() => ScopedTiers(path, def, anchor, out _));
 
     /// <summary>Whether <see cref="ResolveScoped"/> refuses this write the global tier. It does when
     /// the world holds several instances of the definition and the name carries no wildcard. Several
@@ -680,6 +710,33 @@ public sealed class NameResolver<TNode>
         }
         _byIndex.Remove(index);
         return null;
+    }
+
+    // The tier chain both scoped forms share; refused reports a global tier RefusesGlobalTier denied.
+    private List<TNode> ScopedTiers(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor, out bool refused)
+    {
+        refused = false;
+        if (anchor == null || !_isLive(anchor))
+        {
+            return AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, null);
+        }
+        var found = AdmissibleStaging(ResolvePath(path, anchor, localOnly: true), def, anchor);
+        if (found.Count == 0)
+        {
+            found = ResolveInOwnRoot(path, def, anchor);
+        }
+        if (found.Count == 0 && !def.LocalNodesOnly)
+        {
+            if (RefusesGlobalTier(def, path))
+            {
+                refused = true;
+            }
+            else
+            {
+                found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
+            }
+        }
+        return found;
     }
 
     // A parent->child NAME path: the first element within scope (falling back to the whole index

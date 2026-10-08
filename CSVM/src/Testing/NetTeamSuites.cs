@@ -9,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -54,14 +55,17 @@ internal static class NetTeamSuites
     internal static void ATeamMatchAcrossThreeMachines(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.ZrdrPath))}");
-        var table = SpawnPoints.LoadNetTable(SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission));
+        // The whole table the sessions' own pickers read for these teams: MP1's net.zrd, or the
+        // empty stage's team blocks.
+        var table = new SpawnPicker(spec) { SeatTeams = Teams }
+            .LoadSpawnList(SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission), spec.Scenario);
         if (table is not { Count: > 2 * SpawnPoints.NetBlock })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission}'s net.zrd authors no second team block");
+            throw new SuiteSkippedException($"{NetCombatSuites.ArenaTable(ctx, spec)} authors no second team block");
         }
 
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(8401));
-        var roster = NetCombatSuites.Roster(3).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
+        var roster = NetCombatSuites.Roster(3, spec).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try

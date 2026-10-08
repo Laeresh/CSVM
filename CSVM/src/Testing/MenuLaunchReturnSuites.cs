@@ -53,7 +53,6 @@ internal static class MenuLaunchReturnSuites
         + "re-showing the same presentation without re-selecting")]
     internal static void MenuLaunchReturn(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -92,13 +91,12 @@ internal static class MenuLaunchReturnSuites
     [Suite("menu-backdrop",
         "the persistent environment's background over an Options restart and a launch, on the "
         + "launcher's own WorldEnvironment: a run that shows no menu leaves it on the sky, the "
-        + "menu's first show blacks it, Built-in's Options screen offers eighteen steppers, two doors "
+        + "menu's first show blacks it, Built-in's Options screen offers nineteen steppers, two doors "
         + "and no presentation row, the frame between the apply's exit and the restart carries no "
         + "presentation and stays black, the restart stands a fresh Built-in up over the same "
         + "black, and a launch puts the sky back with the material the rig built still on it")]
     internal static void MenuBackdrop(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -169,8 +167,8 @@ internal static class MenuLaunchReturnSuites
             run.Press(Down);
         }
 
-        ctx.Check(rows.Count == 20 && !rows.Exists(r => r.Contains("presentation", StringComparison.OrdinalIgnoreCase)),
-            $"the Options screen holds eighteen steppers and two doors and no presentation row ({string.Join(" | ", rows)})");
+        ctx.Check(rows.Count == 21 && !rows.Exists(r => r.Contains("presentation", StringComparison.OrdinalIgnoreCase)),
+            $"the Options screen holds nineteen steppers and two doors and no presentation row ({string.Join(" | ", rows)})");
         WalkTo(run, menu, "Apply and restart the menu");
         run.Press(Accept);
         var applied = run.Expect<OptionsApplyExit>();

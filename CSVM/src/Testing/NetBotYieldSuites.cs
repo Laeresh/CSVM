@@ -49,6 +49,8 @@ internal static class NetBotYieldSuites
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, "--vs-time=1");
         ctx.RequireData(ctx.MessagesPath, $"message table");
+        // Fifteen Random bots draw from every stock airframe.
+        ctx.RequirePlane(StockAirframes.Nodes.ToArray());
         var pool = BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(5121));
         var gate = new ArrivalGate(mesh[0]);

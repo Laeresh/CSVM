@@ -126,6 +126,46 @@ checked in, as the `[Trait("Tier", "Quick")]` classes and `SuiteCatalog.QuickTie
 `-Suite`/`-Filter` unions with the engine tier and a `-UnitFilter` replaces the unit tier. Quick
 prints a `not checked:` line per omitted surface, and never satisfies the landing gate.
 
+**The ci engine tier (`--run-tests=tier:ci`) is what CI requires, and a skip in it fails.** Its
+membership is checked in as `SuiteCatalog.CiTier`, one name per line and sorted. A suite earns its
+place by passing `RunCiSuites.ps1` (below): headless, with no extraction but the `--synthetic-data`
+tree of invented records, with no IPv6 loopback and no OS shell or real display, and by being shown
+to go red when one of its inputs in that tree is broken. It joins when it stops needing the install,
+and leaves rather than taking an exception when it starts needing one. The plane and Original-shell
+suites skip without the switch, so the tier is only green with it. The suites on the `headlessOnly`
+list in `analysis/headless-limits.json` (a unit test keeps them off the tier), `enet-dual-stack`,
+`enet-stable-ipv6-reply` and `build-stamp-focus` are out for that reason.
+The ENet and LAN discovery suites bound to `127.0.0.1` are in. A network match suite flies the
+install's `C1/MP1` (Capture the Flag `C1/MP2`) when the data root carries it, and otherwise
+`--stage=empty` with its own spawn table and arena of flags and rearm nodes, and notes which. The tier carries
+`SuiteTier.SkipFails`, so a listed suite that SKIPs reports FAIL with its skip reason and the run
+exits nonzero; any other selector, including `suite:<name>` on a listed suite, keeps SKIP as a
+non-failure, so the local battery is unchanged. The tier checks mechanisms on invented or absent
+data and never replaces the full local battery. A suite whose install reads sit in a few legs
+splits rather than staying off: those legs keep the original name and its `RequireData` gates, the
+rest move to a `<name>-core` suite on the tier, and no leg runs in both, so the local battery still
+makes every check once.
+
+**`RunCiSuites.ps1` is the CI engine stage, and runs locally on Linux or macOS the same way.** The
+`engine` job in `.github/workflows/checks.yml` runs it on `ubuntu-latest` after `dotnet build
+CSVM/CSVM.sln` and one `<godot> --headless --path CSVM --import`, with Godot 4.7 .NET downloaded
+from the official release, checked against the release's `SHA512-SUMS.txt` and cached per release.
+A contributor runs those two commands and then `./RunCiSuites.ps1 -Godot <path to the mono build>`
+(`-Selector` for another selector than `tier:ci`, `-NetPortBase`, `-TimeoutSec`). It starts one
+headless Godot with `CSVM_DATA_ROOT` at a fresh empty folder, `--synthetic-data` (so the run reads
+the invented tree written for its process id, and the report must name that root and
+`syntheticData: true`; `-NoSyntheticData` runs over the empty folder alone) and the XDG folders inside
+`.scratch/ci-suites/`, which it wipes first and which receives `godot.out`, `godot.err` and a copy of
+the screened engine log; the job uploads those, `.scratch/test-report.json` and `.scratch/logs/` on
+every outcome. ⚠ **The verdict comes from the report, not from Godot's exit code.** A headless
+process prints engine error lines a windowed one does not, so a bare headless `--run-tests=tier:ci`
+reports `menu-player-setup-journey`'s text-server lines as unexpected and exits 1. The script
+excuses an unexpected line only when it matches a `headlessEngineErrors` pattern in
+`analysis/headless-limits.json`, the same patterns and the same mechanism `sandbox/LinuxRelease.ps1`
+uses; any other unexpected line, an allowance over its cap, an unscreened log, a FAIL, a missing or
+stale report, or a crash exit fails the run. It refuses to start on Linux without
+`libfontconfig.so.1`, for the reason the Linux release check gives.
+
 **The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
 many; the default is 6 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
 and `-Shards 1` is the serial reference path. Membership comes from the harness's
@@ -592,9 +632,11 @@ What the check had to learn:
   the harness would report the engine log unscreened. Without the flag, each process logs to its
   own `user://logs/godot.log` and the harness screens that.
 - **Some suites cannot pass headless on any platform.** They read back what only a renderer or a
-  display produces (mesh and MultiMesh instance data, viewport pixels, windows and screens). The
-  `$HeadlessOnly` table at the top of the script lists them with the reason each fails, beside
-  `$HeadlessEngineErrors`, the engine error lines only a headless process prints. The same
+  display produces (mesh and MultiMesh instance data, viewport pixels, windows and screens).
+  `analysis/headless-limits.json` lists them with the reason each fails (`headlessOnly`), beside
+  the engine error lines only a headless process prints (`headlessEngineErrors`); the script
+  reads them as `$HeadlessOnly` and `$HeadlessEngineErrors`, and `RunCiSuites.ps1` reads the same
+  file. The same
   suites and the same error counts come out of the Windows export run headless, which is how an
   entry is admitted: a suite that fails on Linux alone is a Linux bug and never goes on the list.
   Listed suites still run, and one that passes is reported so a stale entry is seen.

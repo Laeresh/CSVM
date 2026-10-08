@@ -766,6 +766,7 @@ internal static class TargetingSuites
             ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
             string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
             ctx.RequireData(texturesPath, $"C1 textures");
+            ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
             var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
             var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
             // Private: the assertions read every site as ia1.gw leaves it and then the five aaguns

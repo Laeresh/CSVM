@@ -46,6 +46,7 @@ internal static class LoadSheetSuites
     internal static void LoadSheetScreen(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
 
         // Every campaign mission, not the run's own chapter: no world is built here, so the whole
         // sequence is affordable, and the filmed mission has to be in it whatever chapter is up.

@@ -34,6 +34,7 @@ internal static class CampaignZeppelinSuites
     internal static void CampaignZeppelins(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         var mission = MissionOf(missions, ZepChapter, ZepMission)
             ?? throw new SuiteSkippedException($"{ZepChapter}/{ZepMission} is not in cm_sequence");

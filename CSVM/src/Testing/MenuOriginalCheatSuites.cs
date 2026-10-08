@@ -24,7 +24,9 @@ internal static class MenuOriginalCheatSuites
     private const float Dt = 1f / 60f;
     private const string Pilot = "Zachary";
     private const string Built = "Cheat Bird";
-    private const string CabinPainting = "PC_BackGround.png";
+    // The cabin painting's shipped name, which the page also falls back on when [@PassengerCabin@]
+    // authors no PC_BACKGROUND art.
+    private const string CabinFallback = "PC_BackGround.png";
 
     // A point inside each screen's authored cheat region. No row of any of the three screens stands
     // in one, which is what lets the click be read before the hit test.
@@ -58,7 +60,6 @@ internal static class MenuOriginalCheatSuites
         + "and the eleven stock airframes, leaving the screen standing and every airframe offered")]
     internal static void MenuOriginalCheats(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -107,7 +108,7 @@ internal static class MenuOriginalCheatSuites
             var size = ctx.Host.GetViewport().GetVisibleRect().Size;
             var fit = BoardFit.For(size.X, size.Y);
             Seat(ctx, host, seat, shell, fit, campaign);
-            Cabin(ctx, host, seat, shell, fit, campaign);
+            Cabin(ctx, host, seat, shell, fit, campaign, layout);
             Contents(ctx, host, seat, shell, fit, campaign);
             Hub(ctx, host, seat, shell, fit, campaign, store);
             UnlockingName(ctx, host, seat, shell, fit, campaign, store);
@@ -144,7 +145,7 @@ internal static class MenuOriginalCheatSuites
     // PASSENGERCABIN.SCRIPT's word: the click that gives the widget the keyboard, the two refusals,
     // the pull-down it shows, and the mission NEXT MISSION launches afterwards.
     private static void Cabin(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
-        CampaignFeature campaign)
+        CampaignFeature campaign, MenuLayout layout)
     {
         if (shell.Screen != OriginalScreen.CampaignCabin)
         {
@@ -180,8 +181,17 @@ internal static class MenuOriginalCheatSuites
         // The field's paper is a fill and fills draw under the pictures, so the painting has to
         // stand in the backdrop for the closed field to show at all.
         var shown = shell.Compose();
-        ctx.Check(HasArt(shown.Backdrop, CabinPainting) && !HasArt(shown.Pictures, CabinPainting) && shown.Fills.Count > 0,
+        string painting = layout.Screen("PassengerCabin")?.Widget("PC_BACKGROUND") is { Art.Count: > 0 } back
+            ? back.Art[0]
+            : CabinFallback;
+        ctx.Check(HasArt(shown.Backdrop, painting) && !HasArt(shown.Pictures, painting) && shown.Fills.Count > 0,
             $"the closed field's paper draws over the cabin painting ({shown.Backdrop.Count} backdrop, {shown.Fills.Count} fills)");
+        // On the install the shipped name is pinned too, so a decode that renames the painting goes red.
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(HasArt(shown.Backdrop, CabinFallback) && !HasArt(shown.Pictures, CabinFallback) && shown.Fills.Count > 0,
+                $"the closed field's paper draws over the cabin painting ({shown.Backdrop.Count} backdrop, {shown.Fills.Count} fills)");
+        }
 
         Click(host, seat, Pointer(fit, field.X + 5f, field.Y + 5f, pressed: true, clicked: true));
         var entry = Row(shell, "ENTRY:" + PickedRow.ToString(CultureInfo.InvariantCulture));

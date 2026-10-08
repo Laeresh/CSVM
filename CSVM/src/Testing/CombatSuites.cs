@@ -30,6 +30,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
         var r = Probes.Loadouts(ctx.ZrdrPath, ctx.MessagesPath, ctx.PlanesGamezPath, ctx.DataRoot,
             "", ctx.LoadoutOverride);
         ctx.Check(r.Error == null, $"loadout inputs load error={r.Error ?? "-"}");
@@ -237,8 +238,15 @@ internal static class CombatSuites
             pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);
             var result = WeaponBench.Run(plane, loadout, weapons, pool);
-            ctx.Same(WeaponDefCount, result.Total, $"weapons offered to the bench");
-            ctx.Same(WeaponDefCount, result.Ok, $"weapons that mounted and fired");
+            // Every weapon the loaded table defines mounts and fires. The bench is offered the whole
+            // table, so only the install's census can pin how many that is.
+            ctx.Check(result.Total > 0 && result.Ok == result.Total,
+                $"weapons that mounted and fired, every one of the {result.Total} the table defines ok={result.Ok}");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Same(WeaponDefCount, result.Total, $"weapons offered to the bench");
+                ctx.Same(WeaponDefCount, result.Ok, $"weapons that mounted and fired");
+            }
             ctx.Same(0, result.Errors, $"weapons that threw");
             // ForRig seats 4 gun-group slots on every airframe (loadout-forrig proves that across
             // all 11); the pylon count is per-rig, so only its presence is pinned here, 0 pylons
@@ -406,22 +414,46 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        ctx.Check(Mathf.IsEqualApprox(5.0f, stats.StickyBulletCatchupRate),
-            $"sticky_bullet_catchup_rate parses as the shipped 5.0");
-        ctx.Check(Mathf.IsEqualApprox(1.5f, stats.StickyBulletForgetInterval),
-            $"sticky_bullet_forget_interval parses as the shipped 1.5");
-        ctx.Check(stats.StickyBulletDistFactor == 0f,
-            $"sticky_bullet_dist_factor parses as the shipped 0.0 (compiled default 2.5e-4), so selection is purely most-aligned");
-        ctx.Check(Mathf.IsEqualApprox(1.0f, Mathf.RadToDeg(stats.StickyBulletInaccuracy), 1e-4f),
-            $"sticky_bullet_inaccuracy parses as the shipped 1.0 DEGREE, stored in radians as the original stores it");
+        // Each field against its own record. A reader that missed the key would hold the compiled
+        // fallback, which shows wherever the record authors anything else.
+        var fields = new (string Key, float Field)[]
+        {
+            ("sticky_bullet_catchup_rate", stats.StickyBulletCatchupRate),
+            ("sticky_bullet_forget_interval", stats.StickyBulletForgetInterval),
+            ("sticky_bullet_dist_factor", stats.StickyBulletDistFactor),
+            ("sticky_bullet_inaccuracy", Mathf.RadToDeg(stats.StickyBulletInaccuracy)),
+        };
+        foreach (var (key, field) in fields)
+        {
+            float? authored = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, key);
+            ctx.Check(authored is { } a && Mathf.IsEqualApprox(field, a, 1e-6f),
+                $"{key} parses as player.json authors it ({authored?.ToString("0.#####", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"}): got {field:0.#####}");
+        }
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(5.0f, stats.StickyBulletCatchupRate),
+                $"sticky_bullet_catchup_rate parses as the shipped 5.0");
+            ctx.Check(Mathf.IsEqualApprox(1.5f, stats.StickyBulletForgetInterval),
+                $"sticky_bullet_forget_interval parses as the shipped 1.5");
+            ctx.Check(stats.StickyBulletDistFactor == 0f,
+                $"sticky_bullet_dist_factor parses as the shipped 0.0 (compiled default 2.5e-4), so selection is purely most-aligned");
+            ctx.Check(Mathf.IsEqualApprox(1.0f, Mathf.RadToDeg(stats.StickyBulletInaccuracy), 1e-4f),
+                $"sticky_bullet_inaccuracy parses as the shipped 1.0 DEGREE, stored in radians as the original stores it");
+        }
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.CannonSpread is > 0f);
         ctx.Check(gun != null, $"a gun ships CANNON_SPREAD, the assist's acceptance cone (BL-342 A1)");
         if (gun != null)
         {
-            ctx.Check(Mathf.IsEqualApprox(6.0f, gun.CannonSpread!.Value),
-                $"{gun.Id} ships CANNON_SPREAD 6.0, a 6° cone half-angle: cos={AimAssist.WeaponConeCos(gun):0.000000}");
+            float spread = gun.CannonSpread!.Value;
+            ctx.Check(Mathf.IsEqualApprox(AimAssist.WeaponConeCos(gun), Mathf.Cos(Mathf.DegToRad(spread))),
+                $"{gun.Id}'s CANNON_SPREAD {spread:0.#} is the assist's cone half-angle in degrees: cos={AimAssist.WeaponConeCos(gun):0.000000}");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(Mathf.IsEqualApprox(6.0f, spread),
+                    $"{gun.Id} ships CANNON_SPREAD 6.0, a 6° cone half-angle: cos={AimAssist.WeaponConeCos(gun):0.000000}");
+            }
         }
     }
 
@@ -772,6 +804,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
@@ -861,6 +894,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
         var textures = new TextureArchive(texturesPath);
         Node3D? carrier = null;
         try
@@ -1121,6 +1155,7 @@ internal static class CombatSuites
     internal static void TurretDeathEffectWorldAnchor(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         ProjectilePool? pool = null;
@@ -1433,8 +1468,22 @@ internal static class CombatSuites
         var skills = AiSkills.Load(ctx.ZrdrPath);
         var stock = StockLoadouts.Load().All.Values.FirstOrDefault(d => d.Model == ctx.PlaneName);
         ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
-        ctx.Check(stats.BulletHitSound == "bullet_hit_sg",
-            $"player.json binds bullet_hit_sound={stats.BulletHitSound}, the group the ricochet draws from");
+        // Each cue is judged by the members of its own group as the loaded records name them. Two
+        // groups are the ones player.json binds, the third the canopy group the code names. The
+        // install pins the shipped names too.
+        string[] Members(string group) => soundGroups.TryGetValue(group, out var g)
+            ? g.Members.Select(m => m.Name).ToArray() : System.Array.Empty<string>();
+        bool DrewFrom(string line, string[] members) => members.Any(m => line.Contains($"snd={m}"));
+        string[] passMembers = Members(stats.WarningShotSound);
+        string[] ricochetMembers = Members(stats.BulletHitSound);
+        string[] windowMembers = Members(Flight.Hud.CanopyHoleCue.WindowHitSound);
+        ctx.Check(passMembers.Length > 0 && ricochetMembers.Length > 0 && windowMembers.Length > 0,
+            $"player.json binds warning_shot_sound={stats.WarningShotSound} and bullet_hit_sound={stats.BulletHitSound}, groups with members as {Flight.Hud.CanopyHoleCue.WindowHitSound} has ({passMembers.Length}/{ricochetMembers.Length}/{windowMembers.Length})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(stats.BulletHitSound == "bullet_hit_sg",
+                $"player.json binds bullet_hit_sound={stats.BulletHitSound}, the group the ricochet draws from");
+        }
         if (stock == null)
             return;
 
@@ -1526,8 +1575,13 @@ internal static class CombatSuites
                     string name = PilotView.Name(view);
                     ctx.Check(passed.Count > 0,
                         $"{name}: the AI gunner's first rounds reached the shield passes={passed.Count}");
-                    ctx.Check(passed.All(l => l.Contains("snd=snd_bulletpass")),
-                        $"{name}: every absorbed round drew from bullet_warning_sg's own members first={passed.FirstOrDefault() ?? "-"}");
+                    ctx.Check(passed.All(l => DrewFrom(l, passMembers)),
+                        $"{name}: every absorbed round drew from {stats.WarningShotSound}'s own members first={passed.FirstOrDefault() ?? "-"}");
+                    if (!ctx.SyntheticData)
+                    {
+                        ctx.Check(passed.All(l => l.Contains("snd=snd_bulletpass")),
+                            $"{name}: every absorbed round drew from bullet_warning_sg's own members first={passed.FirstOrDefault() ?? "-"}");
+                    }
                     ctx.Check(Mathf.IsEqualApprox(shielded, before),
                         $"{name}: not one point of gun damage stuck while the shield stood ({before:0.0} → {shielded:0.0})");
                     ctx.Check(hits.FindIndex(l => l.Contains("warning shot P1"))
@@ -1535,8 +1589,13 @@ internal static class CombatSuites
                         $"{name}: the pass cue comes first and the ricochet only after the accumulator filled");
                     ctx.Check(landed > 0, $"{name}: past saturation the same gunner's rounds tell rounds={landed}");
                     ctx.Same(landed, rung.Count, $"{name}: every landed gun round rang the ricochet");
-                    ctx.Check(rung.Count > 0 && rung.All(l => l.Contains("snd=snd_ricochet")),
-                        $"{name}: every draw came from bullet_hit_sg's own members first={rung.FirstOrDefault() ?? "-"}");
+                    ctx.Check(rung.Count > 0 && rung.All(l => DrewFrom(l, ricochetMembers)),
+                        $"{name}: every draw came from {stats.BulletHitSound}'s own members first={rung.FirstOrDefault() ?? "-"}");
+                    if (!ctx.SyntheticData)
+                    {
+                        ctx.Check(rung.Count > 0 && rung.All(l => l.Contains("snd=snd_ricochet")),
+                            $"{name}: every draw came from bullet_hit_sg's own members first={rung.FirstOrDefault() ?? "-"}");
+                    }
                     ctx.Check(Dented(),
                         $"{name}: and the rounds that got through reached the hull pool health={target.Damage!.SummaryHealthFraction:0.000}");
 
@@ -1553,8 +1612,13 @@ internal static class CombatSuites
                     }
 
                     var glass = hits.Where(l => l.Contains("canopy hole P1")).ToList();
-                    ctx.Check(glass.Count == 1 && glass[0].Contains("snd=snd_windowhit"),
-                        $"{name}: the canopy cue opened a hole and drew from window_hit_sg line={glass.FirstOrDefault() ?? "-"}");
+                    ctx.Check(glass.Count == 1 && DrewFrom(glass[0], windowMembers),
+                        $"{name}: the canopy cue opened a hole and drew from {Flight.Hud.CanopyHoleCue.WindowHitSound}'s own members line={glass.FirstOrDefault() ?? "-"}");
+                    if (!ctx.SyntheticData)
+                    {
+                        ctx.Check(glass.Count == 1 && glass[0].Contains("snd=snd_windowhit"),
+                            $"{name}: the canopy cue opened a hole and drew from window_hit_sg line={glass.FirstOrDefault() ?? "-"}");
+                    }
                     report.Add($"{name}: {passed.Count} rounds absorbed, {landed} landed, {rung.Count} ricochets, {glass.Count} canopy hole(s)");
                 }
 
@@ -1775,8 +1839,14 @@ internal static class CombatSuites
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        ctx.Check(Mathf.IsEqualApprox(stats.BounceFactor, 0.6f),
-            $"the airframe carries this install's authored bounce_factor={stats.BounceFactor:0.###}");
+        float? authoredBounce = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "bounce_factor", "crash");
+        ctx.Check(authoredBounce is { } bounce && Mathf.IsEqualApprox(stats.BounceFactor, bounce),
+            $"the airframe carries player.json's crash bounce_factor={authoredBounce?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"} got={stats.BounceFactor:0.###}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(stats.BounceFactor, 0.6f),
+                $"the airframe carries this install's authored bounce_factor={stats.BounceFactor:0.###}");
+        }
 
         var textures = new TextureArchive(texturesPath);
         StaticBody3D? surface = null;
@@ -1919,6 +1989,7 @@ internal static class CombatSuites
     internal static void AiPlaneDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         // node name, AI def, authored pair, def-level injure entries. The pools are vehicle.json's
         // own (docs/formats/vehicle.md); the ladder is seven everywhere but the balmoral's eight.
@@ -2164,7 +2235,7 @@ internal static class CombatSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_14", out var torpedo)
+        if (OrdnanceSuites.PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
         {
             ctx.Check(false, $"torpedo (wep_14) carries HEALTH_DAMAGE + IMPACT_PROXIMITY");
@@ -2258,6 +2329,7 @@ internal static class CombatSuites
     internal static void EngineNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_bhawk");
         var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
 
         // Everything below is quoted in PERCENT OF THE LEVEL BASELINE, so the shipped curve has to
@@ -2534,18 +2606,34 @@ internal static class CombatSuites
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         float limit = stats.VoiceoverVolumeLimiter;
-        ctx.Check(Mathf.IsEqualApprox(limit, 0.4f),
-            $"player.zrd authors voiceover_volume_limiter={limit:0.000}, over the compiled 0.5");
+        // The limit is the record's own, and one unlike the compiled 0.5, so a reader that missed
+        // the key cannot pass. The install pins the shipped 0.4 too.
+        float? authoredLimit = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "voiceover_volume_limiter");
+        ctx.Check(authoredLimit is { } authored && !Mathf.IsEqualApprox(authored, 0.5f) && Mathf.IsEqualApprox(limit, authored),
+            $"player.zrd authors voiceover_volume_limiter={authoredLimit?.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"}, over the compiled 0.5, read as {limit:0.000}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(limit, 0.4f),
+                $"player.zrd authors voiceover_volume_limiter={limit:0.000}, over the compiled 0.5");
+        }
 
         using var archive = new SoundArchive(ctx.SoundsPath);
         AudioStreamWav? Stream(string name) =>
             soundDefs.TryGetValue(name, out var d) ? archive.Find(d.WavName, d.Looped) : null;
         // A mission's own VO waits 45 s for the channel and a combat bark 0.5 s (docs/formats/sounds.md).
+        // A combat line is a bark by its QUEUE wait. The install's own are the snd_id lines, taken
+        // first there and pinned, so the battery keeps the line it always ducked under.
         string? missionLine = DuckLine(soundDefs, Stream, d => d.QueueSeconds >= 40f, 3.0);
-        string? combatLine = DuckLine(soundDefs, Stream,
+        string? idLine = DuckLine(soundDefs, Stream,
             d => d.QueueSeconds < 1f && d.Name.StartsWith("snd_id", System.StringComparison.OrdinalIgnoreCase), 0.8);
+        string? combatLine = idLine ?? DuckLine(soundDefs, Stream, d => d.QueueSeconds < 1f, 0.8);
         ctx.Check(missionLine != null && combatLine != null,
-            $"a mission line of 3 s or more ({missionLine}) and a combat line of 0.8 s or more ({combatLine})");
+            $"a mission line of 3 s or more ({missionLine}) and a bark of 0.8 s or more ({combatLine})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(missionLine != null && idLine != null,
+                $"a mission line of 3 s or more ({missionLine}) and a combat line of 0.8 s or more ({idLine})");
+        }
         if (missionLine == null || combatLine == null)
             return;
         ctx.Note($"lines: mission {missionLine} {Stream(missionLine)!.GetLength():0.00} s, combat {combatLine} {Stream(combatLine)!.GetLength():0.00} s");
@@ -3187,6 +3275,11 @@ internal static class CombatSuites
                 $"concentrated fire on the nose bearing alone downs the plane rounds={oneZone}/{oneZoneBudget}");
             ctx.Note($"one-bearing kill took {oneZone} rounds of {gun.Id} (redirect + whole-pool overflow)");
 
+            // The sponge below is one shipped airframe against one shipped rocket, so only the
+            // install runs it.
+            if (ctx.SyntheticData)
+                return;
+
             // --- the user-reported sponge, decode-confirmed fix: a Fury dies to a few HE
             // rockets (wep_06 BOOM, 40 armor / 60 health), fired head-on from one bearing.
             // Each detonation reaches the plane through the blast pass at its nearest box.
@@ -3385,14 +3478,23 @@ internal static class CombatSuites
     // the speeds anyone actually flies. Decode: docs/org/shakes.md.
     private static void CheckRattleGate(TestContext ctx, PlaneStats stats)
     {
-        ctx.Check(Mathf.IsEqualApprox(stats.RattleSpeedGate, 1f),
-            $"the shipped rattle gate is {stats.RattleSpeedGate:0.###}x fd_speed (want 1)");
-        ctx.Check(stats.RattleSound == "snd_planeshake",
-            $"…on the definition the rattle block names, {stats.RattleSound}");
+        float gate = stats.RattleSpeedGate;
+        float? authored = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "speed_range", "rattle");
+        ctx.Check(authored is { } a && Mathf.IsEqualApprox(gate, a),
+            $"the rattle gate is the rattle block's own speed_range floor, {gate:0.###}x fd_speed (authored {authored?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"})");
+        ctx.Check(stats.RattleSound is { } rattle && SoundDefs.Load(ctx.ZrdrPath).ContainsKey(rattle),
+            $"…on a definition the sound library holds, {stats.RattleSound}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(gate, 1f),
+                $"the shipped rattle gate is {gate:0.###}x fd_speed (want 1)");
+            ctx.Check(stats.RattleSound == "snd_planeshake",
+                $"…on the definition the rattle block names, {stats.RattleSound}");
+        }
 
-        float below = EngineAudioCurves.Rattle(stats, 0.999f);
-        float at = EngineAudioCurves.Rattle(stats, 1f);
-        float over = EngineAudioCurves.Rattle(stats, 1.2f);
+        float below = EngineAudioCurves.Rattle(stats, gate * 0.999f);
+        float at = EngineAudioCurves.Rattle(stats, gate);
+        float over = EngineAudioCurves.Rattle(stats, gate * 1.2f);
         ctx.Check(below == 0f, $"a hair under the gate the rattle is silent: {below:0.0000}");
         ctx.Check(Mathf.IsEqualApprox(at, EngineAudioCurves.RattleLevel()),
             $"…and reaches its full level the moment speed meets it: {at:0.0000}");

@@ -233,8 +233,9 @@ public partial class Launcher : Node3D
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics, _perfSetup;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
-    // The spyglass discs' own counts over the window (SpyglassView.Census), split out of draws.
-    private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws;
+    // The spyglass discs' own counts and GPU time over the window (SpyglassView.Census), split out
+    // of draws, prims and the root viewport's gpu_ms.
+    private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws, _perfDiscPrims, _perfDiscGpu;
 
     // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
     // without the flag subscribes to no runtime events at all.
@@ -285,6 +286,9 @@ public partial class Launcher : Node3D
     // so a git worktree can run the game, /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
     private string _dataRoot = "";
+    // Why --synthetic-data could not write its tree, or null. The run quits on it once the log is
+    // open. Until then the data root names the unwritten tree, so nothing real is read.
+    private string? _syntheticError;
     private string _planesGamezPath = "";  // extracted/planes.zip, the aircraft models (always this)
     private string _zrdrPath = "";
     private string _soundsPath = "";
@@ -392,6 +396,7 @@ public partial class Launcher : Node3D
         if (_spec.DataRoot is { } dataRootArg) _dataRoot = Path.GetFullPath(dataRootArg);
         if (_dataRoot != _repoRoot)
             Log.Info("core", $"data root: {_dataRoot} (repo root {_repoRoot})");
+        ResolveSyntheticData();
 
         // An override is used verbatim; everything else derives from the data root.
         var planesGamezPath = Path.Combine(_dataRoot, "extracted", "planes.zip");
@@ -543,6 +548,15 @@ public partial class Launcher : Node3D
         string hitchLogPath = Log.SinkPath
             ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
+
+        // A failed --synthetic-data tree ends the run. Reading the install instead would pass it on
+        // data nobody asked for, and an empty tree would only skip every suite.
+        if (_syntheticError != null)
+        {
+            Log.Error("core", $"--synthetic-data could not write its tree: {_syntheticError}");
+            GetTree().Quit(1);
+            return;
+        }
 
         // --extract builds no world and no menu: it writes the data root's extracted/ and quits.
         if (_spec.ExtractInstall is { } extractInstall)
@@ -708,9 +722,12 @@ public partial class Launcher : Node3D
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
             Utils.ShadowQualitySetting.SavedWord(_spec.Det),
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
+        // Before any session builds, since the ocean's build reads the word.
+        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality,
+            Utils.WaterQualitySetting.SavedWord(_spec.Det), _spec.Det);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)} water_quality={waterQuality.Word} water_source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -728,6 +745,7 @@ public partial class Launcher : Node3D
         // Registered before the --dump-* branches below, which build materials of their own:
         // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
+        Effects.Ocean.RegisterGlobal();
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
@@ -1624,6 +1642,39 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"net: {left} {bots} left out, the {people} filled the {Net.NetSeats.MaxPlayers}-seat field");
         }
+    }
+
+    // --synthetic-data replaces the data root, whatever it held, with a tree written into scratch.
+    // The switch alone opts in, and a synthetic tree is named in the log on every run that reads one.
+    // ⚠ Do not fall back to the resolved root when the tree fails; see _syntheticError.
+    private void ResolveSyntheticData()
+    {
+        if (!_spec.SyntheticData)
+        {
+            if (Tooling.SyntheticData.Marks(_dataRoot))
+            {
+                Log.Warn("core", $"SYNTHETIC DATA: the data root {_dataRoot} holds an invented test tree, not an extraction; every asset this run reads is invented");
+            }
+            return;
+        }
+        string replaced = _dataRoot;
+        bool installThere = !UI.Screens.NoGameDataScreen.Missing(replaced);
+        _dataRoot = Tooling.SyntheticData.ScratchRoot(_repoRoot);
+        try
+        {
+            Tooling.SyntheticData.Build(Tooling.SyntheticData.FixturesUnder(_repoRoot), _dataRoot, UI.Menu.Original.SyntheticShell.TreeFamilies);
+        }
+        catch (System.Exception e)
+        {
+            // Every failure alike, a malformed record included: each one leaves the tree unusable.
+            _syntheticError = $"{e.GetType().Name}: {e.Message}";
+            return;
+        }
+        Flight.Weapons.StockLoadouts.Supplement =
+            Tooling.SyntheticPlane.LoadoutsUnder(Tooling.SyntheticData.FixturesUnder(_repoRoot));
+        SessionSpec.DefaultPlane = Tooling.SyntheticPlane.Plane;
+        string families = string.Join(",", System.Linq.Enumerable.Select(UI.Menu.Original.SyntheticShell.TreeFamilies, f => f.Name));
+        Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {_dataRoot} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
     }
 
     // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame
@@ -2653,6 +2704,7 @@ public partial class Launcher : Node3D
         options.RenderScale = applied.RenderScale;
         options.AntiAliasing = applied.AntiAliasing;
         options.ShadowQuality = applied.ShadowQuality;
+        options.WaterQuality = applied.WaterQuality;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2679,14 +2731,20 @@ public partial class Launcher : Node3D
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
-        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
+        // The same for the sea; --water-quality still beats the saved word.
+        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality, applied.WaterQuality, _spec.Det);
+        Log.Info("world", $"water quality applied: {waterQuality.Word} source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
+        // A mode switch dresses the sun at the new level and follows the sea itself; otherwise the
+        // level and the sea alone move.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
         {
             RequestGraphicsSwitch(enhanced, "options", save: false);
         }
-        else if (IsInstanceValid(_sun))
+        else
         {
-            ApplyShadowQuality(_sun);
+            if (IsInstanceValid(_sun))
+                ApplyShadowQuality(_sun);
+            EnhancedLook.ApplyWaterQuality(_session);
         }
 
         // The render scale and the anti-aliasing method reach every 3D viewport now as well.
@@ -3526,10 +3584,12 @@ public partial class Launcher : Node3D
         _perfPrims += counters.Prims;
         _perfNodes += counters.Nodes;
         _perfMem += counters.MemBytes;
-        var (discs, discDraws, discShadowDraws) = Flight.Camera.SpyglassView.Census();
+        var (discs, discDraws, discShadowDraws, discPrims, discGpuMs) = Flight.Camera.SpyglassView.Census();
         _perfDiscs += discs;
         _perfDiscDraws += discDraws;
         _perfDiscShadowDraws += discShadowDraws;
+        _perfDiscPrims += discPrims;
+        _perfDiscGpu += discGpuMs;
         if (_perfFrames < PerfWindowFrames)
         {
             return;
@@ -3594,10 +3654,10 @@ public partial class Launcher : Node3D
         // The discs' own line, said only while one rendered in the window. Each is a viewport of its
         // own, which gpu_ms leaves out and draws folds into the frame's total (verification PERF-47).
         if (_perfDiscs > 0)
-            Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0}");
+            Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0} disc_prims={_perfDiscPrims / n:0} disc_gpu_ms={_perfDiscGpu / n:0.000}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
-        _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = 0;
+        _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = _perfDiscPrims = _perfDiscGpu = 0;
     }
 }
 
@@ -3716,4 +3776,9 @@ public sealed class LauncherContext
     /// outlives every session. Null when the sound archive or the sound definitions would not
     /// load, which leaves the game silent rather than refusing to launch.</summary>
     public MusicPlayer? Music { get; init; }
+
+    /// <summary>A decode store shared with other builds in this process, or null to decode afresh.
+    /// The test harness hands its own in, so a suite's sessions decode a chapter once. A launch
+    /// leaves it null, so a session retains nothing of a chapter it has left.</summary>
+    public Mech3.DecodeCache? Decode { get; init; }
 }

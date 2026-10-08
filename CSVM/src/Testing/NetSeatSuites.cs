@@ -64,17 +64,14 @@ internal static class NetSeatSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         ctx.RequireData(chapterZrdr, $"{ctx.Chapter} zrdr");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
 
-        var spec = SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--spawn=0",
-        });
+        var spec = SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx, gateChapterGamez: false))
+            .Concat(new[] { "--players=1", "--spawn=0" }).ToArray());
         var picker = new SpawnPicker(spec);
         var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
         if (table is not { Count: >= 4 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
+            throw new SuiteSkippedException($"{NetCombatSuites.ArenaTable(ctx, spec)} holds no usable spawn table");
         }
 
         // Seat 0 is this machine's pane; seats 1 and 2 are flown elsewhere. Seat 1 names its own
@@ -223,17 +220,14 @@ internal static class NetSeatSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         ctx.RequireData(chapterZrdr, $"{ctx.Chapter} zrdr");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
 
-        var spec = SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--spawn=0",
-        });
+        var spec = SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx, gateChapterGamez: false))
+            .Concat(new[] { "--players=1", "--spawn=0" }).ToArray());
         var picker = new SpawnPicker(spec);
         var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
         if (table is not { Count: >= 3 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
+            throw new SuiteSkippedException($"{NetCombatSuites.ArenaTable(ctx, spec)} holds no usable spawn table");
         }
 
         // The guest's side of a match: the host flies seat 0 elsewhere, and this machine's two

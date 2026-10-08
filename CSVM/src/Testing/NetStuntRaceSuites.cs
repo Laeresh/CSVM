@@ -239,7 +239,7 @@ internal static class NetStuntRaceSuites
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
 
         var mesh = LoopbackTransport.Mesh(2, link, new Random(seed));
-        var roster = NetCombatSuites.Roster(2);
+        var roster = NetCombatSuites.Roster(2, spec);
         var ends = new List<NetCombatSuites.Ends>();
         try
         {
@@ -499,7 +499,7 @@ internal static class NetStuntRaceSuites
             new[] { "player_pfighter" }, DogfightLobby.LaunchMode(options), vsTimeMinutes: rules.TimeLimitMinutes,
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(Latency, 0.0, 0.0), new Random(seed));
-        var roster = NetCombatSuites.Roster(2);
+        var roster = NetCombatSuites.Roster(2, spec);
         var ends = new List<NetCombatSuites.Ends>();
         for (int i = 0; i < 2; i++)
         {

@@ -1,0 +1,226 @@
+{
+  "defs": [
+    {"file": "he_ring-he_ground_effect", "def": {
+      "name": "he_ring", "anim_name": "he_ground_effect", "anim_root_name": "he_ring", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "he_ring", "state": true}}},
+        {"data": {"CallAnimation": {"name": "call_he_ring1", "parameters": {"AtNode": {"node": "he_ring", "position": {"x": 0.0, "y": 9.0, "z": 0.0}}}}}},
+        {"data": {"CallAnimation": {"name": "call_he_trails", "parameters": {"AtNode": {"node": "he_ring"}}}}},
+        {"data": {"ObjectMotionFromTo": {"node": "he_ringer", "scale": {"from": {"x": 0.3, "y": 1.0, "z": 0.3}, "to": {"x": 1.6, "y": 1.0, "z": 1.6}}, "run_time": 1.0}}}
+      ]}]
+    }},
+    {"file": "he_ring1-call_he_ring1", "def": {
+      "name": "he_ring1", "anim_name": "call_he_ring1", "anim_root_name": "he_ring1", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "he_ringer1", "scale": {"from": {"x": 0.5, "y": 1.0, "z": 0.5}, "to": {"x": 1.8, "y": 1.0, "z": 1.8}}, "run_time": 1.2}}}
+      ]}]
+    }},
+    {"file": "he_trails-call_he_trails", "def": {
+      "name": "he_trails", "anim_name": "call_he_trails", "anim_root_name": "he_trails", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "fly_trail1", "translation_range": {"xz": {"min": 0.0, "max": 359.0}, "y": {"min": 35.0, "max": 65.0}, "initial": {"min": 9.0, "max": 13.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 3.5}}},
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "fly_trail2", "translation_range": {"xz": {"min": 0.0, "max": 359.0}, "y": {"min": 35.0, "max": 65.0}, "initial": {"min": 9.0, "max": 13.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 3.5}}},
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "fly_trail3", "translation_range": {"xz": {"min": 0.0, "max": 359.0}, "y": {"min": 35.0, "max": 65.0}, "initial": {"min": 9.0, "max": 13.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 3.5}}},
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "fly_trail4", "translation_range": {"xz": {"min": 0.0, "max": 359.0}, "y": {"min": 35.0, "max": 65.0}, "initial": {"min": 9.0, "max": 13.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 3.5}}},
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "fly_trail5", "translation_range": {"xz": {"min": 0.0, "max": 359.0}, "y": {"min": 50.0, "max": 80.0}, "initial": {"min": 7.0, "max": 10.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 3.5}}}
+      ]}]
+    }},
+    {"file": "dum_gunhit-3040ap_gunhit", "def": {
+      "name": "dum_gunhit", "anim_name": "3040ap_gunhit", "anim_root_name": "dum_gunhit", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "dum_gunhit", "state": true}}},
+        {"data": {"ObjectMotionFromTo": {"node": "gunhit_chunk", "scale": {"from": {"x": 1.0, "y": 1.0, "z": 1.0}, "to": {"x": 1.6, "y": 1.6, "z": 1.6}}, "run_time": 0.1}}}
+      ]}]
+    }},
+    {"file": "ballflare.flt-ballflare.flt", "def": {
+      "name": "ballflare.flt", "anim_name": "ballflare.flt", "anim_root_name": "ballflare.flt", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "flare_disc", "scale": {"from": {"x": 0.5, "y": 0.5, "z": 0.5}, "to": {"x": 6.0, "y": 6.0, "z": 6.0}}, "run_time": 1.5}}}
+      ]}]
+    }},
+    {"file": "probe_torpbody-probe_torpedo_trail", "def": {
+      "name": "probe_torpbody", "anim_name": "probe_torpedo_trail", "anim_root_name": "probe_torpbody", "activation": "OnCall",
+      "reset_state": {"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "atbody", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "rightwing", "state": false}}},
+        {"data": {"ObjectActiveState": {"node": "leftwing", "state": false}}},
+        {"data": {"ObjectActiveState": {"node": "atprop", "state": false}}}
+      ]},
+      "sequences": [{"name": "probe_unfold", "seq_state": "Initial", "events": [
+        {"start": {"offset": "Animation", "time": 3.5}, "data": {"ObjectActiveState": {"node": "rightwing", "state": true}}},
+        {"start": {"offset": "Animation", "time": 3.5}, "data": {"ObjectActiveState": {"node": "leftwing", "state": true}}},
+        {"start": {"offset": "Animation", "time": 4.0}, "data": {"ObjectActiveState": {"node": "atprop", "state": true}}}
+      ]}]
+    }},
+    {"file": "player-spinprops", "def": {
+      "name": "player", "anim_name": "spinprops", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "prop1", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "staticprop1", "state": false}}},
+        {"data": {"ObjectMotion": {"node": "prop1", "xyz_rotation": {"initial": {"x": 0.0, "y": 0.0, "z": 30.0}, "delta": {"x": 0.0, "y": 0.0, "z": 0.0}}}}}
+      ]}]
+    }},
+    {"file": "player-startprops", "def": {
+      "name": "player", "anim_name": "startprops", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"Sound": {"name": "snd_propstart", "at_node": "prop1"}}},
+        {"data": {"ObjectActiveState": {"node": "staticprop1", "state": true}}},
+        {"start": {"offset": "Animation", "time": 1.5}, "data": {"ObjectActiveState": {"node": "prop1", "state": true}}},
+        {"start": {"offset": "Animation", "time": 1.5}, "data": {"ObjectActiveState": {"node": "staticprop1", "state": false}}}
+      ]}]
+    }},
+    {"file": "player-agyro_rotors", "def": {
+      "name": "player", "anim_name": "agyro_rotors", "activation": "OnCall",
+      "reset_state": {"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "prop1", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "rotor1", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "staticprop1", "state": false}}}
+      ]},
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotion": {"node": "prop1", "xyz_rotation": {"initial": {"x": 0.0, "y": 0.0, "z": 24.0}, "delta": {"x": 0.0, "y": 0.0, "z": 0.0}}}}},
+        {"data": {"ObjectMotion": {"node": "rotor1", "xyz_rotation": {"initial": {"x": 0.0, "y": 18.0, "z": 0.0}, "delta": {"x": 0.0, "y": 0.0, "z": 0.0}}}}}
+      ]}]
+    }},
+    {"file": "player-stopprops", "def": {
+      "name": "player", "anim_name": "stopprops", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "staticprop1", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "prop1", "state": false}}}
+      ]}]
+    }},
+    {"file": "player-pdpanel4", "def": {
+      "name": "player", "anim_name": "pdpanel4", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"CallAnimation": {"name": "gimmeflakes", "parameters": {"AtNode": {"node": "pdp4"}}}}}
+      ]}]
+    }},
+    {"file": "player-pdpanel5", "def": {
+      "name": "player", "anim_name": "pdpanel5", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"CallAnimation": {"name": "gimmeflakes", "parameters": {"AtNode": {"node": "pdp5"}}}}}
+      ]}]
+    }},
+    {"file": "player-pdpanel7", "def": {
+      "name": "player", "anim_name": "pdpanel7", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"CallAnimation": {"name": "gimmeflakes", "parameters": {"AtNode": {"node": "pdp7", "position": {"x": 2.0, "y": 0.0, "z": 0.0}}}}}},
+        {"start": {"offset": "Animation", "time": 0.2}, "data": {"CallAnimation": {"name": "gimmeflakes", "parameters": {"AtNode": {"node": "pdp7", "position": {"x": -2.0, "y": 0.0, "z": 0.0}}}}}},
+        {"start": {"offset": "Animation", "time": 0.5}, "data": {"CallAnimation": {"name": "gimmeflakes", "parameters": {"AtNode": {"node": "pdp7", "position": {"x": -2.0, "y": 0.0, "z": 0.0}}}}}},
+        {"start": {"offset": "Animation", "time": 0.9}, "data": {"CallAnimation": {"name": "gimmeflakes", "parameters": {"AtNode": {"node": "pdp7", "position": {"x": -2.0, "y": 0.0, "z": 0.0}}}}}}
+      ]}]
+    }},
+    {"file": "planeflakes-gimmeflakes", "def": {
+      "name": "planeflakes", "anim_name": "gimmeflakes", "anim_root_name": "planeflakes", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "flake1", "translation_range": {"xz": {"min": 0.0, "max": 120.0}, "y": {"min": 20.0, "max": 50.0}, "initial": {"min": 4.0, "max": 7.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 1.0}}},
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "flake2", "translation_range": {"xz": {"min": 120.0, "max": 240.0}, "y": {"min": 20.0, "max": 50.0}, "initial": {"min": 4.0, "max": 7.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 1.0}}},
+        {"start": {"offset": "Sequence", "time": 0.0}, "data": {"ObjectMotion": {"node": "flake3", "translation_range": {"xz": {"min": 240.0, "max": 359.0}, "y": {"min": 20.0, "max": 50.0}, "initial": {"min": 4.0, "max": 7.0}, "delta": {"min": 0.0, "max": 0.0}}, "gravity": {"value": -9.8}, "run_time": 1.0}}}
+      ]}]
+    }},
+    {"file": "sonic_effect-sonic_ground_effect", "def": {
+      "name": "sonic_effect", "anim_name": "sonic_ground_effect", "anim_root_name": "sonic_effect", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"CallAnimation": {"name": "ring_up1", "parameters": {"AtNode": {"node": "sonic_effect"}}}}},
+        {"data": {"CallAnimation": {"name": "ring_up2", "parameters": {"AtNode": {"node": "sonic_effect", "position": {"x": 0.0, "y": 3.0, "z": 0.0}}}}}},
+        {"data": {"ObjectMotionFromTo": {"node": "sonic_emit1", "translate": {"from": {"x": 0.0, "y": 0.5, "z": 0.0}, "to": {"x": 0.0, "y": 8.0, "z": 0.0}}, "run_time": 1.5}}}
+      ]}]
+    }},
+    {"file": "sonic_ring1-ring_up1", "def": {
+      "name": "sonic_ring1", "anim_name": "ring_up1", "anim_root_name": "sonic_ring1", "activation": "OnCall",
+      "reset_state": {"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "sonic_ring", "state": true}}},
+        {"data": {"ObjectOpacityState": {"node": "sonic_ring", "state": false}}},
+        {"data": {"ObjectScaleState": {"node": "sonic_ring", "state": {"x": 1.0, "y": 1.0, "z": 1.0}}}}
+      ]},
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "sonic_ring", "scale": {"from": {"x": 0.4, "y": 1.0, "z": 0.4}, "to": {"x": 3.0, "y": 1.0, "z": 3.0}}, "run_time": 1.2}}},
+        {"data": {"ObjectOpacityState": {"node": "sonic_ring", "state": true, "opacity": 0.0}}},
+        {"data": {"ObjectActiveState": {"node": "sonic_ring", "state": false}}}
+      ]}]
+    }},
+    {"file": "sonic_ring2-ring_up2", "def": {
+      "name": "sonic_ring2", "anim_name": "ring_up2", "anim_root_name": "sonic_ring2", "activation": "OnCall",
+      "reset_state": {"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "sonic_ring", "state": true}}},
+        {"data": {"ObjectOpacityState": {"node": "sonic_ring", "state": false}}},
+        {"data": {"ObjectScaleState": {"node": "sonic_ring", "state": {"x": 1.0, "y": 1.0, "z": 1.0}}}}
+      ]},
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "sonic_ring", "scale": {"from": {"x": 0.6, "y": 1.0, "z": 0.6}, "to": {"x": 2.4, "y": 1.0, "z": 2.4}}, "run_time": 0.9}}},
+        {"data": {"ObjectOpacityState": {"node": "sonic_ring", "state": true, "opacity": 0.0}}},
+        {"data": {"ObjectActiveState": {"node": "sonic_ring", "state": false}}}
+      ]}]
+    }},
+    {"file": "player-player_crash_water", "def": {
+      "name": "player", "anim_name": "player_crash_water", "anim_root_name": "player", "activation": "OnCall",
+      "sequences": [{"name": "probe_crash_water", "seq_state": "Initial", "events": [
+        {"data": {"CallAnimation": {"name": "call_crash_trails"}}},
+        {"data": {"CallAnimation": {"name": "large_10sec_fire"}}},
+        {"data": {"CallAnimation": {"name": "plane_big_splash", "wait_for_completion": true}}},
+        {"data": {"CallAnimation": {"name": "large_steam_spray"}}}
+      ]}]
+    }},
+    {"file": "carnage_trails-call_crash_trails", "def": {
+      "name": "carnage_trails", "anim_name": "call_crash_trails", "anim_root_name": "carnage_trails", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "piece1", "translate": {"from": {"x": 0.0, "y": 0.0, "z": 0.0}, "to": {"x": 0.0, "y": 2.0, "z": 0.0}}, "run_time": 1.0}}}
+      ]}]
+    }},
+    {"file": "large_fire-large_10sec_fire", "def": {
+      "name": "large_fire", "anim_name": "large_10sec_fire", "anim_root_name": "large_fire", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "piece2", "scale": {"from": {"x": 1.0, "y": 1.0, "z": 1.0}, "to": {"x": 2.0, "y": 2.0, "z": 2.0}}, "run_time": 2.0}}}
+      ]}]
+    }},
+    {"file": "huge_splash_model-plane_big_splash", "def": {
+      "name": "huge_splash_model", "anim_name": "plane_big_splash", "anim_root_name": "huge_splash_model", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"PufferState": {"name": "splasher", "active_state": 1, "at_node": "sp_1", "interval_garbage": {"interval_value": 0.05}, "number": 4, "lifetime_range": {"min": 0.4, "max": 0.9}, "size_range": {"min": 1.0, "max": 3.0}, "textures": [{"name": "smoke101"}]}}},
+        {"data": {"ObjectActiveState": {"node": "sp_1", "state": false}}},
+        {"data": {"ObjectMotionFromTo": {"node": "splash_polys", "scale": {"from": {"x": 0.2, "y": 0.2, "z": 0.2}, "to": {"x": 1.0, "y": 1.0, "z": 1.0}}, "run_time": 0.5}}},
+        {"data": {"PufferState": {"name": "splasher", "active_state": 0, "at_node": "sp_1"}}},
+        {"data": {"ObjectMotionFromTo": {"node": "ripple1", "scale": {"from": {"x": 1.0, "y": 1.0, "z": 1.0}, "to": {"x": 1.4, "y": 1.4, "z": 1.4}}, "run_time": 2.5}}}
+      ]}]
+    }},
+    {"file": "white_water_impact-large_steam_spray", "def": {
+      "name": "white_water_impact", "anim_name": "large_steam_spray", "anim_root_name": "white_water_impact", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotionFromTo": {"node": "piece3", "scale": {"from": {"x": 0.5, "y": 0.5, "z": 0.5}, "to": {"x": 1.5, "y": 1.5, "z": 1.5}}, "run_time": 1.0}}}
+      ]}]
+    }},
+    {"file": "m_bld_healthy-m_build01", "def": {
+      "name": "m_bld_healthy", "anim_name": "m_build01", "activation": "OnCall",
+      "sequences": [
+        {"name": "", "seq_state": "Initial", "events": [
+          {"data": {"ObjectActiveState": {"node": "m_bld_healthy", "state": false}}},
+          {"data": {"ObjectActiveState": {"node": "m_bld_destroyed", "state": true}}},
+          {"data": {"PufferState": {"name": "trailpuffer3", "active_state": 1, "at_node": "part3", "interval_garbage": {"interval_value": 0.1}, "number": 1, "lifetime_range": {"min": 1.0, "max": 1.5}, "size_range": {"min": 1.0, "max": 2.0}, "textures": [{"name": "smoke102"}]}}},
+          {"data": {"ObjectMotion": {"node": "part3", "translation": {"initial": {"x": 0.0, "y": 12.0, "z": 5.0}, "delta": {"x": 0.0, "y": 0.0, "z": 0.0}, "rnd_xz": {"x": 0.0, "y": 0.0, "z": 1.0}}, "gravity": {"value": -9.8}, "run_time": 2.4}}}
+        ]},
+        {"name": "sparkout3", "seq_state": "Initial", "events": [
+          {"start": {"offset": "Sequence", "time": 1.8}, "data": {"ObjectActiveState": {"node": "part3", "state": false}}}
+        ]}
+      ]
+    }},
+    {"file": "player-bullet1", "def": {
+      "name": "player", "anim_name": "bullet1", "activation": "OnCall",
+      "sequences": [
+        {"name": "", "seq_state": "Initial", "events": [
+          {"data": {"If": {"condition": {"PlayerFirstPerson": 0}}}},
+          {"data": "Else"},
+          {"data": {"CallAnimation": {"name": "two_bulletholes_a"}}},
+          {"data": "Endif"}
+        ]},
+        {"name": "", "seq_state": "Initial", "events": [
+          {"data": {"ObjectActiveState": {"node": "probe_bul1", "state": true}}}
+        ]}
+      ]
+    }},
+    {"file": "player-two_bulletholes_a", "def": {
+      "name": "player", "anim_name": "two_bulletholes_a", "activation": "OnCall",
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "probe_hole1", "state": true}}}
+      ]}]
+    }}
+  ]
+}

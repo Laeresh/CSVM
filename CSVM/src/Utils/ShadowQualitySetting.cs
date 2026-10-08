@@ -99,9 +99,13 @@ public static class ShadowQualitySetting
     /// <see cref="ResolveForPanes"/> names a splitscreen session's count.</summary>
     public static int Panes { get; private set; } = 1;
 
-    /// <summary>The fallback word for this machine at the running session's <see cref="Panes"/>.
-    /// The GPU is read once, since the device cannot change under a run.</summary>
-    public static string MachineDefault => FallbackFor(_integrated ??= IsIntegratedGpu(), Panes);
+    /// <summary>Whether the renderer runs on an integrated GPU, the Steam Deck's APU among them. Read
+    /// once, since the device cannot change under a run. <see cref="WaterQualitySetting"/>'s fallback
+    /// reads it too.</summary>
+    public static bool IntegratedGpu => _integrated ??= IsIntegratedGpu();
+
+    /// <summary>The fallback word for this machine at the running session's <see cref="Panes"/>.</summary>
+    public static string MachineDefault => FallbackFor(IntegratedGpu, Panes);
 
     /// <summary>The fallback a launch resolves against. ⚠ <see cref="Default"/> under
     /// <paramref name="det"/>, so a scripted capture does not depend on the machine it runs on.</summary>

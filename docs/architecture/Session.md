@@ -34,14 +34,14 @@ every human (a def read off a file) or is only player 1's pick (the launchscreen
 Pure over the spec. The built aircraft's display name is `Flight/Airframe/PlaneRoster.cs`'s.
 
 ## src/Session/Roster/SpawnPicker.cs
-Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks, the mission's
-`ia.json` scenario or a Dogfight launch's `net.zrd` block, the whole table when `SeatTeams` names a team, which `PlanTeams` walks by team block), `ChooseSpawnBase` (the shared
-`--spawn=`-or-random list index), `ChooseSpawn` (a player's position and look-at from that list,
-`objectives.json`'s `PLAYER_INIT`, or the `--spawn-at=` debug override), `StartState` (the field's
-throttle and speed) and `LogSpawn`. Constructed once per session build. Also the plain
-`IFlightStarts`: `ChooseStarts` loops its own `ChooseSpawn`, the placement every session flies
-except a splitscreen race or a co-op campaign mission. `StartGrid` and `SharedSpawnStarts` take
-their anchor from here, so this type owns it. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
+Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks: the mission's
+`ia.json` scenario, a Dogfight's `net.zrd` block, the whole table when `SeatTeams` names a team,
+which `PlanTeams` walks by team block, or on `--stage=empty` the `SpawnRing` or whole `SpawnTable`),
+`ChooseSpawnBase` (the shared `--spawn=`-or-random index), `ChooseSpawn` (a player's position and
+look-at from that list, `PLAYER_INIT`, or the `--pos=` override), `StartState` (the field's throttle
+and speed) and `LogSpawn`. Built once per session. Also the plain `IFlightStarts`: `ChooseStarts`
+loops `ChooseSpawn` for every session but a splitscreen race or a co-op campaign mission, and
+`StartGrid` and `SharedSpawnStarts` take their anchor from here, so this type owns it. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
 
 ## src/Session/Roster/IFlightStarts.cs
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
@@ -127,7 +127,7 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 `objective` half (the Enemy cycle) and then its `other_target` half (the Non-Aircraft cycle), the
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
-take, their table unedited. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
+take, their table unedited, and the empty stage's Capture the Flag arena passes its own node finder. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state and whether its node is switched on; a roster block that flags itself
 rides its own aeroplane. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
@@ -212,11 +212,11 @@ seat tick, and apply through `ApplyReplicatedHealth`. `FollowVoice` relays each 
 ## src/Session/World/VersusDirector.cs
 The engine side of one Dogfight (`--vs`), split screen or over the wire, the sibling of `InstantActionDirector` and `CampaignDirector`: `TryCreate` builds the `VersusMatch`, teamed off the lobby's seats, ahead of the roster, and `Wire` feeds it every seat's Downed report (reported to the host on the wire; scored here in a local match, which posts the death lines too), sets each pilot's crash-cam respawn (a bot seat's never waits for Fire Guns, whatever Auto Respawn says) and builds the `VersusSpawnRotation` of the host or the local machine, which relaxes its one-living-seat-per-point rule for a field larger than the table rather than failing. Having a wire and having a seat roster are separate questions: a local match with bots holds a roster and no wire, and decides its returns, scores and rematch itself.
 `WireSpawns` puts placement on the wire under one rule: the OPENING spawn is the shared seed's walk over the mission table and crosses no wire, while every later return is GRANTED by the host's single rotation, a table entry every peer applies through the call the owner would have made (`SpawnsTaken`, `SpawnEntries`). `WireMatchState` makes the host the only writer of the match: the clock, both limits and the ending go out as one reliable message, change-driven plus a `MatchStateCadence` tick that carries the host clock into every guest's `NetClockSlew`, and a guest hands its match over, its rematch the host's (`RematchIsTheHosts`). `ScoreDeath` is the host's one scoring site; it sends the scores, then the death notice every machine posts once, and the ending only after the scores that settled the round. The scoreboard itself is never sent.
-`StepMatch` advances the clock, holds a pilot out of lives spectating (`VersusMatch.OutOfLives`) and posts its lives line; the session steps the flags and the rearm bases ahead of it. `WireFlags`, `WireZeppelinVersus` and `WireRearmBases` open `FlagRuntime.cs`, `ZeppelinVersusRuntime.cs` (whose return is a `SpawnAtMessage` and whose Restart leaves for the lobby rather than rerunning on burnt hulls) and `RearmRuntime.cs`. Decode: [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md).
+`StepMatch` advances the clock, holds a pilot out of lives spectating (`VersusMatch.OutOfLives`) and posts its lives line; the session steps the flags and the rearm bases ahead of it. `WireFlags`, `WireZeppelinVersus` and `WireRearmBases` open `FlagRuntime.cs`, `ZeppelinVersusRuntime.cs` (whose return is a `SpawnAtMessage` and whose Restart leaves for the lobby rather than rerunning on burnt hulls) and `RearmRuntime.cs`, whose rearm nodes the world or the empty stage's arena holds. Decode: [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md).
 
 ## src/Session/World/FlagRuntime.cs
 Capture the Flag in a network match, built by `VersusDirector.WireFlags` for a `--ctf` launch: one
-`FlagMatch` flag per lobby team whose `cs_flag_n` the mission world holds. Each machine checks its
+`FlagMatch` flag per lobby team whose `cs_flag_n` the mission world, or the empty stage's arena, holds. Each machine checks its
 own seats and asks the host (`FlagRequestMessage`); the host decides, scores through
 `VersusMatch.AddScore` and sends its `FlagTableMessage`. Every machine moves the props from the
 changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
@@ -236,7 +236,7 @@ base's. Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
 
 ## src/Session/World/RearmRuntime.cs
 The multiplayer rearm bases in any Dogfight, built by `VersusDirector.WireRearmBases`: the world's
-`rearm_node_n` serving lobby team `n`, or in Zeppelin vs Zeppelin each hull's `zep_rearm_node_n`
+`rearm_node_n` (or the empty stage arena's) serving lobby team `n`, or in Zeppelin vs Zeppelin each hull's `zep_rearm_node_n`
 serving its side while the hull lives. Each machine steps only the seats it flies through
 `RearmBases`, and on entry calls `FlightController.Rearm` and posts "Rearmed!" in the seat's own
 pane. The restored ledger reaches every other machine in the next `0x40` damage report, where a
