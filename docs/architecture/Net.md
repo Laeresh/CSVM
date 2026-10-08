@@ -119,14 +119,14 @@ payload at or below the newest on its channel is discarded. `Lost` (per channel 
 channel, which no sequence stream rides. Read `LoopbackTransportTests.cs`.
 
 ## src/Net/EnetTransport.cs
-The shipped carrier over Godot's ENet peer, and the one type under `CSVM/` allowed to name a Godot
-networking type. `Host` opens a listen server on every address `ListenAddresses` names (for `*`:
-IPv4's wildcard, the stable global IPv6 address and `::1`) as one roster, so a reply leaves from the
-address a guest dialled; a guest drops a reply from a temporary one. `Join` reports the host (peer 1)
-joining. Every roster change and payload comes out of `Step`. A service thread polls ENet when the
-main thread has not stepped for `ServiceGapSeconds`, up to `Keepalive.CeilingSeconds`, so a
-blocking mission load keeps acknowledging. `INetLink` is where a board reads the socket, and a
-socket with no listener holds what lands and replays it on `Bind`. Read `NetLink.cs` next.
+The shipped carrier over Godot's ENet peer, the one type under `CSVM/` allowed to name a Godot
+networking type. `Host` opens one roster over every address `ListenAddresses` names (for `*`:
+IPv4's wildcard, the stable global IPv6 address, `::1`), so a reply leaves from the address a guest
+dialled; a guest drops one from a temporary address. `Join` reports the host as peer 1. Every roster
+change and payload comes out of `Step`. A service thread polls when the main thread has not stepped
+for `ServiceGapSeconds`, up to the keepalive's ceiling, so a blocking load keeps acknowledging. A
+socket with no listener holds what lands and replays it on `Bind`. At quit, the launcher's
+`CloseAll` ends every service thread before the engine disposes the peers. Read `NetLink.cs` next.
 
 ## src/Net/NetLink.cs
 `NetLinkState`, where one end's link stands (connecting, up, down) in words a board can show

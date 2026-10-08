@@ -969,6 +969,21 @@ public partial class Launcher : Node3D
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
+        // ⚠ Do not move this below the teardown calls, nor out of here. The engine disposes the
+        // peers a service thread may still poll, and a probe's quit closes no transport itself.
+        try
+        {
+            int closed = Net.EnetTransport.CloseAll();
+            if (closed > 0)
+            {
+                Log.Info("core", $"net: closed {closed} transport(s) still open at quit");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Log.Error("core", $"net: closing the open transports at quit failed: {e}");
+        }
+
         DrainLowPriorityTasks();
         _hitchSidecar.Flush();
         _musicArchive?.Dispose();
