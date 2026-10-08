@@ -176,6 +176,15 @@ internal sealed class OceanMask
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
     }
 
+    /// <summary>Whether the texel under a world point counts as sea, at the coverage the ocean draws
+    /// from (<see cref="SeaThreshold"/>). A point off the mask is not sea.</summary>
+    public bool IsSea(Vector3 world)
+    {
+        int x = (int)Math.Floor((world.X - Origin.X) / Cell);
+        int y = (int)Math.Floor((world.Z - Origin.Y) / Cell);
+        return x >= 0 && y >= 0 && x < Width && y < Height && Image.GetPixel(x, y).R >= SeaThreshold;
+    }
+
     private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         long t0 = Stopwatch.GetTimestamp();

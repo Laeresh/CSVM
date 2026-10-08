@@ -2043,8 +2043,7 @@ void fragment() {
         // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
         // would stretch to its model origin. The colliders stay flat. The hide reads the ocean's mask
         // at the fragment's world X/Z, so a sheet shown after the bake still draws.
-        if (oceanHide)
-            ghostVertex += "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n";
+        string oceanVertex = oceanHide ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2071,7 +2070,7 @@ void fragment() {
               + "    }\n";
         sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{oceanVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.

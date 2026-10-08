@@ -325,7 +325,7 @@ public sealed partial class Ocean : Node3D
             Offer(hull, wake: false);
         foreach (var mover in _mask.UnjudgedMovers)
         {
-            if (Afloat(mover) && Waterline(mover) != null && OverSea(mover.GlobalPosition))
+            if (Afloat(mover) && Waterline(mover) != null && _mask.IsSea(mover.GlobalPosition))
                 Offer(mover, wake: false);
         }
         for (int i = _candidates.Count - 1; i >= 0; i--)
@@ -470,14 +470,5 @@ public sealed partial class Ocean : Node3D
             return rel.Origin.DistanceTo(rest.Origin) < 0.5f && rel.Basis.Z.Normalized().Dot(rest.Basis.Z.Normalized()) > 0.999f;
         }
         return false;
-    }
-
-    // Whether the mask counts the texel under a world point as sea.
-    private bool OverSea(Vector3 p)
-    {
-        int x = (int)Math.Floor((p.X - _mask.Origin.X) / OceanMask.Cell);
-        int y = (int)Math.Floor((p.Z - _mask.Origin.Y) / OceanMask.Cell);
-        return x >= 0 && y >= 0 && x < _mask.Width && y < _mask.Height
-            && _mask.Image.GetPixel(x, y).R >= OceanMask.SeaThreshold;
     }
 }

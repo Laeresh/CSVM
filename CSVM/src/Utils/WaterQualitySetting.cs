@@ -26,8 +26,9 @@ public static class WaterQualitySetting
     /// <summary>The word a desktop with nothing saved runs, and under <c>--det</c> every machine.</summary>
     public const string Default = Waves;
 
-    /// <summary>The word Linux and an integrated GPU run when nothing is set. The Deck already runs
-    /// Enhanced split-screen below 60 fps, and the ocean's reflection costs more than the flat sea's.</summary>
+    /// <summary>The word Linux and an integrated GPU run when nothing is set. The ocean's wave grid
+    /// costs a low-power GPU several milliseconds a frame over the flat sheet, more than the Deck can
+    /// spare.</summary>
     public const string LowPowerDefault = Flat;
 
     /// <summary>Every word, the cheaper first, the order the Options row offers them.</summary>
