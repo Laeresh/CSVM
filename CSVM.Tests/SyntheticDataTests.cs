@@ -2,8 +2,11 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
+using CSVM.Effects;
 using CSVM.Extraction;
+using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Tooling;
 using CSVM.UI.Menu.Original;
@@ -109,6 +112,24 @@ public class SyntheticDataTests
 
             Assert.Equal((entry.GetProperty("width").GetInt32(), entry.GetProperty("height").GetInt32()), size);
         }
+    }
+
+    [Fact]
+    public void TheInventedMissionCarriesTwoBearingsACloudBandAndANetBlock()
+    {
+        string zrdr = SessionPaths.MissionZrdr(Built(), SyntheticMission.Chapter, SyntheticMission.Mission);
+
+        // A zone change shows only where the two zones author different bearings. A whiteout
+        // shows only where the band's core sits above the ground.
+        var weather = WeatherState.Load(zrdr);
+        Assert.NotNull(weather);
+        Assert.NotEqual(weather!.Zone("zone1").SunOrientation, weather.Zone("zone2").SunOrientation);
+        Assert.Equal(1f, weather.WhiteoutAmount(weather.CloudBandCentre));
+        Assert.Equal(0f, weather.WhiteoutAmount(0f));
+
+        var block = SpawnPoints.LoadNetFreeForAll(zrdr);
+        Assert.Equal(SpawnPoints.NetBlock, block?.Count);
+        Assert.Equal(block!.Count, block.Select(s => s.Position).Distinct().Count());
     }
 
     [Fact]

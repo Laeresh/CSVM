@@ -672,8 +672,10 @@ loader's own checks become the thing under test.
 `--synthetic-data` and no extraction. Over the 548-suite catalog the switch shows 183 PASS, 22 FAIL,
 343 SKIP; without it 63 PASS, 1 FAIL, 484 SKIP. What remains, each with its owner:
 
-- **C24** (below): anim, effect and weather records, plus an invented `voice.json` family for
-  `ai-voice`, `voice-runtime` and `net-player-voice`.
+- **C24** (below): anim, effect and puffer records. The weather, voice and one-off half landed;
+  of the voice suites `voice-runtime` joined, while `ai-voice` waits on the `ai.json` turret table,
+  and `net-player-voice` on a sound runtime for the empty stage (no `WorldSounds` there, so no combat
+  voice) or an MP map's world.
 - **Shipped airframes the tree lacks:** with the switch `versus-local-bot` (`player_bhawk` and
   `player_peacemaker`; its menu-launch leg also reads a C1 file), `versus-local-bot-graze` (`player_fury`), `net-bot-yield`
   (`player_bhawk`) and `graze-bounce-bot` (`player_autogyro`) FAIL building a session. A
@@ -1171,6 +1173,96 @@ screens. The loader checks an extraction stamp, a layout with `MainMenu` and an 
 tiles"), so the invented widgets need the same relative positions as the format describes.
 
 ## C24 ☐ Anim, effect and weather records for the remaining D suites
+
+**The weather, voice and one-off half landed.** Two families join the synthetic tree, and no
+production code changed. `mission` (`Tooling/SyntheticMission.cs`) writes one invented mission
+scope, `C1/PROBE1/zrdr/`: a `weather.json` whose two zones author different `SUNLIGHT_ORIENTATION`
+(-50°/60° and -20°/150°) and their own fog and `SUNLIGHT_*` levels under a 2200 to 2600 m
+`CLOUD_COVER` band with an 80 m opaque core, and a `net.json` of one 16-entry free-for-all block.
+The scope is a folder rather than records the empty stage carries in code, as C22 chose for its
+arena, because the weather suites hand `WeatherRig` a zrdr path and the net-table suite's subject is
+the file read; the stage has no path to hand. Its name matches no shipped mission, so every suite
+gated on `C1/IA1`, `C2/MP2` or `MP1` still skips on the tree instead of failing on a half-filled
+folder, and a real install's paths are unchanged. `voice` (in `Tooling/SyntheticSounds.cs`) copies an
+invented `zrdr/voice.json` accent table (a two-pilot pool and two one-pilot pools), and the `sounds`
+fixture gains two pilots' combat-voice sets: VO ids 2 and 26, the ids the code's Player Information
+table (`PilotVoices`) gives Jack and Gruff Male, under the `snd_id<N>_<TYPE>` names `CombatVoice`
+builds. Each set has an `-A` take of every trigger family, a `-B` take of `DI-LowDmg`, the
+`Bail`/`NoBail` split of `DA` and `DE`, a `snd_<FAMILY>-A_id<N>_random` group per family (the
+format's shape, without which `PlayableFor` resolves nothing), and the twelve bearings for id 2
+alone, over 52 generated `probe_vo<N>_*.wav` files. `SyntheticDataTests` and `SyntheticSoundsTests`
+check both families.
+
+Nine suites join `tier:ci` (160). Each passed three runs in a row by name with the switch, went red
+on the broken input named, then passed again once restored, and skips as before without the switch:
+`sun-orientation` and `cockpit-sun-bearing` (ZONE2's bearing set to ZONE1's), `weather-cockpit-whiteout`
+(no `CLOUD_COVER`), `danger-zone-photograph-fill` (ZONE1's `SUNLIGHT_AMBIENT` at 1.0, so the fill no
+longer outshines the ambient half), `voice-runtime` (pilot 2's `WA-Enemy-3H` definition renamed),
+`versus-spawn-net-table` (a 15-entry block), `instant-action` (the probe's AI def renamed away),
+`tex-dropin` (an empty texture manifest) and `versus-spawn-rotation` (the stage ring's radius at 0,
+a code record, as C21 broke it). Each check that pinned a shipped value now reads it off the record it
+loaded, and the literal still runs under `!ctx.SyntheticData`:
+
+- `sun-orientation`: `C2/MP2` becomes `WorldAndToolSuites.WeatherMission` (PROBE1 on the tree); the
+  `-25f, 90f` and `-65f, 90f` bearings come from `AuthoredBearing`, the zone's own
+  `SunOrientation`; on the tree a precondition checks the two zones differ.
+- `cockpit-sun-bearing`: both missions become PROBE1; the lit `-25°/90°`, below-band `-65°/90°` and
+  in-band `-25°/90°` beams come from the zones read; the message drops the "19,024-20,124 m" figure.
+- `weather-cockpit-whiteout`: `C1/IA1` becomes PROBE1 and the camera's `1047f` the record's
+  `CloudBandCentre`. `danger-zone-photograph-fill`: `C1/IA1` becomes PROBE1 (no literal).
+- `voice-runtime`: `Same(35, AccentIds.Count)` becomes `Count > 0`; accent 12 and VO id 2 become the
+  first one-pilot accent whose pilot authors a `DI-LowDmg` group, and `"snd_DI-LowDmg-A_id2_random"`,
+  `"snd_id2_DI-LowDmg"` and trigger 6 follow that id; `decoded >= 70` becomes `decoded == subset.Count`;
+  the unprewarmed `"snd_id26_TA-SucShk-A"` becomes another pilot's `TA-SucShk` clip, checked to be a
+  definition.
+- `instant-action`: `RequirePlane("player_warhawk")` goes; the Warhawk, Fury and Brigand nodes become
+  the tree's plane (the display-name table check stays, being code); `AttackRange == 2000f` and
+  `ReturnRange == 1200f` become the airframe's own `AiAttackRange`/`AiReturnRange`, and every tree now
+  also checks they differ from the 10000 m actor volume.
+- `tex-dropin`: the shipped `DropInSamples` (behind a `RequireTexture` skip) become every texture the
+  archive's manifest lists, with a non-empty check. The invented textures are all RGB, so its alpha
+  legs run on the install only.
+- `versus-spawn-rotation`: a root with no `C1/IA1` walks the list a `--vs` launch on the empty stage
+  hands the same rotation, the stage's spawn ring. `versus-spawn-net-table`: `C1/MP1` becomes PROBE1
+  on the tree.
+
+`ai-voice` gains two precise gates, `RequireZrdrEntry(ai.json)` and `RequirePlane(player_fbrand)`:
+its WA-Turret leg builds that carrier's gunner off the turret table. Both pass on any install.
+
+Left off, with the reason. `net-player-voice`: on the empty stage the session builds no
+`WorldSounds`, so `SessionVoices.Build` builds no combat voice and "both ends build the combat voice"
+fails; it needs a sound runtime for the stage or an MP map's world. Its `Jack`/`Gruff Male` pilots
+are the code's `PilotVoices` ids, which the invented sets already carry, so no retarget was needed.
+`ai-voice`: the `ai.json` turret table and `player_fbrand`. `net-ai-voice` and `net-ai-world`: C1's
+world with a standing destructible on `MP1`. `instant-action-wave-net-seat`: an Instant Action def
+names its planes through the display-name table, which resolves only to shipped airframes, and the
+walk needs the chapter's AI nets. `instant-action-stunt-summary` and `menu-original-wrapup`: a
+chapter world gamez with Danger Zone nodes; one in the tree would open every chapter-world suite
+gated on it. `clutter-cells` and `terrain-pick-export`: a chapter world (C3, C4).
+`flight-mouse-scheme-live` and `pause-preferences-live-options`: `player_bhawk`. `ai-airframe-pool-claim`,
+`pause-preferences`, `net-coop-*`, `menu-campaign-journey` and the campaign suites: the campaign
+family. `net-seats`: the `player_fbrand` item. `hud-crash-prompt` and `world-sound-falloff` were
+already on the tier. The destructible and anim-def rows (`carried-state-silent`,
+`start-state-swap-pool`, `nodelab-visibility`, `first-person-condition`) are the anim half's.
+
+Verified on Windows, headless, empty data root, port base 54000. The catalog is now 548 suites (the
+B15 counts above are from the 500-suite one); this worktree's HEAD, built as a snapshot, reads 180
+PASS, 24 FAIL, 344 SKIP with the switch and 63, 1, 484 without. After: 189, 24, 335 with, the nine
+above SKIP to PASS and nothing else, and 63, 1, 484 without, suite by suite. `tier:ci` with the switch
+passes 160/0/0; its 37 engine error lines all match `analysis/headless-limits.json`, and the
+at-exit RID leak line is in the snapshot's run too. Units 6417 pass, 3 skip; `dotnet build` and the
+`-t:Rebuild` show no warning; the content checks pass. The single-process full catalog without the
+switch exits `0xC0000005` in `GodotObject.Finalize` after writing its report; the snapshot does not,
+both shards and `tier:ci` exit normally, and the trigger moves with unrelated code layout (an
+equivalent rewrite of one changed line made it vanish in the snapshot and not in the worktree), so it
+is the teardown finalizer crash `analysis/bl-053-dense-rank/FINDINGS.md` records on an unmodified
+build, not a path this change runs.
+
+**Still owed to the Windows run.** On the install every retargeted check reduces to its literal,
+`versus-spawn-rotation` reads `C1/IA1` as before and `ai-voice`'s gates pass, so the full
+`RunTests.ps1` battery should show the same PASS/FAIL/SKIP per suite. Optionally,
+`--run-tests=tier:ci --synthetic-data` on the real checkout should pass all 160 (with the anim half's
+additions, more).
 
 **Goal.** The remaining bucket D suites (anim and effect defs, weather and sun, puffer records,
 one-off records) run on invented records.

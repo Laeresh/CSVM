@@ -9,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Spec;
+using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
 
@@ -40,15 +41,22 @@ internal static class VersusSpawnSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, "IA1");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/IA1 zrdr");
 
-        var spawns = SpawnPoints.LoadIa(missionZrdr, Scenario);
+        // A root with no IA1 walks the list a --vs launch on the empty stage hands the same
+        // rotation, the stage's code-built spawn ring.
+        bool onStage = !System.IO.File.Exists(missionZrdr) && !System.IO.Directory.Exists(missionZrdr);
+        string listName = onStage ? "the empty stage's spawn ring" : $"{ctx.Chapter}/IA1";
+        if (onStage)
+            ctx.Note($"spawn list: {listName}, the data root carries no {ctx.Chapter}/IA1");
+        var spawns = onStage
+            ? new SpawnPicker(SessionSpec.Parse(new[] { "--vs", "--stage=empty" })).LoadSpawnList(missionZrdr, Scenario)
+            : SpawnPoints.LoadIa(missionZrdr, Scenario);
         if (spawns is not { Count: >= 4 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/IA1 authors no usable {Scenario} spawn list");
+            throw new SuiteSkippedException($"{listName} authors no usable {Scenario} spawn list");
         }
         ctx.Check(spawns.Count >= 4,
-            $"{ctx.Chapter}/IA1 ships {spawns.Count} {Scenario} spawns for the rotation to walk");
+            $"{listName} ships {spawns.Count} {Scenario} spawns for the rotation to walk");
 
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
@@ -150,21 +158,24 @@ internal static class VersusSpawnSuites
         + "the identical launch without --vs still reads no table")]
     internal static void VersusNetSpawnTable(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
+        // The synthetic tree carries no MP map, so it reads the invented PROBE1 scope's table.
+        string chapter = ctx.SyntheticData ? SyntheticMission.Chapter : ctx.Chapter;
+        string mission = ctx.SyntheticData ? SyntheticMission.Mission : MpMission;
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
 
         var spec = SessionSpec.Parse(new[]
         {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=4", "--spawn=0",
+            "--vs", $"--chapter={chapter}", $"--mission={mission}", "--players=4", "--spawn=0",
         });
         var picker = new SpawnPicker(spec);
         var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
         if (table is not { Count: > 0 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no net.zrd table");
+            throw new SuiteSkippedException($"{chapter}/{mission} authors no net.zrd table");
         }
         ctx.Check(picker.NetSpawns && table.Count == SpawnPoints.NetBlock,
-            $"the picker answers {MpMission} with the net table's free-for-all block: {table.Count} entries, net={picker.NetSpawns}");
+            $"the picker answers {mission} with the net table's free-for-all block: {table.Count} entries, net={picker.NetSpawns}");
 
         var starts = picker.ChooseStarts(table, missionZrdr, picker.ChooseSpawnBase(table), 4);
         var seen = new List<int>();
@@ -193,12 +204,12 @@ internal static class VersusSpawnSuites
         // campaign mission's unread placeholder table out of every other launch.
         var flyPicker = new SpawnPicker(SessionSpec.Parse(new[]
         {
-            "--fly", $"--chapter={ctx.Chapter}", $"--mission={MpMission}",
+            "--fly", $"--chapter={chapter}", $"--mission={mission}",
         }));
         ctx.Check(flyPicker.LoadSpawnList(missionZrdr, Scenario) == null && !flyPicker.NetSpawns,
             $"ABLE-TO-FAIL CONTROL: the same mission without --vs reads no table and falls back");
 
-        ctx.Note($"{ctx.Chapter}/{MpMission}: {table.Count}-entry free-for-all block, seats on entries {string.Join(", ", seen)}");
+        ctx.Note($"{chapter}/{mission}: {table.Count}-entry free-for-all block, seats on entries {string.Join(", ", seen)}");
     }
 
     [Suite("versus-spawn-empty-stage",

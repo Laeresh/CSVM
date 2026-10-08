@@ -2500,7 +2500,23 @@ internal static class AiSuites
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
-        ctx.Same(35, voice.AccentIds.Count, $"voice.zrd accent rows");
+        if (ctx.SyntheticData)
+            ctx.Check(voice.AccentIds.Count > 0, $"voice.zrd has accent rows count={voice.AccentIds.Count}");
+        else
+            ctx.Same(35, voice.AccentIds.Count, $"voice.zrd accent rows");
+
+        // The install's worked example is accent 12, VO id 2 (the pilot with the full bearing
+        // set), and id 26 a pilot outside its pool. The synthetic tree takes the first one-pilot
+        // accent whose pilot authors a DI-LowDmg group, and any other pilot.
+        int accent = ctx.SyntheticData
+            ? voice.AccentIds.FirstOrDefault(a => voice.Pool(a).Length == 1
+                && voice.PilotFor(a, 0) is int p && voice.PlayableFor(p, "DI-LowDmg")?.EndsWith("_random") == true)
+            : 12;
+        int vo = ctx.SyntheticData ? voice.PilotFor(accent, 0) ?? -1 : 2;
+        int stranger = ctx.SyntheticData ? voice.PilotIds.FirstOrDefault(id => id != vo) : 26;
+        string unprewarmed = ctx.SyntheticData
+            ? voice.ClipsFor(stranger, "TA-SucShk").FirstOrDefault() ?? "none"
+            : "snd_id26_TA-SucShk-A";
 
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
@@ -2513,22 +2529,23 @@ internal static class AiSuites
             };
             ctx.Host.AddChild(sounds);
 
-            // The chain's worked example: accent 12 is a single-id pool, VO id 2 (the pilot with
-            // the full bearing set). Prewarm that pilot exactly as a mission roster would.
-            int? pilot = voice.PilotFor(12, 0);
-            ctx.Check(pilot == 2, $"accent 12 resolves to VO id 2 got={pilot?.ToString() ?? "null"}");
-            var subset = voice.PrewarmNames(new[] { 12 });
+            // The chain's worked example, a single-id pool. Prewarm that pilot exactly as a mission
+            // roster would.
+            int? pilot = voice.PilotFor(accent, 0);
+            ctx.Check(pilot == vo && vo >= 0, $"accent {accent} resolves to VO id {vo} got={pilot?.ToString() ?? "null"}");
+            var subset = voice.PrewarmNames(new[] { accent });
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int decoded = sounds.Prewarm(subset);
             sw.Stop();
-            ctx.Check(decoded >= 70, $"the accent-12 subset decodes names={subset.Count} decoded={decoded}");
-            ctx.Note($"accent-12 prewarm: {subset.Count} defs, {decoded} streams, {sw.ElapsedMilliseconds} ms");
+            ctx.Check(ctx.SyntheticData ? decoded == subset.Count && decoded > 0 : decoded >= 70,
+                $"the accent-{accent} subset decodes names={subset.Count} decoded={decoded}");
+            ctx.Note($"accent-{accent} prewarm: {subset.Count} defs, {decoded} streams, {sw.ElapsedMilliseconds} ms");
             sounds.Loader = null;   // the session's build scope closing (WorldSession.Build)
 
-            string? playable = voice.PlayableFor(2, "DI-LowDmg");
-            ctx.Check(playable == "snd_DI-LowDmg-A_id2_random",
-                $"DI-LowDmg resolves to the shipped variant group got={playable}");
-            string? bearing = voice.PlayableForTrigger(2, 6);   // WA-Enemy-3H
+            string? playable = voice.PlayableFor(vo, "DI-LowDmg");
+            ctx.Check(playable == $"snd_DI-LowDmg-A_id{vo}_random",
+                $"DI-LowDmg resolves to the authored variant group got={playable}");
+            string? bearing = voice.PlayableForTrigger(vo, 6);   // WA-Enemy-3H
             ctx.Check(bearing != null && sounds.HasStream(bearing),
                 $"the bearing clip's stream survived the loader retirement name={bearing}");
 
@@ -2536,7 +2553,7 @@ internal static class AiSuites
             radio = new MissionRadio(defs, groups, sounds.StreamFor);
             ctx.Host.AddChild(radio);
             string? resolved = radio.Speak(playable!, new System.Random(2));
-            ctx.Check(resolved != null && resolved.StartsWith("snd_id2_DI-LowDmg"),
+            ctx.Check(resolved != null && resolved.StartsWith($"snd_id{vo}_DI-LowDmg"),
                 $"a prewarmed voice line queues after the archive closed resolved={resolved}");
             radio.Tick(0.1f);
             ctx.Check(radio.LinesStarted == 1 && radio.OnAir == resolved,
@@ -2544,8 +2561,8 @@ internal static class AiSuites
 
             // A def never prewarmed is null once the loader is gone: the exact failure the
             // prewarm exists to prevent.
-            ctx.Check(radio.Speak("snd_id26_TA-SucShk-A", new System.Random(3)) == null,
-                $"an unprewarmed pilot's line stays null after the archive closed");
+            ctx.Check((!ctx.SyntheticData || defs.ContainsKey(unprewarmed)) && radio.Speak(unprewarmed, new System.Random(3)) == null,
+                $"an unprewarmed pilot's line stays null after the archive closed ({unprewarmed}, VO id {stranger})");
 
             // The cost of prewarm-everything, measured on a fresh archive so nothing is cached:
             // the number the roster-subset strategy is justified against.
@@ -2623,6 +2640,9 @@ internal static class AiSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
+        // The WA-Turret leg builds the carrier's gunner off the turret table.
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
+        ctx.RequirePlane(TurretCarrier);
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");

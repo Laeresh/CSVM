@@ -24,6 +24,7 @@ public static class SyntheticSounds
     private const string SoundsFixture = "synthetic/zrdr/sounds.json";
     private const string ManifestFixture = "synthetic/" + ArchiveFolder + "/manifest.json";
     private const string ArchiveFolder = "soundsh";
+    private const string VoiceFixture = "synthetic/zrdr/voice.json";
 
     // The peak level of a generated signal, as a share of full scale. It reads plainly in a capture
     // and stays far enough under the clip that the ADPCM step never saturates.
@@ -53,6 +54,11 @@ public static class SyntheticSounds
             tree.WriteBytes($"{ArchiveFolder}/{name}", WavWriter.MsAdpcm(Signal(name, seconds, hz), Rate));
         }
     }
+
+    /// <summary>Writes <c>zrdr/voice.json</c>, the accent table whose pools name the pilot VO ids
+    /// the <c>snd_id&lt;N&gt;_*</c> clip sets of <c>sounds.json</c> carry. Shape:
+    /// <c>docs/formats/combat-voice.md</c>.</summary>
+    public static void WriteVoice(SyntheticTree tree) => tree.CopyFixture(VoiceFixture, "zrdr/voice.json");
 
     /// <summary>The samples for one manifest entry: a tone at <paramref name="hz"/> with its octave
     /// at a quarter weight, or seeded white noise when <paramref name="hz"/> is 0. The noise is

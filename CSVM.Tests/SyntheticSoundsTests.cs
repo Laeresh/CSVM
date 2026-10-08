@@ -5,6 +5,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
+using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using Xunit;
 
@@ -76,6 +77,34 @@ public class SyntheticSoundsTests
         var cues = weapons.SoundCues();
         Assert.Contains(cues, c => c.Looped);
         Assert.All(cues, c => Assert.True(defs.ContainsKey(c.Name), c.Name));
+    }
+
+    [Fact]
+    public void EveryAccentDealsAPilotWhoseWholeSetResolves()
+    {
+        string zrdr = Path.Combine(Built(), "extracted", "zrdr");
+        var defs = SoundDefs.Load(zrdr);
+        var voice = new CombatVoice(defs, SoundDefs.LoadGroups(zrdr), CombatVoice.LoadAccents(zrdr));
+
+        Assert.NotEmpty(voice.AccentIds);
+        var pilots = voice.AccentIds.SelectMany(voice.Pool).Distinct().ToList();
+
+        // The Player Information voices the network suites seat are dealt by an accent too.
+        Assert.Contains(PilotVoices.SpeakerFor(PilotVoices.Wire(1))!.Value, pilots);
+        Assert.Contains(PilotVoices.SpeakerFor(PilotVoices.Wire(5))!.Value, pilots);
+        foreach (int pilot in pilots)
+        {
+            // The bearings are a per-pilot capability, and DA/DE resolve below the family root.
+            foreach (string family in CombatVoice.TriggerFamilies.Where(f => !f.StartsWith("WA-Enemy-") && f is not ("DA" or "DE")))
+            {
+                Assert.True(voice.PlayableFor(pilot, family) != null, $"VO id {pilot} speaks {family}");
+            }
+
+            Assert.Equal(4, voice.ClipsFor(pilot, "DA").Count + voice.ClipsFor(pilot, "DE").Count);
+            Assert.EndsWith("_random", voice.PlayableFor(pilot, "DI-LowDmg"));
+        }
+
+        Assert.Contains(pilots, p => voice.PlayableForTrigger(p, 6) != null);
     }
 
     [Fact]

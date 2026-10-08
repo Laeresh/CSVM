@@ -659,7 +659,8 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/SyntheticTextures.cs`, the synthetic tree's C1 texture archive: the fixture manifest plus one generated PNG per entry.
 - `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket, shakes and messages.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
-- `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry.
+- `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry, and the `voice.json` accent table.
+- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
 
 ### `src/Launch/`, the composition root
