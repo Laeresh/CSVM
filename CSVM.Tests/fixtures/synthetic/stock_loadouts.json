@@ -45,6 +45,70 @@
          "markers": ["firepoint1"]}
       ],
       "hardpoints": {"count": 6, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobehawk": {
+      "model": "player_bhawk",
+      "display": "Probe Kite",
+      "guns": [
+        {"slot": 2, "mount": "Kite Wing Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint5", "firepoint6"]},
+        {"slot": 4, "mount": "Kite Nose Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint1", "firepoint2"]}
+      ],
+      "hardpoints": {"count": 4, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobegyro": {
+      "model": "player_autogyro",
+      "display": "Probe Whirl",
+      "guns": [
+        {"slot": 3, "mount": "Whirl Cowl Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint3", "firepoint4"]}
+      ],
+      "hardpoints": {"count": 2, "stock": ["wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobefury": {
+      "model": "player_fury",
+      "display": "Probe Gale",
+      "guns": [
+        {"slot": 1, "mount": "Gale Outer Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint7", "firepoint8"]},
+        {"slot": 3, "mount": "Gale Cowl Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint3", "firepoint4"]}
+      ],
+      "hardpoints": {"count": 4, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobepeace": {
+      "model": "player_peacemaker",
+      "display": "Probe Warden",
+      "guns": [
+        {"slot": 1, "mount": "Warden Outer Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint7", "firepoint8"]},
+        {"slot": 2, "mount": "Warden Inner Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint5", "firepoint6"]}
+      ],
+      "hardpoints": {"count": 6, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobewarhawk": {
+      "model": "player_warhawk",
+      "display": "Probe Hauler",
+      "guns": [
+        {"slot": 2, "mount": "Hauler Wing Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint5", "firepoint6"]},
+        {"slot": 4, "mount": "Hauler Nose Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint1", "firepoint2"]}
+      ],
+      "hardpoints": {"count": 8, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobekestrel": {
+      "model": "player_kestrel",
+      "display": "Probe Heron",
+      "guns": [
+        {"slot": 1, "mount": "Heron Outer Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint7", "firepoint8"]},
+        {"slot": 3, "mount": "Heron Cowl Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint3", "firepoint4"]}
+      ],
+      "hardpoints": {"count": 4, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
     }
   }
 }

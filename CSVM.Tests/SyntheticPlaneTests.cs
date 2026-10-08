@@ -223,6 +223,75 @@ public class SyntheticPlaneTests
         Assert.True(weapons.Get(Loadout.StockOrdnance)!.HighExplosive);
     }
 
+    [Fact]
+    public void TheSixMoreShippedNamesAreDistinctAirframesWithTheirOwnDefsRowsAndFits()
+    {
+        string root = Built();
+        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter)!;
+        var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
+        var stock = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
+        stock.Overlay(SyntheticPlane.LoadoutsUnder(TestData.Fixture()));
+
+        foreach (var (node, def, ai) in new[]
+                 {
+                     ("player_bhawk", "pprobehawk", "probehawk"), ("player_autogyro", "pprobegyro", "probegyro"),
+                     ("player_fury", "pprobefury", "probefury"), ("player_peacemaker", "pprobepeace", "probepeace"),
+                     ("player_warhawk", "pprobewarhawk", "probewarhawk"), ("player_kestrel", "pprobekestrel", "probekestrel"),
+                 })
+        {
+            var rig = MarkerRig.Extract(gamez, node);
+            Assert.NotNull(rig);
+            Assert.Equal(8, rig.Markers.Count(m => m.Kind == MarkerRig.MarkerKind.Firepoint));
+            Assert.NotEqual(Marker(fighterRig, "pylon1"), Marker(rig, "pylon1"));
+
+            var stats = PlaneStats.Load(zrdr, node);
+            Assert.Equal(def, stats.DefName);
+            Assert.NotEqual(fighter.EngineSound, stats.EngineSound);
+            Assert.Equal(node == "player_autogyro", stats.IsAutogyro);
+            Assert.Equal(ai, PlaneStats.LoadForAi(zrdr, node).AiDefName);
+            int airframe = StockAirframes.IdOf(node)!.Value;
+            Assert.NotNull(CustomPlaneBuild.EnginePowerFor(zrdr, new CustomPlaneDef { Airframe = airframe, Engine = 2 }));
+            Assert.Equal(def, stock.ForModel(node)?.Def);
+        }
+
+        Assert.Equal(12, stock.All.Count);
+    }
+
+    [Fact]
+    public void TheVariantsAndTheTurretTableResolveAgainstTheirAirframes()
+    {
+        string root = Built();
+        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        string zrdr = Path.Combine(root, "extracted", "zrdr");
+        var weapons = WeaponDefs.Load(zrdr, null);
+
+        // The variants a suite names derive from their airframe's own AI def.
+        var wingman = PlaneStats.LoadForAi(zrdr, "player_bhawk", "wbloodhawk");
+        Assert.Equal("wingman", wingman.VehicleMode);
+        Assert.True(wingman.AiStructBias < wingman.AiTargetBias && wingman.AiTargetBias < 0f);
+        var hauler = PlaneStats.LoadForAi(zrdr, "player_warhawk", "bhatwarhawk");
+        Assert.Contains(hauler.AiWeapons, w => weapons.Get(w.WeaponId) is { DamagesZeppelin: true });
+        var cabbie = PlaneStats.LoadForAi(zrdr, "player_autogyro", "autogyro");
+        Assert.Equal("agyro_rotors", cabbie.SpinPropsAnim);
+        Assert.NotNull(gamez.FindByName("rotor1"));
+        var fury = PlaneStats.LoadForAi(zrdr, "player_fury");
+        Assert.True(fury.VehicleInjureAnims.Count(e => e.Anim == "random_remote_damage") > 1);
+
+        // Each carried mount names a table row and a rig on its own model; one emplacement stands apart.
+        var turrets = TurretDefs.Load(zrdr);
+        Assert.Single(turrets.All, d => !d.Carried);
+        Assert.All(turrets.All, d => Assert.NotNull(weapons.Get(d.WeaponName)));
+        foreach (string node in new[] { "player_kestrel", SyntheticPlane.Firebrand })
+        {
+            var mount = Assert.Single(PlaneStats.Load(zrdr, node).TurretMounts);
+            Assert.False(mount.FirstPerson);
+            Assert.True(turrets.FindByTitle(mount.Title) is { Carried: true });
+            Assert.NotNull(gamez.FindByName(mount.Node));
+        }
+    }
+
     private static Vector3 Marker(MarkerRig rig, string name) => rig.Markers.Single(m => m.Name == name).Local;
 
     private static string Built()

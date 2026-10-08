@@ -145,6 +145,7 @@
       "kind_of", ["player_airplane"],
       "nodename", ["player_fbrand"],
       "title", ["MSG_PROBE_BRAND"],
+      "turrets", ["thirdp", [["title", ["MSG_TUR_PROBE_DORSAL_G3"], "node", ["probe_brand_turret1"]]]],
       "engine_sound", ["snd_probe_brand_engine"],
       "engine", [31],
       "fuel", [80],
@@ -186,6 +187,7 @@
     [
       "title", ["MSG_PROBE_BRAND"],
       "mode", ["jet"],
+      "turrets", ["thirdp", [["title", ["MSG_TUR_PROBE_DORSAL_G3"], "node", ["probe_brand_turret1"]]]],
       "armor", [50],
       "health", [50],
       "dare_devil", [6],
@@ -265,6 +267,421 @@
       [
         ["wep_probe_gun", 450, 0.55, 0, 850],
         ["wep_probe_rocket", 6, 3, 150, 1600]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "pprobehawk",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_bhawk"],
+      "title", ["MSG_PROBE_HAWK"],
+      "engine_sound", ["snd_probe_hawk_engine"],
+      "engine", [10],
+      "fuel", [75],
+      "dynamics",
+      [
+        "pitch_torque", [2.5],
+        "roll_torque", [6.1],
+        "rudder_torque", [1.5],
+        "return_rate", [3.1],
+        "ang_momentum_damp", [5.1],
+        "rec_moments_inertia", [0.8, 0.58, 1.08],
+        "fd_speed", [126],
+        "drag_factor", [0.95],
+        "veh_weight", [2750],
+        "ref_area", [275]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 24, 24, "critical", "engine",
+         "injure_anims", [[0.27, "pdpanel7", "player_bhawk"]]],
+        ["tail", 17, 17,
+         "injure_anims", [[0.27, "pdpanel8", "player_bhawk"]]],
+        ["leftwing", 19, 19,
+         "injure_anims", [[0.52, "pdpanel3", "player_bhawk"], [0.32, "pdpanel2", "player_bhawk"], [0.11, "pdpanel5", "player_bhawk"]]],
+        ["rightwing", 19, 19,
+         "injure_anims", [[0.52, "pdpanel4", "player_bhawk"], [0.32, "pdpanel1", "player_bhawk"], [0.11, "pdpanel6", "player_bhawk"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -3.15],
+        [0.0, -0.1, 3.24],
+        [6.46, -0.2, -0.18],
+        [0.0, 0.8, -0.18],
+        [-6.46, -0.2, -0.18],
+        [0.0, -0.5, 1.8]
+      ]
+    ],
+    "probehawk",
+    [
+      "title", ["MSG_PROBE_HAWK"],
+      "mode", ["jet"],
+      "armor", [48],
+      "health", [48],
+      "dare_devil", [6],
+      "natural_touch", [7],
+      "sixth_sense", [5],
+      "dead_eye", [6],
+      "quick_draw", [5],
+      "steady_hand", [5],
+      "stun_recovery", [4],
+      "talker", [6],
+      "constitution", [5],
+      "weapons",
+      [
+        ["wep_probe_gun", 380, 0.42, 0, 760],
+        ["wep_probe_rocket", 3, 4, 170, 1350]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "wbloodhawk",
+    [
+      "kind_of", ["probehawk"],
+      "mode", ["wingman"],
+      "target_bias", [-60],
+      "struct_bias", [-180],
+      "dare_devil", [4],
+      "steady_hand", [6]
+    ],
+    "pprobegyro",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_autogyro"],
+      "title", ["MSG_PROBE_GYRO"],
+      "engine_sound", ["snd_probe_gyro_engine"],
+      "engine", [37],
+      "fuel", [60],
+      "is_autogyro",
+      "spin_props_anim", ["agyro_rotors"],
+      "dynamics",
+      [
+        "pitch_torque", [2.9],
+        "roll_torque", [4.9],
+        "rudder_torque", [21.0],
+        "return_rate", [1.7],
+        "ang_momentum_damp", [4.6],
+        "rec_moments_inertia", [0.7, 0.9, 0.95],
+        "fd_speed", [98],
+        "drag_factor", [1.25],
+        "veh_weight", [2100],
+        "ref_area", [230]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 20, 20, "critical", "engine",
+         "injure_anims", [[0.32, "pdpanel7", "player_autogyro"]]],
+        ["tail", 14, 14,
+         "injure_anims", [[0.32, "pdpanel8", "player_autogyro"]]],
+        ["leftwing", 15, 15,
+         "injure_anims", [[0.58, "pdpanel3", "player_autogyro"], [0.34, "pdpanel2", "player_autogyro"], [0.13, "pdpanel5", "player_autogyro"]]],
+        ["rightwing", 15, 15,
+         "injure_anims", [[0.58, "pdpanel4", "player_autogyro"], [0.34, "pdpanel1", "player_autogyro"], [0.13, "pdpanel6", "player_autogyro"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -2.8],
+        [0.0, -0.12, 2.88],
+        [4.76, -0.23, -0.16],
+        [0.0, 0.92, -0.16],
+        [-4.76, -0.23, -0.16],
+        [0.0, -0.58, 1.6]
+      ]
+    ],
+    "probegyro",
+    [
+      "title", ["MSG_PROBE_GYRO"],
+      "mode", ["jet"],
+      "spin_props_anim", ["agyro_rotors"],
+      "armor", [38],
+      "health", [38],
+      "dare_devil", [4],
+      "natural_touch", [5],
+      "sixth_sense", [7],
+      "dead_eye", [4],
+      "quick_draw", [5],
+      "steady_hand", [6],
+      "stun_recovery", [5],
+      "talker", [7],
+      "constitution", [4],
+      "weapons",
+      [
+        ["wep_probe_gun", 260, 0.5, 0, 650],
+        ["wep_probe_rocket", 2, 5, 160, 1200]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "autogyro",
+    [
+      "kind_of", ["probegyro"],
+      "title", ["MSG_PROBE_GYRO"],
+      "talker", [3]
+    ],
+    "pprobefury",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_fury"],
+      "title", ["MSG_PROBE_FURY"],
+      "engine_sound", ["snd_probe_fury_engine"],
+      "engine", [16],
+      "fuel", [85],
+      "dynamics",
+      [
+        "pitch_torque", [2.2],
+        "roll_torque", [5.3],
+        "rudder_torque", [1.3],
+        "return_rate", [2.7],
+        "ang_momentum_damp", [4.7],
+        "rec_moments_inertia", [0.88, 0.64, 1.18],
+        "fd_speed", [131],
+        "drag_factor", [0.88],
+        "veh_weight", [3100],
+        "ref_area", [290]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 34, 8, "critical", "engine",
+         "injure_anims", [[0.24, "pdpanel7", "player_fury"]]],
+        ["tail", 24, 6,
+         "injure_anims", [[0.24, "pdpanel8", "player_fury"]]],
+        ["leftwing", 28, 7,
+         "injure_anims", [[0.57, "pdpanel3", "player_fury"], [0.33, "pdpanel2", "player_fury"], [0.09, "pdpanel5", "player_fury"]]],
+        ["rightwing", 28, 7,
+         "injure_anims", [[0.57, "pdpanel4", "player_fury"], [0.33, "pdpanel1", "player_fury"], [0.09, "pdpanel6", "player_fury"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -3.85],
+        [0.0, -0.1, 3.96],
+        [7.14, -0.19, -0.22],
+        [0.0, 0.76, -0.22],
+        [-7.14, -0.19, -0.22],
+        [0.0, -0.48, 2.2]
+      ]
+    ],
+    "probefury",
+    [
+      "title", ["MSG_PROBE_FURY"],
+      "mode", ["jet"],
+      "injure_anims", [[0.93, "random_remote_damage"], [0.8, "random_remote_damage"], [0.6, "random_remote_damage"], [0.36, "pfsmoketrail"], [0.25, "random_remote_damage"]],
+      "armor", [58],
+      "health", [58],
+      "dare_devil", [5],
+      "natural_touch", [6],
+      "sixth_sense", [6],
+      "dead_eye", [7],
+      "quick_draw", [6],
+      "steady_hand", [4],
+      "stun_recovery", [6],
+      "talker", [4],
+      "constitution", [6],
+      "weapons",
+      [
+        ["wep_probe_gun", 420, 0.48, 0, 820],
+        ["wep_probe_rocket", 4, 4, 190, 1450]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "pprobepeace",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_peacemaker"],
+      "title", ["MSG_PROBE_PEACE"],
+      "engine_sound", ["snd_probe_peace_engine"],
+      "engine", [13],
+      "fuel", [95],
+      "dynamics",
+      [
+        "pitch_torque", [2.1],
+        "roll_torque", [4.7],
+        "rudder_torque", [1.25],
+        "return_rate", [2.6],
+        "ang_momentum_damp", [4.4],
+        "rec_moments_inertia", [0.92, 0.72, 1.2],
+        "fd_speed", [118],
+        "drag_factor", [1.05],
+        "veh_weight", [3300],
+        "ref_area", [315]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 31, 31, "critical", "engine",
+         "injure_anims", [[0.23, "pdpanel7", "player_peacemaker"]]],
+        ["tail", 21, 21,
+         "injure_anims", [[0.23, "pdpanel8", "player_peacemaker"]]],
+        ["leftwing", 26, 26,
+         "injure_anims", [[0.62, "pdpanel3", "player_peacemaker"], [0.36, "pdpanel2", "player_peacemaker"], [0.12, "pdpanel5", "player_peacemaker"]]],
+        ["rightwing", 26, 26,
+         "injure_anims", [[0.62, "pdpanel4", "player_peacemaker"], [0.36, "pdpanel1", "player_peacemaker"], [0.12, "pdpanel6", "player_peacemaker"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -3.33],
+        [0.0, -0.1, 3.42],
+        [7.82, -0.21, -0.19],
+        [0.0, 0.84, -0.19],
+        [-7.82, -0.21, -0.19],
+        [0.0, -0.53, 1.9]
+      ]
+    ],
+    "probepeace",
+    [
+      "title", ["MSG_PROBE_PEACE"],
+      "mode", ["jet"],
+      "armor", [62],
+      "health", [62],
+      "dare_devil", [3],
+      "natural_touch", [5],
+      "sixth_sense", [6],
+      "dead_eye", [5],
+      "quick_draw", [4],
+      "steady_hand", [7],
+      "stun_recovery", [6],
+      "talker", [5],
+      "constitution", [6],
+      "weapons",
+      [
+        ["wep_probe_gun", 470, 0.52, 0, 880],
+        ["wep_probe_rocket", 5, 3, 160, 1550]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "pprobewarhawk",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_warhawk"],
+      "title", ["MSG_PROBE_WARHAWK"],
+      "engine_sound", ["snd_probe_warhawk_engine"],
+      "engine", [34],
+      "fuel", [120],
+      "dynamics",
+      [
+        "pitch_torque", [1.7],
+        "roll_torque", [4.1],
+        "rudder_torque", [1.0],
+        "return_rate", [2.1],
+        "ang_momentum_damp", [4.0],
+        "rec_moments_inertia", [1.05, 0.85, 1.3],
+        "fd_speed", [108],
+        "drag_factor", [1.15],
+        "veh_weight", [3900],
+        "ref_area", [360]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 36, 36, "critical", "engine",
+         "injure_anims", [[0.21, "pdpanel7", "player_warhawk"]]],
+        ["tail", 26, 26,
+         "injure_anims", [[0.21, "pdpanel8", "player_warhawk"]]],
+        ["leftwing", 30, 30,
+         "injure_anims", [[0.63, "pdpanel3", "player_warhawk"], [0.37, "pdpanel2", "player_warhawk"], [0.08, "pdpanel5", "player_warhawk"]]],
+        ["rightwing", 30, 30,
+         "injure_anims", [[0.63, "pdpanel4", "player_warhawk"], [0.37, "pdpanel1", "player_warhawk"], [0.08, "pdpanel6", "player_warhawk"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -4.38],
+        [0.0, -0.12, 4.5],
+        [8.84, -0.24, -0.25],
+        [0.0, 0.96, -0.25],
+        [-8.84, -0.24, -0.25],
+        [0.0, -0.6, 2.5]
+      ]
+    ],
+    "probewarhawk",
+    [
+      "title", ["MSG_PROBE_WARHAWK"],
+      "mode", ["jet"],
+      "armor", [74],
+      "health", [74],
+      "dare_devil", [4],
+      "natural_touch", [4],
+      "sixth_sense", [5],
+      "dead_eye", [6],
+      "quick_draw", [5],
+      "steady_hand", [7],
+      "stun_recovery", [7],
+      "talker", [4],
+      "constitution", [7],
+      "weapons",
+      [
+        ["wep_probe_gun", 520, 0.58, 0, 900],
+        ["wep_probe_rocket", 6, 3, 140, 1650]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "bhatwarhawk",
+    [
+      "kind_of", ["probewarhawk"],
+      "title", ["MSG_PROBE_WARHAWK"],
+      "weapons",
+      [
+        ["wep_probe_zeptorp", 6, 3, 320, 950],
+        ["wep_probe_gun", 560, 0.5, 1, 880]
+      ]
+    ],
+    "pprobekestrel",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_kestrel"],
+      "title", ["MSG_PROBE_KESTREL"],
+      "turrets", ["thirdp", [["title", ["MSG_TUR_PROBE_REAR_G3"], "node", ["probe_kestrel_turret1"]]]],
+      "engine_sound", ["snd_probe_kestrel_engine"],
+      "engine", [28],
+      "fuel", [100],
+      "dynamics",
+      [
+        "pitch_torque", [1.95],
+        "roll_torque", [4.6],
+        "rudder_torque", [1.15],
+        "return_rate", [2.3],
+        "ang_momentum_damp", [4.3],
+        "rec_moments_inertia", [0.98, 0.78, 1.22],
+        "fd_speed", [114],
+        "drag_factor", [1.08],
+        "veh_weight", [3450],
+        "ref_area", [330]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 33, 33, "critical", "engine",
+         "injure_anims", [[0.22, "pdpanel7", "player_kestrel"]]],
+        ["tail", 23, 23,
+         "injure_anims", [[0.22, "pdpanel8", "player_kestrel"]]],
+        ["leftwing", 27, 27,
+         "injure_anims", [[0.61, "pdpanel3", "player_kestrel"], [0.35, "pdpanel2", "player_kestrel"], [0.11, "pdpanel5", "player_kestrel"]]],
+        ["rightwing", 27, 27,
+         "injure_anims", [[0.61, "pdpanel4", "player_kestrel"], [0.35, "pdpanel1", "player_kestrel"], [0.11, "pdpanel6", "player_kestrel"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -4.03],
+        [0.0, -0.11, 4.14],
+        [7.48, -0.22, -0.23],
+        [0.0, 0.88, -0.23],
+        [-7.48, -0.22, -0.23],
+        [0.0, -0.55, 2.3]
+      ]
+    ],
+    "probekestrel",
+    [
+      "title", ["MSG_PROBE_KESTREL"],
+      "mode", ["jet"],
+      "turrets", ["thirdp", [["title", ["MSG_TUR_PROBE_REAR_G3"], "node", ["probe_kestrel_turret1"]]]],
+      "armor", [66],
+      "health", [66],
+      "dare_devil", [5],
+      "natural_touch", [4],
+      "sixth_sense", [7],
+      "dead_eye", [5],
+      "quick_draw", [6],
+      "steady_hand", [6],
+      "stun_recovery", [5],
+      "talker", [6],
+      "constitution", [6],
+      "weapons",
+      [
+        ["wep_probe_gun", 440, 0.5, 0, 860],
+        ["wep_probe_rocket", 4, 4, 175, 1500]
       ],
       "collision", [[0.0, 0.0, 0.0]]
     ]

@@ -3478,14 +3478,23 @@ internal static class CombatSuites
     // the speeds anyone actually flies. Decode: docs/org/shakes.md.
     private static void CheckRattleGate(TestContext ctx, PlaneStats stats)
     {
-        ctx.Check(Mathf.IsEqualApprox(stats.RattleSpeedGate, 1f),
-            $"the shipped rattle gate is {stats.RattleSpeedGate:0.###}x fd_speed (want 1)");
-        ctx.Check(stats.RattleSound == "snd_planeshake",
-            $"…on the definition the rattle block names, {stats.RattleSound}");
+        float gate = stats.RattleSpeedGate;
+        float? authored = SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "speed_range", "rattle");
+        ctx.Check(authored is { } a && Mathf.IsEqualApprox(gate, a),
+            $"the rattle gate is the rattle block's own speed_range floor, {gate:0.###}x fd_speed (authored {authored?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? "absent"})");
+        ctx.Check(stats.RattleSound is { } rattle && SoundDefs.Load(ctx.ZrdrPath).ContainsKey(rattle),
+            $"…on a definition the sound library holds, {stats.RattleSound}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(gate, 1f),
+                $"the shipped rattle gate is {gate:0.###}x fd_speed (want 1)");
+            ctx.Check(stats.RattleSound == "snd_planeshake",
+                $"…on the definition the rattle block names, {stats.RattleSound}");
+        }
 
-        float below = EngineAudioCurves.Rattle(stats, 0.999f);
-        float at = EngineAudioCurves.Rattle(stats, 1f);
-        float over = EngineAudioCurves.Rattle(stats, 1.2f);
+        float below = EngineAudioCurves.Rattle(stats, gate * 0.999f);
+        float at = EngineAudioCurves.Rattle(stats, gate);
+        float over = EngineAudioCurves.Rattle(stats, gate * 1.2f);
         ctx.Check(below == 0f, $"a hair under the gate the rattle is silent: {below:0.0000}");
         ctx.Check(Mathf.IsEqualApprox(at, EngineAudioCurves.RattleLevel()),
             $"…and reaches its full level the moment speed meets it: {at:0.0000}");

@@ -406,8 +406,13 @@ internal static class AiSuites
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        ctx.Check(turretDefs.All.Count(d => d.Carried) == 16,
-            $"the 16 carried ai.zrd entries parse carried={turretDefs.All.Count(d => d.Carried)}");
+        ctx.Check(turretDefs.All.Any(d => d.Carried),
+            $"a carried ai.zrd entry parses carried={turretDefs.All.Count(d => d.Carried)}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(turretDefs.All.Count(d => d.Carried) == 16,
+                $"the 16 carried ai.zrd entries parse carried={turretDefs.All.Count(d => d.Carried)}");
+        }
 
         // The Kestrel: a single rear turret (thirdp MSG_TUR_PAC_G3, PITCH [20,50], YAW
         // [105,255], the directed rear arc through 180°, DETECTION_RANGE 450, FIRE_RATE 0.4,
@@ -470,9 +475,15 @@ internal static class AiSuites
 
             // Load pose: the centre of each arc, yaw 180 (rearward), pitch 35.
             var (restYaw, restPitch) = TurretController.AnglesOfLocal(turret.BarrelLocal);
-            ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - 180f, -180f, 180f)) < 0.5f
-                      && Mathf.Abs(restPitch - 35f) < 0.5f,
-                $"the turret poses at its arc centre yaw={restYaw:0.#} pitch={restPitch:0.#}");
+            ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - turret.Def.RestYawDeg, -180f, 180f)) < 0.5f
+                      && Mathf.Abs(restPitch - turret.Def.RestPitchDeg) < 0.5f,
+                $"the turret poses at its arc centre yaw={restYaw:0.#} pitch={restPitch:0.#} (the arcs' {turret.Def.RestYawDeg:0.#}, {turret.Def.RestPitchDeg:0.#})");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - 180f, -180f, 180f)) < 0.5f
+                          && Mathf.Abs(restPitch - 35f) < 0.5f,
+                    $"the Kestrel's arc centre is yaw 180, pitch 35: yaw={restYaw:0.#} pitch={restPitch:0.#}");
+            }
 
             // The target: in-arc (behind and above the host, yaw ~180, elevation ~35°), inside
             // DETECTION_RANGE, on a hostile team. INACCURACY is zeroed so every gated round flies
@@ -549,8 +560,16 @@ internal static class AiSuites
             var (parkedYaw, _) = TurretController.AnglesOfLocal(turret.BarrelLocal);
             ctx.Check(turret.ShotsFired == shotsAtOutOfArc,
                 $"an out-of-arc target draws no fire shots={turret.ShotsFired}");
-            ctx.Check(Mathf.Abs(parkedYaw - 105f) < 1.5f,
-                $"the barrel parks at the nearer end stop (105°, not 255°) yaw={parkedYaw:0.#}");
+            float lowStop = turret.Def.YawMinDeg ?? 0f, highStop = turret.Def.YawMaxDeg ?? 0f;
+            float StopGap(float stop) => Mathf.Abs(Mathf.Wrap(20f - stop, -180f, 180f));
+            float nearStop = StopGap(lowStop) <= StopGap(highStop) ? lowStop : highStop;
+            ctx.Check(Mathf.Abs(Mathf.Wrap(parkedYaw - nearStop, -180f, 180f)) < 1.5f,
+                $"the barrel parks at the end stop nearer the target ({nearStop:0}° of {lowStop:0}°/{highStop:0}°) yaw={parkedYaw:0.#}");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(Mathf.Abs(parkedYaw - 105f) < 1.5f,
+                    $"the barrel parks at the nearer end stop (105°, not 255°) yaw={parkedYaw:0.#}");
+            }
 
             // --- YAW [0,0] means UNRESTRICTED: with the limit spelled that way the same ahead
             // target becomes reachable and the turret opens fire, the misread ('locked forward')
@@ -2652,7 +2671,12 @@ internal static class AiSuites
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        // The install's accent 12 speaks as pilot VO id 2; another tree stands in its first one-voice accent.
+        var accents = CombatVoice.LoadAccents(ctx.ZrdrPath);
+        var (accent, accentVo) = ctx.SyntheticData && accents.FirstOrDefault(a => a.Value.Length == 1) is { Value: { } pool } single
+            ? (single.Key, pool[0])
+            : (12, 2);
+        var voice = new CombatVoice(defs, groups, accents);
         WeaponDef? gun = weapons.All.FirstOrDefault(w =>
             w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
         ctx.Check(gun != null && stats.DestroyableParts.Count > 0,
@@ -2679,7 +2703,7 @@ internal static class AiSuites
                 Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
             };
             ctx.Host.AddChild(sounds);
-            sounds.Prewarm(voice.PrewarmNames(new[] { 12 }));
+            sounds.Prewarm(voice.PrewarmNames(new[] { accent }));
             sounds.Loader = null;
 
             radio = new MissionRadio(defs, groups, sounds.StreamFor);
@@ -2707,10 +2731,10 @@ internal static class AiSuites
 
             // Talker chance pinned to 1: every roll passes, so a silent trigger is a GATE
             // decision (cooldown, aliveness), never luck.
-            runtime.RegisterAi(ai, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(ai, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
             var speaker = runtime.Dispatcher.Find(ai.PlayerIndex);
-            ctx.Check(speaker is { VoId: 2 },
-                $"accent 12 registers the AI as VO id 2 got={speaker?.VoId.ToString() ?? "none"}");
+            ctx.Check(speaker?.VoId == accentVo,
+                $"accent {accent} registers the AI as VO id {accentVo} got={speaker?.VoId.ToString() ?? "none"}");
             if (speaker == null)
                 return;
 
@@ -2865,8 +2889,8 @@ internal static class AiSuites
             var killer = Rig(FlightRoster.ShooterIdBase + 1, enemyTeam, human: false);
             var wingman = Rig(FlightRoster.ShooterIdBase + 2, AimAssist.PlayerTeam, human: false);
             var pilotRig = Rig(0, AimAssist.PlayerTeam, human: true);
-            runtime.RegisterAi(killer, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
-            runtime.RegisterAi(wingman, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(killer, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(wingman, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
             runtime.RegisterPlayer(pilotRig);
 
             // The first predicate, over shooter and victim: a kill inside one team picks no gloat.
@@ -2919,7 +2943,7 @@ internal static class AiSuites
             var evader = Rig(FlightRoster.ShooterIdBase + 7, enemyTeam, human: false);
             var machine = new AiModeMachine(new System.Random(11));
             evader.Pilot!.Machine = machine;
-            runtime.RegisterAi(evader, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(evader, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
             var evaderPos = evader.WorldPosition;
             var pursuerPos = evaderPos + new Vector3(0f, 0f, 300f);
             var onTail = (evaderPos - pursuerPos).Normalized();  // the pursuer's nose on the evader
@@ -3119,8 +3143,8 @@ internal static class AiSuites
             // ⚠ The flight mate is registered at 2: the bearing ids halve the talker chance, so a
             // chance of 1 would make every assertion below a coin flip on the dice rather than on
             // the raise. The halving itself is pinned by AiVoiceDispatcherTests.
-            attack.RegisterAi(flightMate, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
-            attack.RegisterAi(ace, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            attack.RegisterAi(flightMate, accentId: accent, talkerChance: 2f, constitutionChance: 1f);
+            attack.RegisterAi(ace, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
 
             // The mission start: the ace takes the human on the first frame, well inside the
             // window, and nothing may speak yet.
@@ -3172,7 +3196,7 @@ internal static class AiSuites
                 {
                     Target = chased,
                 };
-                attack.RegisterAi(rig, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+                attack.RegisterAi(rig, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
                 rig.PlaceHeld(at, lookAt);
                 return rig;
             }
@@ -3192,7 +3216,7 @@ internal static class AiSuites
             busy.PlaceHeld(asternAt, chasedAt);
             busyModes.Enter(AiMode.Pursue, "ordered");
             busyModes.NotifyDamage(1e6f, 1e6f, 100f, 100f);
-            attack.RegisterAi(busy, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            attack.RegisterAi(busy, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
 
             attack.Step(0.1f);
             bool Taunted(FlightController who, int trigger) => calls.Exists(line =>
@@ -3255,7 +3279,7 @@ internal static class AiSuites
             var sixLowAt = homeAt + new Vector3(0f, -200f, 500f);
             var sixLow = Chaser(FlightRoster.ShooterIdBase + 22, enemyTeam, sixLowAt);
             wreckWatch.RegisterPlayer(homebound);
-            wreckWatch.RegisterAi(escort, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
+            wreckWatch.RegisterAi(escort, accentId: accent, talkerChance: 2f, constitutionChance: 1f);
             // Accentless, so a death cry cannot occupy the channel the bearing needs.
             wreckWatch.RegisterAi(sixLow, accentId: null, talkerChance: 0f, constitutionChance: 0f);
 

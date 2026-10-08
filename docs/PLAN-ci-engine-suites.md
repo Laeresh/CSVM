@@ -668,19 +668,21 @@ loader's own checks become the thing under test.
 
 ## B15 ☐ Bring the plane-only suites onto the tier
 
-**Open work (read this first).** `tier:ci` holds 154 suites and passes headless with
-`--synthetic-data` and no extraction. Over the 548-suite catalog the switch shows 183 PASS, 22 FAIL,
-343 SKIP; without it 63 PASS, 1 FAIL, 484 SKIP. What remains, each with its owner:
+**Open work (read this first).** `tier:ci` holds 196 suites and passes headless with
+`--synthetic-data` and no extraction. Over the 548-suite catalog the switch shows 225 PASS, 20 FAIL,
+303 SKIP; without it 63 PASS, 1 FAIL, 484 SKIP. What remains, each with its owner:
 
 - **C24** (below): anim, effect and puffer records. The weather, voice and one-off half landed;
-  of the voice suites `voice-runtime` joined, while `ai-voice` waits on the `ai.json` turret table,
-  and `net-player-voice` on a sound runtime for the empty stage (no `WorldSounds` there, so no combat
-  voice) or an MP map's world.
-- **Shipped airframes the tree lacks:** with the switch `versus-local-bot` (`player_bhawk` and
-  `player_peacemaker`; its menu-launch leg also reads a C1 file), `versus-local-bot-graze` (`player_fury`), `net-bot-yield`
-  (`player_bhawk`) and `graze-bounce-bot` (`player_autogyro`) FAIL building a session. A
-  `RequirePlane` gate would make each SKIP naming the airframe; a stand-in under another shipped name
-  needs the author's approval of that name first.
+  of the voice suites `voice-runtime` and `ai-voice` joined, and `net-player-voice` waits on a sound
+  runtime for the empty stage (no `WorldSounds` there, so no combat voice) or an MP map's world.
+- **The two airframes the tree lacks:** `player_balmoral` and `player_brigand` have no approved
+  stand-in. Eight suites SKIP naming `player_balmoral`: the five gated on all eleven
+  `MarkerRig.PlayerAirframes` (`ai-plane-defs`, `airframe-collider-hit-rate`, `airframe-hull-coverage`,
+  `loadout-bind`, `loadout-forrig`), `graze-bounce-bot` and `net-bot-yield` (a Random bot draws from
+  every stock airframe) and `campaign-wingman-fit` (a Balmoral wingman). `ai-plane-defs` would still
+  pin each airframe's shipped pool with both. `versus-local-bot` FAILs on its menu-launch leg, which
+  `SessionSpec.FromMenu` sends to C1's world (deathmatch mission, world mode) and whose Random bot
+  draws from all eleven.
 - **Off the tier by design or judgement:** `wingman-station` (the nitro leg rests on the shipped
   airframe's speed margin; retuning the shared stand-in would move other suites), `ground-shadow` and
   `flyout-rack-pose` (C1 terrain and FLYOUT models), `menu-original-hangar` and
@@ -892,6 +894,56 @@ where the hand-off counted 500, and its 24 FAILs include the four airframe ones 
 supplement fits and invented weapons are never read, so the full `RunTests.ps1` battery should show
 the same PASS/FAIL/SKIP per suite.
 
+**Six more shipped names landed: `player_bhawk`, `player_autogyro`, `player_fury`, `player_peacemaker`,
+`player_warhawk` and `player_kestrel` as invented stand-ins.** Each is the fighter's invented subtree
+rescaled to its own proportions on its own colour, with the full marker rig, its own player def
+(`pprobehawk` and the rest), dynamics, zones, collision probes, three engine rows on the ids
+`CustomPlaneBuild.EngineRegistryBase` composes for it, an engine loop, a jet flavour and a supplement
+fit (`fixtures/README.md`). Where the code keys on what an airframe is, the stand-in carries it over
+invented numbers: `is_autogyro`, an `agyro_rotors` spin definition and a `rotor1` blade on the
+autogyro; a `thirdp` rear turret mount on the kestrel; an AI ladder repeating `random_remote_damage` on
+the fury. The variants suites spawn by name are invented too: `wbloodhawk` (a wingman authoring both
+target biases), `bhatwarhawk` (a `DAMAGES_ZEPPELIN` torpedo, `wep_probe_zeptorp`, and a gun) and
+`autogyro` (the Cabbie). An invented `zrdr/ai.json` holds two carried entries, the kestrel's rear gunner
+and a dorsal one the fbrand's new mount names (`ai-voice` flies the fbrand as its turret carrier), and
+one dormant standalone entry under the `aagun**` pattern the sight-line suites build. Two values were
+chosen so a suite's behaviour is reachable in its own layout: the fury's zones carry light armour, so a
+ground graze reaches health, and the autogyro's rudder is strong enough to turn its nose 10 degrees in
+three seconds at the 0.1 high-speed yaw authority.
+
+Gates: `graze-bounce-bot` and `net-bot-yield` now `RequirePlane` every stock airframe, and
+`campaign-wingman-fit` also `player_balmoral`, so each SKIPs naming the missing one instead of failing
+to build. Retargeted checks, each old literal kept under `!ctx.SyntheticData`: `engine-note`'s rattle
+gate (the shipped 1.0x and `snd_planeshake` against the `rattle` block's own `speed_range` floor and a
+definition the sound library holds, the gate probes taken at that floor); `damage-stage-slots` (seven
+entries, six `random_remote_damage` and four held at half, counted off the loaded ladder);
+`carried-turrets` (16 carried entries against at least one, the 180/35 rest pose against the def's arc
+centres, the 105 end stop against the stop nearer the ahead target). `ai-voice` registers accent 12 as
+VO id 2 on the install and the table's first one-voice accent on the synthetic tree.
+
+Nineteen suites join `tier:ci` (196), each passing three runs in a row by name with the switch, red on
+one broken input and SKIPping as before without it: `ai-target-rescore` (`wbloodhawk`'s `kind_of`
+broken), `ai-voice` (the fbrand mount's node renamed), `aircraft-first-targeting` (`struct_bias` 0),
+`carried-turrets` and `ranked-pool-carried-turret-dedup` (the rear entry's yaw ring renamed),
+`damage-stage-slots` (the smoke entry under the walk), `engine-note` (the rattle sound unnamed),
+`flight-mouse-capture`, `flight-mouse-scheme-live` and `pause-preferences-live-options`
+(`pprobehawk`'s `nodename` broken), `flight-mouse-scheme` (`is_autogyro` dropped),
+`gasbag-ordnance-gate` and `warhawk-torpedo-run` (the torpedo band moved inside its minimum range),
+`menu-free-flight-journey` (`pprobegyro`'s `nodename` broken), `spawn-props-by-def` (the Cabbie's
+flavour names no spin definition), `turret-death-effect-world-anchor`, `turret-grouped-site-sightline`
+and `turret-own-mount-sightline` (the standalone entry's weapon unresolved), `versus-local-bot-graze`
+(the fury's nose armour over the contact pair). Still off: the eight `player_balmoral` skips and
+`versus-local-bot` above; `ground-shadow` (C1 terrain), `instant-action-wave-net-seat` (C1/IA1);
+`world-turrets`, `turret-self-fire`, `turret-hull-blocks-own-fire`, `turret-structure-targets`,
+`turret-death-fire-follows-hull` and `target-pool` (C1's gamez), `turret-vessel-targets` (C1B/M03) and
+`turret-gun-voices` (C4 textures); `wingman-station` as before. Full catalog over an empty root on
+Windows, headless: with the switch 225 PASS, 20 FAIL, 303 SKIP against 206, 23, 319 (eighteen SKIP to
+PASS, `versus-local-bot-graze` FAIL to PASS, `graze-bounce-bot` and `net-bot-yield` FAIL to SKIP);
+without it 63, 1, 484 both, suite by suite. `tier:ci` passes 196/0/0, its 39 engine lines all excused.
+**Still owed to the Windows run.** No production code changed. On the install `RequirePlane` does
+nothing, each retargeted check reduces to the literal it sits beside, which still runs, and `ai-voice`
+still registers accent 12, so the full `RunTests.ps1` battery should show the same PASS/FAIL/SKIP per
+suite, with a few more check sites in `engine-note`, `damage-stage-slots` and `carried-turrets`.
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).
 

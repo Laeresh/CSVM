@@ -69,6 +69,18 @@
         {"start": {"offset": "Animation", "time": 1.5}, "data": {"ObjectActiveState": {"node": "staticprop1", "state": false}}}
       ]}]
     }},
+    {"file": "player-agyro_rotors", "def": {
+      "name": "player", "anim_name": "agyro_rotors", "activation": "OnCall",
+      "reset_state": {"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectActiveState": {"node": "prop1", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "rotor1", "state": true}}},
+        {"data": {"ObjectActiveState": {"node": "staticprop1", "state": false}}}
+      ]},
+      "sequences": [{"name": "", "seq_state": "Initial", "events": [
+        {"data": {"ObjectMotion": {"node": "prop1", "xyz_rotation": {"initial": {"x": 0.0, "y": 0.0, "z": 24.0}, "delta": {"x": 0.0, "y": 0.0, "z": 0.0}}}}},
+        {"data": {"ObjectMotion": {"node": "rotor1", "xyz_rotation": {"initial": {"x": 0.0, "y": 18.0, "z": 0.0}, "delta": {"x": 0.0, "y": 0.0, "z": 0.0}}}}}
+      ]}]
+    }},
     {"file": "player-stopprops", "def": {
       "name": "player", "anim_name": "stopprops", "activation": "OnCall",
       "sequences": [{"name": "", "seq_state": "Initial", "events": [

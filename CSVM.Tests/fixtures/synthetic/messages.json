@@ -51,6 +51,16 @@
     { "key": "MSG_PROBE_CAL60", "id": 73, "value": "Probe cannon" },
     { "key": "MSG_PROBE_CAL70", "id": 74, "value": "Probe great cannon" },
     { "key": "MSG_PROBE_PYLON_HE", "id": 75, "value": "Probe pylon rocket" },
-    { "key": "MSG_PROBE_GUNHIT", "id": 76, "value": "Probe Strike Gun" }
+    { "key": "MSG_PROBE_GUNHIT", "id": 76, "value": "Probe Strike Gun" },
+    { "key": "MSG_PROBE_HAWK", "id": 77, "value": "Probe Kite" },
+    { "key": "MSG_PROBE_GYRO", "id": 78, "value": "Probe Whirl" },
+    { "key": "MSG_PROBE_FURY", "id": 79, "value": "Probe Gale" },
+    { "key": "MSG_PROBE_PEACE", "id": 80, "value": "Probe Warden" },
+    { "key": "MSG_PROBE_WARHAWK", "id": 81, "value": "Probe Hauler" },
+    { "key": "MSG_PROBE_KESTREL", "id": 82, "value": "Probe Heron" },
+    { "key": "MSG_PROBE_ZEPTORP", "id": 83, "value": "Probe hull torpedo" },
+    { "key": "MSG_TUR_PROBE_REAR_G3", "id": 84, "value": "Probe tail gunner" },
+    { "key": "MSG_TUR_PROBE_AA", "id": 85, "value": "Probe ground gun" },
+    { "key": "MSG_TUR_PROBE_DORSAL_G3", "id": 86, "value": "Probe dorsal gunner" }
   ]
 }

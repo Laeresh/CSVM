@@ -410,6 +410,27 @@
         "DETONATION_DISTANCE", [7],
         "FIRE", ["SOUND", ["snd_probe_launch"]],
         "IMPACT", ["default", ["SOUND", ["snd_probe_boom"]]]
+      ],
+      "wep_probe_zeptorp",
+      [
+        "DESC", ["MSG_PROBE_ZEPTORP"],
+        "NAME", ["probezeptorp"],
+        "PRIORITY", [4],
+        "CLUSTER_SIZE", [1],
+        "ROCKET", null,
+        "TORPEDO", null,
+        "DAMAGES_ZEPPELIN", null,
+        "FIRE_RATE", [1],
+        "VELOCITY", [70],
+        "RANGE", [1300],
+        "RANGE_MINIMUM", [260, 0],
+        "TURN_RATE", [0.002],
+        "LOCK_ON", [1.5],
+        "ARMOR_DAMAGE", [140],
+        "HEALTH_DAMAGE", [170],
+        "IMPACT_PROXIMITY", [30],
+        "FIRE", ["SOUND", ["snd_probe_launch"]],
+        "IMPACT", ["default", ["ANIMATION", ["torpedo_ground_effect"], "SOUND", ["snd_probe_boom"]]]
       ]
     ]
   ]

@@ -86,14 +86,14 @@ code. The shape is what `Mech3/TextureArchive.cs` reads, from the header fields 
 [../org/textures.md](../org/textures.md).
 
 ## src/Tooling/SyntheticPlane.cs
-The synthetic tree's stand-in aircraft: `probe_plane`, the default, and three under the code's names,
-every record invented: `player_pfighter` (the lobby door's starter), `player_fbrand` and `player_avenger`
-(the custom-plane suites' airframes). `plane` writes `planes/` (`nodes.json`, `materials.json`, and a
-`models.json` generated from `boxes.json`, one outward-wound box per entry) and `vehicle.json`,
-`engines.json`, `player.json` and `maneuvers.json` under `zrdr/`. `armament` writes the invented weapons
-(the ids a custom build composes among them), `shakes.json` and `messages.json`. `Launcher` sets the
-fits as `StockLoadouts.Supplement` and the probe as `SessionSpec.DefaultPlane` under the switch. Shapes:
-[gamez](../formats/gamez.md), [markers](../formats/markers.md), [vehicle](../formats/vehicle.md), [weapons](../formats/weapons.md).
+The synthetic tree's stand-in aircraft, every record invented: `probe_plane`, the default, and nine under
+shipped airframe names the suites fly (`player_pfighter`, the lobby door's starter, the custom-plane
+pair and six more), each carrying what the code keys on (`is_autogyro`, a turret mount). `plane` writes
+`planes/` (`nodes.json`, `materials.json`, and a `models.json` generated from `boxes.json`, one
+outward-wound box per entry) and `vehicle.json`, `engines.json`, `player.json` and `maneuvers.json`.
+`armament` writes the weapons, the `ai.json` turret table, `shakes.json` and `messages.json`. `Launcher`
+sets the fits as `StockLoadouts.Supplement` and the probe as `SessionSpec.DefaultPlane` under the switch.
+Shapes: [gamez](../formats/gamez.md), [markers](../formats/markers.md), [vehicle](../formats/vehicle.md), [weapons](../formats/weapons.md), [turrets](../formats/turrets.md).
 
 ## src/Tooling/SyntheticImages.cs
 The synthetic tree's JPEG and TGA writers, for menu art a layout or a script names by those
