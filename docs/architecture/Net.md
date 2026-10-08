@@ -5,9 +5,8 @@ ENet carrier a match ships over, the WebRTC carrier internet play rides, and the
 picks between them. Only the carriers and the port mapping name an engine type beyond Godot's plain math structs, and nothing
 here names a socket API, which is what lets one session run over the loopback in a plain unit test
 and over ENet in a match; the boundary and its exemptions are asserted over compiled metadata by
-`CSVM.Tests/NetNamespaceDependencyTests.cs`, which also holds every Steam name to the Steam
-carrier. Nothing about the world crosses this seam, and the message vocabulary sits entirely above
-it.
+`CSVM.Tests/NetNamespaceDependencyTests.cs`. Nothing about the world crosses this seam, and the
+message vocabulary sits entirely above it.
 
 One `## src/...` entry per module, body at most 8 lines.
 
@@ -46,9 +45,10 @@ These are the design rules every module below is shaped by, and every multiplaye
   sits out with a line saying so, and never takes a seat already flying.
 - **The carrier is a flag.** ENet ships, by LAN search or direct IP with an IPv4 UPnP mapping or an
   IPv6 pinhole. With a master server set (`--master-server=`, `server/README.md`), a host also lists
-  its game there and takes WebRTC guests, who join by code with STUN and a TURN fallback. A Steam carrier (Networking Sockets, relay, lobbies) is added behind `CsvmSteam`
-  without touching a session; listing the game on Steam is a distribution and legal decision, not
-  the code's.
+  its game there and takes WebRTC guests, who join by code with STUN and a TURN fallback. A Steam
+  carrier (Networking Sockets, relay, lobbies) would be one more `INetTransport` chosen in
+  `NetCarrier.cs`, with no session edit; listing the game on Steam is a distribution and legal
+  decision, not the code's.
 - **Two seams above the transport.** On the session side `INetTransport`; on the aircraft side a
   `FlightController` fed a `RemotePoseBuffer` in place of an `IFlightInputSource`. A remote human is
   a pose that arrives late, never a stick that arrives late. Godot's `MultiplayerApi`,
@@ -135,19 +135,10 @@ WebRTC, a merged host) shows a board: its state, the payloads held while no list
 a fault as a player reads it. `HeldPayloads` is the one depth every carrier holds to before
 `Bind`. A carrier without it, the loopback, is read through its peer roster instead.
 
-## src/Net/SteamTransport.cs
-The Steam carrier's place in the seam with nothing behind it: the Steamworks SDK cannot be
-committed here under its licence, so every way in throws "not built with the Steamworks SDK" and
-says which of the two cases the build is. `SteamBuild` is the `CSVM_STEAM` define, set by the
-`CsvmSteam` build property, and the only thing that define changes. The throw is an
-`InvalidOperationException`, the kind the door and the launcher already catch from a socket that
-will not open, so a Steam build reaches a board as a line of text rather than a crash. Read
-`NetCarrier.cs` for where it is chosen.
-
 ## src/Net/NetCarrier.cs
 Which carrier a match runs over, chosen once: the menu door's registration in `Launcher.cs` and
 the command line's own open both come through `Host` and `Join`, so a build changes carrier with
-no edit above the seam. `UsesSteam` is the switch, `Name` the log word. `PortMap`/`PortUnmap` are
+no edit above the seam. `Name` is the log word. `PortMap`/`PortUnmap` are
 the router door a direct-IP host asks for, `Pinhole` (given the address) and `PinholeClose` its
 IPv6 pinhole, and `StableIpv6`/`LanIpv4` the addresses it names (`Utils/HostAddress.cs`). All are
 null for a carrier reachable without them. `HostListed` adds a listed WebRTC host beside ENet as a

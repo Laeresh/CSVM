@@ -880,7 +880,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 ### `src/Net/`, the network seam
 
 What carries bytes between peers: the in-process carrier the suites run on, the ENet carrier a
-match ships over, the Steam carrier behind a build define, and the one place a build picks between
+match ships over, the WebRTC carrier internet play rides, and the one place a build picks between
 them. Only the ENet and WebRTC carriers and the port mapping name an engine type, so a session cannot learn
 what it is being carried by. The
 original's own message set, with ids and guarantees, is in [`org/multiplayer-messages.md`](org/multiplayer-messages.md).
@@ -891,8 +891,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/LoopbackTransport.cs`, transports wired to each other in one process through delivery queues: nothing arrives until a step, so a suite owns delivery time and makes its own reorders.
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
 - `src/Net/NetLink.cs`, where a real socket's link stands (`NetLinkState`) as a board reads it through `INetLink`, and how many payloads a link holds before a listener binds.
-- `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
-- `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
+- `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, so no edit above the seam changes carrier.
 - `src/Net/WebRtcTransport.cs`, the WebRTC carrier: a host listed on the master server and a guest joining by code, negotiated through its socket with STUN and a TURN fallback, the third type allowed to name a Godot networking type.
 - `src/Net/WebRtcFraming.cs`, the frame a WebRTC payload rides in: the session channel and a per-channel sequence, with the sequenced discard a WebRTC data channel lacks.
 - `src/Net/MergedTransport.cs`, several host carriers as one roster, so a host takes ENet and WebRTC guests in one session, each guest renumbered from 2.
