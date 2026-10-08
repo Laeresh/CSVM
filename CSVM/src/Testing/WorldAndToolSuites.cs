@@ -2258,6 +2258,117 @@ internal static class WorldAndToolSuites
         });
     }
 
+    // Clicks a lazily loaded branch's fold arrow through the viewport, the path where Godot refuses
+    // Tree.CreateItem. The first click also fills the branch from inside the click, which must
+    // leave it collapsed on its placeholder. The second must expand it with no engine error and
+    // leave the fill to the deferred call. ExpandForTest stands in for that call.
+    [Suite("nodelab-click-expand", "a click on a node lab fold arrow expands a lazy branch with no engine error, and a fill Godot refuses inside the click leaves the branch collapsed on its placeholder for the next expand")]
+    internal static void NodeLabClickExpand(TestContext ctx)
+    {
+        EffectStageSuiteHelper.WithAnimWorld(ctx, "C2", world =>
+        {
+            var selection = new SelectionService(world.Root, ctx.Camera);
+            var lab = new NodeLab(world.Root, selection, world.Runtime, world.Program,
+                world.Scene, collisionBuilt: false);
+            ctx.Host.AddChild(selection);
+            ctx.Host.AddChild(lab);
+            try
+            {
+                lab.Toggle();
+                var tree = lab.TreeForTest()!;
+                var target = tree.GetRoot()?.GetChildren().FirstOrDefault(OnPlaceholder);
+                ctx.Check(target != null, $"the world root has a collapsed branch on its placeholder");
+                if (target == null)
+                {
+                    return;
+                }
+                Control top = tree;
+                while (top.GetParent() is Control parent)
+                {
+                    top = parent;
+                }
+                PauseBoardSuites.Settle(top);
+
+                // Godot's fold check for a depth-1 row is x below two item margins past the panel's
+                // content edge. The row's y comes from asking the tree, not from its layout.
+                var panel = tree.GetThemeStylebox("panel").GetOffset();
+                float x = panel.X + 1.5f * tree.GetThemeConstant("item_margin");
+                float? y = null;
+                for (float probe = 0f; probe < tree.Size.Y && y == null; probe += 2f)
+                {
+                    if (tree.GetItemAtPosition(new Vector2(tree.Size.X / 2f, probe)) == target)
+                    {
+                        y = probe + 4f;
+                    }
+                }
+                ctx.Check(y != null, $"the target row is on screen in a tree of size {tree.Size}");
+                if (y == null)
+                {
+                    return;
+                }
+                var at = tree.GetGlobalTransform() * new Vector2(x, y.Value);
+                void Click()
+                {
+                    var viewport = tree.GetViewport();
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
+                }
+
+                // The refused fill: Godot prints its refusal by design, so printing is off for it.
+                bool ranInside = false;
+                System.Exception? thrown = null;
+                void FillInside(TreeItem item)
+                {
+                    if (item != target || item.Collapsed)
+                    {
+                        return;
+                    }
+                    ranInside = true;
+                    Engine.PrintErrorMessages = false;
+                    try
+                    {
+                        lab.ExpandForTest(item);
+                    }
+                    catch (System.Exception e)
+                    {
+                        thrown = e;
+                    }
+                    finally
+                    {
+                        Engine.PrintErrorMessages = true;
+                    }
+                }
+                tree.ItemCollapsed += FillInside;
+                Click();
+                tree.ItemCollapsed -= FillInside;
+                ctx.Check(ranInside, $"the click at {at} reached the fold arrow and expanded the branch");
+                ctx.Check(thrown == null, $"a fill inside the click does not throw ({thrown?.GetType().Name}: {thrown?.Message})");
+                ctx.Check(OnPlaceholder(target),
+                    $"and leaves the branch collapsed on its placeholder collapsed={target.Collapsed} rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+
+                int? errorsBefore = TestHarness.EngineErrorsSoFar();
+                Click();
+                int? errorsAfter = TestHarness.EngineErrorsSoFar();
+                ctx.Check(!target.Collapsed && target.GetChildCount() == 1 && target.GetFirstChild().GetText(0) == "…",
+                    $"a plain click expands the branch and leaves the fill for later collapsed={target.Collapsed} rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+                ctx.Check((errorsAfter ?? 0) == (errorsBefore ?? 0),
+                    $"with no engine error ({(errorsAfter ?? 0) - (errorsBefore ?? 0)} new line(s), log {(errorsBefore != null ? "read" : "missing")})");
+
+                lab.ExpandForTest(target);
+                ctx.Check(target.GetChildCount() >= 1 && target.GetFirstChild().GetText(0) != "…",
+                    $"the fill after the click turns the placeholder into real rows rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+            }
+            finally
+            {
+                lab.Free();
+                selection.Free();
+            }
+        });
+
+        static bool OnPlaceholder(TreeItem item) =>
+            item.Collapsed && item.GetChildCount() == 1 && item.GetFirstChild().GetText(0) == "…";
+    }
+
     // Aims straight down at a sample of C4's 1024 m terrain tiles with the cloud deck hidden. The
     // box-only pick skipped every map-scale mesh and missed over bare ground; the triangle pick must
     // land on the aimed tile. Two struck tiles then export through the set and are read back: the

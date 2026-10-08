@@ -834,7 +834,8 @@ per-node frame, hide and glTF export into `Exports/`, the export set's three but
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
 twin, its token grammar checked at launch by `SessionSpec`. A row's text and colour follow live
-visibility, re-read on the panel's own status cadence.
+visibility, re-read on the panel's own status cadence. A branch fills on a deferred call after
+the click that expanded it, because Godot refuses to create tree rows inside its mouse handling.
 
 ## src/UI/Screens/ExportSet.cs
 The node lab's export set: the nodes gathered with Ctrl+click or the panel's ± set, written as one

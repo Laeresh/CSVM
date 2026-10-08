@@ -319,6 +319,11 @@ public sealed partial class NodeLab : Node
 
     internal void RefreshStatusForTest() => UpdateStatus();
 
+    internal Tree? TreeForTest() => _tree;
+
+    // Stands in for the deferred fill a fold-arrow click queues, which a one-frame suite never reaches.
+    internal void ExpandForTest(TreeItem item) => Expand(item);
+
     internal (string Text, bool Dim)? RowStateForTest(Node3D node) =>
         _nodeItem.TryGetValue(node.GetInstanceId(), out var item)
             ? (item.GetText(0), item.GetCustomColor(0) == Dim)
@@ -887,11 +892,19 @@ public sealed partial class NodeLab : Node
         return kids.Count;
     }
 
+    // A fold-arrow click emits this from inside the tree's mouse handling, where Godot refuses
+    // CreateItem, so the fill waits for the click to finish.
     private void OnItemCollapsed(TreeItem item)
     {
         if (!item.Collapsed)
         {
-            Expand(item);
+            Callable.From(() =>
+            {
+                if (IsInstanceValid(item))
+                {
+                    Expand(item);
+                }
+            }).CallDeferred();
         }
     }
 
@@ -901,19 +914,26 @@ public sealed partial class NodeLab : Node
     {
         item.Collapsed = false;
         ulong id = item.GetInstanceId();
-        if (!_stubs.Remove(id))
+        if (!_stubs.Contains(id) || !_itemNode.TryGetValue(id, out var node) || !IsInstanceValid(node))
         {
             return;
         }
-        if (!_itemNode.TryGetValue(id, out var node) || !IsInstanceValid(node))
+        var tree = _tree!;
+        // Godot refuses CreateItem for the whole tree or not at all, so one probe before the
+        // placeholder is touched decides the fill. A refused branch stays collapsed on its
+        // placeholder, still a stub, and fills on its next expand.
+        var probe = tree.CreateItem(item);
+        if (probe == null)
         {
+            item.Collapsed = true;
             return;
         }
+        probe.Free();
+        _stubs.Remove(id);
         var kids = new List<Node3D>();
         CollectNamed(node, kids);
         kids.Sort((a, b) => string.Compare(SelectionService.NameOf(a), SelectionService.NameOf(b),
             StringComparison.OrdinalIgnoreCase));
-        var tree = _tree!;
         int shown = Math.Min(kids.Count, MaxBranchItems);
         // The placeholder becomes the first row rather than being freed, so no TreeItem lifetime
         // question arises; the remaining rows append after it in order.
