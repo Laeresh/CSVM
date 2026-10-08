@@ -67,7 +67,8 @@ The shipped per-chapter seas, `CSVM/data/ocean_seas.json`, read through `res://`
 object per chapter (`Chapters`, which `Ocean.Covers` reads) holding only the fields that differ from the defaults.
 A missing entry or field takes the default; an unknown chapter or field, a non-number and a clamped value are each
 a `world` warning. `WithEntry` rewrites one chapter's entry in place for the ocean lab's Save, keeping every other
-key and its order; `SourceTreePath` is null in an exported build. `OceanSeasTests`. Read `SeaState.cs` next.
+key and its order, skipping comments as the read does, and refusing a file it cannot parse rather than replacing it;
+`SourceTreePath` is null in an exported build. `OceanSeasTests`. Read `SeaState.cs` next.
 
 ## src/Effects/OceanShader.cs
 The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
@@ -78,10 +79,11 @@ setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`.
 
 ## src/Effects/SeaState.cs
 One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
-with today's tune as its default, and `Fields` naming each one's key, label, group, range and slider step for the
+with the ocean's tune as its default, and `Fields` naming each one's key, label, group, range and slider step for the
 file, the flag and the lab. `Clamped`, which every path into the shader takes, holds each value in range, sharpness
-times height at the fold limit, and each coast ramp at least 4 m wide within the mask's 160 m reach.
-`WithOverrides` reads `--debug-ocean`. `SeaStateTests`. Read `OceanShader.cs` next.
+times height at the fold limit (at the base group gain, so a grouped crest can still fold), and each coast ramp at
+least 4 m wide within the mask's 160 m reach. `Written` is the sea at the file's precision, rounded toward a bound
+it would otherwise pass. `WithOverrides` reads `--debug-ocean`. `SeaStateTests`. Read `OceanShader.cs` next.
 
 ## src/Effects/OceanCalmZone.cs
 One ship's calm zone on the wave ocean: a box on the water along the hull's heading, grown over

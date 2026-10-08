@@ -983,23 +983,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>The world nodes the dispatch writes when it plays <paramref name="events"/> of
     /// <paramref name="def"/>. It asks on each instance the bind gives the definition: one per
     /// anchor, or one global instance when placeless, as <see cref="Play"/> starts it. The rule is
-    /// the dispatch's own, an ALL_NAMES event per record. Read-only: nothing is counted or logged,
-    /// and a node may appear more than once.</summary>
+    /// the dispatch's own, an ALL_NAMES event per record. Read-only: nothing is counted, logged or
+    /// claimed and no name answer is memoized, so the world merge is the same whether this ran or
+    /// not. A node may appear more than once.</summary>
     public List<Node3D> TargetsOf(AnimDefinition def, IEnumerable<AnimEvent> events)
     {
-        var anchors = Anchors(def);
+        var anchors = _resolver.PeekAnchors(def);
         if (anchors.Count == 0)
             anchors.Add(null);
-        var nodes = new List<Node3D>();
-        foreach (var ev in events)
+        return _resolver.Peek(() =>
         {
-            foreach (var one in ev.Kind == AnimDefinition.AllNamesKind ? ev.AllNamesMotions() : new[] { ev })
+            var nodes = new List<Node3D>();
+            foreach (var ev in events)
             {
-                foreach (var anchor in anchors)
-                    nodes.AddRange(ResolveTargets(one, def, anchor, peek: true, out _));
+                foreach (var one in ev.Kind == AnimDefinition.AllNamesKind ? ev.AllNamesMotions() : new[] { ev })
+                {
+                    foreach (var anchor in anchors)
+                        nodes.AddRange(ResolveTargets(one, def, anchor, peek: true, out _));
+                }
             }
-        }
-        return nodes;
+            return nodes;
+        });
     }
 
     /// <summary>Every live node a name query has handed out so far. Every node a definition's symbol

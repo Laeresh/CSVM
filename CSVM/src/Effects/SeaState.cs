@@ -6,29 +6,30 @@ namespace CSVM.Effects;
 
 /// <summary>
 /// One chapter's sea on the wave ocean: every value the ocean lab tunes, each defaulting to the
-/// ocean's tune. The defaults generate the shader text the ocean always had. The field table
+/// ocean's tune. The defaults generate the constants' shader text. The field table
 /// (<see cref="Fields"/>) names each value with its range and lab group. Clamping holds every value
-/// in range and the crests below folding. The shipped file (<see cref="OceanSeas"/>) holds one per
+/// in range and the ungrouped swell below folding. The shipped file (<see cref="OceanSeas"/>) holds one per
 /// chapter, and the generator (<see cref="OceanShader"/>) writes it into the shader. Pure, so it
 /// unit-tests without a session.
 /// </summary>
 public sealed record SeaState
 {
     /// <summary>The bound on <see cref="Sharpness"/> times <see cref="Height"/>. Each wave bunches the
-    /// surface by Q k A, the sharpness over the wave count, so the sum folds a crest at 1.</summary>
+    /// surface by Q k A, the sharpness over the wave count. At the base gain the sum folds a crest at
+    /// 1. The sea-state grouping scales a wave by up to 1.8, so a grouped crest can fold sooner.</summary>
     public const float FoldLimit = 1f;
 
     /// <summary>The narrowest a coast ramp may be, in metres, so its smoothstep keeps its edges apart.</summary>
     public const float RampGap = 4f;
 
-    /// <summary>The sea every chapter draws with nothing saved: today's tune.</summary>
+    /// <summary>The sea every chapter draws with nothing saved: the ocean's tune.</summary>
     public static readonly SeaState Default = new();
 
     /// <summary>Every tunable, in the order the lab lists them and the file writes them.</summary>
     public static readonly IReadOnlyList<Field> Fields = new Field[]
     {
         new("height", "Height", Swell, 0f, 2f, 0.01f, s => s.Height, (s, v) => s with { Height = v },
-            "folds past sharpness x height 1.0 and is held there; length does not move the fold"),
+            "sharpness x height is held at 1.0, where an ungrouped crest folds; grouped crests fold sooner. Length does not move the fold"),
         new("length", "Length", Swell, 0.5f, 2f, 0.01f, s => s.Length, (s, v) => s with { Length = v }),
         new("wind", "Wind (deg)", Swell, 0f, 360f, 1f, s => s.WindDeg, (s, v) => s with { WindDeg = v }),
         new("sharpness", "Crest sharpness", Swell, 0.1f, 1f, 0.01f, s => s.Sharpness, (s, v) => s with { Sharpness = v }),
@@ -181,9 +182,10 @@ public sealed record SeaState
         return s.Clamped();
     }
 
-    /// <summary>This sea with every value in its field's range, the swell held below folding
-    /// (<see cref="FoldLimit"/>), and each coast ramp at least <see cref="RampGap"/> wide. A value
-    /// that is not a number takes its default. Every path into the shader goes through here.</summary>
+    /// <summary>This sea with every value in its field's range and each coast ramp at least
+    /// <see cref="RampGap"/> wide. Sharpness times height is at most <see cref="FoldLimit"/>, though
+    /// grouped crests can still fold. A value that is not a number takes its default. Every path into
+    /// the shader goes through here.</summary>
     public SeaState Clamped()
     {
         var s = this;
@@ -201,6 +203,28 @@ public sealed record SeaState
             s = s with { SwellFrom = s.SwellFull - RampGap };
         if (s.LookFrom > s.LookFull - RampGap)
             s = s with { LookFrom = s.LookFull - RampGap };
+        return s;
+    }
+
+    /// <summary>This sea as the file holds it: clamped, each changed field at <see cref="Field.Rounded"/>
+    /// precision and each unchanged one at its default. A value that rounding carries past a bound
+    /// <see cref="Clamped"/> holds is rounded toward the bound instead, so the file reads back with no clamp.</summary>
+    public SeaState Written()
+    {
+        var clamped = Clamped();
+        var s = clamped;
+        foreach (var f in Fields)
+            s = f.With(s, clamped.Differs(f) ? (float)Field.Rounded(f.Get(clamped)) : f.Default);
+
+        // Every bound one field sets on another reads a field that only its range clamps, so one pass settles.
+        var held = s.Clamped();
+        foreach (var f in Fields)
+        {
+            float v = f.Get(s), c = f.Get(held);
+            if (c != v)
+                s = f.With(s, (float)Field.RoundedToward(c, up: c > v));
+        }
+
         return s;
     }
 
@@ -240,6 +264,16 @@ public sealed record SeaState
 
         /// <summary>A value as the file writes it: four decimals, so a float's tail never reads as a change.</summary>
         public static double Rounded(float v) => Math.Round((double)v, 4);
+
+        /// <summary>The four-decimal value nearest <paramref name="v"/> at or above it when
+        /// <paramref name="up"/>, else at or below it, compared as the float the file reads back.</summary>
+        public static double RoundedToward(float v, bool up)
+        {
+            double r = Rounded(v);
+            if (up ? (float)r < v : (float)r > v)
+                r = Math.Round(r + (up ? 1e-4 : -1e-4), 4);
+            return r;
+        }
 
         /// <summary>A value at the precision its slider steps in, invariant.</summary>
         public string Format(float v) =>

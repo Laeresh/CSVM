@@ -337,7 +337,7 @@ rows).
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
 - `src/Effects/OceanShader.cs`, the wave ocean's shader text generated from one sea state, byte-identical to the tune at the defaults.
-- `src/Effects/SeaState.cs`, one chapter's sea: every tunable of the wave ocean with its default, range and lab group, clamped below folding.
+- `src/Effects/SeaState.cs`, one chapter's sea: every tunable of the wave ocean with its default, range and lab group, clamped to the fold limit.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 - `src/Effects/ScorchField.cs`, the enhanced presentation's scorch marks: a capped pool of decals with one procedural burn texture, laid over the crater carve.
 - `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.

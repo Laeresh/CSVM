@@ -7,7 +7,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// One chapter's sea (<see cref="SeaState"/>). Its defaults are the ocean's tune, and every value is
-/// held in its range with the swell below folding. The <c>--debug-ocean</c> grammar keeps only what
+/// held in its range with sharpness times height at the fold limit. The <c>--debug-ocean</c> grammar keeps only what
 /// it can apply.
 /// </summary>
 [Trait("Tier", "Quick")]
@@ -51,8 +51,8 @@ public sealed class SeaStateTests
         Assert.Equal(held, field.Get(field.With(SeaState.Default, value).Clamped()));
     }
 
-    /// <summary>Sharpness times height is held at the fold limit by lowering the height, so a crest
-    /// never loops over itself. Length does not enter, since Q k A does not depend on it.</summary>
+    /// <summary>Sharpness times height is held at the fold limit by lowering the height, so a crest at
+    /// the base group gain never loops over itself. Length does not enter, since Q k A does not depend on it.</summary>
     [Fact]
     public void TheSwellIsHeldBelowFolding()
     {

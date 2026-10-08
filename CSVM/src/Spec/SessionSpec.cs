@@ -957,7 +957,7 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
     /// <see cref="ParseDamageScript"/>.</summary>
     public string? DebugDamage { get; private set; }
-    /// <summary><b>Resolved.</b> <c>--debug-ocean=&lt;field&gt;:&lt;value&gt;,...[,open]</c>: the ocean
+    /// <summary>Resolved. <c>--debug-ocean=&lt;field&gt;:&lt;value&gt;,...[,open]</c>: the ocean
     /// lab's overrides for this launch, filtered through <see cref="Effects.SeaState.FilterOverrides"/>
     /// and null outside <c>--freecam</c>, the only mode the lab exists in.</summary>
     public string? DebugOcean { get; private set; }

@@ -150,7 +150,8 @@ public sealed partial class OceanLab : Node
     }
 
     /// <summary>Writes this chapter's entry into the source tree's file, the fields that differ from
-    /// the defaults alone. Returns the path written, or null where Save is off or the write failed.</summary>
+    /// the defaults alone. Returns the path written, or null where Save is off, the file there is not
+    /// readable JSON, or the write failed.</summary>
     public string? Save()
     {
         if (_savePath == null)
@@ -168,6 +169,13 @@ public sealed partial class OceanLab : Node
             Log.Info("ui", $"ocean lab: saved {_chapter} sea={_edit.Describe()} to {_savePath}");
             UpdateStatus();
             return _savePath;
+        }
+        catch (InvalidDataException ex)
+        {
+            _note = $"save refused: {ex.Message}; fix or delete {_savePath} first";
+            Log.Warn("ui", $"ocean lab: left {_savePath} unwritten, {ex.Message}");
+            UpdateStatus();
+            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

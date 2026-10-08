@@ -10,11 +10,10 @@ namespace CSVM.Effects;
 
 /// <summary>
 /// The wave ocean's shader text, generated from one sea (<see cref="SeaState"/>) with no engine object
-/// touched. The swell and detail tables, the foam and the coast ramps are written as literals. At the
-/// defaults it is the text the ocean always had, held byte for byte by <c>OceanShaderTests</c>. No
-/// golden moves until a sea is saved. Every
-/// rate is rounded to whole cycles per <c>csky_time</c> wrap, so the hourly rollover lands on an
-/// identical frame at any setting.
+/// touched. The swell and detail tables, the foam and the coast ramps are written as literals. The
+/// defaults write the constants' text, held byte for byte by <c>OceanShaderTests</c>, so no golden
+/// moves until a sea is saved. Every rate is rounded to whole cycles per <c>csky_time</c> wrap, so
+/// the hourly rollover lands on an identical frame at any setting.
 /// </summary>
 public static class OceanShader
 {
@@ -128,13 +127,6 @@ public static class OceanShader
     public static float PatchPeriodsPerWrap(float cell, float speed) =>
         (float)Math.Max(1.0, Math.Round(speed * ShaderTime.RolloverSecs / cell));
 
-    /// <summary>The detail table's cells and speeds as the sea scales them, longest first.</summary>
-    public static IEnumerable<(float Cell, float Speed)> DetailDrifts(SeaState sea)
-    {
-        foreach (var d in DetailLayers)
-            yield return (d.Cell, d.Speed * sea.DetailDrift);
-    }
-
     /// <summary>The swell table's wavelengths as the sea scales them, longest first.</summary>
     public static IEnumerable<float> SwellLengths(SeaState sea)
     {
@@ -228,7 +220,7 @@ public static class OceanShader
         (1.0 - (level * (double)SceneBuilder.DepthBiasPerLevel)).ToString("0.0######", CultureInfo.InvariantCulture);
 
     // The open sea's colour: the texture's mean, times the sea's tint when it has one. An untinted
-    // sea writes the line it always had.
+    // sea writes no tint term, so its text matches the defaults'.
     private static string OpenSeaColour(SeaState sea) =>
         "textureLod(albedo_tex, vec2(0.5), 16.0).rgb"
         + (sea.Tinted ? $" * vec3({Literal(sea.TintR)}, {Literal(sea.TintG)}, {Literal(sea.TintB)})" : "");
@@ -539,7 +531,7 @@ void fragment() {
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
     // The open sea takes the texture's mean and the light alone varies it: a tiled texture reads as
     // a lattice from the air. The last mip is the mean the GPU samples. At sheet = 1 the texture is
-    // the sheet's own mapping, so C25's seam holds.
+    // the sheet's own mapping, so no seam shows where the ocean meets a coast tile.
     vec3 tex_mean = " + OpenSeaColour(sea) + @";
     vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
     // Foam forms where the swell bunches the surface, its Jacobian below 1, which rides each crest.

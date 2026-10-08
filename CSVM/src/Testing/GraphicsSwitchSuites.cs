@@ -30,11 +30,11 @@ internal static class GraphicsSwitchSuites
     // The chapter these suites build the wave ocean on. Effects.Ocean.Covers lists every chapter it covers.
     private const string OceanChapter = "C1B";
 
-    // A whole-map wtr sea opened at flat water quality, so no ocean builds over it. Its sheet still
+    // A sea chapter this suite opens at flat water quality, so no ocean builds over it. Its sheet still
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
-    private const string UncoveredSeaChapter = "C2B";
+    private const string FlatWaterChapter = "C2B";
 
-    // The base sheet's vertex-stage call. The include line alone never matches it.
+    // The call in the base sheet's fragment-stage discard. The include line alone never matches it.
     private const string HideCall = "csky_ocean_hides_sea(";
 
     // Where the hide and its mask globals are declared.
@@ -366,7 +366,7 @@ internal static class GraphicsSwitchSuites
     internal static void OceanFollowsSwitch(TestContext ctx)
     {
         RequireData(ctx, OceanChapter);
-        RequireData(ctx, UncoveredSeaChapter);
+        RequireData(ctx, FlatWaterChapter);
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = WaterQualitySetting.Word;
         var report = new StringBuilder();
@@ -436,7 +436,7 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(roundTrip.Oceans == 1 && OceansUnder(ctx.Host) == 1 && rebuilt != null && !ReferenceEquals(rebuilt, builtFresh),
                     $"back to Enhanced the ocean is built again, exactly once ({roundTrip}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(roundTrip.Hidden == roundTrip.Materials && roundTrip.Census == freshEnhanced.Census,
-                    $"and the base sheet carries a fresh Enhanced build's text, hidden again ({roundTrip.Hidden} of {roundTrip.Materials} collapsing)");
+                    $"and the base sheet carries a fresh Enhanced build's text, hidden again ({roundTrip.Hidden} of {roundTrip.Materials} hiding)");
                 ctx.Check(Effects.OceanMask.Live != null,
                     $"and the rebuilt ocean hands its mask to the hide again");
                 report.AppendLine($"fresh enhanced\n{freshEnhanced.Print()}\nswitched original\n{switchedOriginal.Print()}\nround trip\n{roundTrip.Print()}");
@@ -451,20 +451,20 @@ internal static class GraphicsSwitchSuites
                 $"and with the ocean gone the hide's mask globals hold their no-sea defaults");
 
             WaterQualitySetting.Resolve(WaterQualitySetting.Flat, null, null);
-            var uncovered = Open(ctx, enhanced: true, chapter: UncoveredSeaChapter);
+            var flat = Open(ctx, enhanced: true, chapter: FlatWaterChapter);
             try
             {
-                var sea = uncovered.Built ? Sea(uncovered) : null;
-                ctx.Check(uncovered.Built && !uncovered.Session.OceanBuilt
+                var sea = flat.Built ? Sea(flat) : null;
+                ctx.Check(flat.Built && !flat.Session.OceanBuilt
                         && sea is { Oceans: 0 } && OceansUnder(ctx.Host) == 0,
-                    $"a following Enhanced {UncoveredSeaChapter} session at flat water builds no ocean (built={uncovered.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
+                    $"a following Enhanced {FlatWaterChapter} session at flat water builds no ocean (built={flat.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(sea is { Materials: > 0, Drawn: > 0 } && sea.Hidden == sea.Materials,
                     $"and its drawn sheet carries the hide, so a switch left on would hole its sea ({sea?.ToString() ?? "no reading"})");
-                report.AppendLine($"uncovered {UncoveredSeaChapter}\n{sea?.Print() ?? "no reading"}");
+                report.AppendLine($"flat water {FlatWaterChapter}\n{sea?.Print() ?? "no reading"}");
             }
             finally
             {
-                uncovered.Close();
+                flat.Close();
             }
             ctx.WriteArtifact("test-graphics-ocean-switch.txt", report.ToString());
         }
@@ -1457,7 +1457,7 @@ internal static class GraphicsSwitchSuites
     private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census)
     {
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
-            $"{Oceans} ocean(s), {Materials} base sheet material(s), {Hidden} collapsing, {Drawn} drawn surface(s)");
+            $"{Oceans} ocean(s), {Materials} base sheet material(s), {Hidden} hiding, {Drawn} drawn surface(s)");
 
         public string Print() => $"  {this}\n  census {Census}";
     }

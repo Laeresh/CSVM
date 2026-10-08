@@ -31,6 +31,9 @@ public sealed class OceanSeas
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    // Comments are skipped on every read, so a note added by hand breaks neither a load nor a Save.
+    private static readonly JsonDocumentOptions Reading = new() { CommentHandling = JsonCommentHandling.Skip };
+
     private readonly Dictionary<string, SeaState> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _warnings = new();
 
@@ -43,21 +46,18 @@ public sealed class OceanSeas
         ((IList<string>)Chapters).IndexOf(Canonical(chapter) ?? "") >= 0;
 
     /// <summary>Reads the seas, logging each warning. A missing or unreadable file draws every
-    /// chapter at the defaults, which is the ocean the constants always drew.</summary>
-    public static OceanSeas Load(string? path = null)
+    /// chapter at the defaults, the ocean the constants draw.</summary>
+    public static OceanSeas Load()
     {
-        path ??= DefaultPath;
-        bool viaGodot = path.StartsWith("res://", StringComparison.Ordinal);
         OceanSeas seas;
-        if (viaGodot ? !Godot.FileAccess.FileExists(path) : !File.Exists(path))
+        if (!Godot.FileAccess.FileExists(DefaultPath))
         {
             seas = new OceanSeas();
-            seas._warnings.Add($"{path} not found, every chapter takes the default sea");
+            seas._warnings.Add($"{DefaultPath} not found, every chapter takes the default sea");
         }
         else
         {
-            byte[] bytes = viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path);
-            seas = Parse(Encoding.UTF8.GetString(bytes));
+            seas = Parse(Encoding.UTF8.GetString(Godot.FileAccess.GetFileAsBytes(DefaultPath)));
         }
 
         foreach (var w in seas.Warnings)
@@ -72,7 +72,7 @@ public sealed class OceanSeas
         JsonNode? root;
         try
         {
-            root = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
+            root = JsonNode.Parse(json, documentOptions: Reading);
         }
         catch (JsonException ex)
         {
@@ -108,26 +108,36 @@ public sealed class OceanSeas
 
     /// <summary>The file's text with <paramref name="chapter"/>'s entry replaced by the fields of
     /// <paramref name="sea"/> that differ from the defaults, in <see cref="SeaState.Fields"/> order.
-    /// Every other key keeps its place and value; a chapter the file lacks is appended.</summary>
+    /// Every other key keeps its place and value; a chapter the file lacks is appended. Throws
+    /// <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object, so a
+    /// Save never replaces a file it cannot read.</summary>
     public static string WithEntry(string? existing, string chapter, SeaState sea)
     {
         string name = Canonical(chapter) ?? throw new ArgumentException($"'{chapter}' is not a sea chapter", nameof(chapter));
         JsonObject root;
-        try
-        {
-            root = existing is { Length: > 0 } text && JsonNode.Parse(text) is JsonObject parsed ? parsed : new JsonObject();
-        }
-        catch (JsonException)
+        if (string.IsNullOrWhiteSpace(existing))
         {
             root = new JsonObject();
         }
+        else
+        {
+            try
+            {
+                root = JsonNode.Parse(existing, documentOptions: Reading) as JsonObject
+                    ?? throw new InvalidDataException("the seas file is not a JSON object, so Save leaves it as it is");
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException($"the seas file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
+            }
+        }
 
         var entry = new JsonObject();
-        var clamped = sea.Clamped();
+        var written = sea.Written();
         foreach (var f in SeaState.Fields)
         {
-            if (clamped.Differs(f))
-                entry[f.Key] = JsonValue.Create(SeaState.Field.Rounded(f.Get(clamped)));
+            if (written.Differs(f))
+                entry[f.Key] = JsonValue.Create(SeaState.Field.Rounded(f.Get(written)));
         }
 
         // Rebuilt key by key, since a JsonObject cannot replace a member in its place.
@@ -150,15 +160,16 @@ public sealed class OceanSeas
     }
 
     /// <summary>Writes <paramref name="chapter"/>'s entry into the file at <paramref name="diskPath"/>,
-    /// creating it when absent, and returns how many fields the entry holds.</summary>
+    /// creating it when absent, and returns how many fields the entry holds. A file that is not a
+    /// JSON object is left untouched and <see cref="InvalidDataException"/> thrown.</summary>
     public static int Save(string diskPath, string chapter, SeaState sea)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
         File.WriteAllText(diskPath, WithEntry(existing, chapter, sea), new UTF8Encoding(false));
         int count = 0;
-        var clamped = sea.Clamped();
+        var written = sea.Written();
         foreach (var f in SeaState.Fields)
-            count += clamped.Differs(f) ? 1 : 0;
+            count += written.Differs(f) ? 1 : 0;
         return count;
     }
 

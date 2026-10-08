@@ -355,6 +355,30 @@ public class NameResolverTests
     }
 
     [Fact]
+    public void APeekClaimsNothingAndLeavesTheLaterClaimOwed()
+    {
+        // A peek that memoized its answer unclaimed would hand the real query a memo hit, and the
+        // node would never be claimed. So the peek writes no memo, and the real query claims as usual.
+        var boat = Node("boat1");
+        var anchor = Node("harbour");
+        var resolver = Build((anchor, "harbour", null), (boat, "boat1", anchor));
+        var claimed = new List<TestNode>();
+        resolver.Claimed = claimed.Add;
+        var def = Def("harbour");
+        var path = new List<string> { "boat1" };
+
+        Assert.Equal(new TestNode?[] { anchor }, resolver.PeekAnchors(def));
+        Assert.Equal(new[] { boat }, resolver.PeekScoped(path, def, anchor));
+        Assert.Equal(new[] { boat }, resolver.Peek(() => resolver.FindAll("boat1", null)));
+        Assert.Empty(claimed);
+
+        Assert.Equal(new[] { boat }, resolver.ResolveScoped(path, def, anchor));
+        Assert.Equal(new[] { boat }, claimed);
+        Assert.Equal(new TestNode?[] { anchor }, resolver.Anchors(def));
+        Assert.Contains(anchor, claimed);
+    }
+
+    [Fact]
     public void AnExactlyNamedDefStillFallsThroughToTheGlobalTier()
     {
         // The contrast: one world object, one instance. A name it does not carry is still the

@@ -112,7 +112,8 @@ internal static class OceanMaskRaster
             if (spans[i].Hi >= r0 && spans[i].Lo <= r1)
                 Raster(tris[i], g, r0, r1, tintF);
         }
-        // Open texels take the mean; the rounding is the one every texel had before the bands.
+        // Open texels take the mean, rounded through Channel as a tinted texel is. The bytes do not
+        // depend on how the rows split into bands.
         byte mr = Channel(mean.R), mg = Channel(mean.G), mb = Channel(mean.B);
         for (int k = 0; k < tintF.Length; k++)
         {

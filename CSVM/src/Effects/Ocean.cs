@@ -30,9 +30,6 @@ public sealed partial class Ocean : Node3D
     private const float CalmFade = 50f;
     private const int MaxShips = OceanShader.MaxShips;
 
-    // A hull is on the water while its origin sits this close to sea level; a hoisted lifeboat is not.
-    private const float HullWaterBand = OceanMovers.OriginBand;
-
     // The hull meshes that reach this close to the hull's own y = 0 make its waterline.
     private const float WaterlineBand = OceanMovers.WaterlineBand;
 
@@ -289,15 +286,14 @@ public sealed partial class Ocean : Node3D
         return new Vector2(z.X, z.Z);
     }
 
-    // Whether a hull shows with its origin on sea level.
-    private static bool Afloat(Node3D hull) =>
-        IsInstanceValid(hull) && hull.IsInsideTree() && hull.IsVisibleInTree()
-        && Mathf.Abs(hull.GlobalPosition.Y) <= HullWaterBand;
+    // Whether a hull or wake sheet shows with its origin on sea level; a hoisted lifeboat's is not.
+    private static bool Afloat(Node3D node) =>
+        IsInstanceValid(node) && node.IsInsideTree() && node.IsVisibleInTree()
+        && Mathf.Abs(node.GlobalPosition.Y) <= OceanMovers.OriginBand;
 
     // A visible wake sheet's mesh while the sheet lies on the water, else null.
     private static Mesh? WakeOnWater(Node3D wake) =>
-        IsInstanceValid(wake) && wake.IsInsideTree() && wake.IsVisibleInTree() && wake is MeshInstance3D { Mesh: { } mesh }
-        && Mathf.Abs(wake.GlobalPosition.Y) <= HullWaterBand ? mesh : null;
+        Afloat(wake) && wake is MeshInstance3D { Mesh: { } mesh } ? mesh : null;
 
     // The sea's uniforms. At the defaults they equal the values the shader text declares.
     private void SetSeaUniforms()
@@ -397,12 +393,9 @@ public sealed partial class Ocean : Node3D
     // Opens a zone over a visible hull on the water and its waterline; returns the zones in use.
     private int AddHull(Node3D hull, int n)
     {
-        if (n >= MaxShips || !IsInstanceValid(hull) || !hull.IsInsideTree() || !hull.IsVisibleInTree()
-            || Array.IndexOf(_zoneHulls, hull, 0, n) >= 0)
+        if (n >= MaxShips || !Afloat(hull) || Array.IndexOf(_zoneHulls, hull, 0, n) >= 0)
             return n;
         var xf = hull.GlobalTransform;
-        if (Mathf.Abs(xf.Origin.Y) > HullWaterBand)
-            return n;
         _zones[n] = new OceanCalmZone(new Vector2(xf.Origin.X, xf.Origin.Z), Heading(hull));
         if (Waterline(hull) is { } line)
             _zones[n].Add(line, xf);
