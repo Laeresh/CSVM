@@ -567,6 +567,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/AiStepCost.cs`, the wall cost of one AI walk over the flight roster and the aircraft it walked, the `--perf` term that attributes frame cost to the AI rather than to the whole frame.
+- `src/Utils/AtomicFile.cs`, whole-file replacement through a sibling temp file and one rename, the write path every store of player data uses so a kill or a full disk never leaves a truncated save.
 - `src/Utils/AudioBuses.cs`, the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
 - `src/Utils/AudioMix.cs`, the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs`, the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.

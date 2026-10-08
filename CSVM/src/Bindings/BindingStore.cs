@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Bindings;
@@ -267,10 +268,7 @@ public sealed class BindingStore
     public void Save(int player, BindingProfile profile)
     {
         Directory.CreateDirectory(_dir);
-        var path = Path.Combine(_dir, FileNameFor(player));
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, Serialize(player, profile), new UTF8Encoding(false));
-        File.Move(temp, path, overwrite: true);
+        AtomicFile.WriteAllText(Path.Combine(_dir, FileNameFor(player)), Serialize(player, profile));
     }
 
     // Every readable row is cleared before any is added, and full axes go in last. A full axis

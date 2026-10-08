@@ -1,3 +1,4 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Modes;
@@ -9,10 +10,9 @@ namespace CSVM.Flight.Modes;
 /// <c>{ best: seconds, date: "YYYY-MM-DD" }</c>. A pinned or scripted run records into a
 /// throwaway store instead (<see cref="ForSession(string, bool)"/>).
 ///
-/// Read/written through Godot's <see cref="FileAccess"/> + <see cref="Json"/> rather than
-/// System.Text.Json: only the Godot API resolves the <c>user://</c> scheme, and
-/// <see cref="Json.Stringify"/> is locale-neutral where <c>ToString()</c> is not. A missing or
-/// corrupt file is an empty store, never an exception that would break the scoreboard.
+/// Read through Godot's <see cref="FileAccess"/>, written through <see cref="AtomicFile"/>, and
+/// encoded by <see cref="Json.Stringify"/>, which is locale-neutral where <c>ToString()</c> is not.
+/// A missing or corrupt file is an empty store, never an exception that breaks the scoreboard.
 /// </summary>
 public sealed class ScoreStore
 {
@@ -107,12 +107,14 @@ public sealed class ScoreStore
     {
         if (_storePath == null)
             return;
-        using var f = FileAccess.Open(_storePath, FileAccess.ModeFlags.Write);
-        if (f == null)
+        string path = _storePath.Contains("://") ? ProjectSettings.GlobalizePath(_storePath) : _storePath;
+        try
         {
-            GD.PushWarning($"stunt scores: could not write {_storePath}: {FileAccess.GetOpenError()}");
-            return;
+            AtomicFile.WriteAllText(path, Json.Stringify(_data, "  "));
         }
-        f.StoreString(Json.Stringify(_data, "  "));
+        catch (System.Exception e) when (e is System.IO.IOException or System.UnauthorizedAccessException)
+        {
+            Log.Warn("flight", $"stunt scores: could not write {_storePath}: {e.Message}");
+        }
     }
 }

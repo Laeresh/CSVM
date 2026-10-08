@@ -293,8 +293,6 @@ public sealed class OptionsStore
     /// source.</summary>
     public const string FileName = "options.json";
 
-    private const string TempFileName = "options.json.tmp";
-
     // The only presentation names this option currently accepts. Kept as strings, not an enum: the
     // presentation identity type belongs to whichever module owns the presentation contract.
     private static readonly HashSet<string> ValidPresentations = new(StringComparer.Ordinal)
@@ -533,10 +531,7 @@ public sealed class OptionsStore
     public void Save(OptionsDef def)
     {
         Directory.CreateDirectory(_dir);
-        var path = Path.Combine(_dir, FileName);
-        var temp = Path.Combine(_dir, TempFileName);
-        File.WriteAllText(temp, Serialize(def), new UTF8Encoding(false));
-        File.Move(temp, path, overwrite: true);
+        AtomicFile.WriteAllText(Path.Combine(_dir, FileName), Serialize(def));
     }
 
     // A never-set field is written as an explicit null rather than left out, so the file names

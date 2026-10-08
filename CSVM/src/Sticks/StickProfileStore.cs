@@ -234,9 +234,7 @@ public sealed class StickProfileStore
             : FileNameFor(profile);
         Directory.CreateDirectory(UserDirectory);
         var path = Path.Combine(UserDirectory, Path.GetFileName(name));
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, Serialize(profile), new UTF8Encoding(false));
-        File.Move(temp, path, overwrite: true);
+        AtomicFile.WriteAllText(path, Serialize(profile));
         Log.Info("core", $"stick profile saved: {profile.Model} -> {path}");
         return new StickProfileFile(StickProfileSource.User, Path.GetFileName(name), profile);
     }

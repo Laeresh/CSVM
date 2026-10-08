@@ -415,8 +415,17 @@ independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malforme
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
-distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
+distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes through `AtomicFile`. Under `--run-tests`, `UserOptions()` uses an emptied scratch
 directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` and those boxes' OK are its writers.
+
+## src/Utils/AtomicFile.cs
+Whole-file replacement for player data: `WriteAllText` writes BOM-less UTF-8 to `<path>.tmp`, then
+one `File.Move` with overwrite puts it over the target. A kill or a full disk mid-write therefore
+leaves the previous file, or none on a first save, never a truncated one, which `File.WriteAllText`
+on the target would. A temp file a killed write left is overwritten by the next. IO failures reach
+the caller, since each store keeps its own policy for a failed save. Its writers are the options,
+keymap, stick-profile, campaign-profile, custom-plane and stunt-score stores and the two UPnP
+memories.
 
 ## src/Utils/AudioBuses.cs
 The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`
