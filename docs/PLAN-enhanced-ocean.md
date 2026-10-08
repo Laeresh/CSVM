@@ -115,6 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E, per-chapter seas
 
 41. ☐ An ocean lab and a shipped sea state per chapter
+42. ☐ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
 
 ## Dependency and parallelism notes
 
@@ -1276,3 +1277,43 @@ against the length scale or say so on the slider. Shore ramps past `ShoreReach` 
 rebaked. The values are shipped data, so a network peer and a `--det` capture agree as long as both
 load the same file. Shift+F1 sits beside `ControlCapture`'s bindable F1 to F12; the lab exists only in
 `--freecam`, where no flight controls are read.
+
+## E42 ☐ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
+
+**Goal.** No world shader keeps its Original compiled code after a live switch to Enhanced, so no
+material moved onto it later draws stale code or fails its uniform buffer.
+
+**Evidence (confidence: proven by probe and experiment; predates this branch, on main too).** The
+complete battery went red on 20 engine-error lines in `net-pause-overlay` after its live graphics
+switch: "Uniform buffer supplied (binding: 0) size (128) is smaller than size of shader uniform:
+(144)" then "Parameter "us" is null". Minimal set: `gasbag-ordnance-gate, gemini-gasbag-bays,
+graphics-ocean-switch, landings-docking-hold, landings-train-pickup-gate, load-progress,
+net-pause-overlay` (the extra suites only decide whether gemini's materials are freed by the first
+switch). It reproduces at a4ebec53 and on main (66c22e53b, `graphics-live-switch` in place of the
+ocean suite). Cause: `ShaderTwins.RetextInPlace` (`Mech3/ShaderTwins.cs`, `from.Code = text`, called
+from `Regenerate`) rewrites an Original shader to its Enhanced text on a first switch before an
+Enhanced frame has drawn. Godot 4.7 sizes the uniform block at once
+(`scene_shader_forward_clustered.cpp` 231-233) but only marks the code dirty; the recompile waits for
+a material update (`version_get_shader`), and the first Enhanced frame's advanced-variant enable
+(`ShaderRD::enable_group`, `_compile_version_start`, `shader_rd.cpp` 720) clears `dirty` without
+rebuilding the base variants. A rewritten shader nobody wears that frame keeps its Original code for
+good. Probe: 60 shaders rewritten at the first switch, one (`world:8047`) worn by nobody; the later
+switch moved 8 materials onto it and 8 error pairs followed. With the in-place rewrite gated off the
+minimal set ran clean. Where the two uniform blocks match in size, the stale shader draws Original
+code in Enhanced with no error at all. No existing issue tracked it.
+
+**Approach.** Pin every rewritten shader on a throwaway `ShaderMaterial` held until
+`Engine.GetFramesDrawn()` has advanced by at least 2, so Godot's material update recompiles it before
+the advanced-variant step; release the pins in `Regenerate` or `ReleaseUnused`. (A fresh twin for
+unworn shaders instead of the in-place rewrite still depends on wearers surviving a frame, so it is
+the weaker option.)
+
+**Model recommendation.** high: an engine-level ordering bug with a silent failure mode.
+
+**Verify.** A regression engine suite: build a key in Original, release its materials, switch to
+Enhanced with `EnhancedDrawn` false, draw one frame, put a fresh material on the key, and find no
+engine error and the material's shader compiled from the Enhanced text. The minimal set and the full
+shard-3 list clean; the complete battery green, goldens 25/25.
+
+**⚠ Traps.** The minimal set is GC-timing dependent; prove the fix on the exact failing list, not on a
+smaller one that happens to pass. Original graphics output must not change.
