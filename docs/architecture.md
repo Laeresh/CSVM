@@ -174,6 +174,7 @@ rows).
 - `src/Flight/Airframe/ContactReport.cs`, one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether it was an aeroplane.
 - `src/Flight/Airframe/ContactOutcome.cs`, what a contact costs the striker: fate, the damage pair, the charged zone, the push-out, and the struck-aircraft instruction.
 - `src/Flight/Airframe/AircraftContactResolver.cs`, the decoded contact rules for one aircraft: the damage pair, the fate and the un-embed loop, holding no node.
+- `src/Flight/Airframe/AircraftContactSweep.cs`, contact detection for one aircraft: the hull sweep, the AI probe rays and the centre ray, each into one `ContactReport`.
 - `src/Flight/Airframe/AircraftLifecycle.cs`, the states one aircraft moves between and the spawn timers; every transition reports what the node must then perform.
 - `src/Flight/Airframe/PlaneDamage.cs`, the decoded damage ledger: per-part pools plus the whole-vehicle pair, the armour-first take-hit flow, and the kill rule.
 - `src/Flight/Airframe/DamageVisuals.cs`, flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
@@ -185,6 +186,7 @@ rows).
 - `src/Flight/Airframe/FlightControllerBuild.cs`, FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
 - `src/Flight/Airframe/PropellerSlot.cs`, one aircraft's propeller slot: the spinning discs or the stopped blade, and the engine-out, death and spawn edges that move it.
 - `src/Flight/Airframe/IFlightInputSource.cs`, the seam a sim step reads this frame's pilot intent through; `Bind` resolves one of its three adapters once per aircraft.
+- `src/Flight/Airframe/SeatControls.cs`, one seat's keymap and device readers: the latched commands, selectors, attitude axes, commanded lever and lab orbit.
 
 **`Flight.Weapons`**, fire control, the projectile pool, targeting and turrets.
 
@@ -228,6 +230,7 @@ rows).
 - `src/Flight/Ai/AiVoiceDispatcher.cs`, the combat-voice trigger dispatch: the talker roll, the bearing halving, the broadcast election, the damage tiers.
 - `src/Flight/Ai/AiTargetRanking.cs`, the decoded target-ranking formula, minimised over weight, distance and objective bias, the deconfliction pick, and the two-scorer selector.
 - `src/Flight/Ai/GunnerAcquisition.cs`, the AI gunner's target acquisition: the decoded hold, the four-pool ranked sweep and the gasbag ordnance gate.
+- `src/Flight/Ai/AiWeaponsDrive.cs`, the AI's per-tick weapons drive: the gunner's acquisition and lead solve, then the rocketeer's pylon walk on the same target.
 - `src/Flight/Ai/PursuitQuarry.cs`, the flight law's one-step snapshot of the standing target of any class: an aircraft, a turret or a zeppelin part.
 - `src/Flight/Ai/AiNetFollower.cs`, walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/Ai/ManeuverExecutor.cs`, plays one library maneuver's attitude-step program as `FlightInput` per sim step, for the `evasive maneuver` mode.

@@ -149,11 +149,10 @@ public sealed partial class TargetHud : Control
     public float HeadingDeg { get; set; }
 
     /// <summary>The pose this pane's aeroplane is DRAWN at, the render-interpolated one the chase
-    /// camera follows, which the spyglass eye stands on and rolls with (for an aircraft target;
-    /// every other class is watched level).
-    /// ⚠ Not <see cref="PlanePos"/>'s sim pose. The target point the picture is aimed at comes off
-    /// the same interpolation, and an eye quantised to the physics tick against it is the shake
-    /// <see cref="FlightController.TryRenderPosition"/> exists to keep out of the markers.</summary>
+    /// camera follows. The spyglass eye stands on it and, for an aircraft target, rolls with it.
+    /// ⚠ Not <see cref="PlanePos"/>'s sim pose. The picture's aim point comes off the same
+    /// interpolation. An eye quantised to the physics tick against it is the shake
+    /// <see cref="TargetPool.TryRenderPosition"/> keeps out of the markers.</summary>
     public Transform3D RenderPose { get; set; } = Transform3D.Identity;
 
     /// <summary>Whether this pane's spyglass is armed, <see cref="Spyglass.DefaultOn"/> at level
@@ -607,7 +606,7 @@ public sealed partial class TargetHud : Control
             {
                 if (!GodotObject.IsInstanceValid(pilot) || !pilot.IsInsideTree())
                     continue;
-                var at = FlightController.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
+                var at = TargetPool.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
                 DrawOpponent(font, at, HudGreen, TargetPool.AircraftDisplayName(pilot, OwnTeam) ?? pilot.Name,
                     s, markerFont, stagger++);
             }
@@ -647,7 +646,7 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        var at = FlightController.TryRenderPosition(sel.Source, out var render)
+        var at = TargetPool.TryRenderPosition(sel.Source, out var render)
             ? render
             : sel.Position;
         var placed = EdgeMarker.Resolve(_camera.UnprojectPosition(at),
@@ -671,7 +670,7 @@ public sealed partial class TargetHud : Control
         // Drawn at the source's render pose, like --debug-markers; the candidate's own Position is
         // the physics pose the gun solves to, and projecting that through a camera on the render
         // pose is a fly-by shake. The gate in UpdateBrackets stays on the physics pose.
-        if (!FlightController.TryRenderPosition(target.Source, out var pos))
+        if (!TargetPool.TryRenderPosition(target.Source, out var pos))
         {
             pos = target.Position;
         }

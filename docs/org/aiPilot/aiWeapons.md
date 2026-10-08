@@ -400,7 +400,7 @@ at most three rockets a minute at every tier, where the roll on the 30 s fallbac
 attempt per 30 s at 0.05 to 0.44. Every other AI keeps the roll and its def's tuple or the 30 s and 200 to
 800 m fallback: the campaign's and Instant Action's wingmen, enemies and world AI are armed by
 `PreparePilot` alone and never pass through `ArmSeatPilot`. The remake's own Pursue-only firing
-hold (`FlightController.DriveAiRocketeer`) applies to a bot as to every AI.
+hold (`AiWeaponsDrive`) applies to a bot as to every AI.
 
 The match's zeppelin side is flown. The acquisition offers a gasbag to a pilot whose
 `DAMAGES_ZEPPELIN` ordnance can launch now and hands the identity to `Solve`, and an AI aeroplane

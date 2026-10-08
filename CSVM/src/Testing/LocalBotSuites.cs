@@ -4,6 +4,7 @@ using System.Linq;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session.World;
@@ -187,7 +188,7 @@ internal static class LocalBotSuites
         steps = UntilBack(bot, session);
         entry = EntryAt(table, bot);
         ctx.Check(!bot.Crashed && entry >= 0 && ReferenceEquals(bot.Pilot, pilot) && gunner.Target == null,
-            $"[{cell}] the bot comes back on rotation entry {entry} on the same pilot with no quarry ({FlightController.TargetLabel(gunner.Target)}, {steps} step(s))");
+            $"[{cell}] the bot comes back on rotation entry {entry} on the same pilot with no quarry ({TargetPool.TargetLabel(gunner.Target)}, {steps} step(s))");
 
         // The rematch: the bot down and the pane far off its opening point, then both put back.
         Lift(pane);

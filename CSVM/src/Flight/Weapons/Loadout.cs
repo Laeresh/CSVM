@@ -721,6 +721,18 @@ public sealed class GunGroup : IGunSlot
     public int Ammo { get; set; }      // mutable remaining rounds
 
     public int MuzzleCount => Muzzles.Count;
+
+    /// <summary>The group's muzzle MIDPOINT: the original averages that group's live barrel
+    /// attachments, which is where that group's fire converges.</summary>
+    public Vector3 MuzzleMidpoint()
+    {
+        var origin = Vector3.Zero;
+        foreach (var m in Muzzles)
+        {
+            origin += m.GlobalPosition;
+        }
+        return origin / Muzzles.Count;
+    }
 }
 
 /// <summary>One live hardpoint (pylon): its resolved ordnance weapon and a per-pylon ammo counter

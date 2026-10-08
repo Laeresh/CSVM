@@ -560,7 +560,7 @@ its centre: its wings and tail pass through anything. That is how the CM13 racer
 wing probes) and how any
 AI clears a gap a player airframe cannot. The remake reads the list as
 `PlaneStats.CollisionProbes` (nearest def in the damage chain, so the AI chain on an AI load)
-and sweeps exactly those probes for an AI aircraft (`FlightController.SweepProbes`); a human
+and sweeps exactly those probes for an AI aircraft (`AircraftContactSweep`); a human
 rig keeps the mesh-derived hull sweep, which is wider than the six points; flown through the
 `dzpath2` arch, a player airframe passes in both the original and the remake, so no flown slot
 separates the two shapes.

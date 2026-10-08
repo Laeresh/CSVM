@@ -957,7 +957,7 @@ much smaller stick than its slow ones, which is roll-off produced in the input s
 aerodynamics are involved, see the landing note below.
 
 **Landing note, with the kinematic nose-chase retired, the roll-off gap is closed.** Ported as
-`StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the gamepad's
+`StickRamp`, applied to the keyboard axes in `SeatControls.ReadStick` (the gamepad's
 analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep` through
 the ramp on the current plant (`NoseChaseFactor` 0) reads the 1300 → 570 ms roll-off at **42.0×
 against the original's 42×** (unramped 34.4×). The 1.57× deficit this note used to record was
