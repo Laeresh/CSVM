@@ -93,7 +93,8 @@ internal static class NetCombatSuites
         + "off it, takes the whole pair alone from a ledger counting other zones, and shows nothing "
         + "once out of play; a "
         + "guest kills the host and the host kills the guest with the score agreeing on both "
-        + "peers, and the suicide and turret-kill causes score as the decode says")]
+        + "peers, the suicide and turret-kill causes score as the decode says, and a guest's report "
+        + "of a seat it does not fly, or of a death notice only the host sends, scores nothing")]
     internal static void CombatEventsCrossTheWire(TestContext ctx)
     {
         var spec = MatchSpec(ctx, out _);
@@ -1369,6 +1370,22 @@ internal static class NetCombatSuites
         Lockstep(SettleSteps, host, guest);
         Board(ctx, host, guest, "a death charged to a turret's owner scores it score_turret_kill",
             (scores.Kill + scores.TurretKill, 1, 2), (scores.Kill + scores.Suicide, 3, 1));
+
+        // A guest speaks for its own seat alone, and never for the host's decisions. A forged death
+        // and a forged notice, however often they arrive, move nothing on either board.
+        int forged = host.Wire.Link!.Forged;
+        int unknown = host.Wire.Link!.DroppedUnknown;
+        for (int i = 0; i < 3; i++)
+        {
+            link.Send(link.HostPeer, new DeathMessage(0, 1, NetDeathCause.Killer, 0u), NetChannels.Events);
+            link.Send(link.HostPeer, new DeathNoticeMessage(0, 1, NetDeathCause.ZeppelinPart, 1), NetChannels.Events);
+        }
+
+        Lockstep(SettleSteps, host, guest);
+        Board(ctx, host, guest, "a guest's three reports of the host's death and three death notices score nothing",
+            (scores.Kill + scores.TurretKill, 1, 2), (scores.Kill + scores.Suicide, 3, 1));
+        ctx.Check(host.Wire.Link!.Forged == forged + 3 && host.Wire.Link!.DroppedUnknown == unknown + 3,
+            $"and the host drops the deaths as forged and the notices as a type it never takes ({host.Wire.Link!.Forged - forged} forged, {host.Wire.Link!.DroppedUnknown - unknown} unknown, of 3 each)");
     }
 
     // One reading of the board on both peers: the expected (score, deaths, kills) per seat. The

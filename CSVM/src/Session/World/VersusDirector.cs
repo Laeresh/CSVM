@@ -230,11 +230,17 @@ public sealed class VersusDirector
         _spawnAsked = new bool[seatRigs.Count];
         _spawnEntries = new int[seatRigs.Count];
         Array.Fill(_spawnEntries, -1);
-        net.On<Net.SpawnMessage>((_, spawn) => TakeSpawn(spawn));
-        net.On<Net.SpawnAtMessage>((_, spawn) => TakeSpawnAt(spawn));
+        // ⚠ Never take a placement on the host. It applies its own grant directly, and a guest's
+        // would move any seat, the host's own included.
         if (net.IsHost)
         {
+            net.RequireSeatOwner<Net.SpawnRequestMessage>(ask => ask.Seat);
             net.On<Net.SpawnRequestMessage>((_, ask) => GrantSpawn(ask.Seat, Net.NetSpawnKind.Respawn));
+        }
+        else
+        {
+            net.On<Net.SpawnMessage>((_, spawn) => TakeSpawn(spawn));
+            net.On<Net.SpawnAtMessage>((_, spawn) => TakeSpawnAt(spawn));
         }
 
         Log.Info("core", $"net spawns: {seatRigs.Count} seats, {(net.IsHost ? $"host (the rotation over {_spawnList?.Count ?? 0} point(s) grants every return)" : "guest (asking the host for its own return, running no rotation)")}");

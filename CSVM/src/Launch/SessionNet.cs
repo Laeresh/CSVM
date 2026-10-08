@@ -222,9 +222,10 @@ internal sealed class SessionNet
         // aeroplane is assembled reaches a seat with no buffer and is dropped there.
         Link?.On<Net.AircraftStateMessage>((_, sample) => TakeAircraftState(sample));
         // The star's first leg, armed with the handler. A guest is linked to the host alone, so
-        // its samples reach the other guests only by being forwarded here.
+        // its samples reach the other guests only by being forwarded here, and only for its seats.
         if (Link is { IsHost: true } relayHost)
         {
+            relayHost.RequireSeatOwner<Net.AircraftStateMessage>(sample => sample.Seat);
             relayHost.RelayToOthers<Net.AircraftStateMessage>();
         }
     }
@@ -363,16 +364,27 @@ internal sealed class SessionNet
         net.On<Net.HitMessage>((_, hit) => TakeHit(hit));
         net.On<Net.DamageMessage>((_, damage) => TakeDamage(damage));
         net.On<Net.DeathMessage>((_, death) => TakeDeath(death));
-        net.On<Net.ScoreMessage>((_, score) => _dogfight?.TakeScore(score));
-        net.On<Net.DeathNoticeMessage>((_, notice) => _dogfight?.TakeDeathNotice(notice));
         if (net.IsHost)
         {
+            // Each report speaks for the seat its sender flies: an owner its own aeroplane's fire,
+            // ledger and death, a shooter its own round's hit. Anything else is forged.
+            net.RequireSeatOwner<Net.FireMessage>(fire => fire.Seat);
+            net.RequireSeatOwner<Net.DamageMessage>(damage => damage.Seat);
+            net.RequireSeatOwner<Net.DeathMessage>(death => death.VictimSeat);
+            net.RequireSeatOwner<Net.HitMessage>(hit => hit.ShooterSeat);
             // A hit is addressed to one machine, everything else is news for the whole field.
             // The score needs no leg at all: the host is the only one that writes it.
             net.RelayToOthers<Net.FireMessage>();
             net.RelayToOthers<Net.DamageMessage>();
             net.RelayToOthers<Net.DeathMessage>();
             net.RelayToSeatOwner<Net.HitMessage>(hit => hit.VictimSeat);
+        }
+        else
+        {
+            // The host's decisions, taken from it alone. A host never handles one, since a guest's
+            // would write the scoreboard it alone keeps.
+            net.On<Net.ScoreMessage>((_, score) => _dogfight?.TakeScore(score));
+            net.On<Net.DeathNoticeMessage>((_, notice) => _dogfight?.TakeDeathNotice(notice));
         }
 
         for (int i = 0; i < _seatRigs.Count && i < Seats.Count; i++)

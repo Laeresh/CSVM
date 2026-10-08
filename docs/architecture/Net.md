@@ -60,7 +60,9 @@ These are the design rules every module below is shaped by, and every multiplaye
   state, because a lost hit is a lost kill.
 - **Star topology.** A guest connects to the host alone, and the host relays every guest's states
   and events to the other guests (`NetSession`), so one port and one router mapping serve a match
-  and a guest-to-guest packet costs one extra hop. Guests never connect to each other.
+  and a guest-to-guest packet costs one extra hop. Guests never connect to each other. The host
+  relays and applies a guest's report only for a seat that guest flies, and takes none of the
+  decisions it alone sends (a spawn, a score, a death notice) from a guest at all.
 - **The doors are the Original presentation's.** The campaign cabin's Host Co-op button opens the
   network and reads Close Network while open; the NETWORK OPEN band shows the address and guest
   count, and a chip per guest its Ready mark. Close Network, or leaving the cabin for the main menu,
@@ -540,8 +542,8 @@ peer with the handshake (which names its first seat and the run after it, `Local
 and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
 addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
 `RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to
-its sender; `FliesOnTeam` answers a team line's addressing by the persons a machine seats, never its bots. A suite reads the counters (`Sent`,
-`Received`, `Relayed`, `DroppedUnknown`, `Malformed`) and `Instruments`, fed before any handler.
+its sender; `FliesOnTeam` answers a team line's addressing by the persons a machine seats, never its bots. A host's `RequireSeatOwner` drops, before relay and handler, a type whose seat the sender does not fly. A suite reads the counters (`Sent`,
+`Received`, `Relayed`, `DroppedUnknown`, `Malformed`, `Forged`) and `Instruments`, fed before any handler.
 
 ## src/Net/NetInstruments.cs
 One machine's desync counters over its own traffic, engine-free, read by `net-soak` and the

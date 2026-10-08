@@ -61,6 +61,7 @@ internal sealed class NetWorldLink
         _world = world;
         if (net.IsHost)
         {
+            net.RequireSeatOwner<AiHitMessage>(hit => hit.ShooterSeat);
             net.On<AiHitMessage>((_, hit) => TakeAiHit(hit));
             if (world != null)
             {

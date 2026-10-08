@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 
 namespace CSVM.Net;
 
@@ -24,6 +25,9 @@ public sealed class NetSession : INetTransportListener
     private readonly INetTransport _transport;
     private readonly Dictionary<NetMessageType, Handler> _handlers = new();
     private readonly Dictionary<NetMessageType, Relay> _relays = new();
+    private readonly Dictionary<NetMessageType, Claim> _claims = new();
+    // Each peer and type a forgery was logged for, so a flood costs one line rather than one a packet.
+    private readonly HashSet<(int Peer, NetMessageType Type)> _forgeriesLogged = new();
     private readonly List<NetSeat> _seats = new();
     private readonly List<NetSeatEntry> _received = new();
     private readonly IReadOnlyList<string> _airframes;
@@ -70,6 +74,10 @@ public sealed class NetSession : INetTransportListener
     /// <summary>One arrival offered to the star's relay before its own handler sees it. The
     /// channel rides along because a forward keeps the one it arrived on.</summary>
     private delegate void Relay(int from, int channel, ReadOnlySpan<byte> payload);
+
+    // The seat one arrival speaks for, false when its body will not read. An unreadable body is
+    // left to the handler, which counts it malformed.
+    private delegate bool Claim(ReadOnlySpan<byte> payload, out int seat);
 
     /// <summary>Raised when a peer drops off the transport. Its seats stay on the roster; what
     /// leaving means for the aeroplanes it flew is the session's rule.</summary>
@@ -134,17 +142,22 @@ public sealed class NetSession : INetTransportListener
     /// <see cref="NoPeer"/> before a guest's join lands.</summary>
     public int HostPeer => IsHost ? _transport.LocalPeer : _hostPeer;
 
-    /// <summary>Payloads discarded because no handler claimed the type word, or because the header
-    /// did not describe the buffer. The counter a suite reads to prove a handler is bound.</summary>
+    /// <summary>Payloads discarded because no handler claimed the type word, because the header did
+    /// not describe the buffer, or because the channel is past <see cref="NetChannels.Count"/>. The
+    /// counter a suite reads to prove a handler is bound.</summary>
     public int DroppedUnknown { get; private set; }
+
+    /// <summary>Payloads a host dropped because the peer that sent them does not fly the seat they
+    /// speak for (<see cref="RequireSeatOwner"/>). Neither relayed nor handled.</summary>
+    public int Forged { get; private set; }
 
     /// <summary>Payloads whose type was routed but whose body would not deserialise. Separate from
     /// <see cref="DroppedUnknown"/>: an unclaimed type is a missing handler, this is bad bytes.
     /// </summary>
     public int Malformed { get; private set; }
 
-    /// <summary>The desync counters over everything this end sent and everything that reached it,
-    /// fed before any handler or relay sees an arrival.</summary>
+    /// <summary>The desync counters over everything this end sent and every arrival it admitted,
+    /// fed before any handler or relay sees one.</summary>
     public NetInstruments Instruments { get; } = new();
 
     /// <summary>Opens the match's own end: <paramref name="roster"/> is the whole field as this
@@ -320,6 +333,27 @@ public sealed class NetSession : INetTransportListener
         };
     }
 
+    /// <summary>Drops every arriving <typeparamref name="T"/> whose seat, as <paramref name="seatOf"/>
+    /// reads it, the sending peer does not fly, before its relay or its handler sees it. Host only:
+    /// a guest hears its host alone, which speaks for every seat it relays.</summary>
+    /// <typeparam name="T">The message whose sender is checked.</typeparam>
+    public void RequireSeatOwner<T>(Func<T, int> seatOf)
+        where T : struct, INetMessage<T>
+    {
+        ArgumentNullException.ThrowIfNull(seatOf);
+        if (!IsHost)
+        {
+            throw new InvalidOperationException("only the host checks a seat's owner; a guest hears its host alone");
+        }
+
+        _claims[T.Type] = (ReadOnlySpan<byte> payload, out int seat) =>
+        {
+            bool read = T.TryRead(payload, out var message);
+            seat = read ? seatOf(message) : NetMessage.NoSeat;
+            return read;
+        };
+    }
+
     /// <summary>Whether <paramref name="peer"/> seats a person on lobby team <paramref name="team"/>,
     /// which is the whole of a team line's addressing. A host's bot reads no chat, so its team does
     /// not admit the host to another team's lines. A seat's team number is never a team id.
@@ -363,9 +397,18 @@ public sealed class NetSession : INetTransportListener
     public void OnPayload(int peer, int channel, ReadOnlySpan<byte> payload)
     {
         Received++;
-        if (!NetMessage.TryReadHeader(payload, out var type, out int length) || length != payload.Length)
+        // ⚠ Check the channel before anything can forward it. A carrier's send throws past
+        // NetChannels.Count, and a relay would raise that inside the host's physics step.
+        if (channel < 0 || channel >= NetChannels.Count
+            || !NetMessage.TryReadHeader(payload, out var type, out int length) || length != payload.Length)
         {
             DroppedUnknown++;
+            return;
+        }
+
+        if (_claims.TryGetValue(type, out var claim) && claim(payload, out int seat) && PeerOfSeat(seat) != peer)
+        {
+            DropForged(peer, type, seat);
             return;
         }
 
@@ -410,6 +453,15 @@ public sealed class NetSession : INetTransportListener
         }
 
         return true;
+    }
+
+    private void DropForged(int peer, NetMessageType type, int seat)
+    {
+        Forged++;
+        if (_forgeriesLogged.Add((peer, type)))
+        {
+            Log.Warn("core", $"net: dropped a {type} from peer {peer} for seat {seat}, which it does not fly; later ones from it are dropped unlogged");
+        }
     }
 
     private void Forward(int peer, NetMessageType type, int channel, ReadOnlySpan<byte> payload)
