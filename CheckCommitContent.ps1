@@ -382,7 +382,7 @@ function Invoke-SelfTest {
         Assert-Row 'row 13 a -C variable assigned a literal resolves' ($r13.Count -eq 1 -and $r13[0] -ieq $wtNormal)
         $r13b = @(Get-TargetRoots -CommandLine ('$t = ' + $q + $wt + $q + '; Set-Location $t; git commit -m x') -From $main)
         Assert-Row 'row 13 a Set-Location variable assigned a literal resolves' ($r13b.Count -eq 1 -and $r13b[0] -ieq $wtNormal)
-        $r13c = @(Get-TargetRoots -CommandLine ('${wt} = ' + $q + $base + $q + '; git -C ${wt}\wt commit -m x') -From $main)
+        $r13c = @(Get-TargetRoots -CommandLine ('${wt} = ' + $q + $base + $q + '; git -C ${wt}' + [IO.Path]::DirectorySeparatorChar + 'wt commit -m x') -From $main)
         Assert-Row 'row 13 a braced variable with a path tail resolves' ($r13c.Count -eq 1 -and $r13c[0] -ieq $wtNormal)
         foreach ($case in @(
                 @('an unassigned -C variable', 'git -C $wt commit -m x', '$wt'),
