@@ -139,7 +139,7 @@ public partial class FlightAudio : Node
         }
         else
         {
-            GD.PushWarning($"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
+            Log.Warn("sound", $"empty-clip cue unresolved: {WeaponAudioCues.EmptyClipName(weapons) ?? "none"}");
         }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
@@ -464,7 +464,7 @@ public partial class FlightAudio : Node
         baseVolume = 1f;
         if (!defs.TryGetValue(sndName, out var def))
         {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            Log.Warn("sound", $"sound def not found in sounds.json: {sndName}");
             return null;
         }
         baseVolume = def.Volume;
@@ -479,7 +479,7 @@ public partial class FlightAudio : Node
         group = null;
         if (groups == null || !groups.TryGetValue(name, out var found))
         {
-            GD.PushWarning($"sound group not found in sounds.json: {name}");
+            Log.Warn("sound", $"sound group not found in sounds.json: {name}");
             return null;
         }
         group = found;
@@ -612,7 +612,7 @@ public partial class FlightAudio : Node
         baseVolume = 1f;
         if (!defs.TryGetValue(sndName, out var def))
         {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            Log.Warn("sound", $"sound def not found in sounds.json: {sndName}");
             return null;
         }
         var stream = archive.Find(def.WavName, looped: false);

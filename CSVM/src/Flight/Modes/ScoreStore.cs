@@ -98,7 +98,7 @@ public sealed class ScoreStore
                     return new ScoreStore(storePath, parsed.AsGodotDictionary());
             }
             else
-                GD.PushWarning($"stunt scores: could not read {storePath}: {FileAccess.GetOpenError()}");
+                Log.Warn("flight", $"stunt scores: could not read {storePath}: {FileAccess.GetOpenError()}");
         }
         return new ScoreStore(storePath, new Godot.Collections.Dictionary());
     }

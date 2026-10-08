@@ -488,7 +488,7 @@ internal sealed class AiFlightAssembler
             }
             catch (Exception e)
             {
-                GD.PushWarning($"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
+                Log.Warn("flight", $"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
             }
         }
 
@@ -529,7 +529,7 @@ internal sealed class AiFlightAssembler
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ai: no mode machine, cannot load skills/maneuvers: {e.Message}");
+            Log.Warn("flight", $"ai: no mode machine, cannot load skills/maneuvers: {e.Message}");
         }
     }
 
