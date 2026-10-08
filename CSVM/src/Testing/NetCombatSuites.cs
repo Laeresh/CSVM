@@ -86,7 +86,8 @@ internal static class NetCombatSuites
 
     [Suite("net-combat-events",
         "a host session and a guest session in one process: the rounds one owner fires are spawned "
-        + "on the other from its fire events and nowhere else, a hit on an aeroplane flown "
+        + "on the other from its fire events and nowhere else, a smoke screen one owner lays is laid "
+        + "behind its copy on the other without spending the copy's ammo, a hit on an aeroplane flown "
         + "elsewhere spends nothing locally and lands as damage on the machine that owns it, whose "
         + "hull report builds the copy's pending crash rig; the owner's whole ledger, a ram's spend "
         + "included, is mirrored into the other machine's copy, which plays the same damage stages "
@@ -125,6 +126,7 @@ internal static class NetCombatSuites
 
             Lockstep(SettleSteps, host.Session, guest.Session);
             FireEvents(ctx, host.Session, guest.Session);
+            SmokeEvents(ctx, host.Session, guest.Session, weapons);
             HitRouting(ctx, host.Session, guest.Session, gun);
             LedgerMirror(ctx, host.Session, guest.Session);
             Kills(ctx, host.Session, guest.Session);
@@ -1177,6 +1179,59 @@ internal static class NetCombatSuites
         Lockstep(SettleSteps, host, guest);
         ctx.Check(here.CannonRoundsFired == quiet,
             $"ABLE-TO-FAIL CONTROL: the seat flown elsewhere fires nothing of its own on this machine ({here.CannonRoundsFired - quiet} round(s))");
+    }
+
+    // A smoke launch spawns no round, so only its fire event can lay the screen on another machine.
+    // Every pylon of the host's seat carries the smoker for one launch, then its own weapon again.
+    private static void SmokeEvents(TestContext ctx, GameSession host, GameSession guest, WeaponDefs weapons)
+    {
+        var layer = host.SeatRigs[0].Controller!;
+        var copy = guest.SeatRigs[0].Controller!;
+        if (!weapons.TryGet("wep_13", out var smoker) || smoker.SmokeScreenTime == null
+            || layer.Loadout is not { Hardpoints.Count: > 0 } fit || layer.SmokeScreens is not { } here
+            || copy.SmokeScreens is not { } there)
+        {
+            ctx.Check(false, $"the smoker resolves and the host's seat carries a pylon and the session's screens");
+            return;
+        }
+
+        var saved = fit.Hardpoints.Select(h => (h.Weapon, h.Capacity, h.Ammo)).ToArray();
+        int copyAmmo = copy.Loadout!.Hardpoints.Sum(h => h.Ammo);
+        try
+        {
+            ctx.Check(!there.IsLaying(copy),
+                $"ABLE-TO-FAIL CONTROL: no screen runs behind the guest's copy before the launch");
+            foreach (var hp in fit.Hardpoints)
+            {
+                hp.Weapon = smoker;
+                hp.Capacity = 1;
+                hp.Ammo = 1;
+            }
+
+            layer.AutoFireRockets = true;
+            for (int i = 0; i < BurstSteps && !here.IsLaying(layer); i++)
+            {
+                Lockstep(1, host, guest);
+            }
+
+            layer.AutoFireRockets = false;
+            Lockstep(2, host, guest);
+            ctx.Check(here.IsLaying(layer) && there.IsLaying(copy),
+                $"the host's smoke launch lays a screen behind its own seat and behind the guest's copy (host {here.IsLaying(layer)}, guest {there.IsLaying(copy)})");
+            ctx.Same(copyAmmo, copy.Loadout.Hardpoints.Sum(h => h.Ammo),
+                $"the copy's pylons spend nothing, the launch's ammo is the owner's alone");
+        }
+        finally
+        {
+            layer.AutoFireRockets = false;
+            for (int i = 0; i < saved.Length; i++)
+            {
+                (fit.Hardpoints[i].Weapon, fit.Hardpoints[i].Capacity, fit.Hardpoints[i].Ammo) = saved[i];
+            }
+
+            here.Clear();
+            there.Clear();
+        }
     }
 
     // The hit-authority fork. The shooter's machine decides the hit and spends nothing on its own copy

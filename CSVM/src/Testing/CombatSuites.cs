@@ -3040,6 +3040,16 @@ internal static class CombatSuites
                 live.Clear();
             }
 
+            // --- a respawn restocks its own aeroplane and nothing else. The pool is the session's
+            // one shared pool, so another pilot's round in it flies on.
+            live.Spawn(rocket, crossMuzzle, Vector3.Zero, shooter.PlayerIndex);
+            target.Respawn();
+            var afterRespawn = new List<(Vector3 Pos, Vector3 Velocity)>();
+            live.CollectLiveRounds(afterRespawn);
+            live.Clear();
+            ctx.Check(ReferenceEquals(target.Projectiles, live) && afterRespawn.Count == 1,
+                $"respawning P{target.PlayerIndex + 1} leaves P{shooter.PlayerIndex + 1}'s live round in the shared pool ({afterRespawn.Count} live)");
+
             // --- the fused pass: one rocket across the nose gap. The fuse must hold while the
             // round is still closing and pop at the closest approach, blasting the nose by the
             // weapon's own magnitudes under the linear falloff at exactly the gap distance.

@@ -160,6 +160,12 @@ public partial class GameSession : Node3D
     // time regardless of the sim being halted.
     private readonly HoldToRepeat _stepHold = new(initialDelay: 0.3f, repeatInterval: 0f);
 
+    // The two position snapshots refill these, because every aircraft asks on every sim step.
+    // ⚠ A caller reads the answer on the spot and never keeps it, since the next call overwrites
+    // it. Arrays, not lists, so a nested call during a caller's foreach cannot throw.
+    private Vector3[] _playerPositions = Array.Empty<Vector3>();
+    private Vector3[] _fieldPositions = Array.Empty<Vector3>();
+
     // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
     // Launcher once per process and re-applied here at each session build. A pinned run takes
     // the spec's value, everything else draws from the clock. Not readonly: a guest replaces it
@@ -606,8 +612,15 @@ public partial class GameSession : Node3D
             smokeTunables = SmokeScreenTunables.Image;
         }
         var screenFlashSink = _screenFlash;
-        _smokeScreens = new SmokeScreens(smokeTunables, AllAircraft,
-            (playerIndex, colour, weight, duration) => screenFlashSink.PlayBlend(playerIndex, colour, weight, duration));
+        _smokeScreens = new SmokeScreens(smokeTunables, AllAircraft, (playerIndex, colour, weight, duration) =>
+        {
+            // A guest's seat index is not its pane index, so the wash finds the pane by its pilot.
+            for (int i = 0; i < _rigs.Count; i++)
+            {
+                if (_rigs[i].Controller?.PlayerIndex == playerIndex)
+                    screenFlashSink.PlayBlend(i, colour, weight, duration);
+            }
+        });
         // A fresh list per build: a tag never outlives the session that painted it.
         _beeperTags = new BeeperTags<FlightController>();
         LoadProgress.Report(LoadStep.Rigs);
@@ -2722,14 +2735,18 @@ public partial class GameSession : Node3D
     // EXECUTION_BY_RANGE and PLAYER_RANGE cannot answer "who is nearest" differently.
     private IReadOnlyList<Vector3> PlayerPositionsSnapshot()
     {
+        if (_rigs.Count == 0 && _camera == null)
+            return Array.Empty<Vector3>();
+        int count = Math.Max(_rigs.Count, 1);
+        if (_playerPositions.Length != count)
+            _playerPositions = new Vector3[count];
         if (_rigs.Count == 0)
-            return _camera is { } cam ? new[] { cam.GlobalPosition } : Array.Empty<Vector3>();
-        var positions = new Vector3[_rigs.Count];
+            _playerPositions[0] = _camera!.GlobalPosition;
         for (int i = 0; i < _rigs.Count; i++)
-            positions[i] = _rigs[i].Controller is { } fc
+            _playerPositions[i] = _rigs[i].Controller is { } fc
                 ? fc.GlobalPosition
                 : _rigs[i].Camera.GlobalPosition;
-        return positions;
+        return _playerPositions;
     }
 
     // The anim runtime's range reads: every seat's aeroplane, a guest's copy and a bot included. A
@@ -2739,15 +2756,23 @@ public partial class GameSession : Node3D
     {
         if (_wire.Seats.Count == 0)
             return PlayerPositionsSnapshot();
-        var positions = new List<Vector3>(_seatRigs.Count);
+        int count = 0;
+        foreach (var rig in _seatRigs)
+        {
+            if (rig.Controller != null || rig.Camera != null)
+                count++;
+        }
+        if (_fieldPositions.Length != count)
+            _fieldPositions = new Vector3[count];
+        int i = 0;
         foreach (var rig in _seatRigs)
         {
             if (rig.Controller is { } fc)
-                positions.Add(fc.GlobalPosition);
+                _fieldPositions[i++] = fc.GlobalPosition;
             else if (rig.Camera is { } cam)
-                positions.Add(cam.GlobalPosition);
+                _fieldPositions[i++] = cam.GlobalPosition;
         }
-        return positions;
+        return _fieldPositions;
     }
 
     // The stick's half of _UnhandledInput's cutscene skip, for seat 1, who owns every stick. Ahead

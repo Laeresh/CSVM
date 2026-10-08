@@ -637,6 +637,7 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
+    private int _cannonHitsLogged;               // the same for the cannon cues; see LogsCannonHit
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
     private GunAimSlot[][] _aimSlots = Array.Empty<GunAimSlot[]>(); // per _firableGuns group, one slot per muzzle, B2's assist state
@@ -1242,7 +1243,7 @@ public partial class FlightController : Node3D
             _cam.Head.TargetOffset = PadlockOffset;
         }
         _spawnPos = spawnPos;
-        _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
+        _spawnAttitude = AimAttitude(spawnPos, spawnLookAt, Basis.Identity);
         _spawnThrottle = spawnThrottle;
         _spawnSpeed = spawnSpeed;
         _warningShots = new WarningShotCue(model.Stats.WarningShotMax,
@@ -1435,9 +1436,7 @@ public partial class FlightController : Node3D
         if (placed is { } placement)
         {
             _spawnPos = placement.Pos;
-            var aim = placement.LookAt - placement.Pos;
-            if (aim.LengthSquared() > 1e-6f)
-                _spawnAttitude = Basis.LookingAt(aim.Normalized(), Vector3.Up);
+            _spawnAttitude = AimAttitude(placement.Pos, placement.LookAt, _spawnAttitude);
         }
         var (placePos, placeAttitude) = _zoneReturn ?? (_spawnPos, _spawnAttitude);
         _zoneReturn = null;
@@ -1459,7 +1458,7 @@ public partial class FlightController : Node3D
         Shake?.Reset();      // the crash's wobble stops with the airframe it rocked
         if (ShakePivot != null)
             ShakePivot.Rotation = Shake?.Rotation ?? Vector3.Zero;
-        RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
+        RestockWeapons();    // full ammo, dry warnings re-armed; the shared pool's rounds fly on
         // ⚠ The field, not the forcing property: a rig that is still armed has never played
         // anything, so there is nothing here to undo, and asking for it would build the whole rig
         // on the frame an aeroplane is placed, which is the frame the deferral exists to spare.
@@ -1643,11 +1642,8 @@ public partial class FlightController : Node3D
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
         bool carrierDrop = false, float? launchThrottle = null)
     {
-        var dir = lookAt - pos;
         _spawnPos = pos;
-        // A zero-length aim keeps the attitude it has, the same guard PlaceHeld makes.
-        if (dir.LengthSquared() > 1e-6f)
-            _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
+        _spawnAttitude = AimAttitude(pos, lookAt, _spawnAttitude);
         Inert = false;
         ArmSpawnTimers(carrierDrop);
         Respawn();
@@ -1714,12 +1710,8 @@ public partial class FlightController : Node3D
     /// <see cref="Respawn"/> uses. Sets the pin whether or not <see cref="Held"/> is on.</summary>
     public void PlaceHeld(Vector3 pos, Vector3 lookAt)
     {
-        var dir = lookAt - pos;
-        // A zero-length aim (clicked the plane's own position) would make LookingAt throw, keep
-        // the attitude the plane already has rather than fail the placement.
-        _heldAttitude = dir.LengthSquared() > 1e-6f
-            ? Basis.LookingAt(dir.Normalized(), Vector3.Up)
-            : _model.Attitude;
+        // Clicking the plane's own position keeps the attitude it already has.
+        _heldAttitude = AimAttitude(pos, lookAt, _model.Attitude);
         _heldPos = pos;
         _heldPinned = true;
         _model.Reset(_heldPos, _heldAttitude, 0f, 0f);
@@ -1968,17 +1960,9 @@ public partial class FlightController : Node3D
         float poolArmorBefore = Damage.WholeArmor, poolHealthBefore = Damage.WholeHealth;
         // Apply's answer is the struck zone, not the geometric guess: it may redirect a dead-zone
         // hit to a survivor (docs/org/vehicleDamage.md).
-        var state = Damage.Apply(dataPart,
+        var state = SpendDamage(dataPart,
             (weapon.HealthDamage ?? 0f) * damageScale, (weapon.ArmorDamage ?? 0f) * damageScale);
         string struckPart = state?.Def.Name ?? dataPart;
-        if (state != null)
-        {
-            Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-            _pilotHud.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
-        }
-
-        // the def-level stages run off the hull pool even when the round went zone-less
-        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
         if (_projectileHitsLogged < 6)
         {
@@ -2004,9 +1988,13 @@ public partial class FlightController : Node3D
             machine.NotifyDamage((weapon.ArmorDamage ?? 0f) * damageScale,
                 (weapon.HealthDamage ?? 0f) * damageScale, poolArmorBefore, poolHealthBefore);
         }
-        _pilotHud.Flash(state != null
-            ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"
-            : $"⚠ HIT HULL {Damage.SummaryHealthFraction * 100f:0}%");
+        // Only a pilot reads the impact line, so an AI hit builds no string for it.
+        if (IsHumanPiloted)
+        {
+            _pilotHud.Flash(state != null
+                ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"
+                : $"⚠ HIT HULL {Damage.SummaryHealthFraction * 100f:0}%");
+        }
     }
 
     /// <summary>The death its owner reported over the wire, played out here. It runs the same
@@ -2099,15 +2087,8 @@ public partial class FlightController : Node3D
         EnsureCrashRig();
         var pose = new Transform3D(_model.Attitude, _model.Position);
         string dataPart = PlaneDamage.MapStruckPart("center", pose.AffineInverse() * impact);
-        var state = Damage.Apply(dataPart, healthDamage, armorDamage);
+        var state = SpendDamage(dataPart, healthDamage, armorDamage);
         string struckPart = state?.Def.Name ?? dataPart;
-        if (state != null)
-        {
-            Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-            _pilotHud.OnPartDamage(struckPart);
-        }
-
-        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
         Log.Info("flight",
             $"rammed P{PlayerIndex + 1} by P{striker + 1} ({struckPart}): a={armorDamage:0.0} h={healthDamage:0.0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         if (Damage.IsDestroyed)
@@ -2747,12 +2728,9 @@ public partial class FlightController : Node3D
         }
         SpeedCue?.Dispose(freeNow);
         SpeedCue = null;
-        if (WindStreaks is { } streaks)
-        {
-            streaks.GetParent()?.RemoveChild(streaks);
-            streaks.QueueFree();
-            WindStreaks = null;
-        }
+        if (WindStreaks is { } streaks && GodotObject.IsInstanceValid(streaks))
+            Discard(streaks, freeNow);
+        WindStreaks = null;
         Race?.Remove(PlayerIndex);
         Race = null;
         SmokeScreens = null;
@@ -3196,26 +3174,17 @@ public partial class FlightController : Node3D
         Body?.SetHittable(InPlay && !Racing);
     }
 
-    /// <summary>The selected firable gun group, the one the trigger fires, or null when there is
-    /// no loadout, no fire control, no group at the selected index, or the group has no muzzle to
-    /// fire from. Shared by the pipper and the targeting marker's bracket gate so both read the
-    /// same "which gun is selected" answer.</summary>
+    // The selected firable gun group, the one the trigger fires. Null with no fire control, no
+    // group at the selected index, or no muzzle on it. The pipper, the bracket gate and the AI
+    // gunner all read this one answer.
     private GunGroup? SelectedGun()
     {
-        if (Loadout == null || _fire == null)
+        if (_fire == null || _fire.GunSel < 0 || _fire.GunSel >= _firableGuns.Length)
         {
             return null;
         }
-        int gi = 0;
-        foreach (var g in Loadout.FirableGuns)
-        {
-            if (gi == _fire.GunSel)
-            {
-                return g.Muzzles.Count > 0 ? g : null;
-            }
-            gi++;
-        }
-        return null;
+        var g = _firableGuns[_fire.GunSel];
+        return g.Muzzles.Count > 0 ? g : null;
     }
 
     // The ordnance the hardpoint selector points at, or null with no fit, no fire control or no
@@ -3377,11 +3346,12 @@ public partial class FlightController : Node3D
             {
                 Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
                     rocketAim, Team, launchTarget);
-                // The same fallback the spawn takes for a launch with no aim vector. The round
-                // another machine builds then leaves down the direction this one gave it.
-                WeaponFired?.Invoke(hp.Weapon, hp.Pylon.GlobalPosition,
-                    rocketAim ?? -hp.Pylon.GlobalTransform.Basis.Z.Normalized());
             }
+            // Sent for a smoke launch too, so every other machine lays the screen behind its copy.
+            // A missing aim vector takes the spawn's own fallback, so another machine's round
+            // leaves down the direction this one gave it.
+            WeaponFired?.Invoke(hp.Weapon, hp.Pylon.GlobalPosition,
+                rocketAim ?? -hp.Pylon.GlobalTransform.Basis.Z.Normalized());
             // After the spawn branch, so a SMOKE_SCREEN launch rumbles too. The cue hangs on the
             // pylon firing, where the original hangs it, not on a round appearing.
             if (IsHumanPiloted)
@@ -3400,11 +3370,9 @@ public partial class FlightController : Node3D
             Audio?.StartGunLoop(outcome.GunLoopSound);
             WeaponAudio?.StartGunLoop(outcome.GunLoopSound);
         }
-        else if (_gunLoopOn)
+        else
         {
-            _gunLoopOn = false;
-            Audio?.StopGunLoop();
-            WeaponAudio?.StopGunLoop();
+            StopGunLoop();
         }
         if (outcome.GunDryCue)
         {
@@ -3419,15 +3387,8 @@ public partial class FlightController : Node3D
         }
     }
 
-    // Refills every gun group to its full load and re-arms the dry warnings (respawn).
-    private void RefillWeapons()
-    {
-        RestockWeapons();
-        Projectiles?.Clear();
-    }
-
     // Every slot back to its full load, the fire clocks and dry warnings reset, the gun loop off.
-    // The rounds already in the air are left to fly.
+    // ⚠ Never clear Projectiles here: it is the session's one shared pool, every pilot's rounds.
     private void RestockWeapons()
     {
         if (Loadout == null)
@@ -3446,17 +3407,33 @@ public partial class FlightController : Node3D
             h.Ammo = h.Capacity;
         }
         _fire?.Refill();
-        if (_gunLoopOn)
-        {
-            _gunLoopOn = false;
-            Audio?.StopGunLoop();
-            WeaponAudio?.StopGunLoop();
-        }
+        StopGunLoop();
     }
 
-    // Full stunt rerun from the results scoreboard (R): fresh clock + every
-    // zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
-    // scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.
+    private void StopGunLoop()
+    {
+        if (!_gunLoopOn)
+            return;
+        _gunLoopOn = false;
+        Audio?.StopGunLoop();
+        WeaponAudio?.StopGunLoop();
+    }
+
+    // One spend through the ledger, the core every hit shares. A struck zone plays its stage and
+    // blinks its dial; the hull's stages run always, even for a zone-less spend.
+    // Answers the zone Apply settled on, which may be a redirect (docs/org/vehicleDamage.md).
+    private PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage)
+    {
+        var state = Damage!.Apply(zone, healthDamage, armorDamage);
+        if (state != null)
+        {
+            Visuals?.OnPartDamage(state.Def.Name, state.HealthFraction);
+            _pilotHud.OnPartDamage(state.Def.Name); // damage dial: hit zone blinks 5 s
+        }
+
+        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
+        return state;
+    }
 
     // True if the segment crosses any solid collider, the static world, or another
     // aircraft's body (never this plane's own, excluded by RID); on a hit,
@@ -3625,12 +3602,7 @@ public partial class FlightController : Node3D
     // playing under the wreck, since nothing else calls StopGunLoop while the plane is crashed.
     private void EndFlightSystems()
     {
-        if (_gunLoopOn)
-        {
-            _gunLoopOn = false;
-            Audio?.StopGunLoop();
-            WeaponAudio?.StopGunLoop();
-        }
+        StopGunLoop();
         Audio?.StopNitroLoop();
         Audio?.OnCrash();
         // An AI aircraft's loops end here and stay ended: the animation's own authored sound
@@ -4140,6 +4112,14 @@ public partial class FlightController : Node3D
     // The gunner's one standing target of any class, which AiPilot reads as its pursuit quarry.
     private static object? StandingTarget(AiGunner gunner) => gunner.Target;
 
+    // The attitude facing from one point to another. A zero-length aim, which LookingAt cannot
+    // take, answers the attitude the caller keeps instead.
+    private static Basis AimAttitude(Vector3 from, Vector3 to, Basis keep)
+    {
+        var dir = to - from;
+        return dir.LengthSquared() > 1e-6f ? Basis.LookingAt(dir.Normalized(), Vector3.Up) : keep;
+    }
+
 #pragma warning restore SA1204
 
     // One AI-gunner tick: the acquisition keeps or re-acquires the standing target. The gunner then
@@ -4156,17 +4136,10 @@ public partial class FlightController : Node3D
         // though the target stays acquired in every mode.
         if (Pilot?.Machine is { } modes && modes.Mode != AiMode.Pursue)
             return;
-        GunGroup? group = _fire.GunSel >= 0 && _fire.GunSel < _firableGuns.Length
-            ? _firableGuns[_fire.GunSel]
-            : null;
-        if (group == null || group.Muzzles.Count == 0)
+        if (SelectedGun() is not { } group)
             return;
-        // The muzzle midpoint of the selected group, the same convergence point the reticle
-        // and the original's own barrel averaging use.
-        var muzzlePos = Vector3.Zero;
-        foreach (var m in group.Muzzles)
-            muzzlePos += m.GlobalPosition;
-        muzzlePos /= group.Muzzles.Count;
+        // The same convergence point the reticle and the original's own barrel averaging use.
+        var muzzlePos = MuzzleMidpoint(group);
         // The engagement window is a property of the weapon slot, not of the pilot, so a group whose
         // AI def authored one flies that one; a stock fit authors none and keeps the gunner's own.
         if (group.MinRangeM > 0f && group.MaxRangeM > 0f)
@@ -4481,12 +4454,23 @@ public partial class FlightController : Node3D
             string? pass = Audio?.OnWarningShot();
             // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, how full
             // the shield is, and which of the three pass samples drew.
-            Log.Info("weapons", $"warning shot P{PlayerIndex + 1} intensity={_warningShots.Intensity:0.00} snd={pass ?? "none"}");
+            if (LogsCannonHit())
+                Log.Info("weapons", $"warning shot P{PlayerIndex + 1} intensity={_warningShots.Intensity:0.00} snd={pass ?? "none"}");
             return true;
         }
-        if (Audio?.OnBulletHit() is { } variant)
+        if (Audio?.OnBulletHit() is { } variant && LogsCannonHit())
             Log.Info("weapons", $"bullet hit P{PlayerIndex + 1} snd={variant}");
         return false;
+    }
+
+    // The first few cannon hits always log. Past that a hit logs only under weapons debug, because a
+    // sustained volley would flood the file. The cue suite turns debug on to count every one.
+    private bool LogsCannonHit()
+    {
+        if (_cannonHitsLogged >= 6)
+            return Log.ConsoleShows("weapons", Log.Level.Debug);
+        _cannonHitsLogged++;
+        return true;
     }
 
     // The incoming-fire block's tick (FUN_004b1340), which the original runs for the PLAYER's own
@@ -4784,20 +4768,8 @@ public partial class FlightController : Node3D
         public void PlayGrazeReaction() =>
             _rig.GrazeReaction(_contact.Impact, _contact.ColliderName, _struck);
 
-        public PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage)
-        {
-            var state = _rig.Damage!.Apply(zone, healthDamage, armorDamage);
-            string struckPart = state?.Def.Name ?? zone;
-            if (state != null)
-            {
-                _rig.Visuals?.OnPartDamage(struckPart, state.HealthFraction);
-                _rig._pilotHud.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
-            }
-
-            // the def-level stages run off the hull pool even when the graze went zone-less
-            _rig.Visuals?.OnHullDamage(_rig.Damage.SummaryHealthFraction);
-            return state;
-        }
+        public PlaneDamage.PartState? SpendDamage(string zone, float healthDamage, float armorDamage) =>
+            _rig.SpendDamage(zone, healthDamage, armorDamage);
 
         // Placement and the decoded impulse, on the plant whose fields they write. An airframe
         // already crashed is off the player path, so its gate rides the impulse's argument.

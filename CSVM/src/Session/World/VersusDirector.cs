@@ -552,7 +552,10 @@ public sealed class VersusDirector
             return;
         }
 
-        // A local match puts back every seat it flies, a bot included, from its own rotation.
+        // A local match puts back every seat it flies, a bot included, from its own rotation. The
+        // last round's live ordnance goes once here: the pool is shared, so no respawn may clear it.
+        if (seatRigs.Count > 0)
+            seatRigs[0].Controller?.Projectiles?.Clear();
         foreach (var rig in seatRigs)
             rig.Controller?.Respawn();
     }

@@ -214,9 +214,9 @@ The `SMOKE_SCREEN` mechanism, decoded in [../org/ordnanceTypes.md](../org/ordnan
 "SMOKE_SCREEN is a stun trap", as three types in one file. `SmokeScreenRule` is static and
 Godot-`Node`-free, holding the catch test and the human wash's cadence; `SmokeScreenTunables` reads
 the three `player.json` keys with the loader's own image defaults; `SmokeScreens` is the world
-registry, where `Lay` is the fire path's entry (such a weapon spawns no round) and `SimStep` runs the
-timer down and stuns or washes every other in-play aircraft inside the cone about the layer's live
-pose. It is not an occluder: no collision, no visibility and no targeting role. Each screen drives
+registry, where `Lay` is the fire path's entry on every machine (such a weapon spawns no round) and
+`SimStep` runs the timer down and stuns or washes every other in-play aircraft flown on this machine
+inside the cone about the layer's live pose. It is not an occluder: no collision, no visibility and no targeting role. Each screen drives
 its own emitter over the `ISmokeEmitter` seam, whose engine side is `SmokeScreenEmitters`.
 
 ## src/Flight/Airframe/BeeperTags.cs
