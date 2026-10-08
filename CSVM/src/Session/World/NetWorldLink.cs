@@ -395,9 +395,10 @@ internal sealed class NetWorldLink
 
         AiHitsTaken++;
         int shooter = _seats.ShooterOfSeat(hit.ShooterSeat) ?? ProjectilePool.NoShooter;
+        // A negative share would hand the pools back. No ceiling: the debug kill key claims a 1e6 share.
         var pose = new Transform3D(ai.Attitude, ai.WorldPosition);
         ai.TakeProjectileHit(weapon, pose * hit.LocalImpact, ai.Body?.PartName(hit.Part) ?? "center",
-            shooter, hit.Damage);
+            shooter, Math.Max(0f, hit.Damage));
     }
 
     private void SendDestructibleClaim(DestructibleRegistry.Instance inst, float damage)
@@ -411,11 +412,12 @@ internal sealed class NetWorldLink
         _net.Send(_net.HostPeer, new DestructibleHitMessage((ushort)index, PoolKey(inst), damage), NetChannels.Events);
     }
 
-    // Spent through DamageAt, so the stage change it causes goes back out to every guest.
+    // Spent through DamageAt, so the stage change it causes goes back out to every guest. A
+    // negative amount would heal the pool.
     private void TakeDestructibleHit(in DestructibleHitMessage hit)
     {
         if (_world != null && FindPool(_world.Destructibles.All, hit.Pool, hit.Key) is { } pool
-            && _world.DamageAt(pool.Anchor, hit.Damage))
+            && _world.DamageAt(pool.Anchor, Math.Max(0f, hit.Damage)))
         {
             DestructibleHitsTaken++;
         }

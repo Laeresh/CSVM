@@ -437,8 +437,8 @@ The two cursors every serialiser and deserialiser runs on, `NetMessageWriter` an
 Little-endian primitives over the caller's span, plus the two quantised forms the layouts need: a
 unit-range field as a 16-bit integer, and a fixed-width UTF-8 field that truncates on a whole
 character. The writer opens with the header and patches the total length in on `Close`; the
-reader reads the header in its constructor, so `Type`, `Length` and `Valid` answer before any
-payload byte is touched. A text field decodes on the stack, so a read allocates only its string.
+reader reads the header in its constructor, so `Type`, `Length` and `Valid` answer first, and a
+NaN or infinite float clears `Valid`. A text field decodes on the stack and allocates only its string.
 `NetMessageFuzzTests.cs` feeds every reader random, truncated and mislabelled bytes.
 
 ## src/Net/NetClockSlew.cs

@@ -923,9 +923,10 @@ internal sealed class SessionNet
             ? _seatRigs[hit.ShooterSeat].Controller?.PlayerIndex ?? ProjectilePool.NoShooter
             : hit.Hull != Net.NetMessage.NoSeat ? ZeppelinVersus.BroadsideShooter(hit.Hull)
             : ProjectilePool.NoShooter;
+        // A negative share would hand the pools back. No ceiling: the debug kill key claims a 1e6 share.
         var pose = new Transform3D(victim.Attitude, victim.WorldPosition);
         victim.TakeProjectileHit(defs.All[hit.Weapon], pose * hit.LocalImpact,
-            victim.Body?.PartName(hit.Part) ?? "center", shooter, hit.Damage);
+            victim.Body?.PartName(hit.Part) ?? "center", shooter, Math.Max(0f, hit.Damage));
     }
 
     // Every seat flown here whose ledger moved since the last step, sent whole. Read off the seat's

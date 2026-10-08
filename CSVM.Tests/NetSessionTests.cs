@@ -198,6 +198,54 @@ public sealed class NetSessionTests
         Assert.Equal(0, reached);
     }
 
+    // A NaN clock throws out of the guest's slew, and a NaN position reaches the pose reset. So a
+    // non-finite float is bad bytes on a bound type, and no handler sees it.
+    [Fact]
+    public void A_clock_ping_or_aircraft_state_carrying_a_nan_is_malformed_not_handled()
+    {
+        var (_, guest) = Joined(18);
+        int reached = 0;
+        guest.On<ClockPingMessage>((_, _) => reached++);
+        guest.On<AircraftStateMessage>((_, _) => reached++);
+        var ping = new byte[ClockPingMessage.Size];
+        var state = new byte[AircraftStateMessage.Size];
+        new ClockPingMessage(1f, float.NaN).Write(ping);
+        State(new Vector3(0f, float.NaN, 0f)).Write(state);
+
+        guest.OnPayload(0, 0, ping);
+        guest.OnPayload(0, 0, state);
+
+        Assert.Equal(2, guest.Malformed);
+        Assert.Equal(0, reached);
+
+        // ABLE-TO-FAIL CONTROL: the same two messages with finite floats reach their handlers.
+        new ClockPingMessage(1f, 2f).Write(ping);
+        State(Vector3.One).Write(state);
+        guest.OnPayload(0, 0, ping);
+        guest.OnPayload(0, 0, state);
+
+        Assert.Equal(2, guest.Malformed);
+        Assert.Equal(2, reached);
+
+        static AircraftStateMessage State(Vector3 at) =>
+            new(0, 1, at, Quaternion.Identity, Vector3.Zero, 0.5f, 0f, 0f, 0f, false);
+    }
+
+    // The handshake's clock opens the guest's slew, which throws on an infinite offset.
+    [Fact]
+    public void A_handshake_carrying_a_non_finite_clock_is_malformed()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(24));
+        var guest = NetSession.Guest(mesh[1], Airframes);
+        var payload = new byte[HandshakeMessage.Size];
+        new HandshakeMessage(Seed, double.PositiveInfinity, 1).Write(payload);
+
+        guest.OnPayload(0, 0, payload);
+
+        Assert.Equal(1, guest.Malformed);
+        Assert.Equal(NetMessage.NoSeat, guest.LocalSeat);
+    }
+
     [Fact]
     public void A_payload_whose_header_disagrees_with_its_length_is_dropped_unread()
     {
