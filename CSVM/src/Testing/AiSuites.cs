@@ -399,14 +399,20 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-        ctx.Check(turretDefs.All.Count(d => d.Carried) == 16,
-            $"the 16 carried ai.zrd entries parse carried={turretDefs.All.Count(d => d.Carried)}");
+        ctx.Check(turretDefs.All.Any(d => d.Carried),
+            $"a carried ai.zrd entry parses carried={turretDefs.All.Count(d => d.Carried)}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(turretDefs.All.Count(d => d.Carried) == 16,
+                $"the 16 carried ai.zrd entries parse carried={turretDefs.All.Count(d => d.Carried)}");
+        }
 
         // The Kestrel: a single rear turret (thirdp MSG_TUR_PAC_G3, PITCH [20,50], YAW
         // [105,255], the directed rear arc through 180°, DETECTION_RANGE 450, FIRE_RATE 0.4,
@@ -469,9 +475,15 @@ internal static class AiSuites
 
             // Load pose: the centre of each arc, yaw 180 (rearward), pitch 35.
             var (restYaw, restPitch) = TurretController.AnglesOfLocal(turret.BarrelLocal);
-            ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - 180f, -180f, 180f)) < 0.5f
-                      && Mathf.Abs(restPitch - 35f) < 0.5f,
-                $"the turret poses at its arc centre yaw={restYaw:0.#} pitch={restPitch:0.#}");
+            ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - turret.Def.RestYawDeg, -180f, 180f)) < 0.5f
+                      && Mathf.Abs(restPitch - turret.Def.RestPitchDeg) < 0.5f,
+                $"the turret poses at its arc centre yaw={restYaw:0.#} pitch={restPitch:0.#} (the arcs' {turret.Def.RestYawDeg:0.#}, {turret.Def.RestPitchDeg:0.#})");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - 180f, -180f, 180f)) < 0.5f
+                          && Mathf.Abs(restPitch - 35f) < 0.5f,
+                    $"the Kestrel's arc centre is yaw 180, pitch 35: yaw={restYaw:0.#} pitch={restPitch:0.#}");
+            }
 
             // The target: in-arc (behind and above the host, yaw ~180, elevation ~35°), inside
             // DETECTION_RANGE, on a hostile team. INACCURACY is zeroed so every gated round flies
@@ -548,8 +560,16 @@ internal static class AiSuites
             var (parkedYaw, _) = TurretController.AnglesOfLocal(turret.BarrelLocal);
             ctx.Check(turret.ShotsFired == shotsAtOutOfArc,
                 $"an out-of-arc target draws no fire shots={turret.ShotsFired}");
-            ctx.Check(Mathf.Abs(parkedYaw - 105f) < 1.5f,
-                $"the barrel parks at the nearer end stop (105°, not 255°) yaw={parkedYaw:0.#}");
+            float lowStop = turret.Def.YawMinDeg ?? 0f, highStop = turret.Def.YawMaxDeg ?? 0f;
+            float StopGap(float stop) => Mathf.Abs(Mathf.Wrap(20f - stop, -180f, 180f));
+            float nearStop = StopGap(lowStop) <= StopGap(highStop) ? lowStop : highStop;
+            ctx.Check(Mathf.Abs(Mathf.Wrap(parkedYaw - nearStop, -180f, 180f)) < 1.5f,
+                $"the barrel parks at the end stop nearer the target ({nearStop:0}° of {lowStop:0}°/{highStop:0}°) yaw={parkedYaw:0.#}");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(Mathf.Abs(parkedYaw - 105f) < 1.5f,
+                    $"the barrel parks at the nearer end stop (105°, not 255°) yaw={parkedYaw:0.#}");
+            }
 
             // --- YAW [0,0] means UNRESTRICTED: with the limit spelled that way the same ahead
             // target becomes reachable and the turret opens fire, the misread ('locked forward')
@@ -601,6 +621,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -1093,6 +1114,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -1856,18 +1878,34 @@ internal static class AiSuites
             Step(1);
             ctx.Check(ReferenceEquals(gunner.Target, target), $"a cleared target re-acquires next tick");
 
-            // --- the quick-draw gate: 80° off the target's tail axis (a beam-ish shot). At
-            // rating 1 the ~54° cone refuses it; at rating 9 the 89° cone takes it.
-            var beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
-            ai.PlaceHeld(beamPos, targetPos);
-            int ammoAtBeam = gun.Ammo;
-            Step(60);
-            ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam,
-                $"a beam-ish shot is refused at quick-draw rating 1 (~54°) rounds={ammoAtBeam - gun.Ammo}");
-            gunner.QuickDrawAngleDeg = skills.QuickDrawAngleDeg(9);
-            Step(60);
-            ctx.Check(gun.Ammo < ammoAtBeam,
-                $"the same bearing is taken at rating 9 (89°) rounds={ammoAtBeam - gun.Ammo}");
+            // --- the quick-draw gate: a beam-ish shot off the target's tail axis, refused inside
+            // rating 1's cone and taken inside rating 9's. The bearing sits between the two cones the
+            // record gives; on the install the shipped 80° bearing between ~54° and 89° runs too.
+            float quickDraw1 = skills.QuickDrawAngleDeg(1), quickDraw9 = skills.QuickDrawAngleDeg(9);
+            Vector3 BeamAt(float deg) => targetPos
+                + new Vector3(Mathf.Sin(Mathf.DegToRad(deg)), 0f, Mathf.Cos(Mathf.DegToRad(deg))) * 500f;
+            void QuickDraw(Vector3 at, string refused, string taken)
+            {
+                gunner.QuickDrawAngleDeg = quickDraw1;
+                ai.PlaceHeld(at, targetPos);
+                int ammoAtBeam = gun.Ammo;
+                Step(60);
+                ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam, $"{refused} rounds={ammoAtBeam - gun.Ammo}");
+                gunner.QuickDrawAngleDeg = quickDraw9;
+                Step(60);
+                ctx.Check(gun.Ammo < ammoAtBeam, $"{taken} rounds={ammoAtBeam - gun.Ammo}");
+            }
+
+            float beamDeg = (quickDraw1 + quickDraw9) * 0.5f;
+            var beamPos = BeamAt(beamDeg);
+            QuickDraw(beamPos, $"a shot {beamDeg:0.#}° off the tail is refused at quick-draw rating 1 ({quickDraw1:0.#}°)",
+                $"the same bearing is taken at rating 9 ({quickDraw9:0.#}°)");
+            if (!ctx.SyntheticData)
+            {
+                beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
+                QuickDraw(beamPos, $"a beam-ish shot is refused at quick-draw rating 1 (~54°)",
+                    $"the same bearing is taken at rating 9 (89°)");
+            }
 
             // --- the aim gate: nose 30° off the bearing clamps to the airframe's 11° and leaves
             // a 19° residual, past the gun's 10°, so the shot is refused with quick draw willing.
@@ -2101,9 +2139,17 @@ internal static class AiSuites
         if (gun == null)
             return;
 
-        // The shipped range gates the machine runs on.
-        ctx.Check(Mathf.IsEqualApprox(skills.MinAiActiveDist, 2000f),
-            $"player.json min_ai_active_dist is the decoded 2000 m got={skills.MinAiActiveDist:0}");
+        // The range gates the machine runs on, read back against the record; the install pins the
+        // shipped radius too.
+        float activeDist = skills.MinAiActiveDist;
+        ctx.Check(SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "min_ai_active_dist") is { } authored
+            && Mathf.IsEqualApprox(activeDist, authored),
+            $"player.json min_ai_active_dist reaches the machine as authored got={activeDist:0}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(skills.MinAiActiveDist, 2000f),
+                $"player.json min_ai_active_dist is the decoded 2000 m got={skills.MinAiActiveDist:0}");
+        }
         ctx.Check(Mathf.IsEqualApprox(stats.AiAttackRange, 2000f)
             && Mathf.IsEqualApprox(stats.AiReturnRange, 1200f),
             $"vehicle.json attack/return_range are the decoded 2000/1200 m got={stats.AiAttackRange:0}/{stats.AiReturnRange:0}");
@@ -2165,7 +2211,8 @@ internal static class AiSuites
             string? lastRoll = null;
             machine.RollLogged += line => lastRoll = line;
 
-            var aiPos = targetPos + new Vector3(0f, 0f, 2600f); // outside the 2000 m radius
+            // Outside the radius the promotion admits a quarry from, the airframe's attack volume.
+            var aiPos = targetPos + new Vector3(0f, 0f, stats.AiAttackRange + 600f);
             var pilot = AiPilot.HoldingCourse(aiPos, targetPos);
             pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260813 })
             {
@@ -2207,14 +2254,14 @@ internal static class AiSuites
             // pursue, announced in the decoded vocabulary.
             ctx.Check(machine.Mode == AiMode.Patrol, $"the machine starts on patrol");
             Step(1);
-            ctx.Check(machine.Mode == AiMode.Patrol && Dist() > 2000f,
-                $"outside min_ai_active_dist it stays on patrol d={Dist():0} m");
+            ctx.Check(machine.Mode == AiMode.Patrol && Dist() > stats.AiAttackRange,
+                $"outside the attack radius it stays on patrol d={Dist():0} m");
             int budget = 60 * 60;
             while (machine.Mode == AiMode.Patrol && budget-- > 0)
                 Step(1);
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"the approach activates it into pursue d={Dist():0} m");
-            ctx.Check(Dist() <= 2010f, $"…at the activation radius, not before d={Dist():0} m");
+            ctx.Check(Dist() <= stats.AiAttackRange + 10f, $"…at the activation radius, not before d={Dist():0} m");
             ctx.Check(transitions.Contains("patrol>pursue"),
                 $"…logged as patrol>pursue transitions=[{string.Join(" ", transitions)}]");
 
@@ -2352,8 +2399,18 @@ internal static class AiSuites
             ctx.Check(machine.ClimbOutAltitude > yBefore,
                 $"…ordering a climb-out to {machine.ClimbOutAltitude:0} m from {yBefore:0} m");
             Step(240);
+            // How fast it climbs back past the order's altitude is the airframe's: the install's
+            // plane is past it inside 4 s. Any airframe must be back past it while the override
+            // holds, inside 8 s of the order.
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(ai.WorldPosition.Y > yBefore,
+                    $"the plane is climbing out y={ai.WorldPosition.Y:0} from {yBefore:0}");
+            }
+            for (int i = 0; i < 240 && ai.WorldPosition.Y <= yBefore && machine.Mode == AiMode.AvoidCrash; i++)
+                Step(1);
             ctx.Check(ai.WorldPosition.Y > yBefore,
-                $"the plane is climbing out y={ai.WorldPosition.Y:0} from {yBefore:0}");
+                $"the plane climbs back out past the order's altitude y={ai.WorldPosition.Y:0} from {yBefore:0}");
             terrainBlocked = false;
             Step(120);
             ctx.Check(machine.Mode != AiMode.AvoidCrash,
@@ -2458,10 +2515,27 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
-        ctx.Same(35, voice.AccentIds.Count, $"voice.zrd accent rows");
+        if (ctx.SyntheticData)
+            ctx.Check(voice.AccentIds.Count > 0, $"voice.zrd has accent rows count={voice.AccentIds.Count}");
+        else
+            ctx.Same(35, voice.AccentIds.Count, $"voice.zrd accent rows");
+
+        // The install's worked example is accent 12, VO id 2 (the pilot with the full bearing
+        // set), and id 26 a pilot outside its pool. The synthetic tree takes the first one-pilot
+        // accent whose pilot authors a DI-LowDmg group, and any other pilot.
+        int accent = ctx.SyntheticData
+            ? voice.AccentIds.FirstOrDefault(a => voice.Pool(a).Length == 1
+                && voice.PilotFor(a, 0) is int p && voice.PlayableFor(p, "DI-LowDmg")?.EndsWith("_random") == true)
+            : 12;
+        int vo = ctx.SyntheticData ? voice.PilotFor(accent, 0) ?? -1 : 2;
+        int stranger = ctx.SyntheticData ? voice.PilotIds.FirstOrDefault(id => id != vo) : 26;
+        string unprewarmed = ctx.SyntheticData
+            ? voice.ClipsFor(stranger, "TA-SucShk").FirstOrDefault() ?? "none"
+            : "snd_id26_TA-SucShk-A";
 
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
@@ -2474,22 +2548,23 @@ internal static class AiSuites
             };
             ctx.Host.AddChild(sounds);
 
-            // The chain's worked example: accent 12 is a single-id pool, VO id 2 (the pilot with
-            // the full bearing set). Prewarm that pilot exactly as a mission roster would.
-            int? pilot = voice.PilotFor(12, 0);
-            ctx.Check(pilot == 2, $"accent 12 resolves to VO id 2 got={pilot?.ToString() ?? "null"}");
-            var subset = voice.PrewarmNames(new[] { 12 });
+            // The chain's worked example, a single-id pool. Prewarm that pilot exactly as a mission
+            // roster would.
+            int? pilot = voice.PilotFor(accent, 0);
+            ctx.Check(pilot == vo && vo >= 0, $"accent {accent} resolves to VO id {vo} got={pilot?.ToString() ?? "null"}");
+            var subset = voice.PrewarmNames(new[] { accent });
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int decoded = sounds.Prewarm(subset);
             sw.Stop();
-            ctx.Check(decoded >= 70, $"the accent-12 subset decodes names={subset.Count} decoded={decoded}");
-            ctx.Note($"accent-12 prewarm: {subset.Count} defs, {decoded} streams, {sw.ElapsedMilliseconds} ms");
+            ctx.Check(ctx.SyntheticData ? decoded == subset.Count && decoded > 0 : decoded >= 70,
+                $"the accent-{accent} subset decodes names={subset.Count} decoded={decoded}");
+            ctx.Note($"accent-{accent} prewarm: {subset.Count} defs, {decoded} streams, {sw.ElapsedMilliseconds} ms");
             sounds.Loader = null;   // the session's build scope closing (WorldSession.Build)
 
-            string? playable = voice.PlayableFor(2, "DI-LowDmg");
-            ctx.Check(playable == "snd_DI-LowDmg-A_id2_random",
-                $"DI-LowDmg resolves to the shipped variant group got={playable}");
-            string? bearing = voice.PlayableForTrigger(2, 6);   // WA-Enemy-3H
+            string? playable = voice.PlayableFor(vo, "DI-LowDmg");
+            ctx.Check(playable == $"snd_DI-LowDmg-A_id{vo}_random",
+                $"DI-LowDmg resolves to the authored variant group got={playable}");
+            string? bearing = voice.PlayableForTrigger(vo, 6);   // WA-Enemy-3H
             ctx.Check(bearing != null && sounds.HasStream(bearing),
                 $"the bearing clip's stream survived the loader retirement name={bearing}");
 
@@ -2497,7 +2572,7 @@ internal static class AiSuites
             radio = new MissionRadio(defs, groups, sounds.StreamFor);
             ctx.Host.AddChild(radio);
             string? resolved = radio.Speak(playable!, new System.Random(2));
-            ctx.Check(resolved != null && resolved.StartsWith("snd_id2_DI-LowDmg"),
+            ctx.Check(resolved != null && resolved.StartsWith($"snd_id{vo}_DI-LowDmg"),
                 $"a prewarmed voice line queues after the archive closed resolved={resolved}");
             radio.Tick(0.1f);
             ctx.Check(radio.LinesStarted == 1 && radio.OnAir == resolved,
@@ -2505,8 +2580,8 @@ internal static class AiSuites
 
             // A def never prewarmed is null once the loader is gone: the exact failure the
             // prewarm exists to prevent.
-            ctx.Check(radio.Speak("snd_id26_TA-SucShk-A", new System.Random(3)) == null,
-                $"an unprewarmed pilot's line stays null after the archive closed");
+            ctx.Check((!ctx.SyntheticData || defs.ContainsKey(unprewarmed)) && radio.Speak(unprewarmed, new System.Random(3)) == null,
+                $"an unprewarmed pilot's line stays null after the archive closed ({unprewarmed}, VO id {stranger})");
 
             // The cost of prewarm-everything, measured on a fresh archive so nothing is cached:
             // the number the roster-subset strategy is justified against.
@@ -2583,6 +2658,10 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
+        // The WA-Turret leg builds the carrier's gunner off the turret table.
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
+        ctx.RequirePlane(TurretCarrier);
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -2592,7 +2671,12 @@ internal static class AiSuites
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
-        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        // The install's accent 12 speaks as pilot VO id 2; another tree stands in its first one-voice accent.
+        var accents = CombatVoice.LoadAccents(ctx.ZrdrPath);
+        var (accent, accentVo) = ctx.SyntheticData && accents.FirstOrDefault(a => a.Value.Length == 1) is { Value: { } pool } single
+            ? (single.Key, pool[0])
+            : (12, 2);
+        var voice = new CombatVoice(defs, groups, accents);
         WeaponDef? gun = weapons.All.FirstOrDefault(w =>
             w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
         ctx.Check(gun != null && stats.DestroyableParts.Count > 0,
@@ -2619,7 +2703,7 @@ internal static class AiSuites
                 Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
             };
             ctx.Host.AddChild(sounds);
-            sounds.Prewarm(voice.PrewarmNames(new[] { 12 }));
+            sounds.Prewarm(voice.PrewarmNames(new[] { accent }));
             sounds.Loader = null;
 
             radio = new MissionRadio(defs, groups, sounds.StreamFor);
@@ -2647,10 +2731,10 @@ internal static class AiSuites
 
             // Talker chance pinned to 1: every roll passes, so a silent trigger is a GATE
             // decision (cooldown, aliveness), never luck.
-            runtime.RegisterAi(ai, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(ai, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
             var speaker = runtime.Dispatcher.Find(ai.PlayerIndex);
-            ctx.Check(speaker is { VoId: 2 },
-                $"accent 12 registers the AI as VO id 2 got={speaker?.VoId.ToString() ?? "none"}");
+            ctx.Check(speaker?.VoId == accentVo,
+                $"accent {accent} registers the AI as VO id {accentVo} got={speaker?.VoId.ToString() ?? "none"}");
             if (speaker == null)
                 return;
 
@@ -2805,8 +2889,8 @@ internal static class AiSuites
             var killer = Rig(FlightRoster.ShooterIdBase + 1, enemyTeam, human: false);
             var wingman = Rig(FlightRoster.ShooterIdBase + 2, AimAssist.PlayerTeam, human: false);
             var pilotRig = Rig(0, AimAssist.PlayerTeam, human: true);
-            runtime.RegisterAi(killer, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
-            runtime.RegisterAi(wingman, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(killer, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(wingman, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
             runtime.RegisterPlayer(pilotRig);
 
             // The first predicate, over shooter and victim: a kill inside one team picks no gloat.
@@ -2859,7 +2943,7 @@ internal static class AiSuites
             var evader = Rig(FlightRoster.ShooterIdBase + 7, enemyTeam, human: false);
             var machine = new AiModeMachine(new System.Random(11));
             evader.Pilot!.Machine = machine;
-            runtime.RegisterAi(evader, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(evader, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
             var evaderPos = evader.WorldPosition;
             var pursuerPos = evaderPos + new Vector3(0f, 0f, 300f);
             var onTail = (evaderPos - pursuerPos).Normalized();  // the pursuer's nose on the evader
@@ -3059,8 +3143,8 @@ internal static class AiSuites
             // ⚠ The flight mate is registered at 2: the bearing ids halve the talker chance, so a
             // chance of 1 would make every assertion below a coin flip on the dice rather than on
             // the raise. The halving itself is pinned by AiVoiceDispatcherTests.
-            attack.RegisterAi(flightMate, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
-            attack.RegisterAi(ace, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            attack.RegisterAi(flightMate, accentId: accent, talkerChance: 2f, constitutionChance: 1f);
+            attack.RegisterAi(ace, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
 
             // The mission start: the ace takes the human on the first frame, well inside the
             // window, and nothing may speak yet.
@@ -3112,7 +3196,7 @@ internal static class AiSuites
                 {
                     Target = chased,
                 };
-                attack.RegisterAi(rig, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+                attack.RegisterAi(rig, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
                 rig.PlaceHeld(at, lookAt);
                 return rig;
             }
@@ -3132,7 +3216,7 @@ internal static class AiSuites
             busy.PlaceHeld(asternAt, chasedAt);
             busyModes.Enter(AiMode.Pursue, "ordered");
             busyModes.NotifyDamage(1e6f, 1e6f, 100f, 100f);
-            attack.RegisterAi(busy, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            attack.RegisterAi(busy, accentId: accent, talkerChance: 1f, constitutionChance: 1f);
 
             attack.Step(0.1f);
             bool Taunted(FlightController who, int trigger) => calls.Exists(line =>
@@ -3195,7 +3279,7 @@ internal static class AiSuites
             var sixLowAt = homeAt + new Vector3(0f, -200f, 500f);
             var sixLow = Chaser(FlightRoster.ShooterIdBase + 22, enemyTeam, sixLowAt);
             wreckWatch.RegisterPlayer(homebound);
-            wreckWatch.RegisterAi(escort, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
+            wreckWatch.RegisterAi(escort, accentId: accent, talkerChance: 2f, constitutionChance: 1f);
             // Accentless, so a death cry cannot occupy the channel the bearing needs.
             wreckWatch.RegisterAi(sixLow, accentId: null, talkerChance: 0f, constitutionChance: 0f);
 
@@ -3337,6 +3421,20 @@ internal static class AiSuites
             engineA.Listeners = () => new[] { posA };
             engineB.Listeners = () => new[] { posB };
 
+            // The swap is told apart by the damaged definition the airframe's own record names. The
+            // install pins the shipped name too.
+            string? damagedName = aiCache.TryGetValue(ctx.PlaneName, out var shared) ? shared.DamagedEngineSound : null;
+            ctx.Check(damagedName != null, $"{ctx.PlaneName} names a damaged engine definition ({damagedName ?? "-"})");
+            if (damagedName == null)
+            {
+                return;
+            }
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(damagedName == "snd_damagedengine",
+                    $"{ctx.PlaneName} swaps to the shipped snd_damagedengine ({damagedName})");
+            }
+
             const float dt = 1f / 60f;
             var drive = new EngineDrive(0.5f, 0f, 0f);
             var damagedA = new List<string>();
@@ -3352,7 +3450,7 @@ internal static class AiSuites
                     {
                         return;
                     }
-                    bool damaged = line.Contains("snd_damagedengine");
+                    bool damaged = line.Contains($"-> {damagedName} ");
                     bool fromA = line.Contains(a.Name.ToString());
                     if (damaged && fromA)
                         damagedA.Add(line);
@@ -3800,6 +3898,7 @@ internal static class AiSuites
         ctx.RequireData(texturesPath, $"C1 textures");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
+        ctx.RequireZrdrEntry(chapterZrdr, "neindex.json");
 
         // The chapter graph resolves both ways the data references it: by id (aiv field 0)
         // and by neindex name (egen/zeppelins/objectives), case-insensitively.

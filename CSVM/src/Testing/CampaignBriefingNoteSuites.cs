@@ -41,6 +41,7 @@ internal static class CampaignBriefingNoteSuites
     internal static void CampaignBriefingNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var probe = new Control();
         ctx.Host.AddChild(probe);
         try

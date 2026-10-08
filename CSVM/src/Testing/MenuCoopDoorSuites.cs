@@ -39,7 +39,6 @@ internal static class MenuCoopDoorSuites
         + "and leaving the campaign unmaps the port")]
     internal static void TheCoopDoor(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
 
         // The first host wire serves the open-and-close control, the second the match itself. A
         // loopback end binds once, so every open needs its own.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -8,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Spec;
+using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
 
@@ -39,15 +41,22 @@ internal static class VersusSpawnSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
         ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, "IA1");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/IA1 zrdr");
 
-        var spawns = SpawnPoints.LoadIa(missionZrdr, Scenario);
+        // A root with no IA1 walks the list a --vs launch on the empty stage hands the same
+        // rotation, the stage's code-built spawn ring.
+        bool onStage = !System.IO.File.Exists(missionZrdr) && !System.IO.Directory.Exists(missionZrdr);
+        string listName = onStage ? "the empty stage's spawn ring" : $"{ctx.Chapter}/IA1";
+        if (onStage)
+            ctx.Note($"spawn list: {listName}, the data root carries no {ctx.Chapter}/IA1");
+        var spawns = onStage
+            ? new SpawnPicker(SessionSpec.Parse(new[] { "--vs", "--stage=empty" })).LoadSpawnList(missionZrdr, Scenario)
+            : SpawnPoints.LoadIa(missionZrdr, Scenario);
         if (spawns is not { Count: >= 4 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/IA1 authors no usable {Scenario} spawn list");
+            throw new SuiteSkippedException($"{listName} authors no usable {Scenario} spawn list");
         }
         ctx.Check(spawns.Count >= 4,
-            $"{ctx.Chapter}/IA1 ships {spawns.Count} {Scenario} spawns for the rotation to walk");
+            $"{listName} ships {spawns.Count} {Scenario} spawns for the rotation to walk");
 
         var textures = new TextureArchive(texturesPath);
         var pool = new ProjectilePool(textures, null, null);
@@ -149,21 +158,24 @@ internal static class VersusSpawnSuites
         + "the identical launch without --vs still reads no table")]
     internal static void VersusNetSpawnTable(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
+        // The synthetic tree carries no MP map, so it reads the invented PROBE1 scope's table.
+        string chapter = ctx.SyntheticData ? SyntheticMission.Chapter : ctx.Chapter;
+        string mission = ctx.SyntheticData ? SyntheticMission.Mission : MpMission;
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
 
         var spec = SessionSpec.Parse(new[]
         {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=4", "--spawn=0",
+            "--vs", $"--chapter={chapter}", $"--mission={mission}", "--players=4", "--spawn=0",
         });
         var picker = new SpawnPicker(spec);
         var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
         if (table is not { Count: > 0 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no net.zrd table");
+            throw new SuiteSkippedException($"{chapter}/{mission} authors no net.zrd table");
         }
         ctx.Check(picker.NetSpawns && table.Count == SpawnPoints.NetBlock,
-            $"the picker answers {MpMission} with the net table's free-for-all block: {table.Count} entries, net={picker.NetSpawns}");
+            $"the picker answers {mission} with the net table's free-for-all block: {table.Count} entries, net={picker.NetSpawns}");
 
         var starts = picker.ChooseStarts(table, missionZrdr, picker.ChooseSpawnBase(table), 4);
         var seen = new List<int>();
@@ -192,12 +204,100 @@ internal static class VersusSpawnSuites
         // campaign mission's unread placeholder table out of every other launch.
         var flyPicker = new SpawnPicker(SessionSpec.Parse(new[]
         {
-            "--fly", $"--chapter={ctx.Chapter}", $"--mission={MpMission}",
+            "--fly", $"--chapter={chapter}", $"--mission={mission}",
         }));
         ctx.Check(flyPicker.LoadSpawnList(missionZrdr, Scenario) == null && !flyPicker.NetSpawns,
             $"ABLE-TO-FAIL CONTROL: the same mission without --vs reads no table and falls back");
 
-        ctx.Note($"{ctx.Chapter}/{MpMission}: {table.Count}-entry free-for-all block, seats on entries {string.Join(", ", seen)}");
+        ctx.Note($"{chapter}/{mission}: {table.Count}-entry free-for-all block, seats on entries {string.Join(", ", seen)}");
+    }
+
+    [Suite("versus-spawn-empty-stage",
+        "Dogfight on --stage=empty opens on the stage's own code-built spawn ring: the picker "
+        + "answers with it in place of a net.zrd table, every entry sits on the ring at the stage's "
+        + "spawn altitude with its nose aimed in, two seats open on opposite entries and four on a "
+        + "compass cross at the multiplayer opening state, a team match opens each team on its own "
+        + "block at its own base, an explicit --pos still wins, and the stage without --vs still "
+        + "reads no table")]
+    internal static void VersusEmptyStageRing(TestContext ctx)
+    {
+        var spec = SessionSpec.Parse(new[] { "--vs", "--stage=empty", "--players=4", "--spawn=0" });
+        var picker = new SpawnPicker(spec);
+        var table = picker.LoadSpawnList("", spec.Scenario);
+        ctx.Check(spec.EmptyStage && spec.SpawnAt == null && picker.NetSpawns
+                  && table is { Count: EmptyStage.SpawnRingEntries },
+            $"the picker answers an empty-stage Dogfight with the stage's ring: {table?.Count ?? 0} entries, net={picker.NetSpawns}, override={spec.SpawnAt?.ToString() ?? "none"}");
+        if (table == null)
+        {
+            return;
+        }
+
+        // Aimed in: the nose's bearing is the skew away from the bearing to the origin, no more.
+        float cosSkew = Mathf.Cos(Mathf.DegToRad(EmptyStage.SpawnRingSkewDeg + 0.5f));
+        var bad = new List<int>();
+        for (int i = 0; i < table.Count; i++)
+        {
+            var p = table[i].Position;
+            var inward = new Vector3(-p.X, 0f, -p.Z).Normalized();
+            var nose = table[i].Forward with { Y = 0f };
+            bool onRing = Mathf.Abs(new Vector2(p.X, p.Z).Length() - EmptyStage.SpawnRingRadius) < 0.5f
+                          && Mathf.IsEqualApprox(p.Y, EmptyStage.SpawnAltitude);
+            if (!onRing || nose.Normalized().Dot(inward) < cosSkew)
+            {
+                bad.Add(i);
+            }
+        }
+
+        ctx.Check(bad.Count == 0,
+            $"every entry sits {EmptyStage.SpawnRingRadius:0} m out at {EmptyStage.SpawnAltitude:0} m with its nose within {EmptyStage.SpawnRingSkewDeg:0} degrees of the origin (off: {string.Join(", ", bad)})");
+
+        var two = picker.ChooseStarts(table, "", picker.ChooseSpawnBase(table), 2);
+        float apart = two[0].Pos.DistanceTo(two[1].Pos);
+        ctx.Check(apart > EmptyStage.SpawnRingRadius * 1.99f,
+            $"two seats open on opposite entries, {apart:0} m apart");
+        var four = picker.ChooseStarts(table, "", picker.ChooseSpawnBase(table), 4);
+        float closest = float.MaxValue;
+        for (int a = 0; a < four.Count; a++)
+        {
+            for (int b = a + 1; b < four.Count; b++)
+            {
+                closest = Mathf.Min(closest, four[a].Pos.DistanceTo(four[b].Pos));
+            }
+        }
+
+        ctx.Check(closest > EmptyStage.SpawnRingRadius * 1.41f,
+            $"four seats open on a compass cross, the closest pair {closest:0} m apart");
+        ctx.Check(Mathf.IsEqualApprox(four[0].ThrottleFrac, SpawnPoints.MultiplayerThrottleFrac)
+                  && Mathf.IsEqualApprox(four[0].SpeedMps, SpawnPoints.MultiplayerSpeedMps),
+            $"on the original's multiplayer opening state: throttle={four[0].ThrottleFrac:0.00} speed={four[0].SpeedMps:0.#}m/s");
+
+        // A team match takes the whole table and opens each team on its own block, at its own base.
+        var teams = new[] { 1, 2, 1, 2 };
+        var teamPicker = new SpawnPicker(spec) { SeatTeams = teams };
+        var teamTable = teamPicker.LoadSpawnList("", spec.Scenario);
+        teamPicker.PlanTeams(teamTable, 0);
+        ctx.Check(teamTable is { Count: (EmptyStage.TeamBlockCount + 1) * SpawnPoints.NetBlock }
+                  && teamPicker.SeatEntries is [16, 32, 17, 33],
+            $"a team match walks team n's block n of the whole {teamTable?.Count ?? 0}-entry table ({string.Join(", ", teamPicker.SeatEntries ?? Array.Empty<int>())})");
+        var teamStarts = teamPicker.ChooseStarts(teamTable, "", 0, teams.Length);
+        var offBase = Enumerable.Range(0, teams.Length).Where(seat =>
+            (teamStarts[seat].Pos with { Y = 0f }).DistanceTo(EmptyStage.TeamBase(teams[seat])) > EmptyStage.TeamBlockSpacing).ToList();
+        ctx.Check(offBase.Count == 0 && teamStarts[0].Pos.DistanceTo(teamStarts[1].Pos) > EmptyStage.TeamBaseRadius,
+            $"and four seats stand at their own team's base, the two teams across the origin (off base: {string.Join(", ", offBase)})");
+
+        var placed = SessionSpec.Parse(new[] { "--vs", "--stage=empty", "--players=2", "--pos=100,400,0" });
+        var placedPicker = new SpawnPicker(placed);
+        var placedTable = placedPicker.LoadSpawnList("", placed.Scenario);
+        var (pos, _) = placedPicker.ChooseSpawn(placedTable, "", 0, 0, "");
+        ctx.Check(pos.IsEqualApprox(new Vector3(100f, 400f, 0f)),
+            $"an explicit --pos still beats the ring ({pos.X:0},{pos.Y:0},{pos.Z:0})");
+
+        // ABLE-TO-FAIL CONTROL: a flight on the stage keeps the single pose over the origin.
+        var fly = SessionSpec.Parse(new[] { "--fly", "--stage=empty" });
+        var flyPicker = new SpawnPicker(fly);
+        ctx.Check(flyPicker.LoadSpawnList("", fly.Scenario) == null && !flyPicker.NetSpawns
+                  && fly.SpawnAt == new Vector3(0f, EmptyStage.SpawnAltitude, 0f),
+            $"ABLE-TO-FAIL CONTROL: the stage without --vs reads no table and starts over the origin");
     }
 
     // The placement closure GameSession installs: the living field read fresh at the respawn, so a

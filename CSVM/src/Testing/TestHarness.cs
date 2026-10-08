@@ -85,8 +85,8 @@ public static class TestHarness
 
     /// <summary>Runs the suites <paramref name="filter"/> selects (empty = all), prints the table,
     /// writes <c>.scratch/test-report.json</c>, and returns the process exit code: 0 when nothing
-    /// failed, 1 otherwise. A skipped suite is not a failure; a selector term that matched nothing
-    /// is, and nothing runs in that case.</summary>
+    /// failed, 1 otherwise. A skipped suite is a failure only when <see cref="SkipFailures"/> names
+    /// it. A selector term that matched nothing is a failure, and nothing runs in that case.</summary>
     public static int Run(TestContext ctx, string filter)
     {
         // Numbers in a committed report must read the same on every machine.
@@ -99,8 +99,13 @@ public static class TestHarness
             return 1;
         }
         var selected = Select(All, terms, out var unmatched);
+        var skipFails = SkipFailures(terms);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
+        if (ctx.SyntheticData)
+        {
+            Log.Warn("test", $"run-tests reads SYNTHETIC data dataRoot={ctx.DataRoot}: a PASS here proves a code path on invented records, never the game's data");
+        }
         if (unmatched.Count > 0)
         {
             Log.Error("test", $"run-tests selector matched nothing: {string.Join(", ", unmatched)}; registered: {string.Join(", ", All.Select(s => s.Name))}");
@@ -178,6 +183,15 @@ public static class TestHarness
                 string leak = $"left {orphansLeft} orphan node(s) past its teardown, over the tolerance of {OrphanLeakTolerance}: {orphanRoots}";
                 ctx.Failures.Add(leak);
                 Log.Error("test", $"FAIL {leak}");
+                status = SuiteStatus.Fail;
+            }
+            // After the orphan check, which a skipped body is exempt from. The row keeps the skip
+            // reason as its detail, so the report names the input that went missing.
+            if (status == SuiteStatus.Skip && skipFails.TryGetValue(suite.Name, out string? refusing))
+            {
+                string refused = $"skipped, and {refusing} counts a skip as a failure: {detail}";
+                ctx.Failures.Add(refused);
+                Log.Error("test", $"FAIL {suite.Name} {refused}");
                 status = SuiteStatus.Fail;
             }
             double wallSeconds = watch.Elapsed.TotalSeconds;
@@ -264,7 +278,7 @@ public static class TestHarness
         Log.Raw(FormatTable(results, screen, logPath));
         WriteReport(ctx, results, screen, logPath, phaseTotals, filter, plan);
         string errors = screen == null ? "unscreened" : screen.Ok ? "clean" : "UNEXPECTED";
-        Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}");
+        Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}{(ctx.SyntheticData ? " data=SYNTHETIC" : "")}");
         return fail > 0 || screenFailed ? 1 : 0;
     }
 
@@ -303,6 +317,30 @@ public static class TestHarness
             }
         }
         return suites.Where(s => wanted.Contains(s.Name)).ToList();
+    }
+
+    /// <summary>The suites whose SKIP fails a run of <paramref name="spec"/>, each mapped to the
+    /// <c>tier:</c> term that refuses it. They are the members of every named tier carrying
+    /// <see cref="SuiteTier.SkipFails"/>. A suite reached only by another term keeps SKIP as a
+    /// non-failure. Pure, like <see cref="Select"/>.</summary>
+    public static IReadOnlyDictionary<string, string> SkipFailures(string spec)
+    {
+        const string tier = "tier:";
+        var refused = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string raw in spec.Split(','))
+        {
+            string term = raw.Trim();
+            if (!term.StartsWith(tier, StringComparison.OrdinalIgnoreCase)
+                || SuiteCatalog.Tier(term[tier.Length..]) is not { SkipFails: true } named)
+            {
+                continue;
+            }
+            foreach (string name in named.Suites)
+            {
+                refused.TryAdd(name, term);
+            }
+        }
+        return refused;
     }
 
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
@@ -395,12 +433,12 @@ public static class TestHarness
         }
         if (term.StartsWith(tier, StringComparison.OrdinalIgnoreCase))
         {
-            var names = SuiteCatalog.Tier(term[tier.Length..]);
-            if (names == null)
+            var named = SuiteCatalog.Tier(term[tier.Length..]);
+            if (named == null)
             {
                 return new List<Suite>();
             }
-            var set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var set = new HashSet<string>(named.Suites, StringComparer.OrdinalIgnoreCase);
             return suites.Where(s => set.Contains(s.Name)).ToList();
         }
         return suites.Where(s => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -552,6 +590,7 @@ public static class TestHarness
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
         json.AppendLine($"  \"dataRoot\": {Quote(ctx.DataRoot)},");
+        json.AppendLine($"  \"syntheticData\": {(ctx.SyntheticData ? "true" : "false")},");
         json.AppendLine($"  \"passed\": {results.Count(r => r.Status == SuiteStatus.Pass)},");
         json.AppendLine($"  \"failed\": {results.Count(r => r.Status == SuiteStatus.Fail)},");
         json.AppendLine($"  \"skipped\": {results.Count(r => r.Status == SuiteStatus.Skip)},");
@@ -783,8 +822,16 @@ public sealed class TestContext
     // see DecodeCache for what it holds and the read-only contract that binds every user.
     private readonly DecodeCache _decode = new();
 
+    // The synthetic planes archive's node names, read once by RequirePlane and only under the switch.
+    private HashSet<string>? _syntheticPlaneNodes;
+
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
+
+    /// <summary>Whether <see cref="DataRoot"/> is the invented tree <c>--synthetic-data</c> writes,
+    /// read off the tree's own stamp. The run's log and report say so.</summary>
+    public bool SyntheticData { get; init; }
+
     public required string Chapter { get; init; }
     public required string Mission { get; init; }
     public required string ZrdrPath { get; init; }
@@ -910,6 +957,52 @@ public sealed class TestContext
         if (!File.Exists(path) && !Directory.Exists(path))
         {
             throw new SuiteSkippedException($"{Log.Format(what)} not found: {path}");
+        }
+    }
+
+    /// <summary>On the synthetic tree, skips a suite whose body reads a shipped texture by
+    /// <paramref name="name"/> that the invented archive does not carry. ⚠ Never skip on a real
+    /// extraction: a shipped name missing there is a broken tree, which the body reports.</summary>
+    public void RequireTexture(TextureArchive textures, string name)
+    {
+        if (SyntheticData && textures.FindImage(name) == null)
+        {
+            throw new SuiteSkippedException($"the synthetic texture archive carries no {name}");
+        }
+    }
+
+    /// <summary>Skips a suite whose body reads the reader file <paramref name="fileName"/> when the
+    /// zrdr archive at <paramref name="zrdrPath"/> lacks it. The archive may be a ZIP or its unpacked
+    /// folder. Checked on every tree, like <see cref="RequireData"/>. A suite names only entries every
+    /// install ships, so on a real extraction the gate passes wherever the body would have run.</summary>
+    public void RequireZrdrEntry(string zrdrPath, string fileName)
+    {
+        RequireData(zrdrPath, $"zrdr archive for {fileName}");
+        if (!Zrdr.HasFile(zrdrPath, fileName))
+        {
+            throw new SuiteSkippedException($"{fileName} not found in {zrdrPath}");
+        }
+    }
+
+    /// <summary>On the synthetic tree, skips a suite whose body needs a shipped airframe, by node
+    /// name, that the invented planes archive lacks. ⚠ Never skip on a real extraction: every
+    /// install carries every shipped airframe, so a miss there is a broken tree the body reports.</summary>
+    public void RequirePlane(params string[] nodeNames)
+    {
+        if (!SyntheticData)
+        {
+            return;
+        }
+
+        RequireData(PlanesGamezPath, $"planes gamez");
+        _syntheticPlaneNodes ??= new HashSet<string>(
+            GameZ.Load(PlanesGamezPath).Nodes.Select(n => n.Name), StringComparer.Ordinal);
+        foreach (string name in nodeNames)
+        {
+            if (!_syntheticPlaneNodes.Contains(name))
+            {
+                throw new SuiteSkippedException($"the synthetic planes gamez carries no {name}");
+            }
         }
     }
 

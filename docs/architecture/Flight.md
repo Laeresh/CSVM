@@ -19,10 +19,10 @@ behaviour: [../org/ordnanceTypes.md](../org/ordnanceTypes.md). Inspect with `--d
 ## src/Flight/Weapons/Loadout.cs
 Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file into per-plane
 `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves each gun slot's markers to live
-muzzle `Node3D`s and its caliber plus ammo to a `WeaponDef`, and each hardpoint to its `pylon`,
+muzzle `Node3D`s and its caliber plus ammo, or its named `weapon`, to a `WeaponDef`, and each hardpoint to its `pylon`,
 yielding `GunGroup`s with their own ammo counters and `Hardpoint`s. Turret slots bind but stay inert.
 `Loadout.ForRig` synthesizes a lab loadout covering the airframe's whole rig rather than only what
-stock names, and runs it through the same `Bind`, so there is exactly one bind path; `BindAi` (an AI def's `weapons`) and `BindWingman` (a wingman's pick, [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)) end in it too. `Hangs`, `WingPylons`, `WingCounts` and `PylonForCell` read a fit the other way, which pylons it carries, how many each wing hangs and which one a saved ordnance cell names, off the rig's odd-to-port split rather than a count heuristic, so the flight check, the ammo screen and a fresh hangar build all bound their cells alike. `ApplyRocketOverride` is the `--rocket=` hook, every pylon re-armed with one named weapon, which the human assembly and the weapon lab both call. Inspect with
+stock names (its node-free `RigDef` keeps a slot's named `weapon`), and runs it through the same `Bind`, so there is exactly one bind path; `BindAi` (an AI def's `weapons`) and `BindWingman` (a wingman's pick, [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)) end in it too. `StockLoadouts.Overlay` lays the `Supplement` file over the committed one, a supplement plane replacing any committed def on its model. `Hangs`, `WingPylons`, `WingCounts` and `PylonForCell` read a fit the other way, which pylons it carries, how many each wing hangs and which one a saved ordnance cell names, off the rig's odd-to-port split rather than a count heuristic, so the flight check, the ammo screen and a fresh hangar build all bound their cells alike. `ApplyRocketOverride` is the `--rocket=` hook, every pylon re-armed with one named weapon, which the human assembly and the weapon lab both call. Inspect with
 `--dump-loadout`. Slot-to-firepoint binding: [../formats/markers.md](../formats/markers.md); schema:
 [../formats/loadouts.md](../formats/loadouts.md). Read `LoadoutChoice.cs` next.
 
@@ -644,7 +644,8 @@ A mission's `targets.json` as one table: target key to its objective display key
 a nested `[parent, child]` entry keys `parent/child`, the same spelling `ObjectiveTarget` gives
 the script's directives, so the two tables meet on one string. `Load(mission, chapter)` walks the
 original's reader search path, and `ByNode` exposes the whole table for a consumer that wants the
-starting flags rather than one key's labels. Schema: [../formats/missions.md](../formats/missions.md).
+starting flags rather than one key's labels. `Objectives(keys)` is a table built in code, every key
+flagged, for a stage that ships none. Schema: [../formats/missions.md](../formats/missions.md).
 
 ## src/Flight/Weapons/ObjectiveTarget.cs
 One argument of a target directive (`ADD_`/`REMOVE_OBJECTIVE_TARGET`, `ADD_`/`REMOVE_OTHER_TARGET`,

@@ -51,6 +51,17 @@ public sealed class MissionTargets
     public static MissionTargets Load(string missionZrdrPath, string chapterZrdrPath) =>
         TryLoad(missionZrdrPath) ?? TryLoad(chapterZrdrPath) ?? new MissionTargets();
 
+    /// <summary>A table built in code for a stage that ships no <c>targets.json</c>. Every key is
+    /// flagged <c>objective</c> with no display keys, for a mode that labels each site itself.
+    /// </summary>
+    public static MissionTargets Objectives(IEnumerable<string> keys)
+    {
+        var targets = new MissionTargets();
+        foreach (var key in keys)
+            targets._byNode[key] = new MissionTarget(null, null, null, Objective: true);
+        return targets;
+    }
+
     /// <summary>The display keys for a target key, or an all-null <see cref="MissionTarget"/>
     /// if the key has no targets.json entry.</summary>
     public MissionTarget For(string nodeName) =>

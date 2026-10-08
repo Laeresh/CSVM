@@ -116,6 +116,12 @@ mission that ships no `ia.json`. That is the original's own gate: the un-teamed 
 that reads block 0, and no other mode reads the file at all. Every Dogfight launched from a menu
 flies its type's `MP` mission (`SessionSpec.FromMenu`), a Deathmatch `MP1`, so a menu launch always
 opens on this table; a command-line `--vs` reads it only beside `--mission=MP1`, `MP2` or `MP3`.
+A `--vs` on `--stage=empty` reads no file: it walks `EmptyStage.SpawnRing`, a free-for-all block of
+the same records built in code, which is invented and stands for no shipped map. A team match there
+walks `EmptyStage.SpawnTable`, that ring as block 0 followed by four team blocks in the staging-stack
+shape above: block N is four positions 100 m apart on four rungs 100 m apart, at team N's base
+1.5 km out, the whole block facing the origin. It is the same 80-entry layout `MP1` authors, so
+`TeamBlocks` and the respawn walk run on it unchanged.
 
 A team Dogfight reads the whole table instead (`SpawnPoints.LoadNetTable`). `SpawnPoints.TeamBlocks`
 opens a seat on lobby team N at block N's entry for its place among that team's seats, and a seat

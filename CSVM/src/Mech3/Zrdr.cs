@@ -129,6 +129,31 @@ public static class Zrdr
         }
     }
 
+    /// <summary>Whether a zrdr ZIP or directory carries <paramref name="fileName"/> under either
+    /// name <see cref="LoadFile"/> accepts. It lets a caller tell an absent entry from a broken one
+    /// before reading; false when the archive itself is absent.</summary>
+    public static bool HasFile(string zrdrPath, string fileName)
+    {
+        if (Directory.Exists(zrdrPath))
+        {
+            foreach (var candidate in CandidateNames(fileName))
+            {
+                if (File.Exists(Path.Combine(zrdrPath, candidate)))
+                    return true;
+            }
+            return false;
+        }
+        if (!File.Exists(zrdrPath))
+            return false;
+        using var zip = ZipFile.OpenRead(zrdrPath);
+        foreach (var candidate in CandidateNames(fileName))
+        {
+            if (zip.GetEntry(candidate) != null)
+                return true;
+        }
+        return false;
+    }
+
     // The names a requested reader file may be stored under. mech3ax v0.6.1
     // replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
     // instead ("vehicle.zrd.json"), keeping the original extension visible. Content is

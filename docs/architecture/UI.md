@@ -1418,6 +1418,15 @@ caller to log once. `ArtPath` and `RelativeArtPath` are where a layout art name 
 `RofTree`'s upper case, the presentation's size read going through the first; `IsMovie` puts the movies one directory deeper,
 under `MPG`, where the executable resolves them. Coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
+## src/UI/Menu/Original/SyntheticShell.cs
+The `--synthetic-data` tree's Original shell, `extracted/rof/`: `fixtures/menu-layout-original/LAYOUT.CSV`
+decoded by `Extraction/MenuLayoutDecoder.cs` into `menu_layout.json`, the invented string rows of
+`fixtures/synthetic/rof/ui_strings.json` (a layout symbol's row, or a row the code reads by id), and
+one generated picture per `fixtures/synthetic/rof/art.json` entry at that size. A file the asset
+manifest requires with no size stops the build. The backdrop movies stay absent, the one optional
+gap. It sits in UI because it reads the manifest, so `TreeFamilies` here composes the whole tree's
+family list over `Tooling/SyntheticData.cs`'s. Read `OriginalAvailability.cs` for what the tree must satisfy.
+
 ## src/UI/Menu/Original/OriginalAssetManifest.cs
 The versioned required/optional asset manifest, derived from the decoded layout rather than
 hand-listed. `Derive` classes the art of the sections Original composes required, less two short

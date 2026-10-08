@@ -1,0 +1,496 @@
+file	suite	bucket	reason
+AceWakeTerrainSuites.cs	ace-wake-terrain	E	C2/M01 built terrain, hkfirebrand_9 roster pose, g35052 SHOW_BACKFACE polygons
+AiAirframePoolSuites.cs	ai-airframe-pool	A	counting logic with a stand-in builder lambda; no install input
+AiAirframePoolSuites.cs	ai-airframe-pool-claim	D	C4/M03 roster block + wave generator (egen) orders on a built world used as host, plane; node-for-node build comparison is generic but needs an authored roster + generator record
+AiSuites.cs	ai-actor	C	plane stats (nose part) + any gun weapon def + planes gamez + C1 textures; AI rig in a running sim
+AiSuites.cs	ai-engine-listeners	C	plane + sound defs + soundsh archive + C1 textures; nearest-human engine/weapon voice culling
+AiSuites.cs	ai-engine-rearm	C	plane + weapon/shake/sound defs + soundsh archive (engine loops) + C1 textures; two AI spawns on one airframe def
+AiSuites.cs	ai-far-field-plant	C	planes gamez + PlaneStats + C1 textures; AI rigs at set ranges
+AiSuites.cs	ai-gunnery	C	needs planes gamez + player stats + weapon defs + C1 texture archive (ProjectilePool); no chapter world plus AiSkills
+AiSuites.cs	ai-modes	C	needs planes gamez + player stats + weapon defs + C1 texture archive (ProjectilePool); no chapter world plus AiSkills and Maneuvers records (a maneuvers fixture already exists)
+AiSuites.cs	ai-net-follow	E	real C1 chapter net resolves by id/name and is followed (half uses EmptyStage)
+AiSuites.cs	ai-voice	D	plane + voice.zrd accent table + snd_id2_* sound set + soundsh archive; trigger dispatch/cooldown logic is generic but names VO id 2 clips
+AiSuites.cs	ai-weapon-emitters	C	plane + sound defs + soundsh archive + C1 textures; per-aircraft positional weapon emitters
+AiSuites.cs	c1-aa-guns	E	CM07 C1/M02 five aaguns, OBJECTIVE1 wake, persist chain, cm_sequence
+AiSuites.cs	carried-turrets	C	plane + weapon defs + TurretDefs/vehicle thirdp mount records + C1 textures; no world
+AiSuites.cs	empty-stage-net	C	EmptyStage ring net + plane + weapons + AiSkills + C1 textures; one check reads C1 nets only to prove no name collision (droppable)
+AiSuites.cs	flight-roster-transaction	C	FlightRoster atomic assembly: planes gamez, PlaneStats, WeaponDefs, Shake defs, Messages, C1 textures and C1 zrdr path; no world
+AiSuites.cs	inert-aircraft	C	planes gamez + PlaneStats + any gun WeaponDef + C1 textures; inert/activate on a live rig
+AiSuites.cs	mission-off-turrets	E	C3/M03 six switched-off balloon turrets vs C3/M02 six standing
+AiSuites.cs	turret-self-fire	E	C1's five named aagun emplacements and fort geometry
+AiSuites.cs	voice-runtime	E	voice.zrd 35 accent rows, accent 12 to VO id 2, real clip names, prewarm cost over real archive
+AiSuites.cs	world-turrets	E	real C1 world aagun NODES census pinned, zeppelin 14 rings
+AiVesselTargetSuites.cs	ai-vessel-targets	E	C1B/M03 four patrol boats, authored rating_biases of named pilots
+AiWaveLaunchHitchSuites.cs	ai-wave-launch-hitch	E	perf on real C4/M03 world, five cargozep1 launches
+AirframeColliderSuites.cs	airframe-collider-hit-rate	E	measures hit rate on every real player airframe hull vs mesh
+AirframeColliderSuites.cs	airframe-hull-coverage	E	every real player airframe hull vs its mesh, part names order
+AirframeSwapSuites.cs	campaign-airframe-swap	E	CM02 built world, decoded swap codes, shipped stat rows
+AirframeSwapSuites.cs	campaign-capture-silences-guns	E	CM02 Balmoral capture over its built world
+AirframeSwapSuites.cs	campaign-hangar-handover	E	CM07 hdrop_direction nodes and Blue Streak special-plane template
+AirframeSwapSuites.cs	campaign-warhawk-capture-livery	E	CM19 Warhawk capture and bhatwarhawk scheme over built world
+AlphaCutoutRaySuites.cs	alpha-cutout-ray-census	E	C3/M01 hydrogentank1 ray census, g482 plate, named nodes
+AnimationAndEffectsSuites.cs	anim-activation-prerequisite	E	C4/M03 cargozep1 five named restraint anims
+AnimationAndEffectsSuites.cs	anim-call-start-order	A	hand-authored AnimProgram on a code-built stage Node3D under ctx.Host; no chapter
+AnimationAndEffectsSuites.cs	barracuda-drive	E	C3/M03 barracuda node, sub_movement 1680 m, authored positions
+AnimationAndEffectsSuites.cs	bounce-launch	E	refuel1 authored speed/elevation bands, C1 only chapter shipping refuel*
+AnimationAndEffectsSuites.cs	effect-template-mesh	D	needs he_ground_effect def plus its he_ring templates on an effect stage; mesh-visibility semantics generic
+AnimationAndEffectsSuites.cs	effects-census	E	full --effects-test sweep of every shipped effect
+AnimationAndEffectsSuites.cs	emitter-host-deactivation	D	needs authored defs plane_big_splash / splasher puffer on a flat stage; BL-229 semantics generic
+AnimationAndEffectsSuites.cs	fbfx-flash	E	he_ground_effect authored six-step colour/run-time chain
+AnimationAndEffectsSuites.cs	forward-rotation	B	WithWorld(ctx.Chapter) used only as AnimRuntime/scene host; launches are hand-authored AnimData dicts on a probe node
+AnimationAndEffectsSuites.cs	ground-contact	B	WithWorld(ctx.Chapter, collision) used only as a collidable ground; bodies are hand-authored AnimData dropped on a downward-probed surface, no named node or count
+AnimationAndEffectsSuites.cs	launch-direction-cache	B	WithWorld(ctx.Chapter) used only as AnimRuntime/scene host; launches are hand-authored AnimData dicts on a probe node
+AnimationAndEffectsSuites.cs	nulled-launch	E	zep_ng_dstry1.flt authored eight-part band numbers
+AnimationAndEffectsSuites.cs	ordnance-burst-timeline	E	HE/flash/sonic timelines pinned to authored JSON
+AnimationAndEffectsSuites.cs	self-ref-launch	E	C5 agyrobus destructible and its fly script
+AnimationAndEffectsSuites.cs	wait-for-completion	D	needs authored anim defs (player_crash_water and callees) on a flat stage; WaitForCompletion semantics are generic (demo_anims fixture exists)
+AudioBusSuites.cs	audio-buses	C	plane stats + weapons + sound defs + soundsh archive + C1 textures + menu sounds dir; structural bus-placement walk of the scene tree
+AudioLaunchSuites.cs	audio-levels-launch	A	OptionsStore under ctx.ScratchDir and AudioServer buses; no install input
+BalmoralCaptureSuites.cs	campaign-balmoral-hidden	E	C3/M01 built world, balmoral node undrawn
+BalmoralCaptureSuites.cs	campaign-cm15-capture	E	CM15 C2/M05 built world, balmoral drop onto cargozep2
+BalmoralCaptureSuites.cs	campaign-cm15-staged-paint	E	C2/M05 balmoral_1 roster livery and staged subtree
+BindingLaunchSuites.cs	bindings-launch-load	A	BindingStore files under ctx.ScratchDir plus a bare FlightController; no plane built
+BuildStampSuites.cs	build-stamp-focus	A	code-built NoGameDataScreen and BuildStamp over a scratch dir, Godot focus walk
+BuildStampSuites.cs	build-stamp-icons	A	BuildStamp UI built from ctx.RepoRoot with a stub opener
+CampaignBalloonDeathSuites.cs	campaign-balloon-death	E	C1/M05 nine lifesaver sites, 60/40 HP pools
+CampaignBlackeDropSuites.cs	blacke-drop-cameras	E	C4/M03 Blacke drop, two camera defs, marker states
+CampaignBlackeSearchSuites.cs	blacke-intro-handoff	E	C4/M02 generic_intro vs aiv.zrd 'player' spawn
+CampaignBlackeSearchSuites.cs	campaign-blacke-search	E	C4/M02 OBJECTIVE23 four waypoints, bhatgyro_1
+CampaignBlackeSearchSuites.cs	cutscene-handoff-speed	C	planes gamez + PlaneStats + chapter textures; code-built marker, StageAt hand-back speed; no world
+CampaignBlackeSearchSuites.cs	net-blacke-warp	E	C4/M02 WARP_VEHICLE over lossy loopback
+CampaignBriefingNoteSuites.cs	campaign-briefing-note	E	all 24 missions briefing notes vs 240 px parchment
+CampaignBriefingRepaintSuites.cs	campaign-briefing-repaint	D	real LaunchMenu on cm_sequence/briefing records and menu layout; frame-cost/repaint logic generic
+CampaignCabbieSuites.cs	campaign-cabbie-run	E	C5/M01 Cabbie roster, taxi path pp1, nodes 2/11/4
+CampaignDedgVolumeSuites.cs	campaign-dedg-volume	E	C3/M05 DEDG groups 1/5, 9000 m radius
+CampaignDockingSuites.cs	campaign-cm09-docking	E	C1/M04 CM09 piratezep docking chain, objective numbers
+CampaignHudSuites.cs	campaign-objectives-hud	E	first mission of ctx.Chapter objective graph + extracted mark art
+CampaignHudSuites.cs	mission-radio	E	first story mission's authored callout vocabulary
+CampaignHumanFieldSuites.cs	campaign-coop-human-field	E	C3/M01 OBJECTIVE5 and dzpath1 gates
+CampaignLaunchHookSuites.cs	campaign-launch-hook	E	C4/M04 six bhatwarhawk blocks, OBJECTIVE67, callback 801
+CampaignLaunchHookSuites.cs	campaign-launch-hook-prop	E	C4/M04 anim2_warhawk and bmhookpoint nodes
+CampaignLayoutSuites.cs	campaign-layout-parity	E	decoded menu layout vs hardcoded chrome with six measured pinned rows
+CampaignLoopSuites.cs	campaign-loop	E	whole campaign loop on mission 1, real profile, briefing, cutscene
+CampaignMarkerSuites.cs	campaign-balloon-marker	E	C1/M05 nine lifesaver sites markers, OBJECTIVE10
+CampaignMarkerSuites.cs	campaign-objective-labels	E	C1C/M01 targets table labels and names
+CampaignMarkerSuites.cs	campaign-objective-markers	E	first story mission targets.zrd sites
+CampaignMarkerSuites.cs	campaign-objective-target-path	E	C1/M04 piratezep/rock_zeppelin path target
+CampaignMilitiaLiverySuites.cs	campaign-militia-livery	E	CM01/CM02/CM16/CM19 militia defs and patterns
+CampaignPandoraLossSuites.cs	campaign-pandora-loss	E	C3/M04 twelve nacelles, 40 HP pools, OBJECTIVE10 45 s
+CampaignPlaneChangeSuites.cs	campaign-flight-check-plane-change	E	FLIGHTCHECK.SCRIPT rules and authored reward row, cm_sequence wingman rows
+CampaignPlayerDeathSuites.cs	campaign-player-death	E	C3/M01 mission authoring no loss
+CampaignRaceSuites.cs	campaign-race-chain	E	C2/M03 Hollywood race OBJECTIVE17-19, dzpath1-3
+CampaignRacerSuites.cs	campaign-racers	E	C2/M03 six hafury racers, seven tagged zones
+CampaignRosterObjectiveMarkerSuites.cs	campaign-cm02-roster-marker-relabel	E	C3/M05 three Balmorals and SET_HELP_LABEL objectives
+CampaignRosterObjectiveMarkerSuites.cs	campaign-cm15-roster-objective-marker	E	C2/M05 balmoral_1 flag, OBJECTIVE21
+CampaignRosterObjectiveMarkerSuites.cs	campaign-cm21-cabbie-marker	E	C5/M01 autogyro_1, OBJECTIVE28
+CampaignRosterSuites.cs	ai-voice-mission	E	C1/M02 roster blakepeace_2_1 accent -1, wingman voices
+CampaignRosterSuites.cs	campaign-bomber-crash-probe	E	C3/M05 bombers in a collision world
+CampaignRosterSuites.cs	campaign-bomber-formation	E	C3/M05 three netted bombers, net 19
+CampaignRosterSuites.cs	campaign-kill-credit	E	C3/M05 roster britbalmoral/britpeace tallies
+CampaignRosterSuites.cs	campaign-roster	E	C1/M04 shipped roster census (who gets rigs, escorts, nets)
+CampaignRosterSuites.cs	roster-skill-difficulty	E	C1/M02 authored blakepeace_2_1 / bloodhawk_2 skill numbers
+CampaignRosterSuites.cs	roster-spawn-names	E	C1/M02 roster names wingman_4, bloodhawk_2
+CampaignRosterSuites.cs	roster-voice-ratings	E	C5/M01 autogyro_1 authored talker/constitution (7, 8)
+CampaignScratchProfileSuites.cs	campaign-scratch-profiles	D	CampaignSequence + C3/M01 mission zrdr + profile store; world only hosts a crash that produces a Lost outcome; assertions are about profile files
+CampaignSetAiSuites.cs	campaign-set-ai-net	E	C3/M05 M5Bombers/M5Bombrun/M5Escort nets, OBJECTIVE4/68
+CampaignSnapshotSuites.cs	campaign-danger-zone-snapshot	E	C3/M01 dzpath1, Snap_1_18 row, 640x480 photo
+CampaignSquadWakeSuites.cs	campaign-roster-wake-node	E	C3/M05 britpeace_7 FindNodes override, OBJECTIVE5/8
+CampaignSquadWakeSuites.cs	campaign-squad-wakeup	E	C3/M05 britpeace_7/8/9, OBJECTIVE5/8
+CampaignStuntMarkerSuites.cs	campaign-cm11-stunt-marker	E	C2/M02 secfury_5/6 flags
+CampaignSuites.cs	campaign-coop-attempt	E	mission reward table answer for the real mission and mask
+CampaignSuites.cs	campaign-cutscene	E	C1/M04 intro callback codes and C3/M03 opening scene
+CampaignSuites.cs	campaign-danger-zones	E	C3/M01 dzpath1/dzpath4 gates
+CampaignSuites.cs	campaign-mission-cash	E	C3/M01 $900 on bit 12, OBJECTIVE30
+CampaignSuites.cs	campaign-mission-end	E	real mission INACTIVEn kill, destruction log, docking film codes
+CampaignSuites.cs	campaign-objectives	E	a shipped mission's BEGIN_DORMANT timings, INACTIVEn, INSTANTWIN
+CampaignSuites.cs	campaign-persistence	E	three real PERSIST_LOG objects of a campaign mission across profile store
+CampaignSuites.cs	cutscene-letterbox	E	chapter letterbox node as authored, pane ratios
+CampaignSuites.cs	persist-chain-kill	E	C3/M01 fuel trucks to bridge chain, C3/M05 deck
+CampaignSupportBeamSuites.cs	campaign-support-beam-destroyed	E	C5/M01 rfspt4 spprt node
+CampaignTargetListSuites.cs	target-mission-list	E	all 24 missions target tables; CM01/CM06/CM07 cycle contents
+CampaignTravelersDeleteSuites.cs	campaign-cabbie-delivered	E	C5/M01 OBJECTIVE20 TRAVELERS point and Cabbie
+CampaignTravelersDeleteSuites.cs	campaign-travelers-delete-forms	E	C5/M02 OBJECTIVE29, C2/M05 OBJECTIVE35
+CampaignWakeCarrySuites.cs	campaign-wake-trailer-carry	E	C1/M04 blakebloodhawk_8 M4ReinfAce
+CampaignZeppelinCommandSuites.cs	campaign-set-ai-zeppelin-net	E	C4/M05 blackhatzep M5Hatzep/M5ZepAttack
+CampaignZeppelinCommandSuites.cs	campaign-set-ai-zeppelin-team	E	C2/M05 cargozep2 OBJECTIVE36
+CampaignZeppelinCrashSuites.cs	campaign-zeppelin-crash	E	C3/M01 cargo zeppelin tanks, gasbag burns, cargozep1_crash
+CampaignZeppelinSuites.cs	campaign-zeppelins	E	C3/M01 zeppelins.zrd and egen.zrd authored empty
+CampaignZeppelinWakeSuites.cs	campaign-zeppelin-wakeup	E	C3/M01 cargozep1 team and OBJECTIVE39
+CaptureChuteSuites.cs	campaign-capture-chutes	E	C3/M05 CM02 capture wing walk chute defs
+CaptureGroupSuites.cs	campaign-capture-group	E	C3/M05 CM02 capture group counts, DEDG, britbalmoral_1
+ChaseTrailSuites.cs	chase-trail	A	CameraController over a bare Camera3D and scripted attitudes; no plane or world
+CinemaSkipSuites.cs	cinema-skip-pad	A	synthetic InputEvents through CinemaSkips.PressOf; pure logic
+CloudBandObjectGateSuites.cs	cloud-band-object-gate	E	C1C/M01 zeppelin hull vs CLOUD_COVER band
+CloudFieldSuites.cs	cloud-field-fade	E	per-chapter pinned cloud sprite counts C1/C1C/C5
+CloudFieldSuites.cs	cloud-puffs	E	per-chapter C1/C5 fvol masks and tints
+CloudFieldSuites.cs	fogvol-banks	E	per-chapter authored fvol volume counts and whiteout flag
+ClutterActivationSuites.cs	clutter-activation	E	CM01 island hidden node stamps
+ClutterActivationSuites.cs	clutter-cells	D	cuts the largest clutter kind of the chapter into cells; invariants are structural over a placements list a hand-authored KindExport could supply
+ClutterCardDepthSuites.cs	clutter-card-depth	E	C1 firtree card rendered at three ranges, pixel counts
+CombatSuites.cs	ai-plane-defs	E	all eleven real airframes seed damage defs
+CombatSuites.cs	ai-spawn-jitter	C	planes gamez + PlaneStats + weapons + shake defs + C1 textures; real spawner, determinism and spread
+CombatSuites.cs	aim-assist	E	asserts shipped sticky_bullet_* player.json values and dist_factor 0.0 (logic half is C, splittable)
+CombatSuites.cs	air-to-air	C	planes gamez + PlaneStats + weapon defs + C1 textures; rounds, rockets, kills between built planes
+CombatSuites.cs	blast-neighbor-shape	C	one named weapon record (wep_14 torpedo HEALTH_DAMAGE, IMPACT_PROXIMITY) + C1 textures; code-built wall and neighbour bodies
+CombatSuites.cs	canopy-hole-draws	E	chapter crash def table bullet1..5 and overlay roots in the chapter gamez
+CombatSuites.cs	engine-cockpit-pitch	C	PlaneStats + sound defs + soundsh archive + weapons; cockpit loop pitch option
+CombatSuites.cs	engine-damage-phases	C	PlaneStats + sound defs + soundsh archive + weapons; own-ship engine slot timing
+CombatSuites.cs	engine-note	E	shipped player_bhawk curve 0.6-1 and CAP-10 measured 0.9370
+CombatSuites.cs	engine-voice-duck	C	PlaneStats + sound defs + soundsh archive + weapons; MissionRadio duck law
+CombatSuites.cs	graze-bounce	C	planes gamez + PlaneStats (bounce_factor 0.6 is a precondition a synthetic stat can carry) + C1 textures; code-built floor/wall
+CombatSuites.cs	incoming-fire-cues	D	plane + AiSkills + stock loadout + bullet_hit_sound and snd_bulletpass/snd_ricochet sound groups + soundsh archive; real AI gunnery
+CombatSuites.cs	loadout-bind	E	every stock loadout and marker on every real airframe
+CombatSuites.cs	loadout-forrig	E	every firepoint/pylon on all 11 real airframes
+CombatSuites.cs	muzzle-flash-cockpit-hidden	C	WeaponDefs + C1 textures for ProjectilePool; view mode switch
+CombatSuites.cs	muzzle-flash-rides-muzzle	C	WeaponDefs + C1 textures for ProjectilePool; code-built moving muzzle
+CombatSuites.cs	muzzle-light-first-person-point-term	C	any gun WeaponDef + C1 textures; the pair values are compiled constants in the pool
+CombatSuites.cs	ring-death-effects-follow-hull	E	C1C/M01 gun ring on moving hull
+CombatSuites.cs	team-model	C	planes gamez + PlaneStats + weapon defs + C1 textures; two teammates and an enemy
+CombatSuites.cs	trail-world-anchor	D	pufftrails.json firepuffer def (zrdr) + C1 textures; code-built rotated carrier
+CombatSuites.cs	turret-death-effect-world-anchor	C	WeaponDefs + TurretDefs records only; code-built carrier hull and site nodes
+CombatSuites.cs	turret-death-fire-follows-hull	E	C1/M04 piratezep doublecannon4 ring
+CombatSuites.cs	weapons-fire	E	census of all 48 shipped weapons
+CoopCutsceneSuites.cs	campaign-coop-cutscene-fullscreen	A	SplitScreen panes plus a CutsceneController over an empty AnimProgram and a code-built world node
+CoopDeathSuites.cs	campaign-coop-death	E	co-op loss rule driven over real C3/M01 objective script + built world + planes; generic rule but needs a whole mission (E-soft: invented mission zrdr w/o loss + plane + EmptyStage)
+CoopDropoffSuites.cs	campaign-coop-dropoff	E	C3/M01's authored drop-off definition and its 'player' re-placement driven with two humans (E-soft)
+CoopEpisodeOwnerSuites.cs	campaign-coop-episode-owner	E	CM02's own capture/swap definitions with two humans (E-soft)
+CraneAimPointSuites.cs	cm15-crane-aim-point	E	C2/M05 zcraneN/healthy marker positions on the real zeppelin
+CraterSuites.cs	crater-carve	E	C1 forested-middle ground scan, struck node ArrayMesh, clutter decorations inside radius, 'no C1 node carries can_modify', real wep_12 (E-soft: EmptyStage + invented clutter would cover the carve geometry)
+CraterSuites.cs	scorch-decals	C	weapon def wep_06 (rocket with crater radius) + wep CRATER/gun hit defs + a chapter texture archive for the projectile pool; tarmac/grass/water plates are built in code
+CutsceneAiParkSuites.cs	cutscene-ai-park-intro	E	CM14 intro (C2B/M04 generic_intro) code 20 and Gemini bay generator, real mission graph
+CutsceneAiParkSuites.cs	cutscene-ai-park-mission-start	E	C1/IA1 wave aircraft parked at mission start via real bootstrap definition (E-soft)
+CutsceneFastForwardSuites.cs	campaign-cutscene-fast-forward	E	CM02 built world, its authored codes/clock/pose path under a held input
+CutsceneHostCodeSuites.cs	campaign-wingman-removal	E	CALLBACK 968 over C4/M03 docking film and its aiv roster (bswingman_1)
+CutsceneHostCodeSuites.cs	cutscene-clear-ordnance	E	CALLBACK 86 raised by C1/M02 hangar drop, the one install definition that does
+CutsceneOwnershipSuites.cs	campaign-cutscene-ownership	E	C5/M02 objective chain and its authored ending definitions
+CutsceneSkipSuites.cs	campaign-cutscene-skip	E	CM02 capture definition closure authors no hold code; asserts the authored timing
+DamageSuites.cs	ai-damage-stages	E	spawns real Fury and Bloodhawk through FlightRoster over the chapter crash program; asserts random_remote_damage/pfsmoketrail counts and the Bloodhawk's missing elevator pair (shipped-data parity)
+DamageSuites.cs	cockpit-panel-staging	C	planes gamez tree with pdp4/pdp6 plus cockpit1 interior with pcdp4/pcdp6 + plane stats injure_anims pdpanel4/6 + texture archive
+DamageSuites.cs	damage-hd	E	Probes.Damage census of every destructible of the chapter (hits, reset, rekill, collider census)
+DamageSuites.cs	damage-stage-slots	C	zrdr plane stats only: player_fury AI ladder (7 injure entries, six random_remote_damage) and player_fury pdpanel names; the rest is a code-built synthetic ladder (fury counts are parity numbers a stand-in record would carry)
+DamageSuites.cs	damage-stages	E	Probes.Damage census over every DAMAGE_SEQUENCE def of the chapter
+DamageSuites.cs	damage-staging-pool	C	planes gamez node tree with pdpN torn-panel nodes + zrdr plane stats (destroyable_parts MaxArmor/MaxHp, injure_anims pdpanelN) + a texture archive; data-driven zone pick
+DamageSuites.cs	damage-template-freed-anchor	D	same as damage-template-pool: pdpanel4/5 + gimmeflakes anim defs and planeflakes gamez root
+DamageSuites.cs	damage-template-pool	D	chapter anim program subset pdpanel4/pdpanel5 + gimmeflakes defs and a 'planeflakes' gamez root, staged on a code-built rig (anim defs + one gamez node)
+DanteEngineFireSuites.cs	dante-engine-fires	E	C5/M04 Dante's engines, large_30sec_fire per engine, fire_here pool depth
+DestroyChoreographySuites.cs	ai-crash-defs	E	ai_crash_* family indexed by surface id (dirt 13 -> ai_crash_dirt, default), player_crash_* on the human rig
+DestroyChoreographySuites.cs	ai-crash-rig-deferral	E	BL-641 deferred AI crash rig through the roster pump over the chapter crash program
+DestroyChoreographySuites.cs	ai-wreck-fall	E	AI Fury fall: self-named destroy def, no ai_crash_*, Callback 15 at authored 3.0 s, surface-indexed crash def, BL-451 lever
+DestroyChoreographySuites.cs	callback-events	E	census of every destroy def's authored callback codes in the chapter, code 0 never authored
+DestroyChoreographySuites.cs	called-death-chain	E	C3/M01 bridge_truck01 kills susp_bridge via chainreaction EVENT_OFFSET
+DestroyChoreographySuites.cs	carried-pose-called-sequence	E	C3/M01 susp_bridge named spans rope1/part3a/dbase and its ON_CALL fire-puffer sequences
+DestroyChoreographySuites.cs	carried-state-silent	D	PERSIST_LOG destructible with healthy/destroyed pair, found by scan of the chapter (invented destructible def would do)
+DestroyChoreographySuites.cs	crash-rig-anchors	E	Devastator model root shares the crash defs' authored NAME; bhawk/pfighter pooled template reset pose
+DestroyChoreographySuites.cs	death-not-a-revival	E	C3/M03 Barracuda sub_destruction, a lifesaver, a constructed def: four named authored chains
+DestroyChoreographySuites.cs	death-respawn-rest-pose	E	bhawk and autogyro after death/respawn at 3 s and 15 s over the real player-player def
+DestroyChoreographySuites.cs	death-slot	E	chapter destructible with a calling destruction slot (the 30 s fire's 1,035 death calls)
+DestroyChoreographySuites.cs	debris-shading	E	C1 refuel debris authored at vertex colour 119 on a sheet of mean texel 63 vs tank at 254
+DestroyChoreographySuites.cs	emitter-prewarm	E	bhawk crash rig PUFFER_STATE emitters over the shipped crash defs and sonic bursts
+DestroyChoreographySuites.cs	first-person-condition	D	one anim def (bullet1) with a PLAYER_1ST_PERSON IF/ELSE branch, run on a code-built stage
+DestroyChoreographySuites.cs	nitro-ai-edges	E	AI nitro: medium_aishake, snd_nitro 0.1 s blip, nitro_decay instance lockout (real defs and sound set)
+DestroyChoreographySuites.cs	nitro-boost-anchors	E	nitro_boost/nitro_decay authored NAME 'warhawk' anchor and nitropuff1 puffer
+DestroyChoreographySuites.cs	nitro-boost-flown-rig	E	Warhawk nitro on the WorldEffectsFactory rig, nitropuffN on the aircraft's exhaust nodes
+DestroyChoreographySuites.cs	player-destroy-choreography	E	player-player def over all eleven airframes: NODE_ACTIVE 1 is player_autogyro, four wreck pieces, Callback 3
+DestroyChoreographySuites.cs	prop-slot-edges	E	Warhawk stopprops/spinprops cross-fade over the shipped defs, human and AI rigs
+DestroyChoreographySuites.cs	repeat-call-slots	D	pdpanel7 anim def with four gimmeflakes CALL_ANIMATION at pdp7 + planeflakes gamez root (invented def with N repeated calls; authored count 4 is the real shape)
+DestroyChoreographySuites.cs	start-state-swap-pool	D	a destructible whose Initial sequence authors the healthy/destroyed swap (scanned from the chapter; one invented destructible def + world nodes would do)
+DestroyChoreographySuites.cs	stop-sequence	E	real large_fireball (0.3 s stopper), large_30sec_fire halt, car_loop1_start/car_dust1 lap defs
+DisplaySettingsSuites.cs	display-det-guard	A	reflection over OptionsDef and the SavedWord(det) readers plus a MenuSuiteHost menu; no install read
+DisplaySettingsSuites.cs	display-mode	D	first half is pure setting-resolution logic (install-free); the VIDEO page leg needs the Original shell layout fixture (LAYOUT.CSV with the Options/VIDEO page widgets + invented art) via OriginalAvailability
+DisplaySettingsSuites.cs	display-monitor	D	first half is pure setting-resolution logic (install-free); the VIDEO page leg needs the Original shell layout fixture (LAYOUT.CSV with the Options/VIDEO page widgets + invented art) via OriginalAvailability
+DisplaySettingsSuites.cs	display-render-scale	D	first half is pure setting-resolution logic (install-free); the VIDEO page leg needs the Original shell layout fixture (LAYOUT.CSV with the Options/VIDEO page widgets + invented art) via OriginalAvailability
+DisplaySettingsSuites.cs	display-resolution	D	first half is pure setting-resolution logic (install-free); the VIDEO page leg needs the Original shell layout fixture (LAYOUT.CSV with the Options/VIDEO page widgets + invented art) via OriginalAvailability and the Built-in custom size row
+DisplaySettingsSuites.cs	display-vsync	D	first half is pure setting-resolution logic (install-free); the VIDEO page leg needs the Original shell layout fixture (LAYOUT.CSV with the Options/VIDEO page widgets + invented art) via OriginalAvailability
+DropoffChutemanSuites.cs	dropoff-chuteman-stage	E	C3/M01 chuteman/pilot/stamp cross-archive pointers of the compiled drop
+DropoffPlacementSuites.cs	cutscene-handoff-unposed	E	C2/M05 paratrooper drop definition, no 'player' node, handoff pose
+DropoffPlacementSuites.cs	dropoff-placement	E	C3/M01 cutscenes directory's re-placement definition and 'player' node pose
+EnetTransportSuites.cs	enet-dual-stack	A	IPv4+IPv6 loopback ENet; no install
+EnetTransportSuites.cs	enet-load-stall	A	loopback ENet service-thread stall; no install
+EnetTransportSuites.cs	enet-stable-ipv6-reply	A	real host IPv6 addresses; skips without stable+temporary global IPv6 (may SKIP on CI); no install
+EnetTransportSuites.cs	enet-transport	A	loopback ENet in-process; no install
+ExhaustSmokeSuites.cs	exhaust-smoke	C	planes gamez with exhaust markers + plane stats (throttle/exhaust data) + texture archive; no world
+ExhaustSmokeSuites.cs	exhaust-smoke-ai	C	same plane inputs plus an AI roster spawn (AiDef) and per-marker exhaust trails; no world
+ExtractionScreenSuites.cs	extraction-picker	A	Godot FileDialog over scratch folders
+ExtractionScreenSuites.cs	extraction-screen	A	the extraction UI over a scratch fake install built in code (docstring: reads or writes no real install)
+FlightInputHandoffSuites.cs	flight-input-handback	A	CutsceneController/FlightController input latches with a code-built rig and PauseState; no data read
+FlightInputHandoffSuites.cs	flight-live-respawn-gate	C	planes gamez + plane stats (fuel tank) + a texture archive; human rig, respawn with a pinned/unpinned tank
+FlightTelemetrySuites.cs	flight-telemetry-gate	C	three AI aircraft through FlightRoster: planes gamez + plane stats + weapon defs + shakes + texture archive; log sink line count
+GeminiBreakupRestSuites.cs	gemini-breakup-rest	E	C2B/M04 geminizep kill chain, five breakup sections resting on water
+GeminiGasbagBaySuites.cs	gemini-engines-leave-the-bays	E	C2B/M04 OBJECTIVE11-13 and the fourteen engines, authored defs
+GeminiGasbagBaySuites.cs	gemini-gasbag-bays	E	C2B/M04 Gemini gasbag/bay authored torpedo defs and all_gmzep_gasbags (BL-694)
+GeneratorCreditSuites.cs	generator-callback-credit	E	C4/M03 cargozep1 generator capacity 0 and callback 800 credit rule on the real mission
+GeneratorLaunchCountSuites.cs	generator-launch-danger-zone	E	C5/M04 dantezep launch, dzpath34 tagged node, dzones.zrd
+GeneratorLaunchCountSuites.cs	generator-launch-dedg	E	C5/M04 dantezep generator, stihellhound_5_eg0 launch, DEDG group counts, OBJECTIVE38/39
+GeneratorLaunchCountSuites.cs	generator-sub-kill-disables-bay	E	C3/M03 barracuda submarine 'subhealthy' node and its generator bay
+GeneratorRosterSuites.cs	generator-roster-params	E	C5/M04 and C1/M04 roster census (stihellhound_5_7, Eairg32_params): shipped-data parity
+GraphicsSwitchSuites.cs	graphics-live-switch	E	whole flight session over the real chapter; relational (fresh vs switched) but content-bearing: needs clutter cells, clouds, crater stamps, merged-surface counts, a plane (E-soft: invented small chapter with fogvol clutter + weather clouds + stand-in plane)
+GraphicsSwitchSuites.cs	graphics-shader-twins	E	whole flight session over the real chapter; relational (fresh vs switched) but content-bearing: needs clutter cells, clouds, crater stamps, merged-surface counts, a plane (E-soft: invented small chapter with fogvol clutter + weather clouds + stand-in plane)
+GraphicsSwitchSuites.cs	graphics-switch-cover	A	SwitchCover/GameClock/PauseState timing driven in code; the shard-level RequireData is never called by this body
+GraphicsSwitchSuites.cs	graphics-view-distance	E	whole flight session over the real chapter; relational (fresh vs switched) but content-bearing: needs clutter cells, clouds, crater stamps, merged-surface counts, a plane (E-soft: invented small chapter with fogvol clutter + weather clouds + stand-in plane)
+GraphicsSwitchSuites.cs	world-merge	E	whole flight session over the real chapter; relational (fresh vs switched) but content-bearing: needs clutter cells, clouds, crater stamps, merged-surface counts, a plane (E-soft: invented small chapter with fogvol clutter + weather clouds + stand-in plane)
+GroundShadowSuites.cs	ground-shadow	C	mostly EmptyStage already; needs planes gamez + zrdr stats + a texture archive for the plane; one leg uses C1 terrain height via WithWorld (generic terrain, would move to a raised EmptyStage box)
+GunVoiceReachSuites.cs	gun-voice-reach	E	C4 belly ring snd_chaingun authored RANGE, snd_30cal, real sound archive: the point is what the shipped data buys
+HudKillLineSuites.cs	hud-kill-line	C	a spawned AI Kestrel (player_kestrel, AiDef medkestrel, title 'Medusa Kestrel') through FlightRoster: planes gamez + plane stats + weapon defs + texture archive + message table rows (was shot down / Wingman was shot down / was destroyed)
+InstantActionNetSeatSuites.cs	instant-action-wave-net-seat	D	IA mission zrdr (ia fixture exists) + AI nets (ainets fixture exists) + a roster-spawnable plane; asserts walk seating, generic over data (E-soft: 'C1/IA1's own data')
+InstantActionSuites.cs	instant-action	C	plane gamez + stats + weapon defs + AI skill rows for ace/wingman roster spawns on a code-built stage; the rest is pure logic over ia defs (ia fixture covers)
+InstantActionSuites.cs	instant-action-end	E	C1/IA1 authored stunt zones and C1/M04 piratezep engines, real signals
+InstantActionSuites.cs	instant-action-marker-names	E	C1/IA1 and C5/IA1 ace_name via real string table, wingmen Jack/Tex/Buck/Big John/Betty
+InstantActionSuites.cs	instant-action-stunt-summary	D	StuntMission.Load needs a gamez with Danger Zone nodes + an IA mission zrdr with stunt zones + messages.json; the ScoreStore logic is generic
+InstantActionSuites.cs	instant-action-voice	E	C1/IA1 accent table, 13 militias, clipless pilot id 5, streamed DE clips from the real sound archive
+InstantActionSuites.cs	instant-action-wrapup	E	first half (shot counters) needs only a cannon + rocket weapon def and a plane (C); second half flies a C1/IA1 stunt run for the photograph row
+InstantActionSuites.cs	instant-action-zeppelin	E	C1/IA1 real world: multiplayer1zep, gasbag collision shapes, cargobay drop point
+InstantActionSuites.cs	results-board-shell	A	ResultsBoard shell contract over ShellProbeBoard and PauseState, code only
+IntroAircraftSuites.cs	intro-aircraft-stage	E	first story mission's 'player'/'piratefighter' intro pointers, OBJECT_ADD_CHILD airship
+LandingApproachSuites.cs	campaign-coop-approach-row	E	first story mission auto row with two humans
+LandingApproachSuites.cs	campaign-coop-hookup-seat	E	first story mission auto row, two humans same airframe, extend-hook fork
+LandingApproachSuites.cs	landings-approach-trigger	E	first story mission landings.zrd rows, cone/half-cone/sphere volumes
+LandingApproachSuites.cs	landings-auto-land-button	E	first story mission auto row, message-table prompt
+LandingApproachSuites.cs	landings-balmoral-dock	E	CM02 ending over C3/M05, Balmoral wing-fold 2 s branch
+LandingApproachSuites.cs	landings-car-pickup-credit	E	CM16 armoured-car pickup, destroy_car01 beat
+LandingApproachSuites.cs	landings-docking-hold	E	CM06 docking onto the Workers' Voyage, the one shipped row raising no code
+LandingApproachSuites.cs	landings-hangar-drop-gate	E	CM07 zeppelin-hangar drop, mission-named definitions and objective node
+LandingApproachSuites.cs	landings-hookup-airframe	E	zeppelin hookup on three airframes over the first story mission (per-airframe branches of the shipped fork)
+LandingApproachSuites.cs	landings-trailer-pickup-gate	E	CM11 trailer pickup via objective WAKE_ANIM
+LandingApproachSuites.cs	landings-train-pickup-gate	E	CM07 caboose pickup, pickup_timing, real mission path
+LandingApproachSuites.cs	landings-train-pickup-ride	E	CM07 moving train, caboose child offset, flare smoke
+LandingApproachSuites.cs	landings-wingwalk-gate	E	CM02 Balmoral capture gate, roster, three approach rows
+LoadProgressSuites.cs	load-progress	E	extracted strip widths 236/338, C3/M01 sheet propeller cycle, six extracted frames: art parity
+LoadSheetSuites.cs	load-sheet	E	24 Loading.zrd campaign dialogs, every named bitmap exists in the extraction: census
+LookStickSuites.cs	look-stick	C	planes gamez (chase camera + cockpit head) + plane stats + texture archive; flag parsing is pure
+LookStickSuites.cs	look-stick-edge	C	planes gamez + plane stats + camera over a flown rig; assertions are relative to the stick's own motion
+MenuCampaignSuites.cs	menu-campaign-journey	D	Built-in campaign journey over a scratch profile store; only the briefing legs (--menu=campaign-briefing:24 reveal clock, narration starts) need one cm_sequence entry + briefing dialog/objectives record (CampaignBriefing.Load); mission count/cinemas are code
+MenuCaptureSuites.cs	menu-screenshot-key	A	real key event through the viewport, screenshot folder count; no install data
+MenuCoopDoorSuites.cs	menu-coop-door	A	Built-in campaign network door over two launchscreens on loopback; scratch profile; briefing not needed
+MenuHangarSuites.cs	menu-hangar-journey	A	Built-in hangar journey, scratch plane store; stock loadouts live in res://, stock armour reads degrade to zeros without zrdr; verify armour page checks
+MenuHangarSuites.cs	menu-original-hangar	D	Original hangar over the shell: layout fixture needs the name screen, Plane Construction hub, tabs, dropdowns, description box, decal grid widgets + invented art + string table rows (wallet-free/over-wallet notes)
+MenuHostSuites.cs	menu-host-pointer	A	Built-in presentation under mouse events through MenuHost; code-built
+MenuHostSuites.cs	menu-host-tracer	A	Built-in Free Flight through MenuHost; code-built chapters and roster
+MenuInstantActionSuites.cs	menu-instant-action-journey	A	Built-in Instant Action screens; InstantActionFeature falls back to InstantAction.Defaults() without ia.zrd
+MenuInstantActionSuites.cs	menu-original-instant-action	D	Original Instant Action screen: layout fixture with the IA section + ia.zrd per environment (ia fixture exists) + stock loadouts (res://); ammo chrome
+MenuJourneySuites.cs	menu-free-flight-journey	C	Built-in menu is code-built (chapters, roster); only the 'Top Speed' detail check needs plane stats for the first airframe (player_autogyro) via PlaneStats; rest A
+MenuLaunchReturnSuites.cs	menu-backdrop	D	background on Options restart/launch: layout fixture main menu + Options (Built-in options 18 steppers are code)
+MenuLaunchReturnSuites.cs	menu-launch-return	D	launch/return through Original presentation; layout fixture main menu + Free Flight/IA screens
+MenuNetPlaySuites.cs	menu-host-address	A	Built-in host address screen over loopback
+MenuNetPlaySuites.cs	menu-net-door	A	Built-in multiplayer door over loopback
+MenuOriginalCampaignSuites.cs	menu-original-campaign	D	Original campaign through the shell: layout fixture campaign screens + briefing records (CampaignBriefing), memento art/ids (CampaignMementos), narration clip names, scratch profiles
+MenuOriginalCheatSuites.cs	menu-original-cheats	D	Original cheats: layout fixture cheat screen + briefing records for mission list
+MenuOriginalConnectionSuites.cs	lan-discovery	A	LAN discovery over loopback sockets; no RequireData
+MenuOriginalConnectionSuites.cs	menu-original-boot	D	Original boot card layout fixture
+MenuOriginalConnectionSuites.cs	menu-original-builtin-host	D	Original built-in host box layout fixture
+MenuOriginalConnectionSuites.cs	menu-original-connection	D	Original connection screen: layout fixture with the Connection box widgets
+MenuOriginalConnectionSuites.cs	menu-original-coop-boot	D	Original co-op boot through the shell: layout fixture campaign + net screens + stock loadouts (res://) + loopback; campaign profile scratch
+MenuOriginalConnectionSuites.cs	menu-original-ipv6-address	D	Original IPv6 address entry box layout fixture
+MenuOriginalConnectionSuites.cs	menu-original-lobby	D	Original lobby screen layout fixture
+MenuOriginalConnectionSuites.cs	menu-original-lobby-teams	D	Original lobby team widgets layout fixture
+MenuOriginalConnectionSuites.cs	menu-original-outlaw-list	D	Original outlaw list screen layout fixture
+MenuOriginalConnectionSuites.cs	menu-original-version	D	Original version-mismatch box layout fixture
+MenuOriginalControlsSuites.cs	menu-original-controls	D	Original Options CONTROLS/KEYS pages: layout fixture with MM_B_PREFERENCES, Options doors, CONTROLS and KEYS widgets (seven category strips, three column heads, authored button order) + invented art
+MenuOriginalCoopFilmSuites.cs	menu-original-coop-film	D	Original co-op film hand-off: layout fixture campaign cabin/coop door; films are recorders (ChapterCinema counts are code)
+MenuOriginalCoopFlowSuites.cs	menu-original-coop-flow	D	Original co-op flow: layout fixture campaign/lobby screens + briefing records; loopback transport
+MenuOriginalSuites.cs	menu-join-board	D	Original join board: layout fixture join screen + loopback/net-info boxes
+MenuOriginalSuites.cs	menu-original-tracer	D	Original presentation tracer: main-menu layout fixture (the fixture's main menu panes/buttons already exist)
+MenuOriginalWrapupSuites.cs	menu-original-wrapup	D	Original wrap-up board: layout fixture + messages.json + a gamez with Danger Zone nodes and an IA mission zrdr with stunt zones for the StuntMission photographs leg (C4/IA1 today)
+MenuPlayerSetupSuites.cs	menu-controls-seats	A	Built-in Controls screen join, scratch binding store
+MenuPlayerSetupSuites.cs	menu-player-setup-journey	A	shared player-setup feature through a Built-in launchscreen
+MenuPlayerSetupSuites.cs	menu-player-setup-seats	D	Built-in seats leg is A; Original leg needs layout fixture Dogfight/aircraft/ammo screens + ia def
+MenuZoneSuites.cs	menu-zone-layout	A	Built-in launchscreen band metrics over the paint aid; the ZrdrPath gate is incidental (hangar reads degrade to zeros)
+MeshLightSuites.cs	mesh-light-blink	E	C5's authored beacon blink periods 1/2 s from the real gamez (gamez-lights fixture exists but asserts are on C5's set)
+MeshLightSuites.cs	mesh-light-fade	E	C5's authored fade far/slope set and counts
+ModeTargetTableSuites.cs	mode-target-table	E	C1 world: ap_transmitter, rearm bases, multiplayer1zep, crates among the hundred-odd destructibles, IA1/MP3 targets.zrd flags
+MouseFlightSuites.cs	flight-mouse-capture	C	player_bhawk plane stats only; bare-node rig
+MouseFlightSuites.cs	flight-mouse-scheme	C	plane stats only (is_autogyro true on player_autogyro, false on player_bhawk); rig is a bare Node3D model; the control check is shipped-data parity
+MouseFlightSuites.cs	flight-mouse-scheme-live	D	pause Preferences leaf over the Original menu layout fixture (Options/CONTROLS page) + player_bhawk stats
+MusicSuites.cs	music-states	D	sounds zrdr set (music_splash/prebattle/battle/primaryobj/secondaryobj/tertiaryobj/battlesuccess/missionsuccess + SOUND_GROUPS, sounds.json fixture style) + a SoundArchive stand-in with clips long enough for the 20 s hold/4 s fade
+NetAiSpawnSuites.cs	net-ai-spawn	E	C1/M02 generators eairg31/eairg32, authored launch points and due times
+NetChatSuites.cs	net-flight-chat	D	[MP-map+messages] three-session MP1 match (net.zrd table >=2 via MatchSpec) + messages.json strings for the To Team prompt; chat rules are otherwise code
+NetCombatSuites.cs	net-combat-events	C	[plane+weapons(+MP-launch)] two sessions on MP1 as ground; asserts net rules over zrdr weapon defs (first cannon with health damage) + 2 player planes; no spawn-entry assertions (MatchSpec still demands net.zrd >=2 entries, an empty-stage net launch would drop that)
+NetCombatSuites.cs	net-kill-line	D	[MP-map+messages] kill-line texts (Destroyed by / Self-Destroyed / Killed by Turret) and crash key come from messages.json; MP1 + weapons
+NetCombatSuites.cs	net-match-state	D	[MP-map] host kill target from zrdr MatchScores + >=3-spawn net.zrd table; match end reasons/boards
+NetCombatSuites.cs	net-relay-star	C	[plane+weapons(+MP-launch)] 3 sessions star topology; asserts relay/forwarding counts and own-track vs third plane distance; MP1 only needs >=3 spawns
+NetCombatSuites.cs	net-spawn-rotation	D	[MP-map] asserts each seat's opening/return entry on the net.zrd table (real table entries, same on all peers)
+NetCombatSuites.cs	net-versus-host-left	C	[plane+weapons(+MP-launch)] lobby doors are code-built NetPlayFeature; MP1 as arena only; host-left notice/close
+NetCombatSuites.cs	net-versus-lives	C	[plane+weapons(+MP-launch)] lives rule, spent seat watching host, no-respawn press; MP1 as arena only
+NetCoopGuestPlaneSuites.cs	net-coop-guest-planes	D	[campaign-seq+mission] cm_sequence rows (one solo, one wingman mission with chapter folder) + that mission zrdr + planes/loadouts/Custom plane store; asserts plane-pick arbitration and wingman fallback
+NetCoopMissionSuites.cs	net-coop-cabbie-delivered	E	C5/M01 OBJECTIVE28 wake and OBJECTIVE20 delivery point, autogyro_1 Cabbie
+NetCoopMissionSuites.cs	net-coop-intro-field	E	CM09 (C1/M04) bespoke opening film mission_intro_animation and its piratefighter prop
+NetCoopMissionSuites.cs	net-coop-mission	D	[campaign-seq+mission] first cm_sequence mission with a chapter: its chapter gamez/textures + mission zrdr, profile store untouched check; rules are co-op seating/ammo/result
+NetCoopMissionSuites.cs	net-coop-restart	D	[campaign-seq+mission] same first-campaign-mission rig as net-coop-mission, pause-sheet restart
+NetCoopMissionSuites.cs	net-coop-wingman	D	[campaign-seq+mission] a wingman cm_sequence mission + profile store scratch + wingman def/ammo; asserts host-owned wingman fit on both ends
+NetCustomPlaneSuites.cs	net-custom-planes	C	[plane+weapons(+MP-launch)] Allow Custom Planes / Outlaw Components over lobby doors (code); needs hangar parts (zrdr stats/ammo/rocket lists) + planes; MP1 as arena
+NetCutsceneSuites.cs	net-cutscene-remote-owner	E	first story mission docking, 'player' marker, auto landing-approach row of the real world
+NetCutsceneSuites.cs	net-cutscene-skip-episode	A	two code-built CutsceneControllers over loopback with an invented film name; no data
+NetDirectorSuites.cs	net-director-follow	E	C5/M02 director graph, docking code, ending cutscene, objective timers across three BUILT worlds
+NetEnetSessionSuites.cs	net-enet-join	C	[plane+weapons(+MP-launch)] real ENet sockets on 127.0.0.1, handshake/roster/seed; MP1 only as arena; planes+zrdr to build sessions
+NetFlagSuites.cs	net-capture-the-flag	D	[MP-map(flags)] MP2 map cs_flag_n flag/base markers per team, score_enemy_flag/score_return_flag from zrdr MatchScores; invented MP map with 2 flag records could carry it
+NetHumanFieldSuites.cs	net-human-field	E	C3/M01 own script, OBJECTIVE5 'player' TRAVELERS point, host/guest death outcomes
+NetLobbyEnvironmentSuites.cs	net-lobby-above-the-clouds	E	C1C MP3 zeppelins.zrd hull starts, multiplayer1zep/2zep, zep_rearm_node_1/2, loading_m3z
+NetPlayerVoiceSuites.cs	net-player-voice	D	[MP-map+sound-set] pilot VO sets (Jack, Gruff Male) from the sound archive + sound defs; MP1 + planes
+NetPositionalStartSuites.cs	net-positional-start	E	CM02 shipped Balmoral capture rows over BUILT C3/M05 worlds
+NetPositionalStartSuites.cs	net-swap-rewire	C	[plane+weapons] airframe-swap code on a guest seat (AirframeSwapCodes is code); needs two planes, zrdr stats/weapons and chapter texture archive (plane skins); C3/MP1 only as arena
+NetRangeGateSuites.cs	net-range-gate	E	C4/M03 blacke_drop 64 m range gate, blacke_marker, cutscene codes
+NetRearmSuites.cs	net-lobby-deathmatch-mp1	E	MP1 net.zrd free-for-all block and the rearm bases mp1.gw leaves on
+NetRearmSuites.cs	net-rearm-deathmatch	E	MP1's rearm_node_1/2 as authored (serve any pilot), team-3 guest, node radius behaviour
+NetRearmSuites.cs	net-rearm-zeppelins	E	MP3 zep_rearm_node_1/2 per team, hull-lost behaviour
+NetSeatSuites.cs	net-guest-keymap	C	[plane+weapons(+MP-launch)] guest local players load keymap files (scratch dir written by suite); MP1 arena, planes+zrdr stats/weapons/shakes
+NetSeatSuites.cs	net-seats	D	[MP-map] spawn walk places each remote seat on its own net.zrd entry, board rows, roster airframe pick; plus planes gamez and HUD-less remote seat checks
+NetSessionSuites.cs	net-aircraft-replication	C	[plane+weapons(+MP-launch)] scripted curve replication error bars over lossy link; MP1 arena only
+NetSessionSuites.cs	net-pause-overlay	C	[plane+weapons(+MP-launch)] Built-in pause (code) over a net flight; MP1 arena; offline control already uses --stage=empty
+NetSessionSuites.cs	net-two-session	D	[MP-map] asserts both worlds walk every seat onto the same net.zrd table entry; join/seed/roster
+NetSoakSuites.cs	net-soak	C	[plane+weapons(+MP-launch)] four link cells, scripted dogfight, kills each way; weapons zrdr; MP1 arena only
+NetStartSuites.cs	net-start-together	C	[plane+weapons(+MP-launch)] held start until every guest builds; MP1 arena only
+NetSurfaceVehicleSuites.cs	net-surface-patrol	E	C1B/M03's four patrol boats and their nets, chase-lag bar over authored speed
+NetTeamSuites.cs	net-team-deathmatch	D	[MP-map(teams)] each seat opens/returns inside its team's net.zrd block ('no second team block' skip), teammate/Ally cycle, score_suicide + team score target from zrdr
+NetWorldSuites.cs	net-ai-voice	D	[MP-map(destructible)+sound-set] AI pilot VO ids/accent and attack call-outs (sound archive + sound defs) plus a standing pool matched on both ends
+NetWorldSuites.cs	net-ai-world	D	[MP-map(destructible)] --ai=player_pfighter:n=2 on MP1 plus a standing destructible pool the host kills; weapons; needs one authored destructible in the map
+NetZeppelinSuites.cs	net-zeppelin-path	E	C3/M01's zeppelins, sampled hull path vs authored speed
+NetZeppelinVersusSuites.cs	net-zeppelin-vs-zeppelin	E	MP3 multiplayer1zep/2zep, gas bag/cannon scores from player.zrd, rearm bases, Restart-to-lobby
+OptionsLaunchSuites.cs	options-difficulty-launch	A	scratch options.json + SessionSpec/policy only
+OptionsLaunchSuites.cs	options-targeting-launch	A	scratch options.json + SessionSpec/policy only
+OptionsLaunchSuites.cs	options-view-launch	A	scratch options.json + SessionSpec/policy only
+OrdnanceSuites.cs	blast-curve-cover-cap	C	[plane+weapons] splash law 1-d^2/R^2, cover wall, 32-target cap on code-built destructibles; wep_14 splash + a texture archive for the pool
+OrdnanceSuites.cs	burst-light	E	he_ground_effect's authored he_light/he_light1 ramp, (104,320) m plateau, 420 m peak, in the real world
+OrdnanceSuites.cs	burst-light-envelope	D	[anim-effect-defs] he_ground_effect authored light replaced by burst light; EffectCatalogue + wep_06/09/11 (Enhanced only)
+OrdnanceSuites.cs	disabling-hits	C	[plane+weapons] wep_08/09/12 disabling types, wash weights and stun seconds, planes + stats
+OrdnanceSuites.cs	effect-pool-reset	D	[anim-effect-defs] sonic_ground_effect def and its ring meshes from the chapter anim program/gamez; pooling logic is the point
+OrdnanceSuites.cs	effect-pool-spawn-pose	D	[anim-effect-defs] he_ground_effect debris spawn pose over a four-slot pool; effect def + gamez template nodes
+OrdnanceSuites.cs	flyout-rack-pose	E	census over every FLYOUT weapon's reset events plus named reararc/sflsh/rapolys prototypes and rear_flash_effect timings
+OrdnanceSuites.cs	heat-shimmer	D	[anim-effect-defs] wep_06 burst takes one shimmer quad; he_ground_effect fireball liveness (Enhanced only)
+OrdnanceSuites.cs	impact-building-surface	E	C2 film-lot and C1 hangar/airport building materials, 3040slug_gunhit, bld_damage.flt
+OrdnanceSuites.cs	impact-orientation	D	[anim-effect-defs] IMPACT rows he_ground_effect/scatter_effect SURFACE_ANIMATION basis (effect catalogue defs) + wep_06/12
+OrdnanceSuites.cs	launch-velocity-decay	C	[plane+weapons] motor round velocity shed over LOCK_ON; weapon records wep_00/12/14/26 (ids and values 120->180->60 are pinned)
+OrdnanceSuites.cs	motor-acceleration	C	[plane+weapons] ACCELERATION to speed cap on wep_04 (150/300/450 pinned) and others
+OrdnanceSuites.cs	ordnance-end-conditions	C	[plane+weapons] range/timed-fuse/own-target fuse/unhittable window on wep_24/12/15/14/08 + planes gamez + stats
+OrdnanceSuites.cs	ordnance-guidance	C	[plane+weapons] turn rate/speed penalty/paint on wep_11/14/10 + planes; one clause scans every shipped carrier for LOCK_ON_LEAD element 0
+OrdnanceSuites.cs	ordnance-impact-effects	E	default IMPACT row decode (FUN_005ac3a0), flak_effect/ballflare.flt name collision against C1 gamez
+OrdnanceSuites.cs	ordnance-launch-axis	C	[plane+weapons] pylon salvo along aircraft axis vs mount axis with markers canted 20 deg; widest rig from planes gamez; wep_13
+OrdnanceSuites.cs	shootable-flyout	D	[anim-effect-defs+messages] FLYOUT torpedo body from chapter gamez prototypes + anim defs (torpedo_trail, torpedo_destroy_effect) + 'Aerial torpedo' label message; wep_14/wep_06
+OrdnanceSuites.cs	smoke-screen	D	[anim-effect-defs] SmokeScreenTunables zrdr + chapter IA1 anim program for the screen/camera anims + wep_13 + planes
+OrdnanceSuites.cs	sonic-ground-ring	E	named sonic nodes ring_down1/sonic_puff1/sonic_emit1 and their authored offsets (1 m, 30 m)
+PauseBoardSuites.cs	pause-board	A	real PauseBoard code-built, no data
+PausePreferencesSuites.cs	pause-preferences	D	[menu-layout+messages] decoded menu layout (MenuLayout), original pause sheet strips from zrdr escape + messages + campaign sequence
+PausePreferencesSuites.cs	pause-preferences-live-options	D	[menu-layout+plane] menu layout + PlaneStats player_bhawk; two seats and the Preferences leaf
+PauseSheetSuites.cs	pause-sheet	E	each campaign mission's escape.zrd sheet, reference stills flag for flag, C3/M01 and C3/M04 and C4/M05 rows, bitmaps exist in extraction
+PauseSheetSuites.cs	pause-sheet-ia	E	ia_escape.zrd's 28 loading_i dialogs, reference still word for word, every named bitmap exists
+PauseWorldIconSuites.cs	pause-world-icons	E	CM05 BUILT world, PLAYER_INIT, piratezep hull, chart flag pins within 40 px
+PerfHudSuites.cs	perf-hud-layout	A	real PerfHud Full tier drawn in the harness; no data
+PlaneWobbleSuites.cs	plane-wobble-walk	C	[plane+weapons] overspeed rattle/nitro shake on a flown plane node: planes gamez + zrdr stats (authored gate) + chapter texture archive
+PromptDeviceSuites.cs	bindings-prompt-device	D	[messages] MSG_PRESS_AUTOLAND and glyph/word lines from messages.json; seat/pad logic is code
+PromptDeviceSuites.cs	hud-auto-dock-line	D	[messages] auto-dock prompt line text from messages.json; layout anchors are code
+PromptDeviceSuites.cs	hud-crash-prompt	D	[messages] respawn prompt text from messages.json; layer/anchor logic is code
+PufferSuites.cs	emitter-lifetime	E	C1 refuel*/fire_n_smoke defs and a destructible death in the built C1
+PufferSuites.cs	puffer-blend-flag	E	additive bit of the chapter's shipped texture archive, missile_puffers trailpuffer
+PufferSuites.cs	puffer-distance-fade	E	shipped NEAR/FAR fade bands of C3 spew_puffer and volcanosmoke (the cross-wire)
+PufferSuites.cs	puffer-draw-order	A	in-code states, recording renderer, farthest-first order
+PufferSuites.cs	puffer-fire-column	E	the 30 s fire's authored column height in C1's own upward wind
+PufferSuites.cs	puffer-fire-glow	E	chapter's shipped archive: no shipped puffer sprite carries the additive bit
+PufferSuites.cs	puffer-idle-process-gate	D	[zrdr-puffer-records] needs PufferState records flame_ball.json/fierypuffer and pufftrails.json/smokepuffer; gating logic only, no pinned values
+PufferSuites.cs	puffer-modes	E	asserts authored fierypuffer/smokepuffer/cuepuffer values (NUMBER 18, TIME_INTERVAL 0.2, ...) and every chapter's speed_cue.json
+PufferSuites.cs	puffer-priority-size	A	in-code PufferState, recording renderer
+PufferSuites.cs	puffer-smoke-sun	E	chapter's shipped archive, smoke vs fire columns
+PufferSuites.cs	puffer-wind	A	integration-order and wind coupling on in-code PufferStates and a fake renderer
+PufferSuites.cs	world-emitter-ambience	E	C5's own PUFFER_STATE emitters with authored FADE_RANGE and mission wind
+RemoteAirframeSuites.cs	remote-airframe	C	[plane+weapons] aeroplane flown from received samples vs identical local rig: planes gamez + zrdr stats/weapons + chapter textures
+RenderPoseSuites.cs	render-poses	A	render-pose book on code-built nodes and fixed/realtime clocks
+RenderThreadSuites.cs	render-thread-handoffs	A	render-thread timing, texture refill, subtree copy on code-built geometry
+ScrapbookFitSuites.cs	scrapbook-fit	E	every scrap of shipped SCRAPBOOK.CSV/LAYOUT.CSV measured in the installed face (census)
+SessionStartCoverSuites.cs	session-start-cover	A	cover node layers/fade on code; --det builds none
+ShadowQualitySuites.cs	display-shadow-quality	A	shadow-quality precedence, pinned sun/renderer writes, scratch options file; code only
+SpawnPropsSuites.cs	spawn-props-by-def	E	autogyro vehicle def names agyro_rotors, CM21 Cabbie def, Warhawk spinprops, choke/restart on the real defs
+SpawnPropsSuites.cs	spawn-props-silent	D	[anim-effect-defs+plane+sounds] session roster over a world: spinprops/stopprops anim defs, snd_propstart sound defs + sound archive, planes gamez, zrdr stats; needs the anim program for the prop defs
+StaticCameraSuites.cs	death-camera	C	[plane+weapons] already runs on EmptyStage; needs planes gamez, zrdr death_* camera fields, stats/weapons/shakes, C1 textures/zrdr paths
+StaticCameraSuites.cs	flyby-camera	C	[plane+weapons] already runs on EmptyStage; planes + zrdr flyby camera fields + textures
+StickButtonSuites.cs	stick-discrete-buttons	A	binding rows and tap/hold splitter on code
+StuntCaptureSuites.cs	stunt-capture	E	C4/IA1 dz markers, DzRadius, snd_dangerzone_camera sting, stunt scoreboard strip
+StuntTargetSuites.cs	stunt-target-cycle	E	C1/IA1 danger zones as objective-class entries with their names
+SubmarineHullSuites.cs	destructible-sub-hull	E	C3/M03 barracuda hull block, sub_destruction HEALTH 200, subgen_doors, six-recipient flak count
+SurfaceVehicleGunSuites.cs	surface-gun-voices	E	C5/M01 patrol boat and turret truck, snd_turretgun LOOPED_SOUND_NAME, 400 m RANGE/0.3 s refire
+SurfaceVehicleGunSuites.cs	surface-vehicle-guns	E	C1B/M03 patrolboat blocks, wep_29 tuple 9000 rounds, def's 400 m ATTACK radius, firepoint marker
+SurfaceVehicleSuites.cs	campaign-surface-vehicles	E	CM08 four patrolboat blocks in C1B, CM12 eshipg31/patrolboat_eg0 launch
+TargetClassCycleSuites.cs	target-class-cycle	E	C3/M01 piratezep parts, targets.zrd other_target node, five aaguns, ordering
+TargetingCandidateSuites.cs	ai-pursues-structure	C	[plane+weapons] mode machine pursue on a code-registered engine; planes, stats, weapons, AiSkills
+TargetingCandidateSuites.cs	ai-target-rescore	C	[plane+weapons] 20 s hold, aircraft-first preference, ATTACK-radius reach; player_bhawk/wbloodhawk, weapons
+TargetingCandidateSuites.cs	aircraft-first-targeting	C	[plane+weapons] ranking vs decoded target_bias/struct_bias; player_bhawk + wbloodhawk wingman def + turret defs
+TargetingCandidateSuites.cs	gasbag-ordnance-gate	C	[plane+weapons] gun-only vs torpedo-armed Warhawk (player_warhawk/bhatwarhawk AI def), DamagesZeppelin weapon flags
+TargetingCandidateSuites.cs	ranked-pool-carried-turret-dedup	C	[plane+weapons] hostile aircraft with crewed rear mount (player_kestrel) + turret defs + AiSkills
+TargetingCandidateSuites.cs	targeting-candidates	C	[plane+weapons] AI acquisition over a code-registered destructible 'leng11' structure: planes gamez, stock loadout, zrdr stats/weapons/AiSkills, texture archive
+TargetingSuites.cs	debug-kill-target	C	[plane+weapons] F17 debug kill routing on aircraft and a destructible: planes + stats + textures
+TargetingSuites.cs	hostile-marker-hud	C	[plane+weapons] TargetHud tracker/F16 toggle/debug markers/off-screen geometry on flown planes: planes gamez + stats + textures
+TargetingSuites.cs	spyglass-marker-hud	C	[plane+weapons] TargetHud+Spyglass picture gates on flown planes: planes + stats + textures
+TargetingSuites.cs	target-flag	A	--target= grammar on tree-free candidates
+TargetingSuites.cs	target-input	C	[plane+weapons] tap/hold decode plus a real hostile round through TakeProjectileHit: planes, weapons, stats, chapter textures
+TargetingSuites.cs	target-pool	E	includes C1's real emplacements (five aaguns switched on, live and hostile, reach no cycle) via a private C1 world
+TargetingSuites.cs	target-ref	A	tree-free TargetRef/Classify/label formats, no data
+TargetingSuites.cs	target-selection	A	tree-free sticky selection and cycle order on AimCandidates
+TurretHullBlockSuites.cs	turret-hull-blocks-own-fire	E	C1/M04's real piratezep: every emplacement gimbal-swept for its first hull-blocked direction
+TurretMountSightlineSuites.cs	turret-grouped-site-sightline	C	[weapons+turret-defs] same code-built aagun site under a group node; zrdr turret/weapon defs only
+TurretMountSightlineSuites.cs	turret-own-mount-sightline	C	[weapons+turret-defs] aagun-pattern site under a bare root with a 4 m box; needs zrdr turret def + weapon def and a texture archive for the pool; no plane
+TurretStructureSuites.cs	turret-structure-targets	E	C1/M05's hospital ship (redcross) flagged scene node ownership for the mission
+TurretVesselSuites.cs	turret-vessel-targets	E	C1B/M03's four woken patrol boats, hostility against hulls' own team
+TurretVoiceSuites.cs	turret-gun-voices	E	every turret the data gives a voice over C4: piratezep rings, snd_chaingun, trucks and twin cannon silent
+VersusSpawnSuites.cs	versus-spawn-net-table	D	[MP-map] MP1 net.zrd free-for-all block read by SpawnPicker, multiplayer throttle/speed; pure zrdr reading, no world needed
+VersusSpawnSuites.cs	versus-spawn-rotation	D	[mission-zrdr(IA1 spawn list)] needs a mission zrdr with a dogfight_ace ia.json spawn list (>=3 points) + planes; rule is the rotation geometry
+VesselFuseSuites.cs	vessel-fuse	E	CM08 patrolboat_1 in C1B: proximity fuse against the real hull and its destructible pool
+WarhawkTorpedoRunSuites.cs	warhawk-torpedo-run	E	C4/M03's own opening geometry, authored 350-800 m torpedo band
+WeaponSelectorSuites.cs	weapon-selector-input	A	F3-F6 and pad class buttons routed on code
+WindStreakSuites.cs	wind-streaks	A	enhanced wind-streak uniforms follow flight; code-built
+WingWalkCameraSuites.cs	campaign-wingwalk-camera	E	CM02 capture cutscene (britbalmoral_1, ww_balmoral1, camera1) over its BUILT world
+WingmanFitSuites.cs	campaign-wingman-fit	E	census: nearly every shipped wingman def authors a weapons block; Fury/Balmoral wingman defs, wep_12
+WingmanSuites.cs	wingman-engage	E	every escorting block CM02 plans (C3/M05 roster, rating_biases, attack gates)
+WingmanSuites.cs	wingman-lost-leader	E	CM05 pairing devastator_1 on M4Bravo#11 net, deactivated leader hand-off
+WingmanSuites.cs	wingman-station	C	[plane+weapons] decoded escort station law as geometry then flown: planes gamez, stats, wingman AI def, chapter textures; no mission
+WorldAndToolSuites.cs	alpha-coverage-text	E	built world's every cutout/blend surface and C5 clutter sprite cards (shader census, both presentations)
+WorldAndToolSuites.cs	chapter-census	E	every chapter's built world: colliders, partition-cell ground rays, pinned destructible totals, 8-inch cannons, mip LOD bias
+WorldAndToolSuites.cs	clutter-card-pose	E	C5 poleflare facade look-at vs lightpole cylindrical pose, cblock7
+WorldAndToolSuites.cs	clutter-determinism	E	C1 templates.zrd substitute/scale_range species mix, instance total, interp.json templates
+WorldAndToolSuites.cs	clutter-mesh-lift	E	C5 cblock7 lamp glow stamps 4.75 m up its decoration chain
+WorldAndToolSuites.cs	cockpit-interior	C	[plane+weapons] player plane cockpit1 interior at cockpit_camera marker, per-mode hiding: planes gamez node cockpit1 + marker + textures
+WorldAndToolSuites.cs	cockpit-overlay-pass	C	[plane+weapons] cockpit pass moves the interior into its own world: planes gamez + textures
+WorldAndToolSuites.cs	cockpit-sun-bearing	D	[mission-zrdr(weather)] mission zrdr SUNLIGHT_ORIENTATION per zone (C1/IA1 ZONE1 -25, C2/MP2 cross); cockpit pass nodes in code
+WorldAndToolSuites.cs	danger-zone-photograph-fill	D	[plane+mission-zrdr] WeatherState from C1/IA1 mission zrdr (decoded fill ambient) + planes + textures
+WorldAndToolSuites.cs	fade-walk-bound	A	WorldCollision fade re-derive on code-built node chain
+WorldAndToolSuites.cs	gltf-export	C	[plane+weapons] viewer plane exports to glTF textured and wound out: planes gamez + texture archive
+WorldAndToolSuites.cs	lens-flare-gates	E	gamez sun node vs init.gw LensFlareTexture slots agreeing chapter by chapter (C2 and C3 only)
+WorldAndToolSuites.cs	nodelab-visibility	D	[gamez-destructible] needs a world with a destructible that has a 'healthy' variant and RESET_STATE; the world is used for its anim def, not just as a tree
+WorldAndToolSuites.cs	plane-shader-reuse	C	[plane+weapons] second aircraft build reuses Shader resources: planes gamez + texture archive
+WorldAndToolSuites.cs	scene-build-throw-frees	C	[plane+weapons] subtree build that throws frees its meshes: planes gamez + texture archive
+WorldAndToolSuites.cs	sky-sprite-backdrop-key	E	C4 moon1, C5 star1 corners, C2 moonbackdrop/moonsurface left alone
+WorldAndToolSuites.cs	splitscreen-listeners	A	SplitScreen.Build 2-4P panes are audio listeners, code only
+WorldAndToolSuites.cs	sun-energy	E	C1B night against C1C day mission: the install's own pair, plus C1C/MP1 edge case
+WorldAndToolSuites.cs	sun-orientation	D	[mission-zrdr(weather)] mission zrdr with ZONE1/ZONE2 SUNLIGHT_ORIENTATION and a cloud band (19024-20124 m); WeatherRig on code nodes; C2/MP2 values pinned
+WorldAndToolSuites.cs	terrain-pick-export	D	[terrain-world] needs map-scale terrain mesh tiles + CloudDeck (CollectMapScale) for click-pick and glTF export; C4 tile counts not pinned
+WorldAndToolSuites.cs	tex-dropin	D	[texture-archive] TextureDropIn.Flatten over named archive textures (DropInSamples) from a chapter texture archive; needs a small archive with those names
+WorldAndToolSuites.cs	texture-alpha-class	E	every chapter's texture archive alpha classification from the manifest; named textures poleflare/lightpole/cblock1/bldg1/wtr00000
+WorldAndToolSuites.cs	texture-alpha-nibble	E	C5 flare_green 4-bit alpha on every mip, cloud1 bit 3
+WorldAndToolSuites.cs	weather-cockpit-whiteout	D	[mission-zrdr(weather)] mission zrdr cloud band (C1/IA1 970-1124 m, core 1032-1062 m) and fog; CockpitOverlay on code nodes
+WorldAndToolSuites.cs	wing-flare-pose	C	[plane+weapons] player_pfighter wing-light flares look-at pose and authored falloff pair: planes gamez + textures
+WorldAndToolSuites.cs	world-lights-enhanced-budget	A	WorldLights omni pool budgets on synthetic positions
+WorldAndToolSuites.cs	world-lights-nearest-viewer	A	WorldLights on synthetic positions
+WorldFidelitySuites.cs	anim-clock-realtime	A	AnimRuntime callbacks per clock mode on an empty program
+WorldFidelitySuites.cs	campaign-submarine	E	CM04 authored-inactive barracuda in C3/M03 and sub_movement
+WorldFidelitySuites.cs	fog-state	E	C1/M04 intro definition FOG_STATE drop_fog values
+WorldFidelitySuites.cs	generator-launch-climb-out	E	C1/M02 eairg31 real airfield with colliders, 30 s climb-out
+WorldFidelitySuites.cs	generator-takeoff-run	E	C1/M02 eairg31 eag31_aip points and take-off run
+WorldFidelitySuites.cs	hangar-door-wake	E	C1/M04 OBJECTIVE1 WAKE_ANIM hangar3_doors, 50 m panels, eairg_open31, 4 s lead
+WorldFidelitySuites.cs	partition-areas	E	C3's own three story rectangles, C3/M01 third area switched off
+WorldFidelitySuites.cs	scripted-path	E	C1/M04 authored pp1 takeoff path, 40 mph taxi, decoded 300 m point
+WorldFidelitySuites.cs	world-node-active-depth	E	C1's bbtur11/healthy and attack_balloon11 active bits
+WorldQueryReuseSuites.cs	world-query-reuse	A	GodotWorldQuery ray/overlap reuse against one code-built block
+WorldSoundSuites.cs	world-sound-falloff	D	[sound-set] SoundDefs/groups RANGE curve + a sound archive entry for a pooled emitter; invented def and a tiny wav archive would do
+ZeppelinBreakupSuites.cs	zeppelin-breakup	E	C1/M04 piratezep killpzep, NODE_UNDERCOVER 65 m, six gasbag drops, twelve engines
+ZeppelinCannonBurnoutSuites.cs	dante-cannon-burnout	E	C5/M04 Dante among nine other zeppelins sharing node names, OBJECTIVE10
+ZeppelinCannonBurnoutSuites.cs	zeppelin-cannon-burnout	E	C1/M04 hk_zep sabotaged doors, finish_locklear, lkgasbag05
+ZeppelinCannonStowedSuites.cs	zeppelin-cannon-stowed	E	C2B/M04 Gemini lbroad11 deploy def RESET_STATE, HEALTH 60
+ZeppelinDormantDrawSuites.cs	zeppelin-dormant-draws-nothing	E	C4/M05 CM20 blackhatzep deactivated record
+ZeppelinFuseSuites.cs	zeppelin-fuse	E	C1/M04 piratezep top, DETONATION_DISTANCE pass
+ZeppelinHullActivationSuites.cs	zeppelin-hull-activation	E	C2/M03 Pandora piratezep hidden gamez bit, pzhookpoint, pzhomebase dock
+ZeppelinIdentitySuites.cs	structure-part-bias	E	C4/M03 cargozep1 pools, Black Swan escort -1.0 and Black Hat 1.0 biases
+ZeppelinIdentitySuites.cs	zeppelin-identity	E	C5/M03 cargozep* exclusion; C1/MP3 record team on ally hull emplacements
+ZeppelinLibraryCopyHitchSuites.cs	zeppelin-library-copy-hitch	E	C4/M05 cargozep3 library-root callee copy cost on the real world
+ZeppelinPanelSwapSuites.cs	zeppelin-panel-swap	E	C2B/M04 pzepleft_gasbag1 panel/burnt twin cull modes
+ZeppelinSuites.cs	zeppelin-broadside	E	C3/M03 Pandora, C1/M04 flying piratezep wep_28 volleys, C5/M04 Dante twelve cannons
+ZeppelinSuites.cs	zeppelin-damage	E	C1/M04 piratezep gasbag 120/engine 40 pools, survivor threshold polarity
+ZeppelinSuites.cs	zeppelin-launch	E	C1/IA1 zeppelin-launch generator, cargobay origin, mp1 door anims, 7 s schedule
+ZeppelinSuites.cs	zeppelin-motion	E	C1/M04 piratezep PirateZep1 node 0 stop points, max_speed, sqrt curve
+ZeppelinSuites.cs	zeppelin-pandora-dead-end	E	CM08 piratezep Klondike1 chain stops 7/8, zepgetcargo
+ZeppelinSuites.cs	zeppelin-scripted-pose	E	CM04 pzep_todrydock 61.65 s over C3/M03
+ZeppelinZoneTeamSuites.cs	zeppelin-zone-team	E	C4/M03 Pandora gasbag/engine pool teams off flagged nodes

@@ -286,6 +286,9 @@ public partial class Launcher : Node3D
     // so a git worktree can run the game, /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
     private string _dataRoot = "";
+    // Why --synthetic-data could not write its tree, or null. The run quits on it once the log is
+    // open. Until then the data root names the unwritten tree, so nothing real is read.
+    private string? _syntheticError;
     private string _planesGamezPath = "";  // extracted/planes.zip, the aircraft models (always this)
     private string _zrdrPath = "";
     private string _soundsPath = "";
@@ -393,6 +396,7 @@ public partial class Launcher : Node3D
         if (_spec.DataRoot is { } dataRootArg) _dataRoot = Path.GetFullPath(dataRootArg);
         if (_dataRoot != _repoRoot)
             Log.Info("core", $"data root: {_dataRoot} (repo root {_repoRoot})");
+        ResolveSyntheticData();
 
         // An override is used verbatim; everything else derives from the data root.
         var planesGamezPath = Path.Combine(_dataRoot, "extracted", "planes.zip");
@@ -544,6 +548,15 @@ public partial class Launcher : Node3D
         string hitchLogPath = Log.SinkPath
             ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
+
+        // A failed --synthetic-data tree ends the run. Reading the install instead would pass it on
+        // data nobody asked for, and an empty tree would only skip every suite.
+        if (_syntheticError != null)
+        {
+            Log.Error("core", $"--synthetic-data could not write its tree: {_syntheticError}");
+            GetTree().Quit(1);
+            return;
+        }
 
         // --extract builds no world and no menu: it writes the data root's extracted/ and quits.
         if (_spec.ExtractInstall is { } extractInstall)
@@ -1629,6 +1642,39 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"net: {left} {bots} left out, the {people} filled the {Net.NetSeats.MaxPlayers}-seat field");
         }
+    }
+
+    // --synthetic-data replaces the data root, whatever it held, with a tree written into scratch.
+    // The switch alone opts in, and a synthetic tree is named in the log on every run that reads one.
+    // ⚠ Do not fall back to the resolved root when the tree fails; see _syntheticError.
+    private void ResolveSyntheticData()
+    {
+        if (!_spec.SyntheticData)
+        {
+            if (Tooling.SyntheticData.Marks(_dataRoot))
+            {
+                Log.Warn("core", $"SYNTHETIC DATA: the data root {_dataRoot} holds an invented test tree, not an extraction; every asset this run reads is invented");
+            }
+            return;
+        }
+        string replaced = _dataRoot;
+        bool installThere = !UI.Screens.NoGameDataScreen.Missing(replaced);
+        _dataRoot = Tooling.SyntheticData.ScratchRoot(_repoRoot);
+        try
+        {
+            Tooling.SyntheticData.Build(Tooling.SyntheticData.FixturesUnder(_repoRoot), _dataRoot, UI.Menu.Original.SyntheticShell.TreeFamilies);
+        }
+        catch (System.Exception e)
+        {
+            // Every failure alike, a malformed record included: each one leaves the tree unusable.
+            _syntheticError = $"{e.GetType().Name}: {e.Message}";
+            return;
+        }
+        Flight.Weapons.StockLoadouts.Supplement =
+            Tooling.SyntheticPlane.LoadoutsUnder(Tooling.SyntheticData.FixturesUnder(_repoRoot));
+        SessionSpec.DefaultPlane = Tooling.SyntheticPlane.Plane;
+        string families = string.Join(",", System.Linq.Enumerable.Select(UI.Menu.Original.SyntheticShell.TreeFamilies, f => f.Name));
+        Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {_dataRoot} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
     }
 
     // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame

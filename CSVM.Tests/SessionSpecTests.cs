@@ -1093,6 +1093,19 @@ public class SessionSpecTests
         Assert.Equal("/somewhere", s.DataRoot);
     }
 
+    /// <summary>The synthetic tree is opt-in only, and an extraction never lands in it. Beside
+    /// `--extract` the switch is dropped with a note.</summary>
+    [Fact]
+    public void SyntheticDataIsOptInAndNeverAppliesToAnExtraction()
+    {
+        Assert.False(S("--run-tests").SyntheticData);
+        Assert.True(S("--run-tests", "--synthetic-data").SyntheticData);
+
+        var extract = S("--extract=/install", "--synthetic-data");
+        Assert.False(extract.SyntheticData);
+        Assert.Contains(extract.Warnings, n => n.Message.Contains("--synthetic-data"));
+    }
+
     /// <summary>`--ia=` is a path VALUE only, loading the file into an `InstantActionDef` is the
     /// runtime's job, which is what keeps this type free of file
     /// I/O.</summary>

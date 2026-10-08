@@ -357,10 +357,10 @@ public sealed class VersusDirector
 
     /// <summary>The rearm bases of any Dogfight, over the wire or split screen. Zeppelin vs Zeppelin
     /// rearms only at its hulls' own nodes, so a match that could not seat both hulls has no base
-    /// at all.</summary>
-    internal void WireRearmBases(AnimRuntime? world, string zrdrPath, ZeppelinRuntime? hulls)
+    /// at all. On the empty stage the bases stand in its match <paramref name="arena"/>.</summary>
+    internal void WireRearmBases(AnimRuntime? world, Node3D? arena, string zrdrPath, ZeppelinRuntime? hulls)
     {
-        if (world == null || (_spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin && ZvzPlay == null))
+        if ((world == null && arena == null) || (_spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin && ZvzPlay == null))
         {
             return;
         }
@@ -371,6 +371,7 @@ public sealed class VersusDirector
             IsLocal = seat => _field.NetSeats.Count == 0 || IsLocal(seat),
             SeatTeams = SeatTeams(_spec, _field.NetSeats),
             World = world,
+            Arena = arena,
             CaptureTheFlag = _spec.MissionType == DogfightMissionType.CaptureTheFlag,
             Zeppelins = ZvzPlay,
             Hulls = hulls,

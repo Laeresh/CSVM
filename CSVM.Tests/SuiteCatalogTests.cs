@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using CSVM.Testing;
 using Xunit;
 
@@ -58,6 +60,62 @@ public sealed class SuiteCatalogTests
     }
 
     [Fact]
+    public void The_ci_tier_is_a_sorted_registered_subset_where_a_skip_fails()
+    {
+        var names = Names.ToHashSet();
+
+        Assert.NotEmpty(SuiteCatalog.CiTier);
+        Assert.All(SuiteCatalog.CiTier, name => Assert.Contains(name, names));
+        Assert.Equal(SuiteCatalog.CiTier.OrderBy(n => n, StringComparer.Ordinal).Distinct().ToArray(),
+            SuiteCatalog.CiTier.ToArray());
+        // Each needs an environment CI lacks: an IPv6 loopback, or an OS shell to open a folder.
+        Assert.DoesNotContain("enet-dual-stack", SuiteCatalog.CiTier);
+        Assert.DoesNotContain("enet-stable-ipv6-reply", SuiteCatalog.CiTier);
+        Assert.DoesNotContain("build-stamp-focus", SuiteCatalog.CiTier);
+
+        Assert.True(SuiteCatalog.Tier("ci")!.SkipFails);
+        Assert.Same(SuiteCatalog.CiTier, SuiteCatalog.Tier("CI")!.Suites);
+        Assert.False(SuiteCatalog.Tier("quick")!.SkipFails);
+    }
+
+    [Fact]
+    public void The_headless_limits_name_registered_suites_off_the_ci_tier()
+    {
+        string path = Path.Combine(TestData.RepoRoot, "analysis", "headless-limits.json");
+        using var limits = JsonDocument.Parse(File.ReadAllText(path));
+        string[] headlessOnly = limits.RootElement.GetProperty("headlessOnly").EnumerateObject().Select(p => p.Name).ToArray();
+        string[] patterns = limits.RootElement.GetProperty("headlessEngineErrors").EnumerateObject().Select(p => p.Name).ToArray();
+        var registered = Names.ToHashSet();
+
+        Assert.NotEmpty(headlessOnly);
+        Assert.All(headlessOnly, name => Assert.Contains(name, registered));
+        // The CI job runs headless, so a suite that cannot pass there would hold it red for good.
+        Assert.All(headlessOnly, name => Assert.DoesNotContain(name, SuiteCatalog.CiTier));
+        Assert.NotEmpty(patterns);
+        Assert.All(patterns, pattern => Assert.NotNull(new Regex(pattern)));
+    }
+
+    [Fact]
+    public void Only_a_tier_term_whose_tier_says_so_makes_a_skip_fail()
+    {
+        var ci = TestHarness.SkipFailures("tier:ci");
+        Assert.Equal(SuiteCatalog.CiTier.Count, ci.Count);
+        Assert.All(SuiteCatalog.CiTier, name => Assert.Equal("tier:ci", ci[name]));
+
+        // The local battery's selectors keep SKIP as a non-failure, a listed suite named alone too.
+        Assert.Empty(TestHarness.SkipFailures(""));
+        Assert.Empty(TestHarness.SkipFailures("tier:quick"));
+        Assert.Empty(TestHarness.SkipFailures($"suite:{SuiteCatalog.CiTier[0]}"));
+        Assert.Empty(TestHarness.SkipFailures(SuiteCatalog.CiTier[0]));
+        Assert.Empty(TestHarness.SkipFailures("tier:nosuchtier"));
+
+        // A union refuses a skip only from the ci tier's own members.
+        var union = TestHarness.SkipFailures("suite:chapter-census, tier:ci");
+        Assert.False(union.ContainsKey("chapter-census"));
+        Assert.Equal(SuiteCatalog.CiTier.Count, union.Count);
+    }
+
+    [Fact]
     public void An_exact_term_selects_one_suite_and_a_substring_still_selects_many()
     {
         var exact = TestHarness.Select(TestHarness.All, "suite:weapons-fire", out var unmatched);
@@ -80,6 +138,10 @@ public sealed class SuiteCatalogTests
         Assert.Equal(
             Names.Where(n => SuiteCatalog.QuickTier.Contains(n)).ToArray(),
             selected.Select(s => s.Name).ToArray());
+
+        var ci = TestHarness.Select(TestHarness.All, "tier:ci", out unmatched);
+        Assert.Empty(unmatched);
+        Assert.Equal(SuiteCatalog.CiTier, ci.Select(s => s.Name).ToArray());
     }
 
     [Fact]

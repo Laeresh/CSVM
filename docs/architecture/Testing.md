@@ -19,11 +19,11 @@ instead; read `TestHarness.cs` for that half.
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
 scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld`
 chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
-`TestContext.ScratchDir`, and the process exit code. `Select` is the pure selector over the flag's
-value; `SuiteShards` handles the one term that divides rather than selects. The world cache and its
-eviction, the mission-override and private-world forms, the shared `DecodeCache`, the per-build
-`StartupProfile`, the between-suite queued-free flush and the engine-error allowlist carry their
-own rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
+`TestContext.ScratchDir` (its `syntheticData` names a synthetic data root), and the exit code.
+Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
+(a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
+`Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
+cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/FinalizerGate.cs
 The `--debug-finalizers` instrument: `TestHarness.Run` wraps each suite in one gate, which parks the
@@ -83,10 +83,11 @@ emitter's own modes are. Neither covers the other's job.
 The registry of the in-engine assertion suites, discovered from the `[Suite("name", "what")]`
 attribute each body carries in the `*Suites.cs` modules; the catalog keeps no per-suite table, so
 adding a suite means adding one marked body in one of those modules and nothing else. `QuickTier`
-is the checked-in membership of `--run-tests=tier:quick`, resolved through `Tier(name)`. The
-determinism rule behind the alphabetical registry order, and why a malformed declaration throws
-rather than being skipped, are stated at the members themselves. Read `SuiteShards.cs` for what
-depends on that order.
+and `CiTier` are the memberships of `tier:quick` and `tier:ci`; `Tier(name)` resolves each into a
+`SuiteTier`, whose `SkipFails` (the ci tier's alone) makes a member's SKIP fail the run. The
+determinism rule behind the alphabetical order, and why a malformed declaration throws rather
+than being skipped, are stated at the members. Read `SuiteShards.cs` for what depends on that
+order, and `docs/tooling.md` for each tier's selection rule.
 
 ## src/Testing/*Suites.cs
 The in-engine scenario bodies, one module per domain: the emitter model, combat and ordnance,
@@ -104,7 +105,9 @@ an all-purpose helper. Per-suite traps live as comments on the suites themselves
 
 ## src/Testing/SuiteConstants.cs
 The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
-timing, the destructible census, texture samples, and the ordnance-burst step and slack.
+timing, the destructible census, texture samples, and the ordnance-burst step and slack. It also
+reads a `player.json` float back raw (`PlayerGlobal`), so a check can hold a typed field to the
+record it came from on any data tree.
 
 ## src/Testing/BurstTimeline.cs
 The three value types describing an authored ordnance-burst timeline and its observed dispatches.
@@ -114,6 +117,10 @@ Builds a test pane camera at a supplied world position for suites that exercise 
 
 ## src/Testing/EffectStageSuiteHelper.cs
 Builds and frees a production-shaped, pooled effect-template stage for mesh-visibility suites.
+`WithAnimSource` hands an effect suite its anim program, template gamez and scene builder, and
+`WithAnimWorld` a destructible suite its world root and bound runtime. On an extraction both are the
+chapter world; under `--synthetic-data` they are the `effects` family's invented records
+(`Tooling/SyntheticEffects.cs`), the world a private one of its destructible roots.
 
 ## src/Testing/BotSuiteHelper.cs
 The readings the bot suites share: lifting a pilot clear of the ground, the spawn-table entry a

@@ -130,4 +130,17 @@ internal static class SuiteConstants
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
         };
+
+    /// <summary>One float read raw off the zrdr scope's <c>player.json</c>, inside
+    /// <paramref name="block"/> when one is named. Null when the record does not author it. A
+    /// check compares it with the typed loader's field, so the field answers to its record on any
+    /// tree rather than to one install's figure.</summary>
+    internal static float? PlayerGlobal(string zrdrPath, string key, string? block = null)
+    {
+        if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is not List<object?> list)
+            return null;
+        var player = ZrdrDict.FromAlternating(list);
+        var scope = block == null ? player : player.Dict(block);
+        return scope != null && scope.TryFloat(key, out float value) ? value : null;
+    }
 }

@@ -71,41 +71,15 @@ $Inv = [Globalization.CultureInfo]::InvariantCulture
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
-# Suites that cannot pass in a headless process by construction, on any platform: each reads
-# back something only a real renderer or a real display produces. Every entry was run headless
-# from the Windows export of the same commit against a Windows extraction of the same shape and
-# failed there too, so an entry here is never a Linux finding. They still run; a listed suite
-# that passes is reported so a stale entry is seen. This is the one place the list lives.
-$HeadlessOnly = [ordered]@{
-    "build-stamp-focus"         = "pushes a click at the logs icon's laid-out centre, which a headless window of no size places outside the viewport"
-    "cloud-field-fade"          = "reads the cloud cards' normals back out of the built mesh, which the headless dummy renderer does not store"
-    "clutter-activation"        = "reads each stamp's drawn state back from the clutter MultiMesh's instance transforms, which the headless renderer keeps no instances for"
-    "clutter-cells"             = "reads every placement back through the clutter cells' MultiMesh instance transforms, which the headless renderer keeps no instances for"
-    "clutter-card-depth"        = "counts rendered pixels in a viewport; headless renders none"
-    "display-mode"              = "asserts on the window mode of a real window; the headless display server has none"
-    "display-monitor"           = "enumerates screens; the headless display server reports none"
-    "display-resolution"        = "reads the screen size; the headless display server reports 0x0"
-    "display-vsync"             = "applies V-Sync to a real window's swap chain; headless has none"
-    "fog-per-view"              = "reads each splitscreen pane's rendered fog colour back from its viewport; headless renders none"
-    "graphics-live-switch"      = "reads the drawn clutter buffers and every texture's image back after each switch, which the headless renderer keeps neither of"
-    "menu-original-tracer"      = "reads the OS pointer's visibility and the monitor list from the display server, which headless does not provide"
-    "menu-screenshot-key"       = "captures the viewport texture to a PNG; headless draws nothing, so every file is empty"
-    "muzzle-flash-rides-muzzle" = "reads the flash quads' drawn instance transforms back, which the headless renderer does not keep"
-    "puffer-fire-glow"          = "reads each emitter column's MultiMesh instance custom data back, which the headless renderer does not keep"
-    "puffer-smoke-sun"          = "reads each emitter column's MultiMesh instance custom data back, which the headless renderer does not keep"
-    "sun-per-view"              = "counts each splitscreen pane's rendered aircraft pixels and reads their shade back; headless renders none"
-    "trail-world-anchor"        = "reads the first drawn puff's instance transform back, which the headless renderer does not keep"
-    "wing-flare-pose"           = "counts the flare's rendered pixels in a viewport; headless renders none"
-}
-# Engine error lines a headless process prints and a windowed one does not, on either platform:
-# the same run from the Windows export prints each of these, at the same counts. The harness's
-# own allowlist is written for the windowed battery, so these are passed here, by pattern, and
-# every other unexpected line still fails the stage.
-$HeadlessEngineErrors = [ordered]@{
-    'texture_2d_get \(\./servers/rendering/dummy/'  = "the dummy renderer holds no texture data to read back"
-    '(_shaped_text_add_string|_ensure_cache_for_size|_font_get_(ascent|descent)) \(modules/text_server_adv/' ="a headless font has no rasterised size cache, so shaping at a measured size of 0 fails"
-    'The new image dimensions must match the texture size\. at: update \(scene/resources/image_texture\.cpp' = "a graphics switch re-uploads an alpha-depth texture in place (TextureUpload.Replace), and a headless process reports a size mismatch the windowed battery does not"
-}
+# The suites that cannot pass in a headless process by construction ($HeadlessOnly) and the
+# engine error lines only a headless process prints ($HeadlessEngineErrors), each with its reason.
+# They live in analysis/headless-limits.json, which RunCiSuites.ps1 reads too, so the two headless
+# runs share one list; the file's readme says what admits an entry.
+$headlessLimits = [IO.File]::ReadAllText((Join-Path $RepoRoot "analysis\headless-limits.json"), $Utf8) | ConvertFrom-Json
+$HeadlessOnly = [ordered]@{}
+foreach ($p in $headlessLimits.headlessOnly.PSObject.Properties) { $HeadlessOnly[$p.Name] = [string]$p.Value }
+$HeadlessEngineErrors = [ordered]@{}
+foreach ($p in $headlessLimits.headlessEngineErrors.PSObject.Properties) { $HeadlessEngineErrors[$p.Name] = [string]$p.Value }
 
 function Write-Banner([string]$Text) {
     Write-Host ""

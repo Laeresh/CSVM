@@ -7,7 +7,7 @@ One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traf
 Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Launch/Launcher.cs
-Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
+Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence and the `--synthetic-data` swap (`Tooling/SyntheticData.cs`), the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits and the `--extract` run (`Extraction/ExtractionRun.cs` on a worker thread),
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, the stick pump `Sticks/StickPump.cs` started after the pad roster is logged, the typed-character feed `UI/Boards/TypedText.cs` its `_Input` fills with every key event's character and paste chord, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
 menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/Screens/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),
@@ -56,7 +56,7 @@ The kill and crash lines in each pane's message stack: a downed aircraft posts o
 The opposition outside the directors' own rosters, in four steps the session calls at their build points: `BuildSquadrons` (the `--ai` entries, on a net, on the empty stage's ring, or ahead of P1), `BuildZeppelins` (the mission's hulls with their damage, cannons and target sub-parts, or the `--zep=` graft), `BuildGenerators` (the egen runtime, its launches through the roster and `OrderWaveAirframes` for the load screen) and `PlaceEmplacements` (the world AA guns with the Instant Action zeppelin arm before `--wake-turrets`). Each returns the runtime it built for the session to step. Read `Session/Roster/AiGeneratorRuntime.cs` next.
 
 ## src/Launch/ObjectiveReadouts.cs
-A flown mission's objective readouts once the graph is armed: each pane's objectives readout and mission-end fade and the clock's expiry notices on a campaign, and the objective sites on the player's target cycles. A mode without a director takes the same site feed off the mission's own targets.zrd when `BindsMissionTargetTable` says so. Read `Session/Objectives/ObjectiveSites.cs` next.
+A flown mission's objective readouts once the graph is armed: each pane's objectives readout and mission-end fade and the clock's expiry notices on a campaign, and the objective sites on the player's target cycles. A mode without a director takes the same site feed off the mission's own targets.zrd when `BindsMissionTargetTable` says so. On the empty stage a `--ctf` match's site feed flags the arena's own flag markers (`EmptyStage.ArenaTargets`, `MissionTargets.Objectives`), since the stage has no `targets.zrd`. Read `Session/Objectives/ObjectiveSites.cs` next.
 
 ## src/Launch/TuningWarmup.cs
 The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and

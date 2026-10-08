@@ -51,7 +51,6 @@ internal static class MenuOriginalConnectionSuites
         + "other the host closed the game and puts it back on the Connection page")]
     internal static void TheConnectionPage(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -157,7 +156,6 @@ internal static class MenuOriginalConnectionSuites
         + "page, whose games list's Create Game opens a hosted lobby of its own")]
     internal static void TheLobby(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -255,7 +253,6 @@ internal static class MenuOriginalConnectionSuites
         + "host's list is read-only, and the guest's View... opens it read-only with no Accept")]
     internal static void TheOutlawList(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -337,7 +334,6 @@ internal static class MenuOriginalConnectionSuites
         + "field carries each seat's team")]
     internal static void TheLobbyTeams(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -647,7 +643,6 @@ internal static class MenuOriginalConnectionSuites
         + "the options, and the guest launches behind the host on that map and time in its own pick")]
     internal static void TheBuiltInHost(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -770,7 +765,6 @@ internal static class MenuOriginalConnectionSuites
         + "guest a patch apart from the host joins it")]
     internal static void TheVersionCheck(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1166,7 +1160,6 @@ internal static class MenuOriginalConnectionSuites
         + "is refused while a guest from another machine joins")]
     internal static void TheBootAndThePassword(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -1255,7 +1248,6 @@ internal static class MenuOriginalConnectionSuites
         + "NETWORK, after which a new session admits it")]
     internal static void TheCoopBoot(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -2431,12 +2423,30 @@ internal static class MenuOriginalConnectionSuites
     // Zeppelin. The host goes back to a Deathmatch without teams for the rest of the suite.
     private static void TypeDescriptions(TestContext ctx, End host, End guest, List<End> ends)
     {
+        // Each line is the data root's own row as the page trims it, so any table carrying the three
+        // reads the same. An empty or shared word would make every Draws below vacuous.
+        var table = CSVM.Mech3.UiStrings.TryLoad(ctx.DataRoot) ?? CSVM.Mech3.UiStrings.Empty;
+        string Word(int id) => table.Text(id).Trim().TrimStart(']');
+        string deathmatch = Word(10123), ctf = Word(10124), zvz = Word(10125);
+
+        // On the install the shipped words are pinned too, so a decode that garbles them goes red.
         const string Deathmatch = "Dogfight to the death.";
         const string Ctf = "Steal the opposing squadron's flag";
         const string Zvz = "Protect your zeppelin";
-        ctx.Check(Draws(host.Shell.Compose(), Deathmatch) && Draws(guest.Shell.Compose(), Deathmatch),
+        bool pinned = !ctx.SyntheticData;
+        ctx.Check(deathmatch.Length > 0 && ctf.Length > 0 && zvz.Length > 0
+            && !deathmatch.Contains(ctf, StringComparison.Ordinal) && !ctf.Contains(deathmatch, StringComparison.Ordinal)
+            && !zvz.Contains(deathmatch, StringComparison.Ordinal),
+            $"the string table carries three distinct type descriptions ({deathmatch} / {ctf} / {zvz})");
+        ctx.Check(Draws(host.Shell.Compose(), deathmatch) && Draws(guest.Shell.Compose(), deathmatch),
             $"both ends describe the Deathmatch under the Type box with langui 10123");
-        foreach (var (type, want) in new[] { (DogfightMissionType.CaptureTheFlag, Ctf), (DogfightMissionType.ZeppelinVsZeppelin, Zvz) })
+        if (pinned)
+        {
+            ctx.Check(Draws(host.Shell.Compose(), Deathmatch) && Draws(guest.Shell.Compose(), Deathmatch),
+                $"both ends describe the Deathmatch under the Type box with langui 10123");
+        }
+
+        foreach (var (type, want, shipped) in new[] { (DogfightMissionType.CaptureTheFlag, ctf, Ctf), (DogfightMissionType.ZeppelinVsZeppelin, zvz, Zvz) })
         {
             host.Door.Dogfight!.SetMissionType(type);
             for (int frame = 0; frame < 4; frame++)
@@ -2445,8 +2455,13 @@ internal static class MenuOriginalConnectionSuites
             }
 
             var boards = new[] { host.Shell.Compose(), guest.Shell.Compose() };
-            ctx.Check(boards.All(b => Draws(b, want) && !Draws(b, Deathmatch)),
+            ctx.Check(boards.All(b => Draws(b, want) && !Draws(b, deathmatch)),
                 $"{type} is described on both ends with its own line and not the Deathmatch's ({guest.Door.Dogfight!.Options.MissionType})");
+            if (pinned)
+            {
+                ctx.Check(boards.All(b => Draws(b, shipped) && !Draws(b, Deathmatch)),
+                    $"{type} is described on both ends with its own line and not the Deathmatch's ({guest.Door.Dogfight!.Options.MissionType})");
+            }
         }
 
         host.Door.Dogfight!.SetMissionType(DogfightMissionType.Deathmatch);
@@ -2457,8 +2472,13 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var back = guest.Door.Dogfight!.Options;
-        ctx.Check(back is { MissionType: (byte)DogfightMissionType.Deathmatch, RestrictTeams: false } && Draws(guest.Shell.Compose(), Deathmatch),
+        ctx.Check(back is { MissionType: (byte)DogfightMissionType.Deathmatch, RestrictTeams: false } && Draws(guest.Shell.Compose(), deathmatch),
             $"and back on a Deathmatch without teams the guest reads 10123 again ({back.MissionType}, {back.RestrictTeams})");
+        if (pinned)
+        {
+            ctx.Check(back is { MissionType: (byte)DogfightMissionType.Deathmatch, RestrictTeams: false } && Draws(guest.Shell.Compose(), Deathmatch),
+                $"and back on a Deathmatch without teams the guest reads 10123 again ({back.MissionType}, {back.RestrictTeams})");
+        }
     }
 
     // The guest's second stock plane and a shell of its own on its first gun, picked while Ready,

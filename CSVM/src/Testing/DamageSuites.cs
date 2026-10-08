@@ -77,7 +77,7 @@ internal static class DamageSuites
         "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)")]
     internal static void DamageTemplatePool(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var stage = new Node3D { Name = "DamagePoolStage" };
             var pdp5 = PoolAnchorNode("pdp5", new Vector3(-10, 0, 0));
@@ -90,8 +90,8 @@ internal static class DamageSuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                int built = Session.World.WorldEffectsFactory.BuildEffectStage(source.Gamez,
+                    source.Scene, pool, new[] { "planeflakes" });
                 ctx.Check(built == 1, $"slot {slot} staged its planeflakes copy");
                 foreach (var child in pool.GetChildren())
                 {
@@ -115,7 +115,7 @@ internal static class DamageSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
+                runtime.Bind(stage, source.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
                 runtime.Play("pdpanel5", stage, applyReset: false);
                 for (int i = 0; i < 6; i++)
                 {
@@ -163,7 +163,7 @@ internal static class DamageSuites
         + "takes its own copy through the rebuilt maps")]
     internal static void DamageTemplateFreedAnchor(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var stage = new Node3D { Name = "FreedAnchorStage" };
             var pdp5 = PoolAnchorNode("pdp5", new Vector3(-10, 0, 0));
@@ -176,8 +176,8 @@ internal static class DamageSuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                Session.World.WorldEffectsFactory.BuildEffectStage(source.Gamez,
+                    source.Scene, pool, new[] { "planeflakes" });
                 foreach (var child in pool.GetChildren())
                 {
                     if (child is Node3D copy)
@@ -199,7 +199,7 @@ internal static class DamageSuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
+                runtime.Bind(stage, source.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
                 runtime.Play("pdpanel5", stage, applyReset: false);
                 for (int i = 0; i < 6; i++)
                 {
@@ -446,9 +446,22 @@ internal static class DamageSuites
     internal static void DamageStageSlots(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_fury");
         var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
-        ctx.Check(stats.VehicleInjureAnims.Count == 7,
-            $"fury's AI ladder carries {stats.VehicleInjureAnims.Count} entries (want 7)");
+        const string Remote = "random_remote_damage", Smoke = "pfsmoketrail";
+        var ladder = stats.VehicleInjureAnims;
+        int remote = ladder.Count(e => e.Anim == Remote);
+        int smoke = ladder.Count(e => e.Anim == Smoke);
+        // A repair to half lifts the hull back over every entry under it and none at or above.
+        int remoteHeld = ladder.Count(e => e.Anim == Remote && e.Frac >= 0.5f);
+        int smokeHeld = ladder.Count(e => e.Anim == Smoke && e.Frac >= 0.5f);
+        ctx.Check(remote >= 2 && smoke >= 1 && remoteHeld < remote && ladder.All(e => e.Frac > 0.2f),
+            $"fury's AI ladder repeats {Remote} ({remote} entries, {remoteHeld} at or above half) beside {smoke} {Smoke}, every threshold above the walk's last step");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(ladder.Count == 7 && remote == 6 && smoke == 1 && remoteHeld == 4 && smokeHeld == 0,
+                $"fury's AI ladder carries {ladder.Count} entries (want 7: six {Remote}, four of them at or above half, and one {Smoke} under it)");
+        }
 
         var root = new Node3D { Name = "fury_root" };
         ctx.Host.AddChild(root);
@@ -461,20 +474,20 @@ internal static class DamageSuites
             // one step per band, so each threshold is crossed on its own
             foreach (float frac in new[] { 0.99f, 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
                 visuals.OnHullDamage(frac);
-            int repeats = visuals.StagedEntryCount("random_remote_damage");
-            ctx.Check(repeats == 6,
-                $"the whole ladder walked down: {repeats} random_remote_damage entries staged (want 6)");
-            ctx.Check(visuals.StagedEntryCount("pfsmoketrail") == 1,
-                $"…and the one pfsmoketrail entry at 0.40 staged with them");
+            int repeats = visuals.StagedEntryCount(Remote);
+            ctx.Check(repeats == remote,
+                $"the whole ladder walked down: {repeats} {Remote} entries staged (want {remote})");
+            ctx.Check(visuals.StagedEntryCount(Smoke) == smoke,
+                $"…and the {smoke} {Smoke} entry staged with them");
 
-            // repaired to half: the three entries under 0.5 retract, the four at or above hold
+            // repaired to half: the entries under 0.5 retract, those at or above hold
             visuals.OnHullDamage(0.5f);
-            ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 4
-                      && visuals.StagedEntryCount("pfsmoketrail") == 0,
-                $"repaired to 50%: {visuals.StagedEntryCount("random_remote_damage")} random_remote_damage and {visuals.StagedEntryCount("pfsmoketrail")} pfsmoketrail entries still staged (want 4 and 0)");
+            ctx.Check(visuals.StagedEntryCount(Remote) == remoteHeld
+                      && visuals.StagedEntryCount(Smoke) == smokeHeld,
+                $"repaired to 50%: {visuals.StagedEntryCount(Remote)} {Remote} and {visuals.StagedEntryCount(Smoke)} {Smoke} entries still staged (want {remoteHeld} and {smokeHeld})");
             visuals.OnHullDamage(0.2f);
-            ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 6
-                      && visuals.StagedEntryCount("pfsmoketrail") == 1,
+            ctx.Check(visuals.StagedEntryCount(Remote) == remote
+                      && visuals.StagedEntryCount(Smoke) == smoke,
                 $"…and every retracted entry fires again on the next descent");
         }
         finally

@@ -38,7 +38,6 @@ internal static class MenuNetPlaySuites
         + "screen with one pilot seated, and Back off the board hangs up")]
     internal static void TheMultiplayerDoor(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
@@ -206,7 +205,6 @@ internal static class MenuNetPlaySuites
         + "says so, and a door with no clipboard copies nothing")]
     internal static void TheHostNamesAndCopiesItsAddress(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         const string Stable = "2a04:6ec0:232:6640:feb1:ff80:9ed7:dd90";
         const string Lan = "192.168.178.20";
         var copied = new List<string>();

@@ -37,7 +37,6 @@ internal static class MenuOriginalControlsSuites
         + "screen")]
     internal static void MenuOriginalControls(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -89,7 +88,7 @@ internal static class MenuOriginalControlsSuites
             var size = ctx.Host.GetViewport().GetVisibleRect().Size;
             var fit = BoardFit.For(size.X, size.Y);
             var controls = host.Features.Get<ControlsFeature>();
-            Doors(ctx, host, seat, shell, fit, controls);
+            Doors(ctx, host, seat, shell, fit, controls, layout);
             Capture(ctx, host, seat, shell, fit, controls, written);
             Scrollbar(ctx, host, seat, shell, fit);
             Leave(ctx, host, seat, shell, fit, exits);
@@ -106,7 +105,8 @@ internal static class MenuOriginalControlsSuites
     // The three doors: the top level's PREFERENCES, the Options screen's CONTROLS and the CONTROLS
     // page's KEYS AND BUTTONS, each over the shared feature rather than a page-local copy.
     private static void Doors(
-        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, ControlsFeature controls)
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, ControlsFeature controls,
+        MenuLayout layout)
     {
         Click(host, seat, shell, fit, "MM_B_PREFERENCES");
         ctx.Check(shell.Screen == OriginalScreen.Options, $"PREFERENCES opens the Options screen ({shell.Screen})");
@@ -148,17 +148,44 @@ internal static class MenuOriginalControlsSuites
         var accept = Row(shell, OriginalKeysPage.AcceptKey);
         ctx.Check(cancel != null && accept != null && cancel.X < accept.X && cancel.Y == accept.Y,
             $"CANCEL CHANGES is authored left of ACCEPT CHANGES on one line ({cancel?.X} vs {accept?.X})");
+        // The authored heads are the section's own words, so the count reads the same over any layout.
+        var keys = layout.Screen("Keys");
+        var wanted = new HashSet<string>(StringComparer.Ordinal) { "Stick" };
+        foreach (string key in new[] { "KB_T_COMMANDTITLE", "KB_T_CONTTITLEA", "KB_T_CONTTITLEB" })
+        {
+            if (keys?.Widget(key)?.Text is { Length: > 0 } text)
+            {
+                wanted.Add(text);
+            }
+        }
+
         var board = shell.Compose();
         int heads = 0;
         foreach (var line in board.Lines)
         {
-            if (line.Text is "Action" or "Control A" or "Control B" or "Stick")
+            if (wanted.Contains(line.Text))
             {
                 heads++;
             }
         }
 
-        ctx.Check(heads == 4, $"the page draws its three authored column heads and the port's Stick head ({heads})");
+        ctx.Check(wanted.Count == 4 && heads == 4,
+            $"the page draws its three authored column heads and the port's Stick head ({heads} of {string.Join(", ", wanted)})");
+
+        // On the install the shipped words are pinned too, so a decode that garbles them goes red.
+        if (!ctx.SyntheticData)
+        {
+            int shipped = 0;
+            foreach (var line in board.Lines)
+            {
+                if (line.Text is "Action" or "Control A" or "Control B" or "Stick")
+                {
+                    shipped++;
+                }
+            }
+
+            ctx.Check(shipped == 4, $"the page draws its three authored column heads and the port's Stick head ({shipped})");
+        }
     }
 
     // A capture armed on one cell: Escape abandons it, a second one binds, and ACCEPT CHANGES is

@@ -216,6 +216,9 @@ internal static class PufferSuites
     internal static void PufferModes(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "flame_ball.json");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
+        ctx.RequireZrdrEntry(SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json");
 
         var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
         var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
@@ -1360,6 +1363,8 @@ internal static class PufferSuites
     internal static void PufferIdleProcessGate(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "flame_ball.json");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
         var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
         var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
         ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
@@ -1794,6 +1799,9 @@ internal static class PufferSuites
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
         using var textures = new TextureArchive(texturePath);
+        ctx.RequireTexture(textures, "fire101");
+        ctx.RequireTexture(textures, "splashbase");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "missile_puffers.json");
 
         // The flagged set is exactly the emissive elements, and the value is a bitfield: fire101
         // ships 7 (additive plus both stretch bits) and splashbase ships 3 (both stretch bits and no
@@ -1859,6 +1867,7 @@ internal static class PufferSuites
         string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
+        ctx.RequireTexture(textures, "fire_f01");
 
         // The premise this arm was written on: no puffer sprite is additive, so blend cannot
         // separate the fireball from the smoke and the fire flipbook is named instead.
@@ -1907,6 +1916,7 @@ internal static class PufferSuites
         string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
+        ctx.RequireTexture(textures, "smoke101");
 
         ctx.Check(MultiMeshEmitterRenderer.IsSmokeSprite("smoke101")
                   && MultiMeshEmitterRenderer.IsSmokeSprite("THICKBLKSMOKE03"),

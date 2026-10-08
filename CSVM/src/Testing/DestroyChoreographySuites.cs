@@ -49,7 +49,7 @@ internal static class DestroyChoreographySuites
         "a template root CALLED REPEATEDLY from one anchor takes a pooled copy per authored call, not one for the anchor: pdpanel7's four gimmeflakes calls at pdp7 hold four copies, and a second tear reclaims those four rather than wrapping the pool (D21)")]
     internal static void RepeatCallSlots(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var stage = new Node3D { Name = "RepeatCallStage" };
             var pdp7 = DamageSuites.PoolAnchorNode("pdp7", new Vector3(-10, 0, 0));
@@ -60,8 +60,8 @@ internal static class DestroyChoreographySuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                Session.World.WorldEffectsFactory.BuildEffectStage(source.Gamez,
+                    source.Scene, pool, new[] { "planeflakes" });
                 foreach (var child in pool.GetChildren())
                 {
                     if (child is Node3D copy)
@@ -85,7 +85,7 @@ internal static class DestroyChoreographySuites
             ctx.Host.AddChild(runtime);
             try
             {
-                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel7" }));
+                runtime.Bind(stage, source.Program.Subset(new[] { "pdpanel7" }));
                 // The authored sites: one call at pdp7 + 2 m, three at pdp7 - 2 m, the last three
                 // staggered 0.2 / 0.3 / 0.4 s apart. Debris flies off after placement, so the set
                 // is collected AS each call lands rather than sampled at the end.
@@ -270,9 +270,9 @@ internal static class DestroyChoreographySuites
         "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)")]
     internal static void PlayerFirstPersonCondition(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            var program = world.Session.Program.Subset("bullet1");
+            var program = source.Program.Subset("bullet1");
             var defs = program.ByAnimName("bullet1");
             ctx.Check(defs.Count > 0, $"the program carries the first-person-gated bullet1 def defs={defs.Count}");
             if (defs.Count == 0)
@@ -529,7 +529,7 @@ internal static class DestroyChoreographySuites
         "a destructible whose own Initial sequence authors the healthy/destroyed swap directly (a start-state script's shape, never DamageAt) leaves the HP pool destroyed too, so a later hit does not replay the death choreography (BL-513, BL-521)")]
     internal static void StartStateSwapSyncsThePool(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimWorld(ctx, ctx.Chapter, world =>
         {
             var runtime = world.Runtime;
             DestructibleRegistry.Instance? subject = null;
@@ -746,7 +746,7 @@ internal static class DestroyChoreographySuites
         "a persist-log state lands on the pool and the destroyed pose with no instance started, a carried partial HP lands at its stage, and a later hit on the carried kill is a no-op")]
     internal static void CarriedStateIsSilent(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimWorld(ctx, ctx.Chapter, world =>
         {
             var runtime = world.Runtime;
             var subjects = new List<DestructibleRegistry.Instance>();

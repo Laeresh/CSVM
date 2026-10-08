@@ -51,6 +51,8 @@ internal static class LoadProgressSuites
     internal static void LoadScreenMoves(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage", "prog_red.png"), $"progress strip");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var report = new StringBuilder();
 
         CheckFamily(ctx, report, campaign: false, sheet: null, stripWidth: ChalkStripWidth);

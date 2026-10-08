@@ -35,7 +35,7 @@ internal static class NetChatSuites
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _);
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(8601));
-        var roster = NetCombatSuites.Roster(3).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
+        var roster = NetCombatSuites.Roster(3, spec).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try

@@ -106,6 +106,17 @@ internal static class ObjectiveReadouts
             int modeFlagged = modeSites.Count(c => c.Source is ObjectiveSite { Objective: true });
             Log.Info("core", $"{spec.Chapter}/{spec.Mission}: {modeFlagged} objective site(s) and {modeSites.Count - modeFlagged} other-target site(s) from the mission's own targets.zrd");
         }
+        else if (spec.MissionType == DogfightMissionType.CaptureTheFlag && inputs.StageArena is { } arena)
+        {
+            // The empty stage's arena ships no targets.zrd and has no world index. It flags its own
+            // flag markers and finds them among its own nodes. The flag runtime labels them.
+            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
+                MissionTargets.Objectives(EmptyStage.ArenaTargets), key => EmptyStage.ArenaNode(arena, key));
+            var dogfight = inputs.Dogfight;
+            sites.Sides = key => dogfight?.SideOf(key);
+            inputs.Roster.SetTargetObjectives(into => sites.Collect(into));
+            Log.Info("core", $"stage empty: {EmptyStage.ArenaTargets.Count} flag marker site(s) from the match arena");
+        }
     }
 
     /// <summary>What the readouts are built over, each an output of an earlier build step.
@@ -125,5 +136,7 @@ internal static class ObjectiveReadouts
         // A stunt run binds the targets channel per pane instead.
         public bool Stunting;
         public VersusDirector? Dogfight;
+        // The empty stage's match arena, null on a chapter.
+        public Godot.Node3D? StageArena;
     }
 }

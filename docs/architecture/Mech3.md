@@ -268,7 +268,8 @@ read. Schema, offsets, the per-chapter census and the keying rules: [../formats/
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
 `LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
-`ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+`ne0*` nets), `HasFile` (whether an entry is there, under either stored name), and `ZrdrDict`, the
+key/[values…] view over a reader's alternating list.
 
 ## src/Mech3/GamePath.cs
 Splits a path the game's data names (`..\data\c1\m02\zrdr\cutscenes\cabpickup.zrd`) on `\` and `/`
@@ -821,8 +822,9 @@ Callers are serial by construction. An instance lives as long as its holder.
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
 for a chapter world so flight and ballistics runs boot in about 2 s with nothing else in the frame.
-It also carries the one patrol net a session on this stage has: `PatrolNet`, a closed eight-node ring
-of 1000 m about the grid origin at the spawn altitude, authoring 2500/1500/700 m volumes so a vehicle
-put on it runs on a net's gates rather than the mode machine's defaults. `--ai=<plane>:grid` and
-`--zep=...:net=grid` reach it through `ResolveNet`, which answers before the chapter `neindex` lookup
-on a name no shipped index carries. Built in code, like the grid texture: no chapter assets are here.
+Its patrol net, `PatrolNet`, is a closed eight-node 1000 m ring at the spawn altitude with its own
+2500/1500/700 m volumes, which `--ai=<plane>:grid` and `--zep=...:net=grid` reach through `ResolveNet`.
+A `--vs` match walks `SpawnRing` in place of `net.zrd`, sixteen entries 600 m out and aimed in, and a
+team match `SpawnTable`, that ring plus four team blocks at the teams' bases. `Build(arena: true)`
+stands `ArenaNodes`, two bases' `ctf_n`, `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`, which
+`ArenaNode` finds by name; `ArenaTargets` lists the flag markers. All of it is built in code.

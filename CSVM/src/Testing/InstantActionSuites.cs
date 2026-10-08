@@ -48,6 +48,9 @@ internal static class InstantActionSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        // The spawns fly the configured airframes on an install and the tree's own plane on the
+        // synthetic tree, which carries none of them. The display-name table is code either way.
+        string Flown(string displayName) => ctx.SyntheticData ? ctx.PlaneName : InstantAction.PlaneNodeFor(displayName)!;
 
         // The display-name -> gamez-node table (docs/formats/instant-action.md's IDS_IA_PLANES
         // order): a real entry resolves, a typo/invention does not.
@@ -154,7 +157,7 @@ internal static class InstantActionSuites
             // so Spawn's crash-runtime block (the only reader) is skipped.
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs, new FlightWorldBindings { Projectiles = live, Gamez = planesGamez }, new HumanRosterBindings());
 
-            string aceNode = InstantAction.PlaneNodeFor("Warhawk")!;
+            string aceNode = Flown("Warhawk");
             var aceLivery = new PaintScheme { Pattern = "cccp", Color1 = PaintScheme.FromBytes(200, 10, 10) };
             var pos = new Vector3(0f, 500f, 0f);
             var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
@@ -169,7 +172,7 @@ internal static class InstantActionSuites
             // The wingman census: N aircraft on team 1, since humans and wingmen share the player's side,
             // flying the configured airframe. Spawned through the same FlightRoster.SpawnAi seam as the
             // ace above, on AimAssist.PlayerTeam instead of the enemy team.
-            string wingmanNode = InstantAction.PlaneNodeFor("Fury")!;
+            string wingmanNode = Flown("Fury");
             for (int i = 0; i < 3; i++)
             {
                 var wPos = new Vector3(500f + i * 10f, 500f, 0f);
@@ -192,8 +195,11 @@ internal static class InstantActionSuites
             wingmen.Add(spawner.SpawnAi(new AiSpawn(wingmanNode, volPos, volPos + Vector3.Forward, volPilot,
                 Scheme: null, Team: AimAssist.PlayerTeam)));
             var vol = volPilot.Machine;
-            ctx.Check(Mathf.IsEqualApprox(vol.AttackRange, 2000f)
-                && Mathf.IsEqualApprox(vol.ReturnRange, 1200f),
+            var gates = PlaneStats.Load(ctx.ZrdrPath, wingmanNode);
+            (float attack, float back) = ctx.SyntheticData ? (gates.AiAttackRange, gates.AiReturnRange) : (2000f, 1200f);
+            ctx.Check(Mathf.IsEqualApprox(vol.AttackRange, attack)
+                && Mathf.IsEqualApprox(vol.ReturnRange, back)
+                && !Mathf.IsEqualApprox(attack, InstantActionRuntime.ActorVolumeRadiusM),
                 $"the spawner seeds the airframe's own gates first: attack={vol.AttackRange:0} return={vol.ReturnRange:0}");
             InstantActionRuntime.ApplyActorVolumes(vol);
             ctx.Check(Mathf.IsEqualApprox(vol.ActivationRange, InstantActionRuntime.ActorVolumeRadiusM)
@@ -218,7 +224,7 @@ internal static class InstantActionSuites
             int firstWave = iaWaves.Start();
             ctx.Check(firstWave == 1, $"wave 1 is current at mission start: {firstWave}");
 
-            string waveNode = InstantAction.PlaneNodeFor("Brigand")!;
+            string waveNode = Flown("Brigand");
             var wave1Pos = new Vector3(0f, 500f, 0f);
             for (int i = 0; i < 2; i++)
             {

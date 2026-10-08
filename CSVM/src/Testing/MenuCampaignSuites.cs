@@ -75,6 +75,7 @@ internal static class MenuCampaignSuites
     internal static void MenuCampaignJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         // Its Planes folder sits under the root below, so the root's own sweeps remove it.

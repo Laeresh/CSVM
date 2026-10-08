@@ -26,6 +26,8 @@ internal static class MusicSuites
         + "releases it")]
     internal static void MusicStates(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         using var archive = new SoundArchive(ctx.SoundsPath);

@@ -50,6 +50,7 @@ internal static class NetCoopGuestPlaneSuites
     internal static void EverySeatPicksItsOwnPlane(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath).ToArray();
         var solo = missions.Cast<CampaignMission?>().FirstOrDefault(m => !m!.Value.Wingman)
             ?? throw new SuiteSkippedException($"cm_sequence carries no mission without a wingman");

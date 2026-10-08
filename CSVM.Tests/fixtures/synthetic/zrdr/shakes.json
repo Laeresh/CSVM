@@ -1,0 +1,46 @@
+[
+  "fire_bullet",
+  [
+    "frequency", [12.0],
+    "damp", [10.0],
+    "sawtooth", [1],
+    "magnitude_factor", [0.0001]
+  ],
+  "bullet_impact",
+  [
+    "frequency", [9.0],
+    "damp", [8.0],
+    "sawtooth", [0],
+    "magnitude_factor", [0.002]
+  ],
+  "missile_impact",
+  [
+    "frequency", [3.0],
+    "damp", [5.0],
+    "sawtooth", [0],
+    "magnitude_factor", [0.0008],
+    "he_factor", [1.5]
+  ],
+  "explosion",
+  [
+    "frequency", [2.5],
+    "damp", [4.0],
+    "sawtooth", [0],
+    "magnitude_factor", [0.0005]
+  ],
+  "high_speed",
+  [
+    "frequency", [12.0],
+    "damp", [10.0],
+    "sawtooth", [1],
+    "min_speed", [1.15],
+    "magnitude_quotient", [90.0]
+  ],
+  "nitro",
+  [
+    "frequency", [3.0],
+    "damp", [4.0],
+    "sawtooth", [1],
+    "magnitude", [0.03]
+  ]
+]

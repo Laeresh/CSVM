@@ -517,7 +517,12 @@ public sealed record SessionSpec
 
     // ---- The aircraft -------------------------------------------------------------------------
 
-    public string PlaneName { get; private set; } = "player_bhawk";
+    /// <summary>The aircraft a spec flies when <c>--plane=</c> names none, set once at startup.
+    /// <c>--synthetic-data</c> points it at the stand-in, the one aircraft its tree carries. A spec
+    /// a suite builds without naming a plane then flies what the data holds.</summary>
+    public static string DefaultPlane { get; set; } = "player_bhawk";
+
+    public string PlaneName { get; private set; } = DefaultPlane;
     /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named.</summary>
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
     /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
@@ -1048,6 +1053,12 @@ public sealed record SessionSpec
     /// <summary><c>--data-root=</c> verbatim. The precedence against <c>CSVM_DATA_ROOT</c> and the
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
+
+    /// <summary><c>--synthetic-data</c>: write an invented extraction tree into the scratch folder
+    /// and read it in place of the data root. Off unless given, and dropped with a note beside
+    /// <c>--extract</c>, which would otherwise write an extraction into that tree. See
+    /// <see cref="Tooling.SyntheticData"/>.</summary>
+    public bool SyntheticData { get; private set; }
 
     /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
     /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
@@ -1659,6 +1670,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
+            else if (arg == "--synthetic-data") { s.SyntheticData = true; }
             else if (arg == "--extract") { s.ExtractInstall = ""; }
             else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
             else if (arg == "--extract-force") { s.ExtractForce = true; }
@@ -1843,6 +1855,16 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", $"{name} does nothing without --extract=<install>, ignoring it"));
                 }
             }
+        }
+        else if (s.SyntheticData)
+        {
+            notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
+            s.SyntheticData = false;
+        }
+
+        if (s.SyntheticData && s.PlaneNames.Count == 0)
+        {
+            s.PlaneName = Tooling.SyntheticPlane.Plane;
         }
 
         if (netHost != null)
@@ -2729,13 +2751,17 @@ public sealed record SessionSpec
         {
             Warn("core", "--direction ignored: flight steers the nose from the spawn override, which needs --pos");
         }
-        // The empty stage has no mission spawn list to draw from, so the subject starts over the
-        // grid origin, through the same fields --pos resolves into, so an explicit placement wins.
+        // The empty stage has no mission spawn list, so the subject starts over the grid origin. It
+        // goes through the fields --pos resolves into, so an explicit placement wins. A Dogfight
+        // walks the stage's own spawn ring instead, which a default here would beat.
         if (EmptyStage)
         {
             if (Fly)
             {
-                SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                if (!Versus)
+                {
+                    SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                }
             }
             else
             {

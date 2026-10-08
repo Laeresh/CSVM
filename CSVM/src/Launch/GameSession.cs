@@ -289,6 +289,9 @@ public partial class GameSession : Node3D
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
     // build again. The camera, lights and global shader params live on the Launcher and persist.
     private Node3D? _worldRoot;
+    // The empty stage's match arena, the flag and rearm nodes a Dogfight there stands on. Null on a
+    // chapter, whose own world holds them.
+    private Node3D? _stageArena;
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
     // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
@@ -1403,9 +1406,10 @@ public partial class GameSession : Node3D
     private void BuildEmptyStage(BuildState state)
     {
         long mark = StartupProfile.Mark();
-        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
+        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision, arena: _spec.Versus);
         StartupProfile.Record("world", mark);
         _plane = stage.Root;
+        _stageArena = stage.Arena;
         state.MeshInstances = stage.MeshInstanceCount;
         state.Colliders = stage.ColliderCount;
         state.What = "empty stage";
@@ -2453,7 +2457,7 @@ public partial class GameSession : Node3D
             Radio = voices.Radio,
             GroundAt = GroundSampler(),
         });
-        _dogfight?.WireRearmBases(state.WorldRuntime, state.ZrdrPath, _zeppelins);
+        _dogfight?.WireRearmBases(state.WorldRuntime, _stageArena, state.ZrdrPath, _zeppelins);
 
         _wire.WirePositionalStarts(_landings, _ladder, state.WorldRuntime);
         _wire.WireCutscenes(_cutscene);
@@ -2477,6 +2481,7 @@ public partial class GameSession : Node3D
             SheetCarriesObjectives = boards.SheetCarriesObjectives,
             Stunting = stuntZones != null,
             Dogfight = _dogfight,
+            StageArena = _stageArena,
         });
 
         if (_rigs.Count > 1)
