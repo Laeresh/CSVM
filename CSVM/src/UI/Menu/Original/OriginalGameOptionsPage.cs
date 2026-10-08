@@ -9,8 +9,8 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It holds the five
-/// settings it shows and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
+/// the three it is painted with, its plaques moving down with it. It stages its five settings in
+/// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
@@ -110,55 +110,45 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     {
         new(DifficultyKey, "Difficulty", _ => "Select the difficulty level for a solo campaign.",
             OriginalRowKind.Dropdown, DifficultyWords,
-            s => CSVM.Flight.Hangar.Difficulty.Clamp(s._difficulty),
-            (s, i) => s._difficulty = CSVM.Flight.Hangar.Difficulty.Clamp(i)),
+            c => CSVM.Flight.Hangar.Difficulty.Clamp(c.Difficulty),
+            (c, i) => c.Difficulty = CSVM.Flight.Hangar.Difficulty.Clamp(i)),
         new(DefaultViewKey, "Default View", _ => "Select your default view.",
             OriginalRowKind.Dropdown, DefaultViewWords,
-            s => IndexOfView(s._defaultView),
-            (s, i) => s._defaultView = CSVM.Flight.Camera.PilotView.Name(
+            c => IndexOfView(c.DefaultViewMode),
+            (c, i) => c.DefaultView = CSVM.Flight.Camera.PilotView.Name(
                 CSVM.Flight.Camera.PilotView.Selectable[Math.Clamp(i, 0, CSVM.Flight.Camera.PilotView.Selectable.Count - 1)])),
         new(AutoHeadTurnKey, "Auto Head Turn",
             _ => "Select to turn your head automatically as your aircraft turns.",
             OriginalRowKind.Radio, SwitchWords,
-            s => s._autoHeadTurn == true ? 1 : 0,
-            (s, i) => s._autoHeadTurn = i == 1),
+            c => c.AutoHeadTurnOn ? 1 : 0,
+            (c, i) => c.AutoHeadTurn = i == 1),
         new(NearestAfterKillKey, "Next Target",
             _ => "Take the nearest target after a kill instead of the first of the list.",
             OriginalRowKind.Radio, SwitchWords,
-            s => s._nearestAfterKill == true ? 1 : 0,
-            (s, i) => s._nearestAfterKill = i == 1),
+            c => c.NearestAfterKillOn ? 1 : 0,
+            (c, i) => c.NearestAfterKill = i == 1),
         new(RumbleKey, "Rumble",
             _ => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
             OriginalRowKind.Radio, SwitchWords,
-            s => s._rumble == false ? 0 : 1,
-            (s, i) => s._rumble = i == 1),
+            c => c.RumbleOn ? 1 : 0,
+            (c, i) => c.Rumble = i == 1),
     };
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
     private readonly IOriginalOptionsForm _form;
 
+    // The form's staged settings, shared with the other two settings pages.
+    private readonly OptionsChoices _choices;
+
     private string? _open;
     private int _listTop;
-    private int _difficulty = CSVM.Flight.Hangar.Difficulty.Normal;
-    // The targeting setting as saved, null while never set, which the consumer reads as off. It is
-    // held nullable rather than as the checkbox's own 0/1. A page that never showed it then hands
-    // back "never set" instead of writing a choice the player did not make.
-    private bool? _nearestAfterKill;
-    // The haptics setting as saved, held the same way but read the other way round. Null is "never
-    // set", which the consumer reads as ON, since the original ships force feedback on.
-    private bool? _rumble;
-    // The opening view as saved, the --view= word, null while never set, which the flight reads as
-    // Chase. Held as the word rather than the mode for the reason the store holds one.
-    private string? _defaultView;
-    // The automatic head turn as saved, null while never set. Null leaves the headLook.autohead
-    // config key deciding rather than overruling it with a default of this page's own.
-    private bool? _autoHeadTurn;
 
-    internal OriginalGameOptionsPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form)
+    internal OriginalGameOptionsPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form, OptionsChoices choices)
     {
         _chrome = chrome ?? throw new ArgumentNullException(nameof(chrome));
         _form = form ?? throw new ArgumentNullException(nameof(form));
+        _choices = choices ?? throw new ArgumentNullException(nameof(choices));
         _host = chrome.Host;
     }
 
@@ -167,24 +157,24 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Hangar.Difficulty"/>) the page would
     /// apply.</summary>
-    public int DifficultyChoice => _difficulty;
+    public int DifficultyChoice => _choices.Difficulty;
 
     /// <summary>The targeting setting the page would apply, or null while nothing has been saved
     /// and no row has been touched.</summary>
-    public bool? NearestAfterKillChoice => _nearestAfterKill;
+    public bool? NearestAfterKillChoice => _choices.NearestAfterKill;
 
     /// <summary>The haptics setting the page would apply, or null while nothing has been saved and
     /// no row has been touched.</summary>
-    public bool? RumbleChoice => _rumble;
+    public bool? RumbleChoice => _choices.Rumble;
 
     /// <summary>The opening view the page would apply, a
     /// <see cref="CSVM.Flight.Camera.PilotView.Name"/> word, or null while nothing has been saved and
     /// no row has been touched.</summary>
-    public string? DefaultViewChoice => _defaultView;
+    public string? DefaultViewChoice => _choices.DefaultView;
 
     /// <summary>The automatic head turn the page would apply. It is null while nothing has been
     /// saved and no row has been touched, which leaves the config key deciding.</summary>
-    public bool? AutoHeadTurnChoice => _autoHeadTurn;
+    public bool? AutoHeadTurnChoice => _choices.AutoHeadTurn;
 
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.GameOptions;
 
@@ -214,7 +204,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             for (int i = 0; i < Options.Length; i++)
             {
                 var option = Options[i];
-                rows.Add(_host.PlaqueRow(option.Key, option.Words[option.Read(this)], i, true, 0));
+                rows.Add(_host.PlaqueRow(option.Key, option.Words[option.Read(_choices)], i, true, 0));
             }
 
             _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
@@ -251,7 +241,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         }
 
         int count = option.Words.Count;
-        option.Write(this, ((option.Read(this) + direction) % count + count) % count);
+        option.Write(_choices, ((option.Read(_choices) + direction) % count + count) % count);
         _host.FocusKey(option.Key);
         return true;
     }
@@ -275,7 +265,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
                 return null;
             }
 
-            picked.Write(this, int.Parse(suffix, CultureInfo.InvariantCulture));
+            picked.Write(_choices, int.Parse(suffix, CultureInfo.InvariantCulture));
             _open = null;
             _host.FocusKey(picked.Key);
             return null;
@@ -290,11 +280,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
         {
             _open = option.Key;
             _listTop = 0;
-            _host.FocusedRow = Math.Max(0, option.Read(this));
+            _host.FocusedRow = Math.Max(0, option.Read(_choices));
             return null;
         }
 
-        option.Write(this, (option.Read(this) + 1) % option.Words.Count);
+        option.Write(_choices, (option.Read(_choices) + 1) % option.Words.Count);
         return null;
     }
 
@@ -350,29 +340,16 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             controlPressed = -1;
         }
 
-        _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(this) == 1, layers);
+        _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(_choices) == 1, layers);
         if (OpenDrop() is { } drop && rows.Count > 0)
         {
             layers.Overlays.Add(_chrome.ComposeOptionList(drop, _listTop, rows, focus));
         }
     }
 
-    /// <summary>Takes the five settings this page shows off <paramref name="saved"/>, the shipped
-    /// defaults where it is null.</summary>
-    internal void Read(CSVM.Utils.OptionsDef? saved)
+    // Where a view stands in the Default View dropdown's own list.
+    private static int IndexOfView(CSVM.Flight.Camera.PilotViewMode mode)
     {
-        _difficulty = CSVM.Flight.Hangar.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Hangar.Difficulty.Normal;
-        _nearestAfterKill = saved?.NearestAfterKill;
-        _rumble = saved?.Rumble;
-        _defaultView = saved?.DefaultView;
-        _autoHeadTurn = saved?.AutoHeadTurn;
-    }
-
-    // Where a saved view word stands in the Default View dropdown's own list. A word the list does
-    // not carry, and a never-set field, read as Chase, which is what an unset opening view flies.
-    private static int IndexOfView(string? word)
-    {
-        var mode = CSVM.Flight.Camera.PilotView.Parse(word ?? string.Empty) ?? CSVM.Flight.Camera.PilotViewMode.Chase;
         for (int i = 0; i < CSVM.Flight.Camera.PilotView.Selectable.Count; i++)
         {
             if (CSVM.Flight.Camera.PilotView.Selectable[i] == mode)
@@ -548,7 +525,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             if (option.Kind == OriginalRowKind.Dropdown)
             {
                 var box = shape.DropBoxFor(i);
-                rows.Add(new OriginalRow(option.Key, option.Words[option.Read(this)], OriginalRowKind.Dropdown,
+                rows.Add(new OriginalRow(option.Key, option.Words[option.Read(_choices)], OriginalRowKind.Dropdown,
                     box.X, box.Y, box.Width, box.Height, true, 0, shape.Arrow));
                 continue;
             }
@@ -673,7 +650,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     private sealed record GameOption(
         string Key, string Title, Func<OriginalGameOptionsPage, string> Description, OriginalRowKind Kind,
         IReadOnlyList<string> Words,
-        Func<OriginalGameOptionsPage, int> Read, Action<OriginalGameOptionsPage, int> Write);
+        Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write);
 
     // The page's row shape in authored pixels, every number off the section's own widgets. It is
     // the title column, the first row's line and every row's own line. The dropdown box, the

@@ -182,12 +182,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // in its order: reset the keymap, abandon the staged edits, commit them. Accept stays last. TUNE.
     private const int ControlsFooterRows = 4;
     private const int ControlsFolderButton = 0;
-    // The Options screen's stepper rows, above the Controls door and the apply row, walked top to
-    // bottom. First the three GAME OPTIONS settings in that page's order, then the targeting switch
-    // and the rumble. Then the graphics mode and its view distance. Then the six display
-    // settings and the shadow quality in the VIDEO page's order, then the water quality. Then the
-    // four volume levels in the AUDIO page's order, then the two doors.
-    private const int OptionsStepperRows = 19;
     // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
@@ -271,6 +265,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private readonly List<Slot> _slots = new();
     // Player 1's row controls by absolute row index, as last built, for RowControl.
     private readonly Dictionary<int, Control> _rowControls = new();
+    // The Options screen's staged choices, read from the saved options when the screen opens. It
+    // shows back what was asked for rather than what this process resolved.
+    private readonly OptionsChoices _choices = new(ResolutionSetting.ScreenSizes, MonitorSetting.Screens);
     private int _slotsRevision = -1;
     // The menu host: its first seat is player 1's commands, its feature set holds Free Flight's and
     // Instant Action's state and launch rules and the shared player setup, its audio service plays
@@ -307,38 +304,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // The Options screen's cursor and the choices its stepper rows would apply, seeded from the
-    // saved options when the screen opens so it shows back what was asked for, not what is active:
-    // the graphics mode a running process resolved is the one the process started under.
+    // The Options screen's cursor and window top; the choices its rows step are _choices.
     private int _optionsIndex, _optionsTop;
-    private int _difficultyChoice = Difficulty.Normal;
-    // The targeting setting as saved, null while never set, which the consumer reads as off: a
-    // screen hands back "never set" rather than a choice the player did not make.
-    private bool? _nearestAfterKillChoice;
-    // The haptics setting as saved, null while never set, which the consumer reads as ON.
-    private bool? _rumbleChoice;
-    // The opening view as saved, null while never set, which the flight reads as Chase. Held as the
-    // --view= word rather than the enum, the spelling the store carries.
-    private string? _defaultViewChoice;
-    // The automatic head turn as saved, null while never set. Null leaves the headLook.autohead
-    // config key deciding, rather than overruling it with a default of this screen's own.
-    private bool? _autoHeadTurnChoice;
-    private string _graphicsChoice = GraphicsMode.Default;
-    private string? _viewDistanceChoice;
-    // The water quality as saved, null while never set, which shows and applies the run's own word.
-    private string? _waterQualityChoice;
-    // The six display settings, stepped by the six rows under the view distance. Each is stored as
-    // the word the options file carries, never as a row index. A screen unplugged or a size the
-    // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
-    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice;
-    // The size the options file named when this screen opened, which the size row offers as an entry
-    // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
-    // size stays in the list after a step lands elsewhere. A step back then reaches it again.
-    private string? _savedResolution;
-    // The four volume levels as saved, null while never set, which the mixer reads as the shipped
-    // default. A step that moves nothing leaves the field null, so walking a row writes no level
-    // the player did not change.
-    private int? _audioMasterChoice, _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
     private int _presetCursor, _presetTop;
@@ -1223,20 +1190,6 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
 
-    // One volume row's step, on the Original AUDIO page's own terms so the two presentations write
-    // the same levels. It is the keyboard step of that page's slider, clamped at both ends where
-    // every other row here wraps. A step from silence must not land on full volume. A step that
-    // moves nothing hands back the field unchanged, so a never-set level stays never set.
-    private static int? StepLevel(int? level, int shipped, int dir)
-    {
-        int from = Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel);
-        int to = Math.Clamp(from + (dir * Menu.Original.SliderControl.KeyStep), AudioMix.MinLevel, AudioMix.MaxLevel);
-        return to == from ? level : to;
-    }
-
-    private static string LevelLabel(int? level, int shipped) =>
-        Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel).ToString(CultureInfo.InvariantCulture);
-
     private static (string Name, string Node)[] BuildPlanes()
     {
         var rows = new (string Name, string Node)[InstantActionFeature.Airframes.Count];
@@ -1860,30 +1813,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The nineteen choice rows are steppers; the doors under them have nothing to step.
-                switch (_optionsIndex)
+                // The choice rows are steppers; the doors under them have nothing to step.
+                if (_optionsIndex >= OptionsChoices.Count)
                 {
-                    case 0: StepDifficultyChoice(dir); return true;
-                    case 1: StepDefaultViewChoice(dir); return true;
-                    case 2: ToggleAutoHeadTurnChoice(); return true;
-                    case 3: ToggleNearestAfterKillChoice(); return true;
-                    case 4: ToggleRumbleChoice(); return true;
-                    case 5: ToggleGraphicsChoice(); return true;
-                    case 6: StepViewDistanceChoice(dir); return true;
-                    case 7: StepMonitorChoice(dir); return true;
-                    case 8: StepResolutionChoice(dir); return true;
-                    case 9: StepDisplayModeChoice(dir); return true;
-                    case 10: StepVSyncChoice(dir); return true;
-                    case 11: StepRenderScaleChoice(dir); return true;
-                    case 12: StepAntiAliasingChoice(dir); return true;
-                    case 13: StepShadowQualityChoice(dir); return true;
-                    case 14: StepWaterQualityChoice(dir); return true;
-                    case 15: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 16: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 17: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 18: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
-                    default: return false;
+                    return false;
                 }
+
+                _choices.Step(_optionsIndex, dir);
+                return true;
             case Screen.Network:
                 // The port, the cap and the voice step. The address and the names are typed, and
                 // the three rows under the address are presses.
@@ -2001,11 +1938,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             case Screen.Options:
                 // Accept on a stepper row is the sideways step forwards, so a row is walkable with
                 // one gesture; the two rows past them are the doors this screen leaves by.
-                if (_optionsIndex < OptionsStepperRows)
+                if (_optionsIndex < OptionsChoices.Count)
                 {
                     HandleMoveX(1);
                 }
-                else if (_optionsIndex == OptionsStepperRows)
+                else if (_optionsIndex == OptionsChoices.Count)
                 {
                     _screen = Screen.Controls;
                     OpenControls();
@@ -2014,11 +1951,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     // The launcher persists every choice and restarts the menu; the screen stays
                     // standing for the host to hide.
-                    _host.Exit(new OptionsApplyExit(_graphicsChoice,
-                        Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
-                        _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
-                        _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice, _waterQualityChoice));
+                    _host.Exit(_choices.ToExit());
                 }
 
                 break;
@@ -3536,27 +3469,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         _optionsIndex = 0;
         _optionsTop = 0;
-        var saved = OptionsStore.UserOptions().Load();
-        _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
-        _nearestAfterKillChoice = saved.NearestAfterKill;
-        _rumbleChoice = saved.Rumble;
-        _defaultViewChoice = saved.DefaultView;
-        _autoHeadTurnChoice = saved.AutoHeadTurn;
-        _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
-        _viewDistanceChoice = saved.ViewDistance;
-        _monitorChoice = saved.MonitorIndex;
-        _resolutionChoice = saved.Resolution;
-        _savedResolution = saved.Resolution;
-        _displayModeChoice = saved.DisplayMode;
-        _vsyncChoice = saved.VSync;
-        _renderScaleChoice = saved.RenderScale;
-        _antiAliasingChoice = saved.AntiAliasing;
-        _shadowQualityChoice = saved.ShadowQuality;
-        _waterQualityChoice = saved.WaterQuality;
-        _audioMasterChoice = saved.AudioMaster;
-        _audioMusicChoice = saved.AudioMusic;
-        _audioEffectsChoice = saved.AudioEffects;
-        _audioVoiceChoice = saved.AudioVoice;
+        _choices.Load(OptionsStore.UserOptions().Load());
     }
 
     // Opens the rebinding screen on the joined seats' live keymaps, one per pad seat the join board
@@ -3847,224 +3760,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         return "↑↓  Choose       ←→  Which control       Enter / A  Rebind"
             + "       Del / Backspace / Y  Unbind       P / X  Defaults       Esc / B  Back without saving";
     }
-
-    // A three-way stepper with wrap, Normal / Hard / Hardest in the campaign selector's order.
-    private void StepDifficultyChoice(int dir) =>
-        _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
-
-    // A three-way stepper with wrap over PilotView.Selectable, the order the original's own Default
-    // View dropdown offers. A never-set view steps from Chase, which is what its absence reads as.
-    private void StepDefaultViewChoice(int dir) =>
-        _defaultViewChoice = PilotView.Name(PilotView.Step(
-            PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase, dir));
-
-    private string DefaultViewChoiceLabel() =>
-        PilotView.Label(PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase);
-
-    // A two-way toggle over a setting the flight reads three ways: on, off, and never set, which
-    // leaves the headLook.autohead config key deciding. A first press turns it on, since the key
-    // ships off, so a press has to change something.
-    private void ToggleAutoHeadTurnChoice() => _autoHeadTurnChoice = _autoHeadTurnChoice != true;
-
-    private string AutoHeadTurnChoiceLabel() => _autoHeadTurnChoice == true ? "On" : "Off";
-
-    // A two-way toggle. A never-set field steps to on, since off is what its absence already reads
-    // as and a first press has to change something.
-    private void ToggleNearestAfterKillChoice() =>
-        _nearestAfterKillChoice = _nearestAfterKillChoice != true;
-
-    private string NearestAfterKillChoiceLabel() => _nearestAfterKillChoice == true ? "On" : "Off";
-
-    // The same two-way toggle read the other way round. A never-set rumble is ON, the way the
-    // original ships force feedback, so a first press has to turn it off.
-    private void ToggleRumbleChoice() => _rumbleChoice = _rumbleChoice == false;
-
-    private string RumbleChoiceLabel() => _rumbleChoice != false ? "On" : "Off";
-
-    private void ToggleGraphicsChoice() =>
-        _graphicsChoice = _graphicsChoice == GraphicsMode.EnhancedWord
-            ? GraphicsMode.Default
-            : GraphicsMode.EnhancedWord;
-
-    private string GraphicsChoiceLabel() =>
-        _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
-
-    // Dead under Original, as the resolution row is under borderless: the faithful world keeps the
-    // decoded fade. Clamped at both ends, so a held arrow settles on Normal or Unlimited.
-    private void StepViewDistanceChoice(int dir)
-    {
-        if (_graphicsChoice != GraphicsMode.EnhancedWord)
-        {
-            return;
-        }
-
-        _viewDistanceChoice = ViewDistance.Words[Math.Clamp(ViewDistance.Index(_viewDistanceChoice) + dir, 0, ViewDistance.Words.Length - 1)];
-    }
-
-    private string ViewDistanceChoiceLabel() => ViewDistance.Label(_viewDistanceChoice);
-
-    // The row says why it does not step rather than refusing in silence.
-    private string ViewDistanceDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
-        ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
-        : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.";
-
-    // The monitor and resolution rows ask the engine on every read rather than holding a list from
-    // when the screen opened, since a monitor can be plugged in while the row stands focused and the
-    // sizes are the standing screen's own. A saved index no screen answers to draws as the screen
-    // the window already stands on, MonitorSetting.Resolve's own forgiving read, so the row cannot
-    // name a screen the apply would not move the window to.
-    private string MonitorChoiceLabel()
-    {
-        var screens = MonitorSetting.Screens();
-        return screens.Labels[MonitorSetting.Resolve(_monitorChoice, screens).Screen];
-    }
-
-    private string ResolutionChoiceLabel()
-    {
-        var sizes = ResolutionSizes();
-        return sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice)];
-    }
-
-    // The sizes the resolution row offers: the standing screen's own list, widened with the size the
-    // options file named when the screen opened. A size written in by hand therefore stands in the
-    // row where it sorts for as long as the page is open. A step off it can step back onto it, and
-    // only a step the player makes replaces it.
-    private SizeList ResolutionSizes() => ResolutionSetting.ScreenSizes().Including(_savedResolution);
-
-    private string DisplayModeChoiceLabel() =>
-        DisplaySettingRows.DisplayModeLabels[DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, _displayModeChoice, DisplayModeSetting.Default)];
-
-    private string VSyncChoiceLabel() =>
-        DisplaySettingRows.VSyncLabels[DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, _vsyncChoice, VSyncSetting.Default)];
-
-    // The scales the render-scale row offers under the method the anti-aliasing row stands on.
-    private IReadOnlyList<string> RenderScaleWords() =>
-        RenderScaleSetting.ChoicesFor(DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice));
-
-    private string RenderScaleChoiceLabel()
-    {
-        var words = RenderScaleWords();
-        return DisplaySettingRows.RenderScaleLabels(words)[DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default)];
-    }
-
-    private string AntiAliasingChoiceLabel()
-    {
-        string word = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
-        return DisplaySettingRows.AntiAliasingLabels[DisplaySettingRows.WordIndex(DisplayWords.AntiAliasingChoices, word, word)];
-    }
-
-    // The six display steppers. Each writes back the word the options file carries, not the row's
-    // position, since the apply hands the word to the setting's own resolver. A step off a value
-    // the machine no longer offers therefore starts from the forgiving read, not from -1.
-    private void StepMonitorChoice(int dir)
-    {
-        var screens = MonitorSetting.Screens();
-        int at = MonitorSetting.Resolve(_monitorChoice, screens).Screen;
-        _monitorChoice = MonitorSetting.Word(DisplaySettingRows.Step(at, dir, screens.Labels.Count));
-    }
-
-    // Dead while the display mode owns the size, which borderless does. The saved size is left
-    // where it is rather than overwritten with the screen's. Picking Windowed or Fullscreen again
-    // then gives the player back the size they chose.
-    private void StepResolutionChoice(int dir)
-    {
-        if (ResolutionSetting.Pinned(_displayModeChoice))
-        {
-            return;
-        }
-
-        var sizes = ResolutionSizes();
-        int at = DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice);
-        _resolutionChoice = sizes.Words[DisplaySettingRows.Step(at, dir, sizes.Words.Count)];
-    }
-
-    private void StepDisplayModeChoice(int dir)
-    {
-        var words = DisplayWords.DisplayModes;
-        int at = DisplaySettingRows.WordIndex(words, _displayModeChoice, DisplayModeSetting.Default);
-        _displayModeChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    private void StepVSyncChoice(int dir)
-    {
-        var words = DisplayWords.VSyncChoices;
-        int at = DisplaySettingRows.WordIndex(words, _vsyncChoice, VSyncSetting.Default);
-        _vsyncChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    private void StepRenderScaleChoice(int dir)
-    {
-        var words = RenderScaleWords();
-        int at = DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default);
-        _renderScaleChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    // FSR 2.2 refuses a scale above native, so stepping onto it moves such a scale to native. The
-    // launch applies the same clamp to a saved pair.
-    private void StepAntiAliasingChoice(int dir)
-    {
-        var words = DisplayWords.AntiAliasingChoices;
-        string standing = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
-        int at = DisplaySettingRows.WordIndex(words, standing, standing);
-        _antiAliasingChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-        _renderScaleChoice = RenderScaleSetting.ClampFor(_renderScaleChoice, _antiAliasingChoice);
-    }
-
-    private string ShadowQualityChoiceLabel() =>
-        DisplaySettingRows.ShadowQualityLabels[DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, _shadowQualityChoice, ShadowQualitySetting.Word)];
-
-    // Dead while the graphics row stands on Original, whose world casts no sun shadow. The saved
-    // word is kept, so flipping to Enhanced gives the player back the level they chose.
-    private void StepShadowQualityChoice(int dir)
-    {
-        if (_graphicsChoice != GraphicsMode.EnhancedWord)
-        {
-            return;
-        }
-
-        var words = ShadowQualitySetting.Words;
-        int at = DisplaySettingRows.WordIndex(words, _shadowQualityChoice, ShadowQualitySetting.Word);
-        _shadowQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    // Dead under Original, whose sea is the flat sheet whatever the word. The saved word is kept for
-    // a later flip, as the shadow row keeps its own.
-    private void StepWaterQualityChoice(int dir)
-    {
-        if (_graphicsChoice != GraphicsMode.EnhancedWord)
-        {
-            return;
-        }
-
-        var words = WaterQualitySetting.Words;
-        int at = DisplaySettingRows.WordIndex(words, _waterQualityChoice, WaterQualitySetting.Word);
-        _waterQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    // The row says why it does not step rather than refusing in silence.
-    private string WaterQualityDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
-        ? "Flat draws the original's sea; Waves draws a swell in its place. Flat runs faster. Applies at once."
-        : "Enhanced Graphics only: the original world's sea is always flat.";
-
-    // The size row's detail says what the size does under the mode standing with it. The size does
-    // something different in each mode, and under borderless the row does not step at all. A
-    // stepper that refuses without saying why reads as a broken row.
-    private string ResolutionDetail()
-    {
-        if (ResolutionSetting.Pinned(_displayModeChoice))
-        {
-            return "Borderless runs at the desktop's own size. Pick Windowed or Fullscreen to choose one.";
-        }
-
-        return _displayModeChoice == DisplayWords.Fullscreen
-            ? "Select the size the game draws at, scaled up to fill the fullscreen window."
-            : "Select the window size. The list is what the screen the window stands on can hold.";
-    }
-
-    // The graphics row's detail. The apply switches the running world (Launcher.SwitchGraphicsMode),
-    // so no restart is owed and the line does not read the running mode.
-    private string GraphicsDetail() =>
-        "Original is the faithful world; Enhanced lights it. Applies at once.";
 
     // What this screen is, the middle band's first line.
     private string Heading()
@@ -4520,7 +4215,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Join => JoinRows,
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => OptionsStepperRows + 2, // + the controls door and the apply row
+        Screen.Options => OptionsChoices.Count + 2, // + the controls door and the apply row
         Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
         Screen.Chapter => CurrentChapters.Length + MatchRowCount,
         Screen.Presets => InstantActionPresets.All.Count,
@@ -4583,30 +4278,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Join => index == JoinBackRow ? "Back" : "Continue",
             Screen.Hangar => _hangar?.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
-            Screen.Options => index switch
-            {
-                0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
-                1 => $"Default View: {DefaultViewChoiceLabel()}",
-                2 => $"Auto Head Turn: {AutoHeadTurnChoiceLabel()}",
-                3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
-                4 => $"Controller rumble: {RumbleChoiceLabel()}",
-                5 => $"Graphics: {GraphicsChoiceLabel()}",
-                6 => $"View distance (Enhanced only): {ViewDistanceChoiceLabel()}",
-                7 => $"Monitor: {MonitorChoiceLabel()}",
-                8 => $"Resolution: {ResolutionChoiceLabel()}",
-                9 => $"Display mode: {DisplayModeChoiceLabel()}",
-                10 => $"V-Sync: {VSyncChoiceLabel()}",
-                11 => $"Render scale: {RenderScaleChoiceLabel()}",
-                12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
-                13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
-                14 => $"Water quality: {WaterQualitySetting.Label(_waterQualityChoice)}",
-                15 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                16 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                17 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                18 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                19 => ControlsRow,
-                _ => "Apply and restart the menu",
-            },
+            Screen.Options => index < OptionsChoices.Count ? _choices.Label(index)
+                : index == OptionsChoices.Count ? ControlsRow : "Apply and restart the menu",
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
             Screen.Chapter => index < CurrentChapters.Length
                 ? CurrentChapters[index].Name
@@ -4996,33 +4669,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             : "Keep the seats as signed on and return to the Mode screen.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
-        // One arm per row of the Options screen, in the order RowText writes them. A row that lost
-        // its arm would take the one under it, and every row below would read one line wrong. The
-        // two lists stay the same length.
-        Screen.Options => focus switch
-        {
-            0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
-            1 => "Select your default view. A --view= on the command line still outranks it.",
-            2 => "Select to turn your head automatically as your aircraft turns. Cockpit views only.",
-            3 => "Take the nearest target after a kill instead of the first of the list.",
-            4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
-            5 => GraphicsDetail(),
-            6 => ViewDistanceDetail(),
-            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            8 => ResolutionDetail(),
-            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            11 => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
-            12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
-            13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
-            14 => WaterQualityDetail(),
-            15 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            16 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            17 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            18 => "Set the volume of the voices. Heard once the choices are applied.",
-            19 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
-            _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
-        },
+        Screen.Options => focus < OptionsChoices.Count ? _choices.Detail(focus)
+            : focus == OptionsChoices.Count
+                ? "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away."
+                : "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         Screen.Controls => ControlsDetail(focus),
         Screen.Presets => PresetDetail(focus),
         Screen.Chapter => focus < CurrentChapters.Length
