@@ -112,9 +112,9 @@ original|enhanced`** (default `original`, which appends nothing; `enhanced` appe
 **Every test stage prints its wall time against a budget, and a budget never fails a run**.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
-back-to-back warm runs plus 50 %. A skipped stage is compared against nothing, and the total only
-when its lane's stages all ran. Build carries no budget, since only cutting features shortens it,
-and the total compared is the sum of the budgeted stages. The engine budget is capped at 80 % of
+back-to-back warm runs plus 50 %. A skipped stage is compared against nothing. Build carries no
+budget, since only cutting features shortens it. There is no total budget: one set by the same
+rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine budget is capped at 80 % of
 the 300 s per-launch watchdog, so a growing catalog prints `over budget` before a shard is killed.
 
 **A selection that matches nothing is a failure**: `-Suite`, `-Filter` and `-UnitFilter` each fail

@@ -61,14 +61,13 @@
     summary names what went unchecked: "the data was not there" must never read as "the
     check held".
 
-    Wall-time budgets: each stage row and the total print the measured budget for the lane the run
+    Wall-time budgets: each stage row prints the measured budget for the lane the run
     is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
     the numbers and the rule that set them live, so this help names the file rather than figures
     that would drift out of it. A stage over its budget prints "over budget" and is listed after
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
-    is compared against nothing, and the total is compared only when the lane's own stages all ran.
-    Build carries no budget, and the total compared is the sum of the budgeted stages alone. The
+    is compared against nothing. Build carries no budget, and there is no total budget. The
     engine budget is capped at 80 percent of the per-launch watchdog, so it warns before it kills.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
@@ -1996,20 +1995,16 @@ foreach ($stage in $Stages) {
     $totalSeconds += $stage.Seconds
 }
 
-# A skipped stage is compared against nothing, and the total only against the lane whose work it
-# actually did: a run that skipped goldens is not a slow full run, it is a different run.
-# The total compared is the budgeted stages' own sum: an unbudgeted stage (build, perf) is time
-# the battery cannot be cut to save, so it is printed but never counted against the lane.
+# A skipped stage is compared against nothing. There is no total budget: one set by the same rule
+# is never below the stage budgets' sum, so it could only ever trip after a stage already had.
 $OverBudget = @()
 $stageBudgetText = @{}
-$budgetedSeconds = 0.0
 foreach ($stage in $Stages) {
     $budget = Get-StageBudget $stage.Name
     if ($budget -le 0 -or $stage.Status -eq "SKIP") {
         $stageBudgetText[$stage.Name] = ""
         continue
     }
-    $budgetedSeconds += $stage.Seconds
     if ($stage.Seconds -gt $budget) {
         $stageBudgetText[$stage.Name] = "[over budget $(Format-Seconds $budget)s]"
         $OverBudget += "$($stage.Name) took $(Format-Seconds $stage.Seconds)s against a $(Format-Seconds $budget)s budget"
@@ -2017,31 +2012,6 @@ foreach ($stage in $Stages) {
         $stageBudgetText[$stage.Name] = "[budget $(Format-Seconds $budget)s]"
     }
 }
-$ranStages = @{}
-foreach ($stage in $Stages) {
-    if ($stage.Status -ne "SKIP") {
-        $ranStages[$stage.Name] = 1
-    }
-}
-$laneComplete = ($LaneBudget -ne $null)
-if ($laneComplete) {
-    foreach ($needed in @($LaneBudget.requires)) {
-        if (-not $ranStages.ContainsKey($needed)) {
-            $laneComplete = $false
-        }
-    }
-}
-$totalBudgetText = ""
-if ($laneComplete -and [double]$LaneBudget.total -gt 0) {
-    $totalBudget = [double]$LaneBudget.total
-    if ($budgetedSeconds -gt $totalBudget) {
-        $totalBudgetText = " [budgeted stages $(Format-Seconds $budgetedSeconds)s, over budget $(Format-Seconds $totalBudget)s]"
-        $OverBudget += "the $BudgetLane run's budgeted stages took $(Format-Seconds $budgetedSeconds)s against a $(Format-Seconds $totalBudget)s budget"
-    } else {
-        $totalBudgetText = " [budgeted stages $(Format-Seconds $budgetedSeconds)s, budget $(Format-Seconds $totalBudget)s]"
-    }
-}
-
 Write-Host ""
 Write-Host "--- RunTests ------------------------------------------------------------"
 foreach ($stage in $Stages) {
@@ -2073,9 +2043,9 @@ if ($HiddenDesktop) {
 }
 Close-HiddenDesktop
 if ($failedStages.Count -gt 0) {
-    Write-Host ("  result: FAIL in {0} -- {1}s total{2}, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Red
+    Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
 } else {
-    Write-Host ("  result: PASS -- {0}s total{1}, exit 0" -f (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Green
+    Write-Host ("  result: PASS -- {0}s total, exit 0" -f (Format-Seconds $totalSeconds)) -ForegroundColor Green
 }
 Write-Host "-------------------------------------------------------------------------"
 
