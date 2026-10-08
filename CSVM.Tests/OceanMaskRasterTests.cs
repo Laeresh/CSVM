@@ -123,6 +123,42 @@ public class OceanMaskRasterTests
         Assert.True(one.Zones.AsSpan().SequenceEqual(OceanMaskRaster.Run(tris.ToArray(), Mean, 7).Zones));
     }
 
+    // A ramp's base triangle marks its texels with the ramp byte, which the hide reads, and the rest
+    // of the sheet stays 255. Both are sea, and no band count moves either.
+    [Fact]
+    public void ARampsTexelsCarryTheRampByte()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
+        var p = new Vector3(-200f, 0f, -200f);
+        tris.Add(new Tri(p, p + new Vector3(400f, 1f, 0f), p + new Vector3(0f, 0f, 400f), Kind.Base, Colors.White, Colors.White, Colors.White, Ramp: true));
+        var one = OceanMaskRaster.Run(tris.ToArray(), Mean, 1);
+        byte At(float x, float z) => one.Mask[2 * (((int)((z - one.Origin.Y) / Cell) * one.Width) + (int)((x - one.Origin.X) / Cell))];
+        Assert.Equal(OceanMaskRaster.RampSea, At(-150f, -150f));
+        Assert.Equal(255, At(500f, 500f));
+        var seven = OceanMaskRaster.Run(tris.ToArray(), Mean, 7);
+        Assert.True(one.Mask.AsSpan().SequenceEqual(seven.Mask));
+        Assert.True(one.Lift.AsSpan().SequenceEqual(seven.Lift));
+    }
+
+    // The ocean rises with a ramp's plane, past its rim on the side it rises to, and stays at sea
+    // level away from it.
+    [Fact]
+    public void TheLiftFollowsTheRampsPlane()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 2048f, Kind.Base, Colors.White);
+        var p = new Vector3(-200f, 0f, -200f);
+        tris.Add(new Tri(p, p + new Vector3(400f, 2f, 0f), p + new Vector3(0f, 0f, 400f), Kind.Base, Colors.White, Colors.White, Colors.White, Ramp: true));
+        var r = OceanMaskRaster.Run(tris.ToArray(), Mean, 3);
+        float Lift(int x, int z) => r.Lift[(z * r.Width) + x] / 255f * OceanMask.RampTop;
+        float CentreX(int x) => r.Origin.X + ((x + 0.5f) * Cell);
+        int zRow = (int)((-180f - r.Origin.Y) / Cell);
+        for (int x = (int)((-150f - r.Origin.X) / Cell); x <= (int)((150f - r.Origin.X) / Cell); x++)
+            Assert.InRange(Lift(x, zRow), ((CentreX(x) + 200f) / 200f) - 0.02f, ((CentreX(x) + 200f) / 200f) + 0.02f);
+        Assert.Equal(0, r.Lift[((int)((500f - r.Origin.Y) / Cell) * r.Width) + (int)((500f - r.Origin.X) / Cell)]);
+    }
+
     // C1B-like: a sheet of 512 m base quads with baked colours and scattered edge water. The solids
     // run from slivers to large faces, some reaching past the sheet.
     private static List<Tri> Scene(Random rng)

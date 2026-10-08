@@ -116,6 +116,7 @@ public sealed partial class Ocean : Node3D
             material.SetShaderParameter("albedo_tex", baseTex);
         material.SetShaderParameter("tile_m", mask.TileMetres);
         material.SetShaderParameter("tint_tex", mask.TintTexture);
+        material.SetShaderParameter("lift_tex", mask.LiftTexture);
         if (mask.ZoneTexture is { } zoneTex)
             material.SetShaderParameter("zone_tex", zoneTex);
 
@@ -143,7 +144,7 @@ public sealed partial class Ocean : Node3D
             ocean.AddChild(instance);
         }
         double ms = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} movers={movers.Count} moving_hulls={mask.MovingHulls.Count} unjudged={mask.UnjudgedMovers.Count} hull_tris={mask.MovingHullTriangles} ms={ms:0} bake={bakeMs:0} ({mask.Timing}) sea={sea.Describe()}");
+        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} ramp_tris={mask.RampTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} movers={movers.Count} moving_hulls={mask.MovingHulls.Count} unjudged={mask.UnjudgedMovers.Count} hull_tris={mask.MovingHullTriangles} ms={ms:0} bake={bakeMs:0} ({mask.Timing}) sea={sea.Describe()}");
         foreach (var hull in mask.MovingHulls)
         {
             var p = hull.GlobalPosition;

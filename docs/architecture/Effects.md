@@ -92,17 +92,17 @@ touched. `Distance` and `Calm` are the shader's `ship_calm` in C#: no waves with
 box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold the box and the fade.
 
 ## src/Effects/OceanMask.cs
-The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`) and reused by
-every rebuild of the ocean over it. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the base sheet's
-baked tint and, where the sheet spans zone-gate layers, each texel's zone group. The same walk finds the wake
-sheets, the tile size and the sheet's lowest priority. A wake's ship and every mover judged a hull
-(`OceanMovers.cs`) stay out of the mask. While an ocean stands, `Publish` hands the mask, zone texture and rect to
-the `csky_ocean_mask`/`_zone`/`_rect` globals the sheet's hide reads, which steps aside at `SeaThreshold`;
-`Withdraw` restores the no-sea defaults. `--dump-ocean-mask=` writes the mask and the tint. Read
-`OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
+The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`), reused by every
+rebuild. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the sheet's baked tint, each texel's
+zone group where the sheet spans zone-gate layers, and the ramps: base-sheet triangles rising from sea level to under
+`RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp). A ramp is
+open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wakes, tile size and
+lowest priority; hulls (`OceanMovers.cs`) stay out. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
+the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. `--dump-ocean-mask=` writes the mask and the tint.
+Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
 
 ## src/Effects/OceanMaskRaster.cs
-The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint and R8 zone bytes out, with no engine
+The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint, R8 zone and R8 ramp lift bytes out, with no engine
 object touched. Owns the triangle fill, the shore distance pass and the off-sheet tint, and runs
 in row bands on the thread pool. A texel off the sheet takes its tinted neighbours' mean, so the filtered tint does
 not lighten the sheet's edge. `OceanMask.cs` collects the triangles and uploads the bytes. `OceanMaskRasterTests`

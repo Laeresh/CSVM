@@ -27,13 +27,28 @@ float csky_ocean_sea(vec2 xz) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+// Whether any texel the filter reads at a world X/Z is a ramp's open sea (OceanMaskRaster.RampSea).
+bool csky_ocean_ramp(vec2 xz) {
+    ivec2 size = textureSize(csky_ocean_mask, 0);
+    ivec2 i = ivec2(floor((xz - csky_ocean_rect.xy) * csky_ocean_rect.zw * vec2(size) - 0.5));
+    ivec2 hi = size - 1;
+    vec4 r = vec4(texelFetch(csky_ocean_mask, clamp(i, ivec2(0), hi), 0).r,
+        texelFetch(csky_ocean_mask, clamp(i + ivec2(1, 0), ivec2(0), hi), 0).r,
+        texelFetch(csky_ocean_mask, clamp(i + ivec2(0, 1), ivec2(0), hi), 0).r,
+        texelFetch(csky_ocean_mask, clamp(i + ivec2(1, 1), ivec2(0), hi), 0).r);
+    return any(lessThan(abs(r * 255.0 - 254.0), vec4(0.5)));
+}
+
 // Whether a base-sea fragment at world position `world` steps aside for the ocean: only where the
 // ocean itself draws, so each texel has one owner and a sheet shown after the mask bake (C3's
 // drained crater floor) draws flat instead of leaving a hole. The coverage threshold is the
 // ocean's own discard (OceanMask.SeaThreshold). A zone-seam texel (OceanMaskRaster.AnyZone - 1) is
-// one no grid draws. C3's raised water, C4's lakes and a ramp's raised part keep their flat surface.
+// one no grid draws. A ramp clears up to OceanMask.RampTop; C3's raised water and C4's lakes stay.
 bool csky_ocean_hides_sea(vec3 world) {
-    if (csky_ocean_on < 0.5 || abs(world.y) >= 0.25) {
+    if (csky_ocean_on < 0.5 || world.y <= -0.25 || world.y >= 4.0) {
+        return false;
+    }
+    if (world.y >= 0.25 && !csky_ocean_ramp(world.xz)) {
         return false;
     }
     if (csky_ocean_sea(world.xz) < 0.02) {

@@ -1360,6 +1360,63 @@ smaller one that happens to pass. Original graphics output must not change.
 
 ## E43 ☐ No raised water triangle shows or shadows over the ocean in a harbour
 
+**Landed.** The cause, measured: C2's patch is two base-sheet (`wtr00000`) triangles with their foot
+at sea level and one corner raised to 1.03 m at the quay corner (-6144.1, -3843.5), one in `g36352`
+(about 24,200 m2) and one in `g36353` (about 6,200 m2), plus a degenerate third. The hide cleared the
+sheet only below 0.25 m, so 91 of 153 samples on each (the part near the raised corner, about 57 % of
+the area) drew the flat sheet with its sun streak: the V. The mask took both as surf-ring water
+(shore distance 0, tint the C2 mean 151/152/153 against the triangles' own white), so where the hide
+did clear them the ocean drew fully calm and grey: the wedge. It is no shadow: the captures with no
+sun shadow, no SSAO and no SSR keep it, and hiding the triangles alone (the include clearing to 4 m,
+plan code otherwise) leaves the wedge as a dark V over the whole footprint, mean luma 70.7 against
+86.2 with this fix over the 202,490 pixels the two differ in. The mechanism, Enhanced waves only:
+- `OceanMask.Read` takes a base-sheet triangle whose foot lies within 0.5 m of sea level and whose
+  top lies from `HideHeight` (0.25 m) to under `RampTop` (4 m) as a ramp: open sea in the mask, with
+  its own tint and zone, kept out of the sheet's mean tint and tile size.
+- `OceanMaskRaster` marks a ramp's texels with the red byte `RampSea` (254, still full coverage) and
+  bakes an R8 lift texture of the ramp's plane, reaching 12 m past its rim and clamped to its heights.
+- The base sheet's hide (`csky_ocean_hides_sea`) clears a fragment up to `RampTop` where any texel
+  its filter reads holds `RampSea`, and only below 0.25 m elsewhere.
+- The grid's vertex stage adds the lift, so the calm ocean stands where the hidden ramp stood and
+  meets the quay or hull above it with no gap.
+Flat water quality builds no ocean and Original has no hide, so both keep every triangle; the
+switch suites hold the hide's globals to their no-sea defaults once the ocean leaves. A triangle
+taller than `RampTop` stays as it was: C3's chute to its raised lake keeps its flat surface.
+Scan of the sea chapters (every visible water triangle with a foot at sea level rising past 0.25 m,
+153 samples each, in the user's sea):
+- C1, C1B, C1C, C2B: none.
+- C2: the two harbour triangles above (3 ramp triangles in the mask), all 306 samples cleared; the
+  ocean stands at most 0.006 m below a ramp and at most 0.12 m above it.
+- C5: 8 triangles (12 in the mask) of `g4690`, water rising to a 3.03 m ridge under the steinmann
+  ship; all 1,224 samples cleared. Two lie partly under the ship's hull (`stein_lside`,
+  `stein_rside`, 0.05 m above the water at the least; 73 and 9 of 153 samples); they are hidden too,
+  since the lifted ocean meets the hull: it stands at most 0.007 m below a ramp, and up to 1.0 m above
+  one near the ridge, where the 8 m lift texels round the crease upward.
+- C3: two triangles of the chute to the raised lake (0 to 13.17 m), refused by height; 136 and 152
+  of 153 samples stand, over a footprint that is surf and solid in the mask.
+- No ramp triangle lies over land: one C5 sample of 1,224 has a solid surface within 1 m below it.
+  C2's pair sits in shadow-casting instances and C5's does not; the wedge was never their shadow.
+`ocean-harbour-ramp` holds it in C2 and C5: the ramps are in the mask and cleared, the ocean stands
+under 0.05 m below any ramp, every base-sheet sample over the sea is cleared, and a sea-level sheet
+1 m up still draws (the control). With the ramp rule disabled it fails both chapters (C2: 0 in the
+mask, 9 samples standing, the ocean 1.018 m below; C5: 0, 53, 3.012 m) and passes with it.
+`OceanMaskRasterTests` hold the ramp byte and the lift's plane (both fail with the raster's ramp
+code disabled); `OceanShaderTests` carry the grid's two new lines. Montage, before (plan branch) /
+hide only / after, at the user's pose, C2's quay corner low, C5's harbour low and C5's steinmann
+hull low, in the user's sea: `.scratch\e43\montage-e43-sea.png` in the E43 tree.
+Complete battery on the E43 tree with the plan base's sea file: units 6519 passed, 3 skipped;
+engine 546 passed, 2 skipped, engine errors clean on all six shards (`ocean-harbour-ramp` 9.2 s);
+goldens 25/25 hash-identical, so this item moves no golden. With the user's sea (9b89a82a) on top:
+units 6516 passed, 3 failed (`OceanSeasTests`: `SaveWritesOnlyTheDifferingFieldsAndRoundTrips`,
+`TheShippedFileDrawsEveryChapterAtTheDefaults`, `SavingTheDefaultsLeavesTheShippedFileAsItIs`);
+engine 545 passed, 1 failed (`ocean-lab`: the lab starts on the shipped sea, which is no longer the
+defaults), errors clean; goldens 3 moved by the sea (`c1-lake-enhanced`, `c1-rocket-hit-enhanced`,
+`c1b-ocean-enhanced`), every Original golden held. All of those read the shipped sea file.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
 **Goal.** In an Enhanced waves session, no original water surface shows through or above the ocean
 as a flat patch, and no water surface casts a shadow onto the ocean.
 

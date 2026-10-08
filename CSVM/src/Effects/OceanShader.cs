@@ -242,6 +242,7 @@ public static class OceanShader
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
         sb.AppendLine("uniform float tile_m = 32.0;");
         sb.AppendLine("uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;");
+        sb.AppendLine("uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;");
         sb.AppendLine("uniform float rough_near = 0.2;");
         sb.AppendLine("uniform float rough_far = 0.3;");
         sb.AppendLine("uniform float wave_scale = 1.0;");
@@ -444,7 +445,9 @@ void vertex() {
             disp.y += w.w * g * sin(th);
         }
         v_param = p;
-        vec3 world = vec3(p.x + disp.x, disp.y, p.y + disp.z);
+        // Over a harbour ramp the sea rises with the sheet it replaces, up to the quay it meets.
+        float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * " + Literal(OceanMask.RampTop) + @";
+        vec3 world = vec3(p.x + disp.x, disp.y + lift, p.y + disp.z);
         VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
         // A priority level below the lowest base sheet. Every coplanar layer over or beside it
         // stays on top, the surf ring and C5's fog-gradient passes included.

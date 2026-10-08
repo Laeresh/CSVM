@@ -29,6 +29,16 @@ internal sealed class OceanMask
     /// graphics-ocean-switch suite holds to it.</summary>
     public const float SeaThreshold = 0.02f;
 
+    /// <summary>The height either side of y = 0 within which the base sheet's hide clears the sheet
+    /// over the sea. The include spells it as a literal, which the graphics-ocean-switch suite holds to it.</summary>
+    public const float HideHeight = 0.25f;
+
+    /// <summary>The highest a base-sheet triangle with its foot at sea level may rise and still be a
+    /// ramp. A ramp is open sea in the mask, cleared by the hide up to this height. It sits above the
+    /// tallest harbour ramp and below C3's chute to its raised lake (docs/architecture/Effects.md,
+    /// OceanMask). The include spells it as a literal.</summary>
+    public const float RampTop = 4f;
+
     /// <summary>The zone byte of a texel on a seam between two zone groups, which no grid draws.</summary>
     public const byte SeamZone = OceanMaskRaster.AnyZone - 1;
 
@@ -62,6 +72,13 @@ internal sealed class OceanMask
     /// <summary>The tint texture's pixels, kept for <c>--dump-ocean-mask</c>.</summary>
     public Image TintImage { get; private set; } = null!;
 
+    /// <summary>The height the ocean rises to over a ramp (R8 over <see cref="RampTop"/>), one
+    /// zero texel when the world has no ramp.</summary>
+    public ImageTexture LiftTexture { get; private set; } = null!;
+
+    /// <summary>The lift texture's pixels, kept for <see cref="LiftAt"/>.</summary>
+    public Image LiftImage { get; private set; } = null!;
+
     /// <summary>The world X/Z of the mask's first texel corner.</summary>
     public Vector2 Origin { get; private set; }
 
@@ -85,6 +102,10 @@ internal sealed class OceanMask
     public int BaseLevel { get; private set; }
 
     public int EdgeTriangles { get; private set; }
+
+    /// <summary>The base-sheet triangles rising off sea level below <see cref="RampTop"/>, counted
+    /// in <see cref="BaseTriangles"/> too.</summary>
+    public int RampTriangles { get; private set; }
 
     public int SolidTriangles { get; private set; }
 
@@ -185,6 +206,40 @@ internal sealed class OceanMask
         return x >= 0 && y >= 0 && x < Width && y < Height && Image.GetPixel(x, y).R >= SeaThreshold;
     }
 
+    /// <summary>Whether the base sheet's hide clears a sheet fragment at a world point. It reads the mask
+    /// as <c>csky_ocean_hides_sea</c> does: filtered coverage, the height window, a ramp's taller one.
+    /// A zone seam is not read; the suites hold the include to this.</summary>
+    public bool ClearsSheet(Vector3 world)
+    {
+        if (world.Y <= -HideHeight || world.Y >= RampTop)
+            return false;
+        float tx = ((world.X - Origin.X) / Cell) - 0.5f, ty = ((world.Z - Origin.Y) / Cell) - 0.5f;
+        int ix = (int)Math.Floor(tx), iy = (int)Math.Floor(ty);
+        float fx = tx - ix, fy = ty - iy;
+        float a = Red(Image, ix, iy), b = Red(Image, ix + 1, iy), c = Red(Image, ix, iy + 1), d = Red(Image, ix + 1, iy + 1);
+        float sea = Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(c, d, fx), fy) / 255f;
+        bool ramp = a == OceanMaskRaster.RampSea || b == OceanMaskRaster.RampSea
+            || c == OceanMaskRaster.RampSea || d == OceanMaskRaster.RampSea;
+        return sea >= SeaThreshold && (world.Y < HideHeight || ramp);
+    }
+
+    /// <summary>The height the calm ocean stands at over a world X/Z, sea level away from a ramp. It is
+    /// filtered as the grid's vertex stage reads the lift.</summary>
+    public float LiftAt(Vector3 world)
+    {
+        if (LiftImage.GetWidth() == 1)
+            return 0f;
+        float tx = ((world.X - Origin.X) / Cell) - 0.5f, ty = ((world.Z - Origin.Y) / Cell) - 0.5f;
+        int ix = (int)Math.Floor(tx), iy = (int)Math.Floor(ty);
+        float fx = tx - ix, fy = ty - iy;
+        float a = Red(LiftImage, ix, iy), b = Red(LiftImage, ix + 1, iy), c = Red(LiftImage, ix, iy + 1), d = Red(LiftImage, ix + 1, iy + 1);
+        return Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(c, d, fx), fy) / 255f * RampTop;
+    }
+
+    // The red byte of a texel, clamped to the edge as the include's fetch is.
+    private static float Red(Image image, int x, int y) =>
+        Mathf.Round(image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1)).R * 255f);
+
     private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         long t0 = Stopwatch.GetTimestamp();
@@ -231,6 +286,10 @@ internal sealed class OceanMask
         result.Texture = TextureUpload.Create(result.Image, callerKeeps: true);
         if (result.ZoneLayers.Count > 1)
             result.ZoneTexture = TextureUpload.Create(raster.Width, raster.Height, Image.Format.R8, Seam(raster));
+        result.LiftImage = result.RampTriangles > 0
+            ? Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.R8, raster.Lift)
+            : Image.CreateFromData(1, 1, false, Image.Format.R8, new byte[] { 0 });
+        result.LiftTexture = TextureUpload.Create(result.LiftImage, callerKeeps: true);
         double uploadMs = Lap(ref t0);
         result.Timing = string.Create(CultureInfo.InvariantCulture,
             $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
@@ -445,13 +504,17 @@ internal sealed class OceanMask
                 float minY = Math.Min(a.Y, Math.Min(b.Y, c.Y));
                 float maxY = Math.Max(a.Y, Math.Max(b.Y, c.Y));
                 bool seaLevel = minY > -0.5f && maxY < 0.5f;
+                bool foot = minY > -0.5f && minY < 0.5f;
+                // A base triangle rising off the sea to a quay is sea the hide clears whole. As surf
+                // water its footprint drew calm and in the mean tint, a dark patch in the waves.
+                bool ramp = isBase && foot && maxY >= HideHeight && maxY < RampTop;
                 if (movers.Length > 0 && OceanMovers.ReachesWaterline(a, b, c))
                 {
                     foreach (int m in movers)
                         _movers[m].Waterline = true;
                 }
                 Kind kind;
-                if (isBase && seaLevel)
+                if (isBase && (seaLevel || ramp))
                 {
                     kind = Kind.Base;
                     foreach (int m in movers)
@@ -460,14 +523,18 @@ internal sealed class OceanMask
                     if (_result.BaseTriangles++ == 0 || level < _result.BaseLevel)
                         _result.BaseLevel = level;
                     BaseCounts[tex] = BaseCounts.GetValueOrDefault(tex) + 1;
-                    if (uv.Length > 0)
+                    // A ramp leaves the tile and the mean tint to the sea-level sheet, so the open
+                    // sea away from it keeps its bytes.
+                    if (ramp)
+                        _result.RampTriangles++;
+                    if (!ramp && uv.Length > 0)
                     {
                         float dp = new Vector2(b.X - a.X, b.Z - a.Z).Length();
                         float du = (uv[i1] - uv[i0]).Length();
                         if (du > 1e-4f)
                             UvSamples.Add(dp / du);
                     }
-                    if (col.Length > 0)
+                    if (!ramp && col.Length > 0)
                     {
                         var c0 = Stored(col[i0]);
                         R += c0.R;
@@ -476,10 +543,10 @@ internal sealed class OceanMask
                         ColorCount++;
                     }
                 }
-                else if (water && (seaLevel || (isBase && minY > -0.5f && minY < 0.5f)))
+                else if (water && (seaLevel || (isBase && foot)))
                 {
-                    // A base-sheet ramp rising off the sea hides only below 0.25 m, so the ocean
-                    // must reach under its foot, calm.
+                    // A base-sheet slope too tall for a ramp hides only below HideHeight, so the
+                    // ocean must reach under its foot, calm.
                     kind = Kind.Edge;
                     _result.EdgeTriangles++;
                 }
@@ -494,7 +561,7 @@ internal sealed class OceanMask
                 }
                 bool tinted = kind == Kind.Base && col.Length > 0;
                 byte zone = kind == Kind.Base ? ZoneOf(layers) : (byte)0;
-                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone));
+                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone, ramp));
                 _triMovers.Add(movers);
             }
         }

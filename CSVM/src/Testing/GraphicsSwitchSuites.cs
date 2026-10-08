@@ -34,6 +34,9 @@ internal static class GraphicsSwitchSuites
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string FlatWaterChapter = "C2B";
 
+    // How far the lifted ocean may stand below a ramp: the bilinear lift's rounding, not a gap.
+    private const float RampShortfall = 0.05f;
+
     // The call in the base sheet's fragment-stage discard. The include line alone never matches it.
     private const string HideCall = "csky_ocean_hides_sea(";
 
@@ -49,6 +52,10 @@ internal static class GraphicsSwitchSuites
     private const string EnhancedProbe = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
         + "uniform vec4 probe_a = vec4(0.0);\n"
         + "void fragment() {\n    ALBEDO = vec3(0.0, 1.0, 0.0) + probe_a.rgb * 0.0;\n}\n";
+
+    // The chapters whose base sheet rises off sea level: C2's harbour to a quay, C5's water to the
+    // steinmann ship's hull.
+    private static readonly string[] RampChapters = { "C2", "C5" };
 
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
@@ -555,6 +562,58 @@ internal static class GraphicsSwitchSuites
             finally
             {
                 fly.Close();
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("ocean-harbour-ramp",
+        "an Enhanced flight at water quality waves over C2's harbour ramps and C5's water rising to the "
+        + "steinmann ship takes each base-sheet ramp off sea level as open sea, which the sheet's hide "
+        + "clears whole, so no flat patch stands over the waves; the calm ocean rises with each ramp, never "
+        + "standing below it, so no gap opens under the quay or hull it meets; every base-sheet triangle over "
+        + "the sea is cleared wherever it lies, so none draws or casts a shadow onto the ocean; and a sheet "
+        + "raised off a sea texel no ramp covers still draws")]
+    internal static void OceanHarbourRamp(TestContext ctx)
+    {
+        foreach (string chapter in RampChapters)
+            RequireData(ctx, chapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        try
+        {
+            ViewDistance.Set(null);
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            foreach (string chapter in RampChapters)
+            {
+                var rig = Open(ctx, enhanced: true, chapter: chapter);
+                try
+                {
+                    var mask = Effects.OceanMask.Live;
+                    if (!rig.Built || !rig.Session.OceanBuilt || mask == null || rig.Session.WorldScene == null)
+                    {
+                        ctx.Check(false, $"the Enhanced {chapter} session builds its ocean (built={rig.Built}, ocean={rig.Session.OceanBuilt})");
+                        continue;
+                    }
+                    var sheet = SheetOverSea(rig, mask);
+                    ctx.Check(sheet.Ramps > 0 && mask.RampTriangles >= sheet.Ramps && sheet.RampMissed == 0,
+                        $"{chapter}: the ramps are open sea the hide clears whole ({sheet.Ramps} ramp triangle(s) drawn, {mask.RampTriangles} in the mask, {sheet.RampMissed} sample(s) on them left standing{sheet.Examples})");
+                    ctx.Check(sheet.Ramps > 0 && sheet.RampShortfall < RampShortfall,
+                        $"{chapter}: the calm ocean rises with each ramp, so no gap opens under what it meets (the ocean stands at most {sheet.RampShortfall.ToString("0.000", CultureInfo.InvariantCulture)} m below a ramp)");
+                    ctx.Check(sheet.Sampled > 0 && sheet.Missed == 0,
+                        $"{chapter}: every base-sheet triangle over the sea is cleared, so none draws or casts onto the ocean ({sheet.Sampled} sample(s) over the sea, {sheet.Missed} left standing, {sheet.Casting} in shadow-casting instances{sheet.Examples})");
+                    var flat = sheet.FlatSea;
+                    ctx.Check(flat is { } at && mask.ClearsSheet(at) && !mask.ClearsSheet(at + new Vector3(0f, 1f, 0f)),
+                        $"ABLE-TO-FAIL CONTROL: {chapter}: off a ramp the hide clears the sheet at sea level and keeps it 1 m up (at {flat?.ToString() ?? "no flat sea sample"})");
+                }
+                finally
+                {
+                    rig.Close();
+                }
             }
         }
         finally
@@ -1227,9 +1286,87 @@ internal static class GraphicsSwitchSuites
             $"the sheet's hide steps aside at the coverage the ocean discards below, {threshold} (include {(include.Length > 0 ? "read" : "missing")}, grid shader {(grid.Length > 0 ? "read" : "missing")})");
         ctx.Check(include.Contains($"abs(zone - {Effects.OceanMask.SeamZone}.0)", StringComparison.Ordinal),
             $"and leaves a zone seam texel, which no grid draws, to the sheet");
+        string hide = Effects.OceanMask.HideHeight.ToString("0.0#", CultureInfo.InvariantCulture);
+        string top = Effects.OceanMask.RampTop.ToString("0.0#", CultureInfo.InvariantCulture);
+        ctx.Check(include.Contains($"world.y <= -{hide} || world.y >= {top})", StringComparison.Ordinal)
+                && include.Contains($"world.y >= {hide} && !csky_ocean_ramp(", StringComparison.Ordinal)
+                && include.Contains($"r * 255.0 - {Effects.OceanMaskRaster.RampSea}.0", StringComparison.Ordinal),
+            $"and clears the sheet within {hide} m of sea level, and a ramp's up to {top} m where its filter reads the ramp byte {Effects.OceanMaskRaster.RampSea}");
         ctx.Check(grid.Contains($"if ({Mech3.SceneBuilder.FlatSeaEye}) {{", StringComparison.Ordinal)
                 && sheet.Length > 0 && sheet.Contains($"!{Mech3.SceneBuilder.FlatSeaEye} && {HideCall}", StringComparison.Ordinal),
             $"a spyglass disc's camera collapses the grid before its wave sum and keeps the sheet whole ({Mech3.SceneBuilder.FlatSeaEye}; sheet {(sheet.Length > 0 ? "read" : "missing")})");
+    }
+
+    // Every drawn base-sheet triangle read at its centroid and near each corner. A sample over a sea
+    // texel must be one the hide clears. A ramp rises off sea level to under OceanMask.RampTop, and
+    // its shortfall is how far the lifted ocean stands below it.
+    private static SheetReading SheetOverSea(Rig rig, Effects.OceanMask mask)
+    {
+        var scene = rig.Session.WorldScene!;
+        var names = new Dictionary<Material, string>();
+        foreach (var (material, texture) in scene.TexturedMaterials)
+            names[material] = texture;
+        int sampled = 0, missed = 0, casting = 0, ramps = 0, rampMissed = 0;
+        float gap = 0f;
+        Vector3? flat = null;
+        var examples = new StringBuilder();
+        Walk(rig.Session, node =>
+        {
+            if (node is not MeshInstance3D { Mesh: ArrayMesh mesh } mi || !mi.IsVisibleInTree() || UnderOcean(mi))
+                return;
+            var xf = mi.GlobalTransform;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                var material = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
+                if (material == null || !names.TryGetValue(material, out var texture) || !Mech3.SceneBuilder.IsOceanBaseTexture(texture))
+                    continue;
+                var arrays = scene.SurfaceArrays(mesh, s);
+                var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil
+                    ? Enumerable.Range(0, v.Length).ToArray() : arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+                for (int t = 0; t + 2 < ix.Length; t += 3)
+                {
+                    var a = xf * v[ix[t]];
+                    var b = xf * v[ix[t + 1]];
+                    var c = xf * v[ix[t + 2]];
+                    float minY = Math.Min(a.Y, Math.Min(b.Y, c.Y)), maxY = Math.Max(a.Y, Math.Max(b.Y, c.Y));
+                    bool ramp = minY > -0.5f && minY < 0.5f && maxY >= Effects.OceanMask.HideHeight && maxY < Effects.OceanMask.RampTop;
+                    ramps += ramp && (b - a).Cross(c - a).Length() > 1e-3f ? 1 : 0;
+                    var centre = (a + b + c) / 3f;
+                    var samples = new[] { centre, a.Lerp(centre, 0.15f), b.Lerp(centre, 0.15f), c.Lerp(centre, 0.15f) };
+                    if (ramp)
+                        samples = samples.Concat(new[] { a.Lerp(centre, 0.02f), b.Lerp(centre, 0.02f), c.Lerp(centre, 0.02f) }).ToArray();
+                    foreach (var p in samples)
+                    {
+                        if (ramp)
+                            gap = Math.Max(gap, p.Y - mask.LiftAt(p));
+                        if (!mask.IsSea(p))
+                            continue;
+                        sampled++;
+                        if (!ramp && maxY < 0.5f)
+                            flat ??= p;
+                        if (mask.ClearsSheet(p))
+                            continue;
+                        missed++;
+                        rampMissed += ramp ? 1 : 0;
+                        casting += mi.CastShadow != GeometryInstance3D.ShadowCastingSetting.Off ? 1 : 0;
+                        if (missed <= 4)
+                            examples.Append(string.Create(CultureInfo.InvariantCulture, $"; {mi.GetParent()?.Name}/{mi.Name} at ({p.X:0.0},{p.Y:0.00},{p.Z:0.0})"));
+                    }
+                }
+            }
+        });
+        return new SheetReading(sampled, missed, casting, ramps, rampMissed, gap, flat, examples.ToString());
+    }
+
+    private static bool UnderOcean(Node node)
+    {
+        for (Node? n = node; n != null; n = n.GetParent())
+        {
+            if (n is Effects.Ocean)
+                return true;
+        }
+        return false;
     }
 
     // The base sheet's materials as the world builder named them, by texture and shader text. Also
@@ -1574,6 +1711,8 @@ internal static class GraphicsSwitchSuites
             return text.ToString();
         }
     }
+
+    private sealed record SheetReading(int Sampled, int Missed, int Casting, int Ramps, int RampMissed, float RampShortfall, Vector3? FlatSea, string Examples);
 
     private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census)
     {

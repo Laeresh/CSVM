@@ -18,6 +18,12 @@ internal static class OceanMaskRaster
     /// <summary>The zone byte of a texel every zone group's ocean draws: water the gate never splits.</summary>
     public const byte AnyZone = 255;
 
+    /// <summary>The mask's red byte on a texel a ramp's open sea covers, where the open sea's is 255.
+    /// The base sheet's hide clears a ramp up to <see cref="OceanMask.RampTop"/> where any texel its
+    /// filter reads holds it (<c>csky_ocean.gdshaderinc</c> spells it as a literal). Coverage reads it
+    /// as sea, as it reads 255.</summary>
+    public const byte RampSea = 254;
+
     /// <summary>The shore distance in metres at which the mask's G saturates. G is the distance to
     /// the nearest texel that is not open base sea (a shore, surf or solid texel) over this.</summary>
     public const float ShoreReach = 160f;
@@ -25,6 +31,10 @@ internal static class OceanMaskRaster
     // Rows a band reads past its own edges in the distance pass. Every distance below ShoreReach is
     // a chain of at most ShoreReach / Cell steps, so a band sees every chain its own rows can take.
     private const int Halo = (int)(ShoreReach / Cell) + 4;
+
+    // How far past a ramp its plane is lifted. It reaches the nearest texel centre beyond the rim,
+    // so the linear filter reads the plane on both sides of it.
+    private const double LiftReach = Cell * 1.5;
 
     // Below this many rows a band's halo costs more than its thread saves.
     private const int MinBandRows = 64;
@@ -64,6 +74,7 @@ internal static class OceanMaskRaster
         var grid = new Grid(w, h, minX, minZ);
         var mask = new byte[w * h * 2];
         var tint = new byte[w * h * 3];
+        var lift = new byte[w * h];
         int count = Math.Clamp(Math.Min(bands, h / MinBandRows), 1, h);
         int rows = (h + count - 1) / count;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -78,10 +89,10 @@ internal static class OceanMaskRaster
         Parallel.For(0, count, b => Fill(tris, spans, grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mean, tint));
         Parallel.For(0, count, b => Dilate(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, tint));
         long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
-        Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask));
+        Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask, lift));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.Zone);
+        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.Zone, lift);
     }
 
     /// <summary>(byte)Math.Clamp(Math.Round(v * 255f), 0, 255), banker's rounding included, in float
@@ -111,6 +122,8 @@ internal static class OceanMaskRaster
         {
             if (spans[i].Hi >= r0 && spans[i].Lo <= r1)
                 Raster(tris[i], g, r0, r1, tintF);
+            if (tris[i].Ramp && spans[i].Hi + 2 >= r0 && spans[i].Lo - 2 <= r1)
+                Lift(tris[i], g, r0, r1);
         }
         // Open texels take the mean, rounded through Channel as a tinted texel is. The bytes do not
         // depend on how the rows split into bands.
@@ -224,6 +237,8 @@ internal static class OceanMaskRaster
                             g.Sea[i] = 1;
                         if (g.Zone[i] != AnyZone)
                             g.Zone[i] = t.Zone;
+                        if (t.Ramp)
+                            g.Ramp[i] = true;
                         tint[((z - r0) * w) + x] = new Color(
                             (t.CA.R * w1) + (t.CB.R * w2) + (t.CC.R * w0),
                             (t.CA.G * w1) + (t.CB.G * w2) + (t.CC.G * w0),
@@ -239,6 +254,50 @@ internal static class OceanMaskRaster
                 }
             }
         }
+    }
+
+    // A ramp's plane height at every texel centre within LiftReach of it, held to the ramp's own
+    // heights; the highest plane wins. Sampled linearly, the ocean then meets the plane at the
+    // ramp's rim and reaches the wall the ramp rises to, with no gap under it.
+    private static void Lift(in Tri t, Grid g, int r0, int r1)
+    {
+        double ax = t.A.X, az = t.A.Z, bx = t.B.X, bz = t.B.Z, cx = t.C.X, cz = t.C.Z;
+        double area = ((bx - ax) * (cz - az)) - ((bz - az) * (cx - ax));
+        if (Math.Abs(area) < 1e-6)
+            return;
+        double top = Math.Max(t.A.Y, Math.Max(t.B.Y, t.C.Y));
+        int x0 = Math.Max(0, (int)Math.Floor((Math.Min(ax, Math.Min(bx, cx)) - LiftReach - g.MinX) / Cell));
+        int x1 = Math.Min(g.W - 1, (int)Math.Ceiling((Math.Max(ax, Math.Max(bx, cx)) + LiftReach - g.MinX) / Cell));
+        int z0 = Math.Max(r0, (int)Math.Floor((Math.Min(az, Math.Min(bz, cz)) - LiftReach - g.MinZ) / Cell));
+        int z1 = Math.Min(r1, (int)Math.Ceiling((Math.Max(az, Math.Max(bz, cz)) + LiftReach - g.MinZ) / Cell));
+        for (int z = z0; z <= z1; z++)
+        {
+            double pz = g.MinZ + ((z + 0.5) * Cell);
+            for (int x = x0; x <= x1; x++)
+            {
+                double px = g.MinX + ((x + 0.5) * Cell);
+                double wa = (((bx - px) * (cz - pz)) - ((bz - pz) * (cx - px))) / area;
+                double wb = (((cx - px) * (az - pz)) - ((cz - pz) * (ax - px))) / area;
+                double wc = 1.0 - wa - wb;
+                bool inside = wa >= 0.0 && wb >= 0.0 && wc >= 0.0;
+                if (!inside && Math.Min(Segment(px, pz, ax, az, bx, bz), Math.Min(Segment(px, pz, bx, bz, cx, cz), Segment(px, pz, cx, cz, ax, az))) > LiftReach)
+                    continue;
+                float y = (float)Math.Clamp((wa * t.A.Y) + (wb * t.B.Y) + (wc * t.C.Y), 0.0, top);
+                int i = (z * g.W) + x;
+                if (y > g.Lift[i])
+                    g.Lift[i] = y;
+            }
+        }
+    }
+
+    // The distance from (px, pz) to the segment a..b.
+    private static double Segment(double px, double pz, double ax, double az, double bx, double bz)
+    {
+        double dx = bx - ax, dz = bz - az;
+        double len = (dx * dx) + (dz * dz);
+        double s = len > 0.0 ? Math.Clamp((((px - ax) * dx) + ((pz - az) * dz)) / len, 0.0, 1.0) : 0.0;
+        double ex = ax + (s * dx) - px, ez = az + (s * dz) - pz;
+        return Math.Sqrt((ex * ex) + (ez * ez));
     }
 
     // Narrows lo..hi to the px where one edge's weight can pass the test. The bound is worked in
@@ -267,7 +326,7 @@ internal static class OceanMaskRaster
 
     // Rows r0..r1 of both channels. The distance runs over the band plus its halo, then keeps its
     // own rows. A chain reaching past the halo is longer than ShoreReach and saturates.
-    private static void Encode(Grid g, int r0, int r1, byte[] mask)
+    private static void Encode(Grid g, int r0, int r1, byte[] mask, byte[] lift)
     {
         int w = g.W;
         int e0 = Math.Max(0, r0 - Halo), e1 = Math.Min(g.H - 1, r1 + Halo);
@@ -277,11 +336,12 @@ internal static class OceanMaskRaster
             for (int x = 0; x < w; x++)
             {
                 int i = (y * w) + x;
-                mask[2 * i] = g.Sea[i] != 0 ? (byte)255 : (byte)0;
+                mask[2 * i] = g.Sea[i] == 0 ? (byte)0 : g.Ramp[i] ? RampSea : (byte)255;
                 // The distance, not a height. The shader fades the swell and the look over ramps
                 // of their own, from the distance the linear filter interpolates between texels.
                 float d = dist[((y - e0) * w) + x];
                 mask[(2 * i) + 1] = d >= ShoreReach ? (byte)255 : (byte)Math.Round(d / ShoreReach * 255f);
+                lift[i] = Channel(g.Lift[i] / OceanMask.RampTop);
             }
         }
     }
@@ -332,15 +392,17 @@ internal static class OceanMaskRaster
         return dist;
     }
 
-    /// <summary>One world-space triangle and, on the base sheet, its corners' stored vertex colours
-    /// and the zone group its mesh instance is drawn in.</summary>
-    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0);
+    /// <summary>One world-space triangle. On the base sheet it carries its corners' stored vertex
+    /// colours and its mesh instance's zone group. A ramp is a base triangle rising off sea level:
+    /// its texels take <see cref="RampSea"/> and its plane lifts the ocean.</summary>
+    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0, bool Ramp = false);
 
-    /// <summary>The texel bytes of the mask (RG8: sea, shore distance), the tint (RGB8, sRGB) and the
-    /// zone group (R8, <see cref="AnyZone"/> on surf-ring water). Also the milliseconds each pass
-    /// took over how many bands.</summary>
+    /// <summary>The texel bytes of the mask, tint, zone group and lift, and each pass's milliseconds
+    /// over how many bands. The mask is RG8 (sea or <see cref="RampSea"/>, shore distance), the tint
+    /// RGB8 sRGB. The zone is R8, <see cref="AnyZone"/> on surf-ring water. The lift is R8, the ocean's
+    /// height over a ramp over <see cref="OceanMask.RampTop"/>.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
-        double FillMs, double EncodeMs, int Bands, byte[] Zones);
+        double FillMs, double EncodeMs, int Bands, byte[] Zones, byte[] Lift);
 
     // The coverage both passes share. Each band writes only its own rows.
     private sealed class Grid
@@ -355,6 +417,8 @@ internal static class OceanMaskRaster
             Solid = new bool[w * h];
             Zone = new byte[w * h];
             Tinted = new bool[w * h];
+            Ramp = new bool[w * h];
+            Lift = new float[w * h];
         }
 
         public int W { get; }
@@ -375,5 +439,11 @@ internal static class OceanMaskRaster
 
         // Texels a base triangle gave a tint; the rest start as the mean.
         public bool[] Tinted { get; }
+
+        // Texels a ramp's base triangle covers.
+        public bool[] Ramp { get; }
+
+        // The height in metres the ocean rises to over and around a ramp.
+        public float[] Lift { get; }
     }
 }
