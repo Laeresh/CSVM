@@ -109,6 +109,56 @@ public class RofExtractionTests
     }
 
     [Fact]
+    public void AMemberNamedOutsideTheOutputFolderIsRefusedAndTheRestIsWritten()
+    {
+        string root = TestData.TempDir();
+        string output = Path.Combine(root, "out", "rof");
+        string rooted = Path.Combine(TestData.TempDir(), "ROOTED.TXT");
+        string archive = Path.Combine(root, "crimson.rof");
+        File.WriteAllBytes(archive, ExtractionFixtures.Rof(new RofDir()
+            .File("../../ESCAPE.TXT", new byte[] { 1 })
+            .File(rooted, new byte[] { 2 })
+            .Dir("..", new RofDir().File("SIBLING.TXT", new byte[] { 3 }))
+            .File("KEPT.TXT", new byte[] { 4 })));
+        var log = new List<string>();
+
+        var result = RofExtraction.Run(new RofExtractionRequest(archive, null, null, null, null, output), log.Add);
+
+        Assert.True(File.Exists(Path.Combine(output, "KEPT.TXT")));
+        Assert.False(File.Exists(Path.Combine(root, "ESCAPE.TXT")));
+        Assert.False(File.Exists(rooted));
+        Assert.False(File.Exists(Path.Combine(root, "out", "SIBLING.TXT")));
+        Assert.Equal(1, result.Archives[0].Files);
+        Assert.Equal(4, result.Archives[0].Refused.Count);
+        Assert.Contains(log, l => l.Contains("REFUSED ../../ESCAPE.TXT", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ADirectoryPointingBackAtItsAncestorIsRejectedRatherThanWalkedForever()
+    {
+        byte[] rof = ExtractionFixtures.Rof(new RofDir().Dir("LOOP", new RofDir().File("A.TXT", new byte[] { 1 })));
+
+        // The root node's one entry sits at byte 8 and starts with its target offset; 0 is the root.
+        BitConverter.GetBytes(0).CopyTo(rof, 8);
+
+        Assert.Throws<InvalidDataException>(() => RofArchive.Walk(rof).ToList());
+    }
+
+    [Fact]
+    public void ADirectoryNodeSharedBySiblingsIsWalkedUnderEach()
+    {
+        byte[] rof = ExtractionFixtures.Rof(new RofDir()
+            .Dir("A", new RofDir().File("X.TXT", new byte[] { 1 }))
+            .Dir("B", new RofDir()));
+
+        // Point B's target (the second entry, 24 bytes on) at A's node.
+        Array.Copy(rof, 8, rof, 8 + 24, 4);
+
+        var paths = RofArchive.Walk(rof).Select(e => e.Path).ToList();
+        Assert.Equal(new[] { "A", "A/X.TXT", "B", "B/X.TXT" }, paths);
+    }
+
+    [Fact]
     public void MoviesAreCopiedUpperCaseSkipAMatchingLengthAndNameWhatIsMissing()
     {
         string source = TestData.TempDir();

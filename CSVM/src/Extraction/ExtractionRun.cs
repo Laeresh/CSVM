@@ -222,6 +222,15 @@ public static class ExtractionRun
             yield return "no GOSDATA/ASSETS/crimptch.rof, so the patch overlay is absent";
         }
 
+        foreach (var archive in rof.Archives)
+        {
+            if (archive.Refused.Count > 0)
+            {
+                yield return archive.Name + ": " + Count(archive.Refused.Count) + " member(s) not written, their names lead outside the output folder: "
+                    + string.Join(", ", archive.Refused);
+            }
+        }
+
         if (rof.Movies.Missing.Count > 0)
         {
             yield return Count(rof.Movies.Missing.Count) + " cinema(s) missing, which will not play: " + string.Join(", ", rof.Movies.Missing);
