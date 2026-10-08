@@ -329,6 +329,56 @@ public class NameResolverTests
     }
 
     [Fact]
+    public void APeekResolvesLikeTheDispatchAndTalliesNothing()
+    {
+        // A read-only query asks the same tiers: the anchor's own node, the world answering an
+        // exact def, and the refusal a shared def's instance meets. Only the dispatch's form counts.
+        var crate01 = Node("crate01");
+        var crateHealthy = Node("healthy");
+        var crate02 = Node("crate02");
+        var stray = Node("door1");
+        var resolver = Build(
+            (crate01, "crate01", null),
+            (crateHealthy, "healthy", crate01),
+            (crate02, "crate02", null),
+            (stray, "door1", null));
+        var shared = Def("crate**", rootName: "healthy");
+        var healthy = new List<string> { "healthy" };
+        var door = new List<string> { "door1" };
+
+        Assert.Equal(new[] { crateHealthy }, resolver.PeekScoped(healthy, shared, crate01));
+        Assert.Empty(resolver.PeekScoped(healthy, shared, crate02));
+        Assert.Equal(new[] { stray }, resolver.PeekScoped(door, Def("crate01"), crate01));
+        Assert.Equal(0, resolver.GlobalTierRefused);
+        Assert.Equal(resolver.PeekScoped(healthy, shared, crate02), resolver.ResolveScoped(healthy, shared, crate02));
+        Assert.Equal(1, resolver.GlobalTierRefused);
+    }
+
+    [Fact]
+    public void APeekClaimsNothingAndLeavesTheLaterClaimOwed()
+    {
+        // A peek that memoized its answer unclaimed would hand the real query a memo hit, and the
+        // node would never be claimed. So the peek writes no memo, and the real query claims as usual.
+        var boat = Node("boat1");
+        var anchor = Node("harbour");
+        var resolver = Build((anchor, "harbour", null), (boat, "boat1", anchor));
+        var claimed = new List<TestNode>();
+        resolver.Claimed = claimed.Add;
+        var def = Def("harbour");
+        var path = new List<string> { "boat1" };
+
+        Assert.Equal(new TestNode?[] { anchor }, resolver.PeekAnchors(def));
+        Assert.Equal(new[] { boat }, resolver.PeekScoped(path, def, anchor));
+        Assert.Equal(new[] { boat }, resolver.Peek(() => resolver.FindAll("boat1", null)));
+        Assert.Empty(claimed);
+
+        Assert.Equal(new[] { boat }, resolver.ResolveScoped(path, def, anchor));
+        Assert.Equal(new[] { boat }, claimed);
+        Assert.Equal(new TestNode?[] { anchor }, resolver.Anchors(def));
+        Assert.Contains(anchor, claimed);
+    }
+
+    [Fact]
     public void AnExactlyNamedDefStillFallsThroughToTheGlobalTier()
     {
         // The contrast: one world object, one instance. A name it does not carry is still the

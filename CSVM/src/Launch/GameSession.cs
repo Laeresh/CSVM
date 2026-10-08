@@ -148,6 +148,7 @@ public partial class GameSession : Node3D
     private readonly string _soundsPath;
     private readonly string _interpPath;
     private readonly string _messagesPath;
+    private readonly DecodeCache? _decode;
     // the extracted UI archive (paint patterns)
     private readonly string _rofPath;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
@@ -296,6 +297,14 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
+    private Effects.Ocean? _ocean;
+    private bool _oceanEligible;
+    // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
+    // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
+    private Effects.SeaState _seaSaved = Effects.SeaState.Default;
+    private Effects.SeaState _sea = Effects.SeaState.Default;
+    // The world runtime whose motions say which hulls the ocean follows; set in every mode it builds in.
+    private AnimRuntime? _oceanRuntime;
     private ClutterBuilder? _clutter;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
@@ -338,6 +347,7 @@ public partial class GameSession : Node3D
         _soundsPath = ctx.SoundsPath;
         _interpPath = ctx.InterpPath;
         _messagesPath = ctx.MessagesPath;
+        _decode = ctx.Decode;
         _rofPath = ctx.RofPath;
         _probeRunner = ctx.ProbeRunner;
         _captureDirector = ctx.CaptureDirector;
@@ -369,6 +379,12 @@ public partial class GameSession : Node3D
     /// <summary>Whether the build completed, the Launcher's Esc routing reads it (return to the
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
+
+    /// <summary>Whether the wave ocean stands in this session's world.</summary>
+    public bool OceanBuilt => _ocean != null;
+
+    /// <summary>The static world's scene builder, null outside a built world. Read by the suites.</summary>
+    internal SceneBuilder? WorldScene => _worldScene;
 
     /// <summary>Has the session drawn the first frame the player is meant to see. That frame is
     /// an intro's camera posed onto the rigs, or the flown aeroplane on its spawn under its own
@@ -787,6 +803,12 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        _oceanEligible = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
+        _oceanRuntime = state.WorldRuntime;
+        ResolveSea();
+        FollowOcean();
+        if (_oceanEligible && Effects.Ocean.Covers(_spec.Chapter))
+            _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.
@@ -815,6 +837,7 @@ public partial class GameSession : Node3D
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
+        FollowOcean();
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
@@ -868,6 +891,10 @@ public partial class GameSession : Node3D
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
     }
+
+    /// <summary>A live Water Quality change builds or drops the wave ocean
+    /// (<see cref="EnhancedLook.ApplyWaterQuality"/>). The graphics-mode switch follows it too.</summary>
+    public void FollowWaterQuality() => FollowOcean();
 
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
     /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
@@ -1278,7 +1305,7 @@ public partial class GameSession : Node3D
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute);
+            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute, _decode);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;
@@ -1437,6 +1464,7 @@ public partial class GameSession : Node3D
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
+                Decode = _decode,
                 EffectsParent = _worldRoot!,
                 // The one instance the weather rig publishes to and the player's own effects read.
                 // Without it the world's emitters hold the camera-less still-air null object, which
@@ -1739,7 +1767,7 @@ public partial class GameSession : Node3D
         // gamez is then that chapter's, and planes.zbd has to be loaded here as everywhere else.
         var planesGamez = _spec.EmptyStage && _spec.Zep == null
             ? state.Gamez
-            : GameZ.Load(state.PlanesGamezPath);
+            : _decode?.Gamez(state.PlanesGamezPath) ?? GameZ.Load(state.PlanesGamezPath);
         StartupProfile.Record("gamez", mark);
         // Stats are per plane, not per player (splitscreen players can pick
         // different aircraft), load each distinct one once, logging it as it appears.
@@ -2513,6 +2541,101 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // The Enhanced wave ocean, built on the first Enhanced frame that asks for waves. A switch back
+    // to Original or to flat water drops it, and the sea sheet draws again because the shared
+    // switch resets.
+    private void FollowOcean()
+    {
+        if (!GraphicsMode.Enhanced || !WaterQualitySetting.DrawsWaves)
+        {
+            Drop(_ocean);
+            _ocean = null;
+            return;
+        }
+        if (_ocean != null || !_oceanEligible || _plane == null || _worldScene == null || _sessionTextures == null
+            || !Effects.Ocean.Covers(_spec.Chapter))
+            return;
+        if ((_spec.SkippedPasses & EnhancedPasses.Ocean) != 0)
+        {
+            Log.Info("world", $"ocean: skipped (--no-ocean)");
+            return;
+        }
+        var hulls = new HashSet<Node>();
+        if (_surfaceVehicles != null)
+        {
+            foreach (var v in _surfaceVehicles.Vessels)
+                hulls.Add(v.Body);
+        }
+        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _sea, _spec.OceanMaskPath);
+        if (_ocean != null)
+            _plane.AddChild(_ocean);
+    }
+
+    // The chapter's sea from the shipped file, read once per session that can stand an ocean, under
+    // any --debug-ocean overrides. A chapter with no entry draws the defaults.
+    private void ResolveSea()
+    {
+        if (!_oceanEligible || !Effects.Ocean.Covers(_spec.Chapter))
+            return;
+        _seaSaved = Effects.OceanSeas.Load().For(_spec.Chapter);
+        _sea = _seaSaved.WithOverrides(_spec.DebugOcean);
+        string debug = _spec.DebugOcean is { Length: > 0 } spec ? $" (--debug-ocean={spec})" : "";
+        Log.Info("world", $"ocean: sea {_spec.Chapter} saved={_seaSaved.Describe()} drawn={_sea.Describe()}{debug}");
+    }
+
+    // The ocean lab's edit: the standing ocean takes it at once, and a rebuilt one takes it too.
+    private void ApplySea(Effects.SeaState sea)
+    {
+        _sea = sea.Clamped();
+        _ocean?.Apply(_sea);
+    }
+
+    // The world nodes the bound program's played motions carry, as the runtime resolves them. The
+    // roster hulls are left out; they have their own source.
+    private List<Node3D> AnimatedMovers(HashSet<Node> roster)
+    {
+        var movers = new List<Node3D>();
+        if (_oceanRuntime is not { } runtime || _plane == null)
+            return movers;
+        var seen = new HashSet<Node3D>();
+        foreach (var def in runtime.ProgramDefs)
+        {
+            var moving = Effects.OceanMovers.MovingEvents(def);
+            if (moving.Count == 0)
+                continue;
+            foreach (var node in runtime.TargetsOf(def, moving))
+            {
+                if (node != _plane && GodotObject.IsInstanceValid(node) && !InRoster(node) && seen.Add(node))
+                    movers.Add(node);
+            }
+        }
+        var names = movers.Select(m => m.Name.ToString()).OrderBy(n => n, StringComparer.Ordinal);
+        Log.Debug("world", $"ocean: movers resolved [{string.Join(", ", names)}]");
+        return movers;
+
+        bool InRoster(Node node)
+        {
+            for (Node? n = node; n != null; n = n.GetParent())
+            {
+                if (roster.Contains(n))
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    // The roster hulls the ocean calms around, each over its own waterline.
+    private IEnumerable<Node3D> OceanHulls()
+    {
+        if (_surfaceVehicles == null)
+            yield break;
+        foreach (var v in _surfaceVehicles.Vessels)
+        {
+            if (GodotObject.IsInstanceValid(v.Body) && v.Body.IsVisibleInTree())
+                yield return v.Body;
+        }
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

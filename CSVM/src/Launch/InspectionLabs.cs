@@ -373,6 +373,22 @@ internal sealed class InspectionLabs
         Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}), hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F19 the damage lab on whatever destructible is selected");
     }
 
+    /// <summary>The ocean lab (Shift+F1), in <c>--freecam</c> alone: a slider per field of the
+    /// chapter's sea, applied live through <paramref name="apply"/>, with Save into the shipped file.
+    /// Every other mode builds none, so no other session reads Shift+F1.</summary>
+    public void BuildOceanLab(SeaState saved, SeaState start, Func<Ocean?> ocean, Action<SeaState> apply)
+    {
+        var spec = _in.Spec;
+        if (!spec.Freecam)
+            return;
+        string? savePath = OceanSeas.SourceTreePath();
+        _in.WorldRoot.AddChild(new OceanLab(spec.Chapter.ToUpperInvariant(), saved, start, ocean, apply, savePath)
+        {
+            StartOpen = SeaState.OverridesOpen(spec.DebugOcean),
+        });
+        Log.Info("ui", $"ocean lab ready (Shift+F1), save {savePath ?? "off in an exported build"}");
+    }
+
     /// <summary>The damage lab in flight (F19), the viewer's panel bound to P1's real damage. A
     /// dialled-in state then drives the HUD and can be flown. Splitscreen binds P1 only, since the
     /// panel is one overlay, not one per pane.</summary>

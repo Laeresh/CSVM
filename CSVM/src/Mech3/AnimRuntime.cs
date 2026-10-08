@@ -447,6 +447,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // gameplay distance, and the defs that shrink away hide the node anyway.
     private const float MinPoseScale = 1e-3f;
 
+    // The bind census's cause for a shared definition's name its own instance does not carry, the
+    // one miss Targets also logs.
+    private const string OutsideOwnInstance = "outside-own-instance";
+
     // Name resolution, the index, wildcard matcher, memoized FindAll, and the three-tier scope
     // chain, lives in NameResolver.cs; identity is instance id, since Godot object equality is
     // unreliable inside a dictionary/tuple key across proxy instances of the same native node.
@@ -975,6 +979,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the same wildcard matching and the same memoized index the dispatch uses, exposed so an
     /// inspect tool asks the engine instead of re-implementing the matcher. Read-only.</summary>
     public IReadOnlyList<Node3D> FindNodes(string pattern, Node3D? scope = null) => FindAll(pattern, scope);
+
+    /// <summary>The world nodes the dispatch writes when it plays <paramref name="events"/> of
+    /// <paramref name="def"/>. It asks on each instance the bind gives the definition: one per
+    /// anchor, or one global instance when placeless, as <see cref="Play"/> starts it. The rule is
+    /// the dispatch's own, an ALL_NAMES event per record. Read-only: nothing is counted, logged or
+    /// claimed and no name answer is memoized, so the world merge is the same whether this ran or
+    /// not. A node may appear more than once.</summary>
+    public List<Node3D> TargetsOf(AnimDefinition def, IEnumerable<AnimEvent> events)
+    {
+        var anchors = _resolver.PeekAnchors(def);
+        if (anchors.Count == 0)
+            anchors.Add(null);
+        return _resolver.Peek(() =>
+        {
+            var nodes = new List<Node3D>();
+            foreach (var ev in events)
+            {
+                foreach (var one in ev.Kind == AnimDefinition.AllNamesKind ? ev.AllNamesMotions() : new[] { ev })
+                {
+                    foreach (var anchor in anchors)
+                        nodes.AddRange(ResolveTargets(one, def, anchor, peek: true, out _));
+                }
+            }
+            return nodes;
+        });
+    }
 
     /// <summary>Every live node a name query has handed out so far. Every node a definition's symbol
     /// table or node prerequisite binds is added, run or not. A renderer that copies static nodes
@@ -4751,11 +4781,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return found.Count > 0 ? found[0] : anchor;
     }
 
-    // The world nodes one event targets. Reader-sourced events may carry a parent→child path;
-    // compiled events name a single node (under "node" or "name", which upstream spells
-    // inconsistently per event type).
+    // The world nodes one event targets, as the dispatch writes them. A miss is booked here: the
+    // unresolved-op count, the bind census and the instance-miss log line.
     private List<Node3D> Targets(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
+        var targets = ResolveTargets(ev, def, anchor, peek: false, out var miss);
+        if (miss is not { } m)
+            return targets;
+        _opsUnresolved++;
+        _resolver.RecordMissingTarget(def, m.Named, m.Why);
+        // The original's own no-op, logged: a shared definition's name that its instance does
+        // not carry must not be searched for in the world (docs/org/sequences.md).
+        if (m.Why == OutsideOwnInstance && _instanceMissesLogged++ < 12)
+            Log.Info("anim", $"anim: '{def.AnimName ?? def.Name}' names '{m.Named}', which its own instance under '{NameOf(anchor!)}' does not carry; the write is a no-op");
+        return targets;
+    }
+
+    // The resolution half of Targets, free of its books, so TargetsOf can ask the same question.
+    // Reader-sourced events may carry a parent→child path; compiled events name a single node
+    // (under "node" or "name", which upstream spells inconsistently per event type). A peek also
+    // leaves the resolver's global-tier tally alone. A miss is reported, never booked here.
+    private List<Node3D> ResolveTargets(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool peek, out TargetMiss? miss)
+    {
+        miss = null;
         // ⚠ Resolve the self-reference sentinels here (IsSelfNodeRef). No node is named that and
         // the symbol table does not bind it, so without this a self-referencing event resolves to
         // nothing and is silently dropped, and a shot-down hull never falls.
@@ -4764,8 +4812,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             var host = InputNodeOf(def, anchor) ?? anchor;
             if (host != null)
                 return new List<Node3D> { host };
-            _opsUnresolved++;
-            _resolver.RecordMissingTarget(def, selfRef, "self-ref-no-anchor");
+            miss = new TargetMiss(selfRef, "self-ref-no-anchor");
             return new List<Node3D>();
         }
 
@@ -4792,8 +4839,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // animates, and the rig the mission spawned carries the same names.
                 if (VehiclePart(anchor, refName) is { } part)
                     return new List<Node3D> { part };
-                _opsUnresolved++;
-                _resolver.RecordMissingTarget(def, refName, "index-not-built");
+                miss = new TargetMiss(refName, "index-not-built");
                 return new List<Node3D>();
             }
         }
@@ -4811,17 +4857,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         if (path.Count == 0)
             return new List<Node3D>();
-        var targets = ResolveScoped(path, def, anchor);
+        var targets = peek ? _resolver.PeekScoped(path, def, anchor) : ResolveScoped(path, def, anchor);
         if (targets.Count == 0)
         {
-            _opsUnresolved++;
-            string named = string.Join("/", path);
             bool confined = anchor != null && _resolver.RefusesGlobalTier(def, path);
-            _resolver.RecordMissingTarget(def, named, confined ? "outside-own-instance" : "name-no-match");
-            // The original's own no-op, logged: a shared definition's name that its instance does
-            // not carry must not be searched for in the world (docs/org/sequences.md).
-            if (confined && _instanceMissesLogged++ < 12)
-                Log.Info("anim", $"anim: '{def.AnimName ?? def.Name}' names '{named}', which its own instance under '{NameOf(anchor!)}' does not carry; the write is a no-op");
+            miss = new TargetMiss(string.Join("/", path), confined ? OutsideOwnInstance : "name-no-match");
         }
         return targets;
     }
@@ -4867,6 +4907,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
         return false;
     }
+
+    // What Targets books for an event it resolved to nothing: the name and the census cause.
+    private readonly record struct TargetMiss(string Named, string Why);
 
     // Godot object identity is by native pointer, not the inherited Equals: two managed proxies
     // can wrap the same native node, so NameResolver's dictionary/tuple keys need this rather than

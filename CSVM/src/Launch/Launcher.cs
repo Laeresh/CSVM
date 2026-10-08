@@ -233,8 +233,9 @@ public partial class Launcher : Node3D
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics, _perfSetup;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
-    // The spyglass discs' own counts over the window (SpyglassView.Census), split out of draws.
-    private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws;
+    // The spyglass discs' own counts and GPU time over the window (SpyglassView.Census), split out
+    // of draws, prims and the root viewport's gpu_ms.
+    private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws, _perfDiscPrims, _perfDiscGpu;
 
     // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
     // without the flag subscribes to no runtime events at all.
@@ -721,9 +722,12 @@ public partial class Launcher : Node3D
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
             Utils.ShadowQualitySetting.SavedWord(_spec.Det),
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
+        // Before any session builds, since the ocean's build reads the word.
+        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality,
+            Utils.WaterQualitySetting.SavedWord(_spec.Det), _spec.Det);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)} water_quality={waterQuality.Word} water_source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -741,6 +745,7 @@ public partial class Launcher : Node3D
         // Registered before the --dump-* branches below, which build materials of their own:
         // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
+        Effects.Ocean.RegisterGlobal();
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
@@ -2699,6 +2704,7 @@ public partial class Launcher : Node3D
         options.RenderScale = applied.RenderScale;
         options.AntiAliasing = applied.AntiAliasing;
         options.ShadowQuality = applied.ShadowQuality;
+        options.WaterQuality = applied.WaterQuality;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2725,14 +2731,20 @@ public partial class Launcher : Node3D
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
-        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
+        // The same for the sea; --water-quality still beats the saved word.
+        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality, applied.WaterQuality, _spec.Det);
+        Log.Info("world", $"water quality applied: {waterQuality.Word} source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
+        // A mode switch dresses the sun at the new level and follows the sea itself; otherwise the
+        // level and the sea alone move.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
         {
             RequestGraphicsSwitch(enhanced, "options", save: false);
         }
-        else if (IsInstanceValid(_sun))
+        else
         {
-            ApplyShadowQuality(_sun);
+            if (IsInstanceValid(_sun))
+                ApplyShadowQuality(_sun);
+            EnhancedLook.ApplyWaterQuality(_session);
         }
 
         // The render scale and the anti-aliasing method reach every 3D viewport now as well.
@@ -3572,10 +3584,12 @@ public partial class Launcher : Node3D
         _perfPrims += counters.Prims;
         _perfNodes += counters.Nodes;
         _perfMem += counters.MemBytes;
-        var (discs, discDraws, discShadowDraws) = Flight.Camera.SpyglassView.Census();
+        var (discs, discDraws, discShadowDraws, discPrims, discGpuMs) = Flight.Camera.SpyglassView.Census();
         _perfDiscs += discs;
         _perfDiscDraws += discDraws;
         _perfDiscShadowDraws += discShadowDraws;
+        _perfDiscPrims += discPrims;
+        _perfDiscGpu += discGpuMs;
         if (_perfFrames < PerfWindowFrames)
         {
             return;
@@ -3640,10 +3654,10 @@ public partial class Launcher : Node3D
         // The discs' own line, said only while one rendered in the window. Each is a viewport of its
         // own, which gpu_ms leaves out and draws folds into the frame's total (verification PERF-47).
         if (_perfDiscs > 0)
-            Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0}");
+            Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0} disc_prims={_perfDiscPrims / n:0} disc_gpu_ms={_perfDiscGpu / n:0.000}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
-        _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = 0;
+        _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = _perfDiscPrims = _perfDiscGpu = 0;
     }
 }
 
@@ -3762,4 +3776,9 @@ public sealed class LauncherContext
     /// outlives every session. Null when the sound archive or the sound definitions would not
     /// load, which leaves the game silent rather than refusing to launch.</summary>
     public MusicPlayer? Music { get; init; }
+
+    /// <summary>A decode store shared with other builds in this process, or null to decode afresh.
+    /// The test harness hands its own in, so a suite's sessions decode a chapter once. A launch
+    /// leaves it null, so a session retains nothing of a chapter it has left.</summary>
+    public Mech3.DecodeCache? Decode { get; init; }
 }

@@ -396,6 +396,10 @@ public static class TestHarness
         };
     }
 
+    /// <summary>How many engine error lines this run's log holds so far, or null with no log. For a
+    /// suite that brackets its own work.</summary>
+    internal static int? EngineErrorsSoFar() => ScreenEngineLog(out _)?.Total;
+
     // Narrows an already-valid selection to one shard and tags the context, so every artifact this
     // process writes lands under .scratch/<tag>/ instead of over a sibling shard's.
     private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, ref IReadOnlyList<Suite> selected)
@@ -897,6 +901,10 @@ public sealed class TestContext
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
+
+    /// <summary>The run's decode store. A suite that builds a whole <c>GameSession</c> hands it to
+    /// the launcher context, so its sessions share the decodes this run's worlds made.</summary>
+    internal DecodeCache Decode => _decode;
 
     /// <summary>Reads every positional sound level and cull at the data's own <c>RANGE</c> radii
     /// until the returned handle is disposed, whatever factor the session carries. A suite that

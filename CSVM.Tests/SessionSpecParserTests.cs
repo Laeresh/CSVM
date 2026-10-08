@@ -515,10 +515,23 @@ public class SessionSpecParserTests
         Assert.Equal(EnhancedPasses.Glow, SessionSpec.Parse(new[] { "--no-glow" }).SkippedPasses);
         Assert.Equal(
             EnhancedPasses.SoftShadows, SessionSpec.Parse(new[] { "--no-soft-shadows" }).SkippedPasses);
+        Assert.Equal(EnhancedPasses.Ocean, SessionSpec.Parse(new[] { "--no-ocean" }).SkippedPasses);
 
-        var all = SessionSpec.Parse(new[] { "--no-ssao", "--no-ssr", "--no-glow", "--no-soft-shadows" });
+        var all = SessionSpec.Parse(new[] { "--no-ssao", "--no-ssr", "--no-glow", "--no-soft-shadows", "--no-ocean" });
         Assert.Equal(
-            EnhancedPasses.Ssao | EnhancedPasses.Ssr | EnhancedPasses.Glow | EnhancedPasses.SoftShadows,
+            EnhancedPasses.Ssao | EnhancedPasses.Ssr | EnhancedPasses.Glow | EnhancedPasses.SoftShadows
+                | EnhancedPasses.Ocean,
             all.SkippedPasses);
+    }
+
+    /// <summary><c>--dump-ocean-mask=</c> carries its path and leaves the run's mode alone, since it
+    /// writes the mask beside an ordinary session rather than ending it.</summary>
+    [Fact]
+    public void OceanMaskDumpCarriesItsPath()
+    {
+        Assert.Equal("", SessionSpec.Parse(new[] { "--fly" }).OceanMaskPath);
+        var spec = SessionSpec.Parse(new[] { "--fly", "--chapter=C1B", "--dump-ocean-mask=mask.png" });
+        Assert.Equal("mask.png", spec.OceanMaskPath);
+        Assert.True(spec.Fly);
     }
 }

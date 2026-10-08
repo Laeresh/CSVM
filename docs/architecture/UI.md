@@ -579,7 +579,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
 skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
-by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer`, the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer` or carries `FlatSeaLayer` (no geometry, the disc's flat-sea marker), the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -843,6 +843,15 @@ rather than reading the mouse itself, outlines each member in a cyan box that fo
 transform, and puts the count on the selection's breadcrumb through `HudLine`, because a set is
 gathered whether or not the panel was ever opened. A member freed under it (a destructible swapping
 to its wreck) leaves on its own. Nothing is drawn until the first node joins.
+
+## src/UI/Labs/OceanLab.cs
+The ocean lab (Shift+F1), built by `InspectionLabs.BuildOceanLab` in `--freecam` on a sea chapter and nowhere else:
+a panel down the right edge with one slider per `Effects/SeaState.cs` field in its four groups, each with its value
+and default. An edit reaches the session on release or a quarter second after a click, and the session hands it to
+the standing ocean and to any ocean a switch rebuilds. Reset to defaults, Revert to saved, and Save, which writes
+this chapter's differing fields through `Effects/OceanSeas.cs` into the source tree's file and is off in an
+exported build. The sliders take no keyboard focus and the freecam looks on the right button. `--debug-ocean` is
+the scripted twin, checked at launch by `SessionSpec`.
 
 ## src/UI/Labs/WorldDamageLab.cs
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
@@ -1214,7 +1223,7 @@ The VIDEO page, the Game Options table's shape over the authored Video rows: the
 Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
-clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
+clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance and water quality it carries unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over

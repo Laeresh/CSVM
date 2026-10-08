@@ -335,15 +335,8 @@ internal sealed class PoseChannel
     {
         duration = 0f;
         int applied = 0;
-        foreach (var motion in ev.Data.Objects("motions"))
+        foreach (var one in ev.AllNamesMotions())
         {
-            var one = new AnimEvent
-            {
-                Kind = "ObjectMotionSiScript",
-                Data = motion,
-                StartOffset = ev.StartOffset,
-                StartTime = ev.StartTime,
-            };
             applied += HandleMotionSiScript(one, def, anchor, instant, out float oneDuration);
             duration = Mathf.Max(duration, oneDuration);
         }

@@ -85,10 +85,10 @@ internal static class MenuOriginalSuites
         + "its six display rows over the machine's own screens and sizes, the four vocabularies "
         + "and a wrap onto the last frame cap and, past the three scales below native, onto the last render scale, an anti-aliasing row "
         + "on the stepped mode's default whose step onto FSR 2.2 pulls that scale back to native "
-        + "and narrows the scale row, a shadow-quality row that steps only under Enhanced, its four volume rows "
+        + "and narrows the scale row, a shadow-quality row and a water-quality row that step only under Enhanced, its four volume rows "
         + "stepped by the AUDIO page's own step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all eighteen with no presentation row among them, "
+        + "carrying all nineteen with no presentation row among them, "
         + "Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
@@ -655,9 +655,9 @@ internal static class MenuOriginalSuites
     // Built-in's Options route: the last Mode row opens Options, and Right steps the difficulty to
     // Hard. The two rows under it step the opening view and the automatic head turn, the two under
     // those the targeting setting and the rumble. The graphics mode and view distance rows come next;
-    // the command line alone chooses a presentation, so no row does. The six display rows step over the
-    // machine's own screens and sizes. The four volume rows step the levels the AUDIO page writes.
-    // The apply row's Accept is the one exit the launcher persists every choice from.
+    // the command line alone chooses a presentation, so no row does. The display, shadow, water and
+    // volume rows step their own words, levels, screens and sizes. The apply row's Accept is the one
+    // exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -671,8 +671,8 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow,
             $"Up from Free Flight wraps onto the multiplayer door, and again onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 20 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its twenty rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 21 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its twenty-one rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -721,10 +721,11 @@ internal static class MenuOriginalSuites
             $"a step moves it under Enhanced and not under Original, whose detail says why ({graphics}: {viewDistance} -> {menu.ShownRowText}, {menu.ShownDetail})");
         var display = BuiltInDisplayRows(ctx, host, seat, menu, graphics);
         string? shadowQuality = BuiltInShadowQualityRow(ctx, host, seat, menu, graphics);
+        string? waterQuality = BuiltInWaterQualityRow(ctx, host, seat, menu, graphics);
         BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (19/20)",
-            $"the nineteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (20/21)",
+            $"the twentieth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -748,6 +749,8 @@ internal static class MenuOriginalSuites
                 $"and all six display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.RenderScale}, {applied.AntiAliasing})");
             ctx.Check(applied.ShadowQuality == shadowQuality,
                 $"and the shadow quality the row left, never set where the row stood dead ({applied.ShadowQuality ?? "unset"})");
+            ctx.Check(applied.WaterQuality == waterQuality,
+                $"and the water quality the row left, never set where the row stood dead ({applied.WaterQuality ?? "unset"})");
             ctx.Check(applied.AudioMaster == null && applied.AudioMusic == AudioMix.DefaultMusic - SliderControl.KeyStep
                 && applied.AudioEffects == null && applied.AudioVoice == AudioMix.MinLevel,
                 $"and the levels the volume rows moved, the two left alone still never set ({Level(applied.AudioMaster)}, {Level(applied.AudioMusic)}, {Level(applied.AudioEffects)}, {Level(applied.AudioVoice)})");
@@ -871,14 +874,37 @@ internal static class MenuOriginalSuites
         return ShadowQualitySetting.Low;
     }
 
-    // The four volume rows, walked from the shadow-quality row on a mix nothing has saved. Each shows
+    // The water-quality row under the shadow-quality row, on a store nothing has saved. It shows the
+    // word the run resolved and steps only under Enhanced, since the faithful sea is always flat.
+    // Returns the word the apply carries, null where the row stood dead.
+    private static string? BuiltInWaterQualityRow(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu, string graphics)
+    {
+        string standing = WaterQualitySetting.Label(null);
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Water quality: {standing}" && menu.ShownHeading == "OPTIONS  (15/21)",
+            $"the fifteenth row is the water quality, unsaved showing the run's own word ({menu.ShownRowText}, {menu.ShownHeading})");
+        Press(host, seat, Right);
+        if (graphics != GraphicsMode.EnhancedWord)
+        {
+            ctx.Check(menu.ShownRowText == $"Water quality: {standing}" && menu.ShownDetail.StartsWith("Enhanced Graphics only", System.StringComparison.Ordinal),
+                $"under Original Right steps it nowhere, and the row says why ({menu.ShownRowText}, {menu.ShownDetail})");
+            return null;
+        }
+
+        string other = WaterQualitySetting.Word == WaterQualitySetting.Waves ? WaterQualitySetting.Flat : WaterQualitySetting.Waves;
+        ctx.Check(menu.ShownRowText == $"Water quality: {WaterQualitySetting.Label(other)}",
+            $"under Enhanced Right steps it onto the other word ({menu.ShownRowText})");
+        return other;
+    }
+
+    // The four volume rows, walked from the water-quality row on a mix nothing has saved. Each shows
     // the shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A step
     // that moves nothing writes nothing, so Master stepped up off full stays never set.
     private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (15/20)",
-            $"the fifteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (16/21)",
+            $"the sixteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
             $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");

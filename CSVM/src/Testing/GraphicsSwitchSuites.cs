@@ -15,9 +15,9 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The live graphics-mode switch and the live View Distance, driven through the one
-/// sequence the launcher runs (<see cref="EnhancedLook.Switch"/>,
-/// <see cref="EnhancedLook.ApplyViewDistance"/>) on whole flight sessions. A world switched away and
+/// <summary>The live graphics-mode switch, View Distance and Water Quality on whole flight sessions.
+/// Each runs through the one sequence the launcher runs (<see cref="EnhancedLook.Switch"/>,
+/// <see cref="EnhancedLook.ApplyViewDistance"/>, <see cref="EnhancedLook.ApplyWaterQuality"/>). A world switched away and
 /// back must read as a fresh session in that mode. That covers the layers only one mode builds, the
 /// clutter's cells and ranges, and the shader text on every material. It covers the Environment's
 /// passes and the sun's shadow too. The pixels are the montage's, not this suite's.</summary>
@@ -26,6 +26,36 @@ internal static class GraphicsSwitchSuites
     // Physics steps between a switch and the reading. The world lights free or grow their omni pool
     // on a commit, so a reading taken before one would show the pool the switch left.
     private const int Steps = 3;
+
+    // The chapter these suites build the wave ocean on. Effects.Ocean.Covers lists every chapter it covers.
+    private const string OceanChapter = "C1B";
+
+    // A sea chapter this suite opens at flat water quality, so no ocean builds over it. Its sheet still
+    // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
+    private const string FlatWaterChapter = "C2B";
+
+    // How far the lifted ocean may stand below a ramp: the bilinear lift's rounding, not a gap.
+    private const float RampShortfall = 0.05f;
+
+    // The call in the base sheet's fragment-stage discard. The include line alone never matches it.
+    private const string HideCall = "csky_ocean_hides_sea(";
+
+    // Where the hide and its mask globals are declared.
+    private const string OceanIncludePath = "res://shaders/csky_ocean.gdshaderinc";
+
+    // The retext probe's key, red under Original and green under Enhanced. The Original block is the
+    // larger, so a stale compile also fails the Enhanced material's uniform buffer, as the world shaders did.
+    private const string OriginalProbe = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
+        + "uniform vec4 probe_a = vec4(0.0);\nuniform vec4 probe_b = vec4(0.0);\nuniform vec4 probe_c = vec4(0.0);\n"
+        + "void fragment() {\n    ALBEDO = vec3(1.0, 0.0, 0.0) + (probe_a.rgb + probe_b.rgb + probe_c.rgb) * 0.0;\n}\n";
+
+    private const string EnhancedProbe = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
+        + "uniform vec4 probe_a = vec4(0.0);\n"
+        + "void fragment() {\n    ALBEDO = vec3(0.0, 1.0, 0.0) + probe_a.rgb * 0.0;\n}\n";
+
+    // The chapters whose base sheet rises off sea level: C2's harbour to a quay, C5's water to the
+    // steinmann ship's hull.
+    private static readonly string[] RampChapters = { "C2", "C5" };
 
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
@@ -122,7 +152,8 @@ internal static class GraphicsSwitchSuites
     [Suite("spyglass-sun",
         "under Enhanced the world sun sits on the layer every pane camera draws and the spyglass disc's "
         + "camera leaves out, and one shadowless copy on the disc's own layer, which no pane draws, "
-        + "matches the sun's bearing, colour and energy: in a two-pane flight with one disc per pane, "
+        + "matches the sun's bearing, colour and energy; each disc, and no pane, carries the flat-sea "
+        + "marker: in a two-pane flight with one disc per pane, "
         + "at every Shadow Quality level including Off, across a zone crossing the weather rig lights, "
         + "and after a live switch to Original (copy freed, sun back on layer 1, each disc the pane's "
         + "view less its own airframe) and back; a fresh Original flight builds no copy and moves no layer")]
@@ -265,6 +296,344 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("graphics-water-quality",
+        "the C1B wave ocean follows a live Water Quality change in an Enhanced flight: built into the "
+        + "world's tree at waves, out of the tree after a live move to flat (its leaving resets the "
+        + "switch the flat sheet's sea draws on), and built again by a move back to waves; a session "
+        + "built at flat builds none, and --no-ocean still builds none at waves, live apply included")]
+    internal static void WaterQualityOcean(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        try
+        {
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var live = Open(ctx, enhanced: true, chapter: OceanChapter);
+            try
+            {
+                if (!live.Built)
+                {
+                    ctx.Check(false, $"the Enhanced C1B session builds");
+                    return;
+                }
+
+                string built = OceanState(live);
+                ctx.Check(live.Session.OceanBuilt && built == "1 in tree",
+                    $"at waves the session builds the ocean into its tree ({built})");
+                ApplyWater(live, WaterQualitySetting.Flat);
+                string flat = OceanState(live);
+                ctx.Check(!live.Session.OceanBuilt && flat == "0 in tree",
+                    $"a live move to flat drops it and the sheet draws its sea again ({flat})");
+                ApplyWater(live, WaterQualitySetting.Waves);
+                string again = OceanState(live);
+                ctx.Check(live.Session.OceanBuilt && again == "1 in tree",
+                    $"and a move back to waves builds it again ({again})");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            WaterQualitySetting.Resolve(WaterQualitySetting.Flat, null, null);
+            var flatBuild = Open(ctx, enhanced: true, chapter: OceanChapter);
+            try
+            {
+                string none = OceanState(flatBuild);
+                ctx.Check(flatBuild.Built && !flatBuild.Session.OceanBuilt && none == "0 in tree",
+                    $"a session built at flat builds no ocean (built={flatBuild.Built}, {none})");
+            }
+            finally
+            {
+                flatBuild.Close();
+            }
+
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var door = Open(ctx, enhanced: true, chapter: OceanChapter, extra: new[] { "--no-ocean" });
+            try
+            {
+                EnhancedLook.ApplyWaterQuality(door.Session);
+                string skipped = OceanState(door);
+                ctx.Check(door.Built && !door.Session.OceanBuilt && skipped == "0 in tree",
+                    $"and --no-ocean still builds none at waves, through a live apply as well (built={door.Built}, {skipped})");
+            }
+            finally
+            {
+                door.Close();
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-ocean-switch",
+        "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
+        + "stands one ocean and every sea-level base sheet material carries the hide, which reads "
+        + "that ocean's mask and steps aside only at the coverage the ocean discards below, and neither "
+        + "the grid nor the hide acts for a spyglass disc's camera; "
+        + "switched to Original the ocean leaves the tree, the mask globals return to their no-sea "
+        + "defaults and the sheet carries a fresh Original "
+        + "build's text, with no hide; back to Enhanced exactly one ocean stands and the sheet "
+        + "carries a fresh Enhanced build's text; an Original build switched to Enhanced builds the "
+        + "ocean; a closed session leaves no ocean in the tree, and a following Enhanced C2B session "
+        + "at flat water quality builds none while its sheet still carries the hide")]
+    internal static void OceanFollowsSwitch(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        RequireData(ctx, FlatWaterChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        var report = new StringBuilder();
+        try
+        {
+            ViewDistance.Set(null);
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            SeaReading freshOriginal, originalToEnhanced;
+            Effects.Ocean? builtLive;
+            var original = Open(ctx, enhanced: false, chapter: OceanChapter);
+            try
+            {
+                if (!original.Built)
+                {
+                    ctx.Check(false, $"the Original C1B session builds");
+                    return;
+                }
+                freshOriginal = Sea(original);
+                Switch(original, true);
+                originalToEnhanced = Sea(original);
+                builtLive = FirstOcean(ctx.Host);
+            }
+            finally
+            {
+                original.Close();
+            }
+            ctx.Check(freshOriginal.Oceans == 0 && freshOriginal.Materials > 0 && freshOriginal.Drawn > 0 && freshOriginal.Hidden == 0,
+                $"an Original C1B build stands no ocean and its base sheet carries no hide ({freshOriginal})");
+            ctx.Check(originalToEnhanced.Oceans == 1 && originalToEnhanced.Hidden == originalToEnhanced.Materials,
+                $"switched to Enhanced it builds the ocean and hides the sheet ({originalToEnhanced})");
+            Left(ctx, builtLive, "the Original build switched to Enhanced");
+            report.AppendLine($"fresh original\n{freshOriginal.Print()}\noriginal switched to enhanced\n{originalToEnhanced.Print()}");
+
+            var enhanced = Open(ctx, enhanced: true, chapter: OceanChapter);
+            Effects.Ocean? builtFresh;
+            try
+            {
+                if (!enhanced.Built)
+                {
+                    ctx.Check(false, $"the Enhanced C1B session builds");
+                    return;
+                }
+                var freshEnhanced = Sea(enhanced);
+                builtFresh = FirstOcean(ctx.Host);
+                ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.OceanBuilt && freshEnhanced.Materials > 0
+                        && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
+                    $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
+                HideReadsTheMask(ctx, enhanced, builtFresh);
+                ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
+                    $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
+                ctx.Check(freshEnhanced.Census != freshOriginal.Census,
+                    $"ABLE-TO-FAIL CONTROL: the two modes' fresh base sheet texts differ");
+
+                Switch(enhanced, false);
+                var switchedOriginal = Sea(enhanced);
+                ctx.Check(switchedOriginal.Oceans == 0 && !enhanced.Session.OceanBuilt && OceansUnder(ctx.Host) == 0
+                        && builtFresh is { } dropped && (!GodotObject.IsInstanceValid(dropped) || !dropped.IsInsideTree()),
+                    $"switched to Original the ocean leaves the tree ({switchedOriginal}, {OceansUnder(ctx.Host)} under the host)");
+                ctx.Check(switchedOriginal.Hidden == 0 && switchedOriginal.Census == freshOriginal.Census,
+                    $"and the base sheet carries a fresh Original build's text, with no hide ({switchedOriginal.Hidden} hiding)");
+                ctx.Check(Effects.OceanMask.Live == null,
+                    $"and the hide's mask globals hold their no-sea defaults again");
+
+                Switch(enhanced, true);
+                var roundTrip = Sea(enhanced);
+                var rebuilt = FirstOcean(ctx.Host);
+                ctx.Check(roundTrip.Oceans == 1 && OceansUnder(ctx.Host) == 1 && rebuilt != null && !ReferenceEquals(rebuilt, builtFresh),
+                    $"back to Enhanced the ocean is built again, exactly once ({roundTrip}, {OceansUnder(ctx.Host)} under the host)");
+                ctx.Check(roundTrip.Hidden == roundTrip.Materials && roundTrip.Census == freshEnhanced.Census,
+                    $"and the base sheet carries a fresh Enhanced build's text, hidden again ({roundTrip.Hidden} of {roundTrip.Materials} hiding)");
+                ctx.Check(Effects.OceanMask.Live != null,
+                    $"and the rebuilt ocean hands its mask to the hide again");
+                report.AppendLine($"fresh enhanced\n{freshEnhanced.Print()}\nswitched original\n{switchedOriginal.Print()}\nround trip\n{roundTrip.Print()}");
+                builtFresh = rebuilt;
+            }
+            finally
+            {
+                enhanced.Close();
+            }
+            Left(ctx, builtFresh, "the round-tripped Enhanced session");
+            ctx.Check(Effects.OceanMask.Live == null,
+                $"and with the ocean gone the hide's mask globals hold their no-sea defaults");
+
+            WaterQualitySetting.Resolve(WaterQualitySetting.Flat, null, null);
+            var flat = Open(ctx, enhanced: true, chapter: FlatWaterChapter);
+            try
+            {
+                var sea = flat.Built ? Sea(flat) : null;
+                ctx.Check(flat.Built && !flat.Session.OceanBuilt
+                        && sea is { Oceans: 0 } && OceansUnder(ctx.Host) == 0,
+                    $"a following Enhanced {FlatWaterChapter} session at flat water builds no ocean (built={flat.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
+                ctx.Check(sea is { Materials: > 0, Drawn: > 0 } && sea.Hidden == sea.Materials,
+                    $"and its drawn sheet carries the hide, so a switch left on would hole its sea ({sea?.ToString() ?? "no reading"})");
+                report.AppendLine($"flat water {FlatWaterChapter}\n{sea?.Print() ?? "no reading"}");
+            }
+            finally
+            {
+                flat.Close();
+            }
+            ctx.WriteArtifact("test-graphics-ocean-switch.txt", report.ToString());
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("ocean-lab",
+        "the ocean lab stands in an Enhanced --freecam C1B session and nowhere in a --fly one: opened, "
+        + "a length edit rewrites the standing ocean's shader text and a height edit only its uniform, "
+        + "with one ocean standing throughout; an ocean rebuilt by a switch to Original and back draws "
+        + "the edited sea, a reset draws the defaults, and a revert to the shipped sea writes the text the "
+        + "session opened with")]
+    internal static void OceanLabEdits(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        var shipped = Effects.OceanSeas.Load().For(OceanChapter);
+
+        // Edits that differ from the shipped sea, whatever the lab saved there.
+        float length = shipped.Length == 1.5f ? 1.6f : 1.5f;
+        float height = shipped.Height == 0.8f ? 0.9f : 0.8f;
+        try
+        {
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var freecam = Open(ctx, enhanced: true, chapter: OceanChapter, extra: "--freecam");
+            try
+            {
+                var labs = Labs(freecam.Session);
+                var ocean = FirstOcean(freecam.Session);
+                if (!freecam.Built || labs.Count != 1 || ocean == null)
+                {
+                    ctx.Check(false, $"the Enhanced --freecam C1B session builds one ocean lab over one ocean (built={freecam.Built}, {labs.Count} lab(s), ocean {(ocean != null ? "standing" : "missing")})");
+                    return;
+                }
+                var lab = labs[0];
+                ctx.Check(!lab.IsOpen && lab.Edited == shipped && lab.Saved == shipped && ocean.Sea == shipped,
+                    $"the lab starts closed on the shipped {OceanChapter} sea {shipped.Describe()} (lab {lab.Edited.Describe()}, ocean {ocean.Sea.Describe()})");
+                string opened = ocean.ShaderText;
+                lab.Toggle();
+                ctx.Check(lab.IsOpen, $"Toggle opens the panel");
+
+                lab.Set("length", length);
+                Step(freecam);
+                string lengthened = ocean.ShaderText;
+                ctx.Check(lengthened != opened && ocean.Sea.Length == length && OceansUnder(freecam.Session) == 1
+                        && ReferenceEquals(FirstOcean(freecam.Session), ocean),
+                    $"a length edit rewrites the standing ocean's shader text, and the same one ocean stands ({OceansUnder(freecam.Session)} in the tree, sea {ocean.Sea.Describe()})");
+
+                lab.Set("height", height);
+                Step(freecam);
+                float waveScale = Grid(ocean)?.GetShaderParameter("wave_scale").AsSingle() ?? -1f;
+                ctx.Check(ocean.ShaderText == lengthened && Mathf.IsEqualApprox(waveScale, height),
+                    $"a height edit sets wave_scale alone and compiles nothing (wave_scale {waveScale.ToString("0.###", CultureInfo.InvariantCulture)})");
+
+                Switch(freecam, false);
+                bool droppedInOriginal = OceansUnder(freecam.Session) == 0;
+                Switch(freecam, true);
+                var rebuilt = FirstOcean(freecam.Session);
+                ctx.Check(droppedInOriginal && rebuilt != null && !ReferenceEquals(rebuilt, ocean)
+                        && rebuilt.Sea == lab.Edited && rebuilt.ShaderText == lengthened,
+                    $"an ocean rebuilt by a switch to Original and back draws the edited sea (dropped={droppedInOriginal}, rebuilt sea {rebuilt?.Sea.Describe() ?? "none"})");
+
+                lab.ResetToDefaults();
+                Step(freecam);
+                ctx.Check(rebuilt?.Sea == Effects.SeaState.Default && lab.Edited == Effects.SeaState.Default,
+                    $"a reset draws the defaults (sea {rebuilt?.Sea.Describe() ?? "none"})");
+
+                lab.RevertToSaved();
+                Step(freecam);
+                ctx.Check(rebuilt?.ShaderText == opened && rebuilt.Sea == shipped,
+                    $"a revert to the shipped sea writes the text the session opened with (sea {rebuilt?.Sea.Describe() ?? "none"})");
+            }
+            finally
+            {
+                freecam.Close();
+            }
+
+            var fly = Open(ctx, enhanced: true, chapter: OceanChapter, extra: "--fly");
+            try
+            {
+                ctx.Check(fly.Built && fly.Session.OceanBuilt && Labs(fly.Session).Count == 0,
+                    $"a --fly C1B session stands its ocean and builds no ocean lab (built={fly.Built}, ocean={fly.Session.OceanBuilt}, {Labs(fly.Session).Count} lab(s))");
+            }
+            finally
+            {
+                fly.Close();
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("ocean-harbour-ramp",
+        "an Enhanced flight at water quality waves over C2's harbour ramps and C5's water rising to the "
+        + "steinmann ship takes each base-sheet ramp off sea level as open sea, which the sheet's hide "
+        + "clears whole, so no flat patch stands over the waves; the calm ocean rises with each ramp, never "
+        + "standing below it, so no gap opens under the quay or hull it meets; every base-sheet triangle over "
+        + "the sea is cleared wherever it lies, so none draws or casts a shadow onto the ocean; and a sheet "
+        + "raised off a sea texel no ramp covers still draws")]
+    internal static void OceanHarbourRamp(TestContext ctx)
+    {
+        foreach (string chapter in RampChapters)
+            RequireData(ctx, chapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        try
+        {
+            ViewDistance.Set(null);
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            foreach (string chapter in RampChapters)
+            {
+                var rig = Open(ctx, enhanced: true, chapter: chapter);
+                try
+                {
+                    var mask = Effects.OceanMask.Live;
+                    if (!rig.Built || !rig.Session.OceanBuilt || mask == null || rig.Session.WorldScene == null)
+                    {
+                        ctx.Check(false, $"the Enhanced {chapter} session builds its ocean (built={rig.Built}, ocean={rig.Session.OceanBuilt})");
+                        continue;
+                    }
+                    var sheet = SheetOverSea(rig, mask);
+                    ctx.Check(sheet.Ramps > 0 && mask.RampTriangles >= sheet.Ramps && sheet.RampMissed == 0,
+                        $"{chapter}: the ramps are open sea the hide clears whole ({sheet.Ramps} ramp triangle(s) drawn, {mask.RampTriangles} in the mask, {sheet.RampMissed} sample(s) on them left standing{sheet.Examples})");
+                    ctx.Check(sheet.Ramps > 0 && sheet.RampShortfall < RampShortfall,
+                        $"{chapter}: the calm ocean rises with each ramp, so no gap opens under what it meets (the ocean stands at most {sheet.RampShortfall.ToString("0.000", CultureInfo.InvariantCulture)} m below a ramp)");
+                    ctx.Check(sheet.Sampled > 0 && sheet.Missed == 0,
+                        $"{chapter}: every base-sheet triangle over the sea is cleared, so none draws or casts onto the ocean ({sheet.Sampled} sample(s) over the sea, {sheet.Missed} left standing, {sheet.Casting} in shadow-casting instances{sheet.Examples})");
+                    var flat = sheet.FlatSea;
+                    ctx.Check(flat is { } at && mask.ClearsSheet(at) && !mask.ClearsSheet(at + new Vector3(0f, 1f, 0f)),
+                        $"ABLE-TO-FAIL CONTROL: {chapter}: off a ramp the hide clears the sheet at sea level and keeps it 1 m up (at {flat?.ToString() ?? "no flat sea sample"})");
+                }
+                finally
+                {
+                    rig.Close();
+                }
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-shader-twins",
         "after the load warm-up has compiled the other mode's twin of every cache shader, a live "
         + "switch to Original and back makes no new shader and rewrites no shader's text, so Godot "
@@ -311,6 +680,71 @@ internal static class GraphicsSwitchSuites
         finally
         {
             rig.Close();
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-retext-compiles",
+        "a key whose Original shader nobody wears any more, rewritten in place by a first switch to "
+        + "Enhanced before an Enhanced frame has drawn, stays pinned on a material of its own; after "
+        + "one TAA frame builds Godot's advanced variants, a fresh material on the key draws the "
+        + "Enhanced text with no engine error, and the Original text on a shader of its own draws "
+        + "red. Only a process that has drawn no TAA frame before can show the draw fail; the pin "
+        + "check fails in any")]
+    internal static void RetextCompiles(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
+        var host = new Node { Name = "retext_probe" };
+        ctx.Host.AddChild(host);
+        ShaderMaterial? fresh = null;
+        try
+        {
+            GraphicsMode.Set(false);
+            Mech3.ShaderTwins.Regenerate();
+            Mech3.ShaderTwins.EnhancedDrawn = false;
+            RenderingServer.ForceSync();
+            int? errorsBefore = TestHarness.EngineErrorsSoFar();
+
+            // ⚠ Draw nothing before the rewrite. A draw leaves Godot compiling pipelines on worker
+            // threads, and a rewrite then has a worker rebuild the shader and fail its free_rid calls.
+            var key = Mech3.ShaderTwins.Make(() => GraphicsMode.Enhanced ? EnhancedProbe : OriginalProbe,
+                "retext-probe", "retext-probe");
+            var worn = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
+            var original = worn.Shader;
+            worn.GetRid();
+            // The key keeps no wearer, so the rewrite queues no material update of Godot's own.
+            worn.Dispose();
+
+            GraphicsMode.Set(true);
+            Mech3.ShaderTwins.Regenerate();
+            bool rewritten = ReferenceEquals(key.Current, original);
+            bool pinned = Mech3.ShaderTwins.IsPinned(original);
+            AdvancedFrame(host);
+
+            var (view, quad) = ProbeView(host);
+            fresh = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
+            quad.MaterialOverride = fresh;
+            var drawnEnhanced = ProbePixel(view);
+            quad.MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = OriginalProbe } };
+            var drawnOriginal = ProbePixel(view);
+            RenderingServer.ForceSync();
+            int? errorsAfter = TestHarness.EngineErrorsSoFar();
+
+            ctx.Check(rewritten, $"the first switch to Enhanced rewrites the unworn Original shader in place");
+            ctx.Check(pinned, $"and pins the rewritten shader on a material of its own");
+            ctx.Check(drawnOriginal.R > 0.7f && drawnOriginal.G < 0.3f,
+                $"ABLE-TO-FAIL CONTROL: the Original text draws red ({drawnOriginal})");
+            ctx.Check(drawnEnhanced.G > 0.7f && drawnEnhanced.R < 0.3f,
+                $"after a TAA frame a fresh material on the key draws the Enhanced text, green ({drawnEnhanced})");
+            ctx.Check(errorsBefore != null && errorsAfter == errorsBefore,
+                $"with no engine error ({(errorsAfter ?? 0) - (errorsBefore ?? 0)} new line(s), log {(errorsBefore != null ? "read" : "missing")})");
+        }
+        finally
+        {
+            host.Free();
+            fresh?.Dispose();
             Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
             Restore(wasEnhanced);
         }
@@ -416,6 +850,52 @@ internal static class GraphicsSwitchSuites
             ctx.Check(held && clock.Halted == wasHalted,
                 $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
         }
+    }
+
+    // A small pane of its own world, no TAA, whose quad fills the camera's view.
+    private static (SubViewport View, MeshInstance3D Quad) ProbeView(Node host)
+    {
+        var view = new SubViewport
+        {
+            Size = new Vector2I(64, 64),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            RenderTargetClearMode = SubViewport.ClearMode.Always,
+        };
+        view.AddChild(new Camera3D { Current = true });
+        var quad = new MeshInstance3D { Mesh = new QuadMesh { Size = new Vector2(4f, 4f) }, Position = new Vector3(0f, 0f, -1f) };
+        view.AddChild(quad);
+        host.AddChild(view);
+        quad.ForceUpdateTransform();
+        return (view, quad);
+    }
+
+    // The pane's centre after a forced draw. Twice, so a material set this frame has its update and
+    // its pipeline before the read.
+    private static Color ProbePixel(SubViewport view)
+    {
+        RenderingServer.ForceDraw();
+        RenderingServer.ForceDraw();
+        var image = view.GetTexture()?.GetImage();
+        return image == null || image.IsEmpty() ? new Color(0f, 0f, 0f, 0f) : image.GetPixel(32, 32);
+    }
+
+    // One drawn TAA frame, which is what has Godot build its advanced variants for every shader alive.
+    private static void AdvancedFrame(Node host)
+    {
+        var view = new SubViewport
+        {
+            Size = new Vector2I(256, 256),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            UseTaa = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+        };
+        view.AddChild(new Camera3D { Current = true });
+        host.AddChild(view);
+        RenderingServer.ForceDraw();
+        view.Free();
     }
 
     // The load warm-up's hidden TAA frame: raised once by an Original process that has drawn no
@@ -648,6 +1128,8 @@ internal static class GraphicsSwitchSuites
             uint mask = pane.Camera.CullMask;
             ctx.Check((mask & UI.Boards.SplitScreen.SpyglassSunLayer) == 0 && (mask & UI.Boards.SplitScreen.SunLayer) != 0,
                 $"{label}: pane {pane.Index + 1} draws the sun's layer and not the copy's (0x{mask:X5})");
+            ctx.Check((mask & UI.Boards.SplitScreen.FlatSeaLayer) == 0,
+                $"{label}: pane {pane.Index + 1} does not carry the flat-sea marker, so it draws the wave ocean (0x{mask:X5})");
         }
         foreach (var view in views)
         {
@@ -658,8 +1140,9 @@ internal static class GraphicsSwitchSuites
                 disc == SpyglassView.DiscMask(p.Camera.CullMask, UI.Boards.SplitScreen.OwnAirframeLayer(p.Index), enhanced));
             bool sun = (disc & UI.Boards.SplitScreen.SunLayer) != 0;
             bool copy = (disc & UI.Boards.SplitScreen.SpyglassSunLayer) != 0;
-            ctx.Check(fromPane && sun != enhanced && copy == enhanced,
-                $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun" : "the sun itself")} (0x{disc:X5}: sun {sun}, copy {copy})");
+            bool flat = (disc & UI.Boards.SplitScreen.FlatSeaLayer) != 0;
+            ctx.Check(fromPane && sun != enhanced && copy == enhanced && flat == enhanced,
+                $"{label}: a disc draws its pane's view less its own airframe, with {(enhanced ? "the copy in place of the sun and the flat-sea marker" : "the sun itself and no flat-sea marker")} (0x{disc:X5}: sun {sun}, copy {copy}, flat sea {flat})");
         }
     }
 
@@ -723,12 +1206,202 @@ internal static class GraphicsSwitchSuites
     private static string Light(DirectionalLight3D light) => string.Create(CultureInfo.InvariantCulture,
         $"layers 0x{light.Layers:X5} casts {light.ShadowEnabled} energy {light.LightEnergy:0.###} colour {light.LightColor.ToHtml(false)} specular {light.LightSpecular:0.###} angular {light.LightAngularDistance:0.##} beam {-light.GlobalBasis.Z}");
 
-    private static void RequireData(TestContext ctx)
+    private static void RequireData(TestContext ctx, string? chapter = null)
     {
+        chapter ??= ctx.Chapter;
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+    }
+
+    // A Water Quality apply as the Options accept makes it, then the steps a reading waits for.
+    private static void ApplyWater(Rig rig, string word)
+    {
+        WaterQualitySetting.Resolve(word, null, null);
+        EnhancedLook.ApplyWaterQuality(rig.Session);
+        Step(rig);
+    }
+
+    // The ocean nodes standing in the session's tree. Entering and leaving the tree sets the sheet's
+    // switch. The server's getter for that errors outside the editor, so the tree is read instead.
+    private static string OceanState(Rig rig) =>
+        string.Create(CultureInfo.InvariantCulture, $"{OceansUnder(rig.Session)} in tree");
+
+    // The ocean nodes standing in the tree under root. Read under the host, it also counts one
+    // parented outside the session.
+    private static int OceansUnder(Node root)
+    {
+        int count = 0;
+        Walk(root, node =>
+        {
+            if (node is Effects.Ocean { } ocean && ocean.IsInsideTree())
+                count++;
+        });
+        return count;
+    }
+
+    private static Effects.Ocean? FirstOcean(Node root)
+    {
+        Effects.Ocean? found = null;
+        Walk(root, node => found ??= node as Effects.Ocean);
+        return found;
+    }
+
+    private static List<UI.Labs.OceanLab> Labs(Node root)
+    {
+        var labs = new List<UI.Labs.OceanLab>();
+        Walk(root, node =>
+        {
+            if (node is UI.Labs.OceanLab lab)
+                labs.Add(lab);
+        });
+        return labs;
+    }
+
+    // The material every grid of the ocean shares.
+    private static ShaderMaterial? Grid(Effects.Ocean ocean) =>
+        ocean.GetNodeOrNull<MeshInstance3D>("OceanGrid")?.Mesh?.SurfaceGetMaterial(0) as ShaderMaterial;
+
+    // A closed session's ocean has left the tree, which is what puts the sheet's switch back.
+    private static void Left(TestContext ctx, Effects.Ocean? ocean, string what)
+    {
+        bool gone = ocean == null || !GodotObject.IsInstanceValid(ocean) || !ocean.IsInsideTree();
+        ctx.Check(ocean != null && gone && OceansUnder(ctx.Host) == 0,
+            $"closing {what} leaves no ocean in the tree (held ocean {(ocean == null ? "never built" : gone ? "gone" : "still in the tree")}, {OceansUnder(ctx.Host)} under the host)");
+    }
+
+    // The sheet's hide steps aside only where this ocean draws. Its mask is the one the hide reads,
+    // and the include gates on the coverage below which the ocean's own fragment discards. Neither
+    // the grid nor the hide acts for a spyglass disc's camera.
+    private static void HideReadsTheMask(TestContext ctx, Rig rig, Effects.Ocean? ocean)
+    {
+        string sheet = "";
+        foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            if (Mech3.SceneBuilder.IsOceanBaseTexture(texture) && material.Shader?.Code is { } code
+                && code.Contains(HideCall, StringComparison.Ordinal))
+            {
+                sheet = code;
+                break;
+            }
+        }
+        string threshold = Effects.OceanMask.SeaThreshold.ToString("0.0#", CultureInfo.InvariantCulture);
+        string include = ResourceLoader.Load<ShaderInclude>(OceanIncludePath)?.Code ?? "";
+        string grid = ocean?.GetNodeOrNull<MeshInstance3D>("OceanGrid")?.Mesh?.SurfaceGetMaterial(0) is ShaderMaterial { Shader: { } shader }
+            ? shader.Code : "";
+        ctx.Check(ocean != null && Effects.OceanMask.Live != null,
+            $"the standing ocean hands its mask to the sheet's hide");
+        ctx.Check(include.Contains($"csky_ocean_sea(world.xz) < {threshold}", StringComparison.Ordinal)
+                && grid.Contains($"m.r < {threshold}", StringComparison.Ordinal),
+            $"the sheet's hide steps aside at the coverage the ocean discards below, {threshold} (include {(include.Length > 0 ? "read" : "missing")}, grid shader {(grid.Length > 0 ? "read" : "missing")})");
+        ctx.Check(include.Contains($"abs(zone - {Effects.OceanMask.SeamZone}.0)", StringComparison.Ordinal),
+            $"and leaves a zone seam texel, which no grid draws, to the sheet");
+        string hide = Effects.OceanMask.HideHeight.ToString("0.0#", CultureInfo.InvariantCulture);
+        string top = Effects.OceanMask.RampTop.ToString("0.0#", CultureInfo.InvariantCulture);
+        ctx.Check(include.Contains($"world.y <= -{hide} || world.y >= {top})", StringComparison.Ordinal)
+                && include.Contains($"world.y >= {hide} && !csky_ocean_ramp(", StringComparison.Ordinal)
+                && include.Contains($"r * 255.0 - {Effects.OceanMaskRaster.RampSea}.0", StringComparison.Ordinal),
+            $"and clears the sheet within {hide} m of sea level, and a ramp's up to {top} m where its filter reads the ramp byte {Effects.OceanMaskRaster.RampSea}");
+        ctx.Check(grid.Contains($"if ({Mech3.SceneBuilder.FlatSeaEye}) {{", StringComparison.Ordinal)
+                && sheet.Length > 0 && sheet.Contains($"!{Mech3.SceneBuilder.FlatSeaEye} && {HideCall}", StringComparison.Ordinal),
+            $"a spyglass disc's camera collapses the grid before its wave sum and keeps the sheet whole ({Mech3.SceneBuilder.FlatSeaEye}; sheet {(sheet.Length > 0 ? "read" : "missing")})");
+    }
+
+    // Every drawn base-sheet triangle read at its centroid and near each corner. A sample over a sea
+    // texel must be one the hide clears. A ramp rises off sea level to under OceanMask.RampTop, and
+    // its shortfall is how far the lifted ocean stands below it.
+    private static SheetReading SheetOverSea(Rig rig, Effects.OceanMask mask)
+    {
+        var scene = rig.Session.WorldScene!;
+        var names = new Dictionary<Material, string>();
+        foreach (var (material, texture) in scene.TexturedMaterials)
+            names[material] = texture;
+        int sampled = 0, missed = 0, casting = 0, ramps = 0, rampMissed = 0;
+        float gap = 0f;
+        Vector3? flat = null;
+        var examples = new StringBuilder();
+        Walk(rig.Session, node =>
+        {
+            if (node is not MeshInstance3D { Mesh: ArrayMesh mesh } mi || !mi.IsVisibleInTree() || UnderOcean(mi))
+                return;
+            var xf = mi.GlobalTransform;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                var material = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
+                if (material == null || !names.TryGetValue(material, out var texture) || !Mech3.SceneBuilder.IsOceanBaseTexture(texture))
+                    continue;
+                var arrays = scene.SurfaceArrays(mesh, s);
+                var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil
+                    ? Enumerable.Range(0, v.Length).ToArray() : arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+                for (int t = 0; t + 2 < ix.Length; t += 3)
+                {
+                    var a = xf * v[ix[t]];
+                    var b = xf * v[ix[t + 1]];
+                    var c = xf * v[ix[t + 2]];
+                    float minY = Math.Min(a.Y, Math.Min(b.Y, c.Y)), maxY = Math.Max(a.Y, Math.Max(b.Y, c.Y));
+                    bool ramp = minY > -0.5f && minY < 0.5f && maxY >= Effects.OceanMask.HideHeight && maxY < Effects.OceanMask.RampTop;
+                    ramps += ramp && (b - a).Cross(c - a).Length() > 1e-3f ? 1 : 0;
+                    var centre = (a + b + c) / 3f;
+                    var samples = new[] { centre, a.Lerp(centre, 0.15f), b.Lerp(centre, 0.15f), c.Lerp(centre, 0.15f) };
+                    if (ramp)
+                        samples = samples.Concat(new[] { a.Lerp(centre, 0.02f), b.Lerp(centre, 0.02f), c.Lerp(centre, 0.02f) }).ToArray();
+                    foreach (var p in samples)
+                    {
+                        if (ramp)
+                            gap = Math.Max(gap, p.Y - mask.LiftAt(p));
+                        if (!mask.IsSea(p))
+                            continue;
+                        sampled++;
+                        if (!ramp && maxY < 0.5f)
+                            flat ??= p;
+                        if (mask.ClearsSheet(p))
+                            continue;
+                        missed++;
+                        rampMissed += ramp ? 1 : 0;
+                        casting += mi.CastShadow != GeometryInstance3D.ShadowCastingSetting.Off ? 1 : 0;
+                        if (missed <= 4)
+                            examples.Append(string.Create(CultureInfo.InvariantCulture, $"; {mi.GetParent()?.Name}/{mi.Name} at ({p.X:0.0},{p.Y:0.00},{p.Z:0.0})"));
+                    }
+                }
+            }
+        });
+        return new SheetReading(sampled, missed, casting, ramps, rampMissed, gap, flat, examples.ToString());
+    }
+
+    private static bool UnderOcean(Node node)
+    {
+        for (Node? n = node; n != null; n = n.GetParent())
+        {
+            if (n is Effects.Ocean)
+                return true;
+        }
+        return false;
+    }
+
+    // The base sheet's materials as the world builder named them, by texture and shader text. Also
+    // how many carry the hide and are drawn.
+    private static SeaReading Sea(Rig rig)
+    {
+        var sheet = new HashSet<ShaderMaterial>();
+        var census = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        int hidden = 0;
+        foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            if (!Mech3.SceneBuilder.IsOceanBaseTexture(texture) || !sheet.Add(material))
+                continue;
+            string code = material.Shader?.Code ?? "";
+            hidden += code.Contains(HideCall, StringComparison.Ordinal) ? 1 : 0;
+            Count(census, texture.ToLowerInvariant() + ":" + code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture));
+        }
+        int drawn = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is GeometryInstance3D geometry && geometry.IsVisibleInTree())
+                drawn += Materials(geometry).Count(sheet.Contains);
+        });
+        return new SeaReading(OceansUnder(rig.Session), sheet.Count, hidden, drawn, Print(census));
     }
 
     // The switch as the launcher makes it, then the steps a reading waits for.
@@ -746,13 +1419,13 @@ internal static class GraphicsSwitchSuites
 
     // One flight session in its own pane, lit as the launcher lights one. The sun and the
     // Environment are the launcher's, dressed by EnhancedLook when the session opens under Enhanced.
-    private static Rig Open(TestContext ctx, bool enhanced, int players = 1)
+    private static Rig Open(TestContext ctx, bool enhanced, int players = 1, string? chapter = null, params string[] extra)
     {
         GraphicsMode.Set(enhanced);
         Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
-        var spec = SessionSpec.Parse(new[] { $"--chapter={ctx.Chapter}", $"--players={players}", "--mute", "--no-pads" });
+        var spec = SessionSpec.Parse(new[] { $"--chapter={chapter ?? ctx.Chapter}", $"--players={players}", "--mute", "--no-pads" }.Concat(extra));
         var pane = new SubViewport
         {
             Size = new Vector2I(640, 480),
@@ -784,6 +1457,7 @@ internal static class GraphicsSwitchSuites
         ctx.Host.AddChild(pane);
         var session = new GameSession(spec, new LauncherContext
         {
+            Decode = ctx.Decode,
             RepoRoot = ctx.RepoRoot,
             DataRoot = ctx.DataRoot,
             PlanesGamezPath = ctx.PlanesGamezPath,
@@ -1048,6 +1722,16 @@ internal static class GraphicsSwitchSuites
             text.Append($"  shaders {Shaders}");
             return text.ToString();
         }
+    }
+
+    private sealed record SheetReading(int Sampled, int Missed, int Casting, int Ramps, int RampMissed, float RampShortfall, Vector3? FlatSea, string Examples);
+
+    private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census)
+    {
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Oceans} ocean(s), {Materials} base sheet material(s), {Hidden} hiding, {Drawn} drawn surface(s)");
+
+        public string Print() => $"  {this}\n  census {Census}";
     }
 
     private sealed record CoverReading(string Order, int WorkFrame, bool HeldThroughStall, int Steps, bool Dropped,

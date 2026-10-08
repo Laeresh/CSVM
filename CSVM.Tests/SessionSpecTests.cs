@@ -838,6 +838,20 @@ public class SessionSpecTests
         Assert.Equal(rejected, string.Join(",", rejects));
     }
 
+    /// <summary>The ocean lab lives in <c>--freecam</c> alone, so its twin is dropped everywhere else,
+    /// and its value keeps only what the lab can apply.</summary>
+    [Fact]
+    public void TheOceanLabTwinIsAFreecamFlag()
+    {
+        var s = S("--freecam", "--debug-ocean=height:1.4,bogus,open");
+        Assert.Equal("height:1.4,open", s.DebugOcean);
+        Assert.Contains(s.Warnings, w => w.Category == "ui" && w.Message.Contains("'bogus'"));
+        Assert.Equal("", S("--freecam", "--debug-ocean").DebugOcean);
+        Assert.Null(S("--fly", "--debug-ocean=height:1.4").DebugOcean);
+        Assert.Null(S("--anim-lab", "--debug-ocean=height:1.4").DebugOcean);
+        Assert.Null(S("--viewer", "--debug-ocean=height:1.4").DebugOcean);
+    }
+
     // ---- Placement -----------------------------------------------------------------------------
 
     [Fact]

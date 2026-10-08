@@ -199,6 +199,15 @@ public static class EnhancedLook
         Log.Info("world", $"view distance: {word}, clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
     }
 
+    /// <summary>The resolved <see cref="WaterQualitySetting"/> word on the running world: the session
+    /// builds the wave ocean or drops it, and with it the flat sheet's hole. Original mode moves
+    /// nothing, and a later switch to Enhanced builds what the word asks for.</summary>
+    public static void ApplyWaterQuality(GameSession? session)
+    {
+        session?.FollowWaterQuality();
+        Log.Info("world", $"water quality: {WaterQualitySetting.Word} (applied live, ocean {(session?.OceanBuilt == true ? "built" : "not built")})");
+    }
+
     /// <summary>A texture's alpha depth on the running world. The archive uploads its alpha-plane
     /// textures again at the standing mode's depth. Then the puffer atlases and painted skins made
     /// from them are baked again, each in place. The session calls it first on a switch.

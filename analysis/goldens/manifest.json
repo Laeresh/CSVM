@@ -148,15 +148,15 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "205619d975c85f44ebbccfd6b4a74d15",
-      "exercises": "Enhanced graphics over C1's waterfall lake: the blurred screen-space reflection on the water, conifers casting sun shadows onto shadowless terrain, SSAO, and TAA at its settled jitter phase; frame-sensitive 23.53 %.",
+      "hash": "b7e66c00633d4872c3e6427c3e9c3c25",
+      "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean in the open lake, calmed to the flat sheet's shading at the coast tiles, blurred SSR, conifers casting sun shadows, SSAO, settled TAA; frame-sensitive 24.09 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "7fe15f15527dc356857add7c0d5876c2",
-      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
+      "hash": "d36e8944eb413700e80a4b888714b86f",
+      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, the wave ocean on the far waterline, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {
@@ -169,8 +169,8 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "7534fd874ad6bfa91de257dd7fece809",
-      "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light on the ground, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools live, wind streaks, TAA; frame-sensitive 94.08 %.",
+      "hash": "e2646781df55d23311e7131e7a56151f",
+      "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
@@ -179,6 +179,13 @@
       "hash": "366314f638592ae6b7c42f3a97ed10bd",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
+    },
+    {
+      "name": "c1b-ocean-enhanced",
+      "frame": 120,
+      "hash": "39600594889f1eb291563bf5168e2a63",
+      "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming toward each shore, the surf ring, SSR, TAA, in the shipped C1B sea.",
+      "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }
   ]
 }
