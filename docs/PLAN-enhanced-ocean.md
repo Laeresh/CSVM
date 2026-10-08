@@ -1315,7 +1315,7 @@ its weight is the shard figure.
 and `graphics-retext-compiles` passing in s4 (17.5 s); goldens 25/25 hash-identical. The
 in-place rewrite racing a pipeline compile still in flight is not fixed in production code; any
 `Shader.Code` edit can meet it, the ocean lab's text edits included, and its cost is
-`free_rid` error lines and leaked variants.
+`free_rid` error lines and leaked variants. It is tracked in #164.
 
 **Original approach (kept for reference).**
 
