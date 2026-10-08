@@ -863,3 +863,76 @@ every saved option (DET-8). A resolution-sensitive artefact is invisible at the 
 **`-EngineArgs`** forwards any other Godot option ahead of the `--`, as a string array:
 `-EngineArgs '--render-thread','safe'` A/Bs the project's separate render thread, and
 `-EngineArgs '--log-file','<path>'` keeps every native ERROR line in one file.
+
+### The memory ledger: scripted launches queue instead of exhausting RAM
+
+Every scripted Godot launch on the machine is admitted against one machine-wide ledger before it
+starts (`MemoryLedger.ps1`, dot-sourced by `RunTests.ps1`, `RunProbe.ps1`, `RunGame.ps1` and
+`RunDev.ps1`), so concurrent sessions queue rather than run the machine out of memory. Always on,
+no flag. A free-memory snapshot cannot be the test: an engine shard starts at a few hundred MB and
+grows to about 4 GB over its catalog, so six shards started together all see enough free.
+
+- **The ledger** is `%TEMP%\csvm-mem\`: one `res-*.json` per live launch, `{pid, kind, estimateGB,
+  worktree}`, held open by the launching script (delete-on-close, no delete sharing) for
+  the launch's lifetime. The open handle is the claim, as with the net-port slots, so a dead
+  holder frees its reservation with its process; a named semaphore would leak its count on a
+  crash. A file nobody holds is swept by the next reader. `CleanScratch.ps1` never touches it.
+- **The admission rule**, under the short machine-wide mutex `Global\csvm-mem-admission`, held
+  across the check and the reservation write only, never across the launch:
+  `available now - sum(max(0, estimate - current private bytes) over live reservations) >= own
+  estimate + floor`. "Available now" is physical memory available, which already counts
+  everything outside CSVM. Current usage is **private bytes**, never the working set, which drops
+  whenever Windows trims it. A reservation not yet given its pid owes its whole estimate; one
+  whose process has exited owes nothing. The floor is 8 GB, or 16 GB while the gaming-mode marker
+  `%TEMP%\csvm-gaming` exists.
+- **Guaranteed progress.** With no other live reservation a launch is admitted whatever its
+  estimate, so a grown estimate can never block everything. The floor still holds: below it even
+  an empty ledger waits, up to the wait cap.
+- **Per launch, not per run.** Each engine shard and each golden shot is admitted on its own, so
+  with room for three, three run and the rest start as memory frees. Shard membership
+  (`shard:i/n`) never changes, only start times. **The watchdog starts at admission**: waiting
+  never counts toward `$EngineTimeoutSec` or `RunProbe.ps1 -TimeoutSec`.
+- **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
+  from a handle the ledger holds on the process, after it exits or is killed) under its kind in
+  `history.json`; the estimate is the highest of the kind's last 20 peaks plus 25 percent, and
+  never below the kind's seed. An `engine-shard` peak is recorded only from a complete-catalog
+  `RunTests.ps1` run, since a filtered shard stays small, and a launch the engine refused records
+  nothing. The seed table is `$MemSeedGB` in `MemoryLedger.ps1`; the kinds are `engine-shard`,
+  `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
+  `capture-xr` (`--xr*`). `estimates.json` beside it, written from the seeds when the ledger is
+  first used, is what the engine reads.
+- **DEFERRED.** A launch still waiting after `$MemMaxWaitSec` (1800 s) ends its run
+  `DEFERRED: memory, needs X GB, Y GB admissible, held by <worktree> pids ...`, neither PASS nor
+  FAIL: `RunTests.ps1` marks the stage DEFERRED, skips the later Godot stages and exits **3**
+  (`$MemDeferredExitCode`); `RunProbe.ps1` exits 3 without launching. What did run is still
+  judged: the shards and shots that ran are merged and scored, and **a FAIL outranks DEFERRED** in
+  both the stage and the run result. Gaming mode shares the wait cap and the outcome.
+- **The engine's side** (`src/Tooling/MemoryAdmission.cs`, called once from `Launcher._Ready`,
+  Windows editor builds only). A non-interactive launch (`--det`, `--run-tests`, `--frames=`,
+  `--shots=`, `--screenshot=`) reads physical memory available as the ledger does
+  (`GlobalMemoryStatusEx`, never Godot's own "available", which is commit headroom including the
+  page file), logs `memory: X GB physical available, floor 8 GB`, and refuses to start below the
+  floor: it logs `memory: X GB available is below the 8 GB floor` and exits **75**, which
+  `RunTests.ps1` and `RunProbe.ps1` report as DEFERRED. An unreadable figure never refuses. One
+  started without `CSVM_MEM_RESERVATION` (the path every admitting script hands its child)
+  registers itself, under the same mutex, with its kind's estimate from `estimates.json` (the
+  largest seed when none is written yet), and does not wait: it cannot be held, but every other
+  admission counts it.
+- **Interactive play stays out.** `RunGame.ps1` / `RunDev.ps1` without a scripted flag neither
+  waits nor registers; its memory is counted through "available now". Both, and `RunProbe.ps1`,
+  admit through one helper, `Request-MemLaunch`.
+- **The hook.** `CheckGodotCommand.ps1`, called by all three harnesses' pre-tool hooks, blocks an
+  agent shell command that invokes `Godot_v4*.exe` directly and points at `RunProbe.ps1`. A
+  mention of the name (`Get-Process`, `Test-Path`, a grep) passes, and so does an editor
+  `--import`, which builds no session (`CheckUidSidecars.ps1`'s fix). `-SelfTest` runs its cases.
+- **`.\MemoryLedger.ps1 status`** prints the live reservations (pid, kind, current private bytes
+  against the estimate, worktree), the waiters, and the estimate per kind. A waiting launch prints
+  the same table once, then one line every 30 s. `.\MemoryLedger.ps1 -SelfTest` checks the
+  admission rule, handle-held liveness across a killed holder, the empty-ledger progress rule and
+  its floor, the estimate update and its seed floor, and the complete-catalog rule, against a
+  private ledger directory.
+- **Test-only overrides**, for proving admission on a shared machine: `CSVM_MEM_AVAILABLE_GB`
+  replaces the machine's available memory with a simulated figure, less the private bytes of
+  every live reservation, so the simulated machine fills as launches grow (the engine's floor
+  check reads it as is); `CSVM_MEM_MAX_WAIT_SEC` shortens the wait cap. With the `engine-shard`
+  seed of 4 GB, `CSVM_MEM_AVAILABLE_GB=15` fits one shard at a time.

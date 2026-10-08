@@ -549,6 +549,14 @@ public partial class Launcher : Node3D
             ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
+        // Before anything heavy loads: a scripted launch below the memory floor ends here. A
+        // release build has no ledger to join.
+        if (!_exported && Tooling.MemoryAdmission.Refuses(OS.GetCmdlineUserArgs(), _repoRoot))
+        {
+            GetTree().Quit(Tooling.MemoryAdmission.TripwireExitCode);
+            return;
+        }
+
         // A failed --synthetic-data tree ends the run. Reading the install instead would pass it on
         // data nobody asked for, and an empty tree would only skip every suite.
         if (_syntheticError != null)

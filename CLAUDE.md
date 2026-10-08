@@ -19,13 +19,16 @@ landing gate for any change under `CSVM/`.
   guard, [`CheckBashCommand.ps1`](CheckBashCommand.ps1): on Windows, Bash runs only `git` and
   `gh`, optionally piped into `head`, `tail`, `grep`, `wc`, `sort` or `uniq`, and everything else
   goes to PowerShell. Bash is the shell for a `gh --jq` filter with embedded double quotes, which
-  PowerShell 5.1 strips; (3) the format gate, [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1):
-  `dotnet format` and a `-t:Rebuild` that blocks on StyleCop warnings, before an invocation of
-  `RunTests.ps1`, `dotnet test` or `git commit`; (4) the content gate,
-  [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit. After an Edit or Write,
+  PowerShell 5.1 strips; (3) the Godot guard, [`CheckGodotCommand.ps1`](CheckGodotCommand.ps1):
+  a command that runs `Godot_v4*.exe` directly is blocked, launch through `RunProbe.ps1`, which
+  admits it against the memory ledger (`MemoryLedger.ps1 status`); (4) the format gate,
+  [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1): `dotnet format` and a `-t:Rebuild` that blocks
+  on StyleCop warnings, before an invocation of `RunTests.ps1`, `dotnet test` or `git commit`;
+  (5) the content gate, [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit. After
+  an Edit or Write,
   `CheckCommentCaps.ps1 -Hook` reports an over-cap comment in a `.cs` file and
   `CheckEncoding.ps1 -Hook` rejects a `.ps1` holding non-ASCII without a BOM.
-- ⚠ **Gates (3) and (4) act on the tree the command names**, not the session's cwd: an absolute
+- ⚠ **Gates (4) and (5) act on the tree the command names**, not the session's cwd: an absolute
   runner path, a `git -C`/`--work-tree`, or a `Set-Location` earlier in the same command.
   `-ShowRoot`/`-ShowRoots -Command '…'` says which tree a command would hit, and `-SelfTest`
   exercises a gate. How the gates read a command, and why they check one tree rather than every

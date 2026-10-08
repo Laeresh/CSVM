@@ -235,8 +235,13 @@ $LogDir  = Join-Path $RepoRoot ".scratch\logs"
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 $OutFile = Join-Path $LogDir "game-$Stamp.out"
 $ErrFile = Join-Path $LogDir "game-$Stamp.err"
+# A launch that drives and ends itself is admitted against the machine-wide memory ledger first;
+# interactive play neither waits nor registers (MemoryLedger.ps1).
+. (Join-Path $PSScriptRoot "MemoryLedger.ps1")
+$Reservation = Request-MemLaunch -GodotArgs $UserArgs -Label "game" -Worktree $RepoRoot
 $proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
     -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
+Set-MemReservationPid -Reservation $Reservation -ProcessId $proc.Id
 # The main window does not exist at spawn; poll briefly rather than guessing a sleep.
 # Found via EnumWindows by pid, NOT Process.MainWindowHandle -- that property is zero for a
 # HIDDEN window, which is exactly the case this rescue exists for.
@@ -251,5 +256,6 @@ for ($i = 0; $i -lt 200; $i++) {
     }
 }
 $proc.WaitForExit()
+Close-MemReservation -Reservation $Reservation
 exit $proc.ExitCode
 

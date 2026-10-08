@@ -65,6 +65,10 @@ orchestrator files the issue and writes the line with its number. Check the form
 -Root <your worktree>`. The orchestrator refuses a red result without one, and a waiver never
 covers a failure your change caused.
 
+A run that ends `result: DEFERRED` (exit 3) waited past the memory ledger's cap or met the memory
+floor. It is neither pass nor fail: re-run it when memory frees, and never report or land on it
+as a result.
+
 ## No foreground game windows
 
 Never launch Godot or the game so that a window appears on the user's screen, and never

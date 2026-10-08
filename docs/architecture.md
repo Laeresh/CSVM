@@ -661,6 +661,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/Probes.cs`, the assertion cores behind the `--dump-*` reports: one pass yields the report text and the verdict a suite asserts on.
 - `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
 - `src/Tooling/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
+- `src/Tooling/MemoryAdmission.cs`, the engine's side of the machine-wide memory ledger: a scripted launch below the floor refuses to start, an unadmitted one registers itself.
 - `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
