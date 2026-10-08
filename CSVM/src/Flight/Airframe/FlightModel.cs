@@ -820,13 +820,6 @@ public sealed class FlightModel
     public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
         BounceImpulse(velocity, normal, contactArm, BodyRates).NormalSpeed;
 
-    /// <summary>The decoded angular half of the same impulse: what the contact adds to the body
-    /// rates, net of the original's accumulator round-trip (the inertia weighting cancels between
-    /// the deposit and the next frame's integration, so the applied kick is the raw
-    /// <c>(r × J) / |r|²</c> scaled by the partition's angular share and the shared 0.5).</summary>
-    public Vector3 BounceRateKick(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
-        BounceImpulse(velocity, normal, contactArm, BodyRates).RateKick;
-
     /// <summary>The decoded collision response: the placement at the sweep's stop and, on a
     /// person's contact rule, the normal-only impulse on velocity and body rates. The original edits
     /// no tangential or vertical speed and adds no friction, so a scrape bleeds speed only through

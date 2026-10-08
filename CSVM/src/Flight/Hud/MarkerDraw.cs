@@ -4,10 +4,10 @@ using Godot;
 namespace CSVM.Flight.Hud;
 
 /// <summary>The world-marker's drawing primitives: the target reticle, the off-screen arrow, and
-/// the centred text block with its drop shadow and its clamped variant. <see cref="EdgeMarker"/>
-/// decides WHERE a marker goes; this decides what it looks like once placed, so every HUD that
-/// draws one reproduces the look instead of copying it. The caller owns the colour and the scaled
-/// sizes, which is why none of them are baked in here.</summary>
+/// the centred text block with its drop shadow. The placement is <see cref="EdgeMarker"/>'s; this
+/// decides what a marker looks like once placed. Every HUD that draws one reproduces the look
+/// through it instead of copying it. The caller owns the colour and the scaled sizes, which is why
+/// none of them are baked in here.</summary>
 public static class MarkerDraw
 {
     /// <summary>1440p reference arrowhead length; scale by <see cref="HudMetrics"/> first.</summary>
@@ -68,24 +68,5 @@ public static class MarkerDraw
             into.DrawString(font, p, line, HorizontalAlignment.Left, -1f, fontSize, color);
             y += lineH;
         }
-    }
-
-    /// <summary>Like <see cref="Lines"/> (vertically centred) but keeps the whole block inside
-    /// <paramref name="paneSize"/> less <paramref name="margin"/>, so an edge marker never spills
-    /// off a corner.</summary>
-    public static void LinesClamped(CanvasItem into, Font font, Vector2 center,
-        IReadOnlyList<string> lines, int fontSize, Color color, Vector2 paneSize, float margin)
-    {
-        float lineH = font.GetHeight(fontSize);
-        float totalH = lines.Count * lineH;
-        float maxW = 0f;
-        foreach (var line in lines)
-        {
-            maxW = Mathf.Max(maxW, font.GetStringSize(line, HorizontalAlignment.Left, -1f, fontSize).X);
-        }
-
-        center.X = Mathf.Clamp(center.X, margin + maxW / 2f, paneSize.X - margin - maxW / 2f);
-        center.Y = Mathf.Clamp(center.Y, margin + totalH / 2f, paneSize.Y - margin - totalH / 2f);
-        Lines(into, font, center, lines, fontSize, color);
     }
 }
