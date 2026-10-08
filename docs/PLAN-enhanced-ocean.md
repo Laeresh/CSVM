@@ -114,9 +114,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E, per-chapter seas
 
-41. ☐ An ocean lab and a shipped sea state per chapter
+41. ☑ An ocean lab and a shipped sea state per chapter
 42. ☑ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
-43. ☐ No raised water triangle shows or shadows over the ocean in a harbour
+43. ☑ No raised water triangle shows or shadows over the ocean in a harbour
 
 ## Dependency and parallelism notes
 
@@ -1204,7 +1204,7 @@ forcing it.
 
 # Wave E, per-chapter seas
 
-## E41 ☐ An ocean lab and a shipped sea state per chapter
+## E41 ☑ An ocean lab and a shipped sea state per chapter
 
 **Landed.** The ocean's tunables are one record, `Effects/SeaState.cs`, its defaults the constants
 it replaces: swell height (`wave_scale`), a length scale on every wave, wind, crest sharpness, the
@@ -1231,7 +1231,15 @@ quiet-gated rounds alternating the trees: the plan tree 3.429, 3.423 and 3.416, 
 change 3.423, 3.419 and 3.416, 3.417 ms (`--no-ocean` 2.093 and 2.129), so it does not move. Montage, defaults / rough / calm at C1B cruise
 and at the golden's 120 m pose, and the panel open, in the E41 worktree's `.scratch\e41\`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The user tuned every sea chapter but C5 in the lab and saved it from the source tree;
+`ocean_seas.json` ships those values, and C5 and C4 take the defaults. With the shipped sea no longer
+the defaults, `OceanSeasTests` run save and round-trip against an all-defaults fixture and hold the
+shipped file to reading clean and saving back byte for byte, and `ocean-lab` starts from the shipped
+C1B sea. The sea moved three Enhanced goldens and nothing else (`c1-lake-enhanced` 9.98 %,
+`c1-rocket-hit-enhanced` 2.12 %, `c1b-ocean-enhanced` 50.61 % of pixels); the two freecam shots
+rendered with the default fields reproduce their old hashes. Complete battery after the re-pin:
+units 6520 passed, 3 skipped; engine 546 passed, 2 skipped, engine errors clean on all six shards;
+goldens 25/25.
 
 **Original approach (kept for reference).**
 
@@ -1358,7 +1366,7 @@ shard-3 list clean; the complete battery green, goldens 25/25.
 **⚠ Traps.** The minimal set is GC-timing dependent; prove the fix on the exact failing list, not on a
 smaller one that happens to pass. Original graphics output must not change.
 
-## E43 ☐ No raised water triangle shows or shadows over the ocean in a harbour
+## E43 ☑ No raised water triangle shows or shadows over the ocean in a harbour
 
 **Landed.** The cause, measured: C2's patch is two base-sheet (`wtr00000`) triangles with their foot
 at sea level and one corner raised to 1.03 m at the quay corner (-6144.1, -3843.5), one in `g36352`
@@ -1413,7 +1421,11 @@ engine 545 passed, 1 failed (`ocean-lab`: the lab starts on the shipped sea, whi
 defaults), errors clean; goldens 3 moved by the sea (`c1-lake-enhanced`, `c1-rocket-hit-enhanced`,
 `c1b-ocean-enhanced`), every Original golden held. All of those read the shipped sea file.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The user judged the three-column montage at their own pose, C2's quay corner, C5's
+harbour and C5's hull, in their sea, and chose the open-sea version over hiding the triangles alone.
+On the plan tree with the user's sea and the three sea-moved goldens re-pinned, the complete battery
+passed: units 6520 passed, 3 skipped; engine 546 passed, 2 skipped (`ocean-harbour-ramp` among
+them), engine errors clean on all six shards; goldens 25/25.
 
 **Original approach (kept for reference).**
 
