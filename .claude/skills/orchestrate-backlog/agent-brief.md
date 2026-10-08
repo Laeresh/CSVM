@@ -33,7 +33,8 @@ do may wait on them.
 - Docs: a changed module updates its `docs/architecture/<Namespace>.md` entry (run
   `.\CheckDocEntries.ps1`); a new verification rule goes in `docs/verification.md` (mint the next
   number from your tree; the orchestrator renumbers collisions); a new CLI flag updates
-  `docs/cli.md`. Run `.\CheckEncoding.ps1` and `.\CheckItemIds.ps1` before you finish.
+  `docs/cli.md`. Run `.\CheckEncoding.ps1`, `.\CheckItemIds.ps1` and `.\CheckUidSidecars.ps1`
+  before you finish; the last prints the import that writes a missing `.uid`.
 - NEVER write to the tracker: no `gh issue create`, `comment`, `edit` or `close`. `gh issue view`
   and `gh issue list` are fine. Anything you would post is written to a file beside your commit
   message (below) and the orchestrator posts it after your work has landed.

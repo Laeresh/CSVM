@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # The content gate every harness's pre-commit hook calls: encoding, item IDs, golden prose,
-# comment caps, doc entries, and the form of any Waiver: line in the commit's own message (read
+# comment caps, doc entries, Godot .uid sidecars, and the form of any Waiver: line in the commit's own message (read
 # off the command's -m and -F arguments; CheckWaiver.ps1 says what that check cannot know).
 #
 # THE ROOT IS THE WHOLE POINT. A hook runs as its own process in whatever directory the session
@@ -64,7 +64,8 @@ $checks = @(
     @{ Name = 'item IDs';        Script = 'CheckItemIds.ps1' },
     @{ Name = 'golden prose';    Script = 'CheckGoldenProse.ps1' },
     @{ Name = 'comment caps';    Script = 'CheckCommentCaps.ps1' },
-    @{ Name = 'doc entries';     Script = 'CheckDocEntries.ps1' }
+    @{ Name = 'doc entries';     Script = 'CheckDocEntries.ps1' },
+    @{ Name = 'uid sidecars';    Script = 'CheckUidSidecars.ps1' }
 )
 
 # THE GATE IS ONLY AS GOOD AS ITS TRIGGER. What follows is what a git commit INVOCATION looks like
@@ -428,6 +429,10 @@ function Invoke-SelfTest {
         Assert-Row 'row 10 duplicate item ID blocks' ($names -contains 'item IDs')
         Assert-Row 'row 10 golden prose blocks' ($names -contains 'golden prose')
         Assert-Row 'row 10 comment cap blocks' ($names -contains 'comment caps')
+        Assert-Row 'row 10 a .cs without its .uid blocks' ($names -contains 'uid sidecars')
+        Write-Chars -File (Join-Path $fx 'CSVM/src/Bad.cs.uid') -Codes ([int[]][char[]]'uid://fixture')
+        Assert-Row 'row 10 the same .cs with its .uid passes' (
+            @(Invoke-Checks -Roots @($fx) | Where-Object { $_.Check -eq 'uid sidecars' }).Count -eq 0)
 
         # Row 11: CheckDocEntries.ps1 as the fifth check. A minimal architecture split (one
         # namespace file, one index bullet, one matching CSVM/src file) so the existence and

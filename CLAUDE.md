@@ -16,10 +16,13 @@ landing gate for any change under `CSVM/`.
   exploration.
 - **Hooks:** `.claude/settings.json` runs four `PreToolUse` hooks. (1) A shell-syntax guard that
   rejects a PowerShell here-string (`@'…'@`) sent to the **Bash** tool, and a heredoc or
-  `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
-  "Use Powershell instead of bash", the one exception is a command whose every `&&`/`||`/`;`/`|`
-  segment starts with `git` or `gh`, since those behave identically in either shell. The block
-  applies on Windows only: on macOS and Linux (under `pwsh`) Bash is the native shell.
+  `/dev/null` sent to the **PowerShell** tool. (2) The Bash guard,
+  [`CheckBashCommand.ps1`](CheckBashCommand.ps1): the **Bash** tool runs only `git` and `gh`,
+  optionally piped into `head`, `tail`, `grep`, `wc`, `sort` or `uniq`, and everything else goes
+  to PowerShell. Quoted text is one word, so a `|` inside a `--jq` filter does not split the
+  command; Bash is the shell for a `gh --jq` filter with embedded double quotes, which PowerShell
+  5.1 strips. The guard applies on Windows only: on macOS and Linux (under `pwsh`) Bash is the
+  native shell.
   (3) The format gate, [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1): `dotnet format` and a
   `-t:Rebuild` that blocks on remaining StyleCop warnings, before an *invocation* of
   `RunTests.ps1` (bare, through `&`, or behind `powershell -File`), `dotnet test`, or
@@ -34,7 +37,9 @@ landing gate for any change under `CSVM/`.
   it), and only a command naming none of those falls back to the session's ambient cwd.
   `.\FormatBeforeTests.ps1 -ShowRoot -Command '…'` says which tree a command would build,
   and `-SelfTest` exercises the trigger and the resolution.
-- **The content gate** runs six checks, each its own script you can also run by hand while
+  One `PostToolUse` hook runs `CheckCommentCaps.ps1 -Hook` after an Edit or Write of a `.cs`
+  file, so a comment over its cap is reported while it is being written, not at the commit.
+- **The content gate** runs seven checks, each its own script you can also run by hand while
   editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
   [`CheckItemIds.ps1`](CheckItemIds.ps1) (`backlog.md`/`playtest.md` defining the same
   `BL-`/`PT-`/`CAP-` ID twice, or a `backlog.md` header tag outside the vocabularies the file's
@@ -45,7 +50,9 @@ landing gate for any change under `CSVM/`.
   [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) over `CSVM/src` and `CSVM.Tests` (`-Summary` for
   one line per file; the sentence caps apply to the comment blocks the commit changes), and [`CheckDocEntries.ps1`](CheckDocEntries.ps1) (`docs/architecture/*.md`
   entry caps and coverage against `CSVM/src`, one-line `docs/architecture.md` index bullets, and
-  `docs/cli.md`'s 600-character flag bullet cap), and [`CheckWaiver.ps1`](CheckWaiver.ps1) (the
+  `docs/cli.md`'s 600-character flag bullet cap), [`CheckUidSidecars.ps1`](CheckUidSidecars.ps1)
+  (a `.cs` or `.gdshaderinc` under `CSVM/` without its Godot `.uid` sidecar; it prints the
+  headless import that writes them), and [`CheckWaiver.ps1`](CheckWaiver.ps1) (the
   form of a `Waiver:` line in the commit's own `-m`/`-F` message, per PROJECT_CONTEXT.md's
   verification loop; it cannot tell whether the battery was red). A comment block over cap has outgrown its
   subject, so reflowing it is the wrong fix: move the decode into `docs/` and leave the
