@@ -159,7 +159,7 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
   `backlog.md`. It cannot know whether the battery was red, so a red landing with no waiver line
   passes it; whoever lands the change (the orchestrator, for a run) checks the reported battery
   result and refuses a red one without a waiver.
-- **Every stage prints its wall time against a budget from `analysis/verification-budgets.json`.**
+- **Every test stage prints its wall time against a budget from `analysis/verification-budgets.json`.**
   An `over budget` marker is awareness only and never changes the exit code, because a busy
   workstation must not fail correct code; `docs/tooling.md` holds the rule that set the numbers.
 

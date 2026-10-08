@@ -68,6 +68,8 @@
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
     is compared against nothing, and the total is compared only when the lane's own stages all ran.
+    Build carries no budget, and the total compared is the sum of the budgeted stages alone. The
+    engine budget is capped at 80 percent of the per-launch watchdog, so it warns before it kills.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
@@ -285,6 +287,9 @@ $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 $EngineTimeoutSec = 300
+# The engine stage's budget is capped below the watchdog, so a growing catalog reads "over budget"
+# before a shard's launch is killed: a budget at the watchdog would go red without ever warning.
+$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineTimeoutSec)
 # Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
 # cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
 # every shard within 8 s of the others, and 8 was slower per shard from contention. The watchdog
@@ -1973,6 +1978,9 @@ function Get-StageBudget {
     if ($prop -eq $null) {
         return 0.0
     }
+    if ($Name -eq "engine") {
+        return [math]::Min([double]$prop.Value, $EngineBudgetCapSec)
+    }
     return [double]$prop.Value
 }
 
@@ -1990,14 +1998,18 @@ foreach ($stage in $Stages) {
 
 # A skipped stage is compared against nothing, and the total only against the lane whose work it
 # actually did: a run that skipped goldens is not a slow full run, it is a different run.
+# The total compared is the budgeted stages' own sum: an unbudgeted stage (build, perf) is time
+# the battery cannot be cut to save, so it is printed but never counted against the lane.
 $OverBudget = @()
 $stageBudgetText = @{}
+$budgetedSeconds = 0.0
 foreach ($stage in $Stages) {
     $budget = Get-StageBudget $stage.Name
     if ($budget -le 0 -or $stage.Status -eq "SKIP") {
         $stageBudgetText[$stage.Name] = ""
         continue
     }
+    $budgetedSeconds += $stage.Seconds
     if ($stage.Seconds -gt $budget) {
         $stageBudgetText[$stage.Name] = "[over budget $(Format-Seconds $budget)s]"
         $OverBudget += "$($stage.Name) took $(Format-Seconds $stage.Seconds)s against a $(Format-Seconds $budget)s budget"
@@ -2022,11 +2034,11 @@ if ($laneComplete) {
 $totalBudgetText = ""
 if ($laneComplete -and [double]$LaneBudget.total -gt 0) {
     $totalBudget = [double]$LaneBudget.total
-    if ($totalSeconds -gt $totalBudget) {
-        $totalBudgetText = " [over budget $(Format-Seconds $totalBudget)s]"
-        $OverBudget += "the whole $BudgetLane run took $(Format-Seconds $totalSeconds)s against a $(Format-Seconds $totalBudget)s budget"
+    if ($budgetedSeconds -gt $totalBudget) {
+        $totalBudgetText = " [budgeted stages $(Format-Seconds $budgetedSeconds)s, over budget $(Format-Seconds $totalBudget)s]"
+        $OverBudget += "the $BudgetLane run's budgeted stages took $(Format-Seconds $budgetedSeconds)s against a $(Format-Seconds $totalBudget)s budget"
     } else {
-        $totalBudgetText = " [budget $(Format-Seconds $totalBudget)s]"
+        $totalBudgetText = " [budgeted stages $(Format-Seconds $budgetedSeconds)s, budget $(Format-Seconds $totalBudget)s]"
     }
 }
 
