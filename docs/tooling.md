@@ -726,7 +726,8 @@ Linux x86_64 libraries (debug and release) into `CSVM/addons/webrtc_native/`, wh
 It also adds the manifest to `CSVM/.godot/extension_list.cfg`, where a run that never opened the
 editor finds extensions; an editor import writes the same line. Unlike SDL2 the extension must sit
 inside the project folder Godot opens, so each checkout or worktree that should play over the
-internet runs it once. `-Verify` checks without installing.
+internet runs it once. Each installed file is pinned by SHA-256 too, so a run reinstalls over a file
+that differs from its pin, and `-Verify` checks every file against its pin without installing.
 
 The game needs it only for internet play through a master server (`--master-server=`,
 `docs/cli.md`): `Net/WebRtcTransport.cs` reports `Available` false without it, the launcher logs that

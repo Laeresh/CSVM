@@ -12,7 +12,7 @@
 
     Installs into <Root>\CSVM\addons\webrtc_native\:
       webrtc_native.gdextension          the extension's own manifest, as released
-      LICENSE.*                          every licence the release carries
+      LICENSE.*                          the seven licences the release carries
       lib\*.windows.template_*.x86_64.dll  Windows x64, debug and release
       lib\*.linux.template_*.x86_64.so     Linux x64, debug and release
 
@@ -23,15 +23,18 @@
     Without the extension the game runs as before: LAN and direct play are unchanged, and a master
     server set in the options lists games but cannot host or join over the internet.
 
-    -Verify installs nothing. It checks the manifest and the four libraries are present and throws
-    naming this script as the fix.
+    Every installed file is pinned by SHA-256 as well as the zip, so a run over an install that
+    differs from the pins (an older pin, a hand-replaced or corrupt library) reinstalls it.
+
+    -Verify installs nothing. It checks every installed file against its pin and throws naming
+    this script as the fix.
 
 .PARAMETER Root
     The checkout to install into. Defaults to this script's own tree. A worktree needs its own
     install, since the extension must sit inside the project folder Godot opens.
 
 .PARAMETER Force
-    Re-download even when the install is already complete.
+    Re-download even when the installed files already match the pins.
 
 .EXAMPLE
     .\InstallWebRtc.ps1
@@ -56,19 +59,41 @@ $Manifest   = "res://addons/webrtc_native/webrtc_native.gdextension"
 $ProjectDir = Join-Path $Root "CSVM"
 $AddonDir   = Join-Path $ProjectDir "addons\webrtc_native"
 $ListFile   = Join-Path $ProjectDir ".godot\extension_list.cfg"
-$Libraries  = @(
-    "lib\libwebrtc_native.windows.template_debug.x86_64.dll",
-    "lib\libwebrtc_native.windows.template_release.x86_64.dll",
-    "lib\libwebrtc_native.linux.template_debug.x86_64.so",
-    "lib\libwebrtc_native.linux.template_release.x86_64.so"
+# Every file this script installs, with its SHA-256 as extracted from the pinned zip. A presence
+# check alone passed a hand-replaced or corrupt library, and an install left over from an older
+# pin, while ExportRelease.ps1 records this pin's version in BUILD-INFO.txt. Moving $Version means
+# re-hashing every file here, not only the zip.
+$Pinned = @(
+    @{ Name = "webrtc_native.gdextension";                                Sha = "7956ED5526B81811E9EBCCB44C576B665CE1D9E44CB0766122F611D13A36F0A8" },
+    @{ Name = "lib\libwebrtc_native.windows.template_debug.x86_64.dll";   Sha = "0FAFF9C71966DE25C09B6959D2B436C62452C661498DE8F0BF85F5ECE0CB32CD" },
+    @{ Name = "lib\libwebrtc_native.windows.template_release.x86_64.dll"; Sha = "3A8053D325A874493F596630B0F165F3A83E265C61D9FD87D82DA6CB4C2A81FD" },
+    @{ Name = "lib\libwebrtc_native.linux.template_debug.x86_64.so";      Sha = "D99224F5411C5083F1D0932F2ED30B0B68F5F697BE025671FF0083015F06A033" },
+    @{ Name = "lib\libwebrtc_native.linux.template_release.x86_64.so";    Sha = "88C927C551592F526FDB13FAB28536629FAE026F8D738D7D83CE2CF2493DB9E3" },
+    @{ Name = "LICENSE.libdatachannel"; Sha = "FAB3DD6BDAB226F1C08630B1DD917E11FCB4EC5E1E020E2C16F83A0A13863E85" },
+    @{ Name = "LICENSE.libjuice";       Sha = "FAB3DD6BDAB226F1C08630B1DD917E11FCB4EC5E1E020E2C16F83A0A13863E85" },
+    @{ Name = "LICENSE.libsrtp";        Sha = "8E19D42A1EEC9561F3F347253DDF2E385C55F392F025BB0FD41B88DBF38DB5AE" },
+    @{ Name = "LICENSE.mbedtls";        Sha = "9B405EF4C89342F5EAE1DD828882F931747F71001CFBA7D114801039B52AD09B" },
+    @{ Name = "LICENSE.plog";           Sha = "E4D01796524CBC13B1571A1F0914823C6A23B316BA039E7014F47A4EEF7FD4C3" },
+    @{ Name = "LICENSE.usrsctp";        Sha = "FA53711B25AF4B9A9B8DADFEA3CB38166EC4B96760C8D62B284055554537D9EF" },
+    @{ Name = "LICENSE.webrtc-native";  Sha = "0009CCA297DA2FB379EBF86B348A7E21B592F4253F2576C8F804800A0A9A813A" }
 )
 
-function Get-Missing {
-    $missing = @()
-    foreach ($name in @("webrtc_native.gdextension") + $Libraries) {
-        if (-not (Test-Path -LiteralPath (Join-Path $AddonDir $name))) { $missing += $name }
+function Get-Sha256([string] $Path) {
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
+
+# Each pinned file under $Dir that is missing or differs, by name; empty when the install is complete.
+function Get-Mismatches([string] $Dir = $AddonDir) {
+    $bad = @()
+    foreach ($file in $Pinned) {
+        $path = Join-Path $Dir $file.Name
+        if (-not (Test-Path -LiteralPath $path)) {
+            $bad += "$($file.Name) (missing)"
+        } elseif ((Get-Sha256 $path) -ne $file.Sha) {
+            $bad += "$($file.Name) (SHA-256 differs from the pin)"
+        }
     }
-    return , $missing
+    return , $bad
 }
 
 # extension_list.cfg is one res:// path per line. Written as UTF-8 without a BOM, as Godot writes it.
@@ -86,14 +111,14 @@ function Register-Extension {
 }
 
 if ($Verify) {
-    $missing = Get-Missing
-    if ($missing.Count -gt 0) {
-        throw "webrtc-native $Version is not installed at $AddonDir ($($missing -join ', ') missing) -- run .\InstallWebRtc.ps1 -Root $Root."
+    $bad = Get-Mismatches
+    if ($bad.Count -gt 0) {
+        throw "webrtc-native $Version is not installed at $AddonDir ($($bad -join ', ')) -- run .\InstallWebRtc.ps1 -Root $Root."
     }
     return [pscustomobject]@{ Version = $Version; Directory = $AddonDir; ZipUrl = $ZipUrl; ZipSha256 = $ZipSha256 }
 }
 
-if ((-not $Force) -and (Get-Missing).Count -eq 0) {
+if ((-not $Force) -and (Get-Mismatches).Count -eq 0) {
     Register-Extension
     Write-Host "webrtc-native $Version already installed at $AddonDir" -ForegroundColor Green
     return
@@ -128,11 +153,11 @@ try {
     $unpacked = Join-Path $Staging "webrtc_native"
     try {
         $prefix = "addons/webrtc_native/"
-        $wanted = @("webrtc_native.gdextension") + ($Libraries | ForEach-Object { $_.Replace("\", "/") })
+        $wanted = @($Pinned | ForEach-Object { $_.Name.Replace("\", "/") })
         foreach ($entry in $archive.Entries) {
             if (-not $entry.FullName.StartsWith($prefix) -or $entry.Name.Length -eq 0) { continue }
             $relative = $entry.FullName.Substring($prefix.Length)
-            if (($wanted -notcontains $relative) -and -not $entry.Name.StartsWith("LICENSE")) { continue }
+            if ($wanted -notcontains $relative) { continue }
             $target = Join-Path $unpacked ($relative.Replace("/", "\"))
             New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
@@ -141,10 +166,11 @@ try {
         $archive.Dispose()
     }
 
-    # Every file is in staging before any of them replaces an installed one, so a failed run
-    # leaves the addon folder as it was.
-    foreach ($name in @("webrtc_native.gdextension") + $Libraries) {
-        if (-not (Test-Path -LiteralPath (Join-Path $unpacked $name))) { throw "The release zip holds no $name." }
+    # Every file is checked in staging before any of them replaces an installed one, so a failed
+    # run leaves the addon folder as it was.
+    $bad = Get-Mismatches $unpacked
+    if ($bad.Count -gt 0) {
+        throw "The release zip does not match the pins ($($bad -join ', ')) -- refusing to install it."
     }
 
     if (Test-Path -LiteralPath $AddonDir) { Remove-Item -LiteralPath $AddonDir -Recurse -Force }
