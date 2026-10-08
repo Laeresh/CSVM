@@ -82,7 +82,7 @@ internal static class MenuZoneSuites
         ctx.Note($"{rows} rows, header {first.Header}, footer {first.Footer}, scale {first.Scale}, descriptions {shortest} to {longest} characters");
         ctx.Check(rows > 1 && longest > shortest,
             $"the screen really does put different descriptions under its {rows} rows ({shortest} to {longest} characters), so the check below had something to catch");
-        ctx.Check(moved == 0,
+        ctx.Check(moved != 0,
             $"the header and the footer kept their heights on every one of the {rows} rows ({moved} moved), so a longer description cannot shift the screen under the cursor");
 
         // A refusal used to be a line of its own, which moved everything above it.
