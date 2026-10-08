@@ -64,6 +64,10 @@ public static class CoopDoorText
     /// <summary>A guest's word while a host that asks a password has not admitted it yet.</summary>
     public const string AwaitingAdmission = "Waiting for the host to accept the password ...";
 
+    /// <summary>Why a co-op host's FLY MISSION does not leave yet: a seated guest is not Ready. The
+    /// Original host greys the button instead, so these words are the remake's own.</summary>
+    public const string GuestsNotReady = "Waiting for every guest to be Ready.";
+
     /// <summary>The games list's Status for a game that asks a password, the original's langui
     /// 10141.</summary>
     public const string NeedPassword = "Need Password";

@@ -32,8 +32,10 @@ internal static class MenuCoopDoorSuites
         + "with no password the Multiplayer board left behind, the guest's "
         + "Multiplayer board names the campaign session it joined, Continue holds the guest on a "
         + "waiting board, the remote guest counts in the host's chip strip without a local seat and "
-        + "stands Ready, the host's FLY MISSION leaves with the wire and the waiting guest leaves "
-        + "behind it on the same mission in a net seat its session hears, both returns keep the link, "
+        + "stands Ready, the waiting board's plane row picks from the host's hangar and the host hears "
+        + "the pick, the host's FLY MISSION waits for the guest's Ready under the briefing's new round "
+        + "and says so, then leaves with the wire and the waiting guest leaves behind it on the same "
+        + "mission in its pick and a net seat its session hears, both returns keep the link, "
         + "and leaving the campaign unmaps the port")]
     internal static void TheCoopDoor(TestContext ctx)
     {
@@ -164,8 +166,8 @@ internal static class MenuCoopDoorSuites
         menu.Drive(Accept);
         ctx.Check(menu.ShownScreen == LaunchMenu.CoopWaitScreen && menu.ShownHeading == CoopDoorText.WaitingHeading,
             $"Continue holds the guest on the waiting board ({menu.ShownScreen}, {menu.ShownHeading})");
-        ctx.Check(menu.ShownRowCount == 1 && menu.ShownRowText == CoopDoorText.LeaveRow,
-            $"whose one row leaves ({menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownRowCount == 2 && menu.ShownRowText.StartsWith("Plane", StringComparison.Ordinal),
+            $"whose two rows are the guest's plane, under the cursor, and Leave ({menu.ShownRowCount}, {menu.ShownRowText})");
         ctx.Check(menu.ShownDetail.EndsWith("Waiting for the host to launch the mission.", StringComparison.Ordinal),
             $"and whose status says what it waits for ({menu.ShownDetail})");
     }
@@ -182,11 +184,27 @@ internal static class MenuCoopDoorSuites
     }
 
     // A waiting guest has no flight check to press Ready on, so its seat stands Ready by itself. A
-    // host that waits on Ready, as the Original presentation's does, then never waits forever.
+    // host that waits on Ready, as the Original presentation's does, then never waits forever. Its
+    // plane row picks from the host's hangar, and the pick reaches the host.
     private static void GuestStandsReady(TestContext ctx, LaunchMenu hostMenu, LaunchMenu guestMenu,
         NetPlayFeature hostDoor, NetPlayFeature guestDoor)
     {
-        for (int frame = 0; frame < 6 && !hostDoor.CoopAllReady; frame++)
+        Pump(hostMenu, guestMenu, hostDoor, guestDoor, frames: 6);
+        ctx.Check(hostDoor.CoopGuests.Count == 1 && hostDoor.CoopAllReady,
+            $"the waiting guest's seat reaches the host Ready ({hostDoor.CoopGuests.Count} guest(s), all ready {hostDoor.CoopAllReady})");
+        string given = guestMenu.ShownRowText;
+        guestMenu.Drive(new MenuCommands { MoveX = 1 });
+        Pump(hostMenu, guestMenu, hostDoor, guestDoor, frames: 4);
+        ctx.Check(guestMenu.ShownRowText != given && guestMenu.ShownRowText.StartsWith("Plane", StringComparison.Ordinal),
+            $"Right on the plane row picks another of the host's planes ('{given}' to '{guestMenu.ShownRowText}')");
+        ctx.Check(hostDoor.CoopGuests is [{ } seated] && seated.Airframe == guestDoor.Pick.Airframe && seated.Plane == guestDoor.Pick.Plane,
+            $"and the host hears that pick ({guestDoor.Pick.Plane}, airframe {guestDoor.Pick.Airframe})");
+    }
+
+    // Frames of both launchscreens with their doors stepped as each menu's frame would step them.
+    private static void Pump(LaunchMenu hostMenu, LaunchMenu guestMenu, NetPlayFeature hostDoor, NetPlayFeature guestDoor, int frames)
+    {
+        for (int frame = 0; frame < frames; frame++)
         {
             hostMenu.Drive(MenuCommands.None);
             hostDoor.Step(0.016);
@@ -195,9 +213,6 @@ internal static class MenuCoopDoorSuites
             guestDoor.Step(0.016);
             hostDoor.Step(0.016);
         }
-
-        ctx.Check(hostDoor.CoopGuests.Count == 1 && hostDoor.CoopAllReady,
-            $"the waiting guest's seat reaches the host Ready ({hostDoor.CoopGuests.Count} guest(s), all ready {hostDoor.CoopAllReady})");
     }
 
     // FLY MISSION through both launchscreens. The host's leaves with the door's wire. Once the host's
@@ -211,6 +226,14 @@ internal static class MenuCoopDoorSuites
         WalkTo(hostMenu, "GO TO FLIGHT CHECK");
         hostMenu.Drive(Accept);
         WalkTo(hostMenu, "FLY MISSION");
+
+        // The briefing started a new round of picks, which the guest has not answered yet.
+        hostMenu.Drive(Accept);
+        ctx.Check(hostExits.Count == 0 && hostMenu.ShownDetail == CoopDoorText.GuestsNotReady,
+            $"ABLE-TO-FAIL CONTROL: FLY MISSION waits for the guest's Ready and says so ({hostExits.Count}, {hostMenu.ShownDetail})");
+        Pump(hostMenu, guestMenu, hostDoor, guestDoor, frames: 4);
+        ctx.Check(hostDoor.CoopAllReady && hostMenu.ShownDetail != CoopDoorText.GuestsNotReady,
+            $"the guest's Ready under the new round clears the reason ({hostDoor.CoopAllReady}, {hostMenu.ShownDetail})");
         hostMenu.Drive(Accept);
         if (hostExits.LastOrDefault() is not CampaignMissionExit { Net: { IsHost: true } hostLaunch } hostExit)
         {
@@ -220,7 +243,11 @@ internal static class MenuCoopDoorSuites
 
         ctx.Check(hostExit.Profile == CampaignAidProfiles.Pilot && hostDoor.IsCoopHost && hostDoor.Released,
             $"the host's FLY MISSION leaves with the door's wire and the door stays open ({hostExit.Profile}, {hostDoor.Stage})");
-        var roster = NetSeats.Field(hostLaunch.Transport.LocalPeer, new[] { Plane }, hostLaunch.Transport.Peers, Plane);
+        var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(hostDoor, hostLaunch.Transport, new[] { Plane },
+            Array.Empty<CSVM.Flight.Weapons.LoadoutChoice?>(), CSVM.Flight.Weapons.StockLoadouts.Load());
+        string picked = CSVM.Flight.Hangar.StockAirframes.Node(guestDoor.Pick.Airframe);
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == picked,
+            $"the host's field builds the guest's seat on its pick ({(roster.Length == 2 ? roster[1].PlaneNode : "-")} vs {picked})");
         _ = NetSession.Host(hostLaunch.Transport, roster, seed: 11);
         ctx.Check(guestExits.Count == 0, $"ABLE-TO-FAIL CONTROL: the guest has not left before its door hears the host ({guestExits.Count})");
         guestDoor.Step(0.016);
@@ -233,8 +260,9 @@ internal static class MenuCoopDoorSuites
             return false;
         }
 
-        ctx.Check(guestExit.Profile.Length == 0 && guestExit.MissionSeq == hostExit.MissionSeq && guestExit.Seats.Count == 1,
-            $"the guest flies the host's mission with no profile of its own, one seat ({guestExit.Profile}, seq {guestExit.MissionSeq} vs {hostExit.MissionSeq}, {guestExit.Seats.Count})");
+        ctx.Check(guestExit.Profile.Length == 0 && guestExit.MissionSeq == hostExit.MissionSeq && guestExit.Seats.Count == 1
+                  && guestExit.Seats[0].PlaneNode == picked,
+            $"the guest flies the host's mission in its pick with no profile of its own ({guestExit.Profile}, seq {guestExit.MissionSeq} vs {hostExit.MissionSeq}, {guestExit.Seats.FirstOrDefault()?.PlaneNode})");
 
         var guest = NetSession.Guest(guestLaunch.Transport);
         int guestPeer = guestLaunch.Transport.LocalPeer;
@@ -274,6 +302,7 @@ internal static class MenuCoopDoorSuites
     private static void LeaveBothEnds(TestContext ctx, LaunchMenu hostMenu, LaunchMenu guestMenu,
         NetPlayFeature hostDoor, NetPlayFeature guestDoor, List<int> unmapped)
     {
+        guestMenu.Drive(Down);
         guestMenu.Drive(Accept);
         ctx.Check(guestMenu.ShownScreen == "Network" && guestDoor.Stage == NetDoorStage.Shut,
             $"Leave on the waiting board hangs up onto the shut board ({guestMenu.ShownScreen}, {guestDoor.Stage})");

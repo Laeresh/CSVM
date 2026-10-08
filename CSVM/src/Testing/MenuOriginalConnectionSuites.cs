@@ -641,9 +641,10 @@ internal static class MenuOriginalConnectionSuites
     [Suite("menu-original-builtin-host",
         "An Original guest against a Built-in Dogfight host over the loopback: the host's door opens "
         + "with its lobby unshown, the guest finds it on the games list and lands in the lobby, its "
-        + "third stock plane reaches the host, the host's launch waits for the guest's Ready and "
-        + "then writes its map and time into the options, and the guest launches behind the host "
-        + "on that map and time in its own pick")]
+        + "third stock plane reaches the host, the Built-in launchscreen's lone-pilot confirm is "
+        + "refused and the refusal drawn while the guest is not Ready, a quiet frame keeps it, the "
+        + "guest's Ready lets the waiting confirm launch and write its map and time into "
+        + "the options, and the guest launches behind the host on that map and time in its own pick")]
     internal static void TheBuiltInHost(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -684,6 +685,13 @@ internal static class MenuOriginalConnectionSuites
         var ends = new List<End>();
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-builtin-host");
         var guestExits = new List<MenuExit>();
+
+        // The host's own launchscreen over the same door, whose launch is the one under test.
+        var hostExits = new List<MenuExit>();
+        var menuHost = MenuSuiteHost.Bare(hostExits, ctx.DataRoot, out var hostSeat, netDoor: hostDoor);
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, menuHost, hostSeat.Input);
+        ctx.Host.AddChild(menu);
+        menu.SetProcess(false);
         try
         {
             var guest = Open(ctx, layout, guestDoor, ends, guestExits);
@@ -725,19 +733,17 @@ internal static class MenuOriginalConnectionSuites
             var lobby = hostDoor.Dogfight!;
             ctx.Check(lobby.Players.Count == 2 && lobby.Players[1].Airframe == 2,
                 $"the guest's third stock plane reaches the Built-in host ({string.Join(",", lobby.Players.Select(p => p.Airframe))})");
-            string chapter = DogfightLobby.ChapterOf(2);
-            var rules = new VersusRules(0, 5);
-            ctx.Check(lobby.CheckBuiltInLaunch(chapter, rules) == DogfightLobby.GuestsNotReady,
-                $"ABLE-TO-FAIL CONTROL: the host's launch waits while the guest is not Ready");
-            ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
-            Frames(hostDoor, guest, 4);
-            ctx.Check(lobby.CheckBuiltInLaunch(chapter, rules) == null,
-                $"once the guest is Ready the launch may go ({lobby.Players[1].Ready})");
+            var exit = LaunchFromTheBuiltInMenu(ctx, menu, hostDoor, guest, hostExits);
+            if (exit is not { Net: { } wire, Match: { } rules })
+            {
+                return;
+            }
+
             Frames(hostDoor, guest, 4);
             var heard = guestDoor.Dogfight!.Options;
-            ctx.Check(heard is { Environment: 2, TimeMinutes: 5, Victory: DogfightVictory.Time },
-                $"and the launch's map and time reach the guest as the lobby's options ({heard.Environment}, {heard.TimeMinutes}, {heard.Victory})");
-            HostTheBuiltInLaunch(ctx, hostDoor, guest, guestExits, chapter);
+            ctx.Check(DogfightLobby.ChapterOf(heard.Environment) == exit.Chapter && heard.TimeMinutes == rules.TimeLimitMinutes,
+                $"and the launch's map and time reach the guest as the lobby's options ({heard.Environment} for {exit.Chapter}, {heard.TimeMinutes})");
+            HostTheBuiltInLaunch(ctx, wire, guest, guestExits, exit.Chapter, rules.TimeLimitMinutes, hostDoor.PlayerName);
         }
         finally
         {
@@ -745,6 +751,9 @@ internal static class MenuOriginalConnectionSuites
             {
                 end.Host.Deactivate();
             }
+
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
 
             hostDoor.Discard();
             guestDoor.Discard();
@@ -3367,22 +3376,50 @@ internal static class MenuOriginalConnectionSuites
 
     // The Built-in host's wire taken out and its field built off the guest's pick. The session
     // opener then launches the guest on the host's map and time in its own pick.
-    private static void HostTheBuiltInLaunch(TestContext ctx, NetPlayFeature hostDoor, End guest, List<MenuExit> guestExits, string chapter)
+    // The Built-in host's launchscreen walked from its Multiplayer board to a lone pilot's confirm.
+    // The lobby refuses it while the guest is not Ready, and the refusal is drawn. The guest's
+    // Ready, heard by the door, lets the waiting confirm launch with no press at the host.
+    private static LaunchExit? LaunchFromTheBuiltInMenu(
+        TestContext ctx, LaunchMenu menu, NetPlayFeature hostDoor, End guest, List<MenuExit> hostExits)
     {
-        var wire = hostDoor.BuildLaunch();
-        if (wire == null)
+        var accept = new MenuCommands { Accept = true };
+        menu.ShowMenu();
+        menu.Drive(new MenuCommands { MoveY = -1 });
+        menu.Drive(accept);
+        for (int i = 0; i < 12 && menu.ShownRowText != "Continue → Map"; i++)
         {
-            ctx.Check(false, $"the Built-in host's door hands its wire out ({hostDoor.Stage})");
-            return;
+            menu.Drive(new MenuCommands { MoveY = 1 });
         }
 
+        menu.Drive(accept);
+        menu.Drive(accept);
+        menu.Drive(accept);
+        menu.Drive(accept);
+        ctx.Check(menu.ShownScreen == "Plane" && hostExits.Count == 0 && menu.ShownDetail == DogfightLobby.GuestsNotReady,
+            $"ABLE-TO-FAIL CONTROL: the lone pilot's confirm is refused and the refusal drawn while the guest is not Ready ({menu.ShownScreen}, {hostExits.Count}, {menu.ShownDetail})");
+        menu.Drive(MenuCommands.None);
+        ctx.Check(hostExits.Count == 0 && menu.ShownDetail == DogfightLobby.GuestsNotReady,
+            $"a quiet frame neither launches nor drops the refusal ({hostExits.Count}, {menu.ShownDetail})");
+
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        Frames(hostDoor, guest, 4);
+        menu.Drive(MenuCommands.None);
+        var exit = hostExits.LastOrDefault() as LaunchExit;
+        ctx.Check(hostExits.Count == 1 && exit is { Mode: MenuMode.Versus, Net.IsHost: true, Match: not null },
+            $"once the guest's Ready reaches the door the waiting confirm launches with the wire ({hostExits.Count}, {menu.ShownDetail})");
+        return exit;
+    }
+
+    private static void HostTheBuiltInLaunch(
+        TestContext ctx, MenuNetLaunch wire, End guest, List<MenuExit> guestExits, string chapter, int minutes, string hostName)
+    {
         var planes = new[] { StockAirframes.Node(0) };
         var fits = new LoadoutChoice?[] { null };
         var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(2),
             $"the host's roster builds the guest's seat on its pick ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
-        ctx.Check(roster.Length == 2 && roster[0].Callsign == SplitScreen.PlayerTag(0),
-            $"a host whose advert names nobody is seated under its player tag ({roster.FirstOrDefault()?.Callsign})");
+        ctx.Check(roster.Length == 2 && roster[0].Callsign == (hostName.Length > 0 ? hostName : SplitScreen.PlayerTag(0)),
+            $"the host is seated under its callsign, else its player tag ({roster.FirstOrDefault()?.Callsign} for '{hostName}')");
         int before = guestExits.Count;
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         for (int frame = 0; frame < 4 && guestExits.Count == before; frame++)
@@ -3391,7 +3428,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var launch = guestExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
-        ctx.Check(launch is { Mode: MenuMode.Versus, Net.IsHost: false, Match.TimeLimitMinutes: 5 }
+        ctx.Check(launch is { Mode: MenuMode.Versus, Net.IsHost: false } && launch.Match?.TimeLimitMinutes == minutes
                   && launch.Chapter == chapter && launch.Seats.Count == 1
                   && launch.Seats[0].PlaneNode == StockAirframes.Node(2),
             $"the guest launches behind the Built-in host on its map and time in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");

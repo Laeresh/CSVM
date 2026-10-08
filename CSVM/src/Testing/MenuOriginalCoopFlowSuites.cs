@@ -10,6 +10,7 @@ using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
@@ -213,6 +214,285 @@ internal static class MenuOriginalCoopFlowSuites
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-mixed-coop-builtin-host",
+        "Campaign co-op across the two presentations over the loopback, a Built-in host and an "
+        + "Original guest: the guest joins onto the host's cabin, follows the Built-in host's NEXT "
+        + "MISSION into the briefing and its GO TO FLIGHT CHECK onto its own check, picks the host's "
+        + "free spare, the host's FLY MISSION waits for the guest's Ready and says so, then leaves "
+        + "with the wire, the host's field builds the guest on the spare, and the guest launches "
+        + "behind the host's opener in the spare")]
+    internal static void TheBuiltInHostsAnOriginalGuest(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var (hostDoor, guestDoor) = Doors(17);
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        var menu = BuiltInMenu(ctx, hostDoor, hostExits);
+        End? guest = null;
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-mixed-coop-builtin-host");
+        try
+        {
+            guest = Open(ctx, layout, guestDoor, OwnStore("mixed-builtin-host"), guestExits);
+            if (guest == null)
+            {
+                return;
+            }
+
+            menu.CampaignProfiles = SpareStore();
+            menu.ShowMenu();
+            menu.OpenCampaignCabin(CampaignAidProfiles.Pilot);
+            menu.Drive(new MenuCommands { Loadout = true });
+            AwaitMapping(hostDoor);
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            guestDoor.OpenJoin();
+            Pump(menu, hostDoor, guest, frames: 6);
+            ctx.Check(hostDoor.IsCoopHost && guestDoor.IsCoopGuest && guest.Shell.Screen == OriginalScreen.CampaignCabin,
+                $"the Original guest joins onto the Built-in host's cabin ({hostDoor.Stage}, {guestDoor.Stage}, {guest.Shell.Screen})");
+            WalkTo(menu, "Next Mission");
+            menu.Drive(new MenuCommands { Accept = true });
+            Pump(menu, hostDoor, guest, frames: 3);
+            ctx.Check(guest.Shell.Screen == OriginalScreen.CampaignBriefing, $"the host's NEXT MISSION takes the guest into the briefing ({guest.Shell.Screen})");
+            WalkTo(menu, "GO TO FLIGHT CHECK");
+            menu.Drive(new MenuCommands { Accept = true });
+            Pump(menu, hostDoor, guest, frames: 3);
+            ctx.Check(guest.Shell.Screen == OriginalScreen.CampaignFlightCheck, $"and GO TO FLIGHT CHECK onto the guest's own check ({guest.Shell.Screen})");
+
+            var campaign = guest.Host.Features.Get<CampaignFeature>();
+            int spare = campaign.Profile?.Planes.FindIndex(plane => plane.Name == SparePlane) ?? -1;
+            ctx.Check(spare >= 0 && campaign.Field.HolderOf(0, campaign.Profile!.Planes[spare]) < 0,
+                $"the Built-in host offers its hangar, whose spare is free to the guest ({spare})");
+            campaign.CommitPlanes(Math.Max(0, spare), null);
+            WalkTo(menu, "FLY MISSION");
+            menu.Drive(new MenuCommands { Accept = true });
+            ctx.Check(hostExits.Count == 0 && menu.ShownDetail == CoopDoorText.GuestsNotReady,
+                $"ABLE-TO-FAIL CONTROL: the host's FLY MISSION waits for the guest's Ready and says so ({hostExits.Count}, {menu.ShownDetail})");
+            ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+            Pump(menu, hostDoor, guest, frames: 4);
+            ctx.Check(hostDoor.CoopAllReady && hostDoor.CoopGuests is [{ Airframe: SpareAirframe }],
+                $"the guest's Ready reaches the host with the spare ({hostDoor.CoopAllReady})");
+            menu.Drive(new MenuCommands { Accept = true });
+            if (hostExits.LastOrDefault() is not CampaignMissionExit { Net: { IsHost: true } wire })
+            {
+                ctx.Check(false, $"the host's FLY MISSION leaves with the wire ({hostExits.Count}, {menu.ShownDetail})");
+                return;
+            }
+
+            GuestFliesTheSpare(ctx, hostDoor, wire, () => guest.Host.Tick(Dt), guestExits);
+        }
+        finally
+        {
+            guest?.Host.Deactivate();
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-mixed-coop-original-host",
+        "Campaign co-op across the two presentations over the loopback, an Original host and a "
+        + "Built-in guest: the guest joins from its Multiplayer board and waits, its plane row steps "
+        + "onto the host's free spare, its seat stands Ready so the host's FLY MISSION is live once the "
+        + "host is on its check, the host's field builds the guest on the spare, and the guest leaves "
+        + "its waiting board behind the host's opener in the spare")]
+    internal static void TheOriginalHostsABuiltInGuest(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var (hostDoor, guestDoor) = Doors(19);
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        var menu = BuiltInMenu(ctx, guestDoor, guestExits);
+        End? host = null;
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-mixed-coop-original-host");
+        try
+        {
+            host = Open(ctx, layout, hostDoor, CampaignAidProfiles.Store(seeded: true, progressed: true), hostExits);
+            if (host == null)
+            {
+                return;
+            }
+
+            host.Shell.Campaign.OpenCampaignOver(SpareStore(), CampaignAidProfiles.Planes());
+            host.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+            MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), "Zachary", CampaignAidProfiles.Pilot);
+            AwaitMapping(hostDoor);
+
+            var up = new MenuCommands { MoveY = -1 };
+            var down = new MenuCommands { MoveY = 1 };
+            var accept = new MenuCommands { Accept = true };
+            menu.ShowMenu();
+            menu.Drive(up);
+            menu.Drive(accept);
+            menu.Drive(down);
+            menu.Drive(accept);
+            Pump(host, menu, guestDoor, frames: 4);
+            menu.Drive(down);
+            ctx.Check(guestDoor.IsCoopGuest && menu.ShownRowText == CoopDoorText.WaitRow,
+                $"the Built-in guest joins the Original host's campaign ({guestDoor.Stage}, {menu.ShownRowText})");
+            menu.Drive(accept);
+            ClickRow(ctx, host, nameof(BoardButton.NextMission));
+            Pump(host, menu, guestDoor, frames: 3);
+            ClickRow(ctx, host, nameof(BoardButton.GoToFlightCheck));
+            Pump(host, menu, guestDoor, frames: 3);
+            for (int i = 0; i < 8 && !menu.ShownRowText.EndsWith(SparePlane, StringComparison.Ordinal); i++)
+            {
+                menu.Drive(new MenuCommands { MoveX = 1 });
+            }
+
+            ctx.Check(menu.ShownScreen == LaunchMenu.CoopWaitScreen && menu.ShownRowText.EndsWith(SparePlane, StringComparison.Ordinal),
+                $"the waiting board's plane row steps onto the host's free spare ({menu.ShownScreen}, {menu.ShownRowText})");
+            Pump(host, menu, guestDoor, frames: 4);
+            ctx.Check(host.Door.CoopAllReady && host.Door.CoopGuests is [{ Airframe: SpareAirframe }]
+                      && Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: true },
+                $"the guest stands Ready in the spare, so the host's FLY MISSION is live ({host.Door.CoopAllReady})");
+            ClickRow(ctx, host, nameof(BoardButton.FlyMission));
+            if (hostExits.LastOrDefault() is not CampaignMissionExit { Net: { IsHost: true } wire })
+            {
+                ctx.Check(false, $"the Original host's FLY MISSION leaves with the wire ({hostExits.Count})");
+                return;
+            }
+
+            GuestFliesTheSpare(ctx, hostDoor, wire, () =>
+            {
+                guestDoor.Step(Dt);
+                menu.Drive(MenuCommands.None);
+            }, guestExits);
+        }
+        finally
+        {
+            host?.Host.Deactivate();
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // The launch's last leg on either presentation pair. The host's field builds the guest's seat
+    // on the spare and its session's opener goes out. The guest's next frames leave behind it.
+    private static void GuestFliesTheSpare(
+        TestContext ctx, NetPlayFeature hostDoor, MenuNetLaunch wire, Action guestFrame, List<MenuExit> guestExits)
+    {
+        string spare = Flight.Hangar.StockAirframes.Node(SpareAirframe);
+        var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
+        var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+            hostDoor, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == spare,
+            $"the host's field builds the guest's seat on the spare ({(roster.Length == 2 ? roster[1].PlaneNode : "-")})");
+        _ = NetSession.Host(wire.Transport, roster, seed: 7);
+        for (int frame = 0; frame < 4 && guestExits.Count == 0; frame++)
+        {
+            guestFrame();
+        }
+
+        ctx.Check(guestExits.LastOrDefault() is CampaignMissionExit { Net.IsHost: false, Profile: "", Seats: [{ } seat] } && seat.PlaneNode == spare,
+            $"the guest launches behind the host's opener in the spare ({(guestExits.LastOrDefault() as CampaignMissionExit)?.Seats.FirstOrDefault()?.PlaneNode})");
+    }
+
+    // A host door and a guest door over one loopback pair, the host's router a stub.
+    private static (NetPlayFeature Host, NetPlayFeature Guest) Doors(int seed)
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
+        var host = new NetPlayFeature(
+            (_, _, _) => mesh[0],
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }));
+        var guest = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+            (_, _) => mesh[1]);
+        return (host, guest);
+    }
+
+    // A Built-in launchscreen over its own door, driven only by the suite's frames.
+    private static LaunchMenu BuiltInMenu(TestContext ctx, NetPlayFeature door, List<MenuExit> exits)
+    {
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat, netDoor: door);
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        ctx.Host.AddChild(menu);
+        menu.SetProcess(false);
+        return menu;
+    }
+
+    // The aids' progressed profile with a spare plane nobody holds, for a guest to pick.
+    private static CampaignProfileStore SpareStore()
+    {
+        var store = CampaignAidProfiles.Store(seeded: true, progressed: true);
+        var profile = store.Load(CampaignAidProfiles.Pilot)!;
+        profile.Planes.Add(new OwnedPlane { Name = SparePlane, Airframe = SpareAirframe, Ammo = new[] { 2, 0, 0, 0 } });
+        store.Save(profile);
+        return store;
+    }
+
+    // An Original guest's own profile store, outside the aids' directory, with one pilot in it.
+    private static CampaignProfileStore OwnStore(string folder)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "CSVM", folder,
+            Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        var store = new CampaignProfileStore(dir);
+        store.Save(CampaignProfileDef.NewProfile(GuestOwnPilot));
+        store.RecordLastPlayed(GuestOwnPilot);
+        return store;
+    }
+
+    // Frames of a Built-in host and an Original guest, the host's door stepped as its frame would.
+    private static void Pump(LaunchMenu host, NetPlayFeature hostDoor, End guest, int frames)
+    {
+        for (int i = 0; i < frames; i++)
+        {
+            host.Drive(MenuCommands.None);
+            hostDoor.Step(Dt);
+            guest.Host.Tick(Dt);
+        }
+    }
+
+    // Frames of an Original host and a Built-in guest, the guest's door stepped as its frame would.
+    private static void Pump(End host, LaunchMenu guest, NetPlayFeature guestDoor, int frames)
+    {
+        for (int i = 0; i < frames; i++)
+        {
+            host.Host.Tick(Dt);
+            guestDoor.Step(Dt);
+            guest.Drive(MenuCommands.None);
+        }
+    }
+
+    private static void WalkTo(LaunchMenu menu, string text)
+    {
+        for (int i = 0; i < menu.ShownRowCount && menu.ShownRowText != text; i++)
+        {
+            menu.Drive(new MenuCommands { MoveY = 1 });
         }
     }
 

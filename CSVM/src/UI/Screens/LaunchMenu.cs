@@ -105,6 +105,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int NetListingRow = 10;
     private const int NetworkRows = 11;
 
+    // The co-op guest's waiting board: its plane pick, then Leave.
+    private const int CoopWaitPlaneRow = 0;
+    private const int CoopWaitRows = 2;
+
     // The Mode screen's doors past the three modes, as offsets from the last mode, in drawn order.
     private const int JoinDoor = 0;
     private const int CampaignDoor = 1;
@@ -981,6 +985,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
             flow.OpenScrapbookAfterMission(profile, seq, missionWon);
+
+            // A co-op host's guests are shown this book as the debrief, over the host's result.
+            flow.Feature.OpenDebrief(seq, missionWon);
         }
 
         Rebuild();
@@ -1630,7 +1637,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     // The waiting board backs onto the board it was continued from, link and all,
                     // as the Dogfight's map screen does. Its Leave row is what hangs up.
-                    _coopWait = false;
+                    LeaveCoopWait();
                     _netIndex = NetContinueRow;
                 }
                 else
@@ -1880,7 +1887,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             case Screen.Network:
                 // The port, the cap and the voice step. The address and the names are typed, and
                 // the three rows under the address are presses.
-                if (_coopWait || _net is not { } door)
+                if (_coopWait)
+                {
+                    return _netIndex == CoopWaitPlaneRow && _campaignFeature.StepGuestPlane(dir);
+                }
+
+                if (_net is not { } door)
                 {
                     return false;
                 }
@@ -2317,11 +2329,18 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        // The waiting board's one row hangs up and hands the board back, shut, to join again.
+        // The waiting board's plane row steps the pick, a pad's one gesture for it. Its Leave row
+        // hangs up and hands the board back, shut, to join again.
         if (_coopWait)
         {
+            if (_netIndex == CoopWaitPlaneRow)
+            {
+                _campaignFeature.StepGuestPlane(1);
+                return;
+            }
+
             net.Close();
-            _coopWait = false;
+            LeaveCoopWait();
             _netIndex = NetJoinRow;
             return;
         }
@@ -2377,15 +2396,26 @@ public sealed partial class LaunchMenu : CanvasLayer
         _error = "";
     }
 
-    // The waiting board's guest has no flight check of its own, so each of its seats stands Ready
-    // under every round. A host that waits on Ready would otherwise wait forever. Once the host
-    // launches, the guest leaves with the exit an Original guest builds, over a guest campaign
-    // opened on the host's word. True when the launch went.
+    // The waiting board's guest follows its host on a guest campaign opened on the host's word, the
+    // feature an Original guest's boards stand on. Its pick is the board's plane row. With no
+    // flight check of its own each seat stands Ready under every round, or a host that waits on
+    // Ready would wait forever. Once the host launches, the guest leaves with the exit an Original
+    // guest builds. True when the launch went.
     private bool TakeCoopGuestLaunch()
     {
-        if (!_coopWait || _net is not { IsCoopGuest: true } net)
+        if (!_coopWait || _net is not { IsCoopGuest: true } net || net.CoopFlow is not { } flow)
         {
             return false;
+        }
+
+        if (!_campaignFeature.IsGuest && !_campaignFeature.OpenCoopGuest(net, Fits, _dataRoot))
+        {
+            return false;
+        }
+
+        if (_campaignFeature.FollowCoopHost(net, flow, _slots.Count) is var lost and >= 0)
+        {
+            _error = _campaignFeature.SeatRefusal(lost);
         }
 
         for (int local = 0; local < net.CoopSeats; local++)
@@ -2397,16 +2427,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             }
         }
 
-        if (!net.CoopLaunchDue || net.CoopFlow is not { } flow)
+        if (!net.CoopLaunchDue
+            || _campaignFeature.CoopGuestExit(net, local => local < _slots.Count ? _slots[local].Input.Pads ?? Array.Empty<int>() : Array.Empty<int>()) is not { } exit)
         {
-            return false;
-        }
-
-        _campaignFeature.OpenGuest(net.Advert?.Host ?? "", flow.Progress, net.CoopHangar, flow.Slot, Fits, _dataRoot,
-            net.Pick.Plane, net.Pick.Fit);
-        if (_campaignFeature.CoopGuestExit(net, local => local < _slots.Count ? _slots[local].Input.Pads ?? Array.Empty<int>() : Array.Empty<int>()) is not { } exit)
-        {
-            _campaignFeature.Discard();
             return false;
         }
 
@@ -2414,6 +2437,30 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaignFeature.Discard();
         _host.Exit(exit);
         return true;
+    }
+
+    // Off the waiting board. The guest campaign goes with it; the door keeps the pick it carried.
+    private void LeaveCoopWait()
+    {
+        _coopWait = false;
+        if (_campaignFeature.IsGuest)
+        {
+            _campaignFeature.Discard();
+        }
+    }
+
+    // The waiting board's rows: the guest's plane, then Leave.
+    private string CoopWaitRowText(int index)
+    {
+        if (index != CoopWaitPlaneRow)
+        {
+            return CoopDoorText.LeaveRow;
+        }
+
+        string plane = _campaignFeature is { IsGuest: true, Profile: { Planes.Count: > 0 } profile }
+            ? profile.Planes[Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1)].Name
+            : "the host's hangar";
+        return $"Plane           {plane}";
     }
 
     // --- the hangar ---
@@ -2892,6 +2939,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // has the profile open anyway.
     private void FlyCampaignMission(CampaignFlow flow)
     {
+        // A co-op host's launch waits for every guest's Ready, as the Original host's greyed FLY
+        // MISSION does. The press stays on the check and says why.
+        if (flow.Feature.CoopLaunchWaits(_net))
+        {
+            flow.Resume();
+            flow.SetMessage(CoopDoorText.GuestsNotReady);
+            _error = flow.Message;
+            return;
+        }
+
         int players = _slots.Count;
         var pads = new List<IReadOnlyList<int>>(players);
         for (int player = 0; player < players; player++)
@@ -2942,7 +2999,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // A waiting board whose link dropped has nothing left to wait for; the board says why.
         if (_coopWait && !net.IsCoopGuest)
         {
-            _coopWait = false;
+            LeaveCoopWait();
             _netIndex = NetJoinRow;
             _error = net.Fault;
         }
@@ -2992,19 +3049,35 @@ public sealed partial class LaunchMenu : CanvasLayer
         flow.SetMessage(net.Fault.Length > 0 ? $"The network did not open: {net.Fault}" : "");
     }
 
-    // What the open door advertises: the mission the boards are about, else the profile's next.
-    // Re-offered every frame; the lobby sends only a change, a guest arriving or a mission picked.
-    // The guests are shown the cabin on that mission, which is what a launch then names as flown.
+    // The open door's word to its guests, re-offered every frame through the feature both
+    // presentations share; the lobby sends only a change. The guests are shown the board this
+    // host stands on, so they brief, pick and Ready on its check as under an Original host.
     private void OfferCoopMission(CampaignFlow flow)
     {
-        if (_net is not { IsCoopHost: true } net || flow.Profile is not { } profile)
+        if (_net is not { IsCoopHost: true } net)
         {
             return;
         }
 
-        int seq = flow.MissionSeq >= 0 ? flow.MissionSeq : flow.Feature.NextMissionSeq;
-        net.Offer(seq, profile.Name, _slots.Count);
-        net.ShowCoop(NetCoopScreen.Cabin, seq, profile.MissionsCompleted, CampaignFeature.HangarAirframes(profile));
+        // The book stays the debrief until the cabin or a briefing is entered with no film up.
+        var feature = flow.Feature;
+        if (!flow.Film.Up && flow.Screen is CampaignScreen.Cabin or CampaignScreen.Briefing or CampaignScreen.Roster)
+        {
+            feature.CloseDebrief();
+        }
+
+        var board = flow.Screen switch
+        {
+            CampaignScreen.Briefing => NetCoopScreen.Briefing,
+            CampaignScreen.FlightCheck or CampaignScreen.Ammo or CampaignScreen.PlaneSelection => NetCoopScreen.FlightCheck,
+            _ when feature.Debriefing => NetCoopScreen.Debrief,
+            _ => NetCoopScreen.Cabin,
+        };
+        feature.OfferCoop(net, board, _slots.Count);
+        if (flow.Message == CoopDoorText.GuestsNotReady && !feature.CoopLaunchWaits(net))
+        {
+            flow.SetMessage(string.Empty);
+        }
     }
 
     // Leaving the campaign, flying out of it and a menu reopened all close the carrier and give
@@ -4443,7 +4516,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int CurrentCount() => _screen switch
     {
         Screen.Mode => Modes.Length + ModeDoors,
-        Screen.Network => _coopWait ? 1 : NetworkRows,
+        Screen.Network => _coopWait ? CoopWaitRows : NetworkRows,
         Screen.Join => JoinRows,
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
@@ -4560,7 +4633,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // status line under them says instead.
     // A guest linked to a campaign host is not walking on to a map, so its way on says where it
     // does go. The waiting board's one row replaces all five.
-    private string NetworkRowText(int index) => _coopWait ? CoopDoorText.LeaveRow : index switch
+    private string NetworkRowText(int index) => _coopWait ? CoopWaitRowText(index) : index switch
     {
         NetPortRow => $"Port            {(_net?.Port ?? NetPorts.Game).ToString(CultureInfo.InvariantCulture)}",
         NetAddressRow => $"Address         {_net?.Address ?? NetPlayFeature.DefaultAddress}",
@@ -4849,7 +4922,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WaveEdit or Screen.Wingmen or Screen.Options => "↑↓  Choose field       ←→  Change",
             // W/A/S/D are dead on the address row (MenuInput.TextEntry), so the arrows are named
             // alone, as the hangar's own name screen names them.
-            Screen.Network when _coopWait => "↑↓  Navigate",
+            Screen.Network when _coopWait => "↑↓  Navigate       ←→  Plane",
             Screen.Network => "↑↓  Choose row       ←→  Port, players, voice, listing       Type / Backspace  Address, names",
             // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
             // nobody can guess at. Free Flight's map screen has nothing sideways and says so.

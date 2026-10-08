@@ -76,6 +76,12 @@ public sealed class CampaignFeature : IMenuFeature
     // The stock Devastator the wingman flies when every hangar plane is held. Session-scoped.
     private OwnedPlane? _stockWingman;
 
+    // The debrief a co-op host's guests are shown: the mission it is on and the host's result.
+    private int _debriefSeq;
+    private bool _debriefWon;
+    private int _debriefObjectives;
+    private int _debriefCash;
+
     // The sequence entry read for MissionSeq, and which sequence that was; -2 is "not read for
     // any", which no MissionSeq ever is, since the cabin's own default is -1.
     private CampaignMission? _mission;
@@ -133,6 +139,10 @@ public sealed class CampaignFeature : IMenuFeature
     /// copies it here so the flight check can name its own last button from the feature alone.
     /// </summary>
     public bool GuestReady { get; set; }
+
+    /// <summary>Whether a flown mission's book is showing as the debrief, which a co-op host names
+    /// to its guests with its result (<see cref="OpenDebrief"/>, <see cref="CloseDebrief"/>).</summary>
+    public bool Debriefing { get; private set; }
 
     /// <summary>The profile store the open campaign creates, reads and deletes through, or null
     /// when none is open.</summary>
@@ -934,6 +944,118 @@ public sealed class CampaignFeature : IMenuFeature
         return BuildExit(pads) is { } exit ? exit with { Net = net.BuildLaunch() } : null;
     }
 
+    /// <summary>Opens a co-op guest's campaign on <paramref name="net"/>'s word: the host's story
+    /// position and hangar, standing on the pick the door kept for the joined session. False while
+    /// the door is not a co-op guest's or has heard nothing from its host.</summary>
+    public bool OpenCoopGuest(NetPlayFeature net, StockLoadouts? stock, string? dataRoot)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        if (!net.IsCoopGuest || net.CoopFlow is not { } flow)
+        {
+            return false;
+        }
+
+        OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, net.CoopHangar, flow.Slot, stock, dataRoot,
+            net.Pick.Plane, net.Pick.Fit);
+        return true;
+    }
+
+    /// <summary>One frame of a co-op guest's campaign following its host. Each of the
+    /// <paramref name="localPlayers"/> asks for a seat, and the guest's planes follow the host's
+    /// hangar. Each seat's pick goes to the door with its Ready kept. Returns the earlier seat
+    /// that took a pick (<see cref="FollowHost"/>), or -1.</summary>
+    public int FollowCoopHost(NetPlayFeature net, Net.CoopFlowMessage flow, int localPlayers)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        net.LocalSeats = Math.Max(1, localPlayers);
+        Field.SetPlayers(net.CoopSeats);
+        int lostTo = FollowHost(flow.Progress, net.CoopHangar);
+        for (int local = 0; local < net.LocalSeats; local++)
+        {
+            var (airframe, fit, plane) = GuestPickOf(local);
+            var pick = net.PickOf(local);
+            pick.Set(airframe, pick.Ready, fit);
+            pick.Choose(plane);
+        }
+
+        return lostTo;
+    }
+
+    /// <summary>Steps a co-op guest's own pick by <paramref name="dir"/> through its planes,
+    /// wrapping and passing over any plane an earlier seat holds. The plane flies its stored fit.
+    /// False when no other plane may be picked.</summary>
+    public bool StepGuestPlane(int dir)
+    {
+        if (!IsGuest || dir == 0 || Profile is not { Planes.Count: > 0 } profile)
+        {
+            return false;
+        }
+
+        int count = profile.Planes.Count;
+        for (int step = 1; step < count; step++)
+        {
+            int at = (((profile.SelectedPlane + (Math.Sign(dir) * step)) % count) + count) % count;
+            if (at >= _guestHangar.Count || !LostToEarlier(_guestHangar[at]))
+            {
+                profile.SelectedPlane = at;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether a co-op host's launch waits: its last local check is showing and a seated
+    /// guest is not Ready under the current round. False off a co-op host's door.</summary>
+    public bool CoopLaunchWaits(NetPlayFeature? net) =>
+        net is { IsCoopHost: true } && !net.CoopAllReady && Field.Current + 1 >= Field.Players;
+
+    /// <summary>A flown mission's book is showing as the debrief of mission <paramref name="seq"/>,
+    /// which a co-op host's guests are shown over its own recorded result.</summary>
+    public void OpenDebrief(int seq, bool won)
+    {
+        var run = Profile is { } seated ? CampaignProgression.ResultOf(seated, seq)?.Latest : null;
+        Debriefing = true;
+        _debriefSeq = seq;
+        _debriefWon = won;
+        _debriefObjectives = run?.CompletedMask ?? 0;
+        _debriefCash = run?.Money ?? 0;
+    }
+
+    /// <summary>The debrief is over, a board other than the book being entered.</summary>
+    public void CloseDebrief() => Debriefing = false;
+
+    /// <summary>One frame of a co-op host's word to its guests. The advert names the mission the
+    /// boards are about, and each guest's pick is settled against the hangar. The hangar, the
+    /// result and the board <paramref name="screen"/> then go out. The lobby sends only a change,
+    /// and a launched host's flight names the board instead.</summary>
+    public void OfferCoop(NetPlayFeature net, Net.NetCoopScreen screen, int localPlayers)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        if (!net.IsCoopHost || net.Released || IsGuest || Profile is not { } profile)
+        {
+            return;
+        }
+
+        int seq = MissionSeq >= 0 ? MissionSeq : NextMissionSeq;
+        net.Offer(seq, profile.Name, Math.Max(1, localPlayers));
+        int shown = screen switch
+        {
+            Net.NetCoopScreen.Debrief => _debriefSeq,
+            Net.NetCoopScreen.Briefing or Net.NetCoopScreen.FlightCheck => MissionSeq,
+            _ => NextMissionSeq,
+        };
+
+        // Every pick is settled and the hangar named with its holders before the flow. A guest
+        // opening on the flow then already knows which planes are free.
+        SetRemotePicks(net.CoopGuestPlanes);
+        net.OfferCoopHangar(CoopHangar(), SeatPlanes);
+
+        // The result goes first, so the flow that names the debrief already carries it.
+        net.HostFlow.ShowResult(_debriefWon, _debriefObjectives, _debriefCash);
+        net.ShowCoop(screen, shown, profile.MissionsCompleted, HangarAirframes(profile));
+    }
+
     /// <summary>Drops the open campaign: the store, the seated profile, the mission and its
     /// briefing, the sortie's field and every intent. Called on a presentation switch and by every
     /// door out of the campaign; nothing saved is touched.</summary>
@@ -942,6 +1064,7 @@ public sealed class CampaignFeature : IMenuFeature
         Store = null;
         IsGuest = false;
         GuestReady = false;
+        Debriefing = false;
         Planes = null;
         Stock = null;
         DataRoot = null;

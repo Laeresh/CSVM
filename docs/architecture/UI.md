@@ -14,7 +14,7 @@ graph. The join board is the one screen a pad signs onto a seat from, through `M
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
 the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
-screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. On the campaign boards player 1's L / Y opens and closes the co-op network door, Private and asking no password, whose band and remote guests' chips ride the chip strip; a co-op host's FLY MISSION carries the door's wire, and a co-op guest's Continue leads to the Network screen's waiting mode, whose seats stand Ready and which leaves behind its host's launch through `CampaignFeature.CoopGuestExit`. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. On the campaign boards player 1's L / Y opens and closes the co-op network door, Private and asking no password, whose band and remote guests' chips ride the chip strip; a co-op host names its boards to its guests and its FLY MISSION waits on their Ready, then carries the door's wire; a co-op guest's Continue leads to the Network screen's waiting mode, whose plane row picks from the host's hangar, whose seats stand Ready, and which leaves behind its host's launch, all through `CampaignFeature`. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Boards/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -1030,7 +1030,7 @@ nothing and standing on the pick the network door kept, `GuestCoopFit` is its am
 original's own words; the mission operations settle which `cm_sequence` entry the screens after the
 cabin are about, with its briefing, wingman flag, per-slot change-plane rules and story aircraft;
 the writes save the loadout, planes, memento (refused unless held), an exported build and the
-mission exit. `CoopGuestExit` is a co-op guest's launch behind its host, which both presentations take. It carries the host's `ChapterCinema` and `ClosingCinema`. Read `CampaignFlow.cs` next.
+mission exit. Both presentations' co-op runs through it: `OfferCoop` is a host's word to its guests each frame (advert, hangar, board, debrief result), `CoopLaunchWaits` its wait on every guest's Ready, and `OpenCoopGuest`, `FollowCoopHost`, `StepGuestPlane` and `CoopGuestExit` a guest's campaign, pick and launch behind its host. It carries the host's `ChapterCinema` and `ClosingCinema`. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
