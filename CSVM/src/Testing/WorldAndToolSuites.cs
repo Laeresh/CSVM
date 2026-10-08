@@ -282,8 +282,9 @@ internal static class WorldAndToolSuites
 
     // A build that throws part way must free what it already made. An orphaned mesh instance outlives
     // the renderer, and a release build then crashes in its teardown, after the verdict is written.
-    // Counted on ObjectDB rather than on orphan ids, which a release export does not track. Able to
-    // fail: with BuildSubtree's catch removed, the parent and its mesh instance stay alive.
+    // Checked on the build's own nodes by instance id, which a release export still answers, unlike
+    // orphan ids. Able to fail: with BuildSubtree's catch removed, the parent and its mesh instance
+    // stay alive.
     [Suite("scene-build-throw-frees",
         "a subtree build that throws below a meshed node frees that node and its mesh instance before the exception leaves, so no render instance outlives the renderer and crashes the process at exit")]
     internal static void SceneBuildThrowFrees(TestContext ctx)
@@ -304,7 +305,6 @@ internal static class WorldAndToolSuites
             {
                 continue;
             }
-            // The full build also fills the mesh and material caches, so the count below sees nodes only.
             var warm = scene.BuildSubtree(node);
             bool meshed = warm?.GetNodeOrNull("mesh") is MeshInstance3D;
             warm?.Free();
@@ -321,27 +321,40 @@ internal static class WorldAndToolSuites
             return;
         }
 
-        // A collection during the build lets earlier suites' finalizers free their objects, so both
-        // readings are taken once the count has stopped moving.
-        long? before = FinalizerGate.SettledObjectCount();
+        // Not Godot's global object count: other threads move it inside any span, settled or not
+        // (docs/verification.md INSTR-100). The ids are taken at the throw, the last moment the
+        // half-built nodes are known alive.
+        var made = new List<Node3D>();
+        var ids = new HashSet<ulong>();
+        scene.NodeMade = made.Add;
         bool threw = false;
         try
         {
-            scene.BuildSubtree(parent, skip: n => n.Index == throwAt
-                ? throw new System.InvalidOperationException("staged build failure")
-                : false);
+            scene.BuildSubtree(parent, skip: n =>
+            {
+                if (n.Index != throwAt)
+                {
+                    return false;
+                }
+                foreach (var node in made)
+                {
+                    ids.Add(node.GetInstanceId());
+                    ids.UnionWith(node.FindChildren("*", owned: false).Select(c => c.GetInstanceId()));
+                }
+                throw new System.InvalidOperationException("staged build failure");
+            });
         }
         catch (System.InvalidOperationException)
         {
             threw = true;
         }
-        long? after = FinalizerGate.SettledObjectCount();
-        ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
-        ctx.Check(before != null && after != null, $"the object count settled on both sides of the build");
-        if (before is long b && after is long a)
+        finally
         {
-            ctx.Same(b, a, $"objects alive across the failed build of {parent.Name}");
+            scene.NodeMade = null;
         }
+        ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
+        ctx.Check(ids.Count >= 2, $"the build had made {parent.Name} and its mesh instance when it threw made={ids.Count}");
+        ctx.Same(0, ids.Count(GodotObject.IsInstanceIdValid), $"nodes the failed build of {parent.Name} left alive");
     }
 
     // The distinct Shader resources every ShaderMaterial in the subtree points at, by reference:

@@ -1004,12 +1004,14 @@ member, and it does not go here.
   A Resource reached through a node's signal after its wrapper was collected reproduced the release
   check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
   either way.
-- **INSTR-100**, **Read Godot's global `ObjectCount` only after finalizer drains have stopped changing
-  it, never after a fixed number: one drain can leave objects that only the next one frees, and any
-  collection inside the measured span frees earlier suites' objects into it.**
-  `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
-  drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
-  during it.
+- **INSTR-100**, **Prove that an operation frees what it made on those objects' own instance ids,
+  never on Godot's global `ObjectCount` read before and after: any collection inside the span frees
+  earlier suites' objects into it, and settling the finalizers does not stop other threads moving
+  the count.** Late in an engine shard, successive finalizer drains freed 308, then 84, then 0
+  objects, and one drain before a staged build still let 98 fall during it. Drains repeated until
+  the count held still left `scene-build-throw-frees` 2 objects short in about 5 % of shard runs
+  under six concurrent copies. Two objects released on a worker thread inside the span reproduce
+  that reading exactly, and do not move the instance-id check.
 - **INSTR-101**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
   the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
   bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.

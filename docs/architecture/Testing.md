@@ -30,9 +30,8 @@ The `--debug-finalizers` instrument: `TestHarness.Run` wraps each suite in one g
 .NET finalizer thread on a sentinel, forces a collection every few milliseconds while the suite runs,
 then releases and drains the queue before the next suite. A Godot wrapper finalized after its object
 was reached again natively then logs its error at the boundary of the suite that dropped it, and the
-gate's own `finalizer gate` line counts those throws. Off unless the flag is given. It also gives
-any suite Godot's global object count after finalizer drains have settled it, without waiting on a
-gate it holds. Read `docs/verification.md` for the binding states it exposes.
+gate's own `finalizer gate` line counts those throws. Off unless the flag is given. Read
+`docs/verification.md` for the binding states it exposes.
 
 ## src/Testing/SuiteShards.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
