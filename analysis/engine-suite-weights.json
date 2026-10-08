@@ -342,6 +342,7 @@
     "muzzle-flash-cockpit-hidden": 0.014,
     "muzzle-flash-rides-muzzle": 0.01,
     "muzzle-light-first-person-point-term": 0.024,
+    "net-ai-far-field": 7.653,
     "net-ai-spawn": 6.609,
     "net-ai-voice": 7.356,
     "net-player-voice": 6.738,

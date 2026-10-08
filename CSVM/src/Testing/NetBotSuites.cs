@@ -25,7 +25,8 @@ namespace CSVM.Testing;
 /// and the guest sees it as a remote seat fed by the host's state samples. Its hits, its death and
 /// its score take the seat paths, so a bot's kill scores the bot. The rig is
 /// <see cref="NetCombatSuites"/>'s, one session per peer under its own world. The bot is seated
-/// as a scripted host seats one, in the roster its launch context carries.</summary>
+/// as a scripted host seats one, in the roster its launch context carries. The host's roster AI
+/// takes the same far-field reading as a bot, against the same people.</summary>
 internal static class NetBotSuites
 {
     private const string MpMission = "MP1";
@@ -133,6 +134,89 @@ internal static class NetBotSuites
                 end.Close();
             }
 
+            ambient.Restore();
+        }
+    }
+
+    [Suite("net-ai-far-field",
+        "a host with one roster AI and a guest in one process over a clean loopback: an AI over a "
+        + "kilometre from the host's plane and beside the guest's flies the full plant, the same AI "
+        + "a kilometre from both flies the far-field one, and once the guest has left the session "
+        + "an AI beside its inert aeroplane flies the far-field plant")]
+    internal static void RosterAiMeasuresEveryPerson(TestContext ctx)
+    {
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, "--ai=player_pfighter");
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(5105));
+        var roster = new NetSeat[]
+        {
+            new() { PeerId = 0, SeatIndex = HostSeat, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 1, SeatIndex = GuestSeat, Callsign = "guest", PlaneNode = Airframes[1] },
+        };
+        NetSeats.Validate(roster, hostPeer: 0);
+        var ambient = NetCombatSuites.Ambient.Save();
+        NetCombatSuites.Ends? host = null;
+        NetCombatSuites.Ends? guest = null;
+        try
+        {
+            host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, Airframes);
+            guest = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null, Airframes);
+            ctx.Check(host.Built && guest.Built,
+                $"both sessions build in one process (host {host.Built}, guest {guest.Built})");
+            if (!host.Built || !guest.Built)
+            {
+                return;
+            }
+
+            NetStartSuites.UntilStarted(host.Session, guest.Session);
+            var peers = new[] { host.Session, guest.Session };
+            Lockstep(1, peers);
+            var ai = host.Session.Wire.World?.AiAt(0);
+            ctx.Check(ai is { RemoteOwned: false, Pilot: not null },
+                $"the host flies its roster AI itself ({FlightController.TargetLabel(ai)})");
+            if (ai == null)
+            {
+                return;
+            }
+
+            var hostPlane = host.Session.SeatRigs[HostSeat].Controller!;
+            var guestCopy = host.Session.SeatRigs[GuestSeat].Controller!;
+            var guestOwn = guest.Session.SeatRigs[GuestSeat].Controller!;
+            Lift(hostPlane);
+            var away = hostPlane.WorldPosition + new Vector3(FarFieldOffset, 0f, 0f);
+            guestOwn.RespawnAt(away, away + (Vector3.Right * 100f));
+            guestOwn.ArmSpawnTimers();
+            int steps = StepUntil(() => Horizontal(guestCopy, hostPlane) > FarFieldOffset * 0.8f
+                && guestCopy.WorldPosition.DistanceTo(guestOwn.WorldPosition) < SettledGap, peers);
+
+            var beside = guestCopy.WorldPosition + new Vector3(0f, 0f, BesideOffset);
+            ai.RespawnAt(beside, beside + (Vector3.Right * 100f));
+            Lockstep(1, peers);
+            float toHost = Horizontal(ai, hostPlane);
+            float toGuest = Horizontal(ai, guestCopy);
+            ctx.Check(toHost > 1000f && toGuest < 1000f && !ai.FarFieldPlant,
+                $"an AI {toHost:0} m from the host's plane and {toGuest:0} m from the guest's flies the full plant (far-field {ai.FarFieldPlant}, {steps} step(s) for the guest's move)");
+
+            // ABLE-TO-FAIL CONTROL. The same AI a kilometre from every person takes the speed-hold
+            // plant, so the reading above is the measurement and not a branch never taken.
+            var alone = guestCopy.WorldPosition + new Vector3(0f, 0f, FarFieldOffset);
+            ai.RespawnAt(alone, alone + (Vector3.Right * 100f));
+            Lockstep(1, peers);
+            ctx.Check(ai.FarFieldPlant,
+                $"ABLE-TO-FAIL CONTROL: {Horizontal(ai, guestCopy):0} m from the guest and {Horizontal(ai, hostPlane):0} m from the host, the AI flies the far-field plant ({ai.FarFieldPlant})");
+
+            // The guest's link drops. Its inert aeroplane stays where it was, and is no person.
+            mesh[0].Disconnect(mesh[1].LocalPeer);
+            var hostOnly = new[] { host.Session };
+            int left = StepUntil(() => host.Session.Wire.HasLeft(GuestSeat), hostOnly);
+            ai.RespawnAt(beside, beside + (Vector3.Right * 100f));
+            Lockstep(1, hostOnly);
+            ctx.Check(host.Session.Wire.HasLeft(GuestSeat) && Horizontal(ai, guestCopy) < 1000f && ai.FarFieldPlant,
+                $"once the guest has left ({left} step(s)), an AI {Horizontal(ai, guestCopy):0} m from its inert aeroplane and {Horizontal(ai, hostPlane):0} m from the host's flies the far-field plant ({ai.FarFieldPlant})");
+        }
+        finally
+        {
+            guest?.Close();
+            host?.Close();
             ambient.Restore();
         }
     }

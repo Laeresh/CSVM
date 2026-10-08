@@ -866,10 +866,14 @@ player compare and remains the evidence `docs/architecture.md` cites for the AI 
 far-field test is the pair at `0x48c4d7` and `0x48c4e9`.
 
 **How CSVM flies it.** `FlightModel.FarFieldPlant` is re-decided every step from
-`FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
-`PlayerPositions` snapshot. The original measures against its single player pointer; CSVM measures
-against the **nearest human pilot**, deliberately widening a player-only behaviour to all four
-human pilots. This is the only difference from the decode. The `[obj+0x384]` arm is deliberately not
+`FlightInput.NearestHumanDistSqM`, which `FlightController` fills from its `HumanPositions`
+binding. For every AI-flown aircraft, roster AI and network bots alike, that binding is
+`HumanFlightAdapter.PersonSeatPositions`: this machine's panes outside a network match, and every
+person's seat inside one, a guest's flown elsewhere included and a bot's or a departed guest's
+left out. It is not the session's pane snapshot, which on a host would put an AI beside a guest
+and a kilometre from the host on the far-field plant. The original measures against its single
+player pointer; CSVM measures against the **nearest human pilot**, deliberately widening a
+player-only behaviour to every person in the session. This is the only difference from the decode. The `[obj+0x384]` arm is deliberately not
 ported, and that is now the decode rather than a gap: the flag is a developer switch no gameplay
 event sets, so a wreck in the original flies the near-field plant exactly as CSVM's does. Two
 constants of the plant's inventory come from here,
@@ -3754,7 +3758,8 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   authority, a forced limiter scalar, and the two load-factor readouts left where the last
   near-field step put them. ⚠ Two of its cases are controls rather than claims: the ground blow
   still runs far-field, and an AI at 999 m integrates identically to one standing on the human.
-  The in-engine half, which is the session plumbing, is the `ai-far-field-plant` suite.
+  The in-engine half, which is the session plumbing, is the `ai-far-field-plant` suite, and its
+  network half, a host's AI measured against a guest's plane, is `net-ai-far-field`.
 - **`FlightConstantInventoryTests`**, the inventory table above, as a census over the plant's own
   const fields plus the `flightModel.*` config block. It checks provenance, not correctness: a
   constant added, dropped or moved fails until somebody classifies it, which is the step skipped

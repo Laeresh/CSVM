@@ -42,8 +42,10 @@ internal sealed class AiFlightAssembler
 
     public AiFlightAssembler(FlightRosterPolicy policy, LiveryResolver liveries,
         WorldEffectsFactory? worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
-        FlightWorldBindings world, int humanCount, CrashRigQueue? crashRigs = null)
+        FlightWorldBindings world, int humanCount,
+        Func<System.Collections.Generic.IReadOnlyList<Vector3>> persons, CrashRigQueue? crashRigs = null)
     {
+        PersonPositions = persons;
         _crashRigs = crashRigs;
         _policy = policy;
         _liveries = liveries;
@@ -56,6 +58,10 @@ internal sealed class AiFlightAssembler
     }
 
     public AiSkills? Skills => _aiSkills;
+
+    /// <summary>Every person in the session, which each AI-flown aircraft's far-field plant is
+    /// selected on (<see cref="HumanFlightAdapter.PersonSeatPositions"/>).</summary>
+    public Func<System.Collections.Generic.IReadOnlyList<Vector3>> PersonPositions { get; }
 
     /// <summary>The aeroplanes built ahead of the launches that need them.</summary>
     public AiAirframePool Airframes => _airframes;
@@ -175,7 +181,7 @@ internal sealed class AiFlightAssembler
                 GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _world.TouchdownDefs,
                 Projectiles = _world.Projectiles,
-                HumanPositions = _world.HumanPositions,
+                HumanPositions = PersonPositions,
                 PadDevices = Array.Empty<int>(),
                 Inert = spawn.Inert,
                 Team = spawn.Team,

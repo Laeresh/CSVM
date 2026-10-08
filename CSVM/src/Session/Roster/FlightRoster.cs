@@ -109,7 +109,7 @@ public sealed class FlightRoster
         _liveries = liveries;
         _aiView = _ai.AsReadOnly();
         _aiAssembler = new AiFlightAssembler(policy, liveries, worldEffects, worldRoot,
-            aircraft, world, human.RigCount, _crashRigs);
+            aircraft, world, human.RigCount, HumanFlightAdapter.PersonSeatPositions(world, human), _crashRigs);
         if (starts != null)
             _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
                 aircraft, world, human, _aiAssembler);

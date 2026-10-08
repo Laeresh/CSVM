@@ -2071,6 +2071,7 @@ public partial class GameSession : Node3D
         {
             RigCount = _seatRigs.Count,
             NetSeats = _wire.Seats,
+            SeatLeft = _wire.HasLeft,
             SeatFit = _wire.SeatFit,
             SeatBuild = _wire.SeatBuild,
             MixGain = mixGain,
