@@ -1280,6 +1280,33 @@ load the same file. Shift+F1 sits beside `ControlCapture`'s bindable F1 to F12; 
 
 ## E42 ☐ A shader rewritten for Enhanced with no wearer compiles before Enhanced's first frame
 
+**Landed.** `ShaderTwins.RetextInPlace` puts every shader it rewrites on a `ShaderMaterial` of its
+own (`Pin`, which asks for the material's RID so the server material exists), and `Regenerate` and
+`ReleaseUnused` drop the pins once `Engine.GetFramesDrawn()` has moved by 2. Godot's `_draw` runs
+the scene update (`update_dirty_instances`, then `update_dirty_resources`, then
+`_update_queued_materials`) before `draw_viewports`, and every advanced-group enable sits inside a
+viewport's render. So the pin's queued update reaches `version_get_shader` on the dirty version
+first, which rebuilds the base variants from the new text; the enable then builds the advanced ones
+from the same text. No `RenderingServer` call reaches `version_is_valid` or `version_get_shader`
+synchronously, so a wearer is the only way to force the compile. A shader never given an RID needs
+no pin, but C# cannot tell, so every rewritten shader gets one. The `graphics-retext-compiles`
+suite builds a synthetic key in Original (red, a 48-byte uniform block), draws it, frees its only
+material, switches to Enhanced with `EnhancedDrawn` false, draws one TAA frame, puts a fresh
+material on the key and reads it green (Enhanced, 16 bytes), the rewritten shader pinned, and no new
+engine error line in the run's log (`TestHarness.EngineErrorsSoFar`). With the pin disabled it fails
+alone: not pinned, the pixel the clear grey, and 6 engine errors, the same "Uniform buffer supplied
+(binding: 0) size (16) is smaller than size of shader uniform: (48)" then "Parameter "us" is null".
+It can show the draw fail only in a process that has drawn no TAA frame before it; the pin check
+fails in any. The minimal set went from 16 engine-error lines to 0 (7/7 pass) and the 62-suite
+shard-3 list from 20 to 0 (62/62). Complete battery: units 6517 passed, 3 skipped; engine 545
+passed, 2 skipped, engine errors clean on all six shards; goldens 25/25 hash-identical. The suite
+takes 1.7 s alone and 18.3 s in a shard, where its TAA frame builds the advanced group for every
+shader the shard has made (PERF-45); its weight is the shard figure.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
 **Goal.** No world shader keeps its Original compiled code after a live switch to Enhanced, so no
 material moved onto it later draws stale code or fails its uniform buffer.
 

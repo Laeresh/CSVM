@@ -605,6 +605,68 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("graphics-retext-compiles",
+        "a key whose Original shader nobody wears any more, rewritten in place by a first switch to "
+        + "Enhanced before an Enhanced frame has drawn, stays pinned on a material of its own; after "
+        + "one TAA frame builds Godot's advanced variants, a fresh material on the key draws the "
+        + "Enhanced text with no engine error, and the Original text drew red before the switch. "
+        + "Only a process that has drawn no TAA frame before can show the draw fail; the pin check "
+        + "fails in any")]
+    internal static void RetextCompiles(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
+        var host = new Node { Name = "retext_probe" };
+        ctx.Host.AddChild(host);
+        ShaderMaterial? fresh = null;
+        try
+        {
+            GraphicsMode.Set(false);
+            Mech3.ShaderTwins.Regenerate();
+            Mech3.ShaderTwins.EnhancedDrawn = false;
+            RenderingServer.ForceSync();
+            int? errorsBefore = TestHarness.EngineErrorsSoFar();
+
+            var key = Mech3.ShaderTwins.Make(RetextProbeText, "retext-probe", "retext-probe");
+            var (view, quad) = ProbeView(host);
+            var worn = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
+            var original = worn.Shader;
+            quad.MaterialOverride = worn;
+            var drawnOriginal = ProbePixel(view);
+            // The key keeps no wearer, so the rewrite queues no material update of Godot's own.
+            quad.MaterialOverride = null;
+            worn.Dispose();
+
+            GraphicsMode.Set(true);
+            Mech3.ShaderTwins.Regenerate();
+            bool rewritten = ReferenceEquals(key.Current, original);
+            bool pinned = Mech3.ShaderTwins.IsPinned(original);
+            AdvancedFrame(host);
+
+            fresh = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
+            quad.MaterialOverride = fresh;
+            var drawnEnhanced = ProbePixel(view);
+            RenderingServer.ForceSync();
+            int? errorsAfter = TestHarness.EngineErrorsSoFar();
+
+            ctx.Check(rewritten, $"the first switch to Enhanced rewrites the unworn Original shader in place");
+            ctx.Check(pinned, $"and pins the rewritten shader on a material of its own");
+            ctx.Check(drawnOriginal.R > 0.7f && drawnOriginal.G < 0.3f,
+                $"ABLE-TO-FAIL CONTROL: the Original text draws red ({drawnOriginal})");
+            ctx.Check(drawnEnhanced.G > 0.7f && drawnEnhanced.R < 0.3f,
+                $"after a TAA frame a fresh material on the key draws the Enhanced text, green ({drawnEnhanced})");
+            ctx.Check(errorsBefore != null && errorsAfter == errorsBefore,
+                $"with no engine error ({(errorsAfter ?? 0) - (errorsBefore ?? 0)} new line(s), log {(errorsBefore != null ? "read" : "missing")})");
+        }
+        finally
+        {
+            host.Free();
+            fresh?.Dispose();
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("world-merge",
         "an Enhanced flight session draws its static world's opaque surfaces merged by shared node frame "
         + "and material, and every material's placed-world vertices once: the same count as on the faithful "
@@ -705,6 +767,62 @@ internal static class GraphicsSwitchSuites
             ctx.Check(held && clock.Halted == wasHalted,
                 $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
         }
+    }
+
+    // Red under Original, green under Enhanced. The Original block is the larger, so a stale compile
+    // also fails the Enhanced material's uniform buffer, as the world shaders did.
+    private static string RetextProbeText() => GraphicsMode.Enhanced
+        ? "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
+          + "uniform vec4 probe_a = vec4(0.0);\n"
+          + "void fragment() {\n    ALBEDO = vec3(0.0, 1.0, 0.0) + probe_a.rgb * 0.0;\n}\n"
+        : "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
+          + "uniform vec4 probe_a = vec4(0.0);\nuniform vec4 probe_b = vec4(0.0);\nuniform vec4 probe_c = vec4(0.0);\n"
+          + "void fragment() {\n    ALBEDO = vec3(1.0, 0.0, 0.0) + (probe_a.rgb + probe_b.rgb + probe_c.rgb) * 0.0;\n}\n";
+
+    // A small pane of its own world, no TAA, whose quad fills the camera's view.
+    private static (SubViewport View, MeshInstance3D Quad) ProbeView(Node host)
+    {
+        var view = new SubViewport
+        {
+            Size = new Vector2I(64, 64),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            RenderTargetClearMode = SubViewport.ClearMode.Always,
+        };
+        view.AddChild(new Camera3D { Current = true });
+        var quad = new MeshInstance3D { Mesh = new QuadMesh { Size = new Vector2(4f, 4f) }, Position = new Vector3(0f, 0f, -1f) };
+        view.AddChild(quad);
+        host.AddChild(view);
+        quad.ForceUpdateTransform();
+        return (view, quad);
+    }
+
+    // The pane's centre after a forced draw. Twice, so a material set this frame has its update and
+    // its pipeline before the read.
+    private static Color ProbePixel(SubViewport view)
+    {
+        RenderingServer.ForceDraw();
+        RenderingServer.ForceDraw();
+        var image = view.GetTexture()?.GetImage();
+        return image == null || image.IsEmpty() ? new Color(0f, 0f, 0f, 0f) : image.GetPixel(32, 32);
+    }
+
+    // One drawn TAA frame, which is what has Godot build its advanced variants for every shader alive.
+    private static void AdvancedFrame(Node host)
+    {
+        var view = new SubViewport
+        {
+            Size = new Vector2I(256, 256),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            UseTaa = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+        };
+        view.AddChild(new Camera3D { Current = true });
+        host.AddChild(view);
+        RenderingServer.ForceDraw();
+        view.Free();
     }
 
     // The load warm-up's hidden TAA frame: raised once by an Original process that has drawn no

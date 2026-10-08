@@ -31,8 +31,17 @@ internal static class ShaderTwins
     private static readonly Dictionary<ShaderMaterial, (ModeShader Twins, bool Fade)> Tracked =
         new(ReferenceEqualityComparer.Instance);
 
+    // Each shader RetextInPlace rewrote, worn by a material of its own until two frames have drawn.
+    // ⚠ Keep a rewritten shader pinned until then. Godot recompiles new text only on a wearer's
+    // material update, and the first TAA frame's advanced-variant build (ShaderRD::enable_group)
+    // clears that pending recompile. An unworn shader would keep its old code for good.
+    private static readonly List<ShaderMaterial> Pins = new();
+
     // The mode the tracked materials last followed, null before the first.
     private static bool? _textEnhanced;
+
+    // Engine.GetFramesDrawn when the last pin went on.
+    private static int _pinnedAt;
 
     /// <summary>Gets or sets a value indicating whether an Enhanced frame has drawn in this process.
     /// That is when Godot builds the advanced shader variants its passes need.</summary>
@@ -100,10 +109,12 @@ internal static class ShaderTwins
     /// <summary>Moves every tracked material onto its key's shader for the current
     /// <see cref="GraphicsMode.Enhanced"/>, making a shader not made yet. No shader's text changes,
     /// so nothing Godot compiled is thrown away. The exception is a first switch to Enhanced before
-    /// an Enhanced frame has drawn, which rewrites in place (<see cref="EnhancedDrawn"/>).</summary>
+    /// an Enhanced frame has drawn, which rewrites in place (<see cref="EnhancedDrawn"/>). It pins
+    /// each rewritten shader until Godot has recompiled it.</summary>
     public static RegenerateStats Regenerate()
     {
         _textEnhanced = GraphicsMode.Enhanced;
+        ReleasePins();
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
         int made = Made;
         int retexted = 0;
@@ -165,10 +176,14 @@ internal static class ShaderTwins
         var unused = Tracked.Keys.Where(m => !GodotObject.IsInstanceValid(m) || m.GetReferenceCount() <= 1).ToList();
         foreach (var material in unused)
             Tracked.Remove(material);
+        ReleasePins();
     }
 
     /// <summary>Whether some key holds <paramref name="shader"/>. For a suite.</summary>
     public static bool IsKeyShader(Shader? shader) => shader != null && All.Any(t => t.Slots().Contains(shader));
+
+    /// <summary>Whether a rewritten <paramref name="shader"/> is still worn by its pin. For a suite.</summary>
+    public static bool IsPinned(Shader shader) => Pins.Any(p => ReferenceEquals(p.Shader, shader));
 
     /// <summary>Whether <paramref name="material"/> follows a key. For a suite.</summary>
     public static bool IsTracked(ShaderMaterial material) => Tracked.ContainsKey(material);
@@ -258,6 +273,7 @@ internal static class ShaderTwins
                     ByText.Remove(from.Code);
                     from.Code = text;
                     ByText[text] = from;
+                    Pin(from);
                     TextRewrites++;
                     rewrote++;
                     rewritten = true;
@@ -276,6 +292,27 @@ internal static class ShaderTwins
             }
         }
         return rewrote;
+    }
+
+    // Puts a rewritten shader on a material of its own. Asking for the RID makes the server material,
+    // whose queued update recompiles the shader before the next frame draws a viewport.
+    private static void Pin(Shader shader)
+    {
+        var pin = new ShaderMaterial { Shader = shader };
+        pin.GetRid();
+        Pins.Add(pin);
+        _pinnedAt = Engine.GetFramesDrawn();
+    }
+
+    // Drops the pins once two frames have drawn since the last went on. The first draw carries the
+    // update that recompiles them, and the second is margin, so no free reaches the render thread first.
+    private static void ReleasePins()
+    {
+        if (Pins.Count == 0 || Engine.GetFramesDrawn() < _pinnedAt + 2)
+            return;
+        foreach (var pin in Pins)
+            pin.Dispose();
+        Pins.Clear();
     }
 
     /// <summary>What one <see cref="Regenerate"/> did. It names the keys, the tracked materials and

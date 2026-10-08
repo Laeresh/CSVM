@@ -358,6 +358,10 @@ public static class TestHarness
         };
     }
 
+    /// <summary>How many engine error lines this run's log holds so far, or null with no log. For a
+    /// suite that brackets its own work.</summary>
+    internal static int? EngineErrorsSoFar() => ScreenEngineLog(out _)?.Total;
+
     // Narrows an already-valid selection to one shard and tags the context, so every artifact this
     // process writes lands under .scratch/<tag>/ instead of over a sibling shard's.
     private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, ref IReadOnlyList<Suite> selected)
