@@ -78,7 +78,9 @@ first-row-wins text map `MenuLayoutDecoder` joins widget strings against. The ru
 
 ## src/Extraction/MovieCopy.cs
 `Run` copies every `.mpg` in the install's folder byte for byte under its upper-case name
-(`RofTree`), skipping a target already at the source's length and replacing a read-only leftover.
+(`RofTree`), skipping a target already at the source's length unless forced and replacing a
+read-only leftover. Each copy lands as `<name>.part` and is renamed over the target, so a killed
+copy leaves only a `.part`, which the next run sweeps.
 `MovieCopyResult` counts copied and current files and names each of the ten `Expected` movies the
 folder lacked, for the report and the stamp.
 

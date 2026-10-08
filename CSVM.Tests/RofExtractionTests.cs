@@ -184,6 +184,28 @@ public class RofExtractionTests
         Assert.Equal(20, new FileInfo(Path.Combine(dest, "ZIPPER.MPG")).Length);
     }
 
+    [Fact]
+    public void AForcedRunRecopiesASameLengthMovieAndAStalePartIsSwept()
+    {
+        string source = TestData.TempDir();
+        string dest = Path.Combine(TestData.TempDir(), "MPG");
+        File.WriteAllBytes(Path.Combine(source, "CHAP1.MPG"), new byte[] { 1, 2, 3, 4 });
+        Directory.CreateDirectory(dest);
+
+        // What a copy killed mid-way can leave: a target at full length holding zeros, and its part.
+        File.WriteAllBytes(Path.Combine(dest, "CHAP1.MPG"), new byte[4]);
+        File.WriteAllBytes(Path.Combine(dest, "CHAP0.MPG.part"), new byte[2]);
+
+        var plain = MovieCopy.Run(source, dest);
+        Assert.Equal(1, plain.AlreadyCurrent);
+        Assert.Equal(new[] { "CHAP1.MPG" }, OnDisk(dest));
+
+        var forced = MovieCopy.Run(source, dest, force: true);
+        Assert.Equal(1, forced.Copied);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(Path.Combine(dest, "CHAP1.MPG")));
+        Assert.Equal(new[] { "CHAP1.MPG" }, OnDisk(dest));
+    }
+
     /// <summary>The case rule the readers rely on, read off the names on disk. <c>File.Exists</c>
     /// cannot check it, since a Windows disk answers without regard to case.</summary>
     [Fact]
