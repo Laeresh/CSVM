@@ -341,9 +341,10 @@ internal static class HudKillLineSuites
         const float WallFrame = 10f * GaugeCluster.DamageBlinkPeriod + GaugeCluster.DamageBlinkPeriod / 8f;
         var parts = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).DestroyableParts;
         var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, parts);
+        // A synthetic tree carries no cockpit art to build a cluster from.
         if (cluster == null)
         {
-            ctx.Check(false, $"a real gauge cluster was built for '{ctx.PlaneName}'");
+            ctx.Check(ctx.SyntheticData, $"a real gauge cluster was built for '{ctx.PlaneName}'");
             return;
         }
         var saved = GameClock.Current;
