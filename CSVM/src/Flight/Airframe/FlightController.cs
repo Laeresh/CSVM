@@ -521,6 +521,8 @@ public partial class FlightController : Node3D
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
     // hands input back while the control that confirmed it is still down.
     private readonly FlightReentryLatch _reentryLatch = new();
+    // The discrete commands read as held last time, so the log carries one line per press.
+    private readonly HashSet<InputAction> _pressesLogged = new();
     // A stunt run's one respawn control, split by hold length: a tap returns, a hold reruns.
     private readonly TapHoldButton _respawnSplit = new(TapHoldButton.PadHoldSeconds);
     // CrashRuntime as a deferred read, so the propeller slot forces an armed rig only on a change.
@@ -2950,8 +2952,24 @@ public partial class FlightController : Node3D
     // commands it is bound to (FlightReentryLatch.Latched names them).
     private bool ReadLatched(InputAction action)
     {
-        bool down = _reentryLatch.Read(action, _actions.Held(action));
+        bool held = _actions.Held(action);
+        LogPressEdge(action, held);
+        bool down = _reentryLatch.Read(action, held);
         return down && !CommandsHeld;
+    }
+
+    // A press reaches the session log on its rising edge, so a run's log can answer whether the
+    // player pressed Respawn or fired. Logged before the latch and the hold, which swallow presses.
+    private void LogPressEdge(InputAction action, bool held)
+    {
+        if (!held)
+        {
+            _pressesLogged.Remove(action);
+        }
+        else if (_pressesLogged.Add(action))
+        {
+            Log.Debug("flight", $"press P{PlayerIndex + 1} {action}");
+        }
     }
 
     // ⚠ One latch read per action per frame. The latch disarms on the first reading that says "up".

@@ -854,9 +854,7 @@ public sealed class WorldBuilder
         Log.Info("world", $"draw order: {report.Pairs} conflicting node pair(s) over {nodes.Count} node(s) / {report.Triangles} triangle(s) -> {report.MaxRank + 1} rank(s), {excluded} origin-parked root(s) excluded, {Time.GetTicksMsec() - start} ms");
         if (report.MaxRank > SceneBuilder.ConflictRankCap)
         {
-            GD.PushWarning($"draw order: conflict chain {report.MaxRank + 1} exceeds the "
-                           + $"{SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers "
-                           + "share a bias and can z-fight");
+            Log.Warn("world", $"draw order: conflict chain {report.MaxRank + 1} exceeds the {SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers share a bias and can z-fight");
         }
     }
 

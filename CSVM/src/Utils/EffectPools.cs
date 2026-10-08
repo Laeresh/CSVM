@@ -97,7 +97,7 @@ public sealed class EffectPools
         bool viaGodot = path.StartsWith("res://", StringComparison.Ordinal);
         if (viaGodot ? !Godot.FileAccess.FileExists(path) : !File.Exists(path))
         {
-            GD.PushWarning($"effect pools: file not found, using built-in defaults: {path}");
+            Log.Warn("world", $"effect pools: file not found, using built-in defaults: {path}");
             return Fallback;
         }
         try
@@ -106,7 +106,7 @@ public sealed class EffectPools
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            GD.PushWarning($"effect pools: {path} could not be read ({ex.Message}), using built-in defaults");
+            Log.Warn("world", $"effect pools: {path} could not be read ({ex.Message}), using built-in defaults");
             return Fallback;
         }
     }

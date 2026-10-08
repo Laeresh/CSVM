@@ -94,10 +94,17 @@ async function runPowerShellBashGuard(cwd: string, event: any): Promise<HookResu
   const command = event.input.command;
   if (!command) return NOT_BLOCKED;
 
-  const psScript = `\$c = ${psLiteral(command)}; if (-not \$c) { exit 0 }; \$segments = \$c -split '&&|\\|\\||;|\\|' | ForEach-Object { \$_.Trim() } | Where-Object { \$_ }; \$other = \$segments | Where-Object { \$_ -notmatch '^(git|gh)\\b' }; if (-not \$other) { exit 0 }; [Console]::Error.WriteLine('Use Powershell instead of bash'); exit 2`;
+  // Which commands Bash may run is the guard's decision, made once in CheckBashCommand.ps1.
+  const here = await getGitRoot(cwd);
+  if (!here) return NOT_BLOCKED;
+  const guard = `${here}/CheckBashCommand.ps1`;
 
   try {
-    await pExecFile("powershell", ["-NoProfile", "-Command", psScript], { cwd, timeout: 15000 });
+    await pExecFile(
+      "powershell",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", guard, "-Command", command],
+      { cwd, timeout: 15000 }
+    );
   } catch (error: any) {
     if (error.code === 2) {
       return {

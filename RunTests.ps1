@@ -61,13 +61,14 @@
     summary names what went unchecked: "the data was not there" must never read as "the
     check held".
 
-    Wall-time budgets: each stage row and the total print the measured budget for the lane the run
+    Wall-time budgets: each stage row prints the measured budget for the lane the run
     is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
     the numbers and the rule that set them live, so this help names the file rather than figures
     that would drift out of it. A stage over its budget prints "over budget" and is listed after
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
-    is compared against nothing, and the total is compared only when the lane's own stages all ran.
+    is compared against nothing. Build carries no budget, and there is no total budget. The
+    engine budget is capped at 80 percent of the per-launch watchdog, so it warns before it kills.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
@@ -285,6 +286,9 @@ $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 $EngineTimeoutSec = 300
+# The engine stage's budget is capped below the watchdog, so a growing catalog reads "over budget"
+# before a shard's launch is killed: a budget at the watchdog would go red without ever warning.
+$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineTimeoutSec)
 # Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
 # cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
 # every shard within 8 s of the others, and 8 was slower per shard from contention. The watchdog
@@ -1973,6 +1977,9 @@ function Get-StageBudget {
     if ($prop -eq $null) {
         return 0.0
     }
+    if ($Name -eq "engine") {
+        return [math]::Min([double]$prop.Value, $EngineBudgetCapSec)
+    }
     return [double]$prop.Value
 }
 
@@ -1988,8 +1995,8 @@ foreach ($stage in $Stages) {
     $totalSeconds += $stage.Seconds
 }
 
-# A skipped stage is compared against nothing, and the total only against the lane whose work it
-# actually did: a run that skipped goldens is not a slow full run, it is a different run.
+# A skipped stage is compared against nothing. There is no total budget: one set by the same rule
+# is never below the stage budgets' sum, so it could only ever trip after a stage already had.
 $OverBudget = @()
 $stageBudgetText = @{}
 foreach ($stage in $Stages) {
@@ -2005,31 +2012,6 @@ foreach ($stage in $Stages) {
         $stageBudgetText[$stage.Name] = "[budget $(Format-Seconds $budget)s]"
     }
 }
-$ranStages = @{}
-foreach ($stage in $Stages) {
-    if ($stage.Status -ne "SKIP") {
-        $ranStages[$stage.Name] = 1
-    }
-}
-$laneComplete = ($LaneBudget -ne $null)
-if ($laneComplete) {
-    foreach ($needed in @($LaneBudget.requires)) {
-        if (-not $ranStages.ContainsKey($needed)) {
-            $laneComplete = $false
-        }
-    }
-}
-$totalBudgetText = ""
-if ($laneComplete -and [double]$LaneBudget.total -gt 0) {
-    $totalBudget = [double]$LaneBudget.total
-    if ($totalSeconds -gt $totalBudget) {
-        $totalBudgetText = " [over budget $(Format-Seconds $totalBudget)s]"
-        $OverBudget += "the whole $BudgetLane run took $(Format-Seconds $totalSeconds)s against a $(Format-Seconds $totalBudget)s budget"
-    } else {
-        $totalBudgetText = " [budget $(Format-Seconds $totalBudget)s]"
-    }
-}
-
 Write-Host ""
 Write-Host "--- RunTests ------------------------------------------------------------"
 foreach ($stage in $Stages) {
@@ -2061,9 +2043,9 @@ if ($HiddenDesktop) {
 }
 Close-HiddenDesktop
 if ($failedStages.Count -gt 0) {
-    Write-Host ("  result: FAIL in {0} -- {1}s total{2}, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Red
+    Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
 } else {
-    Write-Host ("  result: PASS -- {0}s total{1}, exit 0" -f (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Green
+    Write-Host ("  result: PASS -- {0}s total, exit 0" -f (Format-Seconds $totalSeconds)) -ForegroundColor Green
 }
 Write-Host "-------------------------------------------------------------------------"
 

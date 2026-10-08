@@ -209,7 +209,7 @@ public sealed class SpawnPicker : IFlightStarts
         if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
             return LogSpawn("PLAYER_INIT", init.Spawn);
 
-        GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission}, using fallback spawn");
+        Log.Warn("flight", $"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission}, using fallback spawn");
         return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
     }
 

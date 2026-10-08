@@ -2955,7 +2955,7 @@ final leg's climb-out.
 
 Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`), **completed for `C21`**
 with the placement, the angular impulse and the partition's inertia correction below (retiring
-`BL-381`): `FlightModel.BounceNormalSpeed`/`BounceRateKick` are the law and `FlightModel.Collide`
+`BL-381`): `FlightModel.BounceImpulse` is the law (`BounceNormalSpeed` exposes its linear half) and `FlightModel.Collide`
 the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep runs on every other sim
 step, as the original's does, with the skipped step's motion carried into the next sweep
 (`SweepCadence`, "What the parity is ported as" below), and every contact it resolves spends the
@@ -3073,8 +3073,7 @@ two momenta, `2.25·|J|` against `|I·u|`, which is also the physically coherent
 Bloodhawk's reciprocal moments near 1.1 the correction moves `f_lin` a few points up
 (`f_lin = 2.25/(2.25 + sinθ/(recI·|r|))`: ≈0.93 at a 5 m arm, ≈0.71 at 1 m), so every direction
 claim below survives it unchanged. Ported: `BounceImpulse` divides by `RecInertia` for the share
-and applies the net kick with no inertia factor; `BounceRateKick` exposes it and `Collide` spends
-it on the body rates in place of the retired fitted `GrazeKick`.
+and applies the net kick with no inertia factor; `Collide` spends it on the body rates in place of the retired fitted `GrazeKick`.
 
 Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
 `[0, 0.6]` as authored.

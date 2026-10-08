@@ -600,7 +600,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"smoke screen: player.json unavailable ({e.Message}), flying on the image defaults");
+            Log.Warn("flight", $"smoke screen: player.json unavailable ({e.Message}), flying on the image defaults");
             smokeTunables = SmokeScreenTunables.Image;
         }
         var screenFlashSink = _screenFlash;
@@ -1869,7 +1869,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"turrets: ai.zrd unavailable, no turret gunners: {e.Message}");
+            Log.Warn("weapons", $"turrets: ai.zrd unavailable, no turret gunners: {e.Message}");
         }
         StartupProfile.Record("zrdr", mark);
         // The one shared projectile pool and its sinks (src/Launch/ProjectileStage.cs).
@@ -3108,7 +3108,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
+            Log.Warn("flight", $"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return default;
         }
     }

@@ -89,12 +89,6 @@ interactive menus (plane roster, chapter) and then `--fly`, flight flags prompt 
 missing, and the static views (`--plane=`, `--chapter=`, `--damage=`) pass through promptless
 apart from `--damage=`'s own plane prompt.
 
-**The Steam build flavour.** `dotnet build CSVM/CSVM.sln -p:CsvmSteam=true` defines `CSVM_STEAM`,
-which makes `CSVM/src/Net/NetCarrier.cs` select the Steam carrier instead of ENet and nothing
-else. The Steamworks SDK is not in this repo and cannot be, so that carrier throws at every way
-in; the flavour exists to keep the seam honest, and both flavours build clean and pass the unit
-suite. `RunTests.ps1` and every release build are the default flavour.
-
 **`RunTests.ps1`, the verification entry point.** One command, one summary block, one exit code.
 Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 
@@ -115,11 +109,13 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
 `--graphics=enhanced` to the perf and hitch launches only).
 
-**Every stage prints its wall time against a budget, and a budget never fails a run**.
+**Every test stage prints its wall time against a budget, and a budget never fails a run**.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
-back-to-back warm runs plus 50 %. A skipped stage is compared against nothing, and the total only
-when its lane's stages all ran.
+back-to-back warm runs plus 50 %. A skipped stage is compared against nothing. Build carries no
+budget, since only cutting features shortens it. There is no total budget: one set by the same
+rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine budget is capped at 80 % of
+the 300 s per-launch watchdog, so a growing catalog prints `over budget` before a shard is killed.
 
 **A selection that matches nothing is a failure**: `-Suite`, `-Filter` and `-UnitFilter` each fail
 their stage naming the term, rather than reporting a green zero.
@@ -726,7 +722,8 @@ Linux x86_64 libraries (debug and release) into `CSVM/addons/webrtc_native/`, wh
 It also adds the manifest to `CSVM/.godot/extension_list.cfg`, where a run that never opened the
 editor finds extensions; an editor import writes the same line. Unlike SDL2 the extension must sit
 inside the project folder Godot opens, so each checkout or worktree that should play over the
-internet runs it once. `-Verify` checks without installing.
+internet runs it once. Each installed file is pinned by SHA-256 too, so a run reinstalls over a file
+that differs from its pin, and `-Verify` checks every file against its pin without installing.
 
 The game needs it only for internet play through a master server (`--master-server=`,
 `docs/cli.md`): `Net/WebRtcTransport.cs` reports `Available` false without it, the launcher logs that

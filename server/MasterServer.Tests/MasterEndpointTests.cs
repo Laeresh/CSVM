@@ -30,26 +30,17 @@ public sealed class MasterEndpointTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _app = MasterApp.Build(Array.Empty<string>(), builder =>
+        _app = await Start(new Dictionary<string, string?>
         {
-            builder.WebHost.UseTestServer();
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Master:Stun"] = "stun:turn.example.org:3478",
-                ["Master:Turn"] = "turn:turn.example.org:3478?transport=udp",
-                ["Master:TurnSecret"] = "test-secret",
-                ["Master:ListPerMinute"] = "5",
-            });
+            ["Master:Stun"] = "stun:turn.example.org:3478",
+            ["Master:Turn"] = "turn:turn.example.org:3478?transport=udp",
+            ["Master:TurnSecret"] = "test-secret",
+            ["Master:ListPerMinute"] = "5",
         });
-        await _app.StartAsync();
         _server = _app.GetTestServer();
     }
 
-    public async Task DisposeAsync()
-    {
-        await _app.StopAsync();
-        await _app.DisposeAsync();
-    }
+    public async Task DisposeAsync() => await Stop(_app);
 
     [Fact]
     public async Task AnEmptyServerListsNoGamesAndIsHealthy()
@@ -175,6 +166,133 @@ public sealed class MasterEndpointTests : IAsyncLifetime
         Assert.Equal(MasterWire.Error, (await Next(socket)).T);
     }
 
+    [Fact]
+    public async Task AJoinToNoGameIsToldWhyAndItsSocketClosesUnreadPastIt()
+    {
+        using var socket = await Open();
+
+        // A second guess already on the wire behind the first is never answered.
+        await Send(socket, new MasterMessage { T = MasterWire.Join, Code = "ZZZ-ZZZ" });
+        await Send(socket, new MasterMessage { T = MasterWire.Join, Code = "ZZZ-ZZY" });
+
+        var refused = await Next(socket);
+        Assert.Equal((MasterWire.Error, MasterHub.NoGameWhy), (refused.T, refused.Why));
+        await AssertClosed(socket);
+    }
+
+    [Fact]
+    public async Task AnAddressHoldsOnlyItsOpenSocketsAndAClosedOneFreesItsSlot()
+    {
+        var app = await Start(new Dictionary<string, string?>
+        {
+            ["Master:MaxSocketsPerAddress"] = "2",
+            ["Master:SocketsPerMinute"] = "1000",
+        });
+        try
+        {
+            // The in-memory host names no address, so every socket here comes from the same one.
+            var server = app.GetTestServer();
+            using var first = await Open(server);
+            using var second = await Open(server);
+            await Assert.ThrowsAnyAsync<Exception>(() => Open(server));
+
+            await first.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+            WebSocket? third = null;
+            await WaitUntil(async () =>
+            {
+                third = await TryOpen(server);
+                return third != null;
+            });
+            using (third)
+            {
+                await Assert.ThrowsAnyAsync<Exception>(() => Open(server));
+            }
+        }
+        finally
+        {
+            await Stop(app);
+        }
+    }
+
+    [Fact]
+    public async Task ASocketSendsItsBurstThenOnlyWhatTheClockRefillsAndIsClosedPastIt()
+    {
+        var clock = new ManualClock();
+        var app = await Start(
+            new Dictionary<string, string?> { ["Master:MessageBurst"] = "2", ["Master:MessagesPerSecond"] = "1" },
+            clock);
+        try
+        {
+            using var socket = await Open(app.GetTestServer());
+
+            // An update from a socket hosting nothing is answered with an error, one per message.
+            for (int i = 0; i < 2; i++)
+            {
+                await Send(socket, new MasterMessage { T = MasterWire.Update });
+                Assert.Equal(MasterWire.Error, (await Next(socket)).T);
+            }
+
+            clock.Advance(1.0);
+            await Send(socket, new MasterMessage { T = MasterWire.Update });
+            Assert.Equal(MasterWire.Error, (await Next(socket)).T);
+
+            await Send(socket, new MasterMessage { T = MasterWire.Update });
+            await AssertClosed(socket);
+            Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+        }
+        finally
+        {
+            await Stop(app);
+        }
+    }
+
+    private static async Task<WebApplication> Start(IDictionary<string, string?> settings, TimeProvider? time = null)
+    {
+        var app = MasterApp.Build(Array.Empty<string>(), builder =>
+        {
+            builder.WebHost.UseTestServer();
+            builder.Configuration.AddInMemoryCollection(settings);
+            if (time != null)
+            {
+                builder.Services.AddSingleton(time);
+            }
+        });
+        await app.StartAsync();
+        return app;
+    }
+
+    private static async Task Stop(WebApplication app)
+    {
+        await app.StopAsync();
+        await app.DisposeAsync();
+    }
+
+    private static async Task AssertClosed(WebSocket socket)
+    {
+        var buffer = new byte[MasterWire.MaxMessageBytes];
+        using var wait = new CancellationTokenSource(Patience);
+        var result = await socket.ReceiveAsync(buffer, wait.Token);
+        Assert.Equal(WebSocketMessageType.Close, result.MessageType);
+    }
+
+    private static async Task<WebSocket> Open(TestServer server)
+    {
+        var client = server.CreateWebSocketClient();
+        return await client.ConnectAsync(new Uri(server.BaseAddress, MasterWire.SocketPath.TrimStart('/')).ToWsUri(), CancellationToken.None);
+    }
+
+    private static async Task<WebSocket?> TryOpen(TestServer server)
+    {
+        try
+        {
+            return await Open(server);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     private static async Task Send(WebSocket socket, MasterMessage message) =>
         await socket.SendAsync(Encoding.UTF8.GetBytes(MasterWire.Write(message)), WebSocketMessageType.Text, true, CancellationToken.None);
 
@@ -205,11 +323,7 @@ public sealed class MasterEndpointTests : IAsyncLifetime
         }
     }
 
-    private async Task<WebSocket> Open()
-    {
-        var client = _server.CreateWebSocketClient();
-        return await client.ConnectAsync(new Uri(_server.BaseAddress, MasterWire.SocketPath.TrimStart('/')).ToWsUri(), CancellationToken.None);
-    }
+    private Task<WebSocket> Open() => Open(_server);
 }
 
 /// <summary>The in-memory host's base address as the WebSocket scheme its client expects.</summary>

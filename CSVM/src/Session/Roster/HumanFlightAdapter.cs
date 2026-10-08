@@ -323,7 +323,7 @@ internal sealed class HumanFlightAdapter
             }
             catch (Exception e)
             {
-                GD.PushWarning($"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
+                Log.Warn("weapons", $"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
             }
         }
         else if (verbose)
@@ -362,7 +362,7 @@ internal sealed class HumanFlightAdapter
         }
         else
         {
-            GD.PushWarning("no airframe collision boxes, falling back to the center ray");
+            Log.Warn("flight", $"no airframe collision boxes, falling back to the center ray");
         }
         if (verbose && controller.Damage != null)
         {

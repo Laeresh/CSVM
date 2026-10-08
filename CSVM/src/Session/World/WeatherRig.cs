@@ -874,8 +874,7 @@ public sealed class WeatherRig
         }
         if (lighting.Tiles.Count != instances)
         {
-            GD.PushWarning($"deck lighting: {instances - lighting.Tiles.Count} deck tile(s) have no "
-                           + "undimmed twin and will stay dimmed above the cloud band");
+            Log.Warn("world", $"deck lighting: {instances - lighting.Tiles.Count} deck tile(s) have no undimmed twin and will stay dimmed above the cloud band");
         }
         return lighting;
 
@@ -934,7 +933,7 @@ public sealed class WeatherRig
         _views.Clear();
         if (_weather == null)
         {
-            GD.PushWarning($"no weather.json for {_spec.Chapter}/{_spec.Mission}, flying without fog / whiteout");
+            Log.Warn("world", $"no weather.json for {_spec.Chapter}/{_spec.Mission}, flying without fog / whiteout");
             return;
         }
         if (!byFile.Equals(_spec.SkyZone, StringComparison.OrdinalIgnoreCase))

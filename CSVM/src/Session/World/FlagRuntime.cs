@@ -347,6 +347,11 @@ internal sealed class FlagRuntime
         var net = _in.Net;
         net.On<FlagTableMessage>((_, table) => TakeTable(table));
         net.On<FlagRequestMessage>(TakeRequest);
+        // Every ask, a take and a home as much as an eject, comes from the machine flying its seat.
+        if (net.IsHost)
+        {
+            net.RequireSeatOwner<FlagRequestMessage>(request => request.Seat);
+        }
     }
 
     // One ask from a seat flown here. The host decides it at once. A guest asks its host, and takes a

@@ -568,11 +568,12 @@ public sealed class CampaignFeature : IMenuFeature
     /// <summary>Whether the store holds a profile of that name.</summary>
     public bool HasPlayer(string name) => Store?.Load(name) != null;
 
-    /// <summary>CONTINUE: seats the named player, creating the profile when it is new, the
+    /// <summary>CONTINUE: seats the named player, creating the profile when it is new. This is the
     /// original's own commit path from the button, from Enter in the name box and from a
-    /// double-click on a roster row alike. Returns the refusal in the original's words (an empty
-    /// name, langui 200; a name outside the character rule, 707; one over the length, 212; a full
-    /// roster, 202), or null once the player is seated. Nothing is written for a refusal.</summary>
+    /// double-click on a roster row alike. Returns the refusal in the original's words. Those are
+    /// langui 200 for an empty name, 707 for a bad character, 212 for an over-long name and 202 for
+    /// a full roster. A profile file this build cannot read is refused with the store's load
+    /// problem. Null once the player is seated, and nothing is written for a refusal.</summary>
     public string? ContinuePlayer(string name)
     {
         if (Store is not { } store)
@@ -594,6 +595,13 @@ public sealed class CampaignFeature : IMenuFeature
         var profile = store.Load(name);
         if (profile == null)
         {
+            // ⚠ Do not create over a file that fails to load. A cut file or a newer build's save is
+            // still recoverable, and a fresh profile would replace it.
+            if (store.HasFile(name))
+            {
+                return store.LoadProblem(name);
+            }
+
             if (Roster.Count >= MaxProfiles)
             {
                 string full = Strings.Format(202, MaxProfiles);

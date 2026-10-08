@@ -58,7 +58,7 @@ public readonly record struct AiStateMessage(
         message = new AiStateMessage(
             ai, sequence, position, attitude, velocity,
             throttle, aileron, elevator, rudder, (flags & 1) != 0);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -118,7 +118,7 @@ public readonly record struct AiFireMessage(ushort Ai, byte Weapon, Vector3 Orig
         var origin = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
         var direction = new Vector3(reader.ReadUnit(), reader.ReadUnit(), reader.ReadUnit());
         message = new AiFireMessage(ai, weapon, origin, direction);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -172,7 +172,7 @@ public readonly record struct AiHitMessage(
         float damage = reader.ReadSingle();
         var impact = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
         message = new AiHitMessage(ai, shooter, weapon, damage, part, impact);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -222,7 +222,7 @@ public readonly record struct DestructibleHitMessage(ushort Pool, int Key, float
         int key = reader.ReadInt32();
         float damage = reader.ReadSingle();
         message = new DestructibleHitMessage(pool, key, damage);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -316,7 +316,7 @@ public readonly record struct ZeppelinStateMessage(
         float pitch = reader.ReadSingle();
         float yaw = reader.ReadSingle();
         message = new ZeppelinStateMessage(zeppelin, sequence, position, speed, pitch, yaw);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -388,7 +388,7 @@ public readonly record struct AiSpawnMessage(
             (flags & VelocityFlag) != 0 ? velocity : null,
             (flags & CarrierDropFlag) != 0,
             (flags & ThrottleFlag) != 0 ? throttle : null);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -453,7 +453,7 @@ public readonly record struct SurfaceVehicleStateMessage(
         float speed = reader.ReadSingle();
         float yaw = reader.ReadSingle();
         message = new SurfaceVehicleStateMessage(vehicle, sequence, key, position, speed, yaw);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -498,7 +498,7 @@ public readonly record struct WorldEventMessage(ushort Code, ushort Subject, int
 
         message = new WorldEventMessage(
             reader.ReadUInt16(), reader.ReadUInt16(), reader.ReadInt32(), reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>

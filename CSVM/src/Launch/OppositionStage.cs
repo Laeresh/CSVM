@@ -119,14 +119,12 @@ internal sealed class OppositionStage
                     }
                     catch (Exception e)
                     {
-                        GD.PushWarning($"--ai: cannot read {spec.Chapter}'s patrol nets: {e.Message}");
+                        Log.Warn("flight", $"--ai: cannot read {spec.Chapter}'s patrol nets: {e.Message}");
                     }
                 }
                 net ??= nets != null ? AiNets.Resolve(nets, entry.Net) : null;
                 if (net == null)
-                    GD.PushWarning($"--ai: net '{entry.Net}' is neither the built-in " +
-                                   $"'{EmptyStage.PatrolNetName}' ring nor a net in " +
-                                   $"{spec.Chapter}'s neindex; '{planeName}' spawns without a patrol");
+                    Log.Warn("flight", $"--ai: net '{entry.Net}' is neither the built-in '{EmptyStage.PatrolNetName}' ring nor a net in {spec.Chapter}'s neindex; '{planeName}' spawns without a patrol");
             }
             for (int k = 0; k < entry.Count; k++)
             {
@@ -531,7 +529,7 @@ internal sealed class OppositionStage
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ai: cannot resolve '{aiDef ?? planeName}': {e.Message}");
+            Log.Warn("flight", $"ai: cannot resolve '{aiDef ?? planeName}': {e.Message}");
             return null;
         }
     }

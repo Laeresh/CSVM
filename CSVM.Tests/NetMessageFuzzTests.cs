@@ -2,7 +2,9 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using CSVM.Net;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -10,8 +12,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// Every message reader under bytes a peer could send, found by reflection over the
 /// <see cref="INetMessage{TSelf}"/> implementations. A message added later is therefore fuzzed with
-/// no edit here. A read must refuse the bytes or return a value that re-encodes to itself. It must
-/// never throw, and never allocate past <see cref="AllocationBound"/>. The same bytes then go
+/// no edit here. A read must refuse the bytes or return a finite value that re-encodes to itself.
+/// It must never throw, and never allocate past <see cref="AllocationBound"/>. The same bytes then go
 /// through a lobby, a guest session and a host session with every type routed. None may throw or
 /// hold a seat outside the tables.
 /// </summary>
@@ -159,6 +161,38 @@ public sealed class NetMessageFuzzTests
         }
     }
 
+    // A NaN or an infinity laid over every payload offset of every valid encoding. Wherever one
+    // lands in a float field the read must refuse it, so nothing accepted may hold one.
+    [Fact]
+    public void A_non_finite_float_anywhere_in_a_valid_encoding_is_refused()
+    {
+        var patterns = new[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity };
+        foreach (var bytes in Valid.Value)
+        {
+            var subject = SubjectFor(bytes);
+            var copy = new byte[bytes.Length];
+            foreach (float bad in patterns)
+            {
+                for (int at = NetMessage.HeaderBytes; at + sizeof(float) <= bytes.Length; at++)
+                {
+                    bytes.CopyTo(copy, 0);
+                    BinaryPrimitives.WriteSingleLittleEndian(copy.AsSpan(at), bad);
+                    if (subject.ReadValue(copy) is { } value)
+                    {
+                        AssertFinite(subject, value, $"{bad} at byte {at}");
+                    }
+                }
+            }
+        }
+
+        // Able to fail: the walk must see the floats of the messages the fix guards.
+        var carrying = Subjects.Value.Where(s => Floats(s.DefaultValue).Any()).Select(s => s.Type).ToList();
+        Assert.Contains(NetMessageType.ClockPing, carrying);
+        Assert.Contains(NetMessageType.AircraftState, carrying);
+        Assert.Contains(NetMessageType.Hit, carrying);
+        Assert.Contains(NetMessageType.RaceStanding, carrying);
+    }
+
     // A guest's lobby first, holding what arrives before a session binds, then the guest session it
     // replays into and every payload again. The join's own two readers reach this session's seats.
     [Fact]
@@ -275,6 +309,44 @@ public sealed class NetMessageFuzzTests
         int second = subject.ReadAndWrite(once.AsSpan(0, first), twice);
         Assert.True(second == first && once.AsSpan(0, first).SequenceEqual(twice.AsSpan(0, second)),
             $"{subject.Name} read {what} as a value that does not re-encode to itself");
+        AssertFinite(subject, subject.ReadValue(bytes)!, what);
+    }
+
+    // A NaN re-encodes bit for bit, so the round trip above passes one; the consumers do not.
+    private static void AssertFinite(Subject subject, object value, string what)
+    {
+        Assert.True(Floats(value).All(double.IsFinite), $"{subject.Name} read {what} as a value holding a NaN or an infinity");
+    }
+
+    // Every float a read value holds, through nested structs, nullables and lists.
+    private static IEnumerable<double> Floats(object? value, int depth = 0)
+    {
+        switch (value)
+        {
+            case null or string or Enum:
+                return Array.Empty<double>();
+            case float single:
+                return new double[] { single };
+            case double wide:
+                return new[] { wide };
+            case Vector3 v:
+                return new double[] { v.X, v.Y, v.Z };
+            case Quaternion q:
+                return new double[] { q.X, q.Y, q.Z, q.W };
+            case System.Collections.IEnumerable items:
+                return items.Cast<object?>().SelectMany(item => Floats(item, depth + 1)).ToList();
+        }
+
+        var type = value.GetType();
+        if (depth > 4 || type.IsPrimitive || type.Namespace?.StartsWith("CSVM", StringComparison.Ordinal) != true)
+        {
+            return Array.Empty<double>();
+        }
+
+        return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.GetIndexParameters().Length == 0)
+            .SelectMany(p => Floats(p.GetValue(value), depth + 1))
+            .ToList();
     }
 
     private static void AssertSeatsInRange(NetSession session, string when)
@@ -402,7 +474,12 @@ public sealed class NetMessageFuzzTests
 
         public abstract string Name { get; }
 
+        public abstract object DefaultValue { get; }
+
         public abstract bool Read(ReadOnlySpan<byte> bytes);
+
+        // The accepted value boxed, or null when the bytes were refused.
+        public abstract object? ReadValue(ReadOnlySpan<byte> bytes);
 
         // The accepted value written out, or -1 when the bytes were refused.
         public abstract int ReadAndWrite(ReadOnlySpan<byte> bytes, Span<byte> into);
@@ -421,7 +498,11 @@ public sealed class NetMessageFuzzTests
 
         public override string Name => typeof(T).Name;
 
+        public override object DefaultValue => default(T);
+
         public override bool Read(ReadOnlySpan<byte> bytes) => T.TryRead(bytes, out _);
+
+        public override object? ReadValue(ReadOnlySpan<byte> bytes) => T.TryRead(bytes, out var message) ? message : null;
 
         public override int ReadAndWrite(ReadOnlySpan<byte> bytes, Span<byte> into) =>
             T.TryRead(bytes, out var message) ? message.Write(into) : -1;
@@ -457,6 +538,10 @@ public sealed class NetMessageFuzzTests
         public override NetMessageType Type => throw new NotSupportedException();
 
         public override string Name => nameof(Allocating);
+
+        public override object DefaultValue => throw new NotSupportedException();
+
+        public override object? ReadValue(ReadOnlySpan<byte> bytes) => throw new NotSupportedException();
 
         public override bool Read(ReadOnlySpan<byte> bytes)
         {

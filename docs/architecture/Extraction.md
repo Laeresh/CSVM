@@ -33,8 +33,8 @@ install's `MPG` folder, `langui.dll`, `language.dll`, the output root, a force f
 callback. It unpacks `crimson.rof` into the output root and `crimptch.rof` into `_crimptch/`,
 skipping an archive whose `ASSETS` folder is already newer unless forced. Then it copies the
 cinemas, writes `ui_strings.json` (langui rows first) and runs `MenuLayoutDecoder`. Members land
-at `RofTree.Member`. A null or absent input is logged and skipped. The result carries each
-archive's counts and the movie count the stamp records. Finding the install and writing the stamp
+at `RofTree.Member`; one whose path leads outside its folder is refused and listed. A null or absent
+input is logged and skipped. The result carries each archive's counts and the movie count the stamp records. Finding the install and writing the stamp
 belong to the caller.
 
 ## src/Extraction/RofTree.cs
@@ -48,8 +48,8 @@ Coverage: `CSVM.Tests/RofExtractionTests.cs` and `OriginalManifestTests.cs`.
 ## src/Extraction/RofArchive.cs
 `Walk` lists a `.rof` held in memory as `RofEntry` values, a directory before its contents, paths
 joined with `/`, without inflating anything. `ReadMember` inflates one entry to its declared size
-and throws when the payload falls short. An implausible node or an unknown entry kind throws
-`InvalidDataException` rather than reading garbage. Read `BmTexture.cs` next.
+and throws when the payload falls short. An implausible node, a directory looping back to an ancestor or an
+unknown entry kind throws `InvalidDataException` rather than reading garbage. Read `BmTexture.cs` next.
 
 ## src/Extraction/BmTexture.cs
 `TryDecode` splits a `.BM` into its shading plane and its three paint-slot masks packed as RGB,
@@ -78,7 +78,9 @@ first-row-wins text map `MenuLayoutDecoder` joins widget strings against. The ru
 
 ## src/Extraction/MovieCopy.cs
 `Run` copies every `.mpg` in the install's folder byte for byte under its upper-case name
-(`RofTree`), skipping a target already at the source's length and replacing a read-only leftover.
+(`RofTree`), skipping a target already at the source's length unless forced and replacing a
+read-only leftover. Each copy lands as `<name>.part` and is renamed over the target, so a killed
+copy leaves only a `.part`, which the next run sweeps.
 `MovieCopyResult` counts copied and current files and names each of the ten `Expected` movies the
 folder lacked, for the report and the stamp.
 

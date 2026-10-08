@@ -3121,7 +3121,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _uiStrings = UiStrings.TryLoad(_dataRoot);
             if (_uiStrings == null)
             {
-                GD.PushWarning("launchscreen: no extracted/rof/ tree, hangar labels fall back");
+                Log.Warn("ui", $"launchscreen: no extracted/rof/ tree, hangar labels fall back");
                 _uiStrings = UiStrings.Empty;
             }
         }

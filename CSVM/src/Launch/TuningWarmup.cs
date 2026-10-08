@@ -78,7 +78,7 @@ public static class TuningWarmup
         }
         catch (Exception e)
         {
-            GD.PushWarning($"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
+            Log.Warn("core", $"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
         }
     }
 }

@@ -576,6 +576,7 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/AiStepCost.cs`, the wall cost of one AI walk over the flight roster and the aircraft it walked, the `--perf` term that attributes frame cost to the AI rather than to the whole frame.
+- `src/Utils/AtomicFile.cs`, whole-file replacement through a sibling temp file and one rename, the write path every store of player data uses so a kill or a full disk never leaves a truncated save.
 - `src/Utils/AudioBuses.cs`, the four bus names `CSVM/default_bus_layout.tres` ships, so every site that builds an audio player names its category instead of a string.
 - `src/Utils/AudioMix.cs`, the player's mix: four 0..100 levels into one gain per category bus, Master multiplying the other three, bus 0 never written, no level read under `--det`, and the child gains captured and restored for a page's preview.
 - `src/Utils/BuildVersion.cs`, the build's own version, read once from `application/config/version`; the log's first line and the menu's corner stamp state it.
@@ -874,7 +875,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/PngWriter.cs`, a managed 24-bit RGB PNG encoder, so no image library or engine type is needed to write the `.BM` PNGs.
 - `src/Extraction/PeStringTable.cs`, the Win32 `STRINGTABLE` resources read out of a PE file's bytes, with no Win32 call.
 - `src/Extraction/UiStringTable.cs`, the `ui_strings.json` rows: string-table text joined to its `RESOURCE.H` symbol and split from its `[FONTID]` tag.
-- `src/Extraction/MovieCopy.cs`, the install's `.mpg` cinemas copied verbatim under upper-case names, skipping a copy already at the source's length.
+- `src/Extraction/MovieCopy.cs`, the install's `.mpg` cinemas copied verbatim under upper-case names, skipping a copy already at the source's length unless forced.
 - `src/Extraction/MenuLayoutDecoder.cs`, `LAYOUT.CSV`, `SCRAPBOOK.CSV`, `RESOURCE.H` and the GUI scripts decoded into `menu_layout.json`.
 - `src/Extraction/ZbdExtraction.cs`, the ZBD half of extraction: every archive through unzbd, then `messages.json`, the optional unzip and the stamp, off the main thread.
 - `src/Extraction/ZbdPlan.cs`, the ZBD half's pure rules: the archive-name mode map, output naming, the up-to-date and unzip rules, and the stderr notes.
@@ -889,7 +890,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 ### `src/Net/`, the network seam
 
 What carries bytes between peers: the in-process carrier the suites run on, the ENet carrier a
-match ships over, the Steam carrier behind a build define, and the one place a build picks between
+match ships over, the WebRTC carrier internet play rides, and the one place a build picks between
 them. Only the ENet and WebRTC carriers and the port mapping name an engine type, so a session cannot learn
 what it is being carried by. The
 original's own message set, with ids and guarantees, is in [`org/multiplayer-messages.md`](org/multiplayer-messages.md).
@@ -900,8 +901,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/LoopbackTransport.cs`, transports wired to each other in one process through delivery queues: nothing arrives until a step, so a suite owns delivery time and makes its own reorders.
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
 - `src/Net/NetLink.cs`, where a real socket's link stands (`NetLinkState`) as a board reads it through `INetLink`, and how many payloads a link holds before a listener binds.
-- `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
-- `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
+- `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, so no edit above the seam changes carrier.
 - `src/Net/WebRtcTransport.cs`, the WebRTC carrier: a host listed on the master server and a guest joining by code, negotiated through its socket with STUN and a TURN fallback, the third type allowed to name a Godot networking type.
 - `src/Net/WebRtcFraming.cs`, the frame a WebRTC payload rides in: the session channel and a per-channel sequence, with the sequenced discard a WebRTC data channel lacks.
 - `src/Net/MergedTransport.cs`, several host carriers as one roster, so a host takes ENet and WebRTC guests in one session, each guest renumbered from 2.

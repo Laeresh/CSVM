@@ -241,33 +241,33 @@ public sealed class TurretController
             var def = defs.FindByTitle(mount.Title);
             if (def == null)
             {
-                GD.PushWarning($"turret: no ai.zrd entry titled '{mount.Title}' ({stats.DefName})");
+                Log.Warn("weapons", $"turret: no ai.zrd entry titled '{mount.Title}' ({stats.DefName})");
                 continue;
             }
             var weapon = weapons.Get(def.WeaponName);
             if (weapon == null || def.Firepoints.Count == 0)
             {
                 // "An entry with no resolvable WEAPON ticks no further", the engine's own rule.
-                GD.PushWarning($"turret '{mount.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
+                Log.Warn("weapons", $"turret '{mount.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
                 continue;
             }
             // PARTS names resolve inside the mount's own subtree (fire_turret1, …): the same
             // names repeat on the other viewpoint's rig and on every other plane of the type.
             if (!nodesByName.TryGetValue(mount.Node, out var mountRoot))
             {
-                GD.PushWarning($"turret '{mount.Title}': mount node '{mount.Node}' not on {stats.NodeName}");
+                Log.Warn("weapons", $"turret '{mount.Title}': mount node '{mount.Node}' not on {stats.NodeName}");
                 continue;
             }
             var rig = CollectNamedNodes(mountRoot);
             Node3D? yaw = null;
             if (def.YawNode is { } yawName && !rig.TryGetValue(yawName, out yaw))
             {
-                GD.PushWarning($"turret '{mount.Title}': yaw node '{yawName}' not under '{mount.Node}'");
+                Log.Warn("weapons", $"turret '{mount.Title}': yaw node '{yawName}' not under '{mount.Node}'");
                 continue;
             }
             if (!rig.TryGetValue(def.PitchNode, out var pitch))
             {
-                GD.PushWarning($"turret '{mount.Title}': pitch node '{def.PitchNode}' not under '{mount.Node}'");
+                Log.Warn("weapons", $"turret '{mount.Title}': pitch node '{def.PitchNode}' not under '{mount.Node}'");
                 continue;
             }
             var fps = new List<Node3D>();
@@ -279,7 +279,7 @@ public sealed class TurretController
                 }
                 else
                 {
-                    GD.PushWarning($"turret '{mount.Title}': firepoint '{fpName}' not under '{mount.Node}'");
+                    Log.Warn("weapons", $"turret '{mount.Title}': firepoint '{fpName}' not under '{mount.Node}'");
                 }
             }
             if (fps.Count == 0)
@@ -316,7 +316,7 @@ public sealed class TurretController
             if (weapon == null || def.Firepoints.Count == 0)
             {
                 // "An entry with no resolvable WEAPON ticks no further", the engine's own rule.
-                GD.PushWarning($"turret '{def.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
+                Log.Warn("weapons", $"turret '{def.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
                 continue;
             }
             foreach (var path in def.NodePatterns)
@@ -342,12 +342,12 @@ public sealed class TurretController
                     Node3D? yaw = null;
                     if (def.YawNode is { } yawName && !rig.TryGetValue(yawName, out yaw))
                     {
-                        GD.PushWarning($"turret {label}: yaw node '{yawName}' not under the site");
+                        Log.Warn("weapons", $"turret {label}: yaw node '{yawName}' not under the site");
                         continue;
                     }
                     if (!rig.TryGetValue(def.PitchNode, out var pitch))
                     {
-                        GD.PushWarning($"turret {label}: pitch node '{def.PitchNode}' not under the site");
+                        Log.Warn("weapons", $"turret {label}: pitch node '{def.PitchNode}' not under the site");
                         continue;
                     }
                     var fps = new List<Node3D>();
@@ -360,7 +360,7 @@ public sealed class TurretController
                     }
                     if (fps.Count == 0)
                     {
-                        GD.PushWarning($"turret {label}: no firepoint under the site");
+                        Log.Warn("weapons", $"turret {label}: no firepoint under the site");
                         continue;
                     }
                     // The kill switch: HEALTHY_NODE (default "healthy") under the site, else the

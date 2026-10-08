@@ -633,7 +633,7 @@ public sealed class Loadout
     {
         if (weapons.Get(wepId) is not { } weapon)
         {
-            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id, hardpoints keep their stock ordnance");
+            Log.Warn("weapons", $"--rocket='{wepId}' is not a known weapon id, hardpoints keep their stock ordnance");
             return;
         }
         int per = weapon.ClusterSize ?? 0;

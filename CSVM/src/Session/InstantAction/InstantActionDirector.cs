@@ -121,7 +121,7 @@ public sealed class InstantActionDirector
             }
             catch (Exception e)
             {
-                GD.PushWarning($"--ia={spec.IaPath}: cannot load ({e.Message}), flying without a mission");
+                Log.Warn("core", $"--ia={spec.IaPath}: cannot load ({e.Message}), flying without a mission");
             }
         }
         return null;
@@ -168,8 +168,7 @@ public sealed class InstantActionDirector
         string? node = Mech3.InstantAction.PlaneNodeFor(Runtime.Def.PlayerPlane);
         if (node == null)
         {
-            GD.PushWarning($"ia: player plane '{Runtime.Def.PlayerPlane}' is not one of " +
-                            $"the eleven airframes, flying '{_spec.PlaneName}' instead");
+            Log.Warn("core", $"ia: player plane '{Runtime.Def.PlayerPlane}' is not one of the eleven airframes, flying '{_spec.PlaneName}' instead");
         }
 
         return HumanFieldPlanes.InstantActionOverride(_spec, node);
@@ -198,7 +197,7 @@ public sealed class InstantActionDirector
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
+            Log.Warn("core", $"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
         }
         if (iaPatrolNet is { Nodes.Count: 0 })
         {
@@ -227,13 +226,11 @@ public sealed class InstantActionDirector
             string? aceNode = Mech3.InstantAction.PlaneNodeFor(ia.Def.AcePlane);
             if (aceNode == null)
             {
-                GD.PushWarning($"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven " +
-                                "airframes, no ace spawned");
+                Log.Warn("core", $"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven airframes, no ace spawned");
             }
             else if (SpawnPoints.LoadIa(inputs.MissionZrdrPath, ia.Def.MissionType) is not { Count: > 0 } aceSpawns)
             {
-                GD.PushWarning($"ia: no '{ia.Def.MissionType}' spawn points for " +
-                                $"{_spec.Chapter}/{_spec.Mission}, no ace spawned");
+                Log.Warn("core", $"ia: no '{ia.Def.MissionType}' spawn points for {_spec.Chapter}/{_spec.Mission}, no ace spawned");
             }
             else
             {
@@ -270,8 +267,7 @@ public sealed class InstantActionDirector
             string? wingmanNode = Mech3.InstantAction.PlaneNodeFor(ia.Def.WingmanPlane);
             if (wingmanNode == null)
             {
-                GD.PushWarning($"ia: wingman plane '{ia.Def.WingmanPlane}' is not one of " +
-                                "the eleven airframes, no wingmen spawned");
+                Log.Warn("core", $"ia: wingman plane '{ia.Def.WingmanPlane}' is not one of the eleven airframes, no wingmen spawned");
             }
             else
             {
@@ -288,8 +284,7 @@ public sealed class InstantActionDirector
                     .Find(s => string.Equals(s.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase));
                 if (wingmanScheme == null)
                 {
-                    GD.PushWarning("ia: no 'player_fortune' entry in the paint catalog, wingmen " +
-                                    "fly unpainted/random");
+                    Log.Warn("core", $"ia: no 'player_fortune' entry in the paint catalog, wingmen fly unpainted/random");
                 }
                 var wmBasis = leadForWingmen.GlobalTransform.Basis;
                 var wmFwd = -wmBasis.Z;
@@ -356,8 +351,7 @@ public sealed class InstantActionDirector
                 string? waveNode = Mech3.InstantAction.PlaneNodeFor(wave.EnemyPlane);
                 if (waveNode == null)
                 {
-                    GD.PushWarning($"ia: wave {w + 1} plane '{wave.EnemyPlane}' is not one " +
-                                    "of the eleven airframes, no wave enemies spawned");
+                    Log.Warn("core", $"ia: wave {w + 1} plane '{wave.EnemyPlane}' is not one of the eleven airframes, no wave enemies spawned");
                 }
                 else
                 {
@@ -486,8 +480,7 @@ public sealed class InstantActionDirector
             // ⚠ Do not invent a fallback spawn path: the original burns through every wave the
             // same way, its counter advancing whether or not the top-up lands
             // (docs/formats/instant-action.md).
-            GD.PushWarning($"ia: zeppelin '{objectiveZep}' carries no egen generator, no " +
-                            "wave will ever launch on this zeppelin run");
+            Log.Warn("core", $"ia: zeppelin '{objectiveZep}' carries no egen generator, no wave will ever launch on this zeppelin run");
         }
         else
         {
@@ -635,14 +628,15 @@ public sealed class InstantActionDirector
             // VersusMatch's disabled kill target/time limit already has, the mission still
             // flies and can still be lost.
             iaEnd.DisableObjective();
-            GD.PushWarning("ia: this mission has NO win condition, " + (objective switch
+            string why = objective switch
             {
                 null => $"mission type '{iaEnd.Def.MissionType}' has none in this build",
                 InstantActionObjective.AceDown => "no ace was spawned",
                 InstantActionObjective.WavesCleared => "no wave enemy is configured",
                 InstantActionObjective.ZonesFlown => "this mission ships no danger zones",
                 _ => "no zeppelin runtime was built",
-            }) + " (it can still be lost)");
+            };
+            Log.Warn("core", $"ia: this mission has NO win condition, {why} (it can still be lost)");
         }
         // ⚠ A race waives the lives whatever the def holds. A crash there costs time alone, and
         // only the race's own board may end it.
@@ -785,8 +779,7 @@ public sealed class InstantActionDirector
         }
         if (_waveSpawnList is not { Count: > 0 } spawns)
         {
-            GD.PushWarning($"ia: no spawn points for wave {waveNumber}, {roster.Count} " +
-                            "aircraft stay parked inert");
+            Log.Warn("core", $"ia: no spawn points for wave {waveNumber}, {roster.Count} aircraft stay parked inert");
             return;
         }
         var humanPositions = new List<Vector3>();
@@ -918,7 +911,7 @@ public sealed class InstantActionDirector
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ia: cannot read the militia paint patterns: {e.Message}");
+            Log.Warn("core", $"ia: cannot read the militia paint patterns: {e.Message}");
             _militiaPatterns = new Dictionary<string, string>();
         }
         return _militiaPatterns;

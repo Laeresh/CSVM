@@ -74,9 +74,9 @@ internal static class EnetTransportSuites
         EnetTransport? guest = null;
         try
         {
-            // What the door and the command line open through. Without the Steam define it has to
-            // be this carrier, or the rest of the run proves a socket nothing opens.
-            ctx.Check(!NetCarrier.UsesSteam && NetCarrier.Name == "enet",
+            // What the door and the command line open through. It has to be this carrier, or the
+            // rest of the run proves a socket nothing opens.
+            ctx.Check(NetCarrier.Name == "enet",
                 $"the carrier selection hands this build the ENet socket (it hands it {NetCarrier.Name})");
 
             host = OpenHost(out int port, out string why);

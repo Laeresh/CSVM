@@ -109,7 +109,7 @@ internal sealed class SessionVoices
         }
         catch (Exception e)
         {
-            GD.PushWarning($"campaign: cannot load ai_skill_parameters: {e.Message}");
+            Log.Warn("sound", $"campaign: cannot load ai_skill_parameters: {e.Message}");
             return 2000f;
         }
     }

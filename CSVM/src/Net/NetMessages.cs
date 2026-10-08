@@ -512,7 +512,7 @@ public readonly record struct AircraftStateMessage(
         message = new AircraftStateMessage(
             seat, sequence, position, attitude, velocity,
             throttle, aileron, elevator, rudder, (flags & 1) != 0);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -580,7 +580,7 @@ public readonly record struct FireMessage(
         var direction = new Vector3(reader.ReadUnit(), reader.ReadUnit(), reader.ReadUnit());
         byte target = reader.ReadByte();
         message = new FireMessage(seat, weapon, sequence, origin, direction, target);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -642,7 +642,7 @@ public readonly record struct HitMessage(
         float damage = reader.ReadSingle();
         var impact = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
         message = new HitMessage(victim, shooter, weapon, damage, part, impact, hull);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -976,7 +976,7 @@ public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float 
         float y = reader.ReadSingle();
         float z = reader.ReadSingle();
         message = new SpawnAtMessage(seat, new Vector3(x, y, z), reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1111,7 +1111,7 @@ public readonly record struct MatchStateMessage(
         var end = (NetMatchEnd)reader.ReadByte();
         byte winner = reader.ReadByte();
         message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle(), winner);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1157,7 +1157,7 @@ public readonly record struct DirectorTransitionMessage(ushort Code, int Id, flo
         _ = reader.ReadUInt16();
         int id = reader.ReadInt32();
         message = new DirectorTransitionMessage(code, id, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1203,8 +1203,9 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
         ulong clock = reader.ReadUInt32() | ((ulong)reader.ReadUInt32() << 32);
         byte seat = reader.ReadByte();
         byte extra = reader.ReadByte();
-        message = new HandshakeMessage(seed, BitConverter.UInt64BitsToDouble(clock), seat, extra);
-        return true;
+        double hostClock = BitConverter.UInt64BitsToDouble(clock);
+        message = new HandshakeMessage(seed, hostClock, seat, extra);
+        return double.IsFinite(hostClock);
     }
 
     /// <inheritdoc/>
@@ -1582,7 +1583,7 @@ public readonly record struct ClockPingMessage(float AskedClock, float HostClock
 
         float asked = reader.ReadSingle();
         message = new ClockPingMessage(asked, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>

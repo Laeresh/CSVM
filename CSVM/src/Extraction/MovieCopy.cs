@@ -22,10 +22,14 @@ public static class MovieCopy
         "crimflag.mpg", "final.mpg", "msopen1.mpg", "zipper.mpg",
     };
 
+    // A copy in progress; the step sweeps any a killed run left before it starts.
+    private const string PartSuffix = ".part";
+
     /// <summary>Copies every <c>.mpg</c> in <paramref name="sourceFolder"/> into
-    /// <paramref name="destFolder"/> upper case, skipping a target already at the source's length. A
-    /// null or absent source copies nothing and reports every movie missing.</summary>
-    public static MovieCopyResult Run(string? sourceFolder, string destFolder)
+    /// <paramref name="destFolder"/> upper case. A target already at the source's length is skipped
+    /// unless <paramref name="force"/> is set. A null or absent source copies nothing and reports
+    /// every movie missing.</summary>
+    public static MovieCopyResult Run(string? sourceFolder, string destFolder, bool force = false)
     {
         if (sourceFolder == null || !Directory.Exists(sourceFolder))
         {
@@ -33,6 +37,12 @@ public static class MovieCopy
         }
 
         Directory.CreateDirectory(destFolder);
+        foreach (string stale in Directory.EnumerateFiles(destFolder, "*" + PartSuffix).ToList())
+        {
+            File.SetAttributes(stale, FileAttributes.Normal);
+            File.Delete(stale);
+        }
+
         int copied = 0;
         int current = 0;
         long bytes = 0;
@@ -48,8 +58,8 @@ public static class MovieCopy
             long length = new FileInfo(source).Length;
 
             // A verbatim copy already at the source's length is the copy this step would make
-            // again. Skipping it spares rewriting about 106 MB.
-            if (File.Exists(target) && new FileInfo(target).Length == length)
+            // again. Skipping it spares rewriting about 106 MB; a forced run checks nothing.
+            if (!force && File.Exists(target) && new FileInfo(target).Length == length)
             {
                 current++;
                 continue;
@@ -64,15 +74,18 @@ public static class MovieCopy
         return new MovieCopyResult(true, copied, current, bytes, missing);
     }
 
-    // A half-written or read-only leftover is replaced rather than failing the step.
+    // ⚠ Do not copy onto the target itself. File.Copy may preallocate the full length, so a killed
+    // copy would leave a target the length check takes as current. A read-only leftover is replaced.
     private static void ReplaceWithCopy(string source, string target)
     {
+        string part = target + PartSuffix;
+        File.Copy(source, part, overwrite: true);
         if (File.Exists(target))
         {
             File.SetAttributes(target, FileAttributes.Normal);
         }
 
-        File.Copy(source, target, overwrite: true);
+        File.Move(part, target, overwrite: true);
     }
 }
 

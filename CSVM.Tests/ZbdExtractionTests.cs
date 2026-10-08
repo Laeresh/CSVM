@@ -182,6 +182,7 @@ public class ZbdExtractionTests
         Assert.Equal(3, second.UpToDate);
 
         // A gamez archive makes the fake exit non-zero: the run continues, and the tree is not stamped.
+        // Its cut-short output goes too, since it is newer than its archive and would pass as current.
         File.Delete(Path.Combine(extracted, "VERSION.json"));
         Touch(install, "Zbd", "C2", "gamez.zbd");
         var third = ZbdExtraction.Run(install, extracted, fake, new ZbdExtractionOptions());
@@ -189,6 +190,7 @@ public class ZbdExtractionTests
         Assert.Equal(new[] { Path.Combine("C2", "gamez.zbd") + " (exit 3)" }, third.Failures);
         Assert.Null(third.Stamp);
         Assert.False(File.Exists(Path.Combine(extracted, "VERSION.json")));
+        Assert.Empty(Directory.GetFiles(Path.Combine(extracted, "C2")));
     }
 
     [Fact]
@@ -209,8 +211,8 @@ public class ZbdExtractionTests
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-5));
     }
 
-    // Stands in for unzbd. --version prints a line and gamez fails. Every other archive mode writes
-    // its output, two notes and one unexpected line on stderr.
+    // Stands in for unzbd. --version prints a line and gamez fails after writing part of its output.
+    // Every other archive mode writes its output, two notes and one unexpected line on stderr.
     private static string FakeUnzbd(string root)
     {
         string path = Path.Combine(root, "unzbd.cmd");
@@ -218,7 +220,7 @@ public class ZbdExtractionTests
         {
             "@echo off",
             "if \"%~1\"==\"--version\" (echo unzbd fake& exit /b 0)",
-            "if \"%~2\"==\"gamez\" (echo boom 1>&2& exit /b 3)",
+            "if \"%~2\"==\"gamez\" (echo partial> \"%~4\"& echo boom 1>&2& exit /b 3)",
             "if \"%~2\"==\"messages\" (echo {}> \"%~4\"& exit /b 0)",
             "echo object3d transform fail 1>&2",
             "echo INTERVAL VAL FAIL 1>&2",
