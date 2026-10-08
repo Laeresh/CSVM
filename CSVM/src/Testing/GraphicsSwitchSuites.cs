@@ -40,6 +40,16 @@ internal static class GraphicsSwitchSuites
     // Where the hide and its mask globals are declared.
     private const string OceanIncludePath = "res://shaders/csky_ocean.gdshaderinc";
 
+    // The retext probe's key, red under Original and green under Enhanced. The Original block is the
+    // larger, so a stale compile also fails the Enhanced material's uniform buffer, as the world shaders did.
+    private const string OriginalProbe = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
+        + "uniform vec4 probe_a = vec4(0.0);\nuniform vec4 probe_b = vec4(0.0);\nuniform vec4 probe_c = vec4(0.0);\n"
+        + "void fragment() {\n    ALBEDO = vec3(1.0, 0.0, 0.0) + (probe_a.rgb + probe_b.rgb + probe_c.rgb) * 0.0;\n}\n";
+
+    private const string EnhancedProbe = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
+        + "uniform vec4 probe_a = vec4(0.0);\n"
+        + "void fragment() {\n    ALBEDO = vec3(0.0, 1.0, 0.0) + probe_a.rgb * 0.0;\n}\n";
+
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
@@ -609,9 +619,9 @@ internal static class GraphicsSwitchSuites
         "a key whose Original shader nobody wears any more, rewritten in place by a first switch to "
         + "Enhanced before an Enhanced frame has drawn, stays pinned on a material of its own; after "
         + "one TAA frame builds Godot's advanced variants, a fresh material on the key draws the "
-        + "Enhanced text with no engine error, and the Original text drew red before the switch. "
-        + "Only a process that has drawn no TAA frame before can show the draw fail; the pin check "
-        + "fails in any")]
+        + "Enhanced text with no engine error, and the Original text on a shader of its own draws "
+        + "red. Only a process that has drawn no TAA frame before can show the draw fail; the pin "
+        + "check fails in any")]
     internal static void RetextCompiles(TestContext ctx)
     {
         bool wasEnhanced = GraphicsMode.Enhanced;
@@ -627,14 +637,14 @@ internal static class GraphicsSwitchSuites
             RenderingServer.ForceSync();
             int? errorsBefore = TestHarness.EngineErrorsSoFar();
 
-            var key = Mech3.ShaderTwins.Make(RetextProbeText, "retext-probe", "retext-probe");
-            var (view, quad) = ProbeView(host);
+            // ⚠ Draw nothing before the rewrite. A draw leaves Godot compiling pipelines on worker
+            // threads, and a rewrite then has a worker rebuild the shader and fail its free_rid calls.
+            var key = Mech3.ShaderTwins.Make(() => GraphicsMode.Enhanced ? EnhancedProbe : OriginalProbe,
+                "retext-probe", "retext-probe");
             var worn = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
             var original = worn.Shader;
-            quad.MaterialOverride = worn;
-            var drawnOriginal = ProbePixel(view);
+            worn.GetRid();
             // The key keeps no wearer, so the rewrite queues no material update of Godot's own.
-            quad.MaterialOverride = null;
             worn.Dispose();
 
             GraphicsMode.Set(true);
@@ -643,9 +653,12 @@ internal static class GraphicsSwitchSuites
             bool pinned = Mech3.ShaderTwins.IsPinned(original);
             AdvancedFrame(host);
 
+            var (view, quad) = ProbeView(host);
             fresh = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
             quad.MaterialOverride = fresh;
             var drawnEnhanced = ProbePixel(view);
+            quad.MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = OriginalProbe } };
+            var drawnOriginal = ProbePixel(view);
             RenderingServer.ForceSync();
             int? errorsAfter = TestHarness.EngineErrorsSoFar();
 
@@ -768,16 +781,6 @@ internal static class GraphicsSwitchSuites
                 $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
         }
     }
-
-    // Red under Original, green under Enhanced. The Original block is the larger, so a stale compile
-    // also fails the Enhanced material's uniform buffer, as the world shaders did.
-    private static string RetextProbeText() => GraphicsMode.Enhanced
-        ? "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
-          + "uniform vec4 probe_a = vec4(0.0);\n"
-          + "void fragment() {\n    ALBEDO = vec3(0.0, 1.0, 0.0) + probe_a.rgb * 0.0;\n}\n"
-        : "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// graphics-retext-compiles\n"
-          + "uniform vec4 probe_a = vec4(0.0);\nuniform vec4 probe_b = vec4(0.0);\nuniform vec4 probe_c = vec4(0.0);\n"
-          + "void fragment() {\n    ALBEDO = vec3(1.0, 0.0, 0.0) + (probe_a.rgb + probe_b.rgb + probe_c.rgb) * 0.0;\n}\n";
 
     // A small pane of its own world, no TAA, whose quad fills the camera's view.
     private static (SubViewport View, MeshInstance3D Quad) ProbeView(Node host)

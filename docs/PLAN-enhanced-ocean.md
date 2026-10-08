@@ -1290,18 +1290,25 @@ first, which rebuilds the base variants from the new text; the enable then build
 from the same text. No `RenderingServer` call reaches `version_is_valid` or `version_get_shader`
 synchronously, so a wearer is the only way to force the compile. A shader never given an RID needs
 no pin, but C# cannot tell, so every rewritten shader gets one. The `graphics-retext-compiles`
-suite builds a synthetic key in Original (red, a 48-byte uniform block), draws it, frees its only
+suite builds a synthetic key in Original (a 48-byte uniform block), compiles it, frees its only
 material, switches to Enhanced with `EnhancedDrawn` false, draws one TAA frame, puts a fresh
-material on the key and reads it green (Enhanced, 16 bytes), the rewritten shader pinned, and no new
-engine error line in the run's log (`TestHarness.EngineErrorsSoFar`). With the pin disabled it fails
-alone: not pinned, the pixel the clear grey, and 6 engine errors, the same "Uniform buffer supplied
-(binding: 0) size (16) is smaller than size of shader uniform: (48)" then "Parameter "us" is null".
-It can show the draw fail only in a process that has drawn no TAA frame before it; the pin check
-fails in any. The minimal set went from 16 engine-error lines to 0 (7/7 pass) and the 62-suite
-shard-3 list from 20 to 0 (62/62). Complete battery: units 6517 passed, 3 skipped; engine 545
-passed, 2 skipped, engine errors clean on all six shards; goldens 25/25 hash-identical. The suite
-takes 1.7 s alone and 18.3 s in a shard, where its TAA frame builds the advanced group for every
-shader the shard has made (PERF-45); its weight is the shard figure.
+material on the key and reads it green (Enhanced, 16 bytes), the rewritten shader pinned, the
+Original text on a shader of its own reading red, and no new engine error line in the run's log
+(`TestHarness.EngineErrorsSoFar`). With the pin disabled it fails alone: not pinned, the pixel the
+clear grey, and 6 engine errors, the same "Uniform buffer supplied (binding: 0) size (16) is smaller
+than size of shader uniform: (48)" then "Parameter "us" is null". It can show the draw fail only in
+a process that has drawn no TAA frame before it; the pin check fails in any. The suite draws nothing
+before the rewrite. `ShaderData::set_code` marks the version dirty before `clear_pipelines` waits for
+the shader's background pipeline compiles, so a compile still in flight calls `version_get_shader`
+on a worker thread, rebuilds the version there, and its `RD::free_rid` calls fail the render-thread
+guard (50 "free_rid can only be called from the render thread" lines in a shard-4 run, all printed
+inside the rewriting `Regenerate`, when the suite drew a red control just before it). The minimal set
+went from 16 engine-error lines to 0 (7/7 pass) and the 62-suite shard-3 list from 20 to 0 (62/62);
+the 40-suite shard-4 prefix ran clean twice. Complete battery: units 6517 passed, 3 skipped; engine
+545 passed, 2 skipped, engine errors clean on all six shards (the suite in s4, 17.6 s); goldens
+25/25 hash-identical. The suite takes 0.3 s alone and about 15 to 18 s in a
+shard, where its TAA frame builds the advanced group for every shader the shard has made (PERF-45);
+its weight is the shard figure.
 
 **Verified.** <pending orchestrator run>
 
