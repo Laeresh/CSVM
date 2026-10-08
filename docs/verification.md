@@ -1004,6 +1004,9 @@ member, and it does not go here.
   `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
   drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
   during it.
+- **INSTR-101**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
+  the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
+  bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.
 
 ## SRC, sources and documents
 

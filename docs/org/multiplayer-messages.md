@@ -1028,7 +1028,11 @@ same pick without it. At launch the host writes each seat's voice into bits 1 to
 flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
 chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone.
 Bit 4 marks a machine's own player who gave no name, whose callsign field holds only a stand-in, so
-every machine's marker reads that seat as "Unknown" ([`targeting.md`](targeting.md)). A
+every machine's marker reads that seat as "Unknown" ([`targeting.md`](targeting.md)). Bit 5 marks a
+bot, a remake-only computer pilot the host flies, and bits 6 and 7 carry its skill tier (0 novice, 1
+veteran, 2 ace). A bot entry carries the host bit, is never at seat 0, and is flown by no guest; a
+reader refuses a roster with tier 3 or with skill bits on a person's entry. The entry keeps its 20
+bytes, so a build a patch older reads a bot as a seat the host owns. A
 co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
 carries none. The callsign, the voice and the game name are remembered in `options.json`
 for the next session; a password never is. Game Information's password is the one the host asks,
@@ -1188,7 +1192,7 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain), airframe, team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes) |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch), team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |

@@ -578,7 +578,7 @@ Connection page, `connection:gameinfo` and `connection:playerinfo` with GAME INF
 INFORMATION standing over it on a sample answer, `connection:code` with Join by code picked and a
 sample code in its box, and `connection-games` and `connection-games:searching` on the LAN games list
 over an in-process network holding five sample games, one of another build version, or none, and `lobby[:host|guest[:tab]]` on
-the Multiplayer Lobby over an in-process wire with two guests), and any other value opens that 
+the Multiplayer Lobby over an in-process wire with two guests, `lobby:late` a guest waiting on its host's match), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
 A new presentation's aids follow the same rules: they select a screen of its own graph, they never

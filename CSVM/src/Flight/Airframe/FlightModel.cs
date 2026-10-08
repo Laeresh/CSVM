@@ -256,6 +256,11 @@ public sealed class FlightModel
     // one goes negative in an outside pull and is the only thing that can reach lowGs.
     private float _bodyUpLoadFactor;
 
+    // The share of BodyRates the AI ground blow deposited, decayed with them, so the contact impulse
+    // can be read without it (Collide). Always zero on the player path. The rates are linear in their
+    // deposits, so the split is exact.
+    private Vector3 _aiGroundBlowRates;
+
     /// <param name="aiForcePath">Which of the original's two force paths this instance flows, see
     /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
     /// production construction site added later gets the player plant silently. Two sites pass it
@@ -523,6 +528,7 @@ public sealed class FlightModel
         Position = position;
         Attitude = attitude.Orthonormalized();
         BodyRates = Vector3.Zero;
+        _aiGroundBlowRates = Vector3.Zero;
         VelocityDir = -Attitude.Z;
         Speed = speed;
         Throttle = throttle;
@@ -736,8 +742,13 @@ public sealed class FlightModel
         // to first order and flips BodyRates' sign every tick once dt·damp exceeds 2.
         BodyRates += (cmd + (UsesAiForcePath ? Vector3.Zero : groundBlow)) * dt;
         if (UsesAiForcePath)
+        {
             BodyRates += groundBlow;
-        BodyRates *= Mathf.Exp(-dt * s.AngMomentumDamp);
+            _aiGroundBlowRates += groundBlow;
+        }
+        float rateDecay = Mathf.Exp(-dt * s.AngMomentumDamp);
+        BodyRates *= rateDecay;
+        _aiGroundBlowRates *= rateDecay;
 
         var omegaWorld = Attitude * BodyRates;
         float omega = omegaWorld.Length();
@@ -807,30 +818,33 @@ public sealed class FlightModel
     /// <param name="contactArm">NOT normalised: its length sets the rebound/spin partition, and a
     /// LONG arm rebounds harder than a short one.</param>
     public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
-        BounceImpulse(velocity, normal, contactArm).NormalSpeed;
+        BounceImpulse(velocity, normal, contactArm, BodyRates).NormalSpeed;
 
     /// <summary>The decoded angular half of the same impulse: what the contact adds to the body
     /// rates, net of the original's accumulator round-trip (the inertia weighting cancels between
     /// the deposit and the next frame's integration, so the applied kick is the raw
     /// <c>(r × J) / |r|²</c> scaled by the partition's angular share and the shared 0.5).</summary>
     public Vector3 BounceRateKick(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
-        BounceImpulse(velocity, normal, contactArm).RateKick;
+        BounceImpulse(velocity, normal, contactArm, BodyRates).RateKick;
 
-    /// <summary>The decoded collision response: the placement at the sweep's stop and, for a human
-    /// pilot, the normal-only impulse on velocity and body rates. Nothing else: the original edits
-    /// no tangential speed, no friction and no vertical component on contact, so a sustained scrape
-    /// bleeds speed only through repeated impulses as the plant steers back into the surface.
-    /// ⚠ The impulse is PLAYER-only, as the original is; an AI gets the position correction alone,
-    /// resting exactly at the stop with no push-out.</summary>
+    /// <summary>The decoded collision response: the placement at the sweep's stop and, on a
+    /// person's contact rule, the normal-only impulse on velocity and body rates. The original edits
+    /// no tangential or vertical speed and adds no friction, so a scrape bleeds speed only through
+    /// repeated impulses. ⚠ The impulse is PLAYER-only, as the original is; an AI rests exactly at
+    /// the stop with no push-out. A bot seat takes the player's arm, minus the AI ground blow's
+    /// rates (<see cref="FlightController.TakesPersonsContactRule"/>).</summary>
     public void Collide(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact, Vector3 normal,
-        bool humanPiloted)
+        bool personsRule)
     {
-        Position = prev + step * stopFrac + (humanPiloted ? normal * ContactPushOut : Vector3.Zero);
-        if (!humanPiloted)
+        Position = prev + step * stopFrac + (personsRule ? normal * ContactPushOut : Vector3.Zero);
+        if (!personsRule)
             return;
 
         var vel = VelocityDir * Speed;
-        var (rebound, rateKick) = BounceImpulse(vel, normal, impact - Position);
+        // A bot's impulse reads its rates without the AI ground blow's share. That blow pitches it
+        // tail-down in the steps before the contact. Read with it, the impulse returns a bot faster
+        // than it came in. The share is zero for a person.
+        var (rebound, rateKick) = BounceImpulse(vel, normal, impact - Position, BodyRates - _aiGroundBlowRates);
         var bounced = vel - normal * vel.Dot(normal) + normal * rebound;
         float bouncedLen = bounced.Length();
         Speed = bouncedLen;
@@ -872,10 +886,10 @@ public sealed class FlightModel
     // divides (r × J)/|r|² by the authored reciprocal moments before measuring it, so a stiff axis
     // weighs heavier, not lighter. Reading that divide as ×I⁻¹ is the error this replaced.
     private (float NormalSpeed, Vector3 RateKick) BounceImpulse(
-        Vector3 velocity, Vector3 normal, Vector3 contactArm)
+        Vector3 velocity, Vector3 normal, Vector3 contactArm, Vector3 bodyRates)
     {
         float vn = normal.Dot(velocity);
-        var omegaWorld = Attitude * BodyRates;
+        var omegaWorld = Attitude * bodyRates;
         float vpn = vn + 2f * normal.Dot(omegaWorld.Cross(contactArm));
         var j = -vpn * normal;
         float r2 = contactArm.LengthSquared();

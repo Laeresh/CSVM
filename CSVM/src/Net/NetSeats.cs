@@ -17,6 +17,11 @@ public static class NetSeats
     /// (<c>docs/org/multiplayer-spawn.md</c>).</summary>
     public const int MaxPlayers = 16;
 
+    /// <summary>The peer every seat of a local match's roster is owned by, its bots included. No
+    /// transport hands it out, and with no wire nothing reads it but <see cref="Validate"/>.
+    /// </summary>
+    public const int OfflinePeer = NetSession.NoPeer;
+
     /// <summary>How wide every seat-indexed table is built, never below <see cref="MaxPlayers"/>.
     /// Sixteen is what the original's own data holds: 16-entry spawn blocks, a 16-entry lobby
     /// player array and a 16-entry team array.</summary>
@@ -53,10 +58,11 @@ public static class NetSeats
     }
 
     /// <summary>Throws unless <paramref name="roster"/> is a match a session can be built from. One
-    /// to <see cref="MaxPlayers"/> seats, numbered 0 upward with no gap, and at least one of them
-    /// flown on this machine. Every seat-indexed table is addressed by the number, so a leaver's
-    /// seat stays in the roster until the match ends. Given <paramref name="hostPeer"/>, seat 0
-    /// must be that peer's, since every P1 read takes seat 0 as the host.</summary>
+    /// to <see cref="MaxPlayers"/> seats, numbered 0 upward with no gap, and at least one with a
+    /// pane here. Every seat-indexed table is addressed by the number, so a leaver's seat stays in
+    /// the roster until the match ends. Seat 0 is a human, and given <paramref name="hostPeer"/> it
+    /// must be that peer's, since every P1 read takes seat 0 as the host. A bot seat is owned and
+    /// flown where seat 0 is, which is the host on every machine's copy.</summary>
     public static void Validate(IReadOnlyList<NetSeat> roster, int? hostPeer = null)
     {
         ArgumentNullException.ThrowIfNull(roster);
@@ -66,7 +72,8 @@ public static class NetSeats
         }
 
         var seen = new HashSet<int>();
-        int locals = 0;
+        int panes = 0;
+        NetSeat? first = null;
         foreach (var seat in roster)
         {
             if (seat.SeatIndex < 0 || seat.SeatIndex >= roster.Count)
@@ -79,9 +86,14 @@ public static class NetSeats
                 throw new ArgumentException($"two seats claim index {seat.SeatIndex}", nameof(roster));
             }
 
-            if (seat.IsLocal)
+            if (seat.HasPane)
             {
-                locals++;
+                panes++;
+            }
+
+            if (seat.SeatIndex == 0)
+            {
+                first = seat;
             }
 
             if (seat.SeatIndex == 0 && hostPeer is { } host && seat.PeerId != host)
@@ -90,11 +102,80 @@ public static class NetSeats
             }
         }
 
-        if (locals == 0)
+        if (panes == 0)
         {
-            throw new ArgumentException("no seat in the roster is flown on this machine", nameof(roster));
+            throw new ArgumentException("no seat in the roster has a pane on this machine", nameof(roster));
+        }
+
+        RequireHostBots(roster, first!);
+    }
+
+    /// <summary>Appends <paramref name="bots"/> to a host's roster as bot seats of
+    /// <paramref name="hostPeer"/>, numbered on from the seats already in it. A bot past
+    /// <see cref="MaxPlayers"/> is not seated, so a guest always outranks a bot. Answers how many
+    /// were left out.</summary>
+    public static int AddBots(List<NetSeat> roster,
+        int hostPeer, IEnumerable<SeatedBot> bots)
+    {
+        ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(bots);
+        int left = 0;
+        foreach (var bot in bots)
+        {
+            if (roster.Count >= MaxPlayers)
+            {
+                left++;
+                continue;
+            }
+
+            roster.Add(Bot(hostPeer, roster.Count, bot.Callsign, bot.Plane, bot.Skill, bot.Team));
+        }
+
+        return left;
+    }
+
+    /// <summary>Seat <paramref name="seat"/>'s callsign when a bot flies it, else null, so a caller
+    /// names a person by player tag. Null too for a seat past the roster or with no roster.</summary>
+    public static string? BotCallsign(IReadOnlyList<NetSeat>? roster, int seat) =>
+        roster != null && seat >= 0 && seat < roster.Count && roster[seat].IsBot ? roster[seat].Callsign : null;
+
+    /// <summary>A bot seat at <paramref name="seatIndex"/>, owned and flown by the host whose peer
+    /// is <paramref name="hostPeer"/>. It has no pane and no menu pick. Its loadout and build reach
+    /// the session by seat, as a guest's do. <paramref name="team"/> is a lobby team number.
+    /// </summary>
+    public static NetSeat Bot(int hostPeer, int seatIndex, string callsign, string planeNode,
+        NetBotSkill skill = NetBotSkill.Veteran, int team = 0) => new()
+        {
+            PeerId = hostPeer,
+            SeatIndex = seatIndex,
+            TeamId = team,
+            FlownHere = true,
+            Pilot = NetPilot.Bot,
+            Skill = skill,
+            Callsign = SeatRosterMessage.Carried((callsign ?? "").Trim()),
+            PlaneNode = planeNode ?? "",
+        };
+
+    /// <summary>The seats that leave the match when <paramref name="peer"/> drops off the host's
+    /// wire: every human seat that peer flies elsewhere. A bot seat carries the host's own peer and
+    /// is flown here, so no guest's leave ever takes one.</summary>
+    public static IEnumerable<int> LeavingWith(IReadOnlyList<NetSeat> roster, int peer)
+    {
+        ArgumentNullException.ThrowIfNull(roster);
+        for (int seat = 0; seat < roster.Count; seat++)
+        {
+            if (LeavesWithPeer(roster[seat]) && roster[seat].PeerId == peer)
+            {
+                yield return seat;
+            }
         }
     }
+
+    /// <summary>Whether <paramref name="seat"/> can leave the match on its own machine's word: a
+    /// human flown on another machine. A bot seat never leaves; only the host's own exit ends it.
+    /// </summary>
+    public static bool LeavesWithPeer(NetSeat seat) =>
+        seat is { FlownHere: false, Pilot: NetPilot.Human };
 
     /// <summary>A host's field: one seat per plane in <paramref name="localPlanes"/> flown here,
     /// then one per peer in <paramref name="peers"/> flying <paramref name="remotePlane"/>, cut at
@@ -113,7 +194,7 @@ public static class NetSeats
             {
                 PeerId = localPeer,
                 SeatIndex = seats.Count,
-                IsLocal = true,
+                FlownHere = true,
                 Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 Unnamed = i == 0,
                 PlaneNode = localPlanes[i],
@@ -141,6 +222,26 @@ public static class NetSeats
         return seats.ToArray();
     }
 
+    /// <summary>A local match's panes as the first seats of its roster, P1 upward, owned by
+    /// <see cref="OfflinePeer"/>. Each names no plane, so a pane flies its own pick as it does
+    /// with no roster. Bots follow through <see cref="AddBots"/>.</summary>
+    public static List<NetSeat> LocalPanes(int panes)
+    {
+        var seats = new List<NetSeat>(MaxPlayers);
+        for (int i = 0; i < panes && seats.Count < MaxPlayers; i++)
+        {
+            seats.Add(new NetSeat
+            {
+                PeerId = OfflinePeer,
+                SeatIndex = seats.Count,
+                FlownHere = true,
+                Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            });
+        }
+
+        return seats;
+    }
+
     /// <summary>A co-op host's field: one seat per plane in <paramref name="localPlanes"/> flown
     /// here, then one per entry of <paramref name="guests"/> flying the plane it picked, cut at
     /// <see cref="MaxPlayers"/>. A guest flying several seats has one entry per seat, side by side.
@@ -165,7 +266,7 @@ public static class NetSeats
             {
                 PeerId = local ? localPeer : guests[guest].Peer,
                 SeatIndex = seats.Count,
-                IsLocal = local,
+                FlownHere = local,
                 Callsign = name.Length > 0
                     ? name
                     : $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
@@ -178,10 +279,10 @@ public static class NetSeats
         return seats.ToArray();
     }
 
-    /// <summary>Which of this machine's own seats <paramref name="seat"/> is, counting from 0 in
-    /// seat order. That is its index into a list of local seats only, as a launch's menu picks are.
-    /// -1 for a seat flown elsewhere. With no roster every seat is local, so it is its own.
-    /// </summary>
+    /// <summary>Which of this machine's panes <paramref name="seat"/> is, counting from 0 in seat
+    /// order. That is its index into this machine's players, as menu picks, pads and panes are
+    /// listed. A seat with no pane here, a bot flown here included, answers -1. With no roster
+    /// every seat is local, so it is its own.</summary>
     public static int LocalOrdinal(IReadOnlyList<NetSeat> roster, int seat)
     {
         ArgumentNullException.ThrowIfNull(roster);
@@ -190,7 +291,7 @@ public static class NetSeats
             return roster.Count == 0 ? seat : -1;
         }
 
-        if (seat < 0 || !roster[seat].IsLocal)
+        if (seat < 0 || !roster[seat].HasPane)
         {
             return -1;
         }
@@ -198,10 +299,28 @@ public static class NetSeats
         int ordinal = 0;
         for (int i = 0; i < seat; i++)
         {
-            ordinal += roster[i].IsLocal ? 1 : 0;
+            ordinal += roster[i].HasPane ? 1 : 0;
         }
 
         return ordinal;
+    }
+
+    // ⚠ Do not seat a bot at 0 or on another machine. Every P1 read takes seat 0 as the host's own
+    // player. Only the host flies a bot, so on every copy a bot shares seat 0's peer and place.
+    private static void RequireHostBots(IReadOnlyList<NetSeat> roster, NetSeat first)
+    {
+        if (first.IsBot)
+        {
+            throw new ArgumentException("seat 0 is the host's own player, never a bot", nameof(roster));
+        }
+
+        foreach (var seat in roster)
+        {
+            if (seat.IsBot && (seat.PeerId != first.PeerId || seat.FlownHere != first.FlownHere))
+            {
+                throw new ArgumentException($"bot seat {seat.SeatIndex} is not the host's: peer {seat.PeerId}, flown here {seat.FlownHere}, where seat 0 is peer {first.PeerId}, flown here {first.FlownHere}", nameof(roster));
+            }
+        }
     }
 
     // ⚠ Do not let a guest's seats part. Its handshake names them as one run from its first seat,

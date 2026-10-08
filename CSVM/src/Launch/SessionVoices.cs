@@ -29,17 +29,21 @@ internal sealed class SessionVoices
     private readonly IReadOnlyList<PlayerRig> _rigs;
     private readonly IReadOnlyList<PlayerRig> _seatRigs;
     private readonly IReadOnlyList<Net.NetSeat> _netSeats;
+    // Whether the match is on a wire, whose people speak as their lobby pilots. A local match's
+    // roster carries no voice, so its panes stay voiceless as without one.
+    private readonly bool _onWire;
     // The roster the AI fly from, whose skills table is the first choice. Set by Build.
     private FlightRoster? _roster;
     // ai_skill_parameters, loaded once on the first need: the roster's own copy when it has read
     // one, the file otherwise.
     private AiSkills? _aiSkills;
 
-    /// <summary>The voices over one flight build, over its panes, its seats and the match's
-    /// seat roster (empty outside a network match).</summary>
+    /// <summary>The voices over one flight build: its panes, its seats and the match's seat roster.
+    /// The roster is empty in a local match without bots. <paramref name="onWire"/> says whether
+    /// it is a network match's.</summary>
     public SessionVoices(SessionSpec spec, string zrdrPath, Node3D worldRoot,
         IReadOnlyList<PlayerRig> rigs, IReadOnlyList<PlayerRig> seatRigs,
-        IReadOnlyList<Net.NetSeat> netSeats)
+        IReadOnlyList<Net.NetSeat> netSeats, bool onWire)
     {
         _spec = spec;
         _zrdrPath = zrdrPath;
@@ -47,6 +51,7 @@ internal sealed class SessionVoices
         _rigs = rigs;
         _seatRigs = seatRigs;
         _netSeats = netSeats;
+        _onWire = onWire;
     }
 
     /// <summary>The mission radio queue the campaign's objective callouts speak on, null in a
@@ -141,12 +146,12 @@ internal sealed class SessionVoices
     }
 
     // Every human aircraft joins the voice runtime. Outside a network match that is each pane's,
-    // voiceless. In one, every seat speaks on every machine as the pilot its roster voice names.
-    // It rolls the session's talker rating, the vehicle constructor's fallback for a def with none.
+    // voiceless. In one, every human seat speaks on every machine as the pilot its roster voice
+    // names, rolling the session's talker rating. A bot seat is silent and joins nothing.
     private void RegisterPlayers(AiVoiceRuntime voice)
     {
         var seats = _netSeats;
-        if (seats.Count == 0)
+        if (!_onWire || seats.Count == 0)
         {
             foreach (var rig in _rigs)
             {
@@ -173,12 +178,12 @@ internal sealed class SessionVoices
         float constitution = _aiSkills?.At("constitution_chance", rating) ?? 0f;
         for (int seat = 0; seat < seats.Count && seat < _seatRigs.Count; seat++)
         {
-            if (_seatRigs[seat].Controller is not { } human)
+            if (_seatRigs[seat].Controller is not { } human || seats[seat].IsBot)
             {
                 continue;
             }
             int? voId = UI.Menu.PilotVoices.SpeakerFor(seats[seat].Voice);
-            if (seats[seat].IsLocal)
+            if (seats[seat].HasPane)
             {
                 voice.RegisterPlayer(human, voId, talker, constitution);
             }

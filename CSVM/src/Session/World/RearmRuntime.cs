@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -100,7 +104,8 @@ internal sealed class RearmRuntime
             : null;
 
     /// <summary>One match step: every living seat flown here is measured against the bases that
-    /// serve it, and rearmed on the step it enters.</summary>
+    /// serve it, and rearmed on the step it enters. A bot's rearm order is then told its supplies,
+    /// the nearest base serving it and whether it was restored.</summary>
     public void Step()
     {
         _bases.Clear();
@@ -120,19 +125,23 @@ internal sealed class RearmRuntime
             }
 
             int team = _in.SeatTeams is { } teams && seat < teams.Count ? teams[seat] : 0;
-            if (!_rules.Enters(seat, pilot.WorldPosition, team, _bases))
+            bool entered = _rules.Enters(seat, pilot.WorldPosition, team, _bases);
+            if (entered)
             {
-                continue;
+                pilot.Rearm();
+                Rearms++;
+                if (pilot.MessageStack is { } stack)
+                {
+                    HudMessages.PostRearmed(stack, _in.Strings);
+                }
+
+                Log.Info("flight", $"rearm: seat {seat} (team {team}) rearmed");
             }
 
-            pilot.Rearm();
-            Rearms++;
-            if (pilot.MessageStack is { } stack)
+            if (pilot.Pilot?.RearmOrder is { } order)
             {
-                HudMessages.PostRearmed(stack, _in.Strings);
+                StepOrder(seat, pilot, order, team, entered);
             }
-
-            Log.Info("flight", $"rearm: seat {seat} (team {team}) rearmed");
         }
     }
 
@@ -152,4 +161,28 @@ internal sealed class RearmRuntime
     // A hull's base offers nothing once that hull is dead (FUN_0049b920's +6 test). Not a hull's: -1.
     private bool HullLives(int hull) =>
         hull < 0 || (_in.Hulls?.NodeAt(hull) is { } node && !_in.Hulls.IsDead(node));
+
+    // A bot's rearm run reads its supplies after any restore on this step, so a restore ends it.
+    // Its pylons and hull are read; its guns are not, which a bot never empties before its rockets.
+    private void StepOrder(int seat, FlightController pilot, AiRearmOrder order, int team, bool entered)
+    {
+        var was = order.Leg;
+        bool rocketsOut = AiRearmOrder.RocketsOut(pilot.Loadout?.Hardpoints ?? Enumerable.Empty<Hardpoint>(), pilot.InfiniteAmmo);
+        float hull = pilot.Damage?.SummaryHealthFraction ?? 1f;
+        order.Update(pilot.WorldPosition, pilot.WorldVelocity, rocketsOut, hull, _rules.NearestServing(pilot.WorldPosition, team, _bases), entered);
+        if (order.Leg == was)
+        {
+            return;
+        }
+
+        string what = order.Leg switch
+        {
+            AiRearmLeg.Gate or AiRearmLeg.Final when was == AiRearmLeg.None => FormattableString.Invariant(
+                $"breaks off for the base at {order.Base.X:0} {order.Base.Y:0} {order.Base.Z:0} ({order.Reason}), in from bearing {AiPilot.HeadingDegOf(order.Approach):0}, {order.Leg}"),
+            AiRearmLeg.None when was == AiRearmLeg.Clear => "flies clear of the base, back to combat",
+            AiRearmLeg.None => "has no base to fly to",
+            _ => $"{was} to {order.Leg}",
+        };
+        Log.Info("flight", $"rearm: bot seat {seat} {what}");
+    }
 }

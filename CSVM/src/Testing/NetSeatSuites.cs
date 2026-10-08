@@ -6,6 +6,7 @@ using System.Text;
 using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
@@ -48,7 +49,12 @@ internal static class NetSeatSuites
         + "keeps a score row for a seat flown elsewhere and the rotation holds its opening entry, "
         + "the roster's own airframe pick beats this machine's launch flags, and every remote seat "
         + "is built with no HUD in a pane, no pad, no keyboard, no pause key, no target selection "
-        + "and no camera-anchored cue, while the local seat in the same build has all of them")]
+        + "and no camera-anchored cue, while the local seat in the same build has all of them; a "
+        + "bot seat this host flies is built paneless the same way, with no menu pick and no pose "
+        + "buffer, steered by an armed AI pilot under its own seat index, its ordnance on the "
+        + "wingman's 20 s and 1-900 m with a failed roll launching while a world AI from the same "
+        + "assembler keeps 30 s, 200-800 m and the roll, and joins the seat list rather than the "
+        + "roster's AI")]
     internal static void RemoteSeatsWithoutPanes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -66,20 +72,21 @@ internal static class NetSeatSuites
         });
         var picker = new SpawnPicker(spec);
         var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
-        if (table is not { Count: >= 3 })
+        if (table is not { Count: >= 4 })
         {
             throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
         }
 
         // Seat 0 is this machine's pane; seats 1 and 2 are flown elsewhere. Seat 1 names its own
-        // airframe, which is how a peer's pick reaches this build.
+        // airframe, which is how a peer's pick reaches this build. Seat 3 is a bot this host flies.
         var roster = new NetSeat[]
         {
-            new() { PeerId = 1, SeatIndex = 0, IsLocal = true, Callsign = "host" },
+            new() { PeerId = 1, SeatIndex = 0, FlownHere = true, Callsign = "host" },
             new() { PeerId = 2, SeatIndex = 1, Callsign = "guest1", PlaneNode = RemotePlane },
             new() { PeerId = 3, SeatIndex = 2, Callsign = "guest2" },
+            NetSeats.Bot(1, 3, "bot", RemotePlane),
         };
-        NetSeats.Validate(roster);
+        NetSeats.Validate(roster, hostPeer: 1);
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var textures = new TextureArchive(texturesPath);
@@ -92,6 +99,7 @@ internal static class NetSeatSuites
             new() { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
             new() { Index = 1, Camera = null!, HudParent = ctx.Host },
             new() { Index = 2, Camera = null!, HudParent = ctx.Host },
+            new() { Index = 3, Camera = null!, HudParent = ctx.Host },
         };
         FlightRoster? flightRoster = null;
         try
@@ -142,13 +150,47 @@ internal static class NetSeatSuites
                 $"and nothing that needs a camera or a pane is built for it");
             ctx.Check(remotes.All(p => p.IsHumanPiloted),
                 $"while it stays a person's aeroplane, not an AI one (the flight model's own force path)");
+            ctx.Check(remotes.All(p => p.RemoteOwned),
+                $"and it takes its pose from the samples its owner sends");
+
+            // A bot this host flies: flown here, so no pose buffer, and paneless, so none of the above.
+            var bot = pilots[3];
+            ctx.Check(!bot.RemoteOwned && bot.HudParent == null && bot.LocalPlayer == -1,
+                $"the bot seat is simulated here with no pane and no menu pick (remote-owned {bot.RemoteOwned}, local player {bot.LocalPlayer})");
+            ctx.Check(!bot.UseKeyboard && bot.PadDevices is { Length: 0 } && !bot.AllowPause
+                      && bot.Targeting == null && bot.VersusHud == null && bot.Photograph == null && bot.SpeedCue == null,
+                $"and reads no keyboard, pad or pause key, with nothing built that needs a camera or a pane");
+            ctx.Check(!bot.IsHumanPiloted && bot.Pilot is { Gunner: not null, Rocketeer: not null, Machine: not null },
+                $"an AI pilot flies the bot, armed with a gunner, ordnance and a mode machine (human {bot.IsHumanPiloted}, gunner {bot.Pilot?.Gunner != null}, machine {bot.Pilot?.Machine != null})");
+            ctx.Check(bot.PlayerIndex == 3 && bot.Team == AimAssist.TeamOfPilot(3)
+                      && bot.Pilot?.Machine?.AttackRange == bot.Stats?.AiAttackRange,
+                $"under its seat index and that seat's team, with the airframe's engagement range (shooter {bot.PlayerIndex}, team {bot.Team}, attack {bot.Pilot?.Machine?.AttackRange})");
+            ctx.Check(flightRoster.AiAircraft.Count == 0,
+                $"and it is a seat, not one of the roster's AI, which the world link would replicate again ({flightRoster.AiAircraft.Count} AI)");
+            ctx.Check(bot.Pilot?.Gunner is { PlayersPreferred: false },
+                $"and its gunner ranks a person at the weight it gives a bot (players preferred {bot.Pilot?.Gunner?.PlayersPreferred})");
+            var botRockets = bot.Pilot?.Rocketeer;
+            ctx.Check(botRockets is { WingmanRule: true, FiresOnFailedRoll: true }
+                      && botRockets.RefireSeconds == Loadout.WingmanOrdnanceRefireS
+                      && botRockets.MinRangeM == Loadout.WingmanMinRangeM && botRockets.MaxRangeM == Loadout.WingmanMaxRangeM,
+                $"and its ordnance flies the wingman rule with a failed roll launching anyway ({Rockets(botRockets)})");
+
+            // ABLE-TO-FAIL CONTROL: a world AI from the same assembler never passes the bot arming.
+            // It keeps the fallback interval, the band and the roll.
+            var worldAt = pilots[0].WorldPosition + (Vector3.Up * 400f);
+            var world = flightRoster.SpawnAi(new AiSpawn(RemotePlane, worldAt, worldAt + Vector3.Forward,
+                AiPilot.HoldingCourse(worldAt, worldAt + Vector3.Forward), Team: 2, AttackRating: 5));
+            var worldRockets = world.Pilot?.Rocketeer;
+            ctx.Check(worldRockets is { WingmanRule: false, FiresOnFailedRoll: false, RefireSeconds: 30f, MinRangeM: 200f, MaxRangeM: 800f },
+                $"ABLE-TO-FAIL CONTROL: a world AI from the same assembler keeps 30 s over 200-800 m and the roll ({Rockets(worldRockets)})");
 
             // ABLE-TO-FAIL CONTROL: the local seat in this same build takes every one of those.
             // The assertions above cannot be passing because the roster built nothing at all.
             var local = pilots[0];
             ctx.Check(ReferenceEquals(local.HudParent, pane) && local.VersusHud != null
-                      && local.Targeting != null && local.AllowPause && local.UseKeyboard,
-                $"ABLE-TO-FAIL CONTROL: the pane in the same build has its HUD, board, targeting, pause key and keyboard");
+                      && local.Targeting != null && local.AllowPause && local.UseKeyboard
+                      && local.IsHumanPiloted && local.Pilot == null,
+                $"ABLE-TO-FAIL CONTROL: the pane in the same build has its HUD, board, targeting, pause key and keyboard, and no AI pilot");
             ctx.Check(pane.GetChildren().OfType<CanvasLayer>().Any(),
                 $"ABLE-TO-FAIL CONTROL: and its own canvases are in the pane");
 
@@ -199,8 +241,8 @@ internal static class NetSeatSuites
         var roster = new NetSeat[]
         {
             new() { PeerId = 1, SeatIndex = 0, Callsign = "host" },
-            new() { PeerId = 2, SeatIndex = 1, IsLocal = true, Callsign = "P1" },
-            new() { PeerId = 2, SeatIndex = 2, IsLocal = true, Callsign = "P2" },
+            new() { PeerId = 2, SeatIndex = 1, FlownHere = true, Callsign = "P1" },
+            new() { PeerId = 2, SeatIndex = 2, FlownHere = true, Callsign = "P2" },
         };
         NetSeats.Validate(roster);
 
@@ -322,6 +364,11 @@ internal static class NetSeatSuites
                 PadAssignment = padAssignment,
                 PauseState = new PauseState(),
             }, field.Picker);
+
+    private static string Rockets(AiRocketeer? r) =>
+        r == null
+            ? "no launcher"
+            : $"every {r.RefireSeconds:0} s over {r.MinRangeM:0}-{r.MaxRangeM:0} m, wingman rule {r.WingmanRule}, failed roll launches {r.FiresOnFailedRoll}";
 
     // One stored keymap with a single action moved onto Z, through the real serializer.
     private static void WriteKeymap(string dir, int player, InputAction action)

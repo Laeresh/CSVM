@@ -316,6 +316,12 @@ public partial class FlightController : Node3D
     /// leaves the seat to come back on its own timer.</summary>
     public Action? RespawnRequest;
 
+    /// <summary>Run at the end of every <see cref="Respawn"/>, once the new pose stands, for what
+    /// the seat's assembler owes a fresh airframe beyond the reset here. A bot seat starts its AI
+    /// pilot over on it. Null, the default, adds nothing, and a mission AI keeps its orders through
+    /// a respawn.</summary>
+    public Action? Respawned;
+
     /// <summary>Splitscreen pause bookkeeping, the SAME instance on every rig, assigned by
     /// <c>GameSession</c> the way <see cref="Match"/> is. Any player's Start/P here can pause
     /// everyone, but only <see cref="PauseState.OwnerPlayerIndex"/> can resume. It is null only on
@@ -340,6 +346,11 @@ public partial class FlightController : Node3D
     /// spawner sets it false. It is the original's human-versus-AI split (`FUN_004b6530`'s
     /// else-branch), not "pane 1 only".</summary>
     public bool IsHumanPiloted = true;
+
+    /// <summary>A Dogfight's bot seat: AI-piloted (<see cref="IsHumanPiloted"/> false) but standing in
+    /// a person's seat, so its contacts take a person's rule (<see cref="TakesPersonsContactRule"/>).
+    /// Set by the seat assembler on every machine; world AI never sets it.</summary>
+    public bool IsBotSeat;
 
     /// <summary>This plane's carried turret gunners: built by the rig assembler from the
     /// vehicle def's <c>turrets</c> block against <c>ai.zrd</c>, ticked from <see cref="SimStep"/>
@@ -455,11 +466,12 @@ public partial class FlightController : Node3D
     /// to hold the crash camera. Picked by the session (<see cref="VersusMatch.NextWatched"/>).</summary>
     public FlightController? Watching;
 
-    /// <summary>Whether R and pad Y respawn a LIVE aircraft. False wherever the mission counts: in
-    /// a campaign mission and in Instant Action a respawn taken while flying is a free repair,
-    /// restock and refuel, so those two pin it and the button is read only from
-    /// <see cref="Crashed"/>. True in free flight, the stunt runs and the dogfight, where R means
-    /// "put me back at the spawn". Pinned by the session's own director, never from here.</summary>
+    /// <summary>Whether R and pad Y respawn a LIVE aircraft. False where that would be a free
+    /// repair, restock and refuel. That is a campaign mission, Instant Action, a Dogfight match
+    /// and every other network session but a race. There the button is read only from
+    /// <see cref="Crashed"/>. True in free flight and the stunt runs, races
+    /// included, where R means "put me back at the spawn". Pinned by the session's own director
+    /// or its wire, never from here.</summary>
     public bool AllowLiveRespawn = true;
 
     /// <summary>How far this seat's controls are held back while the world flies on, see
@@ -536,6 +548,11 @@ public partial class FlightController : Node3D
     // what turns the carried gunners' running counters into a fired-this-tick edge.
     private readonly PadRumble _rumble;
     private int _turretShots;
+
+    // The unsplit respawn control's press: set once it has respawned, cleared when it reads up.
+    // ⚠ Never a level read. A held press would place the aeroplane again on every step it stays
+    // down, each a fresh pick of the dogfight's rotation.
+    private bool _respawnPressTaken;
 
     // The stick half _stickAxes last polled. The lever reads its bindings from it one by one, since a
     // resolved row cannot tell a centred stick from an unplugged one.
@@ -1082,6 +1099,13 @@ public partial class FlightController : Node3D
     /// is hit, damaged, heard, drawn, marked and crashed exactly as a local one is.</summary>
     public bool RemoteOwned => RemotePoses != null;
 
+    /// <summary>Whether a person's contact rule decides this plane's contacts: the airframe sweep, no
+    /// doom on a world contact, and the bounce. True for a person and for a bot seat, whose hull
+    /// equals a person's in the same plane. World AI keeps the decoded rule.
+    /// ⚠ Contact only. A bot keeps the AI force path, AI shakes, its wreck and the entity cut, all of
+    /// which still read <see cref="IsHumanPiloted"/>.</summary>
+    public bool TakesPersonsContactRule => IsHumanPiloted || IsBotSeat;
+
     /// <summary>The flight model's world position, the plane as a SIM value, not a node transform
     /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
     public Vector3 WorldPosition => _model.Position;
@@ -1163,6 +1187,11 @@ public partial class FlightController : Node3D
     /// assert it is bit-identical across the death handover rather than inferring the freeze from
     /// the wreck's retained speed alone.</summary>
     internal FlightInput LastCommand => _lastInput;
+
+    /// <summary>Whether the last step flew the far-field speed-hold plant
+    /// (<see cref="FlightModel.FarFieldPlant"/>), for a suite to read off a session's aircraft.
+    /// </summary>
+    internal bool FarFieldPlant => _model != null && _model.FarFieldPlant;
 
     // A remote airframe is a pose that arrives late, never a stick that arrives late. It takes no
     // arm at all: a neutral hold answers any incidental read, and no device is touched. That wins
@@ -1477,6 +1506,7 @@ public partial class FlightController : Node3D
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
             SnapCamera();
+        Respawned?.Invoke();
     }
 
     /// <summary>The same return, at a pose this machine did not choose: the placement a match's
@@ -2183,9 +2213,13 @@ public partial class FlightController : Node3D
             }
             // A remote wreck flies again when its owner's spawn says so, never on a button or a
             // timer here.
+            bool pressed = !RemoteOwned && RespawnPressed();
             if (!RemoteOwned
-                && (RespawnPressed() || _lifecycle.TickAutoRespawn(dt, _holdSegments != null, FirePressed)))
+                && (pressed || _lifecycle.TickAutoRespawn(dt, _holdSegments != null, FirePressed)))
             {
+                // The press that skips the crash camera is spent here, so its hold does not respawn
+                // the aeroplane it places again in flight.
+                _respawnPressTaken |= pressed;
                 // In a match the placement is granted, not taken: the ask goes out and the
                 // aeroplane stays down until the answer places it.
                 if (RespawnRequest is { } ask)
@@ -2278,10 +2312,10 @@ public partial class FlightController : Node3D
             bool sweeping = onSweepStep && !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
-            // A human rig sweeps the airframe hulls; an AI rig sweeps its def's collision probes,
-            // the original's shape (see SweepProbes): one origin point on every AI def, so its
-            // wings clip through a slot the hull cannot pass, the CM13 racers' dzpath2 arch first.
-            bool hit = sweeping && (IsHumanPiloted
+            // A person's rule sweeps the airframe hulls. World AI sweeps its def's collision probes,
+            // the original's single origin point, so its wings clip a slot the hull cannot pass
+            // (SweepProbes). A bot takes the hulls, which the un-embed test reads after a contact.
+            bool hit = sweeping && (TakesPersonsContactRule
                 ? SweepAirframe(prev, step, out contact, out hitBody)
                 : SweepProbes(prev, step, out contact, out hitBody));
             if (!hit && sweeping)
@@ -4219,11 +4253,18 @@ public partial class FlightController : Node3D
         }
         else
         {
-            if (AllowLiveRespawn && _padActions.Held(InputAction.Respawn))
+            // One respawn per press, on either half. A press the pin refused is not spent, so the
+            // gate below stays the pin's alone.
+            bool down = _padActions.Held(InputAction.Respawn) || _keyActions.Held(InputAction.Respawn);
+            if (!down)
+            {
+                _respawnPressTaken = false;
+            }
+            else if (AllowLiveRespawn && !_respawnPressTaken)
+            {
+                _respawnPressTaken = true;
                 Respawn();
-
-            if (AllowLiveRespawn && _keyActions.Held(InputAction.Respawn))
-                Respawn();
+            }
         }
 
         // The commanded lever, as FUN_00487460 writes it. The up and down keys move it at 0.5/s,
@@ -4366,6 +4407,7 @@ public partial class FlightController : Node3D
     private ContactConditions Striking() => new()
     {
         IsHumanPiloted = IsHumanPiloted,
+        IsBotSeat = IsBotSeat,
         VelocityDir = _model.VelocityDir,
         Speed = _model.Speed,
         Pose = GlobalTransform,
@@ -4744,7 +4786,7 @@ public partial class FlightController : Node3D
         public ContactResponse ApplyResponse()
         {
             _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
-                _rig.IsHumanPiloted && !_rig.Crashed);
+                _rig.TakesPersonsContactRule && !_rig.Crashed);
             return new ContactResponse(new Transform3D(_rig._model.Attitude, _rig._model.Position));
         }
     }

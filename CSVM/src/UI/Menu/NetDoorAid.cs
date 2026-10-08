@@ -227,6 +227,56 @@ public static class NetDoorAid
         return DogfightLobby.ScoresOf(match.Standings(), names);
     }
 
+    /// <summary>The Game Scores lines of a finished match over every row of a posed lobby with bots.
+    /// They are named off a seat roster built from those rows as a launch seats them. The first bot
+    /// leads on three kills, the host has one and the first guest crashed once.</summary>
+    public static DogfightScore[] PlayedBotScores(NetPlayFeature host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        var rows = host.Dogfight?.Players ?? Array.Empty<DogfightLobbySeat>();
+        var seats = new NetSeat[rows.Count];
+        int firstBot = -1;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            seats[i] = new NetSeat { SeatIndex = i, Callsign = rows[i].Name, Pilot = rows[i].IsBot ? NetPilot.Bot : NetPilot.Human };
+            firstBot = firstBot < 0 && rows[i].IsBot ? i : firstBot;
+        }
+
+        var match = new CSVM.Flight.Modes.VersusMatch(Math.Max(rows.Count, 2), killTarget: 0, timeLimit: 300f);
+        int leader = firstBot >= 0 ? firstBot : 0;
+        for (int kill = 0; kill < 3; kill++)
+        {
+            match.RegisterKill(leader, (leader + 1 + kill) % match.PlayerCount);
+        }
+
+        match.RegisterKill(0, leader);
+        match.RegisterDeath(1);
+        match.Advance(300f);
+        return DogfightLobby.ScoresOf(match, seats);
+    }
+
+    /// <summary>A Dogfight guest door joined to a host that is flying a match. The host's advert
+    /// reads In mission and no options come, as for a player who joined too late for it.</summary>
+    public static NetPlayFeature LateDogfightGuest()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(1));
+        var lobby = new NetLobby(mesh[0]);
+        lobby.Advertise(new SessionAdvertMessage(
+            NetSessionKind.Dogfight, 1, 6, HostName, NetSessionStatus.InMission, NetSeats.MaxPlayers));
+        var door = new NetPlayFeature(
+            (port, maxGuests, bind) => throw new InvalidOperationException("the aid's guest door hosts nothing"),
+            (address, port) => mesh[1])
+        { PlayerName = "Lucy" };
+        door.OpenJoin();
+        for (int step = 0; step < 4; step++)
+        {
+            lobby.Step(0.0);
+            door.Step(0.0);
+        }
+
+        return door;
+    }
+
     /// <summary>Steps every door of a posed lobby until what each sent has landed on the others.
     /// </summary>
     public static void SettleDogfight(NetPlayFeature host, IReadOnlyList<NetPlayFeature> guests)

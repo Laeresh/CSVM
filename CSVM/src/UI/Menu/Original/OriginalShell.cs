@@ -457,7 +457,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net, (hosting, then) => AskNetInfo(hosting, then));
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         Wrapup = new OriginalWrapupScreen(_campaignLayout, measure, this, InstantAction.OpenInstantAction);
-        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster);
+        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster, _setup, dataRoot, _stock);
         Lobby = new OriginalLobbyScreen(
             () => _net, this, dataRoot, _stock,
             () => _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
@@ -571,7 +571,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public bool CapturingText =>
         _box.Standing == null
         && (NetInfo.CapturingText || TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
-            || Connection.CapturingText || Lobby.CapturingText);
+            || Connection.CapturingText || Lobby.CapturingText || JoinBoard.CapturingText);
 
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
     /// on a shell built without a hangar feature.</summary>
@@ -888,6 +888,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             OriginalScreen.CampaignRoster => Campaign.TypeName(commands, cues),
             OriginalScreen.Connection => Connection.TypeText(commands, cues),
             OriginalScreen.Lobby => Lobby.TypeText(commands, cues),
+            OriginalScreen.JoinBoard => JoinBoard.TypeText(commands),
             _ => Hangar?.TypeName(commands, cues) ?? false,
         };
 

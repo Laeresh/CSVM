@@ -108,11 +108,11 @@ public sealed class FlightRoster
         _zrdrPath = aircraft.ZrdrPath;
         _liveries = liveries;
         _aiView = _ai.AsReadOnly();
-        if (starts != null)
-            _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
-                aircraft, world, human);
         _aiAssembler = new AiFlightAssembler(policy, liveries, worldEffects, worldRoot,
             aircraft, world, human.RigCount, _crashRigs);
+        if (starts != null)
+            _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
+                aircraft, world, human, _aiAssembler);
     }
 
     /// <summary>How many mid-flight AI introductions are still owed their crash rig. Zero on any

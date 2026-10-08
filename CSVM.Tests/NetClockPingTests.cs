@@ -122,7 +122,7 @@ public sealed class NetClockPingTests
 
     private static NetSeat[] Roster() => new NetSeat[]
     {
-        new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+        new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
         new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
     };
 

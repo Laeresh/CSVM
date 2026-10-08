@@ -83,8 +83,9 @@ public sealed class NetSession : INetTransportListener
     /// has been given one. A host reads it off its own roster at construction.</summary>
     public int LocalSeat { get; private set; } = NetMessage.NoSeat;
 
-    /// <summary>How many seats this machine flies, counted from <see cref="LocalSeat"/> on a guest:
-    /// one per local player. 0 before a guest has been given a seat.</summary>
+    /// <summary>How many of this machine's players hold a seat, counted from <see cref="LocalSeat"/>
+    /// on a guest: one per pane. A host's bots are flown here but hold no pane, so they are not
+    /// counted. 0 before a guest has been given a seat.</summary>
     public int LocalSeatCount
     {
         get
@@ -92,7 +93,7 @@ public sealed class NetSession : INetTransportListener
             int count = 0;
             foreach (var seat in _seats)
             {
-                count += seat.IsLocal ? 1 : 0;
+                count += seat.HasPane ? 1 : 0;
             }
 
             return count;
@@ -319,14 +320,15 @@ public sealed class NetSession : INetTransportListener
         };
     }
 
-    /// <summary>Whether <paramref name="peer"/> flies a seat on lobby team <paramref name="team"/>,
-    /// which is the whole of a team line's addressing. A seat's team number is never a team id.
+    /// <summary>Whether <paramref name="peer"/> seats a person on lobby team <paramref name="team"/>,
+    /// which is the whole of a team line's addressing. A host's bot reads no chat, so its team does
+    /// not admit the host to another team's lines. A seat's team number is never a team id.
     /// </summary>
     public bool FliesOnTeam(int peer, int team)
     {
         foreach (var seat in _seats)
         {
-            if (seat.PeerId == peer && seat.TeamId == team)
+            if (seat.PeerId == peer && seat.TeamId == team && !seat.IsBot)
             {
                 return true;
             }
@@ -385,8 +387,8 @@ public sealed class NetSession : INetTransportListener
         handler(peer, payload);
     }
 
-    // NetSeats.Validate's numbering and host-at-seat-0 rules, asked of the wire's entries rather
-    // than thrown.
+    // NetSeats.Validate's numbering, host-at-seat-0 and host-owned-bot rules, asked of the wire's
+    // entries rather than thrown.
     private static bool WellFormed(IReadOnlyList<NetSeatEntry> seats)
     {
         if (seats.Count == 0 || seats.Count > NetSeats.MaxPlayers)
@@ -397,7 +399,9 @@ public sealed class NetSession : INetTransportListener
         Span<bool> seen = stackalloc bool[NetSeats.MaxPlayers];
         foreach (var entry in seats)
         {
-            if (entry.Seat >= seats.Count || seen[entry.Seat] || (entry.Seat == 0 && !entry.IsHost))
+            bool bot = entry.Pilot == NetPilot.Bot;
+            if (entry.Seat >= seats.Count || seen[entry.Seat] || (entry.Seat == 0 && (!entry.IsHost || bot))
+                || (bot && !entry.IsHost))
             {
                 return false;
             }
@@ -467,7 +471,8 @@ public sealed class NetSession : INetTransportListener
             var seat = _seats[i];
             entries[i] = new NetSeatEntry(
                 (byte)seat.SeatIndex, (byte)seat.TeamId, AirframeIndex(seat.PlaneNode),
-                seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice, seat.Unnamed);
+                seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice, seat.Unnamed,
+                seat.Pilot, seat.Skill);
         }
 
         return entries;
@@ -519,6 +524,7 @@ public sealed class NetSession : INetTransportListener
     // A guest's roster, rebuilt whenever either half of the join lands, because the seats the
     // handshake names are what decide which entries this machine flies. Every other seat is reached
     // through the peer that sent the roster, which in a listen server is the host for all of them.
+    // A bot entry is never flown here, whatever the handshake names: only its host flies one.
     private void RebuildSeats(int from)
     {
         _hostPeer = from;
@@ -530,13 +536,16 @@ public sealed class NetSession : INetTransportListener
         _seats.Clear();
         foreach (var entry in _received)
         {
-            bool local = LocalSeat != NetMessage.NoSeat && entry.Seat >= LocalSeat && entry.Seat <= LocalSeat + _extraSeats;
+            bool local = LocalSeat != NetMessage.NoSeat && entry.Seat >= LocalSeat && entry.Seat <= LocalSeat + _extraSeats
+                && entry.Pilot == NetPilot.Human;
             _seats.Add(new NetSeat
             {
                 PeerId = local ? _transport.LocalPeer : from,
                 SeatIndex = entry.Seat,
                 TeamId = entry.Team,
-                IsLocal = local,
+                FlownHere = local,
+                Pilot = entry.Pilot,
+                Skill = entry.Skill,
                 Callsign = entry.Callsign,
                 Unnamed = entry.Unnamed,
                 PlaneNode = AirframeName(entry.Plane),
@@ -549,7 +558,7 @@ public sealed class NetSession : INetTransportListener
     {
         foreach (var seat in _seats)
         {
-            if (seat.IsLocal)
+            if (seat.HasPane)
             {
                 return true;
             }

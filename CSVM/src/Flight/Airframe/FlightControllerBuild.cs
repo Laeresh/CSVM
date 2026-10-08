@@ -19,6 +19,10 @@ internal sealed class FlightControllerBuild
     /// wherever there is no network roster.</summary>
     public int? LocalPlayer;
     public bool IsHumanPiloted;
+
+    /// <summary>A bot seat (<see cref="FlightController.IsBotSeat"/>), whose contacts take a
+    /// person's rule. Only the seat assembler sets it.</summary>
+    public bool IsBotSeat;
     public AiPilot? Pilot;
 
     /// <summary>When set, replaces keyboard input, used by automated screenshot runs. Each
@@ -167,6 +171,7 @@ public partial class FlightController
         if (build.LocalPlayer is { } localPlayer)
             LocalPlayer = localPlayer;
         IsHumanPiloted = build.IsHumanPiloted;
+        IsBotSeat = build.IsBotSeat;
         Pilot = build.Pilot;
         _holdSegments = build.HoldSegments;
         _leverSteps = build.LeverSteps;
