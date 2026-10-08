@@ -1204,6 +1204,35 @@ forcing it.
 
 ## E41 ☐ An ocean lab and a shipped sea state per chapter
 
+**Landed.** The ocean's tunables are one record, `Effects/SeaState.cs`, its defaults the constants
+it replaces: swell height (`wave_scale`), a length scale on every wave, wind, crest sharpness, the
+bend's metres and radian cap, detail slope and drift, the foam's threshold, strength, patch size and
+near cover, the swell and look ramps, an open-sea tint and both roughnesses. `Clamped` holds each in
+range and is the one path into the shader. Folding depends on sharpness times height, not on the
+length: each wave bunches the surface by Q k A, which a length scale leaves alone. So the bound is
+sharpness times height at 1.0 (1.82x at the default sharpness), and the slider says so. The ramps
+stay within `ShoreReach` and at least 4 m wide. The shader text moved out of `Ocean.cs` into
+`Effects/OceanShader.cs`, which writes it from a sea; with the defaults it is byte-identical to the
+constants' text for levels -1 to 3, zoned and not (`OceanShaderTests`, hashes taken from the
+unchanged generator, plus a fixture), and all 25 goldens are hash-identical. A length scale
+re-rounds each omega to whole cycles per wrap; detail and patch drifts stay whole periods per wrap
+(a held drift may reach zero). `SceneBuilder.FlatSeaEye` became a property so the generator runs in
+the unit host. `CSVM/data/ocean_seas.json` ships an empty entry per sea chapter
+(`Effects/OceanSeas.cs`); a mistake is a `world` warning. The lab (`UI/Labs/OceanLab.cs`, Shift+F1)
+is built in `--freecam` on a sea chapter only, applies on release or a quarter second after a click,
+hands each edit to the standing ocean and to any ocean a switch rebuilds, and saves only the
+chapter's differing fields, in field order, from the source tree. `--debug-ocean` is the scripted
+twin. The `ocean-lab` suite opens the lab in a C1B freecam, finds a length edit rewriting the text,
+a height edit setting only the uniform, one ocean throughout, the edited sea surviving a switch
+round trip, and no lab in a `--fly` session. `gpu_ms` at the low-pass hold, 1920x1080, two
+quiet-gated rounds alternating the trees: the plan tree 3.429, 3.423 and 3.416, 3.417 ms, this
+change 3.423, 3.419 and 3.416, 3.417 ms (`--no-ocean` 2.093 and 2.129), so it does not move. Montage, defaults / rough / calm at C1B cruise
+and at the golden's 120 m pose, and the panel open, in the E41 worktree's `.scratch\e41\`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
+
 **Goal.** The user tunes each chapter's sea live in `--freecam` and saves it; the game loads each
 chapter's saved sea. With nothing saved, every chapter draws exactly today's ocean.
 

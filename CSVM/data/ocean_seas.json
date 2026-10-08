@@ -1,0 +1,10 @@
+{
+  "_about": "The Enhanced wave ocean's sea per chapter (src/Effects/OceanSeas.cs). Each entry holds only the fields that differ from the defaults, which are the ocean's own tune; an empty entry or a missing field takes the default. The field names, ranges and meanings are SeaState.Fields (src/Effects/SeaState.cs). The ocean lab (Shift+F1 in --freecam) writes one chapter's entry here when run from the source tree; --debug-ocean=<field>:<value>,... overrides it for one launch.",
+  "C1": {},
+  "C1B": {},
+  "C1C": {},
+  "C2": {},
+  "C2B": {},
+  "C3": {},
+  "C5": {}
+}

@@ -475,6 +475,85 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("ocean-lab",
+        "the ocean lab stands in an Enhanced --freecam C1B session and nowhere in a --fly one: opened, "
+        + "a length edit rewrites the standing ocean's shader text and a height edit only its uniform, "
+        + "with one ocean standing throughout; an ocean rebuilt by a switch to Original and back draws "
+        + "the edited sea, and a reset to the defaults writes the text the session opened with")]
+    internal static void OceanLabEdits(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        try
+        {
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var freecam = Open(ctx, enhanced: true, chapter: OceanChapter, extra: "--freecam");
+            try
+            {
+                var labs = Labs(freecam.Session);
+                var ocean = FirstOcean(freecam.Session);
+                if (!freecam.Built || labs.Count != 1 || ocean == null)
+                {
+                    ctx.Check(false, $"the Enhanced --freecam C1B session builds one ocean lab over one ocean (built={freecam.Built}, {labs.Count} lab(s), ocean {(ocean != null ? "standing" : "missing")})");
+                    return;
+                }
+                var lab = labs[0];
+                ctx.Check(!lab.IsOpen && lab.Edited == Effects.SeaState.Default && ocean.Sea == Effects.SeaState.Default,
+                    $"the lab starts closed on the shipped sea, which is the defaults ({lab.Edited.Describe()})");
+                string opened = ocean.ShaderText;
+                lab.Toggle();
+                ctx.Check(lab.IsOpen, $"Toggle opens the panel");
+
+                lab.Set("length", 1.5f);
+                Step(freecam);
+                string lengthened = ocean.ShaderText;
+                ctx.Check(lengthened != opened && ocean.Sea.Length == 1.5f && OceansUnder(freecam.Session) == 1
+                        && ReferenceEquals(FirstOcean(freecam.Session), ocean),
+                    $"a length edit rewrites the standing ocean's shader text, and the same one ocean stands ({OceansUnder(freecam.Session)} in the tree, sea {ocean.Sea.Describe()})");
+
+                lab.Set("height", 1.4f);
+                Step(freecam);
+                float waveScale = Grid(ocean)?.GetShaderParameter("wave_scale").AsSingle() ?? -1f;
+                ctx.Check(ocean.ShaderText == lengthened && Mathf.IsEqualApprox(waveScale, 1.4f),
+                    $"a height edit sets wave_scale alone and compiles nothing (wave_scale {waveScale.ToString("0.###", CultureInfo.InvariantCulture)})");
+
+                Switch(freecam, false);
+                bool droppedInOriginal = OceansUnder(freecam.Session) == 0;
+                Switch(freecam, true);
+                var rebuilt = FirstOcean(freecam.Session);
+                ctx.Check(droppedInOriginal && rebuilt != null && !ReferenceEquals(rebuilt, ocean)
+                        && rebuilt.Sea == lab.Edited && rebuilt.ShaderText == lengthened,
+                    $"an ocean rebuilt by a switch to Original and back draws the edited sea (dropped={droppedInOriginal}, rebuilt sea {rebuilt?.Sea.Describe() ?? "none"})");
+
+                lab.ResetToDefaults();
+                Step(freecam);
+                ctx.Check(rebuilt?.ShaderText == opened && rebuilt.Sea == Effects.SeaState.Default,
+                    $"a reset to the defaults writes the text the session opened with");
+            }
+            finally
+            {
+                freecam.Close();
+            }
+
+            var fly = Open(ctx, enhanced: true, chapter: OceanChapter, extra: "--fly");
+            try
+            {
+                ctx.Check(fly.Built && fly.Session.OceanBuilt && Labs(fly.Session).Count == 0,
+                    $"a --fly C1B session stands its ocean and builds no ocean lab (built={fly.Built}, ocean={fly.Session.OceanBuilt}, {Labs(fly.Session).Count} lab(s))");
+            }
+            finally
+            {
+                fly.Close();
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-shader-twins",
         "after the load warm-up has compiled the other mode's twin of every cache shader, a live "
         + "switch to Original and back makes no new shader and rewrites no shader's text, so Godot "
@@ -977,6 +1056,21 @@ internal static class GraphicsSwitchSuites
         Walk(root, node => found ??= node as Effects.Ocean);
         return found;
     }
+
+    private static List<UI.Labs.OceanLab> Labs(Node root)
+    {
+        var labs = new List<UI.Labs.OceanLab>();
+        Walk(root, node =>
+        {
+            if (node is UI.Labs.OceanLab lab)
+                labs.Add(lab);
+        });
+        return labs;
+    }
+
+    // The material every grid of the ocean shares.
+    private static ShaderMaterial? Grid(Effects.Ocean ocean) =>
+        ocean.GetNodeOrNull<MeshInstance3D>("OceanGrid")?.Mesh?.SurfaceGetMaterial(0) as ShaderMaterial;
 
     // A closed session's ocean has left the tree, which is what puts the sheet's switch back.
     private static void Left(TestContext ctx, Effects.Ocean? ocean, string what)

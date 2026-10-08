@@ -1,0 +1,337 @@
+shader_type spatial;
+render_mode skip_vertex_transform, cull_disabled;
+#include "res://shaders/csky_time.gdshaderinc"
+#include "res://shaders/csky_atmosphere.gdshaderinc"
+#include "res://shaders/csky_mip_bias.gdshaderinc"
+uniform sampler2D mask_tex : filter_linear, repeat_disable;
+uniform vec4 mask_rect;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float tile_m = 32.0;
+uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;
+uniform float rough_near = 0.2;
+uniform float rough_far = 0.3;
+uniform float wave_scale = 1.0;
+uniform float foam_strength = 0.12;
+uniform vec4 calm_axes[16];
+uniform vec4 calm_sizes[16];
+uniform sampler2D zone_tex : filter_nearest, repeat_disable;
+instance uniform float zone_index = 0.0;
+const vec4 SWELL_DKA[8] = vec4[8](vec4(0.939693, 0.34202, 0.041337, 0.967662), vec4(0.62932, 0.777146, 0.053702, 0.782087), vec4(0.997564, -0.069756, 0.067561, 0.666063), vec4(0.258819, 0.965926, 0.088496, 0.5311), vec4(0.891007, -0.453991, 0.110231, 0.453592), vec4(0.829038, 0.559193, 0.1428, 0.364147), vec4(0.62932, -0.777146, 0.1848, 0.281386), vec4(0.529919, 0.848048, 0.241661, 0.248282));
+const vec2 SWELL_QW[8] = vec2[8](vec2(1.71875, 0.637045), vec2(1.636905, 0.726057), vec2(1.527778, 0.813323), vec2(1.462766, 0.932006), vec2(1.375, 1.040216), vec2(1.322115, 1.183333), vec2(1.322115, 1.345649), vec2(1.145833, 1.53938));
+const vec4 SWELL_MOD[8] = vec4[8](vec4(0.8, 0.0, 2.08702, 1.34006), vec4(-0.589895, 0.540392, -0.823276, -3.115196), vec4(0.06994, -0.796937, -1.883608, 3.589463), vec4(0.486751, 0.634881, 4.995227, -1.800273), vec4(-0.787771, -0.139345, -6.10275, -2.54948), vec4(0.675004, -0.429383, 3.598552, 7.775649), vec4(-0.207684, 0.772572, 3.36329, -10.56558), vec4(-0.368725, -0.709959, -12.14262, 6.968275));
+const vec4 SWELL_FINE[8] = vec4[8](vec4(-0.0, 0.0, 0.0, -0.0), vec4(-0.0, -0.0, -0.0, 0.0), vec4(0.0, 0.0, 0.0, 0.0), vec4(-0.0, 0.0, -0.0, -0.0), vec4(0.0, -0.0, 0.0, 0.0), vec4(0.0, 0.0, 0.0, -0.0), vec4(-0.184821, -0.153105, -0.183448, 0.02231), vec4(0.559305, -0.027883, 0.458727, 0.327911));
+const vec4 DETAIL_L[5] = vec4[5](vec4(0.951057, -0.309017, 0.166667, 0.284445), vec4(0.224951, 0.97437, 0.294118, 0.568889), vec4(0.62932, -0.777146, 0.526316, 0.568889), vec4(0.829038, 0.559193, 0.952381, 0.853333), vec4(1.0, 0.0, 1.724138, 1.137778));
+const vec2 DETAIL_G[5] = vec2[5](vec2(0.751457, 0.27443), vec2(-0.739477, 0.305244), vec2(0.339077, -0.724588), vec2(0.239427, 0.763331), vec2(-0.692168, -0.401127));
+const float FOAM_JAC_SIGMA = 0.1375;
+varying vec2 v_param;
+
+vec2 ocean_mask(vec2 p) {
+    return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
+}
+
+// The swell height and the look left at the mask's shore distance g.
+float shore_swell(float g) {
+    return smoothstep(0.15, 1.0, g);
+}
+
+float shore_look(float g) {
+    return smoothstep(0.075, 0.4, g);
+}
+
+// Two hashes in [0, 1] per integer cell, without sin, so it costs little per wave sum.
+vec2 sea_hash(vec2 c) {
+    vec3 p3 = fract(c.xyx * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// Two smooth value-noise channels in [-1, 1].
+vec2 sea_noise(vec2 p) {
+    vec2 c = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(sea_hash(c), sea_hash(c + vec2(1.0, 0.0)), f.x),
+        mix(sea_hash(c + vec2(0.0, 1.0)), sea_hash(c + vec2(1.0, 1.0)), f.x), f.y) * 2.0 - 1.0;
+}
+
+// sea_noise with its slope: d's columns are the two channels' change along x and along y.
+vec2 sea_noise_d(vec2 p, out mat2 d) {
+    vec2 c = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 du = 6.0 * f * (1.0 - f);
+    vec2 a = sea_hash(c);
+    vec2 k1 = sea_hash(c + vec2(1.0, 0.0)) - a;
+    vec2 k2 = sea_hash(c + vec2(0.0, 1.0)) - a;
+    vec2 k3 = sea_hash(c + vec2(1.0, 1.0)) - a - k1 - k2;
+    d = mat2(2.0 * du.x * (k1 + k3 * u.y), 2.0 * du.y * (k2 + k3 * u.x));
+    return (a + k1 * u.x + k2 * u.y + k3 * (u.x * u.y)) * 2.0 - 1.0;
+}
+
+// The grouping channels at p. Each field is turned off the grid's axes so the noise cells do not
+// line up with each other.
+vec2 sea_group(vec2 p) {
+    return sea_noise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * 0.002);
+}
+
+// The phase (warp) channels at p in xy, and its fine octave alone in zw. The out matrix is the
+// slope of xy per metre. A wave's local wavenumber is its own plus its phase weights times it.
+vec4 sea_warp(vec2 p, out mat2 d) {
+    const mat2 rc = mat2(vec2(0.6, -0.8), vec2(0.8, 0.6));
+    const mat2 rf = mat2(vec2(0.28, 0.96), vec2(-0.96, 0.28));
+    mat2 dc;
+    mat2 df;
+    vec2 c = sea_noise_d(rc * p * 0.002778 + vec2(17.0, 5.0), dc);
+    vec2 f = sea_noise_d(rf * p * 0.011111 + vec2(-9.0, 31.0), df);
+    d = dc * rc * 0.001389 + df * rf * 0.005556;
+    return vec4(c * 0.5 + f * 0.5, f);
+}
+
+// A wave's local wavenumber vector: its own plus the warp's slope along its phase weights. Its
+// length is capped at WarpStretchMax times the wave's own, so the fades keep their order.
+vec2 sea_wavevector(vec4 w, vec4 coarse_w, mat2 d) {
+    vec2 k = w.z * w.xy + coarse_w.zw * d;
+    return k * max(1.0, w.z / (1.5 * max(length(k), 1e-4)));
+}
+
+// The fine field at p: xy its grouping channels, zw its phase channels.
+vec4 sea_fine(vec2 p) {
+    vec2 g = sea_noise(mat2(vec2(0.96, -0.28), vec2(0.28, 0.96)) * p * 0.025 + vec2(41.0, -23.0));
+    vec2 f = sea_noise(mat2(vec2(-0.6, 0.8), vec2(-0.8, -0.6)) * p * 0.035714 + vec2(-57.0, 13.0));
+    return vec4(g, f);
+}
+
+// Two gradients in [-1, 1] per integer cell. The cell's x is taken modulo DetailPeriod, so a
+// layer's noise repeats along its drift axis and its drift wraps with csky_time.
+vec2 detail_hash(vec2 c) {
+    return sea_hash(vec2(mod(c.x, 1024.0), c.y)) * 2.0 - 1.0;
+}
+
+// Gradient noise at q: x the value, yz its slope along q's axes.
+vec3 detail_noise(vec2 q) {
+    vec2 i = floor(q);
+    vec2 f = fract(q);
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+    vec2 ga = detail_hash(i);
+    vec2 gb = detail_hash(i + vec2(1.0, 0.0));
+    vec2 gc = detail_hash(i + vec2(0.0, 1.0));
+    vec2 gd = detail_hash(i + vec2(1.0, 1.0));
+    float va = dot(ga, f);
+    float vb = dot(gb, f - vec2(1.0, 0.0));
+    float vc = dot(gc, f - vec2(0.0, 1.0));
+    float vd = dot(gd, f - vec2(1.0, 1.0));
+    float k = va - vb - vc + vd;
+    return vec3(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k,
+        ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(vb, vc) - va));
+}
+
+// Gradient noise at q, about -0.7 to 0.7, smooth across its cells. The cell's x repeats every
+// period cells. The half cell keeps the modulo exact, so no corner hashes differently in two cells.
+float foam_noise(vec2 q, float period) {
+    vec2 i = floor(q);
+    vec2 f = fract(q);
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    vec2 x = vec2(i.x, i.x + 1.0);
+    x -= period * floor((x + 0.5) / period);
+    float a = dot(sea_hash(vec2(x.x, i.y)) * 2.0 - 1.0, f);
+    float b = dot(sea_hash(vec2(x.y, i.y)) * 2.0 - 1.0, f - vec2(1.0, 0.0));
+    float c = dot(sea_hash(vec2(x.x, i.y + 1.0)) * 2.0 - 1.0, f - vec2(0.0, 1.0));
+    float d = dot(sea_hash(vec2(x.y, i.y + 1.0)) * 2.0 - 1.0, f - vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The holes in a sheet of foam: one round hole per jittered cell, each its own size. Returns the
+// distance from q to the nearest hole's centre in that hole's radii, so under 1 inside a hole.
+float foam_holes(vec2 q) {
+    vec2 i = floor(q);
+    vec2 f = fract(q);
+    float s = 9.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 o = vec2(float(x), float(y));
+            vec2 h = sea_hash(i + o);
+            vec2 r = o + h * 0.8 + 0.1 - f;
+            s = min(s, length(r) / (0.35 + 0.4 * fract(h.x * 7.31 + h.y * 3.17)));
+        }
+    }
+    return s;
+}
+
+// Where whitecaps can form, about 0 to 1, at pw (metres along and across the wind).
+float foam_patches(vec2 pw) {
+    return 0.5 + 0.65 * foam_noise(pw * 0.004348 - vec2(csky_time * (23.0 / 3600.0), 0.0), 23.0) + 0.35 * foam_noise(pw * 0.014085 - vec2(csky_time * (76.0 / 3600.0), 0.0), 76.0);
+}
+
+// One wave's height factor and phase shift from its weights on both fields.
+vec2 sea_mod(vec4 coarse_w, vec4 fine_w, vec2 group, vec2 warp, vec4 fine) {
+    return vec2(clamp(1.0 + dot(coarse_w.xy, group) + dot(fine_w.xy, fine.xy), 0.0, 1.8),
+        dot(coarse_w.zw, warp) + dot(fine_w.zw, fine.zw));
+}
+
+// OceanCalmZone.Distance and Calm, per ship: flat within the margin of the box, full height a fade
+// further out.
+float ship_calm(vec2 p) {
+    float a = 1.0;
+    for (int i = 0; i < 16; i++) {
+        vec2 q = p - calm_axes[i].xy;
+        vec2 u = calm_axes[i].zw;
+        vec2 e = max(abs(vec2(dot(q, u), dot(q, vec2(-u.y, u.x)))) - calm_sizes[i].xy, vec2(0.0));
+        a = min(a, smoothstep(calm_sizes[i].z, calm_sizes[i].z + calm_sizes[i].w, length(e)));
+    }
+    return a;
+}
+
+void vertex() {
+    // A spyglass disc shows the flat sea. Every vertex goes to one point behind the eye, so the
+    // clipper drops each triangle before a fragment and no wave is summed.
+    if (((CAMERA_VISIBLE_LAYERS & 160u) == 32u)) {
+        VERTEX = vec3(0.0, 0.0, 1.0);
+        v_param = vec2(0.0);
+    } else {
+        vec2 p = VERTEX.xz + CAMERA_POSITION_WORLD.xz;
+        float spacing = max(UV.x, 0.01);
+        float amp = shore_swell(ocean_mask(p).g) * ship_calm(p) * wave_scale;
+        vec3 disp = vec3(0.0);
+        vec2 group = sea_group(p);
+        mat2 dwarp;
+        vec4 warp = sea_warp(p, dwarp);
+        vec4 fine = sea_fine(p);
+        for (int i = 0; i < SWELL_DKA.length(); i++) {
+            vec4 w = SWELL_DKA[i];
+            float len = 6.2831853 / length(sea_wavevector(w, SWELL_MOD[i], dwarp));
+            vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
+            // Full height at eight grid steps per local wavelength, none at four. A wave the grid
+            // cannot carry would crawl as the grid follows the eye.
+            float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
+            float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
+            disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
+            disp.y += w.w * g * sin(th);
+        }
+        v_param = p;
+        vec3 world = vec3(p.x + disp.x, disp.y, p.y + disp.z);
+        VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
+        // A priority level below the lowest base sheet. Every coplanar layer over or beside it
+        // stays on top, the surf ring and C5's fog-gradient passes included.
+        VERTEX *= 1.0;
+        NORMAL = (VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+    }
+}
+
+void fragment() {
+    vec2 p = v_param;
+    vec2 m = ocean_mask(p);
+    vec3 world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    // One-sided like the sheet it replaces: an eye below the surface sees through it.
+    if (m.r < 0.02 || CAMERA_POSITION_WORLD.y < world.y) {
+        discard;
+    }
+    float zone = textureLod(zone_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * 255.0;
+    if (zone < 254.5 && abs(zone - zone_index) > 0.5) {
+        discard;
+    }
+    // A ship's zone and the shore's swell ramp flatten only the geometry. The normals keep the
+    // swell and the fine detail, so the water there shades like the open sea. Only the short look
+    // ramp below calms them. A calm patch would read as an artefact.
+    float look = shore_look(m.g);
+    float amp = wave_scale;
+    vec2 fw = fwidth(p);
+    float footprint = max(max(fw.x, fw.y), 0.001);
+    vec3 n = vec3(0.0, 1.0, 0.0);
+    // The horizontal displacement's slope (columns: along x, along z), for the foam's Jacobian.
+    // Summed from the fragment's own waves, not the grid's, so the foam reads the same at every
+    // distance the waves are drawn.
+    vec2 bx = vec2(0.0);
+    vec2 bz = vec2(0.0);
+    // The warp's slope is in each wave's normal, as the vertex stage's fade reads it. The grouping
+    // and fine fields' slopes are left out: they bend a crest by a few per cent at most.
+    vec2 group = sea_group(p);
+    mat2 dwarp;
+    vec4 warp = sea_warp(p, dwarp);
+    vec4 fine = sea_fine(p);
+    // The tables run longest first (EmitWaves checks), and no local length passes WarpStretchMax
+    // times the wave's own. Once that bound fades out, every later wave fades too.
+    for (int i = 0; i < SWELL_DKA.length(); i++) {
+        vec4 w = SWELL_DKA[i];
+        float len = 6.2831853 / w.z;
+        if (len * 1.5 <= footprint * 4.0) {
+            break;
+        }
+        vec2 kv = sea_wavevector(w, SWELL_MOD[i], dwarp);
+        float fade = smoothstep(4.0, 9.0, 6.2831853 / length(kv) / footprint);
+        vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
+        float f = amp * fade * sm.x;
+        float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
+        float ka = w.z * w.w * f;
+        float s = sin(th);
+        n.xz -= kv * (w.w * f * cos(th));
+        n.y -= SWELL_QW[i].x * ka * s;
+        float qs = SWELL_QW[i].x * w.w * f * s;
+        bx += w.xy * (kv.x * qs);
+        bz += w.xy * (kv.y * qs);
+    }
+    // The detail layers run longest first (EmitDetail checks), so the first faded layer ends the sum.
+    // A layer's height is DetailSlope times its cell times the noise, the same slope at every cell
+    // size. The sea-state grouping varies it by region.
+    for (int i = 0; i < DETAIL_L.length(); i++) {
+        vec4 l = DETAIL_L[i];
+        float fade = smoothstep(4.0, 9.0, 2.0 / l.z / footprint);
+        if (fade <= 0.0) {
+            break;
+        }
+        vec2 side = vec2(-l.y, l.x);
+        vec2 q = vec2(dot(p, l.xy), dot(p, side)) * l.z - vec2(l.w * csky_time, 0.0);
+        vec3 nd = detail_noise(q);
+        float f = amp * fade * 0.08 * clamp(1.0 + dot(DETAIL_G[i], group), 0.2, 1.8);
+        n.xz -= (l.xy * nd.y + side * nd.z) * f;
+    }
+    float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
+    // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
+    // against a coplanar coast tile. Rising with the fog, so the far sea fogs as the sheet does
+    // instead of showing darker, wavier water through it.
+    float sheet = max(1.0 - look, smoothstep(0.0, 0.25, fog_amt));
+    n = normalize(mix(normalize(n), vec3(0.0, 1.0, 0.0), sheet));
+    NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+    float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
+    vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
+    // The open sea takes the texture's mean and the light alone varies it: a tiled texture reads as
+    // a lattice from the air. The last mip is the mean the GPU samples. At sheet = 1 the texture is
+    // the sheet's own mapping, so C25's seam holds.
+    vec3 tex_mean = textureLod(albedo_tex, vec2(0.5), 16.0).rgb;
+    vec3 col = mix(tex_mean, csky_sample_albedo(albedo_tex, p / tile_m).rgb, sheet) * tint;
+    // Foam forms where the swell bunches the surface, its Jacobian below 1, which rides each crest.
+    // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
+    float bunch = (1.0 - ((1.0 - bx.x) * (1.0 - bz.y) - bz.x * bx.y)) / FOAM_JAC_SIGMA;
+    float foam = 0.0;
+    if (bunch > 0.4) {
+        vec2 wind = SWELL_DKA[0].xy;
+        vec2 pw = vec2(dot(p, wind), dot(p, vec2(-wind.y, wind.x)));
+        float patches = foam_patches(pw);
+        float crest = smoothstep(1.3, 2.3, bunch + (patches - 0.5) * 1.2)
+            * smoothstep(0.5, 0.75, patches);
+        crest *= smoothstep(0.42, 0.62, 0.5 + foam_noise(pw * 0.083333, 65536.0));
+        foam = crest;
+        // Up close a whitecap breaks into patches whose mean is the crest's foam. They fade in with
+        // the footprint as the detail layers do; their edge widens with it, so none shimmers.
+        float near = smoothstep(4.0, 9.0, 1.4 / footprint);
+        if (near > 0.0) {
+            vec2 q = pw * vec2(0.173611, 0.3125);
+            vec2 warp = vec2(foam_noise(q, 65536.0), foam_noise(q + vec2(17.0, 9.0), 65536.0));
+            float cover = 0.3 * crest * clamp(1.0 + 2.5 * warp.x, 0.0, 2.0);
+            float s = foam_holes(q * 2.285714 + warp * 1.2 + vec2(31.0, -17.0));
+            float hole = 1.3 - 1.6 * cover;
+            float edge = max(0.04, 1.428571 * footprint);
+            float lump = smoothstep(hole - edge, hole + edge + 0.35, s) * min(cover * 20.0, 1.0);
+            foam = mix(crest, lump * 3.333333, near);
+        }
+    }
+    float foam_mix = min(foam * foam_strength, 1.0) * (1.0 - sheet);
+    col = mix(col, vec3(0.6, 0.65, 0.68), foam_mix);
+    ALBEDO = col;
+    METALLIC = 0.0;
+    SPECULAR = 0.5;
+    // Lost slope detail turns into roughness, so the far sea keeps a glossy sheen, not a mirror.
+    // Foam is matte where it covers the water.
+    ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), 0.25, sheet), 0.6, foam_mix);
+    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
+}

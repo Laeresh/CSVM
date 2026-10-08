@@ -295,6 +295,10 @@ public partial class GameSession : Node3D
     private Effects.ScorchField? _scorches;
     private Effects.Ocean? _ocean;
     private bool _oceanEligible;
+    // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
+    // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
+    private Effects.SeaState _seaSaved = Effects.SeaState.Default;
+    private Effects.SeaState _sea = Effects.SeaState.Default;
     // The world runtime whose motions say which hulls the ocean follows; set in every mode it builds in.
     private AnimRuntime? _oceanRuntime;
     private ClutterBuilder? _clutter;
@@ -796,7 +800,10 @@ public partial class GameSession : Node3D
         FinishFraming(state);
         _oceanEligible = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
         _oceanRuntime = state.WorldRuntime;
+        ResolveSea();
         FollowOcean();
+        if (_oceanEligible && Effects.Ocean.Covers(_spec.Chapter))
+            _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.
@@ -2553,9 +2560,28 @@ public partial class GameSession : Node3D
             foreach (var v in _surfaceVehicles.Vessels)
                 hulls.Add(v.Body);
         }
-        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _spec.OceanMaskPath);
+        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _sea, _spec.OceanMaskPath);
         if (_ocean != null)
             _plane.AddChild(_ocean);
+    }
+
+    // The chapter's sea from the shipped file, read once per session that can stand an ocean, under
+    // any --debug-ocean overrides. A chapter with no entry draws the defaults.
+    private void ResolveSea()
+    {
+        if (!_oceanEligible || !Effects.Ocean.Covers(_spec.Chapter))
+            return;
+        _seaSaved = Effects.OceanSeas.Load().For(_spec.Chapter);
+        _sea = _seaSaved.WithOverrides(_spec.DebugOcean);
+        string debug = _spec.DebugOcean is { Length: > 0 } spec ? $" (--debug-ocean={spec})" : "";
+        Log.Info("world", $"ocean: sea {_spec.Chapter} saved={_seaSaved.Describe()} drawn={_sea.Describe()}{debug}");
+    }
+
+    // The ocean lab's edit: the standing ocean takes it at once, and a rebuilt one takes it too.
+    private void ApplySea(Effects.SeaState sea)
+    {
+        _sea = sea.Clamped();
+        _ocean?.Apply(_sea);
     }
 
     // The world nodes the bound program's played motions carry, as the runtime resolves them. The

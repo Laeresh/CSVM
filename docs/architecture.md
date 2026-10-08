@@ -335,6 +335,9 @@ rows).
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
+- `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
+- `src/Effects/OceanShader.cs`, the wave ocean's shader text generated from one sea state, byte-identical to the tune at the defaults.
+- `src/Effects/SeaState.cs`, one chapter's sea: every tunable of the wave ocean with its default, range and lab group, clamped below folding.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 - `src/Effects/ScorchField.cs`, the enhanced presentation's scorch marks: a capped pool of decals with one procedural burn texture, laid over the crater carve.
 - `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.
@@ -482,6 +485,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/MeshLab.cs`, the geometry and shading lab (M): normal lines, smoothing seams, cull and normal overrides, on the parked plane or on the selection.
 - `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
+- `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
 - `src/UI/Labs/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/Labs/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
 - `src/UI/Labs/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.
@@ -669,7 +673,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
 - `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.
 - `src/Launch/SessionProbes.cs`, the build's scripted probes that report and quit, and the `--destroy=`/`--debug-objective=` build-time forces.
-- `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, flight labs and debug overlays.
+- `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, the ocean lab, flight labs and debug overlays.
 - `src/Launch/SessionBoards.cs`, the whole-window boards over a flight: the pause board and options leaf, the results boards, the menu readers and photo mode.
 - `src/Launch/SessionNet.cs`, the session's end of the wire: the join, the seat list, the state relay, combat, chat, the clock and start gate, and the world links.
 - `src/Launch/ProjectileStage.cs`, the flight's shared projectile pool build step and its world, crater, scorch and wash sinks.

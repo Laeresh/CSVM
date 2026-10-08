@@ -57,10 +57,31 @@ The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, al
 grid with a Gerstner swell in its vertex stage and drifting noise in its fragment normals replaces the sea-level base
 sheet, which steps aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. It
 draws a priority level below the lowest base sheet, one grid per zone-gate group; a spyglass disc
-(`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the wave tables, a still field bending the crests out of a
-lattice, the noise detail, the foam where the swell's Jacobian bunches the surface, and up to 16 ship calm zones
-(`OceanCalmZone.cs`, `OceanMovers.cs`), nearest the eye first, all on `csky_time`. Off the mask's shore distance the swell fades on a long ramp and the look on a
-short one, so it shades as the flat sheet at the shore and in fog. `GameSession.FollowOcean` builds and drops it.
+(`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the grids, the sea's uniforms and up to 16 ship calm zones
+(`OceanCalmZone.cs`, `OceanMovers.cs`), nearest the eye first; the swell, bent crests, noise detail, foam and coast
+ramps are the shader text `OceanShader.cs` writes from the chapter's `SeaState.cs`, all on `csky_time`. `Apply`
+takes a new sea live, recompiling only when the text changes. `GameSession.FollowOcean` builds and drops it.
+
+## src/Effects/OceanSeas.cs
+The shipped per-chapter seas, `CSVM/data/ocean_seas.json`, read through `res://` at each sea chapter's build: one
+object per chapter (`Chapters`, which `Ocean.Covers` reads) holding only the fields that differ from the defaults.
+A missing entry or field takes the default; an unknown chapter or field, a non-number and a clamped value are each
+a `world` warning. `WithEntry` rewrites one chapter's entry in place for the ocean lab's Save, keeping every other
+key and its order; `SourceTreePath` is null in an exported build. `OceanSeasTests`. Read `SeaState.cs` next.
+
+## src/Effects/OceanShader.cs
+The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
+tables, the bending field, the coast ramps and the open sea's tint, written as literals. At the defaults the text is
+byte-identical to the ocean's tune (`OceanShaderTests` against hashes and a fixture), so nothing moves until a sea
+is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
+setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`.
+
+## src/Effects/SeaState.cs
+One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
+with today's tune as its default, and `Fields` naming each one's key, label, group, range and slider step for the
+file, the flag and the lab. `Clamped`, which every path into the shader takes, holds each value in range, sharpness
+times height at the fold limit, and each coast ramp at least 4 m wide within the mask's 160 m reach.
+`WithOverrides` reads `--debug-ocean`. `SeaStateTests`. Read `OceanShader.cs` next.
 
 ## src/Effects/OceanCalmZone.cs
 One ship's calm zone on the wave ocean: a box on the water along the hull's heading, grown over
