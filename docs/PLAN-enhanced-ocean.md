@@ -47,8 +47,9 @@ capture agree through `csky_time`.
 | 11 | B11 budget | **At most 1.5 ms over the flat sea** at the low-pass pose, desktop 1080p; about the ocean's cost with SSR off today. |
 | 12 | C21 chapter scope | **Every chapter with a sea at y = 0: C1, C1C, C2, C2B, C3, C5.** C4 keeps its flat lakes. C2's coplanar beaches, C3's shore sheets and C5's fog-gradient overlays are the item's to solve, not reasons to leave a chapter out. |
 | 13 | The ocean in the spyglass disc | **None: the disc shows the flat sea.** The user's ruling. The disc's camera carries a marker layer bit the ocean grid reads to step out before its wave math, and the sheet reads to keep drawing, through `CAMERA_VISIBLE_LAYERS`; the pane cameras do not carry it. |
-| 14 | A sea state per region | **A follow-up after landing, not this plan.** The user's ruling. The closing commit files it as a GitHub issue (label `backlog`): a table per region setting wave height (`wave_scale`), swell length, chop, foam (`foam_strength`) and wind direction, starting from Northwest (C1, C1B, C1C) rough open Pacific, Hollywood (C2, C2B) moderate, Hawaii (C3) a long gentle swell with little foam, Manhattan (C5) calm harbour chop; judged from a montage of each region, today against proposed. Height alone folds the crests by about 1.8x, sooner where the sea-state field raises a group (the horizontal displacement sums to `Choppiness` times the scale times that field's gain), so a rougher sea also lengthens the swell. Re-pins `c1b-ocean-enhanced` if C1B changes. |
+| 14 | A sea state per region | **In this plan after all, through E41's ocean lab (Decision 16); the user tunes the regions with it.** First ruled a follow-up after landing; the user then asked for the lab before landing. The guidance below stands for the tuning: a table per region setting wave height (`wave_scale`), swell length, chop, foam (`foam_strength`) and wind direction, starting from Northwest (C1, C1B, C1C) rough open Pacific, Hollywood (C2, C2B) moderate, Hawaii (C3) a long gentle swell with little foam, Manhattan (C5) calm harbour chop; judged from a montage of each region, today against proposed. Height alone folds the crests by about 1.8x, sooner where the sea-state field raises a group (the horizontal displacement sums to `Choppiness` times the scale times that field's gain), so a rougher sea also lengthens the swell. Re-pins `c1b-ocean-enhanced` if C1B changes. |
 | 15 | A3's look findings | **Fixed in this plan, then a re-check at the controls before landing.** The user's ruling: the swell's wave lattice (D31), the foam up close (D32) and the hard cut to flat water at the coast (D33). Procedural ship wakes are issue #160, not this plan. If D33 cannot make the coast gradual, a GitHub issue takes waves to the coast with procedural shore foam in place of the coast foam textures, linked to #160. |
+| 16 | An ocean lab for per-chapter seas | **Built before landing (E41).** The user's ruling: a lab in `--freecam` only, opened with Shift+F1, exposing the swell (height, length, wind, crest sharpness), the crest bending and noise detail, the foam, and the coast ramps, tint and roughness, live; its Save writes a shipped per-chapter data file the game reads at load. The user tunes the seas with it; the shipped defaults are today's values, so nothing moves until they save. |
 
 ## ⚠ Read this before implementing anything
 
@@ -110,6 +111,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ Break up the swell's wave lattice
 32. ☑ Foam that reads as foam up close
 33. ☑ A gradual fade to flat water at the coast
+
+### Wave E, per-chapter seas
+
+41. ☐ An ocean lab and a shipped sea state per chapter
 
 ## Dependency and parallelism notes
 
@@ -1192,3 +1197,53 @@ C3's shore, judged by the user; `c1-lake-enhanced`'s pose shows no edge at the c
 **⚠ Traps.** If the coast cannot be made gradual without the C25 seam or waves cutting through the
 shore, stop and report: Decision 15 then files the procedural-coast issue rather than this item
 forcing it.
+
+---
+
+# Wave E, per-chapter seas
+
+## E41 ☐ An ocean lab and a shipped sea state per chapter
+
+**Goal.** The user tunes each chapter's sea live in `--freecam` and saves it; the game loads each
+chapter's saved sea. With nothing saved, every chapter draws exactly today's ocean.
+
+**Evidence (confidence: traced).** Every wave, detail and foam value is a constant written into the
+generated shader text (`Ocean.ShaderCode`, `EmitWaves`, `EmitDetail`, the `Foam*`, `Phase*`,
+`Detail*`, `Shore*`/`Look*` constants), plus three uniforms nothing sets (`wave_scale`,
+`foam_strength`, `rough_near`/`rough_far`). Nothing reads a per-chapter value. The user: "How can i
+change the parameters for the chapters myself? Could you make me an ocean lab for the --freecam
+mode so that i can test it live?" Decision 16 holds their answers.
+
+**Approach.**
+- A sea-state record (one value per tunable) with today's constants as its defaults, and a shipped
+  data file (`CSVM/data/ocean_seas.json`, read through `res://data/` as the stock loadouts are) with an
+  entry per sea chapter (C1, C1B, C1C, C2, C2B, C3, C5); a missing entry or field takes the default.
+  `Ocean.Create` takes the chapter's sea state and `ShaderCode` writes from it. With the defaults,
+  the generated text is byte-identical to today's, so no golden moves (a unit test holds it).
+- The parameters, per Decision 16: swell (height, a length scale on every wave, wind direction,
+  crest sharpness `Choppiness`), crest bending (the warp's metres and radians) and noise detail
+  (slope, drift speed), foam (threshold, strength, patch size, near cover), coast (the swell and
+  look ramps, within the mask's `ShoreReach`, or a rebake), tint and roughness. Clamp each to a
+  range that keeps the invariants below.
+- The lab: `--freecam` only, Shift+F1 toggles a panel of sliders, built like the existing labs
+  (`UI/Labs/`). A change rebuilds the ocean's shader from the edited state (a brief compile is
+  fine in a lab); Reset to defaults, Revert to saved, and Save for this chapter, which writes the
+  project's data file when running from the source tree and says where it wrote. The scripted twin
+  `--debug-ocean=<field>:<value>,...` applies the same overrides at launch, for screenshots.
+
+**Model recommendation.** high: a new lab plus a data path through the shader generator, with
+invariants that a slider can break.
+
+**Verify.** The defaults' shader text byte-identical to today's (unit test) and the goldens
+unmoved; an engine suite that opens the lab in `--freecam`, moves a value, and finds the ocean's
+shader changed and the session intact; Save round-trips through the file; the lab is absent outside
+`--freecam`. A montage of two lab settings at C1B cruise for the user, and the user's own tuning at
+the Wave D re-check flight.
+
+**⚠ Traps.** The 3600 s `csky_time` wrap: a swell length change moves omega, which must be re-rounded
+to whole cycles per wrap (`EmitWaves` does it), and a detail or foam drift speed must stay a whole
+number of hash periods per wrap. Height alone folds the crests near 1.8x (Decision 14); clamp height
+against the length scale or say so on the slider. Shore ramps past `ShoreReach` (160 m) need the mask
+rebaked. The values are shipped data, so a network peer and a `--det` capture agree as long as both
+load the same file. Shift+F1 sits beside `ControlCapture`'s bindable F1 to F12; the lab exists only in
+`--freecam`, where no flight controls are read.
