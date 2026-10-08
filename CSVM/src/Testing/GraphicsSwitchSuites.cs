@@ -496,12 +496,18 @@ internal static class GraphicsSwitchSuites
         "the ocean lab stands in an Enhanced --freecam C1B session and nowhere in a --fly one: opened, "
         + "a length edit rewrites the standing ocean's shader text and a height edit only its uniform, "
         + "with one ocean standing throughout; an ocean rebuilt by a switch to Original and back draws "
-        + "the edited sea, and a reset to the defaults writes the text the session opened with")]
+        + "the edited sea, a reset draws the defaults, and a revert to the shipped sea writes the text the "
+        + "session opened with")]
     internal static void OceanLabEdits(TestContext ctx)
     {
         RequireData(ctx, OceanChapter);
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = WaterQualitySetting.Word;
+        var shipped = Effects.OceanSeas.Load().For(OceanChapter);
+
+        // Edits that differ from the shipped sea, whatever the lab saved there.
+        float length = shipped.Length == 1.5f ? 1.6f : 1.5f;
+        float height = shipped.Height == 0.8f ? 0.9f : 0.8f;
         try
         {
             WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
@@ -516,23 +522,23 @@ internal static class GraphicsSwitchSuites
                     return;
                 }
                 var lab = labs[0];
-                ctx.Check(!lab.IsOpen && lab.Edited == Effects.SeaState.Default && ocean.Sea == Effects.SeaState.Default,
-                    $"the lab starts closed on the shipped sea, which is the defaults ({lab.Edited.Describe()})");
+                ctx.Check(!lab.IsOpen && lab.Edited == shipped && lab.Saved == shipped && ocean.Sea == shipped,
+                    $"the lab starts closed on the shipped {OceanChapter} sea {shipped.Describe()} (lab {lab.Edited.Describe()}, ocean {ocean.Sea.Describe()})");
                 string opened = ocean.ShaderText;
                 lab.Toggle();
                 ctx.Check(lab.IsOpen, $"Toggle opens the panel");
 
-                lab.Set("length", 1.5f);
+                lab.Set("length", length);
                 Step(freecam);
                 string lengthened = ocean.ShaderText;
-                ctx.Check(lengthened != opened && ocean.Sea.Length == 1.5f && OceansUnder(freecam.Session) == 1
+                ctx.Check(lengthened != opened && ocean.Sea.Length == length && OceansUnder(freecam.Session) == 1
                         && ReferenceEquals(FirstOcean(freecam.Session), ocean),
                     $"a length edit rewrites the standing ocean's shader text, and the same one ocean stands ({OceansUnder(freecam.Session)} in the tree, sea {ocean.Sea.Describe()})");
 
-                lab.Set("height", 1.4f);
+                lab.Set("height", height);
                 Step(freecam);
                 float waveScale = Grid(ocean)?.GetShaderParameter("wave_scale").AsSingle() ?? -1f;
-                ctx.Check(ocean.ShaderText == lengthened && Mathf.IsEqualApprox(waveScale, 1.4f),
+                ctx.Check(ocean.ShaderText == lengthened && Mathf.IsEqualApprox(waveScale, height),
                     $"a height edit sets wave_scale alone and compiles nothing (wave_scale {waveScale.ToString("0.###", CultureInfo.InvariantCulture)})");
 
                 Switch(freecam, false);
@@ -545,8 +551,13 @@ internal static class GraphicsSwitchSuites
 
                 lab.ResetToDefaults();
                 Step(freecam);
-                ctx.Check(rebuilt?.ShaderText == opened && rebuilt.Sea == Effects.SeaState.Default,
-                    $"a reset to the defaults writes the text the session opened with");
+                ctx.Check(rebuilt?.Sea == Effects.SeaState.Default && lab.Edited == Effects.SeaState.Default,
+                    $"a reset draws the defaults (sea {rebuilt?.Sea.Describe() ?? "none"})");
+
+                lab.RevertToSaved();
+                Step(freecam);
+                ctx.Check(rebuilt?.ShaderText == opened && rebuilt.Sea == shipped,
+                    $"a revert to the shipped sea writes the text the session opened with (sea {rebuilt?.Sea.Describe() ?? "none"})");
             }
             finally
             {

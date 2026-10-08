@@ -148,7 +148,7 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "1e8f90cca0e301414a314e89001c8e7d",
+      "hash": "b7e66c00633d4872c3e6427c3e9c3c25",
       "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean in the open lake, calmed to the flat sheet's shading at the coast tiles, blurred SSR, conifers casting sun shadows, SSAO, settled TAA; frame-sensitive 24.09 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -169,7 +169,7 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "0e8b7627c8584b9eebcd8dc41264ff88",
+      "hash": "e2646781df55d23311e7131e7a56151f",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -183,8 +183,8 @@
     {
       "name": "c1b-ocean-enhanced",
       "frame": 120,
-      "hash": "8ba6283a0d0262d3d60a8373834bb2da",
-      "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming toward each shore, the surf ring, SSR, TAA; 65.9 % of pixels off the flat sea, frame-sensitive 15.48 %.",
+      "hash": "39600594889f1eb291563bf5168e2a63",
+      "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming toward each shore, the surf ring, SSR, TAA, in the shipped C1B sea.",
       "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }
   ]

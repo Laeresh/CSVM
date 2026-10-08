@@ -13,16 +13,27 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public sealed class OceanSeasTests
 {
+    // Every sea chapter at the defaults, so the fields a Save writes are the only ones off them. The
+    // shipped file holds the user's tuned seas, which the Save tests must not depend on.
+    private const string AllDefaults =
+        "{\n  \"_about\": \"prose\",\n  \"C1\": {},\n  \"C1B\": {},\n  \"C1C\": {},\n  \"C2\": {},\n"
+        + "  \"C2B\": {},\n  \"C3\": {},\n  \"C5\": {}\n}\n";
+
+    private static readonly string[] FileKeys = { "_about", "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" };
+
     private static string ShippedPath => Path.Combine(TestData.RepoRoot, "CSVM", "data", "ocean_seas.json");
 
-    /// <summary>The shipped file names every sea chapter, saves nothing and reads clean, so every
-    /// chapter draws the ocean's tune.</summary>
+    /// <summary>The shipped file reads clean and names every sea chapter. A clean read means no
+    /// unknown chapter or field and every value in the lab's range; each sea is as the file writes it.</summary>
     [Fact]
-    public void TheShippedFileDrawsEveryChapterAtTheDefaults()
+    public void TheShippedFileReadsCleanAndNamesEverySeaChapter()
     {
-        var seas = OceanSeas.Parse(File.ReadAllText(ShippedPath));
+        string shipped = File.ReadAllText(ShippedPath);
+        var seas = OceanSeas.Parse(shipped);
         Assert.Empty(seas.Warnings);
-        Assert.All(OceanSeas.Chapters, c => Assert.Equal(SeaState.Default, seas.For(c)));
+        var keys = System.Text.Json.Nodes.JsonNode.Parse(shipped)!.AsObject().Select(p => p.Key).Where(k => !k.StartsWith('_'));
+        Assert.Equal(OceanSeas.Chapters, keys);
+        Assert.All(OceanSeas.Chapters, c => Assert.Equal(seas.For(c).Written(), seas.For(c)));
         Assert.Equal(SeaState.Default, seas.For("C4"));
     }
 
@@ -83,26 +94,45 @@ public sealed class OceanSeasTests
     [Fact]
     public void SaveWritesOnlyTheDifferingFieldsAndRoundTrips()
     {
-        string shipped = File.ReadAllText(ShippedPath);
         var sea = SeaState.Default with { FoamStrength = 0.2f, Height = 1.4f, Length = 1.5f };
-        string written = OceanSeas.WithEntry(shipped, "c1b", sea);
+        string written = OceanSeas.WithEntry(AllDefaults, "c1b", sea);
 
         Assert.Contains("\"C1B\": {\n    \"height\": 1.4,\n    \"length\": 1.5,\n    \"foam_strength\": 0.2\n  }", Lf(written));
         var keys = System.Text.Json.Nodes.JsonNode.Parse(written)!.AsObject().Select(p => p.Key).ToArray();
-        Assert.Equal(new[] { "_about", "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" }, keys);
+        Assert.Equal(FileKeys, keys);
         var back = OceanSeas.Parse(written);
         Assert.Empty(back.Warnings);
         Assert.Equal(sea, back.For("C1B"));
         Assert.Equal(SeaState.Default, back.For("C2"));
     }
 
-    /// <summary>Saving the defaults over the shipped file writes the shipped file again, so a Save
-    /// changes only what the lab changed.</summary>
+    /// <summary>A Save into the shipped file replaces its one chapter: every other chapter reads back
+    /// as it was loaded, and every key keeps its place.</summary>
     [Fact]
-    public void SavingTheDefaultsLeavesTheShippedFileAsItIs()
+    public void SaveIntoTheShippedFileLeavesTheOtherChaptersAsLoaded()
     {
         string shipped = File.ReadAllText(ShippedPath);
-        Assert.Equal(Lf(shipped), Lf(OceanSeas.WithEntry(shipped, "C3", SeaState.Default)));
+        var loaded = OceanSeas.Parse(shipped);
+        var sea = loaded.For("C1B") with { FoamStrength = loaded.For("C1B").FoamStrength == 0.2f ? 0.3f : 0.2f };
+        string written = OceanSeas.WithEntry(shipped, "C1B", sea);
+
+        var keys = System.Text.Json.Nodes.JsonNode.Parse(written)!.AsObject().Select(p => p.Key);
+        Assert.Equal(System.Text.Json.Nodes.JsonNode.Parse(shipped)!.AsObject().Select(p => p.Key), keys);
+        var back = OceanSeas.Parse(written);
+        Assert.Empty(back.Warnings);
+        Assert.Equal(sea.Written(), back.For("C1B"));
+        Assert.All(OceanSeas.Chapters.Where(c => c != "C1B"), c => Assert.Equal(loaded.For(c), back.For(c)));
+    }
+
+    /// <summary>Saving each chapter's loaded sea over the shipped file writes the shipped file again. The
+    /// defaults saved over an all-defaults file write it again too, so a Save changes only what the lab changed.</summary>
+    [Fact]
+    public void SavingWhatWasLoadedLeavesTheFileAsItIs()
+    {
+        string shipped = File.ReadAllText(ShippedPath);
+        var loaded = OceanSeas.Parse(shipped);
+        Assert.All(OceanSeas.Chapters, c => Assert.Equal(Lf(shipped), Lf(OceanSeas.WithEntry(shipped, c, loaded.For(c)))));
+        Assert.Equal(AllDefaults, Lf(OceanSeas.WithEntry(AllDefaults, "C3", SeaState.Default)));
     }
 
     /// <summary>Save on disk: a file it creates, then a second chapter added beside the first.</summary>
@@ -122,13 +152,13 @@ public sealed class OceanSeasTests
     [Fact]
     public void SaveReadsPastAComment()
     {
-        string commented = "// tuned by hand\n" + File.ReadAllText(ShippedPath).Replace("\"C2\":", "/* the next sea */ \"C2\":");
+        string commented = "// tuned by hand\n" + AllDefaults.Replace("\"C2\":", "/* the next sea */ \"C2\":");
         Assert.Empty(OceanSeas.Parse(commented).Warnings);
         string written = OceanSeas.WithEntry(commented, "C5", SeaState.Default with { WindDeg = 90f });
 
         var keys = System.Text.Json.Nodes.JsonNode.Parse(written)!.AsObject().Select(p => p.Key).ToArray();
-        Assert.Equal(new[] { "_about", "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" }, keys);
-        Assert.Equal(Lf(File.ReadAllText(ShippedPath)), Lf(OceanSeas.WithEntry(written, "C5", SeaState.Default)));
+        Assert.Equal(FileKeys, keys);
+        Assert.Equal(AllDefaults, Lf(OceanSeas.WithEntry(written, "C5", SeaState.Default)));
     }
 
     /// <summary>A file Save cannot read is left as it was rather than replaced by the one chapter saved.</summary>
