@@ -686,11 +686,12 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("graphics-retext-compiles",
-        "a key whose Original shader nobody wears any more, rewritten in place by a first switch to "
-        + "Enhanced before an Enhanced frame has drawn, stays pinned on a material of its own; after "
+        "a key whose Original shader drew red and nobody wears any more, rewritten in place by a "
+        + "first switch to Enhanced before an Enhanced frame has drawn while that draw's pipeline "
+        + "compiles still wait in a busy worker pool, stays pinned on a material of its own; after "
         + "one TAA frame builds Godot's advanced variants, a fresh material on the key draws the "
-        + "Enhanced text with no engine error, and the Original text on a shader of its own draws "
-        + "red. Only a process that has drawn no TAA frame before can show the draw fail; the pin "
+        + "Enhanced text, and the rewrite and draws print no engine error (no free_rid off the render "
+        + "thread). Only a process that has drawn no TAA frame before can show the draw fail; the pin "
         + "check fails in any")]
     internal static void RetextCompiles(TestContext ctx)
     {
@@ -699,6 +700,7 @@ internal static class GraphicsSwitchSuites
         var host = new Node { Name = "retext_probe" };
         ctx.Host.AddChild(host);
         ShaderMaterial? fresh = null;
+        var busy = new List<long>();
         try
         {
             GraphicsMode.Set(false);
@@ -707,14 +709,18 @@ internal static class GraphicsSwitchSuites
             RenderingServer.ForceSync();
             int? errorsBefore = TestHarness.EngineErrorsSoFar();
 
-            // ⚠ Draw nothing before the rewrite. A draw leaves Godot compiling pipelines on worker
-            // threads, and a rewrite then has a worker rebuild the shader and fail its free_rid calls.
             var key = Mech3.ShaderTwins.Make(() => GraphicsMode.Enhanced ? EnhancedProbe : OriginalProbe,
                 "retext-probe", "retext-probe");
+            var (view, quad) = ProbeView(host);
             var worn = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
             var original = worn.Shader;
-            worn.GetRid();
+            // A busy pool keeps the draw's pipeline compiles queued through the rewrite, as a loaded
+            // shard's does; a plain Code assignment then prints free_rid errors.
+            busy = HoldWorkerPool(150);
+            quad.MaterialOverride = worn;
+            var drawnOriginal = ProbePixel(view);
             // The key keeps no wearer, so the rewrite queues no material update of Godot's own.
+            quad.MaterialOverride = null;
             worn.Dispose();
 
             GraphicsMode.Set(true);
@@ -723,12 +729,9 @@ internal static class GraphicsSwitchSuites
             bool pinned = Mech3.ShaderTwins.IsPinned(original);
             AdvancedFrame(host);
 
-            var (view, quad) = ProbeView(host);
             fresh = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
             quad.MaterialOverride = fresh;
             var drawnEnhanced = ProbePixel(view);
-            quad.MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = OriginalProbe } };
-            var drawnOriginal = ProbePixel(view);
             RenderingServer.ForceSync();
             int? errorsAfter = TestHarness.EngineErrorsSoFar();
 
@@ -743,6 +746,8 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            foreach (long task in busy)
+                WorkerThreadPool.WaitForTaskCompletion(task);
             host.Free();
             fresh?.Dispose();
             Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
@@ -880,6 +885,11 @@ internal static class GraphicsSwitchSuites
         var image = view.GetTexture()?.GetImage();
         return image == null || image.IsEmpty() ? new Color(0f, 0f, 0f, 0f) : image.GetPixel(32, 32);
     }
+
+    // Fills Godot's worker pool with sleeps of ms each, so a pipeline compile a draw queues waits
+    // behind them. The caller waits each task out once.
+    private static List<long> HoldWorkerPool(int ms) => Enumerable.Range(0, 2 * OS.GetProcessorCount())
+        .Select(_ => WorkerThreadPool.AddTask(Callable.From(() => System.Threading.Thread.Sleep(ms)))).ToList();
 
     // One drawn TAA frame, which is what has Godot build its advanced variants for every shader alive.
     private static void AdvancedFrame(Node host)

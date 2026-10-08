@@ -1013,6 +1013,12 @@ member, and it does not go here.
 - **INSTR-101**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
   the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
   bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.
+- **INSTR-102**, **A race with Godot's background work reproduces on demand only with its worker pool
+  held busy, and neither `RenderingServer.ForceSync()` nor a drawn frame waits for that pool: judge a
+  drain by a run whose pool sleeps through it, never by a quiet machine.** With 96 probe shaders
+  drawn and rewritten, an idle pool printed no free_rid line, and a pool held by sleeping tasks
+  printed 50 with no drain, 50 after a `ForceSync`, 50 after a drawn frame, and 0 through an
+  empty text in between.
 
 ## SRC, sources and documents
 

@@ -230,6 +230,17 @@ internal static class ShaderTwins
         return shader;
     }
 
+    /// <summary>Gives a live <paramref name="shader"/> new <paramref name="text"/>. ⚠ Never assign
+    /// <c>Code</c> of a shader that has drawn. Godot marks its version dirty before it waits for the
+    /// pipeline compiles still queued. Each such compile then rebuilds the version on a worker thread,
+    /// whose free_rid calls fail. An empty text in between, of no shader type, deletes the shader's
+    /// data, which waits for those compiles first. The object, its wearers and their parameters stay.</summary>
+    internal static void Rewrite(Shader shader, string text)
+    {
+        shader.Code = "";
+        shader.Code = text;
+    }
+
     // A fade copy's text off its source's: the source with an ALPHA line before its closing brace.
     // Null when the code cannot take it (no csky_opacity preamble, or no col local).
     internal static string? FadeCode(string code)
@@ -271,7 +282,7 @@ internal static class ShaderTwins
                 if (free && !rewritten && !ByText.ContainsKey(text))
                 {
                     ByText.Remove(from.Code);
-                    from.Code = text;
+                    Rewrite(from, text);
                     ByText[text] = from;
                     Pin(from);
                     TextRewrites++;
