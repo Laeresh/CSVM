@@ -672,6 +672,12 @@ member, and it does not go here.
   every other worker idle. A killed hang also never saves the pipeline cache, so the same shots hang
   on the next run too. With the drain, the shots that hung showed 0.3 to 6.4 s of backlog at quit
   and exited; every other shot settles in about 1 ms.
+- **SHELL-22**, **A kill-on-close job object must not hold `dotnet build`'s children: the MSBuild
+  nodes and the compiler server it starts are shared with every other build on the machine, so let
+  them break away during a build and make a `dotnet test` run's nodes private
+  (`MSBUILDDISABLENODEREUSE=1`).** The job's close at the end of a run would otherwise kill a node
+  or the server under a sibling worktree's build. Never put the launching shell itself in such a
+  job either: a member cannot leave, so closing the job would kill the shell.
 
 ## INSTR, building instruments
 

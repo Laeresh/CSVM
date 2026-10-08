@@ -12,6 +12,11 @@
 # exactly (0bb2532d29261339fb11e3eda79403d0, c1-waterfall), and the window was seen on the new
 # desktop in 50 of 52 samples and on ours in 0 -- both halves checked, because "no window appeared"
 # is also what a crash looks like (SHELL-12).
+#
+# Every launch here joins the run's job object (JobObject.ps1) before it runs, so it dies with the
+# runner.
+
+. (Join-Path $PSScriptRoot "JobObject.ps1")
 
 if (-not ([System.Management.Automation.PSTypeName]'CSVMHiddenDesktop').Type) {
     Add-Type -Language CSharp -TypeDefinition @'
@@ -50,7 +55,9 @@ public class CSVMHiddenDesktop
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetExitCodeProcess(IntPtr h, out uint code);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool TerminateProcess(IntPtr h, uint code);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr h);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern uint ResumeThread(IntPtr h);
 
+    const uint CREATE_SUSPENDED = 4;
     const uint GENERIC_ALL = 0x10000000, GENERIC_READ = 0x80000000, GENERIC_WRITE = 0x40000000;
     const uint SHARE_RW = 3, CREATE_ALWAYS = 2, OPEN_EXISTING = 3, NORMAL = 0x80, USESTDHANDLES = 0x100;
 
@@ -76,26 +83,11 @@ public class CSVMHiddenDesktop
         if (_desk != IntPtr.Zero) { CloseDesktop(_desk); _desk = IntPtr.Zero; _name = null; }
     }
 
-    /// <summary>Runs exe to completion on the hidden desktop and returns its exit code. stdout and
-    /// stderr go to real inheritable file handles -- without them the GUI binary reattaches to the
+    /// <summary>Creates the process on the hidden desktop SUSPENDED, so the caller can put it in
+    /// the run's job before it runs any code; <see cref="Resume"/> lets it run. stdout and stderr
+    /// go to real inheritable file handles -- without them the GUI binary reattaches to the
     /// launching console and prints past every redirection (SHELL-10).</summary>
-    public static int Run(string exe, string cmdLine, string cwd, string outPath, string errPath)
-    {
-        return Run(exe, cmdLine, cwd, outPath, errPath, 0xFFFFFFFF);
-    }
-
-    /// <summary>Same, but the wait is bounded: after timeoutMs the process is terminated and 124
-    /// is returned (the GNU timeout convention), so a probe that never quits cannot hang its
-    /// caller forever. 0xFFFFFFFF (INFINITE) preserves the unbounded wait.</summary>
-    public static int Run(string exe, string cmdLine, string cwd, string outPath, string errPath, uint timeoutMs)
-    {
-        return Wait(Start(exe, cmdLine, cwd, outPath, errPath), timeoutMs);
-    }
-
-    /// <summary>Starts the process on the hidden desktop and returns its handle WITHOUT waiting, so
-    /// several can be in flight at once. The caller must pass the handle to <see cref="Wait"/>,
-    /// which closes it.</summary>
-    public static IntPtr Start(string exe, string cmdLine, string cwd, string outPath, string errPath)
+    public static PROCESS_INFORMATION StartSuspended(string exe, string cmdLine, string cwd, string outPath, string errPath)
     {
         if (_desk == IntPtr.Zero) { throw new InvalidOperationException("hidden desktop not open"); }
 
@@ -115,17 +107,25 @@ public class CSVMHiddenDesktop
 
         PROCESS_INFORMATION pi;
         StringBuilder buf = new StringBuilder(cmdLine);   // CreateProcess may write into it
-        bool ok = CreateProcess(exe, buf, IntPtr.Zero, IntPtr.Zero, true, 0, IntPtr.Zero, cwd, ref si, out pi);
+        bool ok = CreateProcess(exe, buf, IntPtr.Zero, IntPtr.Zero, true, CREATE_SUSPENDED, IntPtr.Zero, cwd, ref si, out pi);
         int err = Marshal.GetLastWin32Error();
         CloseHandle(hOut); CloseHandle(hErr); CloseHandle(hIn);
         if (!ok) { throw new Exception("CreateProcess failed, win32 error " + err); }
+        return pi;
+    }
 
+    /// <summary>Lets a <see cref="StartSuspended"/> process run and returns its handle. The caller
+    /// must pass the handle to <see cref="Wait"/>, which closes it.</summary>
+    public static IntPtr Resume(PROCESS_INFORMATION pi)
+    {
+        ResumeThread(pi.hThread);
         CloseHandle(pi.hThread);
         return pi.hProcess;
     }
 
-    /// <summary>Waits for a handle from <see cref="Start"/> and returns the exit code, 124 on
-    /// timeout. Closes the handle either way, so it is called exactly once per start.</summary>
+    /// <summary>Waits for a handle from <see cref="Resume"/> and returns the exit code, 124 on
+    /// timeout (the GNU timeout convention), so a launch that never quits cannot hang its caller.
+    /// Closes the handle either way, so it is called exactly once per start.</summary>
     public static int Wait(IntPtr process, uint timeoutMs)
     {
         uint code;
@@ -170,8 +170,9 @@ function Invoke-OnHiddenDesktop {
         # seconds and returns 124.
         [int]$TimeoutSec = 0
     )
-    $timeoutMs = if ($TimeoutSec -gt 0) { [uint32]($TimeoutSec * 1000) } else { [uint32]::MaxValue }
-    return [CSVMHiddenDesktop]::Run($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr, $timeoutMs)
+    $process = Start-OnHiddenDesktop -Exe $Exe -CommandLine $CommandLine -WorkingDirectory $WorkingDirectory `
+                                     -StdOut $StdOut -StdErr $StdErr
+    return Wait-OnHiddenDesktop -Process $process -TimeoutSec $TimeoutSec
 }
 
 <#
@@ -188,7 +189,10 @@ function Start-OnHiddenDesktop {
         [Parameter(Mandatory=$true)][string]$StdOut,
         [Parameter(Mandatory=$true)][string]$StdErr
     )
-    return [CSVMHiddenDesktop]::Start($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr)
+    $pi = [CSVMHiddenDesktop]::StartSuspended($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr)
+    # Joined before its first instruction, so nothing it starts can begin outside the run's job.
+    Add-ToRunJob -Process $pi.hProcess
+    return [CSVMHiddenDesktop]::Resume($pi)
 }
 
 <#

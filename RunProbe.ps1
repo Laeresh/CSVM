@@ -83,6 +83,8 @@ if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogD
 # rather than failing (same policy as RunTests.ps1).
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
+# The launch joins this job, so killing this script kills the probe (JobObject.ps1).
+$null = Open-RunJob
 
 # Engine options belong before the `--`; everything after it is the CSVM argument list.
 $Engine = @("--path", $ProjectDir, "res://scenes/Main.tscn")
@@ -131,6 +133,8 @@ if ($HiddenDesktop) {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
     $p = [System.Diagnostics.Process]::Start($psi)
+    # Joined after it starts, which is safe because Godot starts no child process of its own.
+    Add-ToRunJob -Process $p.Handle
     # Both pipes drained asynchronously before the wait, or a chatty launch fills the
     # ~4 KB buffer and deadlocks.
     $outRead = $p.StandardOutput.ReadToEndAsync()
@@ -156,4 +160,5 @@ if ($code -eq 124) {
 } else {
     Write-Host ("exit: {0}" -f $code) -ForegroundColor $(if ($code -eq 0) { "Green" } else { "Red" })
 }
+Close-RunJob
 exit $code

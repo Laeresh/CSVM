@@ -815,6 +815,39 @@ via `EnumWindows` (SHELL-13). Every `RunTests.ps1` stage launches through its pr
 `Invoke-Godot` helper, which uses the non-console binary and redirects both streams to
 `<its --log-file>.out` / `.err` (SHELL-10).
 
+### The run's job object: children die with the runner
+
+`RunTests.ps1` and `RunProbe.ps1` put every process they start into one Windows job object per
+run, created with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` before the first launch and closed after
+the summary (`JobObject.ps1`, dot-sourced through `HiddenDesktop.ps1`). The only handle to the job
+is the runner's, so the kernel closes it however the runner's process ends (a tool-call cap,
+`Stop-Process`, a crash), and every Godot shard, golden shot, `dotnet test`
+testhost and MSBuild node of that run dies with it. Killing a runner's PowerShell mid-engine-stage
+leaves no Godot from it within 3 s. Without the job nothing else waits on those children, so they
+run on beside the next run.
+
+- **Assigned before it runs.** A hidden-desktop launch is created suspended, joined, then resumed.
+  `dotnet build` / `dotnet test` and the visible-desktop fallback are started through
+  `ProcessStartInfo`, which cannot start a process suspended, so they join straight after the
+  start; a child started in that window would run outside the job, and neither Godot nor the
+  dotnet host starts one that early. `Invoke-Dotnet` writes dotnet's stdout and stderr lines to the
+  runner's output as they arrive, so a caller's pipe or redirection still receives them.
+- **Shared build servers stay out (SHELL-22).** The job allows silent breakaway while `dotnet
+  build` runs, so only the `dotnet` process is a member and every child of the build (MSBuild
+  nodes, the compiler server, any `Exec` task) runs outside the job and outlives the run as usual.
+  `dotnet test` runs with `MSBUILDDISABLENODEREUSE=1` so its nodes belong to this run alone.
+- **The runner itself is never a member**, or the close at the summary would kill the shell it was
+  started from. A second run in the same PowerShell session first closes a job an interrupted run
+  left open, which kills that run's leftovers.
+- **Refused, it runs without it.** A session whose own job forbids nesting gets one yellow line
+  and an unprotected run, never a failure; `Stop-StrayGodots` (SHELL-2) remains the backstop.
+  Nested assignment works under the job Claude Code runs its shell in, on Windows 11.
+- **The seam for other limits** is `[CSVMRunJob]::Handle`: priority, affinity or memory limits set
+  on the job reach every member, testhosts included. A limit is read, modified and written back,
+  as `SetBreakaway` does, because a plain write replaces every flag, the kill on close among them.
+- `.\JobObject.ps1 -SelfTest` toggles breakaway on and off, starts a child that starts a
+  grandchild, closes the job, and checks both are gone.
+
 **`RunProbe.ps1`, the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
 both the window flash and the console scribble a bare `& $GodotExe …` sprays over the calling
 terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run, go through

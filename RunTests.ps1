@@ -320,6 +320,8 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
 # refused, just visibly.
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop
+# Every child below joins this job, held until the summary, so a killed runner takes them with it.
+$null = Open-RunJob
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -401,6 +403,8 @@ function Start-Godot {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
     $p = [System.Diagnostics.Process]::Start($psi)
+    # Joined after it starts, which is safe because Godot starts no child process of its own.
+    Add-ToRunJob -Process $p.Handle
     return [pscustomobject]@{
         Kind = "process"; Process = $p; StreamBase = $streamBase
         OutRead = $p.StandardOutput.ReadToEndAsync()
@@ -428,6 +432,56 @@ function Wait-Godot {
     [System.IO.File]::WriteAllText("$($Launch.StreamBase).out", $Launch.OutRead.Result)
     [System.IO.File]::WriteAllText("$($Launch.StreamBase).err", $Launch.ErrRead.Result)
     return $code
+}
+
+# Runs dotnet to completion in the run's job, writing its stdout and stderr lines to this script's
+# output as they arrive and setting $LASTEXITCODE, as the call operator would. The call operator
+# gives no handle to join to the job; this start does. Stderr lines arrive as plain strings, never
+# as the ErrorRecords that under "Stop" would end the run mid-stage.
+function Invoke-Dotnet {
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [hashtable]$Environment = @{}
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName        = "dotnet"
+    $psi.Arguments       = (($Arguments | ForEach-Object {
+        if ($_ -match '[\s"]') { '"{0}"' -f ($_ -replace '"', '\"') } else { $_ }
+    }) -join " ")
+    $psi.UseShellExecute        = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $psi.StandardOutputEncoding = [Console]::OutputEncoding
+    $psi.StandardErrorEncoding  = [Console]::OutputEncoding
+    foreach ($name in $Environment.Keys) {
+        $psi.EnvironmentVariables[$name] = $Environment[$name]
+    }
+    $p = [System.Diagnostics.Process]::Start($psi)
+    # Joined after it starts, since ProcessStartInfo cannot start suspended: a child dotnet started
+    # before this line would run outside the job, and its host has the SDK to load before it starts any.
+    Add-ToRunJob -Process $p.Handle
+    # Both streams are read at once, or a full stderr pipe blocks dotnet while stdout is drained.
+    $readers = @($p.StandardOutput, $p.StandardError)
+    $pending = @($readers[0].ReadLineAsync(), $readers[1].ReadLineAsync())
+    while ($pending[0] -or $pending[1]) {
+        for ($i = 0; $i -lt 2; $i++) {
+            if ($pending[$i] -and $pending[$i].IsCompleted) {
+                $line = $pending[$i].Result
+                if ($null -eq $line) {
+                    $pending[$i] = $null
+                } else {
+                    $line
+                    $pending[$i] = $readers[$i].ReadLineAsync()
+                }
+            }
+        }
+        $open = @($pending | Where-Object { $_ })
+        if ($open.Count -gt 0) {
+            $null = [System.Threading.Tasks.Task]::WaitAny([System.Threading.Tasks.Task[]]$open, 250)
+        }
+    }
+    $p.WaitForExit()
+    $global:LASTEXITCODE = $p.ExitCode
 }
 
 $Stages   = New-Object System.Collections.ArrayList
@@ -717,15 +771,13 @@ if ($Quick) {
 
 Write-Stage-Banner "build"
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
-# PowerShell 5.1 wraps a native command's stderr in ErrorRecords as soon as this script's own
-# output is redirected -- a caller piping it into Select-String or a file is enough -- and under
-# $ErrorActionPreference = "Stop" the first such line kills the run mid-stage, orphaning whatever
-# it had launched. Every native call here is judged by its exit code, so they run non-terminating;
-# cmdlets keep Stop, because a silently failed Remove-Item would score a stage from a stale file.
-$ErrorActionPreference = "Continue"
-dotnet build $Sln
+# Breakaway while it builds, so only dotnet itself is in the job and every child it starts runs
+# outside it: its MSBuild nodes and compiler server are shared with every other build on this
+# machine, and the job's close would kill them under a sibling's build.
+Set-RunJobBreakaway -On $true
+Invoke-Dotnet -Arguments @("build", $Sln)
 $buildCode = $LASTEXITCODE
-$ErrorActionPreference = "Stop"
+Set-RunJobBreakaway -On $false
 $watch.Stop()
 if ($buildCode -eq 0) {
     Add-Stage -Name "build" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail "dotnet build CSVM.sln"
@@ -750,15 +802,15 @@ if ($SkipUnits) {
         Remove-Item -Path $trx -Force
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
-    $ErrorActionPreference = "Continue"
+    $testArgs = @("test", $Sln, "--no-build", "--nologo")
     if ($UnitFilter) {
-        dotnet test $Sln --no-build --nologo --filter $UnitFilter `
-            --results-directory $trxDir --logger "trx;LogFileName=units.trx"
-    } else {
-        dotnet test $Sln --no-build --nologo --results-directory $trxDir --logger "trx;LogFileName=units.trx"
+        $testArgs += @("--filter", $UnitFilter)
     }
+    $testArgs += @("--results-directory", $trxDir, "--logger", "trx;LogFileName=units.trx")
+    # The testhosts must stay in the job, so no breakaway here; this run's MSBuild nodes are made
+    # private instead, so the job's close cannot kill a node a sibling's build has taken over.
+    Invoke-Dotnet -Arguments $testArgs -Environment @{ MSBUILDDISABLENODEREUSE = "1" }
     $unitCode = $LASTEXITCODE
-    $ErrorActionPreference = "Stop"
     $watch.Stop()
 
     # The test host is gone now, so its temp roots (%TEMP%\csvm-tests\run-<pid>-*) delete in
@@ -901,6 +953,9 @@ if ($SkipEngine) {
     Write-Host "  net ports: slot $netSlotNumber, bases $(($shardRuns | ForEach-Object { $_.NetPortBase }) -join ', ')" -ForegroundColor DarkGray
 
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    # Native calls run non-terminating, here and in the stages below: PowerShell 5.1 wraps their
+    # stderr in ErrorRecords once this script's output is redirected, and under "Stop" the first one
+    # ends the run mid-stage. They are judged by exit code; cmdlets keep "Stop" elsewhere.
     $ErrorActionPreference = "Continue"
     try {
         foreach ($shard in $shardRuns) {
@@ -2042,6 +2097,7 @@ if ($HiddenDesktop) {
     Write-Host "  windows: THIS desktop -- the hidden one was refused, so launches were visible" -ForegroundColor Yellow
 }
 Close-HiddenDesktop
+Close-RunJob
 if ($failedStages.Count -gt 0) {
     Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
 } else {
