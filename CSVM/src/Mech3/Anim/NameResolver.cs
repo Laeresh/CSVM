@@ -183,11 +183,6 @@ public sealed class NameResolver<TNode>
         }
     }
 
-    /// <summary>Drops every memoized <see cref="FindAll"/> answer. Rows <see cref="Add"/> appends
-    /// no longer need it: a cached answer extends over them on its next query, and only the
-    /// appended rows are scanned.</summary>
-    public void ClearFindCache() => _findCache.Clear();
-
     /// <summary>Drops every row naming a node the liveness test now rejects, with the ancestry
     /// entries and cached answers keyed on one. Nothing tells this index a node has gone, and the
     /// identity comparer dereferences whatever it is handed. A dead key therefore throws for the
