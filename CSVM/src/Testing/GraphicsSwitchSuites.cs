@@ -784,6 +784,7 @@ internal static class GraphicsSwitchSuites
         ctx.Host.AddChild(pane);
         var session = new GameSession(spec, new LauncherContext
         {
+            Decode = ctx.Decode,
             RepoRoot = ctx.RepoRoot,
             DataRoot = ctx.DataRoot,
             PlanesGamezPath = ctx.PlanesGamezPath,

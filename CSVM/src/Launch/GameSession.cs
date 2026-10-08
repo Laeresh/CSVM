@@ -148,6 +148,7 @@ public partial class GameSession : Node3D
     private readonly string _soundsPath;
     private readonly string _interpPath;
     private readonly string _messagesPath;
+    private readonly DecodeCache? _decode;
     // the extracted UI archive (paint patterns)
     private readonly string _rofPath;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
@@ -335,6 +336,7 @@ public partial class GameSession : Node3D
         _soundsPath = ctx.SoundsPath;
         _interpPath = ctx.InterpPath;
         _messagesPath = ctx.MessagesPath;
+        _decode = ctx.Decode;
         _rofPath = ctx.RofPath;
         _probeRunner = ctx.ProbeRunner;
         _captureDirector = ctx.CaptureDirector;
@@ -1275,7 +1277,7 @@ public partial class GameSession : Node3D
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute);
+            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute, _decode);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;
@@ -1433,6 +1435,7 @@ public partial class GameSession : Node3D
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
+                Decode = _decode,
                 EffectsParent = _worldRoot!,
                 // The one instance the weather rig publishes to and the player's own effects read.
                 // Without it the world's emitters hold the camera-less still-air null object, which
@@ -1735,7 +1738,7 @@ public partial class GameSession : Node3D
         // gamez is then that chapter's, and planes.zbd has to be loaded here as everywhere else.
         var planesGamez = _spec.EmptyStage && _spec.Zep == null
             ? state.Gamez
-            : GameZ.Load(state.PlanesGamezPath);
+            : _decode?.Gamez(state.PlanesGamezPath) ?? GameZ.Load(state.PlanesGamezPath);
         StartupProfile.Record("gamez", mark);
         // Stats are per plane, not per player (splitscreen players can pick
         // different aircraft), load each distinct one once, logging it as it appears.
