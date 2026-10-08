@@ -5,8 +5,9 @@
 # IT FIRES ON AN INVOCATION, NEVER A MENTION. The old guard was a substring test over the whole
 # command, so reading, grepping or listing RunTests.ps1 rebuilt the assembly as surely as running
 # it did, and a golden battery reading that tree mid-rebuild found no assembly at all
-# (docs/verification.md INSTR-42). A command segment (the whole command, or a piece after ";",
-# "&&", "||" or "|") counts only when it BEGINS with the runner, "dotnet test" or "git commit".
+# (docs/verification.md INSTR-42). A statement counts only when it BEGINS with the runner (bare,
+# through "&", or as "powershell -File"), "dotnet test" or "git commit". Where a statement begins
+# is GateCommand.ps1's decision, shared with the content gate so the two cannot drift apart.
 #
 # THE BUILD IS A REBUILD ON PURPOSE. Analyzer warnings are emitted only when the compiler runs,
 # and an incremental build of an up-to-date project skips CoreCompile, so a plain build would
@@ -15,10 +16,13 @@
 #
 # THE TREE IS THE ONE THE COMMAND NAMES. dotnet format WRITES, so formatting the wrong tree is
 # worse than checking it. The runner's own path names a tree (an absolute RunTests.ps1 lives in
-# one), a "git -C <tree>" names one, and only when neither does is the process directory used.
-# A Set-Location inside the same command cannot be honoured: a pre-tool hook runs before it. A
-# tree written as a variable is read from a quoted literal assigned to it in the same command, and
-# an invocation naming its tree any other way through a variable or expression is BLOCKED.
+# one), then a "git -C <tree>" or --work-tree, then a directory change ahead of the invocation
+# (Set-Location <tree>; .\RunTests.ps1), and only when none does is the process directory used.
+# The hook runs before the command, so that move is read off the command string, as the content
+# gate reads it; ignoring it formatted the session's own tree (often the main checkout) while the
+# runner tested another. A tree written as a variable is read from a quoted literal assigned to it
+# earlier in the same command, and an invocation naming its tree any other way through a variable
+# or expression is BLOCKED.
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md). Exit code 2 blocks the tool call.
 #
@@ -37,121 +41,53 @@ param(
 $scriptRoot = $PSScriptRoot
 if (-not $scriptRoot) { $scriptRoot = (Get-Location).Path }
 
-# A path as written on the command line, minus the quoting.
-function Get-UnquotedPath {
-    param([string]$Raw)
-    $t = $Raw.Trim()
-    if ($t.Length -ge 2) {
-        $q = $t[0]
-        if (($q -eq '"' -or $q -eq [char]39) -and $t[$t.Length - 1] -eq $q) {
-            return $t.Substring(1, $t.Length - 2)
-        }
-    }
-    return $t
+# The command-line reading both gates share. A missing helper is reported, not turned into a block:
+# a gate that cannot parse would otherwise refuse every shell command the session runs.
+$gateCommand = Join-Path $scriptRoot 'GateCommand.ps1'
+if (-not (Test-Path -LiteralPath $gateCommand -PathType Leaf)) {
+    [Console]::Error.WriteLine('FormatBeforeTests.ps1: ' + $gateCommand + ' is missing, so the format gate did not run.')
+    exit 1
 }
+. $gateCommand
+$q = $GateQuote
 
-# One quoted-or-bare token. Parenthesised because "," binds tighter than "+" in PowerShell.
-$q = [char]39
-$tokenGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|\S+)'
-$runnerGroup = '("[^"]*RunTests\.ps1"|' + $q + '[^' + $q + ']*RunTests\.ps1' + $q + '|[^\s"' + $q + ']*RunTests\.ps1)'
+# What this gate guards, each at the head of a statement: the runner, written bare, through "&" or
+# behind "powershell -File" / "pwsh -File" with any host options before -File; "dotnet test"; and a
+# git commit. One pattern, so the first invocation in the command is the one that is resolved.
+$runnerPath = '(?<path>"[^"]*RunTests\.ps1"|' + $q + '[^' + $q + ']*RunTests\.ps1' + $q + '|[^\s"' + $q + ']*RunTests\.ps1)'
+$hostFile = '(?:(?:[^\s"' + $q + ']*[\\/])?(?i:powershell|pwsh)(?i:\.exe)?(?:\s+(?!(?i:-file)\s)\S+)*?\s+(?i:-file)\s+)?'
+$formatInvocation = $GateStatementStart + '(?:(?<runner>' + $hostFile + $runnerPath + '(?:\s|$))' +
+    '|(?<test>dotnet\s+test(?:\s|$))|(?<commit>' + $GateGitCommit + '))'
 
-# git's own global options, which are what stands between "git" and its subcommand in the form
-# CLAUDE.md prescribes for naming a tree, "git -C <tree> commit". A trigger testing for the two
-# words adjacent misses every one of those, and one accepting any tokens in the gap turns
-# "git log --grep='a git commit'" into a commit and formats a tree on the strength of a quoted word.
-$gitGlobal = '(?:-[Cc]\s+' + $tokenGroup +
-    '|--(?:git-dir|work-tree|namespace|exec-path|super-prefix|config-env)(?:=|\s+)' + $tokenGroup +
-    '|--[a-z][a-z-]*|-[a-zA-Z])'
-
-# Splits a command into the pieces a shell would run one after another. A separator inside a
-# quoted string splits too; the piece that follows then begins mid-string and matches nothing,
-# which is the right answer for a mention.
-function Get-CommandSegments {
-    param([string]$CommandLine)
-    return @([regex]::Split($CommandLine, '&&|\|\||;|\|') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-}
-
-# What, if anything, this command invokes. Returns Kind ('runner', 'test', 'commit') and the tree
-# the invocation itself names (the runner's directory or a -C path), or nothing for a mention.
+# What, if anything, this command invokes. Returns Kind ('runner', 'test', 'commit'), the tree the
+# invocation itself names (the runner's directory, or the commit's -C/--work-tree), and Before, the
+# command ahead of it, which is where a move or an assignment the invocation depends on must be.
 function Get-Invocation {
     param([string]$CommandLine)
-    foreach ($seg in (Get-CommandSegments -CommandLine $CommandLine)) {
-        $s = $seg -replace '^\s*&\s*', ''
-        $m = [regex]::Match($s, '^' + $runnerGroup + '(?:\s|$)')
-        if ($m.Success) {
-            $path = Get-UnquotedPath -Raw $m.Groups[1].Value
-            $dir = Split-Path -Parent $path
-            if ($dir -eq '.' -or $dir -eq '.\' -or $dir -eq './') { $dir = '' }
-            return [pscustomobject]@{ Kind = 'runner'; Tree = $dir }
-        }
-        if ($s -match '^dotnet\s+test(?:\s|$)') {
-            return [pscustomobject]@{ Kind = 'test'; Tree = '' }
-        }
-        if ($s -match ('^git(?:\s+' + $gitGlobal + ')*\s+commit(?:\s|$)')) {
-            $c = [regex]::Match($s, '(?:^|\s)-C\s+' + $tokenGroup)
-            $tree = ''
-            if ($c.Success) { $tree = Get-UnquotedPath -Raw $c.Groups[1].Value }
-            return [pscustomobject]@{ Kind = 'commit'; Tree = $tree }
-        }
-    }
-    return $null
-}
-
-function Resolve-Toplevel {
-    param([string]$Path)
-    if (-not $Path) { return '' }
-    if (-not (Test-Path -LiteralPath $Path)) { return '' }
-    $top = git -C $Path rev-parse --show-toplevel 2>$null
-    if (-not $top) { return '' }
-    $sep = [IO.Path]::DirectorySeparatorChar
-    return (([string]$top) -replace '[\\/]', $sep).TrimEnd($sep)
-}
-
-# A tree written as a variable ("git -C $wt commit", "& $wt\RunTests.ps1") names no path this
-# hook can see, and falling back to the process directory formats a tree the command never named.
-# So a variable is resolved only from a quoted literal assigned to it in the same command, and
-# anything else returns $null for the caller to refuse. Any other token comes back unchanged.
-function Resolve-CommandVariable {
-    param([string]$CommandLine, [string]$Token)
-    if ($Token.StartsWith('(')) { return $null }
-    if (-not $Token.StartsWith('$')) { return $Token }
-    $m = [regex]::Match($Token, '^\$(?:\{([^}]+)\}|((?:env:)?\w+))(.*)$')
+    $m = [regex]::Match($CommandLine, $formatInvocation)
     if (-not $m.Success) { return $null }
-    $name = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
-    $rest = $m.Groups[3].Value
-    if ($rest -and $rest -notmatch '^[\\/][^$(]*$') { return $null }
-    $n = [regex]::Escape($name)
-    $assign = '(?:^|[;\r\n{(|&])\s*\$(?:\{' + $n + '\}|' + $n + ')\s*=\s*("[^"$`]*"|' +
-        $q + '[^' + $q + ']*' + $q + ')\s*(?=$|[;\r\n|&}])'
-    $found = $null
-    foreach ($a in [regex]::Matches($CommandLine, $assign, 'IgnoreCase')) {
-        $found = Get-UnquotedPath -Raw $a.Groups[1].Value
+    $before = $CommandLine.Substring(0, $m.Index)
+    if ($m.Groups['runner'].Success) {
+        $path = Get-UnquotedPath -Raw $m.Groups['path'].Value
+        $dir = Split-Path -Parent $path
+        if ($dir -eq '.' -or $dir -eq '.\' -or $dir -eq './') { $dir = '' }
+        return [pscustomobject]@{ Kind = 'runner'; Tree = $dir; Before = $before }
     }
-    if ($null -eq $found) { return $null }
-    return $found + $rest
+    if ($m.Groups['test'].Success) {
+        return [pscustomobject]@{ Kind = 'test'; Tree = ''; Before = $before }
+    }
+    return [pscustomobject]@{ Kind = 'commit'; Tree = (Get-NamedTree -CommandLine $m.Value); Before = $before }
 }
 
 # The tree to format and build as Root, empty when the command invokes nothing, or Unresolved when
 # the command names its tree through a variable or expression; the caller blocks that case. The
-# invocation's own tree wins; a "git -C <tree>" anywhere in the command is next, which keeps the
-# documented "git -C <tree> rev-parse; .\RunTests.ps1" form working; the process directory is last.
+# precedence is GateCommand.ps1's Resolve-CommandTree, led by the invocation's own tree.
 function Resolve-TargetTree {
     param([string]$CommandLine, [string]$From)
     if (-not $From) { $From = (Get-Location).Path }
-    $none = [pscustomobject]@{ Root = ''; Unresolved = '' }
     $inv = Get-Invocation -CommandLine $CommandLine
-    if (-not $inv) { return $none }
-    $candidates = @()
-    if ($inv.Tree) { $candidates += $inv.Tree }
-    $c = [regex]::Match($CommandLine, '(?:^|\s)-C\s+' + $tokenGroup)
-    if ($c.Success) { $candidates += (Get-UnquotedPath -Raw $c.Groups[1].Value) }
-    foreach ($candidate in $candidates) {
-        $path = Resolve-CommandVariable -CommandLine $CommandLine -Token $candidate
-        if ($null -eq $path) { return [pscustomobject]@{ Root = ''; Unresolved = $candidate } }
-        $top = Resolve-Toplevel -Path $path
-        if ($top) { return [pscustomobject]@{ Root = $top; Unresolved = '' } }
-    }
-    return [pscustomobject]@{ Root = (Resolve-Toplevel -Path $From); Unresolved = '' }
+    if (-not $inv) { return [pscustomobject]@{ Root = ''; Unresolved = '' } }
+    return Resolve-CommandTree -CommandLine $CommandLine -Before $inv.Before -From $From -First @($inv.Tree)
 }
 
 function Get-TargetRoot {
@@ -237,7 +173,26 @@ function Invoke-SelfTest {
         Assert-Fires 'mention  git commit-tree is a different subcommand' 'git commit-tree HEAD -m x' ''
         Assert-Fires 'mention  a non-global token before commit' 'git log commit' ''
 
-        # Tree resolution: the invocation names it, a -C names it, the process directory is last.
+        # Statement boundaries beyond ";", "&&", "||" and "|", and the runner behind a host. These
+        # are the forms the format gate's own splitter once missed while the content gate fired.
+        $nl = [string][char]10
+        Assert-Fires 'commit   after a newline' ('git add -A' + $nl + 'git commit -m x') 'commit'
+        Assert-Fires 'commit   after a CRLF' ('git add -A' + [char]13 + $nl + 'git commit -m x') 'commit'
+        Assert-Fires 'commit   inside a braced block' 'if ($ok) { git commit -m x }' 'commit'
+        Assert-Fires 'commit   through the call operator' '& git commit -m x' 'commit'
+        Assert-Fires 'runner   after a newline' ('Get-Date' + $nl + '.\RunTests.ps1') 'runner'
+        Assert-Fires 'runner   inside a braced block' 'if ($ok) { .\RunTests.ps1 -Quick }' 'runner'
+        Assert-Fires 'runner   powershell -File' 'powershell -File .\RunTests.ps1' 'runner'
+        Assert-Fires 'runner   powershell.exe with options before -File' (
+            'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $other + '\RunTests.ps1" -Quick') 'runner'
+        Assert-Fires 'runner   pwsh -file in lower case' 'pwsh -nop -file ./RunTests.ps1' 'runner'
+        Assert-Fires 'test     dotnet test after a newline' ('dotnet build' + $nl + 'dotnet test CSVM.Tests') 'test'
+        Assert-Fires 'mention  powershell -File running another script' 'powershell -File .\Other.ps1 RunTests.ps1' ''
+        Assert-Fires 'mention  powershell -Command reading the runner' 'powershell -Command Get-Content .\RunTests.ps1' ''
+        Assert-Fires 'mention  a runner path in a here-string body' ('$s = @"' + $nl + 'see .\RunTests.ps1 -Quick' + $nl + '"@') ''
+
+        # Tree resolution: the invocation names it, a -C or --work-tree names it, a move ahead of
+        # the invocation names it, the process directory is last.
         $r1 = Get-TargetRoot -CommandLine ($other + '\RunTests.ps1 -Quick') -From $main
         Assert-Row 'tree     an absolute runner path names its own tree' ($r1 -ieq $other)
         $r2 = Get-TargetRoot -CommandLine ('git -C ' + $other + ' commit -m x') -From $main
@@ -246,8 +201,28 @@ function Invoke-SelfTest {
         Assert-Row 'tree     a leading quoted git -C reaches a relative runner' ($r3 -ieq $other)
         $r4 = Get-TargetRoot -CommandLine '.\RunTests.ps1 -Quick' -From $main
         Assert-Row 'tree     a bare runner uses the process directory' ($r4 -ieq $main)
+        # The runner tests the tree it is moved to, so that is the tree to format; the session's
+        # own tree (often the main checkout) is one the command never touches.
         $r5 = Get-TargetRoot -CommandLine ('Set-Location ' + $other + '; .\RunTests.ps1 -Quick') -From $main
-        Assert-Row 'tree     a same-call Set-Location is not honoured' ($r5 -ieq $main)
+        Assert-Row 'tree     a same-call Set-Location names the tree moved to' ($r5 -ieq $other)
+        $r5b = Get-TargetRoot -CommandLine ('Set-Location "' + $other + '"' + $nl + '.\RunTests.ps1 -Quick') -From $main
+        Assert-Row 'tree     a quoted Set-Location on its own line is the same move' ($r5b -ieq $other)
+        $r5c = Get-TargetRoot -CommandLine ('.\RunTests.ps1 -Quick; Set-Location ' + $other) -From $main
+        Assert-Row 'tree     a move AFTER the runner is not its tree' ($r5c -ieq $main)
+        $r5d = Get-TargetRoot -CommandLine ('Push-Location ' + $main + '; & ' + $other + '\RunTests.ps1') -From $main
+        Assert-Row 'tree     an absolute runner path outranks a move' ($r5d -ieq $other)
+        $r5e = Get-TargetRoot -CommandLine ('Set-Location ' + $base + '; ' + (Join-Path 'other' 'RunTests.ps1')) -From $main
+        Assert-Row 'tree     a relative runner path is taken from the directory moved to' ($r5e -ieq $other)
+        $r5f = Resolve-TargetTree -CommandLine 'Set-Location $wt; .\RunTests.ps1' -From $main
+        Assert-Row 'tree     a move to an unassigned variable is unresolved' ($r5f.Unresolved -eq '$wt' -and -not $r5f.Root)
+        $r11 = Get-TargetRoot -CommandLine ('git --work-tree=' + $other + ' --git-dir=' + (Join-Path $other '.git') + ' commit -m x') -From $main
+        Assert-Row 'tree     --work-tree names the commit tree' ($r11 -ieq $other)
+        $r12 = Get-TargetRoot -CommandLine ('git --git-dir "' + (Join-Path $other '.git') + '" commit -m x') -From $main
+        Assert-Row 'tree     a lone --git-dir names the tree around it' ($r12 -ieq $other)
+        $r13 = Get-TargetRoot -CommandLine ('powershell -NoProfile -File ' + (Join-Path $other 'RunTests.ps1') + ' -Quick') -From $main
+        Assert-Row 'tree     a powershell -File runner names its own tree' ($r13 -ieq $other)
+        $r14 = Get-TargetRoot -CommandLine ('git add -A' + $nl + 'git -C ' + $other + ' commit -m x') -From $main
+        Assert-Row 'tree     a commit after a newline keeps its -C tree' ($r14 -ieq $other)
         $r6 = Get-TargetRoot -CommandLine 'Get-Content .\RunTests.ps1' -From $main
         Assert-Row 'tree     a mention resolves no tree' (-not $r6)
         # dotnet format WRITES, so a lowercase -c read as -C would format a tree named by a config

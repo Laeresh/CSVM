@@ -50,6 +50,15 @@ param(
 $scriptRoot = $PSScriptRoot
 if (-not $scriptRoot) { $scriptRoot = (Get-Location).Path }
 
+# The command-line reading both gates share (GateCommand.ps1). A missing helper is reported, not
+# turned into a block: a gate that cannot parse would otherwise refuse every shell command.
+$gateCommand = Join-Path $scriptRoot 'GateCommand.ps1'
+if (-not (Test-Path -LiteralPath $gateCommand -PathType Leaf)) {
+    [Console]::Error.WriteLine('CheckCommitContent.ps1: ' + $gateCommand + ' is missing, so the content gate did not run.')
+    exit 1
+}
+. $gateCommand
+
 $checks = @(
     @{ Name = 'encoding';        Script = 'CheckEncoding.ps1' },
     @{ Name = 'item IDs';        Script = 'CheckItemIds.ps1' },
@@ -70,83 +79,12 @@ $checks = @(
 # "git log --grep='a git commit'" a commit; matching the bare word would make "git log --grep=commit"
 # one; and starting anywhere would make a commit quoted inside another command's argument one.
 $q = [char]39
-$anyToken = '(?:"[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s]+)'
-$gitGlobal = '(?:-[Cc]\s+' + $anyToken +
-    '|--(?:git-dir|work-tree|namespace|exec-path|super-prefix|config-env)(?:=|\s+)' + $anyToken +
-    '|--[a-z][a-z-]*|-[a-zA-Z])'
-$commitInvocation = '(?:^|[\r\n;|&{(])\s*&?\s*git(?:\s+' + $gitGlobal + ')*\s+commit(?:\s|$)'
+# The pieces (where a statement begins, git's globals) are GateCommand.ps1's, shared with the
+# format gate; what this gate guards is a commit and nothing else.
+$commitInvocation = $GateStatementStart + $GateGitCommit
 
-# A path as written on the command line, minus the quoting.
-function Get-UnquotedPath {
-    param([string]$Raw)
-    $t = $Raw.Trim()
-    if ($t.Length -ge 2) {
-        $q = $t[0]
-        if (($q -eq '"' -or $q -eq [char]39) -and $t[$t.Length - 1] -eq $q) {
-            return $t.Substring(1, $t.Length - 2)
-        }
-    }
-    return $t
-}
-
-# Which tree will this command write to? Empty when it does not say, which is the sweep case.
-function Get-NamedTree {
-    param([string]$CommandLine)
-    # Each element is parenthesised because "," binds tighter than "+" in PowerShell: without the
-    # parentheses these three concatenations collapse into one nested array and nothing matches.
-    $q = [char]39
-    $pathGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s]+)'
-    $patterns = @(
-        ('(?:^|\s)-C\s+' + $pathGroup),
-        ('--work-tree[=\s]+' + $pathGroup),
-        ('--git-dir[=\s]+' + $pathGroup)
-    )
-    foreach ($p in $patterns) {
-        $m = [regex]::Match($CommandLine, $p)
-        if ($m.Success) { return Get-UnquotedPath -Raw $m.Groups[1].Value }
-    }
-    return ''
-}
-
-# git speaks forward slashes and Windows PowerShell speaks backslashes; a trailing separator makes
-# two spellings of the same tree compare unequal, which is how a swept root gets checked twice. The
-# separator is the OS's own, since a backslash path on macOS or Linux names nothing.
-function ConvertTo-NormalPath {
-    param([string]$Path)
-    if (-not $Path) { return '' }
-    $sep = [IO.Path]::DirectorySeparatorChar
-    return ($Path -replace '[\\/]', $sep).TrimEnd($sep)
-}
-
-function Resolve-Toplevel {
-    param([string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) { return '' }
-    $top = git -C $Path rev-parse --show-toplevel 2>$null
-    if (-not $top) { return '' }
-    return (ConvertTo-NormalPath -Path ([string]$top))
-}
-
-# Which directory does this command move to before it commits? Empty when it does not move. Only
-# a change standing BEFORE the commit counts, since one after it cannot affect where it lands, and
-# the last such change wins because that is the directory the commit runs in.
-function Get-ChangedDirectory {
-    param([string]$CommandLine)
-    $commit = [regex]::Match($CommandLine, $commitInvocation)
-    $upTo = if ($commit.Success) { $CommandLine.Substring(0, $commit.Index) } else { $CommandLine }
-    $q = [char]39
-    $pathGroup = '("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s;|&]+)'
-    # Anchored on a statement boundary so a bare "cd" inside a word or a flag value never matches,
-    # and the optional -Path/-LiteralPath is how Set-Location and Push-Location are spelled out.
-    $pattern = '(?:^|[;|&]|^\s*)\s*(?:Set-Location|Push-Location|chdir|pushd|sl|cd)\s+(?:-(?:Literal)?Path\s+)?' + $pathGroup
-    $found = ''
-    foreach ($m in [regex]::Matches($upTo, $pattern)) {
-        $candidate = Get-UnquotedPath -Raw $m.Groups[1].Value
-        if ($candidate -and -not $candidate.StartsWith('-')) { $found = $candidate }
-    }
-    return $found
-}
-
-# The command up to its commit invocation, which is where an assignment the commit reads must be.
+# The command up to its commit invocation, which is where an assignment the commit reads, or a
+# directory change that moves it, must be.
 function Get-TextBeforeCommit {
     param([string]$CommandLine)
     $commit = [regex]::Match($CommandLine, $commitInvocation)
@@ -154,58 +92,18 @@ function Get-TextBeforeCommit {
     return $CommandLine
 }
 
-# A tree written as a variable ("git -C $wt commit") names no path the hook can see, and the old
-# fallback to the hook's own tree checked the wrong one. So a variable is resolved only from a
-# literal assignment earlier in the same command, and anything else returns $null for the caller
-# to refuse. A token that is not a variable or an expression comes back unchanged.
-function Resolve-CommandVariable {
-    param([string]$Before, [string]$Token)
-    if ($Token.StartsWith('(')) { return $null }
-    if (-not $Token.StartsWith('$')) { return $Token }
-    $m = [regex]::Match($Token, '^\$(?:\{([^}]+)\}|((?:env:)?\w+))(.*)$')
-    if (-not $m.Success) { return $null }
-    $name = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
-    $rest = $m.Groups[3].Value
-    if ($rest -and $rest -notmatch '^[\\/][^$(]*$') { return $null }
-    $q = [char]39
-    $n = [regex]::Escape($name)
-    $assign = '(?:^|[;\r\n{(|&])\s*\$(?:\{' + $n + '\}|' + $n + ')\s*=\s*("[^"$`]*"|' +
-        $q + '[^' + $q + ']*' + $q + ')\s*(?=$|[;\r\n|&}])'
-    $found = $null
-    foreach ($a in [regex]::Matches($Before, $assign, 'IgnoreCase')) {
-        $found = Get-UnquotedPath -Raw $a.Groups[1].Value
-    }
-    if ($null -eq $found) { return $null }
-    return $found + $rest
-}
-
 # The tree this command writes to, as Roots, or as Unresolved when the command names it through a
-# variable or expression this gate cannot read; the caller blocks a commit in that case.
+# variable or expression this gate cannot read; the caller blocks a commit in that case. The
+# precedence (the tree git is pointed at, the directory moved to, the hook's own tree) is
+# GateCommand.ps1's Resolve-CommandTree.
 function Resolve-Target {
     param([string]$CommandLine, [string]$From)
     if (-not $From) { $From = $scriptRoot }
     $before = Get-TextBeforeCommit -CommandLine $CommandLine
-    # In precedence order, each read off the command itself. A candidate that does not resolve to
-    # a tree is not a reason to wave the commit through, so the next one is tried and the hook's
-    # own tree is the floor.
-    $named = Get-NamedTree -CommandLine $CommandLine
-    if ($named) {
-        $path = Resolve-CommandVariable -Before $before -Token $named
-        if ($null -eq $path) { return [pscustomobject]@{ Roots = @(); Unresolved = $named } }
-        $top = Resolve-Toplevel -Path $path
-        if ($top) { return [pscustomobject]@{ Roots = @($top); Unresolved = '' } }
-    }
-    $moved = Get-ChangedDirectory -CommandLine $CommandLine
-    if ($moved) {
-        $path = Resolve-CommandVariable -Before $before -Token $moved
-        if ($null -eq $path) { return [pscustomobject]@{ Roots = @(); Unresolved = $moved } }
-        if (-not [IO.Path]::IsPathRooted($path)) { $path = Join-Path $From $path }
-        $top = Resolve-Toplevel -Path $path
-        if ($top) { return [pscustomobject]@{ Roots = @($top); Unresolved = '' } }
-    }
-    $own = Resolve-Toplevel -Path $From
-    if ($own) { return [pscustomobject]@{ Roots = @($own); Unresolved = '' } }
-    return [pscustomobject]@{ Roots = @(); Unresolved = '' }
+    $t = Resolve-CommandTree -CommandLine $CommandLine -Before $before -From $From
+    $roots = @()
+    if ($t.Root) { $roots = @($t.Root) }
+    return [pscustomobject]@{ Roots = $roots; Unresolved = $t.Unresolved }
 }
 
 function Get-TargetRoots {
@@ -262,17 +160,17 @@ function Get-CommitMessage {
     $args2 = @(Get-CommitArguments -CommandLine $CommandLine)
     if ($args2.Count -eq 0) { return '' }
     $invocation = [regex]::Match($CommandLine, $commitInvocation).Value
-    $q = [char]39
     $base = $From
-    $dashC = [regex]::Match($invocation, '(?:^|\s)-C\s+("[^"]*"|' + $q + '[^' + $q + ']*' + $q + '|[^\s]+)')
-    $moved = Get-ChangedDirectory -CommandLine $CommandLine
+    # Only -C moves the directory git reads -F from; --work-tree and --git-dir do not.
+    $dashC = [regex]::Match($invocation, '(?:^|\s)-C\s+(' + $GateToken + ')')
     $before = Get-TextBeforeCommit -CommandLine $CommandLine
+    $moved = Get-ChangedDirectory -Before $before
     $dir = ''
     if ($dashC.Success) { $dir = Get-UnquotedPath -Raw $dashC.Groups[1].Value }
     elseif ($moved) { $dir = $moved }
     if ($dir) { $dir = Resolve-CommandVariable -Before $before -Token $dir }
     if ($dir) { $base = $dir }
-    if (-not [IO.Path]::IsPathRooted($base)) { $base = Join-Path $From $base }
+    $base = Join-CommandPath -Base $From -Path $base
 
     $parts = @()
     $valueLong = '^--(?:author|date|trailer|cleanup|reuse-message|reedit-message|template|fixup|squash|pathspec-from-file)$'
@@ -310,7 +208,7 @@ function Get-CommitMessage {
         if ($null -eq $value) { continue }
         if ($kind -eq 'message') { $parts += $value }
         elseif ($kind -eq 'file' -and $value -ne '-') {
-            $path = if ([IO.Path]::IsPathRooted($value)) { $value } else { Join-Path $base $value }
+            $path = Join-CommandPath -Base $base -Path $value
             if (Test-Path -LiteralPath $path -PathType Leaf) { $parts += [IO.File]::ReadAllText($path) }
         }
     }
@@ -455,6 +353,12 @@ function Invoke-SelfTest {
         $r3b = @(Get-TargetRoots -CommandLine ('cd "' + $wt + '"; git commit -m x') -From $main)
         Assert-Row 'row 3  a quoted cd is the same move' (
             $r3b.Count -eq 1 -and $r3b[0] -ieq $wtNormal)
+        $r3d = @(Get-TargetRoots -CommandLine ('Set-Location ' + $wt + [char]10 + 'git commit -m x') -From $main)
+        Assert-Row 'row 3  a Set-Location on its own line is the same move' (
+            $r3d.Count -eq 1 -and $r3d[0] -ieq $wtNormal)
+        $r3e = @(Get-TargetRoots -CommandLine ('git --git-dir "' + (Join-Path $wt '.git') + '" commit -m x') -From $main)
+        Assert-Row 'row 2  a lone --git-dir names the tree around it' (
+            $r3e.Count -eq 1 -and $r3e[0] -ieq $wtNormal)
         $r3c = @(Get-TargetRoots -CommandLine ('git commit -m x; Set-Location ' + $wt) -From $main)
         Assert-Row 'row 3  a move AFTER the commit is not the commit tree' (
             $r3c.Count -eq 1 -and $r3c[0] -ieq (ConvertTo-NormalPath -Path $main))
@@ -677,6 +581,8 @@ function Invoke-SelfTest {
         Assert-Trigger 'trigger  a commit after a Set-Location' 'Set-Location Z:\wt; git commit -m x' $true
         Assert-Trigger 'trigger  a commit through the call operator' '& git commit -m x' $true
         Assert-Trigger 'trigger  a commit inside a braced block' 'if ($ok) { git commit -m x }' $true
+        Assert-Trigger 'trigger  a commit after a newline' ('git add -A' + [char]10 + 'git commit -m x') $true
+        Assert-Trigger 'trigger  a commit after a CRLF' ('git add -A' + [char]13 + [char]10 + 'git commit -m x') $true
         Assert-Trigger 'trigger  git log --grep=commit is not a commit' 'git log --grep=commit' $false
         Assert-Trigger 'trigger  a commit quoted inside another git command is not one' (
             'git log --grep="a git commit here"') $false

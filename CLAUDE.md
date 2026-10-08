@@ -22,16 +22,17 @@ landing gate for any change under `CSVM/`.
   applies on Windows only: on macOS and Linux (under `pwsh`) Bash is the native shell.
   (3) The format gate, [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1): `dotnet format` and a
   `-t:Rebuild` that blocks on remaining StyleCop warnings, before an *invocation* of
-  `RunTests.ps1`, `dotnet test`, or `git commit`. A command segment counts only when it begins
-  with one of those, so reading, grepping or quoting the runner never builds. The Rebuild is
-  deliberate: analyzer warnings are emitted only when the compiler runs, and an incremental build
-  of an up-to-date tree reports nothing. (4) The content gate,
+  `RunTests.ps1` (bare, through `&`, or behind `powershell -File`), `dotnet test`, or
+  `git commit`. A statement (after a newline, `;`, `&&`, `||`, `|` or an opening brace) counts
+  only when it begins with one of those, so reading, grepping or quoting the runner never builds.
+  The Rebuild is deliberate: analyzer warnings are emitted only when the compiler runs, and an
+  incremental build of an up-to-date tree reports nothing. (4) The content gate,
   [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit.
   ⚠ **Hook (3) formats the tree the command names.** An absolute `RunTests.ps1` path names its
-  own tree, a `git -C <tree>` anywhere in the command names one, and only a command naming
-  neither falls back to the session's ambient cwd. A `Set-Location` inside the same command is
-  invisible to it, since a `PreToolUse` hook runs before the command does; do it first as its own
-  call. `.\FormatBeforeTests.ps1 -ShowRoot -Command '…'` says which tree a command would build,
+  own tree, then a `git -C <tree>` or `--work-tree` anywhere in the command, then a
+  `Set-Location <tree>` ahead of the invocation (read off the command string, as hook (4) reads
+  it), and only a command naming none of those falls back to the session's ambient cwd.
+  `.\FormatBeforeTests.ps1 -ShowRoot -Command '…'` says which tree a command would build,
   and `-SelfTest` exercises the trigger and the resolution.
 - **The content gate** runs six checks, each its own script you can also run by hand while
   editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
@@ -69,7 +70,9 @@ landing gate for any change under `CSVM/`.
   for naming a tree, so a trigger written that way skips the gate for every worktree-scoped commit.
   Only git's globals are allowed in that gap, which keeps `git log --grep=commit` and a commit
   quoted inside another command's argument out. Both self-tests enumerate those forms; extend them
-  rather than trusting a regex on inspection.
+  rather than trusting a regex on inspection. How a command is read (where a statement begins,
+  git's globals, the tree it names or moves to, a variable standing for a path) lives once, in
+  [`GateCommand.ps1`](GateCommand.ps1), dot-sourced by both gates; their own parsers had drifted.
 - **The same gate serves Codex and pi.** `.codex/hooks/pre-tool-use.ps1` and
   `.pi/extensions/hooks.ts` call `CheckCommitContent.ps1` rather than reimplementing the checks;
   three hand-maintained copies had already drifted apart. Add a check to the repo scripts, never

@@ -233,8 +233,9 @@ relays verdicts, drop the passed ones into the section's summary line and keep t
 
 ## 9. Hazards that cost time before
 
-- The Bash tool is hook-blocked except pure `git`/`gh` commands; use PowerShell. A `Set-Location`
-  inside a command is invisible to the format hook, so name trees with `git -C`.
+- The Bash tool is hook-blocked except pure `git`/`gh` commands; use PowerShell. Name trees with
+  `git -C` or an absolute runner path; both gates also read a same-call `Set-Location`, but a
+  path written into the invocation is the form a reader can check at a glance.
 - PowerShell 5.1 mangles non-ASCII: keep every script and every log write ASCII, and build
   non-ASCII from `[char]` codes.
 - The agent brief's commit-message path must be INSIDE the agent worktree (`.scratch\<run>\...`
