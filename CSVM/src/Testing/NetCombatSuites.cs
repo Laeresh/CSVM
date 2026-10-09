@@ -1250,7 +1250,7 @@ internal static class NetCombatSuites
     {
         var layer = host.SeatRigs[0].Controller!;
         var copy = guest.SeatRigs[0].Controller!;
-        if (!weapons.TryGet("wep_13", out var smoker) || smoker.SmokeScreenTime == null
+        if (OrdnanceSuites.PickWeapon(ctx, weapons, "wep_13", w => w.SmokeScreenTime != null) is not { } smoker
             || layer.Loadout is not { Hardpoints.Count: > 0 } fit || layer.SmokeScreens is not { } here
             || copy.SmokeScreens is not { } there)
         {
