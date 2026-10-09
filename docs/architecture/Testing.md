@@ -23,7 +23,7 @@ chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-repo
 Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
 (a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
-cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. After a suite that grew Godot's static memory it collects and finalizes, so dead wrappers free their sessions before the next suite (`CollectAfterStaticGrowth`), and under `--debug-mem` it logs a `MemoryCensus` line per suite. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
+cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. After a suite that grew Godot's static memory it collects and finalizes, so dead wrappers free their sessions before the next suite (`CollectAfterStaticGrowth`). A destroyed `TestWorld` takes the shader cache's tracked materials with it. Under `--debug-mem` the harness logs a `MemoryCensus` line per suite, with the cache's tracked count. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/FinalizerGate.cs
 The `--debug-finalizers` instrument: `TestHarness.Run` wraps each suite in one gate, which parks the
@@ -39,7 +39,8 @@ and the division behind it. `Parse` lifts that term out of a `--run-tests=` valu
 back as the selector; `Plan` divides an already-selected list longest-unit-first onto the lightest
 shard and returns each shard in the input's order, so one tree always divides the same way.
 `SuiteWeights` reads the measured per-suite seconds in `analysis/engine-suite-weights.json`, with a
-default for a suite the file does not name and `Groups` for the sets a shard may not split. Read
+default for a suite the file does not name, `Groups` for the sets a shard may not split and `Alone`
+for the suites that take a shard of their own. Read
 `TestHarness.cs` for where a plan is applied.
 
 ## src/Testing/SuitePorts.cs

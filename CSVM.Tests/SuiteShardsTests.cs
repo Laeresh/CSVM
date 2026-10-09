@@ -103,6 +103,27 @@ public sealed class SuiteShardsTests
     }
 
     [Fact]
+    public void A_suite_the_weights_run_alone_takes_the_last_shard_to_itself()
+    {
+        var names = Enumerable.Range(0, 12).Select(i => $"s{i:00}").ToList();
+        var weights = new SuiteWeights
+        {
+            DefaultSeconds = 1.0,
+            Seconds = names.ToDictionary(n => n, _ => 1.0),
+            Groups = Array.Empty<IReadOnlyList<string>>(),
+            Alone = new[] { "s05" },
+        };
+
+        var three = SuiteShards.Plan(names, n => n, weights, 3);
+        var one = SuiteShards.Plan(names, n => n, weights, 1);
+
+        Assert.Equal(new[] { "s05" }, three[2]);
+        Assert.Equal(names.Count - 1, three[0].Count + three[1].Count);
+        Assert.InRange(three[0].Count - three[1].Count, -1, 1);
+        Assert.Equal(names, one[0]);
+    }
+
+    [Fact]
     public void A_group_naming_a_suite_the_selection_left_out_still_places_the_rest()
     {
         var names = new[] { "a", "b" };
@@ -145,6 +166,8 @@ public sealed class SuiteShardsTests
         Assert.NotEmpty(weights.Seconds);
         Assert.All(weights.Seconds.Keys, name => Assert.Contains(name, registered));
         Assert.All(weights.Groups.SelectMany(g => g), name => Assert.Contains(name, registered));
+        Assert.All(weights.Alone, name => Assert.Contains(name, registered));
+        Assert.Contains("graphics-retext-compiles", weights.Alone);
         Assert.All(weights.Seconds.Values, seconds => Assert.True(seconds >= 0));
         // Every registered suite carries a measured weight, or the balance is guesswork for it.
         Assert.Empty(SuiteShards.Unweighted(registered, weights));

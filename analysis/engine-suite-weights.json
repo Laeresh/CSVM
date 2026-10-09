@@ -7,6 +7,8 @@
   "groups": [
     ["mesh-light-blink", "mesh-light-fade"]
   ],
+  "aloneReadme": "Suites that take a shard of their own. A TAA frame has Godot build the advanced variants of every shader alive in its process, about 25 MB each, so beside a shard's worlds the one suite that must draw a process's first TAA frame holds about 5 GB more than the shard needs (analysis/shard-memory/FINDINGS.md).",
+  "alone": ["graphics-retext-compiles"],
   "suites": {
     "ace-wake-terrain": 3.932,
     "ai-actor": 1.333,
@@ -238,6 +240,7 @@
     "graphics-retext-compiles": 18.3,
     "graphics-shader-twins": 3.192,
     "graphics-switch-cover": 0.026,
+    "graphics-twins-world-release": 0.96,
     "graphics-view-distance": 9.3,
     "graphics-water-quality": 7.1,
     "graze-bounce": 0.483,

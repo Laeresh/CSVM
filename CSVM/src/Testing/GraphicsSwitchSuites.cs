@@ -755,6 +755,50 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("graphics-twins-world-release",
+        "the shader cache stops following a test world's materials, a fade copy made after the build "
+        + "included, once the harness destroys that world, and keeps following the cached chapter "
+        + "world's, its fade copy held only from C# included, through the release a session build runs")]
+    internal static void TwinsWorldRelease(TestContext ctx)
+    {
+        ShaderMaterial? cachedSource = null, cachedFade = null, privateSource = null, privateFade = null;
+        bool privateTracked = false;
+        try
+        {
+            ctx.WithWorld(ctx.Chapter, collision: false, world =>
+            {
+                cachedSource = FadeSource(world.Stage);
+                cachedFade = cachedSource != null ? Mech3.ShaderTwins.FadeCopy(cachedSource) : null;
+            });
+            ctx.WithPrivateWorld(ctx.Chapter, collision: false, world =>
+            {
+                privateSource = FadeSource(world.Stage);
+                privateFade = privateSource != null ? Mech3.ShaderTwins.FadeCopy(privateSource) : null;
+                privateTracked = privateSource != null && privateFade != null
+                    && Mech3.ShaderTwins.IsTracked(privateSource) && Mech3.ShaderTwins.IsTracked(privateFade);
+            });
+            if (cachedSource == null || cachedFade == null || privateSource == null || privateFade == null)
+            {
+                ctx.Check(false, $"each {ctx.Chapter} world holds a tracked material that takes a fade copy");
+                return;
+            }
+            int heldFromCs = cachedFade.GetReferenceCount();
+            Mech3.ShaderTwins.ReleaseUnused();
+
+            ctx.Check(privateTracked, $"ABLE-TO-FAIL CONTROL: the private world's material and its fade copy are followed while it stands");
+            ctx.Check(!Mech3.ShaderTwins.IsTracked(privateSource) && !Mech3.ShaderTwins.IsTracked(privateFade),
+                $"once the harness destroys that world, neither is followed");
+            ctx.Check(heldFromCs <= 1, $"CONTROL: the cached world's fade copy is held only from C# (reference count {heldFromCs})");
+            ctx.Check(Mech3.ShaderTwins.IsTracked(cachedSource) && Mech3.ShaderTwins.IsTracked(cachedFade),
+                $"the cached world's material and its fade copy are still followed after the release a session build runs");
+        }
+        finally
+        {
+            cachedFade?.Dispose();
+            privateFade?.Dispose();
+        }
+    }
+
     [Suite("world-merge",
         "an Enhanced flight session draws its static world's opaque surfaces merged by shared node frame "
         + "and material, and every material's placed-world vertices once: the same count as on the faithful "
@@ -1096,7 +1140,9 @@ internal static class GraphicsSwitchSuites
         return stale;
     }
 
-    // The process back on the mode and fade the suite found, its shaders' text included.
+    // The process back on the mode, fade and anti-aliasing the suite found, its shaders' text included.
+    // ⚠ Keep the anti-aliasing. A switch leaves the window's viewport on TAA. The next suite to draw
+    // it then has Godot build every live shader's advanced variants, 5 GB in a shard.
     private static void Restore(bool wasEnhanced)
     {
         GraphicsMode.Set(wasEnhanced);
@@ -1104,6 +1150,7 @@ internal static class GraphicsSwitchSuites
         Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
+        EnhancedLook.ReapplyDisplayQuality(det: true, "a suite's restore");
     }
 
     // One copy for the whole session, matching the session's sun after one frame of its own. The
@@ -1610,6 +1657,19 @@ internal static class GraphicsSwitchSuites
                 found.Add(shared.SurfaceGetMaterial(s));
         }
         return found.OfType<ShaderMaterial>().Where(m => m.Shader != null);
+    }
+
+    // The first followed material under root whose text takes a fade line, or null.
+    private static ShaderMaterial? FadeSource(Node root)
+    {
+        ShaderMaterial? found = null;
+        Walk(root, node =>
+        {
+            if (found == null && node is GeometryInstance3D geometry)
+                found = Materials(geometry).FirstOrDefault(m => Mech3.ShaderTwins.IsTracked(m)
+                    && Mech3.ShaderTwins.FadeCode(m.Shader.Code) != null);
+        });
+        return found;
     }
 
     private static void Count(SortedDictionary<string, int> into, string key) =>

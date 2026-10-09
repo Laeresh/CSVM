@@ -41,14 +41,14 @@ mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carr
 LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves. `NodeMade` hands a suite each node a build makes, so a build that throws can be checked for what it left alive. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ShaderTwins.cs
-The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites,
-`EmitterRenderer`'s variants), one `Shader` per text, and the materials wearing them. A cache key is
-a `ModeShader` with one shader per graphics mode, so keys whose texts agree in a mode share one and
-Godot compiles it once. `Follow` records the key a material wears, `Copy` and `FadeCopy` the key a
-duplicate wears, and `Regenerate` moves each onto its key's shader for the standing mode with no
-text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
-(`EnhancedDrawn`) a first switch to Enhanced rewrites in place through `Rewrite` (the ocean's too).
-`Pooled` also serves per-instance constant texts (plane flare, light sprites, ground shadow). Read `Launch/EnhancedLook.cs`.
+The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites, `EmitterRenderer`'s
+variants), one `Shader` per text, and the materials wearing them. A cache key is a `ModeShader` with one shader per
+graphics mode, so keys whose texts agree in a mode share one and Godot compiles it once. `Follow` records the key a
+material wears, `Copy` and `FadeCopy` the key a duplicate wears, and `Regenerate` moves each onto its key's shader for
+the standing mode with no text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
+(`EnhancedDrawn`) a first switch to Enhanced rewrites in place through `Rewrite` (the ocean's too). `Pooled` also serves
+per-instance constant texts (plane flare, light sprites, ground shadow). A test harness names the world it builds
+(`BuildingWorld`) and drops its materials when it destroys it (`Untrack`). Read `Launch/EnhancedLook.cs`.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame

@@ -211,7 +211,9 @@ many; the default is 6 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick`
 and `-Shards 1` is the serial reference path. Membership comes from the harness's
 `shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
 the same tree always divides the same way; an unweighted suite is charged the default and printed
-as `not checked:`. Regenerate that file from a warm `-Shards 1` run's report.
+as `not checked:`. A suite the file lists under `alone` takes the last shard to itself, which keeps
+`graphics-retext-compiles`'s first TAA frame out of a shard holding worlds. Regenerate that file
+from a warm `-Shards 1` run's report.
 
 Each shard gets its own log, streams, report and artifacts under `.scratch/engine/owner-<pid>/`;
 what that does not isolate is a suite whose store sits outside `.scratch/`, so overlapping runs are
@@ -982,7 +984,7 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   replaces the machine's available memory with a simulated figure, less the private bytes of
   every live reservation, so the simulated machine fills as launches grow (the engine's floor
   check reads it as is); `CSVM_MEM_MAX_WAIT_SEC` shortens the wait cap. With the `engine-shard`
-  seed of 11.5 GB, `CSVM_MEM_AVAILABLE_GB=25` fits one shard at a time.
+  seed of 7 GB, `CSVM_MEM_AVAILABLE_GB=20` fits one shard at a time.
 
 ### Gaming mode: test runs queue and throttle while you play
 

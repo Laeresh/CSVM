@@ -176,6 +176,41 @@ tracked under a cached world, and in shard 1 the TAA frame's advanced variants o
 about 5 GB above the others for that alone). The variants are process-lifetime by design in the
 game, where the cache saves a compile hitch on a switch or a chapter revisit; bounding them in a
 test process is a change to `ShaderTwins` or to where that suite runs, filed separately.
+
+## Three TAA frames, one of them leaked, and the tracked materials
+
+Measured again on a later catalog (559 suites), the six shards peaked at 12.07, 10.64, 6.64, 5.99,
+5.66 and 12.05 GB. Three shards held a step of 5.0 to 6.1 GB at one suite that made no shader:
+`graphics-retext-compiles` (its own TAA frame), `sun-per-view` and `load-progress`. The last two
+draw the window's viewport, and an earlier graphics suite had left that viewport on TAA: a live
+switch to Enhanced resolves the anti-aliasing again (`EnhancedLook.ReapplyDisplayQuality`), and the
+suites' restore put the mode back without resolving it. The log shows each such suite's last
+`display quality:` line at `anti_aliasing=taa`. A step in private bytes with no new shader is a
+renderer feature turned on, not a cache that grew.
+
+Three changes bound it. The graphics suites' restore resolves the display quality again. The
+weights file runs `graphics-retext-compiles` alone (`alone`), so the one TAA frame a suite must draw
+lands in a process holding one shader. A destroyed `TestWorld` leaves the shader cache's tracked
+materials with it (`ShaderTwins.Untrack`), its fade copies included, while the cached world's stay
+tracked through a session build's `ReleaseUnused`.
+
+| shard | before (GB) | after (GB) |
+|---|---|---|
+| 1/6 | 12.07 | 5.89 |
+| 2/6 | 10.64 | 6.38 |
+| 3/6 | 6.64 | 5.92 |
+| 4/6 | 5.99 | 5.77 |
+| 5/6 | 5.66 | 6.42 |
+| 6/6 | 12.05 | 1.09 (`graphics-retext-compiles` alone) |
+
+Shard membership differs before and after, since five shards now share the catalog; every shard
+passed with engine errors clean, and no suite after the change raised private bytes by more than
+1.4 GB. The material release was measured on one plan with and without it: shards 1 and 2 peaked at
+5.85 and 6.60 (6.64 on a second run) GB with it, 6.95 and 7.38 GB without. Part of that is shaders:
+a switch makes no other-mode shader for a destroyed world's materials (298 against 307 in shard 1).
+Materials a session or a suite makes outside a `TestWorld` build stay tracked until the next session
+build.
+
 ## Captures: render targets, Enhanced, the world
 
 C1, `player_bhawk`, cockpit view, `--det --perf --frames=420 --no-soft-shadows`, one sample a
@@ -211,9 +246,9 @@ learned history (highest of the last 20, plus 25 percent) takes over.
 
 | kind | launch measured | peak private GB | recommended seed (GB) |
 |---|---|---|---|
-| engine shard, the one holding `graphics-retext-compiles` | `--run-tests=shard:1/6` | 11.1 | `engine-shard` 11.5 |
-| engine shard, the other five | `--run-tests=shard:k/6` | 5.9 to 6.5 | (covered by `engine-shard`) |
-| engine shard, before the fix | | 6.7 to 13.4 | |
+| engine shard | `--run-tests=shard:k/6`, five shards | 5.8 to 6.6 | `engine-shard` 7.0 |
+| engine shard, `graphics-retext-compiles` alone | `--run-tests=shard:6/6` | 1.1 | (covered by `engine-shard`) |
+| engine shard, before the alone shard and the restore | | 5.7 to 12.1 | |
 | golden shot, Original | `viewer-bhawk`, `c2-city`, `c5-city-night`, `c1-flight-kill` | 1.5 / 1.7 / 2.1 / 2.4 | `golden-shot` 5.5 |
 | golden shot, Enhanced | `c5-city-night-enhanced`, `c1-cockpit-enhanced` | 4.6 / 5.2 | (covered by `golden-shot`) |
 | perf scenario, Original | `c2m02-hollywood`, `c5-city`, 300 frames | 2.3 / 2.1 | `perf` 5.5 |
@@ -223,8 +258,6 @@ learned history (highest of the last 20, plus 25 percent) takes over.
 | enhanced capture | the same at 720p / 5120x1440 | 5.2 / 7.5 | `capture-enhanced` 8.0 |
 | XR capture | Enhanced at the two eyes' pixel count (stand-in) / the issue's own measurement | 7.4 / 8.1 | `capture-xr` 8.5 |
 
-A ledger that would rather not hold 11.5 GB for each of the five lighter shards needs shard 1 as a
-kind of its own (6.5 GB for the others); with one key, the seed has to cover shard 1.
 Not measured: the four-player golden shots (`campaign-4p-grid`, `campaign-intro-fill`), which need
 a profile store, and an engine run of the whole catalog in one process (`-Shards 1`), which would
 carry every shard's shaders at once.

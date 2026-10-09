@@ -137,7 +137,7 @@ public static class TestHarness
         var runGate = ctx.AuditFinalizersAcrossRun ? FinalizerGate.Hold() : null;
         if (ctx.DebugMem)
         {
-            Log.Info("test", $"mem after=0/{selected.Count} suite=- {MemoryCensus.Line(ShaderTwins.Made)}");
+            Log.Info("test", $"mem after=0/{selected.Count} suite=- {MemoryCensus.Line(ShaderTwins.Made)} tracked={ShaderTwins.TrackedCount}");
         }
         foreach (var suite in selected)
         {
@@ -262,7 +262,7 @@ public static class TestHarness
             Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
             if (ctx.DebugMem)
             {
-                Log.Info("test", $"mem after={results.Count}/{selected.Count} suite={suite.Name} {MemoryCensus.Line(ShaderTwins.Made)}");
+                Log.Info("test", $"mem after={results.Count}/{selected.Count} suite={suite.Name} {MemoryCensus.Line(ShaderTwins.Made)} tracked={ShaderTwins.TrackedCount}");
             }
             if (gate != null)
             {
@@ -812,6 +812,8 @@ public sealed class TestWorld
         // free would only happen after every suite had already built its own world.
         Stage.Free();
         Textures.Dispose();
+        // A destroyed world draws nothing a switch must move, and a tracked material keeps its textures.
+        ShaderTwins.Untrack(Stage);
     }
 }
 
@@ -1288,6 +1290,8 @@ public sealed class TestContext
             using var sounds = archives.Sounds;
             var ambience = Ambience;
 
+            // The world's materials leave the shader cache's table with it (TestWorld.Destroy).
+            ShaderTwins.BuildingWorld = stage;
             var session = WorldSession.Build(
                 new WorldSession.Options
                 {
@@ -1338,6 +1342,7 @@ public sealed class TestContext
             // later suite's phases (or a real session's, if one ever ran after in the same
             // process) to this build's profile instead of its own.
             StartupProfile.Current = previousProfile;
+            ShaderTwins.BuildingWorld = null;
             buildWatch.Stop();
             // The outer stopwatch, not profile's own clock, is what "other" closes against: it is
             // the one wall time TestHarness.Run also attributes to this suite.
