@@ -1,6 +1,7 @@
 extern alias master;
 
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using CSVM.Launch;
@@ -20,6 +21,11 @@ namespace CSVM.Tests;
 /// </summary>
 public sealed class MasterServerLinkTests : IAsyncLifetime
 {
+    // A wait gives up only after Patience and this many looks at its condition. A loaded machine
+    // slows the polls and the server alike, so a starved wait keeps its chances. An idle hang
+    // still fails at Patience, since an idle wait makes this many polls in about two seconds.
+    private const int PatiencePolls = 100;
+
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
     private static readonly Uri Server = new("http://localhost/");
 
@@ -104,11 +110,16 @@ public sealed class MasterServerLinkTests : IAsyncLifetime
 
     private static async Task Until(Func<bool> done)
     {
-        var deadline = DateTime.UtcNow + Patience;
-        while (!done())
+        var waited = Stopwatch.StartNew();
+        for (int polls = 0; !done(); polls++)
         {
-            Assert.True(DateTime.UtcNow < deadline, "the condition never held");
-            await Task.Delay(10);
+            Assert.True(
+                waited.Elapsed < Patience || polls < PatiencePolls,
+                $"the condition never held in {waited.Elapsed.TotalSeconds:F1} s over {polls} polls");
+
+            // Off xUnit's context, whose workers run other classes' tests, onto the server's pool.
+            // The polls are then starved only when the server is.
+            await Task.Delay(10).ConfigureAwait(false);
         }
     }
 

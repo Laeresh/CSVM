@@ -1108,10 +1108,6 @@ not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs
 - **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
   or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
   `.scratch\goldens-failures\<stamp>\`. Rerun: `.\RunTests.ps1 -SkipUnits -SkipEngine -WaitQuiet`.
-- **`MasterServerLinkTests` timed out**: the units stage fails a `MasterServerLinkTests` test with
-  `the condition never held`, under load only, so the rerun waits for quiet. Owner #168. Rerun:
-  `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~MasterServerLinkTests" -SkipEngine -SkipGoldens
-  -WaitQuiet`.
 - **A shard crashed at exit after a full report**: `!! sN: Godot exited -1073741819 though it wrote
   a report`, its `.log.err` ending in `Fatal error. 0xC0000005` under
   `DisposablesTracker.OnGodotShuttingDown` or `GodotObject.Finalize`. Owner #169. Rerun:
