@@ -28,7 +28,7 @@ public static class MemoryAdmission
     private const double Gb = 1024.0 * 1024.0 * 1024.0;
 
     // The largest seed in MemoryLedger.ps1's table, for a ledger the scripts have not seeded yet.
-    private const double FallbackEstimateGb = 8.0;
+    private const double FallbackEstimateGb = 11.5;
 
     // Read by no one: held open for the process lifetime, so the reservation file lives exactly
     // as long as this launch.

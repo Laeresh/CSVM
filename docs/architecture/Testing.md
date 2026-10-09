@@ -23,7 +23,7 @@ chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-repo
 Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
 (a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
-cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
+cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. After a suite that grew Godot's static memory it collects and finalizes, so dead wrappers free their sessions before the next suite (`CollectAfterStaticGrowth`), and under `--debug-mem` it logs a `MemoryCensus` line per suite. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/FinalizerGate.cs
 The `--debug-finalizers` instrument: `TestHarness.Run` wraps each suite in one gate, which parks the

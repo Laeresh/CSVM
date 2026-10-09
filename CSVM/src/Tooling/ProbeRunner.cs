@@ -272,6 +272,7 @@ public sealed class ProbeRunner
             LoadoutOverride = spec.LoadoutOverride,
             AuditFinalizers = spec.DebugFinalizers,
             AuditFinalizersAcrossRun = spec.DebugFinalizersAcrossRun,
+            DebugMem = spec.DebugMem,
             Host = host,
             Camera = camera,
         };

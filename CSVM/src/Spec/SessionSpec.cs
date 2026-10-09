@@ -1154,6 +1154,10 @@ public sealed record SessionSpec
     /// next.</summary>
     public bool DebugFinalizersAcrossRun { get; private set; }
 
+    /// <summary><c>--debug-mem</c>: a <c>Utils.MemoryCensus</c> line after every <c>--run-tests</c>
+    /// suite, and once a wall second in any other run.</summary>
+    public bool DebugMem { get; private set; }
+
     public bool NoFocus { get; private set; }
 
     /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
@@ -1297,6 +1301,7 @@ public sealed record SessionSpec
             else if (arg == "--gc-types") { s.Perf = true; s.GcTypes = true; }
             else if (arg == "--debug-finalizers") { s.DebugFinalizers = true; }
             else if (arg == "--debug-finalizers=run") { s.DebugFinalizersAcrossRun = true; }
+            else if (arg == "--debug-mem") { s.DebugMem = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }

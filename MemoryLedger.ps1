@@ -86,16 +86,16 @@ $MemRetrySec = 2
 $MemUpdateSec = 30
 
 # Every kind's estimate before it has any history, in GB. The one seed table: a kind with history
-# is estimated from it alone. engine-shard and capture-xr are measured peaks; the rest are
-# conservative until measured.
+# is estimated from it, never below its seed. The seeds are measured peaks with headroom
+# (analysis/shard-memory/FINDINGS.md); engine-shard is shard 1's, the heaviest of six.
 $MemSeedGB = [ordered]@{
-    "engine-shard"     = 4.0
-    "golden-shot"      = 4.0
-    "perf"             = 4.0
-    "hitch"            = 4.0
-    "probe"            = 4.0
-    "capture-enhanced" = 6.0
-    "capture-xr"       = 8.0
+    "engine-shard"     = 11.5
+    "golden-shot"      = 5.5
+    "perf"             = 5.5
+    "hitch"            = 5.5
+    "probe"            = 3.5
+    "capture-enhanced" = 8.0
+    "capture-xr"       = 8.5
 }
 
 <#
@@ -605,10 +605,10 @@ if ($SelfTest) {
         Add-MemHistory -Kind "perf" -PeakGB 10 -Worktree "selftest"
         for ($i = 1; $i -le 20; $i++) { Add-MemHistory -Kind "perf" -PeakGB 2 -Worktree "selftest" }
         Assert-Mem ((Get-MemEstimateGB -Kind "perf") -eq $MemSeedGB["perf"]) "the older 10 GB peak dropped out, and 20 small peaks never take the estimate below the seed"
-        Add-MemHistory -Kind "perf" -PeakGB 4 -Worktree "selftest"
-        Assert-Mem ((Get-MemEstimateGB -Kind "perf") -eq 5.0) "a higher peak raises the estimate"
+        Add-MemHistory -Kind "perf" -PeakGB 6 -Worktree "selftest"
+        Assert-Mem ((Get-MemEstimateGB -Kind "perf") -eq 7.5) "a higher peak raises the estimate"
         $written = [System.IO.File]::ReadAllText($MemEstimatesFile) | ConvertFrom-Json
-        Assert-Mem ([double]$written.perf -eq 5.0 -and [double]$written."engine-shard" -eq $MemSeedGB["engine-shard"]) "estimates.json carries every kind for the engine"
+        Assert-Mem ([double]$written.perf -eq 7.5 -and [double]$written."engine-shard" -eq $MemSeedGB["engine-shard"]) "estimates.json carries every kind for the engine"
 
         # An engine-shard peak is learned only from a complete-catalog run.
         foreach ($complete in @($false, $true)) {

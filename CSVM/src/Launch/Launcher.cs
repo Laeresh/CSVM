@@ -268,6 +268,9 @@ public partial class Launcher : Node3D
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
     private long _lastFrameStamp;
+
+    // The QPC stamp of the last --debug-mem line.
+    private long _memCensusStamp;
     // B6's write path for the monitor above: queues a tripped record and drains it a few seconds
     // later, never inline on the hitching frame. Built after Log.Open (its path derives from
     // Log.SinkPath), so it lives a step later in _Ready than _hitchMonitor does.
@@ -995,6 +998,11 @@ public partial class Launcher : Node3D
         }
 
         DrainLowPriorityTasks();
+        if (_spec.DebugMem)
+        {
+            // Its peak_priv_mb is the whole run's, which a short probe's once-a-second line can miss.
+            Log.Info("perf", $"mem exit frame={Engine.GetProcessFrames()} {Utils.MemoryCensus.Line(Mech3.ShaderTwins.Made)}");
+        }
         _hitchSidecar.Flush();
         _musicArchive?.Dispose();
         _musicArchive = null;
@@ -1145,6 +1153,11 @@ public partial class Launcher : Node3D
             }
             (_gcTrace ??= Utils.GcTrace.Create(_spec.GcTypes)).Tick();
             ReportPerf(delta, counters);
+        }
+        if (_spec.DebugMem && stamp - _memCensusStamp >= System.Diagnostics.Stopwatch.Frequency)
+        {
+            _memCensusStamp = stamp;
+            Log.Info("perf", $"mem frame={Engine.GetProcessFrames()} {Utils.MemoryCensus.Line(Mech3.ShaderTwins.Made)}");
         }
 
         // Wall time, like the instruments above: the score is not part of the simulation, and a

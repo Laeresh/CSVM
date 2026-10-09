@@ -255,6 +255,16 @@ uptime rather than by guesswork. What the two numbers mean and why the per-colle
 wrong one to read is `docs/verification.md` PERF-19 and PERF-20. Under `--gc-types` the listener
 runs Verbose and adds a `[perf] gc-types` line naming the allocation sampler's most-seen types.
 
+## src/Utils/MemoryCensus.cs
+The `--debug-mem` readout: one line of `key=value` terms splitting the process's memory by holder.
+Private bytes and their peak come from the process; the managed heap from the GC; Godot's own
+allocations, texture, buffer and video memory and the object, node and pipeline counts from its
+`Performance` monitors. The caller hands in the shader cache's count, which this layer cannot read,
+so every line has one shape. Private bytes well above the named holders is native memory no Godot
+monitor counts: on the development machine's Vulkan driver, mostly each compiled shader's variants
+(`analysis/shard-memory/FINDINGS.md`). It opens a process handle, so it runs at a suite boundary
+or once a wall second, never every frame.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names

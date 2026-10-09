@@ -962,4 +962,4 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   replaces the machine's available memory with a simulated figure, less the private bytes of
   every live reservation, so the simulated machine fills as launches grow (the engine's floor
   check reads it as is); `CSVM_MEM_MAX_WAIT_SEC` shortens the wait cap. With the `engine-shard`
-  seed of 4 GB, `CSVM_MEM_AVAILABLE_GB=15` fits one shard at a time.
+  seed of 11.5 GB, `CSVM_MEM_AVAILABLE_GB=25` fits one shard at a time.
