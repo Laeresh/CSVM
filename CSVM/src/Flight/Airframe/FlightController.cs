@@ -265,11 +265,10 @@ public partial class FlightController : Node3D
     /// flight layer holds and attaches but never names.</summary>
     public Control? Scoreboard;
 
-    /// <summary>The Dogfight per-pane HUD, <c>--vs</c> only: the match timer/K-D/leader line, the
-    /// kill banner, and the opponent markers. Added to the HUD canvas; fed nothing per frame (it
-    /// pulls VersusMatch's own live state) beyond the kill facts GameSession pushes through its
-    /// OnKill.</summary>
-    public VersusHud? VersusHud;
+    /// <summary>The per-pane match status line, <c>--vs</c> only: the match timer/K-D/leader line.
+    /// Added to the HUD canvas; fed nothing per frame, it pulls VersusMatch's own live
+    /// state.</summary>
+    public VersusStatusLine? VersusStatusLine;
 
     /// <summary>The time-attack race this plane is one seat of, or null flying solo. Set, a
     /// rerun of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>. Once
@@ -1272,7 +1271,7 @@ public partial class FlightController : Node3D
             _messageCanvas = messages;
             // The two board-adjacent readouts this node still owns take their z-order slots inside
             // the pilot HUD's own order, so they are handed to it rather than added around it.
-            _pilotHud.Attach(canvas, messages, VersusHud, Scoreboard);
+            _pilotHud.Attach(canvas, messages, VersusStatusLine, Scoreboard);
             // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
             // only (and scales off the pane's height); single player keeps it on this node.
             (HudParent ?? this).AddChild(canvas);
@@ -2671,13 +2670,6 @@ public partial class FlightController : Node3D
                 _model.Position, _model.Attitude, SelectedOrdnance(), InPlay, PlayerIndex,
                 _pilotHud.TargetHud), simDt);
         }
-        // Dogfight opponent / AI hostile markers: this pane's own pose, so each HUD can compute
-        // its own target's clock bearing off it (the same feed the pilot HUD's markers get).
-        if (VersusHud != null)
-        {
-            VersusHud.PlanePos = _model.Position;
-            VersusHud.HeadingDeg = headingDeg;
-        }
         _pilotHud.Draw(BuildHudState((float)delta, simDt, halted, headingDeg));
         Dressing.DriveNeedles();
         if (!halted && !Crashed)
@@ -2733,7 +2725,7 @@ public partial class FlightController : Node3D
             pool.UnregisterAircraft(Body);
         // A rolled-back aircraft never ran _Ready, so no canvas holds the readouts built for it.
         _pilotHud.DiscardUnattached(freeNow);
-        VersusHud = FlightHud.Loose(VersusHud, freeNow);
+        VersusStatusLine = FlightHud.Loose(VersusStatusLine, freeNow);
         Scoreboard = FlightHud.Loose(Scoreboard, freeNow);
         if (_hudCanvas != null && GodotObject.IsInstanceValid(_hudCanvas))
         {

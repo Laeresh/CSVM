@@ -551,6 +551,7 @@
     "stunt-race-boards": 0.211,
     "stunt-race-display-scores": 0.83,
     "dogfight-display-scores": 0.549,
+    "dogfight-splitscreen-marks": 0.66,
     "target-class-cycle": 1.467,
     "mode-target-table": 2.591,
     "world-node-active-depth": 0.863,

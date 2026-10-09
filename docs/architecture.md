@@ -299,7 +299,7 @@ rows).
 - `src/Flight/Modes/ZeppelinVersus.cs`, Zeppelin vs Zeppelin's rules, engine-free: the two sides and their hulls, what a dead gas bag or cannon scores, the return by the pilot's own hull.
 - `src/Flight/Modes/RearmBases.cs`, the multiplayer rearm's rules, engine-free: which bases serve a pilot, the radius, and each seat's once-per-entry latch.
 - `src/Flight/Modes/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
-- `src/Flight/Modes/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
+- `src/Flight/Modes/VersusStatusLine.cs`, per-pane versus match status line: remaining time, this player's kills and deaths, the leader.
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
 - `src/Flight/Modes/SeatPause.cs`, one seat's pause key and the halt it mirrors, the photo-mode and options-leaf silences, and the network sheet over a running flight.
 

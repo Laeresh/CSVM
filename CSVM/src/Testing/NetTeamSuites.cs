@@ -180,8 +180,8 @@ internal static class NetTeamSuites
         }
     }
 
-    // Each machine's own pane on the other two seats. A teammate files on the Ally cycle, and its box
-    // and Dogfight marker take the friendly green. The other team's seat takes neither.
+    // Each machine's own pane on the other two seats. A teammate files on the Ally cycle, and its
+    // target marker takes the friendly green. The other team's seat takes neither.
     private static void Markers(TestContext ctx, GameSession[] peers)
     {
         var readings = new List<string>();
@@ -201,16 +201,15 @@ internal static class NetTeamSuites
                 bool mate = Teams[seat] == Teams[machine];
                 var found = RefOf(pool, s => ReferenceEquals(s, other));
                 bool green = found is { } t && TargetHud.MarkerColor(t, own.Team) == TargetHud.HudGreen;
-                bool hud = VersusHud.MarkerColor(own.Team, other.Team, seat) == TargetHud.HudGreen;
                 bool reads = found is { } f && f.Class == (mate ? TargetClass.Ally : TargetClass.Enemy)
-                    && green == mate && hud == mate;
+                    && green == mate;
                 right &= !mate || reads;
                 foes &= mate || reads;
-                readings.Add($"m{machine}:s{seat} {found?.Class.ToString() ?? "missing"} box={(green ? "green" : "not green")} hud={(hud ? "green" : "own colour")}");
+                readings.Add($"m{machine}:s{seat} {found?.Class.ToString() ?? "missing"} box={(green ? "green" : "not green")}");
             }
         }
 
-        ctx.Check(right, $"every machine's pane reads its teammate on the Ally cycle, its box and its Dogfight marker in the friendly green ({string.Join(", ", readings)})");
+        ctx.Check(right, $"every machine's pane reads its teammate on the Ally cycle and its target marker in the friendly green ({string.Join(", ", readings)})");
         ctx.Check(foes, $"ABLE-TO-FAIL CONTROL: and the other team's seat on the Enemy cycle, never green ({string.Join(", ", readings)})");
     }
 

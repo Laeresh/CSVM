@@ -565,24 +565,20 @@ internal sealed class HumanFlightAdapter
                 racer.Callsign = seat.Callsign;
         }
 
-        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
-        // match GameSession built before this loop ran; kill facts arrive later via Downed.
+        // Every versus mode (--vs): the per-pane match timer/K-D/leader line, bound to the match
+        // GameSession built before this loop ran.
         if (!paneless && _human.VersusMatch is { } versus)
         {
-            // Rigs is the SAME list GameSession keeps live for the whole session, every seat
-            // already exists (BuildRigs ran before this loop), only .Controller fills in as each
-            // player assembles, so by the time this pane draws, every opponent's is populated.
-            controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
-            controller.VersusHud.Rigs = _human.Rigs;
-            controller.VersusHud.StatusHiddenWhile = () => controller.ScoresShown;
+            controller.VersusStatusLine = VersusStatusLine.Build(versus, pi);
+            controller.VersusStatusLine.StatusHiddenWhile = () => controller.ScoresShown;
             var seats = _human.NetSeats;
-            controller.VersusHud.BotName = s => Net.NetSeats.BotCallsign(seats, s);
+            controller.VersusStatusLine.BotName = s => Net.NetSeats.BotCallsign(seats, s);
             if (verbose)
-                Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
+                Log.Info("flight", $"versus HUD: match timer/K-D/leader line");
         }
 
-        // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
-        // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
+        // One per human pane, in EVERY flight session: built unconditionally because generators
+        // spawn hostiles mid-session, and it draws nothing with an empty pool.
         // A remote seat picks its own targets on its own machine, so it takes neither.
         if (!paneless)
         {

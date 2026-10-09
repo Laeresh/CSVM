@@ -395,12 +395,11 @@ public sealed class FlightHud
     }
 
     /// <summary>Builds the text block and parents every readout onto <paramref name="canvas"/> in
-    /// the shipped draw order. <paramref name="versusHud"/> and <paramref name="scoreboard"/> are
-    /// the two board-adjacent readouts the flight node still owns; they are threaded through
-    /// because their z-order slots sit INSIDE this order, not after it.
-    /// ⚠ <paramref name="messages"/> takes the message stack and must be a layer of its own: the
-    /// crash camera hides the HUD layer, and the stack is up over that cut in the original.</summary>
-    public void Attach(CanvasLayer canvas, CanvasLayer messages, Node? versusHud, Node? scoreboard)
+    /// the shipped draw order. The flight node still owns <paramref name="versusStatus"/> and
+    /// <paramref name="scoreboard"/>, threaded through because their z-order slots sit INSIDE this
+    /// order. ⚠ <paramref name="messages"/> takes the message stack and must be a layer of its own.
+    /// The crash camera hides the HUD layer, and the original shows the stack over that cut.</summary>
+    public void Attach(CanvasLayer canvas, CanvasLayer messages, Node? versusStatus, Node? scoreboard)
     {
         if (TextBlockEnabled)
         {
@@ -438,8 +437,8 @@ public sealed class FlightHud
             FocusMode = Control.FocusModeEnum.None,
         };
         canvas.AddChild(AutoDock); // the auto-dock prompt, centred below the message stack
-        if (versusHud != null)
-            canvas.AddChild(versusHud); // dogfight HUD: status line, kill banner, opponent markers
+        if (versusStatus != null)
+            canvas.AddChild(versusStatus); // versus match status line
         if (TargetHud != null)
             canvas.AddChild(TargetHud); // targeting HUD: selected target / --debug-markers
         if (scoreboard != null)

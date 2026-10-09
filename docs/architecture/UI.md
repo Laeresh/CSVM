@@ -658,7 +658,7 @@ while that seat holds the action and survives an airframe swap. Under the Origin
 draws `OriginalScoresText`'s lines in Courier New on the original's character cell at the decoded HUD
 positions, with the flag column; under Built-in it draws `ScoresTable` as a chrome table centred in the
 pane. `Flight/Hud/ChatPanel.cs` steps aside on the same reading, and so do the pane's top-centre
-status lines (`StuntRunHud`'s status and leaderboard lines, `VersusHud`'s match line). Decode:
+status lines (`StuntRunHud`'s status and leaderboard lines, `VersusStatusLine`). Decode:
 [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md) "The in-flight scores".
 
 ## src/UI/Overlays/OriginalScoresText.cs

@@ -385,8 +385,8 @@ public sealed partial class HudMessages : Control
 
     public override void _Process(double delta)
     {
-        // Track the pane (resizable window / splitscreen layout), the same per-frame resize
-        // VersusHud does, since both anchor off the pane's own size.
+        // Track the pane (resizable window / splitscreen layout) every frame, since the stack
+        // anchors off the pane's own size.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
         // Sim time, so a pause freezes the line and a slow --det frame cannot spend it early.

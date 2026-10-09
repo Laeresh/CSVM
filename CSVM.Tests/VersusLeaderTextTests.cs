@@ -4,7 +4,7 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The Dogfight status line's leader, named by the death line's rule: a bot by its
+/// <summary>The versus status line's leader, named by the death line's rule: a bot by its
 /// callsign, a person by the seat's player tag.</summary>
 [Trait("Tier", "Quick")]
 public sealed class VersusLeaderTextTests
@@ -22,10 +22,10 @@ public sealed class VersusLeaderTextTests
         var match = new VersusMatch(3, killTarget: 0, timeLimit: 60f);
         match.RegisterKill(2, 0);
 
-        Assert.Equal("LEADER Crawford", VersusHud.LeaderText(match, 0, seat => NetSeats.BotCallsign(Seats, seat)));
+        Assert.Equal("LEADER Crawford", VersusStatusLine.LeaderText(match, 0, seat => NetSeats.BotCallsign(Seats, seat)));
 
         // ABLE-TO-FAIL CONTROL: with no bot names the bot reads its player tag, as before.
-        Assert.Equal("LEADER P3", VersusHud.LeaderText(match, 0, null));
+        Assert.Equal("LEADER P3", VersusStatusLine.LeaderText(match, 0, null));
     }
 
     [Fact]
@@ -33,9 +33,9 @@ public sealed class VersusLeaderTextTests
     {
         var won = new VersusMatch(3, killTarget: 0, timeLimit: 60f);
         won.RegisterKill(1, 2);
-        Assert.Equal("LEADER P2", VersusHud.LeaderText(won, 0, seat => NetSeats.BotCallsign(Seats, seat)));
+        Assert.Equal("LEADER P2", VersusStatusLine.LeaderText(won, 0, seat => NetSeats.BotCallsign(Seats, seat)));
 
         var level = new VersusMatch(3, killTarget: 0, timeLimit: 60f);
-        Assert.Equal("LEADER TIED", VersusHud.LeaderText(level, 0, seat => NetSeats.BotCallsign(Seats, seat)));
+        Assert.Equal("LEADER TIED", VersusStatusLine.LeaderText(level, 0, seat => NetSeats.BotCallsign(Seats, seat)));
     }
 }

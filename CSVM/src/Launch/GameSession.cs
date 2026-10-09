@@ -1946,9 +1946,9 @@ public partial class GameSession : Node3D
                 Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
-        // Dogfight (--vs): built here, before the rigs, same reason Race is (HumanFlightAdapter
-        // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
-        // that feeds it Downed reports only runs once every rig exists, further down.
+        // Dogfight (--vs): built here, before the rigs, for the reason Race is. HumanFlightAdapter
+        // binds every pane's VersusStatusLine to this one instance. The score/respawn plumbing that
+        // feeds it Downed reports runs only once every rig exists, further down.
         _dogfight = VersusDirector.TryCreate(_spec, new VersusDirector.Field
         {
             Net = _wire.Link,

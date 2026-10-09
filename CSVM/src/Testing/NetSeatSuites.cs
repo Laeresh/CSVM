@@ -142,7 +142,7 @@ internal static class NetSeatSuites
                 $"and the canvases it does build stay on its own node, out of every pane's tree");
             ctx.Check(remotes.All(p => !p.UseKeyboard && p.PadDevices is { Length: 0 } && !p.AllowPause),
                 $"it reads no keyboard, no pad and no pause key on this machine");
-            ctx.Check(remotes.All(p => p.Targeting == null && p.VersusHud == null
+            ctx.Check(remotes.All(p => p.Targeting == null && p.VersusStatusLine == null
                                        && p.Photograph == null && p.SpeedCue == null),
                 $"and nothing that needs a camera or a pane is built for it");
             ctx.Check(remotes.All(p => p.IsHumanPiloted),
@@ -155,7 +155,7 @@ internal static class NetSeatSuites
             ctx.Check(!bot.RemoteOwned && bot.HudParent == null && bot.LocalPlayer == -1,
                 $"the bot seat is simulated here with no pane and no menu pick (remote-owned {bot.RemoteOwned}, local player {bot.LocalPlayer})");
             ctx.Check(!bot.UseKeyboard && bot.PadDevices is { Length: 0 } && !bot.AllowPause
-                      && bot.Targeting == null && bot.VersusHud == null && bot.Photograph == null && bot.SpeedCue == null,
+                      && bot.Targeting == null && bot.VersusStatusLine == null && bot.Photograph == null && bot.SpeedCue == null,
                 $"and reads no keyboard, pad or pause key, with nothing built that needs a camera or a pane");
             ctx.Check(!bot.IsHumanPiloted && bot.Pilot is { Gunner: not null, Rocketeer: not null, Machine: not null },
                 $"an AI pilot flies the bot, armed with a gunner, ordnance and a mode machine (human {bot.IsHumanPiloted}, gunner {bot.Pilot?.Gunner != null}, machine {bot.Pilot?.Machine != null})");
@@ -184,7 +184,7 @@ internal static class NetSeatSuites
             // ABLE-TO-FAIL CONTROL: the local seat in this same build takes every one of those.
             // The assertions above cannot be passing because the roster built nothing at all.
             var local = pilots[0];
-            ctx.Check(ReferenceEquals(local.HudParent, pane) && local.VersusHud != null
+            ctx.Check(ReferenceEquals(local.HudParent, pane) && local.VersusStatusLine != null
                       && local.Targeting != null && local.AllowPause && local.UseKeyboard
                       && local.IsHumanPiloted && local.Pilot == null,
                 $"ABLE-TO-FAIL CONTROL: the pane in the same build has its HUD, board, targeting, pause key and keyboard, and no AI pilot");
