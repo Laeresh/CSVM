@@ -1121,9 +1121,6 @@ not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs
 - **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
   or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
   `.scratch\goldens-failures\<stamp>\`. Rerun: `.\RunTests.ps1 -SkipUnits -SkipEngine -WaitQuiet`.
-- **A shard ran past the watchdog under load**: `!! s1: timed out after 300s (exit 124)` while
-  other sessions' Godots ran. Owner #170. Rerun:
-  `.\RunTests.ps1 -SkipUnits -SkipGoldens -WaitQuiet`.
 
 ## The standing checklist
 

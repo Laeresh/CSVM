@@ -118,11 +118,11 @@ not waited on**: the user's own play (`RunGame.ps1` without a scripted flag, an 
 and an open editor are left out, since holding test runs while the user plays is gaming mode's job
 (below); a play session started with `--det` counts as scripted. It prints each one it waits on as
 `pid <n> <ledger kind or unledgered> <worktree>`, again when the set of worktrees changes and every
-60 s. The memory ledger already
-queues every launch on memory; this waits out the CPU and GPU contention of runs that fit side by
-side, which is what runs a shard past its watchdog. Past `-QuietTimeoutSec` (default 1800 s) the
-run ends `DEFERRED: quiet`, exit 3, without building. `Wait-QuietMachine` in `MemoryLedger.ps1` is
-the code, and `-SelfTest` checks its census.
+60 s. The memory ledger already queues every launch on memory; this waits out the CPU and GPU
+contention of runs that fit side by side, which is what slows a shard and runs a golden shot past
+its watchdog. Past `-QuietTimeoutSec` (default 1800 s) the run ends `DEFERRED: quiet`, exit 3,
+without building. `Wait-QuietMachine` in `MemoryLedger.ps1` is the code, and `-SelfTest` checks
+its census.
 
 **A rebuild under a run stops it.** The build stage records `CSVM.dll`'s write time and size;
 every launch pool (shards, golden shots, perf, hitch, the golden retry) checks them once a second,
@@ -140,8 +140,22 @@ The numbers live in `analysis/verification-budgets.json`, one lane for the compl
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
 back-to-back warm runs plus 50 %. A skipped stage is compared against nothing. Build carries no
 budget, since only cutting features shortens it. There is no total budget: one set by the same
-rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine budget is capped at 80 % of
-the 300 s per-launch watchdog, so a growing catalog prints `over budget` before a shard is killed.
+rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine
+budget is capped at 80 % of a shard's 1200 s ceiling, so no budget written into the file sits at
+the kill line, where a stage would go red without printing `over budget` first.
+
+**A shard's watchdog judges progress, a golden shot's wall time.** An engine shard is killed (exit
+124) once its `--log-file` has not grown for 120 s (`$EngineStallSec`), or at a 1200 s ceiling
+(`$EngineCeilingSec`, about 1.7 times the slowest loaded shard measured) that ends one which hangs
+while still logging; the stage names which, as `sN: killed, its log did not grow for 120s` or `sN:
+killed, ran past its 1200s wall-time watchdog`. A shard prints a `[test] suite` line per suite as
+it finishes, and under another run's load it slows but keeps printing, where a hung one stops. A
+golden shot keeps a 300 s wall-time watchdog (`$GoldenWatchdogSec`), since it logs nothing while
+it renders its frames; the perf and hitch launches carry none. Gaming mode's `watchdogFactor`
+scales all three numbers alike. `Invoke-GodotPool` polls the log's length
+beside its rebuild check, and `.\RunTests.ps1 -SelfTest` drives the rule through the pool with
+stand-in launches: one whose log keeps growing outlives the stall time, one that never writes is
+killed at it, and one that never stops writing is killed at the ceiling.
 
 **A selection that matches nothing is a failure**: `-Suite`, `-Filter` and `-UnitFilter` each fail
 their stage naming the term, rather than reporting a green zero.
@@ -921,7 +935,8 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
 - **Per launch, not per run.** Each engine shard and each golden shot is admitted on its own, so
   with room for three, three run and the rest start as memory frees. Shard membership
   (`shard:i/n`) never changes, only start times. **The watchdog starts at admission**: waiting
-  never counts toward `$EngineTimeoutSec` or `RunProbe.ps1 -TimeoutSec`.
+  never counts toward a launch's watchdog (a shard's stall time and ceiling, a shot's wall time) or
+  `RunProbe.ps1 -TimeoutSec`.
 - **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
   from a handle the ledger holds on the process, after it exits or is killed) under its kind in
   `history.json`; the estimate is the highest of the kind's last 20 peaks plus 25 percent, and
@@ -987,11 +1002,11 @@ slower than budget, leaving the rest of the machine to the game.
   `goldenWorkers` 1, `dotnetCpus` 2 (`dotnet build`/`test -m:2` and the test runner's
   `RunConfiguration.MaxCpuCount`), `priority` `BelowNormal` (`Idle` can starve a run under a
   CPU-heavy game), `threads` 4 (the affinity: the last N logical processors, 12-15 on the 16-thread
-  development machine), `watchdogFactor` 3 (the 300 s per-launch watchdog becomes 900 s) and
-  `maxWaitSec` 1800. Edit the file to change one; a missing or invalid field takes its default, and
-  `on` again keeps the edits. An explicit `-Shards`/`-GoldenWorkers` above the tunable is capped.
+  development machine), `watchdogFactor` 3 (a shard's 120 s stall time becomes 360 s and its
+  ceiling 3600 s, a golden shot's 300 s watchdog 900 s) and `maxWaitSec` 1800. Edit the file to
+  change one; a missing or invalid field takes its default, and `on` again keeps the edits. An explicit `-Shards`/`-GoldenWorkers` above the tunable is capped.
   `-Shards 1` is not the throttled setting: one process with the whole catalog at low priority
-  beside a game can outrun even the scaled watchdog.
+  beside a game can outrun even the scaled ceiling.
 - **The lock**, only while gaming mode is on. `RunTests.ps1` and `RunProbe.ps1` take it before
   their first heavy stage and hold it to the summary: an exclusive delete-on-close file
   `%TEMP%\csvm-gaming.lock` that records the holder's worktree, pid and start time and is released

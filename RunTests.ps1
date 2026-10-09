@@ -29,7 +29,7 @@
                serial), each still with its own process, log, .out/.err and PNG; the silent-death
                retry runs after the whole batch, serially. A mismatch names the shot and leaves the
                actual PNG and that shot's engine log in .scratch/goldens/. Each shot is launched
-               under a per-shot timeout ($EngineTimeoutSec); a shot that exceeds it is killed,
+               under a per-shot timeout ($GoldenTimeoutSec); a shot that exceeds it is killed,
                reported as FAIL, and has its evidence preserved -- it never silently hangs the
                suite (BL-320).
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
@@ -86,7 +86,7 @@
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
     is compared against nothing. Build carries no budget, and there is no total budget. The
-    engine budget is capped at 80 percent of the per-launch watchdog, so it warns before it kills.
+    engine budget is capped at 80 percent of a shard's ceiling, so no budget sits at the kill line.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
@@ -114,7 +114,8 @@
     faster started once than started N times. 1 is the serial reference path and stays selectable.
     Membership comes from analysis/engine-suite-weights.json through the harness's own
     shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
-    run. Each shard gets its own engine log, report, scratch subdirectory and watchdog; the stage's
+    run. Each shard gets its own engine log, report, scratch subdirectory and watchdog, which
+    kills it once its log has not grown for $EngineStallSec or at $EngineCeilingSec; the stage's
     verdict is the merge of every shard's report, and a shard exiting 0 without one FAILS the stage.
     Each shard also gets its own --net-port-base, from a slot this run holds for the stage, so no two
     shards of this or a concurrent run open one port; at most 10 shards (docs/tooling.md).
@@ -208,7 +209,7 @@
     ledger reservation or a scripted flag such as --det or --run-tests), printing the pid, ledger
     kind and worktree of each one waited on. The user's own play (without a scripted flag such as --det) and an editor are never waited on. The memory ledger
     already queues each launch on memory; this waits out the CPU and GPU contention that runs a
-    shard past its watchdog or flips an enhanced golden. Past -QuietTimeoutSec the run ends
+    golden shot past its watchdog or flips an enhanced golden. Past -QuietTimeoutSec the run ends
     DEFERRED, exit 3, without building.
 
 .PARAMETER QuietTimeoutSec
@@ -325,16 +326,24 @@ $ScratchDir = Join-Path $RepoRoot ".scratch"
 # nothing else distinguishes two builds of one revision.
 $PerfDll    = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
-$EngineWatchdogSec = 300
-# The per-launch watchdog in force, scaled by gaming mode's watchdog factor at each stage boundary.
-$EngineTimeoutSec = $EngineWatchdogSec
-# The engine stage's budget is capped below the watchdog, so a growing catalog reads "over budget"
-# before a shard's launch is killed: a budget at the watchdog would go red without ever warning.
-$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineWatchdogSec)
+# A golden shot's watchdog is wall time from admission: a shot logs nothing while it renders.
+$GoldenWatchdogSec = 300
+# An engine shard is killed when its log has not grown for the stall time, or at the ceiling: under
+# another run's load a shard slows down but keeps logging, and a hung one stops (docs/tooling.md).
+$EngineStallSec = 120
+$EngineCeilingSec = 1200
+# The watchdogs in force, each scaled by gaming mode's watchdog factor at every stage boundary.
+$GoldenTimeoutSec = $GoldenWatchdogSec
+$EngineStallTimeoutSec = $EngineStallSec
+$EngineCeilingTimeoutSec = $EngineCeilingSec
+# No engine budget written into the budgets file may reach the ceiling: one there would go red
+# without ever printing "over budget" first.
+$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineCeilingSec)
 # Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
 # cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
-# every shard within 8 s of the others, and 8 was slower per shard from contention. The watchdog
-# above is per launch, so it is not a budget the shard count may be tuned against.
+# every shard within 8 s of the others, and 8 was slower per shard from contention. The shard
+# watchdogs above judge each launch's progress, so they are not a budget the shard count may be
+# tuned against.
 $DefaultEngineShards = 6
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
@@ -380,7 +389,9 @@ $Gaming = New-GamingRun -Worktree $RepoRoot
 function Enter-GamingStage {
     param([string]$Name, [switch]$NoWait)
     Sync-GamingStage $Gaming -NoWait:$NoWait
-    $script:EngineTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineWatchdogSec
+    $script:GoldenTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $GoldenWatchdogSec
+    $script:EngineStallTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineStallSec
+    $script:EngineCeilingTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineCeilingSec
     if ($Gaming.Deferred -and -not $script:Deferred) {
         $script:Deferred = $Gaming.Deferred
         $script:DeferredStage = $Name
@@ -450,6 +461,27 @@ $script:BuiltDll = $null
 $script:Rebuilt = $false
 $script:RebuildCheck = $null
 
+# A pool launch's --log-file, or "". Every pool launch names it in its own arguments, Invoke-Godot's
+# included.
+function Get-LaunchLog {
+    param($Item)
+    $at = [array]::IndexOf([string[]]@($Item.Args), "--log-file")
+    if ($at -ge 0 -and $at + 1 -lt @($Item.Args).Count) { return [string]@($Item.Args)[$at + 1] }
+    return ""
+}
+
+# Seconds since a running launch's log last grew, counted from its admission until it first does.
+function Get-LaunchQuietSec {
+    param($Item)
+    $log = Get-LaunchLog $Item
+    $length = if ($log -and (Test-Path -LiteralPath $log)) { (Get-Item -LiteralPath $log).Length } else { -1 }
+    if ($length -ne $Item.LogLength) {
+        $Item.LogLength = $length
+        $Item.Quiet.Restart()
+    }
+    return $Item.Quiet.Elapsed.TotalSeconds
+}
+
 # The rebuild line, or $null. Checked at most once a second: the DLL's write time and size against
 # the build stage's, and each running launch's log for the line a launch that met a half-written
 # or swapped assembly prints before it sits until its watchdog.
@@ -467,9 +499,7 @@ function Get-RebuildCause {
     }
     foreach ($item in $Running) {
         if ($cause) { break }
-        # Every pool launch names its --log-file in its own arguments, Invoke-Godot's included.
-        $at = [array]::IndexOf([string[]]@($item.Args), "--log-file")
-        $log = if ($at -ge 0 -and $at + 1 -lt @($item.Args).Count) { [string]@($item.Args)[$at + 1] } else { "" }
+        $log = Get-LaunchLog $item
         # Only a log under 64 KB is read: one whose Launcher loaded passes that within seconds.
         $small = $log -and (Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -lt 64KB
         if ($small -and (Select-String -LiteralPath $log -Pattern 'Cannot instantiate C# script' -SimpleMatch -Quiet)) {
@@ -480,51 +510,15 @@ function Get-RebuildCause {
     return "DEFERRED: rebuild, $cause after this run's build, so its launches were stopped; re-run once that build is done"
 }
 
-if ($RunSelfTest) {
-    $failed = 0
-    function Assert-Rebuild {
-        param([bool]$Ok, [string]$What)
-        $script:RebuildCheck = $null
-        if ($Ok) { Write-Host "  PASS  $What" } else { Write-Host "  FAIL  $What" -ForegroundColor Red; $script:failed++ }
-    }
-    $dir = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-rebuild-selftest-$PID"
-    $null = New-Item -ItemType Directory -Path $dir -Force
-    try {
-        $PerfDll = Join-Path $dir "CSVM.dll"
-        [System.IO.File]::WriteAllText($PerfDll, "built")
-        $log = Join-Path $dir "s1.log"
-        [System.IO.File]::WriteAllText($log, "Godot Engine v4.7`n")
-        $shard = [pscustomobject]@{ Label = "s1"; Args = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn") }
-        $built = Get-Item -LiteralPath $PerfDll
-        $script:BuiltDll = $built
-        Assert-Rebuild (-not (Get-RebuildCause -Running @($shard))) "the build's own stamp and a clean log do not trigger"
-        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc; Length = $built.Length + 1 }
-        Assert-Rebuild ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different size triggers"
-        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc.AddSeconds(-5); Length = $built.Length }
-        Assert-Rebuild ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different write time triggers"
-        $script:BuiltDll = $built
-        [System.IO.File]::AppendAllText($log, "ERROR: Cannot instantiate C# script because the associated class could not be found.`n")
-        Assert-Rebuild ((Get-RebuildCause -Running @($shard)) -like "DEFERRED: rebuild, s1 logged 'Cannot instantiate C# script'*") "a running launch's log line triggers"
-        Assert-Rebuild (-not (Get-RebuildCause -Running @())) "the log line of a launch no longer running does not"
-        Remove-Item -LiteralPath $PerfDll
-        Assert-Rebuild ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was deleted*") "a deleted DLL triggers"
-    } finally {
-        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
-        Close-HiddenDesktop
-        Close-RunJob
-    }
-    Write-Host ""
-    if ($failed -gt 0) { Write-Host "SELFTEST FAIL: $failed check(s)" -ForegroundColor Red; exit 1 }
-    Write-Host "SELFTEST PASS" -ForegroundColor Green
-    exit 0
-}
-
 # Launches each item's .Args (at most $MaxConcurrent in flight), every launch admitted first by the
-# machine-wide memory ledger (MemoryLedger.ps1), and sets each item's .ExitCode. The watchdog starts
-# at admission, so waiting for memory never counts toward $TimeoutSec. Order and membership never
-# change; only start times move. An item never started keeps the .ExitCode it came with.
+# machine-wide memory ledger (MemoryLedger.ps1), and sets each item's .ExitCode. A launch is killed
+# (exit 124) at $TimeoutSec, or once its --log-file has not grown for $StallSec, and its .Overdue
+# says which. Both watchdogs start at admission, so waiting for memory never counts toward either.
+# Order and membership never change; only start times move. An item never started keeps the
+# .ExitCode it came with.
 function Invoke-GodotPool {
-    param([object[]]$Items, [string]$Kind, [int]$MaxConcurrent, [int]$TimeoutSec, [switch]$CompleteCatalog)
+    param([object[]]$Items, [string]$Kind, [int]$MaxConcurrent, [int]$TimeoutSec, [int]$StallSec = 0,
+          [switch]$CompleteCatalog)
     $pending = New-Object System.Collections.Queue
     foreach ($item in $Items) { $pending.Enqueue($item) }
     $running = New-Object System.Collections.ArrayList
@@ -532,8 +526,12 @@ function Invoke-GodotPool {
     while ($running.Count -gt 0 -or ($pending.Count -gt 0 -and -not $script:Deferred)) {
         foreach ($item in @($running)) {
             $handle = if ($item.Launch.Kind -eq "desktop") { $item.Launch.Handle } else { $item.Launch.Process.Handle }
-            $overdue = $script:Rebuilt -or ($TimeoutSec -gt 0 -and $item.Watch.Elapsed.TotalSeconds -ge $TimeoutSec)
-            if (-not $overdue -and -not [CSVMMemLedger]::HasExited($handle)) { continue }
+            if ($TimeoutSec -gt 0 -and $item.Watch.Elapsed.TotalSeconds -ge $TimeoutSec) {
+                $item.Overdue = "ran past its ${TimeoutSec}s wall-time watchdog"
+            } elseif ($StallSec -gt 0 -and (Get-LaunchQuietSec $item) -ge $StallSec) {
+                $item.Overdue = "its log did not grow for ${StallSec}s"
+            }
+            if (-not $script:Rebuilt -and -not $item.Overdue -and -not [CSVMMemLedger]::HasExited($handle)) { continue }
             # An overdue launch is killed here, and its reservation released only after the kill.
             $item.ExitCode = Wait-Godot -Launch $item.Launch -TimeoutSec 1
             Close-MemReservation -Reservation $item.Reservation -CompleteCatalog:$CompleteCatalog
@@ -567,6 +565,9 @@ function Invoke-GodotPool {
             Set-MemReservationPid -Reservation $reservation -ProcessId ([CSVMMemLedger]::ProcessId($handle))
             $next | Add-Member -NotePropertyName Reservation -NotePropertyValue $reservation -Force
             $next | Add-Member -NotePropertyName Watch -NotePropertyValue ([System.Diagnostics.Stopwatch]::StartNew()) -Force
+            $next | Add-Member -NotePropertyName Quiet -NotePropertyValue ([System.Diagnostics.Stopwatch]::StartNew()) -Force
+            $next | Add-Member -NotePropertyName LogLength -NotePropertyValue ([long]-1) -Force
+            $next | Add-Member -NotePropertyName Overdue -NotePropertyValue $null -Force
             $null = $running.Add($next)
         }
         if (-not $script:Deferred -and ($cause = Get-RebuildCause -Running $running)) {
@@ -654,6 +655,71 @@ function Wait-Godot {
     [System.IO.File]::WriteAllText("$($Launch.StreamBase).out", $Launch.OutRead.Result)
     [System.IO.File]::WriteAllText("$($Launch.StreamBase).err", $Launch.ErrRead.Result)
     return $code
+}
+
+if ($RunSelfTest) {
+    $failed = 0
+    function Assert-SelfTest {
+        param([bool]$Ok, [string]$What)
+        $script:RebuildCheck = $null
+        if ($Ok) { Write-Host "  PASS  $What" } else { Write-Host "  FAIL  $What" -ForegroundColor Red; $script:failed++ }
+    }
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-rebuild-selftest-$PID"
+    $null = New-Item -ItemType Directory -Path $dir -Force
+    $savedAvail = $env:CSVM_MEM_AVAILABLE_GB
+    try {
+        $PerfDll = Join-Path $dir "CSVM.dll"
+        [System.IO.File]::WriteAllText($PerfDll, "built")
+        $log = Join-Path $dir "s1.log"
+        [System.IO.File]::WriteAllText($log, "Godot Engine v4.7`n")
+        $shard = [pscustomobject]@{ Label = "s1"; Args = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn") }
+        $built = Get-Item -LiteralPath $PerfDll
+        $script:BuiltDll = $built
+        Assert-SelfTest (-not (Get-RebuildCause -Running @($shard))) "the build's own stamp and a clean log do not trigger"
+        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc; Length = $built.Length + 1 }
+        Assert-SelfTest ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different size triggers"
+        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc.AddSeconds(-5); Length = $built.Length }
+        Assert-SelfTest ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different write time triggers"
+        $script:BuiltDll = $built
+        [System.IO.File]::AppendAllText($log, "ERROR: Cannot instantiate C# script because the associated class could not be found.`n")
+        Assert-SelfTest ((Get-RebuildCause -Running @($shard)) -like "DEFERRED: rebuild, s1 logged 'Cannot instantiate C# script'*") "a running launch's log line triggers"
+        Assert-SelfTest (-not (Get-RebuildCause -Running @())) "the log line of a launch no longer running does not"
+        Remove-Item -LiteralPath $PerfDll
+        Assert-SelfTest ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was deleted*") "a deleted DLL triggers"
+
+        # The stall rule through the pool, the running host's PowerShell standing in for Godot on the
+        # hidden desktop, admitted by a private memory ledger.
+        $script:BuiltDll = $null
+        $script:MemLedgerDir = Join-Path $dir "mem"
+        $script:MemHistoryFile = Join-Path $MemLedgerDir "history.json"
+        $script:MemEstimatesFile = Join-Path $MemLedgerDir "estimates.json"
+        $env:CSVM_MEM_AVAILABLE_GB = "64"
+        $GodotExe = (Get-Process -Id $PID).Path
+        $fakes = [ordered]@{
+            steady = '1..10 | ForEach-Object { Add-Content -LiteralPath ''LOG'' x; Start-Sleep -Milliseconds 500 }'
+            hung   = 'Start-Sleep 60'
+            spam   = 'while ($true) { Add-Content -LiteralPath ''LOG'' x; Start-Sleep -Milliseconds 300 }'
+        }
+        $fakeRuns = @(foreach ($name in $fakes.Keys) {
+            $fakeLog = Join-Path $dir "$name.log"
+            # The trailing # makes the host read the --log-file pair as a comment.
+            [pscustomobject]@{ Label = $name; Launch = $null; ExitCode = -1
+                Args = @("-NoProfile", "-Command", ($fakes[$name].Replace("LOG", $fakeLog) + " #"), "--log-file", $fakeLog) }
+        })
+        Invoke-GodotPool -Items $fakeRuns -Kind "probe" -MaxConcurrent 3 -TimeoutSec 15 -StallSec 3
+        Assert-SelfTest ($fakeRuns[0].ExitCode -eq 0 -and -not $fakeRuns[0].Overdue) "a launch whose log keeps growing outlives the stall time"
+        Assert-SelfTest ($fakeRuns[1].ExitCode -eq 124 -and $fakeRuns[1].Overdue -eq "its log did not grow for 3s") "a launch whose log never grows is killed at the stall time"
+        Assert-SelfTest ($fakeRuns[2].ExitCode -eq 124 -and $fakeRuns[2].Overdue -eq "ran past its 15s wall-time watchdog") "a launch that never stops logging is killed at the ceiling"
+    } finally {
+        $env:CSVM_MEM_AVAILABLE_GB = $savedAvail
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        Close-HiddenDesktop
+        Close-RunJob
+    }
+    Write-Host ""
+    if ($failed -gt 0) { Write-Host "SELFTEST FAIL: $failed check(s)" -ForegroundColor Red; exit 1 }
+    Write-Host "SELFTEST PASS" -ForegroundColor Green
+    exit 0
 }
 
 # Runs dotnet to completion in the run's job, writing its stdout and stderr lines to this script's
@@ -851,7 +917,7 @@ function Get-NetPortBase {
 # the selection mean the plan lost or duplicated a suite. Allowlist caps are re-checked against the
 # SUMMED counts, because each process only ever sees its own share of an allowed error.
 function Merge-EngineShards {
-    param([object[]]$Shards, [int]$TimeoutSec)
+    param([object[]]$Shards)
 
     $passed = 0; $failed = 0; $skipped = 0
     $problems = @(); $failedRows = @(); $seenNames = @{}
@@ -861,7 +927,7 @@ function Merge-EngineShards {
 
     foreach ($shard in $Shards) {
         if ($shard.ExitCode -eq 124) {
-            $problems += "$($shard.Label): timed out after ${TimeoutSec}s (exit 124); partial log at $($shard.Log)"
+            $problems += "$($shard.Label): killed, $($shard.Overdue) (exit 124); partial log at $($shard.Log)"
         }
         if (-not (Test-Path $shard.Report)) {
             # A selector term that matched nothing ends the harness before any suite runs, so there
@@ -1212,7 +1278,8 @@ if ($SkipEngine) {
     try {
         # Each shard is admitted by memory on its own and keeps its own watchdog, so one hung shard
         # fails itself and the others still report.
-        Invoke-GodotPool -Items $shardRuns -Kind "engine-shard" -MaxConcurrent $shardCount -TimeoutSec $EngineTimeoutSec `
+        Invoke-GodotPool -Items $shardRuns -Kind "engine-shard" -MaxConcurrent $shardCount `
+                         -TimeoutSec $EngineCeilingTimeoutSec -StallSec $EngineStallTimeoutSec `
                          -CompleteCatalog:(-not $EngineSelector)
     } finally {
         if ($netSlot) {
@@ -1245,7 +1312,7 @@ if ($SkipEngine) {
         Add-Stage -Name "engine" -Status "DEFERRED" -Seconds $watch.Elapsed.TotalSeconds -Detail "no shard ran"
     } else {
         $judged = if ($script:Deferred) { $ranShards } else { $shardRuns }
-        $merged = Merge-EngineShards -Shards $judged -TimeoutSec $EngineTimeoutSec
+        $merged = Merge-EngineShards -Shards $judged
         $status = $merged.Status
         $problems = @($merged.Problems)
         $detail = $merged.Detail
@@ -1519,7 +1586,7 @@ if ($SkipGoldensNow) {
 
     }
     $ErrorActionPreference = "Continue"
-    Invoke-GodotPool -Items $states -Kind "golden-shot" -MaxConcurrent $goldenWorkerCount -TimeoutSec $EngineTimeoutSec
+    Invoke-GodotPool -Items $states -Kind "golden-shot" -MaxConcurrent $goldenWorkerCount -TimeoutSec $GoldenTimeoutSec
     $ErrorActionPreference = "Stop"
     # A shot the ledger never started, or the engine refused below the floor, took no picture and
     # is neither a pass nor a break; the deferral itself is reported once by the stage row.
@@ -1538,7 +1605,7 @@ if ($SkipGoldensNow) {
         Write-Host "  RETRY $($state.Shot.name): exited $($state.ShotCode) with no PNG -- re-running with --verbose" -ForegroundColor DarkYellow
         $state.Attempt = 2
         $ErrorActionPreference = "Continue"
-        $state.ShotCode = Invoke-Godot (Get-GoldenShotArguments -State $state -Verbose $true) -TimeoutSec $EngineTimeoutSec -Kind "golden-shot"
+        $state.ShotCode = Invoke-Godot (Get-GoldenShotArguments -State $state -Verbose $true) -TimeoutSec $GoldenTimeoutSec -Kind "golden-shot"
         $ErrorActionPreference = "Stop"
         Resolve-GoldenAttempt -State $state
     }
@@ -1555,7 +1622,7 @@ if ($SkipGoldensNow) {
         }
         if (-not (Test-Path $state.Png)) {
             if ($state.TimedOut) {
-                $detail = "$($shot.name): timed out after ${EngineTimeoutSec}s (Godot exited 124) -- see $($state.Log)"
+                $detail = "$($shot.name): timed out after ${GoldenTimeoutSec}s (Godot exited 124) -- see $($state.Log)"
             } else {
                 $detail = "$($shot.name): no PNG written (Godot exited $($state.ShotCode)) -- see $($state.Log)"
             }
