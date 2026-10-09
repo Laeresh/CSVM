@@ -387,6 +387,75 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a reset re-arms a death that invalidates itself ----------------------------------------
+
+    // Many death defs latch their own animation off with INVALIDATE_ANIMATION, and Start refuses a
+    // latched def. Subject: the chapter's first live destructible whose death names itself that way.
+    // Able to fail: with the latch clear dropped from the reset, the second kill dispatches nothing.
+    [Suite("reset-rekill",
+        "a destructible whose death INVALIDATE_ANIMATIONs its own animation plays its Initial sequences again when killed after ResetDestructible")]
+    internal static void ResetRekill(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            var subject = runtime.Destructibles.All.FirstOrDefault(DeathInvalidatesItself);
+            ctx.Check(subject != null, $"chapter ships a self-invalidating destructible chapter={ctx.Chapter}");
+            if (subject == null)
+            {
+                return;
+            }
+            if (subject.Status != DestructibleRegistry.State.Healthy)
+            {
+                runtime.ResetDestructible(subject);
+            }
+
+            var def = subject.Def;
+            // Initial sequences only: the overkill hit also runs DAMAGE_SEQUENCE, and the slot runs
+            // whether or not Start refused, so either would pass a refused start.
+            var initialNames = def.Sequences
+                .Where(s => !s.OnCallOnly && !s.Name.Equals("DAMAGE_SEQUENCE", System.StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Name)
+                .ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+            int initial = 0;
+            var counts = new int[2];
+            var refused = new int[2];
+            var previous = runtime.OnEventDispatched;
+            try
+            {
+                runtime.OnEventDispatched = d =>
+                {
+                    if (d.Def == def && initialNames.Contains(d.Sequence))
+                    {
+                        initial++;
+                    }
+                };
+                for (int kill = 0; kill < counts.Length; kill++)
+                {
+                    initial = 0;
+                    int refusedBefore = Count(runtime.UnhandledEventCounts, "Start(invalidated)");
+                    runtime.DamageAt(subject.Anchor, subject.MaxHealth + 1f);
+                    for (int i = 0; i < 30; i++)
+                    {
+                        runtime.Advance(1f / 60f);
+                    }
+                    counts[kill] = initial;
+                    refused[kill] = Count(runtime.UnhandledEventCounts, "Start(invalidated)") - refusedBefore;
+                    runtime.ResetDestructible(subject);
+                }
+            }
+            finally
+            {
+                runtime.OnEventDispatched = previous;
+            }
+
+            string seqs = string.Join(",", initialNames);
+            ctx.Check(counts[0] > 0, $"the first kill ran {def.AnimName}'s Initial sequences [{seqs}] events={counts[0]}");
+            ctx.Check(counts[1] > 0 && refused[1] == 0,
+                $"the kill after a reset ran them again events={counts[1]} refused starts={refused[1]}");
+        });
+    }
+
     // ---- what shades the pieces a death flings --------------------------------------------------
 
     // C1's refuel tanks draw their launched pieces near-black over their own fire column. The data
@@ -2271,6 +2340,27 @@ internal static class DestroyChoreographySuites
                                 || name.Contains("dbase", System.StringComparison.OrdinalIgnoreCase)))
                 || (!active && name.Contains("healthy", System.StringComparison.OrdinalIgnoreCase));
         }));
+
+    // A live pool whose Initial sequences or destruction slot INVALIDATE_ANIMATION its own name.
+    private static bool DeathInvalidatesItself(DestructibleRegistry.Instance inst)
+    {
+        var def = inst.Def;
+        if (inst.Dormant || def.AnimName is not { } name)
+        {
+            return false;
+        }
+        var death = def.Sequences.Where(s => !s.OnCallOnly).ToList();
+        if (death.Count == 0)
+        {
+            return false;
+        }
+        if (def.DeathSlot is { } slot)
+        {
+            death.Add(slot);
+        }
+        return death.Any(s => s.Events.Any(e => e.Kind == "InvalidateAnimation"
+            && string.Equals(e.Data.Str("name"), name, System.StringComparison.OrdinalIgnoreCase)));
+    }
 
     // The same pre-warm at the second host, the world-effects stage: the sonic burst's puffer defs
     // are built at bind, and five plays over a four-slot pool then reach the factory for none of

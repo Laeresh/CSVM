@@ -67,15 +67,6 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private OriginalScreen _briefingReturn = OriginalScreen.CampaignCabin;
     private OriginalScreen _bookReturn = OriginalScreen.CampaignCabin;
 
-    // A co-op host's debrief: the book a mission end opened, the mission it is about and the
-    // shared result it shows. Browsing onward from it stays the debrief until the host leaves the
-    // book for the cabin or a briefing.
-    private bool _debriefing;
-    private int _debriefSeq;
-    private bool _debriefWon;
-    private int _debriefObjectives;
-    private int _debriefCash;
-
     // A co-op guest's following: the host board and mission it last took and how many flows it
     // has heard. The attempt is its own at the mission the debrief is about.
     private NetCoopScreen _guestScreen = NetCoopScreen.Unknown;
@@ -218,9 +209,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             or OriginalScreen.CampaignAmmo or OriginalScreen.CampaignPlaneSelection;
 
     // The host's last local check launches, and it waits while any seated guest is not Ready.
-    private bool LaunchWaits =>
-        _net() is { IsCoopHost: true } net && !net.CoopAllReady
-        && _campaign is { } campaign && campaign.Field.Current + 1 >= campaign.Field.Players;
+    private bool LaunchWaits => _campaign?.CoopLaunchWaits(_net()) == true;
 
     /// <summary>Whether a screen is one of the campaign's.</summary>
     public bool Owns(OriginalScreen screen) =>
@@ -287,12 +276,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         // What a co-op host's guests are shown: this book is the debrief, over the host's result.
-        var run = _campaign.Profile is { } seated ? CampaignProgression.ResultOf(seated, seq)?.Latest : null;
-        _debriefing = true;
-        _debriefSeq = seq;
-        _debriefWon = missionWon;
-        _debriefObjectives = run?.CompletedMask ?? 0;
-        _debriefCash = run?.Money ?? 0;
+        _campaign.OpenDebrief(seq, missionWon);
         if (_campaign.ClosingCinema is { } cinema)
         {
             PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), NetCoopFilm.Closing, () => 0, () => OpenBook(seq));
@@ -322,8 +306,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
         // Reopening from it is what carries the plane and its fit across flights and retries.
-        _campaign.OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, net.CoopHangar, flow.Slot, _stock?.Invoke(),
-            _dataRoot, net.Pick.Plane, net.Pick.Fit);
+        _campaign.OpenCoopGuest(net, _stock?.Invoke(), _dataRoot);
         _flow = new CampaignFlow(_campaign, _layout);
         _host.CloseDialog();
         _briefingReturn = OriginalScreen.CampaignCabin;
@@ -432,7 +415,6 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         // host's guests stay linked through the debrief. The doors that leave the campaign close it.
         _campaign?.Discard();
         _flow = null;
-        _debriefing = false;
         _host.CloseDialog();
 
         // An EXPORT inside the campaign just crossed a plane into the sortie lists. Those are
@@ -748,26 +730,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return false;
         }
 
-        if (net.IsCoopHost && _campaign.Profile is { } profile && !_campaign.IsGuest)
+        if (net.IsCoopHost && !_campaign.IsGuest)
         {
-            int seq = _campaign.MissionSeq >= 0 ? _campaign.MissionSeq : _campaign.NextMissionSeq;
-            net.Offer(seq, profile.Name, Math.Max(1, _setup.Seats.Count));
-            var screen = HostCoopScreen();
-            int shown = screen switch
-            {
-                NetCoopScreen.Debrief => _debriefSeq,
-                NetCoopScreen.Briefing or NetCoopScreen.FlightCheck => _campaign.MissionSeq,
-                _ => _campaign.NextMissionSeq,
-            };
-
-            // Every pick is settled and the hangar named with its holders before the flow. A guest
-            // opening on the flow then already knows which planes are free.
-            _campaign.SetRemotePicks(net.CoopGuestPlanes);
-            net.OfferCoopHangar(_campaign.CoopHangar(), _campaign.SeatPlanes);
-
-            // The result goes first, so the flow that names the debrief already carries it.
-            net.HostFlow.ShowResult(_debriefWon, _debriefObjectives, _debriefCash);
-            net.ShowCoop(screen, shown, profile.MissionsCompleted, CampaignFeature.HangarAirframes(profile));
+            _campaign.OfferCoop(net, HostCoopScreen(), _setup.Seats.Count);
             return false;
         }
 
@@ -784,30 +749,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// until then, and on a campaign that is not a guest's.</summary>
     internal MenuExit? GuestLaunch()
     {
-        if (!IsGuest || _net() is not { CoopLaunchDue: true } net || net.CoopFlow is not { } flow)
-        {
-            return null;
-        }
-
-        _campaign!.SetMission(flow.MissionSeq);
-
-        // One pane per seat the host gave this machine, each on its own player's devices.
-        _campaign.Field.SetPlayers(net.CoopSeats);
-        var pads = new List<IReadOnlyList<int>>(net.CoopSeats);
-        for (int local = 0; local < net.CoopSeats; local++)
-        {
-            pads.Add(local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>());
-        }
-
-        var exit = _campaign.BuildExit(pads);
-        if (exit == null)
+        if (!IsGuest || _net() is not { } net
+            || _campaign!.CoopGuestExit(net, local => local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>()) is not { } exit)
         {
             return null;
         }
 
         // A guest still watching its host's film leaves it for the launch rather than missing it.
         StopGuestFilm();
-        return exit with { Net = net.BuildLaunch() };
+        return exit;
     }
 
     /// <summary>Typed characters and Backspace into the roster's name box, the campaign's own
@@ -955,7 +905,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         if (screen is OriginalScreen.CampaignCabin or OriginalScreen.CampaignBriefing or OriginalScreen.CampaignRoster)
         {
-            _debriefing = false;
+            _campaign?.CloseDebrief();
         }
 
         _flow.GoTo(CampaignScreenOf(screen));
@@ -1492,7 +1442,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     {
         OriginalScreen.CampaignBriefing => NetCoopScreen.Briefing,
         OriginalScreen.CampaignFlightCheck or OriginalScreen.CampaignAmmo or OriginalScreen.CampaignPlaneSelection => NetCoopScreen.FlightCheck,
-        _ when _debriefing => NetCoopScreen.Debrief,
+        _ when _campaign?.Debriefing == true => NetCoopScreen.Debrief,
         _ => NetCoopScreen.Cabin,
     };
 
@@ -1502,19 +1452,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private bool FollowHost(NetPlayFeature net, CoopFlowMessage flow)
     {
         var campaign = _campaign!;
-
-        // Every player at this machine asks for a seat, and flies the ones the host gave.
-        net.LocalSeats = Math.Max(1, _setup.Seats.Count);
-        campaign.Field.SetPlayers(net.CoopSeats);
-        int lostTo = campaign.FollowHost(flow.Progress, net.CoopHangar);
-        for (int local = 0; local < net.LocalSeats; local++)
-        {
-            var (airframe, fit, plane) = campaign.GuestPickOf(local);
-            var pick = net.PickOf(local);
-            pick.Set(airframe, pick.Ready, fit);
-            pick.Choose(plane);
-        }
-
+        int lostTo = campaign.FollowCoopHost(net, flow, _setup.Seats.Count);
         bool changed = lostTo >= 0;
         if (lostTo >= 0)
         {

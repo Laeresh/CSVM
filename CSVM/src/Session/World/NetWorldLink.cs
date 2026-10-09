@@ -727,6 +727,12 @@ internal sealed class NetWorldLink
             return;
         }
 
+        if (weapon.SmokeScreenTime is { } screenTime)
+        {
+            ai.SmokeScreens?.Lay(ai, screenTime);
+            return;
+        }
+
         pool.Spawn(weapon, new Transform3D(ai.Attitude, fire.Origin), ai.WorldVelocity, ai.PlayerIndex,
             null, fire.Direction, ai.Team);
     }

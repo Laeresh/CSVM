@@ -10,8 +10,8 @@ namespace CSVM.UI.Menu.Original;
 /// section, in the Game Options table's shape. Per row it is a key, the authored title, control and
 /// description widgets it stands on, and the store field it reads and writes. The monitor and size
 /// rows are enumerated per machine and the rest are fixed words over
-/// <see cref="CSVM.Utils.DisplayWords"/>. It holds the display settings and leaves through the
-/// form's apply exit (<see cref="IOriginalOptionsForm"/>). Rows: <c>docs/org/menu-inventory.md</c>.
+/// <see cref="CSVM.Utils.DisplayWords"/>. It stages the display settings in the form's shared
+/// <see cref="OptionsChoices"/>, whose rules it keeps, and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>). Rows: <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed class OriginalVideoPage : IOriginalOptionsPage
 {
@@ -71,88 +71,57 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     {
         new(MonitorKey, "Monitor", "VP_T_VideoTitle", "VP_D_Device", "VP_T_DEVICEDESC",
             _ => "Select the monitor the game opens on.",
-            OriginalRowKind.Dropdown, s => s.MonitorWords,
-            s => CSVM.Utils.MonitorSetting.Resolve(s._monitorIndex, s.Screens).Screen,
-            (s, i) => s._monitorIndex = CSVM.Utils.MonitorSetting.Word(i)),
+            OriginalRowKind.Dropdown, c => c.Screens.Labels, c => c.MonitorAt,
+            (c, i) => c.MonitorIndex = CSVM.Utils.MonitorSetting.Word(i)),
         new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
-            s => s.ResolutionDescription(),
-            OriginalRowKind.Dropdown, s => s.ResolutionWords,
-            s => DisplaySettingRows.ResolutionIndex(s.Sizes, s._resolution, s._displayMode),
-            (s, i) => s._resolution = s.ResolutionWords[i],
-            s => !s.ResolutionPinned),
+            ResolutionDescription,
+            OriginalRowKind.Dropdown, c => c.Sizes.Words, c => c.ResolutionAt,
+            (c, i) => c.Resolution = c.Sizes.Words[i],
+            c => !c.ResolutionPinned),
         new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
             _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels,
-            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode, CSVM.Utils.DisplayModeSetting.Default),
-            (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels, c => c.DisplayModeAt,
+            (c, i) => c.DisplayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
         new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels,
-            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
-            (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels, c => c.VSyncAt,
+            (c, i) => c.VSync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(RenderScaleKey, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC",
             _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
-            OriginalRowKind.Dropdown, s => DisplaySettingRows.RenderScaleLabels(s.RenderScaleWords),
-            s => DisplaySettingRows.WordIndex(s.RenderScaleWords, s._renderScale, CSVM.Utils.RenderScaleSetting.Default),
-            (s, i) => s._renderScale = s.RenderScaleWords[i]),
+            OriginalRowKind.Dropdown, c => DisplaySettingRows.RenderScaleLabels(c.RenderScaleWords), c => c.RenderScaleAt,
+            (c, i) => c.RenderScale = c.RenderScaleWords[i]),
         new(AntiAliasingKey, "Anti-aliasing", "VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC",
             _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.AntiAliasingLabels,
-            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.AntiAliasingChoices, s.AntiAliasingWord, s.AntiAliasingWord),
-            (s, i) => s.PickAntiAliasing(CSVM.Utils.DisplayWords.AntiAliasingChoices[i])),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.AntiAliasingLabels, c => c.AntiAliasingAt,
+            (c, i) => c.PickAntiAliasing(CSVM.Utils.DisplayWords.AntiAliasingChoices[i])),
         new(ShadowQualityKey, "Shadow Quality", "VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC",
-            s => DisplaySettingRows.ShadowQualityDetail(s._graphics),
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.ShadowQualityLabels,
-            s => DisplaySettingRows.WordIndex(CSVM.Utils.ShadowQualitySetting.Words, s._shadowQuality, CSVM.Utils.ShadowQualitySetting.Word),
-            (s, i) => s._shadowQuality = CSVM.Utils.ShadowQualitySetting.Words[i],
-            s => s.ShadowQualityLive),
+            c => DisplaySettingRows.ShadowQualityDetail(c.Graphics),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.ShadowQualityLabels, c => c.ShadowQualityAt,
+            (c, i) => c.ShadowQuality = CSVM.Utils.ShadowQualitySetting.Words[i],
+            c => c.Enhanced),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             _ => GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
-            s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
-            (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default,
+            c => c.Enhanced ? 1 : 0,
+            (c, i) => c.Graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default,
             _ => !CSVM.Utils.GraphicsMode.SwitchLocked),
     };
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
     private readonly IOriginalOptionsForm _form;
-    private readonly Func<CSVM.Utils.SizeList>? _screenSizes;
-    private readonly Func<CSVM.Utils.ScreenList>? _screens;
+    // The form's staged settings, shared with the other two settings pages. The view distance and
+    // water quality ride in it unshown, the apply carrying them unchanged.
+    private readonly OptionsChoices _choices;
 
     private string? _open;
     private int _listTop;
-    private string _graphics = CSVM.Utils.GraphicsMode.Default;
-    // The view distance as saved, null while never set, which resolves to Normal. No row shows it;
-    // the apply carries it unchanged.
-    private string? _viewDistance;
-    // The water quality as saved, null while never set. No row shows it either; the apply carries
-    // it unchanged.
-    private string? _waterQuality;
-    private string? _monitorIndex;
-    private string? _resolution;
-    // The size the options file named when the page last read it, which the size row offers as an
-    // entry of its own (Sizes). It is held apart from the stepped choice, so a hand-written size
-    // stays in the list after a step lands elsewhere. A step back then reaches it again.
-    private string? _savedResolution;
-    private string? _displayMode;
-    private string? _vsync;
-    private string? _renderScale;
-    private string? _antiAliasing;
-    // The sun's shadow quality as saved. Null is "never set", which the next start reads as the
-    // enhanced mode's own look.
-    private string? _shadowQuality;
 
-    internal OriginalVideoPage(
-        OriginalOptionsChrome chrome,
-        IOriginalOptionsForm form,
-        Func<CSVM.Utils.SizeList>? screenSizes,
-        Func<CSVM.Utils.ScreenList>? screens)
+    internal OriginalVideoPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form, OptionsChoices choices)
     {
         _chrome = chrome ?? throw new ArgumentNullException(nameof(chrome));
         _form = form ?? throw new ArgumentNullException(nameof(form));
+        _choices = choices ?? throw new ArgumentNullException(nameof(choices));
         _host = chrome.Host;
-        _screenSizes = screenSizes;
-        _screens = screens;
     }
 
     /// <summary>The page's open option list's key, or null when none is open.</summary>
@@ -162,90 +131,72 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// hold. The size the options file names is added where that is not among them. Every other
     /// row's words are a fixed vocabulary. This one's are enumerated per screen, so a shell with no
     /// screen to ask offers every candidate size instead.</summary>
-    public IReadOnlyList<string> ResolutionWords => Sizes.Words;
+    public IReadOnlyList<string> ResolutionWords => _choices.Sizes.Words;
 
     /// <summary>The screens the monitor row offers, one label per screen in index order. Enumerated
     /// like the resolution row's sizes, so a shell with no engine to ask offers the one screen it
     /// can name.</summary>
-    public IReadOnlyList<string> MonitorWords => Screens.Labels;
+    public IReadOnlyList<string> MonitorWords => _choices.Screens.Labels;
 
     /// <summary>Whether the display mode standing on the page owns the size, which borderless does.
     /// The row then reads the screen's own size, takes no press and draws dead. The saved size is
     /// left where it is, so picking Windowed or Fullscreen again gives the player it back.</summary>
-    public bool ResolutionPinned => CSVM.Utils.ResolutionSetting.Pinned(_displayMode);
+    public bool ResolutionPinned => _choices.ResolutionPinned;
 
     /// <summary>The graphics mode word the page would apply.</summary>
-    public string GraphicsChoice => _graphics;
+    public string GraphicsChoice => _choices.Graphics;
 
     /// <summary>The view-distance word the page would apply, null while never set.</summary>
-    public string? ViewDistanceChoice => _viewDistance;
+    public string? ViewDistanceChoice => _choices.ViewDistance;
 
     /// <summary>The water-quality word the page would apply, which is the saved one, null while never
     /// set.</summary>
-    public string? WaterQualityChoice => _waterQuality;
+    public string? WaterQualityChoice => _choices.WaterQuality;
 
     /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
     /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? MonitorChoice => _monitorIndex;
+    public string? MonitorChoice => _choices.MonitorIndex;
 
     /// <summary>The window size (<see cref="CSVM.Utils.OptionsStore.FormatResolution"/>'s spelling)
     /// the page would apply, or null while nothing has been saved and no row has been
     /// touched.</summary>
-    public string? ResolutionChoice => _resolution;
+    public string? ResolutionChoice => _choices.Resolution;
 
     /// <summary>The display-mode word (<see cref="CSVM.Utils.DisplayWords.DisplayModes"/>) the page
     /// would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? DisplayModeChoice => _displayMode;
+    public string? DisplayModeChoice => _choices.DisplayMode;
 
     /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the page would
     /// apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? VSyncChoice => _vsync;
+    public string? VSyncChoice => _choices.VSync;
 
     /// <summary>The render-scale word (<see cref="CSVM.Utils.DisplayWords.RenderScaleChoices"/>) the
     /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? RenderScaleChoice => _renderScale;
+    public string? RenderScaleChoice => _choices.RenderScale;
 
     /// <summary>The anti-aliasing word (<see cref="CSVM.Utils.DisplayWords.AntiAliasingChoices"/>) the
     /// page would apply, or null while nothing has been saved and no row has been touched. The next
     /// start reads a null as the graphics mode's own default.</summary>
-    public string? AntiAliasingChoice => _antiAliasing;
+    public string? AntiAliasingChoice => _choices.AntiAliasing;
 
     /// <summary>The shadow-quality word (<see cref="CSVM.Utils.ShadowQualitySetting.Words"/>) the
     /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? ShadowQualityChoice => _shadowQuality;
+    public string? ShadowQualityChoice => _choices.ShadowQuality;
 
     /// <summary>Whether the Shadow Quality row takes a press, which it does while the page's own
     /// Enhanced Graphics box is ticked. The faithful world casts no sun shadow, so under Original the
     /// row draws dead and keeps the saved word for a later flip.</summary>
-    public bool ShadowQualityLive => _graphics == CSVM.Utils.GraphicsMode.EnhancedWord;
+    public bool ShadowQualityLive => _choices.Enhanced;
 
     /// <summary>The scales the Render Scale row offers under the method the Anti-aliasing row stands
     /// on, which is fewer under FSR 2.2. The list follows that row live.</summary>
-    public IReadOnlyList<string> RenderScaleWords => CSVM.Utils.RenderScaleSetting.ChoicesFor(AntiAliasingWord);
+    public IReadOnlyList<string> RenderScaleWords => _choices.RenderScaleWords;
 
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.Video;
 
     string IOriginalOptionsPage.AcceptKey => AcceptKey;
 
     string IOriginalOptionsPage.CancelKey => CancelKey;
-
-    // The screen's sizes and the one a saved size it lacks falls back to. They are read through the
-    // reader on every access, like the screens below. The list is widened with the size the options
-    // file named, so a hand-written one stands on the row where it sorts. The row's value falls
-    // back through this list's own fallback, the same word ResolutionSetting.Resolve lands on. The
-    // row therefore cannot name a size the window would not be standing at.
-    private CSVM.Utils.SizeList Sizes =>
-        (_screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.Unknown).Including(_savedResolution);
-
-    // The machine's screens and the one a saved index that names none falls back to. It is read
-    // through the reader on every access, since a monitor can be plugged in while the page stands
-    // open. The row's value goes through MonitorSetting.Resolve over this, the same call the apply
-    // makes. The row therefore cannot show a screen the window would not be moved to.
-    private CSVM.Utils.ScreenList Screens => _screens?.Invoke() ?? CSVM.Utils.MonitorSetting.Unknown;
-
-    // The method the Anti-aliasing row shows: the saved word, or the default of the graphics mode
-    // this page would apply.
-    private string AntiAliasingWord => DisplaySettingRows.AntiAliasingWord(_antiAliasing, _graphics);
 
     /// <summary>Opens the page on the saved options with its first row focused. The hub's VIDEO door
     /// and the screenshot aid both go through it.</summary>
@@ -276,8 +227,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             for (int i = 0; i < Options.Length; i++)
             {
                 var fallback = Options[i];
-                rows.Add(_host.PlaqueRow(fallback.Key, fallback.Words(this)[fallback.Read(this)], i,
-                    fallback.Editable(this), 0));
+                rows.Add(_host.PlaqueRow(fallback.Key, fallback.Words(_choices)[fallback.Read(_choices)], i,
+                    fallback.Editable(_choices), 0));
             }
 
             _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
@@ -310,12 +261,12 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count || OptionFor(rows[focus].Key) is not { } option
-            || !option.Editable(this))
+            || !option.Editable(_choices))
         {
             return false;
         }
 
-        option.Write(this, DisplaySettingRows.Step(option.Read(this), direction, option.Words(this).Count));
+        option.Write(_choices, DisplaySettingRows.Step(option.Read(_choices), direction, option.Words(_choices).Count));
         _host.FocusKey(option.Key);
         return true;
     }
@@ -339,7 +290,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
                 return null;
             }
 
-            picked.Write(this, int.Parse(suffix, CultureInfo.InvariantCulture));
+            picked.Write(_choices, int.Parse(suffix, CultureInfo.InvariantCulture));
             _open = null;
             _host.FocusKey(picked.Key);
             return null;
@@ -354,11 +305,11 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         {
             _open = option.Key;
             _listTop = 0;
-            _host.FocusedRow = Math.Max(0, option.Read(this));
+            _host.FocusedRow = Math.Max(0, option.Read(_choices));
             return null;
         }
 
-        option.Write(this, (option.Read(this) + 1) % option.Words(this).Count);
+        option.Write(_choices, (option.Read(_choices) + 1) % option.Words(_choices).Count);
         return null;
     }
 
@@ -396,7 +347,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             var place = Place(screen, option);
             layers.Lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
                 OriginalOptionsChrome.TitleFont, BoardInk.Row));
-            layers.Lines.Add(new BoardLine(option.Description(this), place.DescX, place.DescY, place.DescWidth,
+            layers.Lines.Add(new BoardLine(option.Description(_choices), place.DescX, place.DescY, place.DescWidth,
                 OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
@@ -414,28 +365,11 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             controlPressed = -1;
         }
 
-        _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(this) == 1, layers);
+        _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(_choices) == 1, layers);
         if (OpenDrop() is { } drop && rows.Count > 0)
         {
             layers.Overlays.Add(_chrome.ComposeOptionList(drop, _listTop, rows, focus));
         }
-    }
-
-    /// <summary>Takes the display settings off <paramref name="saved"/>, the shipped defaults where
-    /// it is null.</summary>
-    internal void Read(CSVM.Utils.OptionsDef? saved)
-    {
-        _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
-        _viewDistance = saved?.ViewDistance;
-        _waterQuality = saved?.WaterQuality;
-        _monitorIndex = saved?.MonitorIndex;
-        _resolution = saved?.Resolution;
-        _savedResolution = saved?.Resolution;
-        _displayMode = saved?.DisplayMode;
-        _vsync = saved?.VSync;
-        _renderScale = saved?.RenderScale;
-        _antiAliasing = saved?.AntiAliasing;
-        _shadowQuality = saved?.ShadowQuality;
     }
 
     private static int IndexOf(string key)
@@ -467,24 +401,16 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     // The size row's description says what the size does under the mode standing beside it. It does
     // something different in each. It is the window's own size, nothing at all, or the size the
     // game draws at inside a fullscreen window Godot will not resize.
-    private string ResolutionDescription()
+    private static string ResolutionDescription(OptionsChoices choices)
     {
-        if (ResolutionPinned)
+        if (choices.ResolutionPinned)
         {
             return "Borderless runs at the desktop's size. Pick Windowed or Fullscreen to choose one.";
         }
 
-        return _displayMode == CSVM.Utils.DisplayWords.Fullscreen
+        return choices.DisplayMode == CSVM.Utils.DisplayWords.Fullscreen
             ? "Select the size the game draws at, scaled up to fill the screen."
             : "Select the window size.";
-    }
-
-    // FSR 2.2 refuses a scale above native, so picking it moves a scale standing there to native.
-    // The launch clamps a saved pair the same way, so the page never shows a scale the run ignores.
-    private void PickAntiAliasing(string word)
-    {
-        _antiAliasing = word;
-        _renderScale = CSVM.Utils.RenderScaleSetting.ClampFor(_renderScale, word);
     }
 
     private bool CloseDropdown()
@@ -513,7 +439,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         }
 
         var place = Place(screen, option);
-        return OriginalOptionsChrome.DropList(key, screen.Widget(option.ControlKey), option.Words(this),
+        return OriginalOptionsChrome.DropList(key, screen.Widget(option.ControlKey), option.Words(_choices),
             (place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight));
     }
 
@@ -523,9 +449,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         {
             var place = Place(screen, option);
             rows.Add(new OriginalRow(option.Key,
-                option.Kind == OriginalRowKind.Dropdown ? option.Words(this)[option.Read(this)] : string.Empty,
+                option.Kind == OriginalRowKind.Dropdown ? option.Words(_choices)[option.Read(_choices)] : string.Empty,
                 option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight,
-                option.Editable(this), 0, place.Box));
+                option.Editable(_choices), 0, place.Box));
         }
 
         _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey);
@@ -584,21 +510,21 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     }
 
     // One setting, by its title and the authored widgets it composes over: the title, the control
-    // and the description. Its description is read off the page, since a row can say something
-    // about its saved state. The control it takes, the words of the store field it shows, how it is
-    // read and written, and whether the row is live. The words come off the page too, the
-    // resolution row's being enumerated per screen rather than held as an array.
+    // and the description. Its description is read off the shared choices, since a row can say
+    // something about the staged settings. The control it takes, the words of the store field it
+    // shows, how it is read and written, and whether the row is live follow. The words come off the
+    // choices too, the resolution row's being enumerated per screen rather than held as an array.
     private sealed record VideoOption(
         string Key, string Title, string TitleKey, string ControlKey, string DescriptionKey,
-        Func<OriginalVideoPage, string> Description, OriginalRowKind Kind,
-        Func<OriginalVideoPage, IReadOnlyList<string>> Words,
-        Func<OriginalVideoPage, int> Read, Action<OriginalVideoPage, int> Write,
-        Func<OriginalVideoPage, bool>? Live = null)
+        Func<OptionsChoices, string> Description, OriginalRowKind Kind,
+        Func<OptionsChoices, IReadOnlyList<string>> Words,
+        Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write,
+        Func<OptionsChoices, bool>? Live = null)
     {
         // Whether the row takes a press at all. A row another setting owns the value of is dead.
         // The cursor walks past it, the pointer cannot arm it, and it draws in its disabled frame.
         // Every other unavailable row on these pages already does that.
-        public bool Editable(OriginalVideoPage page) => Live?.Invoke(page) ?? true;
+        public bool Editable(OptionsChoices choices) => Live?.Invoke(choices) ?? true;
     }
 
     // One row's place in authored pixels: the title box, the control's own rectangle and strip,

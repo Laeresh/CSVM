@@ -1,4 +1,5 @@
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using Godot;
 
 namespace CSVM.Flight.Ai;
@@ -50,7 +51,7 @@ public readonly struct PursuitQuarry
     /// <paramref name="gunner"/> is the pursuer's own, read for its assigned target alone.</summary>
     public static PursuitQuarry? Of(object? target, AiGunner? gunner = null)
     {
-        if (!FlightController.TryTargetGeometry(target, out var position, out var velocity,
+        if (!TargetPool.TryTargetGeometry(target, out var position, out var velocity,
                 out var forward, out bool live) || !live)
         {
             return null;

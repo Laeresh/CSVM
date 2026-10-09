@@ -205,7 +205,7 @@ public sealed class SmokeScreens
         // Homed at the launch pose with a zero step, the way the pool homes a round's flyout trail:
         // a fresh emitter's first Emit sets the trail origin, and without this one the screen's
         // first real step would draw a puff line from wherever the emitter last ran.
-        screen.Emitter?.Emit(layer.WorldPosition, layer.SimAttitude, 0f);
+        screen.Emitter?.Emit(layer.WorldPosition, layer.Attitude, 0f);
         _screens.Add(screen);
     }
 
@@ -240,15 +240,15 @@ public sealed class SmokeScreens
                 _screens.RemoveAt(i);
                 continue;
             }
-            screen.Emitter?.Emit(screen.Layer.WorldPosition, screen.Layer.SimAttitude, dt);
+            screen.Emitter?.Emit(screen.Layer.WorldPosition, screen.Layer.Attitude, dt);
             Walk(screen, roster, dt);
         }
     }
 
     // The per-screen walk of FUN_004b8fd0: every in-play aircraft other than the layer, tested
-    // against the layer's position and backward axis as they stand THIS step (the routine reads
-    // both through the layer object each frame, never a pose captured at the lay). The human
-    // branch keys on the victim being the player; ours keys on the seat, so a wash goes to
+    // against the layer's position and backward axis as they stand THIS step. The routine reads
+    // both through the layer object each frame, never a pose captured at the lay. The human
+    // branch keys on the victim being the player; ours keys on the seat. The wash goes to
     // whichever pane flies the victim, and the stun's own guards refuse a human.
     private void Walk(Screen screen, IReadOnlyList<FlightController> roster, float dt)
     {
@@ -258,7 +258,9 @@ public sealed class SmokeScreens
         for (int i = 0; i < roster.Count; i++)
         {
             var victim = roster[i];
-            if (ReferenceEquals(victim, layer) || !victim.InPlay)
+            // ⚠ Never a remote-owned victim. Every machine lays the screen, and only the machine
+            // flying the victim washes its pane or stuns its pilot.
+            if (ReferenceEquals(victim, layer) || !victim.InPlay || victim.RemoteOwned)
                 continue;
             bool inside = SmokeScreenRule.Catches(layerPos, backward, victim.WorldPosition,
                 _tunables.RangeM, _tunables.HalfAngleCos);
@@ -294,15 +296,6 @@ public sealed class SmokeScreens
 
         public void SetRearm(int playerIndex, float rearmS) => _rearm[playerIndex] = rearmS;
     }
-}
-
-/// <summary>The one fact a screen's emitter needs off its layer that nothing else on
-/// <see cref="FlightController"/> publishes: the SIM attitude, whose backward axis the authored
-/// trail blows its puffs down. Declared here rather than in the controller for the same reason
-/// <c>IBeeperSubject</c> is: the reach is this module's, so it belongs beside the module.</summary>
-public partial class FlightController
-{
-    internal Basis SimAttitude => _model.Attitude;
 }
 
 /// <summary>The screen's authored smoke over the real particle runtime: the <c>PUFFER_STATE</c>s of

@@ -13,8 +13,8 @@ Instant Action's own wizard; the join board, Options, Controls, hangar and campa
 graph. The join board is the one screen a pad signs onto a seat from, through `MenuSeatDevices`' board gestures. It owns the drawing, the per-seat `MenuInput` polling, the board scan, the screenshot key and
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
-the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
-screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. On the campaign boards player 1's L / Y opens and closes the co-op network door, Private and asking no password, whose band and remote guests' chips ride the chip strip; a co-op guest's Continue leads to the Network screen's waiting mode. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
+the host's features (`Menu/MenuHost.cs`), the Options screen's staged settings are `OptionsChoices`, the layout is `MenuZones`, and the hangar and campaign
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. On the campaign boards player 1's L / Y opens and closes the co-op network door, Private and asking no password, whose band and remote guests' chips ride the chip strip; a co-op host names its boards to its guests and its FLY MISSION waits on their Ready, then carries the door's wire; a co-op guest's Continue leads to the Network screen's waiting mode, whose plane row picks from the host's hangar, whose seats stand Ready, and which leaves behind its host's launch, all through `CampaignFeature`. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Boards/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -924,7 +924,7 @@ The Built-in presentation (`CSVM.UI.Menu.BuiltIn`): `LaunchMenu` registered unde
 `PresentationId.BuiltIn`. `Activate` builds the launchscreen under the parent node on the first
 call and maps the return destination onto it, the top level being the Mode screen, `InstantAction`
 the wizard's first screen over the setup that flew, `CabinReturn` the profile's cabin and
-`DebriefReturn` the scrapbook on the flown mission; the `--menu=` aid is consumed on that first
+`DebriefReturn` the scrapbook on the flown mission, both keeping a co-op host's door open, and `CoopGuestReturn` the guest's waiting board; the `--menu=` aid is consumed on that first
 call, so a return from flight lands on Mode with the cursors kept. `Tick` runs the menu's frame,
 `Hide` takes it off screen and `Deactivate` frees the node. `Menu` exposes the launchscreen;
 `Planes` and `CampaignProfiles` hand it a scratch plane store and profile store. Read `LaunchMenu.cs` next.
@@ -995,6 +995,16 @@ labels are built over the list the standing method offers, so the scale row narr
 screens and the sizes are enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
+## src/UI/Menu/OptionsChoices.cs
+The nineteen settings an Options screen stages before the apply, one instance per screen, and the rules that couple them: a `Pinned`
+display mode freezes the size (the saved size kept), `PickAntiAliasing` clamps the render scale under FSR 2.2, the view distance, shadow
+and water steps need `Enhanced`, and a volume step is the AUDIO slider's `KeyStep`, clamped, a no-op step keeping a never-set level null.
+`Load` takes an `OptionsDef` (null for the shipped defaults) and `ToExit` hands every setting back as the `OptionsApplyExit`. Built-in's
+`LaunchMenu` walks it as numbered rows through `Step`, `Label` and `Detail`, each row one table entry so no row can lose an arm; it keeps
+only the cursor, the window and the drawing. Original's `OriginalOptionsScreen` shares one instance among its Game Options, AUDIO and
+VIDEO pages, which read and write the values and the `*At` positions from their own authored rows. The screens and sizes come from
+readers handed in, so it tests engine-free (`CSVM.Tests/OptionsChoicesTests.cs`).
+
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout the extraction
 emits, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with
@@ -1032,7 +1042,7 @@ nothing and standing on the pick the network door kept, `GuestCoopFit` is its am
 original's own words; the mission operations settle which `cm_sequence` entry the screens after the
 cabin are about, with its briefing, wingman flag, per-slot change-plane rules and story aircraft;
 the writes save the loadout, planes, memento (refused unless held), an exported build and the
-mission exit. It carries the host's `ChapterCinema` and `ClosingCinema`. Read `CampaignFlow.cs` next.
+mission exit. Both presentations' co-op runs through it: `OfferCoop` is a host's word to its guests each frame (advert, hangar, board, debrief result), `CoopLaunchWaits` its wait on every guest's Ready, and `OpenCoopGuest`, `FollowCoopHost`, `StepGuestPlane` and `CoopGuestExit` a guest's campaign, pick and launch behind its host. It carries the host's `ChapterCinema` and `ClosingCinema`. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
@@ -1192,9 +1202,9 @@ The form behind the Options hub's four doors, one standalone `IOriginalScreenMod
 `[@GameOptions@]`, `[@Audio@]`, `[@Video@]`, `[@ControlsPrefs@]` and `[@Keys@]` sections; the hub itself stays the shell's. It keeps the frame
 (the hub's logo behind every page), the page switch (the one page whose `Screen` is showing answers every dispatch member) and each page's
 ACCEPT CHANGES and CANCEL CHANGES, routed to that page's `Accept` and `Cancel` before any other row reaches its `Activate`. Its `IOriginalOptionsPage`
-is the page-sized sibling of the module seam, and `IOriginalOptionsForm` the narrow way back a page has: `Apply`, the one `OptionsApplyExit` read off
-the three settings pages' public choices, and `Leave`, back to the hub with the edits dropped. `ScreenOpened` re-reads the saved settings into those
-three pages, so a page carries the settings it does not show and only `Launcher.ApplyOptions` writes the store. The shell exposes it as `Options`, and
+is the page-sized sibling of the module seam, and `IOriginalOptionsForm` the narrow way back a page has: `Apply`, the one `OptionsApplyExit` the three
+settings pages' shared `OptionsChoices` hands back, and `Leave`, back to the hub with the edits dropped. `ScreenOpened` re-reads the saved settings into
+that instance, so a page carries the settings it does not show and only `Launcher.ApplyOptions` writes the store. The shell exposes it as `Options`, and
 `OriginalOptionsTests` drives it over a hand-written host. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalOptionsChrome.cs
@@ -1211,13 +1221,13 @@ The Game Options page: the original's own Difficulty, Default View and Auto Head
 and the store field it reads and writes. The plate grows one whole 62-pixel band per row past the three the art is painted with, tiled from the band
 between its own seams so the border art survives, the two plaques moving down with it; a dropdown takes a band to itself and the checkbox rows pair
 from the top of their run where the canvas caps the growth, each checkbox title on its box's centre line, the descriptions spread evenly down their
-window, and a single tightened pitch is the fallback. It holds the five settings it shows as `*Choice` and leaves through the form's `Apply`.
+window, and a single tightened pitch is the fallback. It stages its five settings in the form's `OptionsChoices`, shows them as `*Choice`, and leaves through the form's `Apply`.
 
 ## src/UI/Menu/Original/OriginalAudioPage.cs
 The AUDIO page: four slider rows over `Utils/AudioMix.cs`'s 0..100 on the authored pitches 58, 57, 53 and 53, Master taking the In-Game Music row
 because a slider reaching zero is that checkbox in one fewer widget, and Sound Quality left out. A slider answers no Accept (`SliderControl.cs`).
 `PreviewMix` is the mix the open page stands at and `TakeMoved` the level a frame moved, taken once, the host applying and sounding them; `PoseMix`
-is the screenshot aid's four distinct levels. It holds the four levels as `*Choice` and leaves through the form's `Apply`.
+is the screenshot aid's four distinct levels. It stages the four levels in the form's `OptionsChoices`, shows them as `*Choice`, and leaves through the form's `Apply`.
 
 ## src/UI/Menu/Original/OriginalVideoPage.cs
 The VIDEO page, the Game Options table's shape over the authored Video rows: the monitor and Resolution rows enumerated per machine
@@ -1225,7 +1235,7 @@ The VIDEO page, the Game Options table's shape over the authored Video rows: the
 Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
-clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance and water quality it carries unshown.
+clear. The Graphics row's title and description are the page's own. The pin, the FSR clamp and the Enhanced gate are `OptionsChoices`', the form's shared instance, which also carries the view distance and water quality unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over

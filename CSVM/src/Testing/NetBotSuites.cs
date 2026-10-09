@@ -172,7 +172,7 @@ internal static class NetBotSuites
             Lockstep(1, peers);
             var ai = host.Session.Wire.World?.AiAt(0);
             ctx.Check(ai is { RemoteOwned: false, Pilot: not null },
-                $"the host flies its roster AI itself ({FlightController.TargetLabel(ai)})");
+                $"the host flies its roster AI itself ({TargetPool.TargetLabel(ai)})");
             if (ai == null)
             {
                 return;
@@ -429,7 +429,7 @@ internal static class NetBotSuites
         var picked = gunner.Target as FlightController;
         bool aSeat = picked != null && host.SeatRigs.Any(r => ReferenceEquals(r.Controller, picked));
         ctx.Check(aSeat && !ReferenceEquals(picked, bot) && AimAssist.Hostile(bot.Team, picked!.Team),
-            $"[{cell}] the bot's gunner takes a hostile seat as its quarry ({FlightController.TargetLabel(gunner.Target)}, team {picked?.Team} against {bot.Team}, {steps} step(s))");
+            $"[{cell}] the bot's gunner takes a hostile seat as its quarry ({TargetPool.TargetLabel(gunner.Target)}, team {picked?.Team} against {bot.Team}, {steps} step(s))");
 
         gunner.AutoTarget = false;
         gunner.Target = null;
@@ -618,7 +618,7 @@ internal static class NetBotSuites
         pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(bot.NoseDirection) + 90f;
         pilot.TargetAltitude = 1f;
         ctx.Check(gunner.Target != null && machine is { Mode: AiMode.Pursue, PursuitAnchor: not null },
-            $"ABLE-TO-FAIL CONTROL: [{cell}] the bot dies with a quarry ({FlightController.TargetLabel(gunner.Target)}) and a chase ({AiModeMachine.NameOf(machine.Mode)}) standing");
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the bot dies with a quarry ({TargetPool.TargetLabel(gunner.Target)}) and a chase ({AiModeMachine.NameOf(machine.Mode)}) standing");
 
         int before = host.Dogfight!.SpawnsTaken;
         int guestBefore = guest.Dogfight!.SpawnsTaken;
@@ -643,7 +643,7 @@ internal static class NetBotSuites
         ctx.Check(entry >= 0 && entry < table.Count && standing == entry && host.Dogfight.SpawnsTaken == before + 1,
             $"[{cell}] on the rotation entry the host granted (entry {entry}, aeroplane on {standing}, {host.Dogfight.SpawnsTaken - before} grant(s))");
         ctx.Check(gunner.Target == null && gunner.TargetRankFor == null && !gunner.WantsFire,
-            $"[{cell}] its gunner comes back with no quarry ({FlightController.TargetLabel(gunner.Target)})");
+            $"[{cell}] its gunner comes back with no quarry ({TargetPool.TargetLabel(gunner.Target)})");
         ctx.Check(machine is { Mode: AiMode.Patrol, PursuitAnchor: null, Executor: null, Evading: false } && !pilot.IsStunned,
             $"[{cell}] and its mode machine with no chase, reaction or stun standing ({AiModeMachine.NameOf(machine.Mode)}, anchor {machine.PursuitAnchor?.ToString() ?? "none"})");
         ctx.Check(headingError < 0.5f && Mathf.Abs(pilot.TargetAltitude - bot.WorldPosition.Y) < 0.5f

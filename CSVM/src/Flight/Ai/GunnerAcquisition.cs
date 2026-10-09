@@ -87,21 +87,21 @@ public sealed class GunnerAcquisition
         TargetScore score = default;
         string how = "ranked";
         gunner.Target = gunner.AutoTarget ? Select(gunner, shooter, out score, out how) : null;
-        if (!FlightController.TryTargetGeometry(gunner.Target, out position, out velocity, out forward,
+        if (!TargetPool.TryTargetGeometry(gunner.Target, out position, out velocity, out forward,
                 out bool live) || !live)
             return false;
         if (!_loggedTarget)
         {
             _loggedTarget = true;
             Log.Info("flight",
-                $"ai gunner: shooter {shooter.ShooterId} targets {FlightController.TargetLabel(gunner.Target)} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0}; gasbag ordnance {GasbagOrdnanceState(shooter)}, {_scan.Structures.Count} structure(s) in the scan)");
+                $"ai gunner: shooter {shooter.ShooterId} targets {TargetPool.TargetLabel(gunner.Target)} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0}; gasbag ordnance {GasbagOrdnanceState(shooter)}, {_scan.Structures.Count} structure(s) in the scan)");
         }
         else if (_retargetsLogged < RetargetLogCap && !ReferenceEquals(left, gunner.Target))
         {
             // The switch is the thing the re-score exists for, so it is what gets logged.
             _retargetsLogged++;
             Log.Info("flight",
-                $"ai gunner: shooter {shooter.ShooterId} leaves {FlightController.TargetLabel(left)} for {FlightController.TargetLabel(gunner.Target)} at {score.Distance:0} m ({how}: rank {score.Rank:0}; {_scan.Structures.Count} structure(s) in the scan)");
+                $"ai gunner: shooter {shooter.ShooterId} leaves {TargetPool.TargetLabel(left)} for {TargetPool.TargetLabel(gunner.Target)} at {score.Distance:0} m ({how}: rank {score.Rank:0}; {_scan.Structures.Count} structure(s) in the scan)");
         }
 
         return true;
@@ -154,7 +154,7 @@ public sealed class GunnerAcquisition
     private bool Holds(AiGunner gunner, in AcquiringShooter shooter, out Vector3 pos, out Vector3 vel,
         out Vector3 fwd)
     {
-        if (!FlightController.TryTargetGeometry(gunner.Target, out pos, out vel, out fwd, out bool live)
+        if (!TargetPool.TryTargetGeometry(gunner.Target, out pos, out vel, out fwd, out bool live)
             || !live)
             return false;
         float attack = shooter.AttackRange;

@@ -181,7 +181,7 @@ internal static class NetBotRearmSuites
         int before = rearm.Rearms;
         int steps = StepUntil(() => order.Flying && gunner.Target == null, peers, WaitSteps);
         ctx.Check(order.Flying && order.Reason == "rockets out" && gunner.Target == null && pilot.Machine!.Mode != AiMode.Pursue,
-            $"every pylon emptied, with full guns, the bot breaks off for a base and drops its quarry ({order.Leg}, {order.Reason}, quarry {FlightController.TargetLabel(gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
+            $"every pylon emptied, with full guns, the bot breaks off for a base and drops its quarry ({order.Leg}, {order.Reason}, quarry {TargetPool.TargetLabel(gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
 
         // Set down on the far side of the bay from the side the run chose, the run must fly round to
         // the gate. The return clears the run, refills the pylons and mends the hull. So the pylons
@@ -245,7 +245,7 @@ internal static class NetBotRearmSuites
         PutAhead(peers[0].SeatRigs[HostSeat].Controller!, bot);
         steps = StepUntil(() => pilot.Gunner!.Target != null && pilot.Machine!.Mode == AiMode.Pursue, peers, WaitSteps);
         ctx.Check(pilot.Gunner!.Target != null && pilot.Machine!.Mode == AiMode.Pursue && !pilot.Gunner.Disengaged,
-            $"and back in the fight its gunner takes a quarry and the pilot chases it ({FlightController.TargetLabel(pilot.Gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
+            $"and back in the fight its gunner takes a quarry and the pilot chases it ({TargetPool.TargetLabel(pilot.Gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
     }
 
     // The hull alone starts a run with full racks. Shot down on the way, the bot comes back with none.

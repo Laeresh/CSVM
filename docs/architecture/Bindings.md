@@ -36,8 +36,8 @@ resolve backwards on one path only.
 When a bound Throttle (lever) drives the commanded throttle setting. A lever holds its position
 untouched, so it takes over only when it moves past `Epsilon` and hands back when a rate key, a digit
 or a schedule commands while it is still. `Release` re-seeds it after the throttle is placed. The
-flight model steps one per aircraft; the order against the other commands is in `FlightController`'s
-`ReadKeyboard`.
+flight model steps one per aircraft; the order against the other commands is in `SeatControls`'
+`ReadStick`.
 
 ## src/Bindings/Binding.cs
 A device identity plus a control, and the whole read: `Resolve` reaches hardware only through

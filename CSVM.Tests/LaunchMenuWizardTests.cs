@@ -27,7 +27,7 @@ public class LaunchMenuWizardTests
                 "Hollywood Knight", "Hughes Aviation", "Medusa", "Russian", "Sacred Trust",
                 "German", "Studio Security", "Broadway Bomber",
             },
-            UI.Screens.LaunchMenu.MilitiaNames());
+            UI.Menu.InstantActionFeature.Militias.Select(m => m.Name));
     }
 
     /// <summary>The `.BM` pattern-coverage reading (decision 7), not vehicle.json's narrower
@@ -41,7 +41,7 @@ public class LaunchMenuWizardTests
     [InlineData("Sacred Trust", new[] { "Hellhound", "Warhawk" })]
     [InlineData("Broadway Bomber", new[] { "Peacemaker" })]
     public void MilitiaAircraftCoverageMatchesTheDecodedTable(string militia, string[] expected) =>
-        Assert.Equal(expected, UI.Screens.LaunchMenu.AircraftFor(militia));
+        Assert.Equal(expected, UI.Menu.InstantActionFeature.AircraftFor(militia));
 
     /// <summary>The eleven airframes in the langui 3700 order (docs/formats/instant-action.md
     /// "Option strings"), the order the original stores an aircraft as an index into. Names are
@@ -54,22 +54,22 @@ public class LaunchMenuWizardTests
                 "Autogyro", "Hellhound", "Balmoral", "Bloodhawk", "Brigand", "Devastator",
                 "Firebrand", "Fury", "Kestrel", "Peacemaker", "Warhawk",
             },
-            UI.Screens.LaunchMenu.PlaneNames());
+            UI.Menu.InstantActionFeature.Airframes.Select(a => a.Name));
 
     /// <summary>Fortune Hunter, the player's own militia, is legal as an enemy militia in the
     /// original's list and is never filtered out here (trap c), it covers all eleven airframes,
     /// the same roster the Plane screen itself offers.</summary>
     [Fact]
     public void FortuneHunterCoversAllElevenAirframes() =>
-        Assert.Equal(11, UI.Screens.LaunchMenu.AircraftFor("Fortune Hunter").Length);
+        Assert.Equal(11, UI.Menu.InstantActionFeature.AircraftFor("Fortune Hunter").Count);
 
     [Fact]
     public void AnUnrecognisedMilitiaThrows() =>
-        Assert.Throws<System.ArgumentException>(() => UI.Screens.LaunchMenu.AircraftFor("Not A Militia"));
+        Assert.Throws<System.ArgumentException>(() => UI.Menu.InstantActionFeature.AircraftFor("Not A Militia"));
 
     [Fact]
     public void TheThreeSkillsExistInLanguiOrder() =>
-        Assert.Equal(new[] { "novice", "veteran", "ace" }, UI.Screens.LaunchMenu.SkillKeys());
+        Assert.Equal(new[] { "novice", "veteran", "ace" }, UI.Menu.InstantActionFeature.Skills);
 
     /// <summary>The wave editor's own build step: a configured slot (count > 0) becomes a real
     /// InstantActionWave off the militia/aircraft/skill cursors; an unconfigured one (count 0)
@@ -78,7 +78,7 @@ public class LaunchMenuWizardTests
     [Fact]
     public void WaveForBuildsAConfiguredSlot()
     {
-        var wave = UI.Screens.LaunchMenu.WaveFor(count: 5, militiaIndex: 0, aircraftIndex: 0, skillIndex: 2);
+        var wave = UI.Menu.InstantActionFeature.WaveFor(count: 5, militiaIndex: 0, aircraftIndex: 0, skillIndex: 2);
         Assert.Equal(5, wave.NumEnemies);
         Assert.Equal("Autogyro", wave.EnemyPlane); // Black Hat's first aircraft in the 3700 order
         Assert.Equal("ace", wave.EnemySkill);
@@ -99,8 +99,8 @@ public class LaunchMenuWizardTests
     [Fact]
     public void WaveForAnUnconfiguredSlotIsTheEmptyWaveWhateverTheCursorsAre()
     {
-        Assert.Equal(InstantAction.EmptyWave, UI.Screens.LaunchMenu.WaveFor(0, militiaIndex: 4, aircraftIndex: 3, skillIndex: 1));
-        Assert.Equal(InstantAction.EmptyWave, UI.Screens.LaunchMenu.WaveFor(-1, militiaIndex: 0, aircraftIndex: 0, skillIndex: 0));
+        Assert.Equal(InstantAction.EmptyWave, UI.Menu.InstantActionFeature.WaveFor(0, militiaIndex: 4, aircraftIndex: 3, skillIndex: 1));
+        Assert.Equal(InstantAction.EmptyWave, UI.Menu.InstantActionFeature.WaveFor(-1, militiaIndex: 0, aircraftIndex: 0, skillIndex: 0));
     }
 
     /// <summary>The Ammo Selection list's pylon rows: the stock Bloodhawk's three, then the same

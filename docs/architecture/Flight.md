@@ -83,7 +83,7 @@ sites arrive through `objectives` under their record's flag, `objective` on the 
 Non-Aircraft, and a roster block's own flag marks its aeroplane's candidate. Sub-parts arrive through `subParts` only
 while `selectedWeapon` carries `LOCK_ON`; a gun emplacement is on no cycle. The gamez ancestor chain `CollectOwners`
 hands the `rating_biases` match, and a pool's own anchor name `NameOf` returns, are cached per destructible instance:
-each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
+each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. `TryTargetGeometry`, `TryRenderPosition` and `TargetLabel` read any target source's sim geometry, drawn position and log name for the AI's weapons, its acquisition and the HUD markers. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/Weapons/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
@@ -166,7 +166,7 @@ frame the control that confirmed it is still down, and one control serves both s
 `MenuBack` and `FireGuns`, gamepad A is `MenuAccept` and `FireRockets`, and a cutscene takes any key.
 `Arm` runs where input comes back and `Read` is each latched action's own read after it, released
 until that control lets go; `Latched` names the discrete commands covered and
-`FlightController.ReadLatched` is the one read site they share. The arm takes no button reading: a
+`SeatControls.Command` is the one read site they share. The arm takes no button reading: a
 re-entry point can run inside an input handler whose snapshot predates the press this exists to
 swallow. Pure state, public so its own unit tests drive it. Read `FireControl.cs` next.
 
@@ -214,9 +214,9 @@ The `SMOKE_SCREEN` mechanism, decoded in [../org/ordnanceTypes.md](../org/ordnan
 "SMOKE_SCREEN is a stun trap", as three types in one file. `SmokeScreenRule` is static and
 Godot-`Node`-free, holding the catch test and the human wash's cadence; `SmokeScreenTunables` reads
 the three `player.json` keys with the loader's own image defaults; `SmokeScreens` is the world
-registry, where `Lay` is the fire path's entry (such a weapon spawns no round) and `SimStep` runs the
-timer down and stuns or washes every other in-play aircraft inside the cone about the layer's live
-pose. It is not an occluder: no collision, no visibility and no targeting role. Each screen drives
+registry, where `Lay` is the fire path's entry on every machine (such a weapon spawns no round) and
+`SimStep` runs the timer down and stuns or washes every other in-play aircraft flown on this machine
+inside the cone about the layer's live pose. It is not an occluder: no collision, no visibility and no targeting role. Each screen drives
 its own emitter over the `ISmokeEmitter` seam, whose engine side is `SmokeScreenEmitters`.
 
 ## src/Flight/Airframe/BeeperTags.cs
@@ -525,7 +525,7 @@ that same frame without flying them, one decoded step reach each, which is the e
 altitude veto reads. Pure and engine-free, deterministic on a fixed dt (`ManeuverExecutorTests`).
 
 ## src/Flight/Ai/AiGunner.cs
-The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it the fire geometry (`Solve`), it
+The AI's forward-gun gunnery: per sim tick `AiWeaponsDrive` hands it the fire geometry (`Solve`), it
 answers with the trigger (`WantsFire`) and the intercept, and each round leaves along `ShotDirection(muzzlePos)`, the
 line from that barrel to the intercept point so wing guns converge, perturbed inside the dead-eye cone by one seeded
 draw per shot. Gates in the engine's order: the quick-draw cone off the target's nose-tail axis, the separation inside
@@ -545,7 +545,7 @@ against the RAW lead, so the guard's give-away is charged to the shot the way an
 traverse clamp is. Pinned by `SurfaceGunMountTests`; not the aeroplane's mount.
 
 ## src/Flight/Ai/AiRocketeer.cs
-The AI's ordnance employment, the gun path's twin: per sim tick the host `FlightController` ages the
+The AI's ordnance employment, the gun path's twin: per sim tick `AiWeaponsDrive` ages the
 vehicle-wide lockout and hands over the fire geometry (`Solve`), which answers with the trigger, the
 hardpoint it chose and the direction the round leaves along, the clamped mount aim rather than the
 raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pass, then per pylon
@@ -553,6 +553,14 @@ the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement ba
 clamp's residual against an aim-quality cosine tighter than the gun's. The lead is solved per pylon
 in the frame that round flies in, and each unlocked pass leaves a verdict behind, keyed without its
 numbers so a host logs a gate change. `Reset` clears both lockouts for a respawned pilot's fresh airframe. A bot seat's launcher takes `UseWingmanRule` (1 to 900 m and 20 s over every pylon's own numbers) and `FiresOnFailedRoll` (the original's `Network` override); every other AI keeps the roll. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
+
+## src/Flight/Ai/AiWeaponsDrive.cs
+One AI aircraft's weapons tick, run on the sim step before the fire step reads the triggers. The
+gunner keeps or re-acquires its standing target through `GunnerAcquisition` and solves the selected
+gun group's lead off the sim pose; the rocketeer then walks the pylons against that same target and
+names the pylon `FireControl` selects. Only Pursue shoots, for both classes. It owns the pylon walk's
+list and the per-shooter breadcrumbs and holds no node: `FlightController` hands it one
+`AiWeaponsShooter` per tick. Read `AiGunner.cs` and `AiRocketeer.cs` next.
 
 ## src/Flight/Ai/AiVoiceDispatcher.cs
 The combat-voice trigger dispatch, engine-free
@@ -1270,6 +1278,15 @@ one flies a given aircraft from whichever of the hold segments or `Pilot` is set
 since both arrive through the build DTO before the first sim step; a remote-owned seat resolves to a neutral scripted hold instead, because its pose is received rather than flown and no device here may be read for it.
 Ground-blow probing and the AI ground-blow write stay on `FlightController`, which has the live world a source does not.
 
+## src/Flight/Airframe/SeatControls.cs
+One seat's controls: its keymap (`Profile`), the readers that resolve it over the seat's keyboard,
+pads and flight sticks (`Seat`, `KeyHalf`, `PadHalf`), and what flight reads off them. `Poll` resolves
+at most once per rendered frame; `Command` reads a discrete command through `FlightReentryLatch`;
+`Selectors` gives the weapon selectors; `ReadStick` writes the commanded lever (rate, schedule, digits,
+takeover) and sums the attitude axes; `Orbit` is the weapon lab's swing. It holds no aircraft state:
+the live lever, the respawn and the director's hold stay with `FlightController`, which passes what
+it decides per call. `KeyboardInputSource` reads through it. Read `AnalogAxes.cs` next.
+
 ## src/Flight/Hud/FlightHud.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
 dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
@@ -1286,9 +1303,9 @@ a `RailPose`, the danger-zone ribbon's pose in place of the model step, the swee
 weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run's `StuntRunControl` splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant, while `Respawned` runs after every return for what the seat's assembler owes a fresh airframe), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
-contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`). This node reads the devices, performs what each of those
+contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`) and the AI's weapons tick `AiWeaponsDrive`. The seat's keymap and device readers are `SeatControls`; this node performs what each of those
 reports, and holds the state the engine can only hold as state. Every physics query runs through the
-one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactReport` from the hull
+one `IWorldQuery` bound in `Bind`, and contact detection is `AircraftContactSweep`'s: one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
 damage are the player's path exactly. `TakesPersonsContactRule` (a person, or an AI-piloted `IsBotSeat`) picks the hull sweep and the bounce over the probe rays; nothing else on a bot leaves `IsHumanPiloted`'s AI side. `Held`, `ControlHold` (`FlightControlHold`: the discrete commands are swallowed and no crash cam brings a hull back, with the stick either the pilot's or neutral over the lever they left), `Inert`, `Spectating`, `CrashIsFinal`, `CameraOwned` and
@@ -1488,6 +1505,14 @@ each result is the next rule's premise, go through `IContactEffects`, which `Fli
 implements per contact. Every contact it is handed spends the pair; the alternate-step cadence is
 the sweep's, never a gate on the spend. The doom rule spares a person and a bot seat (`ContactConditions.TakesPersonsContactRule`); the entity cut and the shakes read `IsHumanPiloted` alone. `AircraftContactResolverTests` pins the rule table
 off-engine against a synthetic world query and a scriptable effects sink.
+
+## src/Flight/Airframe/AircraftContactSweep.cs
+Contact detection for one aircraft over the `IWorldQuery` seam, holding no node: `Detect` sweeps the
+airframe hulls for a person's rule or the def's collision probes for world AI, with the
+anti-tunnelling centre ray behind a miss, and fills one `ContactReport`. The struck node comes back
+beside the report, never in it. `HitWorld` is the single ray a falling wreck lands on, and
+`ShowProbe`/`DrawProbe` the `--debug-collision` lines. It decides nothing about a contact: read
+`AircraftContactResolver.cs` next.
 
 ## src/Flight/Weapons/SweepCadence.cs
 The original's alternate-step collision sweep as a pure value with no node: `Advance` answers

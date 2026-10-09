@@ -101,7 +101,7 @@ chunk; a spawn, not one node.
 
 | Site | What it covers | Seeded at |
 |---|---|---|
-| `debris_spawn` | a debris burst coming into existence | `AnimRuntime.RunDeathSequence` |
+| `debris_spawn` | a debris burst coming into existence | `DestructibleDamage.RunDeathSequence` |
 | `part_detach` | a part detaching from an aircraft | `FlightController.Crash` |
 | `ai_spawn` | an AI aircraft built and added to the tree | `AiFlightAssembler` |
 | `effect_checkout` | taking an effect out of its pool | `AnimRuntime.PlayEffectAt` |

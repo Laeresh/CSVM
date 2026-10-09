@@ -859,10 +859,18 @@ internal sealed class SessionNet
             return;
         }
 
+        var weapon = defs.All[fire.Weapon];
+        // A smoke launch lays the screen behind this copy and spawns nothing, as at the launch.
+        if (weapon.SmokeScreenTime is { } screenTime)
+        {
+            rig.SmokeScreens?.Lay(rig, screenTime);
+            return;
+        }
+
         // The muzzle basis is only a fallback for a missing aim vector, and the event always
         // carries one. A lock-on round steers after nothing here: the target is the shooter's
         // own pick and no seat is named on the wire.
-        pool.Spawn(defs.All[fire.Weapon], new Transform3D(rig.Attitude, fire.Origin),
+        pool.Spawn(weapon, new Transform3D(rig.Attitude, fire.Origin),
             rig.WorldVelocity, rig.PlayerIndex, null, fire.Direction, rig.Team);
     }
 

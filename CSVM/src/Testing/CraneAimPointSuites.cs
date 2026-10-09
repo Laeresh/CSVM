@@ -95,7 +95,7 @@ internal static class CraneAimPointSuites
 
         ctx.Check(candidate.Position.DistanceTo(marker) < Tolerance,
             $"{crane}: the gun assist's point stands on the striped arm's marker, {candidate.Position.DistanceTo(marker):0.00} m off it and {candidate.Position.DistanceTo(origin):0.0} m from the joint origin");
-        bool read = FlightController.TryTargetGeometry(pool, out var aiAt, out _, out _, out _);
+        bool read = TargetPool.TryTargetGeometry(pool, out var aiAt, out _, out _, out _);
         ctx.Check(read && aiAt.DistanceTo(marker) < Tolerance,
             $"{crane}: a gunner holding the pool as its target reads the same point, {aiAt.DistanceTo(marker):0.00} m off the marker");
         CheckScan(ctx, crane, candidate, marker, report);

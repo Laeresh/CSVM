@@ -105,6 +105,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int NetListingRow = 10;
     private const int NetworkRows = 11;
 
+    // The co-op guest's waiting board: its plane pick, then Leave.
+    private const int CoopWaitPlaneRow = 0;
+    private const int CoopWaitRows = 2;
+
     // The Mode screen's doors past the three modes, as offsets from the last mode, in drawn order.
     private const int JoinDoor = 0;
     private const int CampaignDoor = 1;
@@ -178,12 +182,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // in its order: reset the keymap, abandon the staged edits, commit them. Accept stays last. TUNE.
     private const int ControlsFooterRows = 4;
     private const int ControlsFolderButton = 0;
-    // The Options screen's stepper rows, above the Controls door and the apply row, walked top to
-    // bottom. First the three GAME OPTIONS settings in that page's order, then the targeting switch
-    // and the rumble. Then the graphics mode and its view distance. Then the six display
-    // settings and the shadow quality in the VIDEO page's order, then the water quality. Then the
-    // four volume levels in the AUDIO page's order, then the two doors.
-    private const int OptionsStepperRows = 19;
     // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
@@ -267,6 +265,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private readonly List<Slot> _slots = new();
     // Player 1's row controls by absolute row index, as last built, for RowControl.
     private readonly Dictionary<int, Control> _rowControls = new();
+    // The Options screen's staged choices, read from the saved options when the screen opens. It
+    // shows back what was asked for rather than what this process resolved.
+    private readonly OptionsChoices _choices = new(ResolutionSetting.ScreenSizes, MonitorSetting.Screens);
     private int _slotsRevision = -1;
     // The menu host: its first seat is player 1's commands, its feature set holds Free Flight's and
     // Instant Action's state and launch rules and the shared player setup, its audio service plays
@@ -303,38 +304,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // The Options screen's cursor and the choices its stepper rows would apply, seeded from the
-    // saved options when the screen opens so it shows back what was asked for, not what is active:
-    // the graphics mode a running process resolved is the one the process started under.
+    // The Options screen's cursor and window top; the choices its rows step are _choices.
     private int _optionsIndex, _optionsTop;
-    private int _difficultyChoice = Difficulty.Normal;
-    // The targeting setting as saved, null while never set, which the consumer reads as off: a
-    // screen hands back "never set" rather than a choice the player did not make.
-    private bool? _nearestAfterKillChoice;
-    // The haptics setting as saved, null while never set, which the consumer reads as ON.
-    private bool? _rumbleChoice;
-    // The opening view as saved, null while never set, which the flight reads as Chase. Held as the
-    // --view= word rather than the enum, the spelling the store carries.
-    private string? _defaultViewChoice;
-    // The automatic head turn as saved, null while never set. Null leaves the headLook.autohead
-    // config key deciding, rather than overruling it with a default of this screen's own.
-    private bool? _autoHeadTurnChoice;
-    private string _graphicsChoice = GraphicsMode.Default;
-    private string? _viewDistanceChoice;
-    // The water quality as saved, null while never set, which shows and applies the run's own word.
-    private string? _waterQualityChoice;
-    // The six display settings, stepped by the six rows under the view distance. Each is stored as
-    // the word the options file carries, never as a row index. A screen unplugged or a size the
-    // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
-    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice;
-    // The size the options file named when this screen opened, which the size row offers as an entry
-    // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
-    // size stays in the list after a step lands elsewhere. A step back then reaches it again.
-    private string? _savedResolution;
-    // The four volume levels as saved, null while never set, which the mixer reads as the shipped
-    // default. A step that moves nothing leaves the field null, so walking a row writes no level
-    // the player did not change.
-    private int? _audioMasterChoice, _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
     private int _presetCursor, _presetTop;
@@ -405,6 +376,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the file). Null until then; a failed load leaves UiStrings.Empty here.
     private UiStrings? _uiStrings;
     private string _error = "";
+    // The door's revision a host lobby last refused the launch at. The open gate re-asks the lobby
+    // only after an input or network news, since each ask rewrites the lobby's options.
+    private int? _launchRefusedAt;
     // The join strip as last drawn, _Process redraws when the live roster changes (hotplug).
     private string _stripText = "";
     // --menu=campaign-guestcheck: which guest's flight check the aid asked for, applied by
@@ -745,40 +719,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         return codes;
     }
 
-    /// <summary>The Instant Action Environment screen's roster, as chapter codes, in the decoded
-    /// dropdown order, C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. The shared feature's
-    /// roster, kept here as the screen's own read-out.</summary>
-    public static string[] EnvironmentCodes() =>
-        Names(InstantActionFeature.Environments, e => e.Code);
-
-    /// <summary>The Instant Action Environment screen's roster as the display names the preset
-    /// table names an environment by, in the same decoded dropdown order
-    /// <see cref="EnvironmentCodes"/> returns codes in.</summary>
-    public static string[] EnvironmentNames() =>
-        Names(InstantActionFeature.Environments, e => e.Name);
-
-    /// <summary>The MissionType screen's roster for one chapter, as `ia.json` `mission_type` keys
-    /// in the UI dropdown order, with Stunt Flying dropped where `disallow_missions` bars it, the
-    /// same rule <see cref="ChapterCodesFor"/> applies via <see cref="DangerZonesFor"/>.</summary>
-    public static string[] MissionTypeKeysFor(string chapterCode) =>
-        Names(InstantActionFeature.MissionTypesFor(chapterCode), m => m.Key);
-
-    /// <summary>The eleven airframe display names in the langui 3700 order, the shared feature's
-    /// roster as this screen reads it.</summary>
-    public static string[] PlaneNames() =>
-        Names(InstantActionFeature.Airframes, a => a.Name);
-
-    /// <summary>The wave editor's Militia field roster, in the langui dropdown order (3670).</summary>
-    public static string[] MilitiaNames() =>
-        Names(InstantActionFeature.Militias, m => m.Name);
-
-    /// <summary>The wave editor's Aircraft field roster for one militia (by <see cref="MilitiaNames"/>'s
-    /// own name, case-sensitive), the `.BM` pattern coverage table
-    /// (docs/formats/instant-action.md), never <c>vehicle.json</c>'s narrower <c>paint_pattern</c>
-    /// reading. Throws <see cref="ArgumentException"/> on an unrecognised name.</summary>
-    public static string[] AircraftFor(string militiaName) =>
-        Names(InstantActionFeature.AircraftFor(militiaName), a => a);
-
     /// <summary>The pylons the Ammo Selection list offers for <paramref name="def"/>, in the
     /// order it lists them. They stand in fill order under their PHYSICAL number, so the screen
     /// agrees with the weapon gauge's belt lights rather than renumbering them 1..N. A fill-order
@@ -798,25 +738,13 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         return pylons;
     }
-    /// <summary>The wave editor's Skill field roster, internal keys in the langui dropdown order
-    /// (3695), the same vocabulary <c>InstantActionWave.EnemySkill</c> stores.</summary>
-    public static string[] SkillKeys() => Names(InstantActionFeature.Skills, s => s);
 
-    /// <summary>Builds one wizard wave slot into the <see cref="InstantActionWave"/>
-    /// <see cref="Mech3.InstantAction.BuildFromWizard"/> stores, returning
-    /// <see cref="InstantAction.EmptyWave"/> when <paramref name="count"/> is 0 so an unconfigured
-    /// slot matches a JSON file's omitted `groupN` byte-identically. The feature's own build rule,
-    /// kept here as the screen's read-out.</summary>
-    public static InstantActionWave WaveFor(int count, int militiaIndex, int aircraftIndex, int skillIndex) =>
-        InstantActionFeature.WaveFor(count, militiaIndex, aircraftIndex, skillIndex);
-
-    /// <summary>Show the menu (normally from the Mode screen) and prime every input edge so a
-    /// button still held from the transition here (the Esc that left a flight, the Start that
-    /// joined a player) does not fire immediately. Joined players survive a return from flight;
-    /// their plane locks do not. <paramref name="startScreen"/> opens on a later screen, a
-    /// screenshot aid: docs/cli.md's <c>--menu=</c> list, with the hangar's own values handled by
-    /// <see cref="OpenHangarAid"/> and the campaign's by <see cref="OpenCampaignAid"/>.</summary>
-    public void ShowMenu(string startScreen = "")
+    /// <summary>Show the menu and prime every input edge, so a button held from the transition
+    /// here does not fire at once. Joined players survive a return from flight; plane locks do not.
+    /// A campaign's network door closes too, unless <paramref name="keepCoopDoor"/> says a co-op
+    /// flight returns. The aid's <paramref name="startScreen"/> is a value of docs/cli.md's
+    /// <c>--menu=</c> list, as are <see cref="OpenHangarAid"/>'s and <see cref="OpenCampaignAid"/>'s.</summary>
+    public void ShowMenu(string startScreen = "", bool keepCoopDoor = false)
     {
         // The pause leaf may have registered these player numbers during a flight. First, since the
         // Controls aid below registers the seats again.
@@ -909,7 +837,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = null;
         _campaignFeature.Discard();
         // The campaign's network door goes with the campaign that opened it.
-        CloseCoopDoor();
+        if (!keepCoopDoor)
+            CloseCoopDoor();
         _coopWait = false;
         _aidGuest = 0;
         RefreshRoster();
@@ -1023,8 +952,26 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
             flow.OpenScrapbookAfterMission(profile, seq, missionWon);
+
+            // A co-op host's guests are shown this book as the debrief, over the host's result.
+            flow.Feature.OpenDebrief(seq, missionWon);
         }
 
+        Rebuild();
+    }
+
+    /// <summary>Opens the co-op guest's waiting board, the screen a guest's flight returns to while
+    /// its link stands. Off a co-op guest's door the menu stays where it is.</summary>
+    public void OpenCoopWait()
+    {
+        if (_net is not { IsCoopGuest: true })
+        {
+            return;
+        }
+
+        _screen = Screen.Network;
+        _coopWait = true;
+        _netIndex = 0;
         Rebuild();
     }
 
@@ -1147,9 +1094,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         // Player 1's commands come through the host's first seat and are applied onto its poller;
         // every other seat's frame is read from its own source. Text capture is set before the
-        // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
+        // poll: a name field's key aliases, Space's Accept among them, must be dead that frame.
         var seat = _host.Seats[0];
-        seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0;
+        seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0
+            || (_screen == Screen.Campaign && _campaign is { CapturesText: true });
         Apply(WithPointer(Gestured(gestures, seat.Poll((float)delta))));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
@@ -1242,29 +1190,6 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
 
-    // One volume row's step, on the Original AUDIO page's own terms so the two presentations write
-    // the same levels. It is the keyboard step of that page's slider, clamped at both ends where
-    // every other row here wraps. A step from silence must not land on full volume. A step that
-    // moves nothing hands back the field unchanged, so a never-set level stays never set.
-    private static int? StepLevel(int? level, int shipped, int dir)
-    {
-        int from = Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel);
-        int to = Math.Clamp(from + (dir * Menu.Original.SliderControl.KeyStep), AudioMix.MinLevel, AudioMix.MaxLevel);
-        return to == from ? level : to;
-    }
-
-    private static string LevelLabel(int? level, int shipped) =>
-        Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel).ToString(CultureInfo.InvariantCulture);
-
-    // The read-out helpers behind the public rosters: one name per row of a feature list.
-    private static string[] Names<T>(IReadOnlyList<T> rows, Func<T, string> name)
-    {
-        var names = new string[rows.Count];
-        for (int i = 0; i < rows.Count; i++)
-            names[i] = name(rows[i]);
-        return names;
-    }
-
     private static (string Name, string Node)[] BuildPlanes()
     {
         var rows = new (string Name, string Node)[InstantActionFeature.Airframes.Count];
@@ -1276,10 +1201,19 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static (string Name, string Code, bool DangerZones)[] ChaptersFor(MenuMode mode) =>
         mode == MenuMode.Stunt ? Array.FindAll(Chapters, c => c.DangerZones) : Chapters;
 
-    // Whether a chapter's `ia.json` ships `dzones`, read off the shared roster so the
-    // Environment/MissionType screens and the plain Chapter screen cannot read two different
-    // answers for the same chapter.
-    private static bool DangerZonesFor(string chapterCode) => MenuChapters.DangerZonesFor(chapterCode);
+    // A list window's first row once it keeps the cursor in view, never scrolled past the end of a
+    // list of count rows. The cursor wraps (Wrap, like every other screen), so top-to-bottom jumps
+    // both ways are normal here rather than an edge case.
+    private static int ScrollTop(int top, int cursor, int count, int window)
+    {
+        int last = Math.Max(0, count - window);
+        top = Math.Clamp(top, 0, last);
+        if (cursor < top)
+            top = cursor;
+        else if (cursor >= top + window)
+            top = cursor - window + 1;
+        return Math.Clamp(top, 0, last);
+    }
 
     // The same roster as the shared setup's rows, so both presentations pick from one list.
     private static IReadOnlyList<MenuAircraft> MenuRoster(IReadOnlyList<CustomPlaneDef> customs) =>
@@ -1567,6 +1501,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             return true;
         }
 
+        if (TakeCoopGuestLaunch())
+        {
+            return true;
+        }
+
         bool dirty = false;
         if (_screen != Screen.Plane)
         {
@@ -1651,7 +1590,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     // The waiting board backs onto the board it was continued from, link and all,
                     // as the Dogfight's map screen does. Its Leave row is what hangs up.
-                    _coopWait = false;
+                    LeaveCoopWait();
                     _netIndex = NetContinueRow;
                 }
                 else
@@ -1761,10 +1700,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             }
         }
 
-        if (CanLaunch())
+        if (CanLaunch() && (dirty || _launchRefusedAt is null || _launchRefusedAt != _net?.Revision))
         {
+            // Either the host took the exit and hid us, or the refusal line needs drawing.
             FireLaunch();
-            return false; // the host took the exit, hid us and is building
+            return true;
         }
         return dirty;
     }
@@ -1873,34 +1813,23 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The nineteen choice rows are steppers; the doors under them have nothing to step.
-                switch (_optionsIndex)
+                // The choice rows are steppers; the doors under them have nothing to step.
+                if (_optionsIndex >= OptionsChoices.Count)
                 {
-                    case 0: StepDifficultyChoice(dir); return true;
-                    case 1: StepDefaultViewChoice(dir); return true;
-                    case 2: ToggleAutoHeadTurnChoice(); return true;
-                    case 3: ToggleNearestAfterKillChoice(); return true;
-                    case 4: ToggleRumbleChoice(); return true;
-                    case 5: ToggleGraphicsChoice(); return true;
-                    case 6: StepViewDistanceChoice(dir); return true;
-                    case 7: StepMonitorChoice(dir); return true;
-                    case 8: StepResolutionChoice(dir); return true;
-                    case 9: StepDisplayModeChoice(dir); return true;
-                    case 10: StepVSyncChoice(dir); return true;
-                    case 11: StepRenderScaleChoice(dir); return true;
-                    case 12: StepAntiAliasingChoice(dir); return true;
-                    case 13: StepShadowQualityChoice(dir); return true;
-                    case 14: StepWaterQualityChoice(dir); return true;
-                    case 15: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 16: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 17: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 18: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
-                    default: return false;
+                    return false;
                 }
+
+                _choices.Step(_optionsIndex, dir);
+                return true;
             case Screen.Network:
                 // The port, the cap and the voice step. The address and the names are typed, and
                 // the three rows under the address are presses.
-                if (_coopWait || _net is not { } door)
+                if (_coopWait)
+                {
+                    return _netIndex == CoopWaitPlaneRow && _campaignFeature.StepGuestPlane(dir);
+                }
+
+                if (_net is not { } door)
                 {
                     return false;
                 }
@@ -2009,11 +1938,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             case Screen.Options:
                 // Accept on a stepper row is the sideways step forwards, so a row is walkable with
                 // one gesture; the two rows past them are the doors this screen leaves by.
-                if (_optionsIndex < OptionsStepperRows)
+                if (_optionsIndex < OptionsChoices.Count)
                 {
                     HandleMoveX(1);
                 }
-                else if (_optionsIndex == OptionsStepperRows)
+                else if (_optionsIndex == OptionsChoices.Count)
                 {
                     _screen = Screen.Controls;
                     OpenControls();
@@ -2022,11 +1951,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     // The launcher persists every choice and restarts the menu; the screen stays
                     // standing for the host to hide.
-                    _host.Exit(new OptionsApplyExit(_graphicsChoice,
-                        Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
-                        _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
-                        _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice, _waterQualityChoice));
+                    _host.Exit(_choices.ToExit());
                 }
 
                 break;
@@ -2250,9 +2175,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         store.Save(saved);
     }
 
-    // One keypress into a name row, under the Original boxes' limits and character rule.
+    // One keypress into a name row, under the Original boxes' limits and character rule. ⚠ Do not
+    // let the password change while a socket is open. The lobby copied it at the open, and refuses
+    // a guest given the new one. The address row refuses for the same reason.
     private void TypeNetName(NetPlayFeature net, int row, InputEventKey key)
     {
+        if (row == NetPasswordRow && net.Stage is NetDoorStage.Hosting or NetDoorStage.Joining or NetDoorStage.Joined)
+        {
+            return;
+        }
+
         string text = row switch
         {
             NetGameNameRow => net.Identity.GameName,
@@ -2331,11 +2263,18 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        // The waiting board's one row hangs up and hands the board back, shut, to join again.
+        // The waiting board's plane row steps the pick, a pad's one gesture for it. Its Leave row
+        // hangs up and hands the board back, shut, to join again.
         if (_coopWait)
         {
+            if (_netIndex == CoopWaitPlaneRow)
+            {
+                _campaignFeature.StepGuestPlane(1);
+                return;
+            }
+
             net.Close();
-            _coopWait = false;
+            LeaveCoopWait();
             _netIndex = NetJoinRow;
             return;
         }
@@ -2389,6 +2328,73 @@ public sealed partial class LaunchMenu : CanvasLayer
         _screen = Screen.Chapter;
         _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
         _error = "";
+    }
+
+    // The waiting board's guest follows its host on a guest campaign opened on the host's word, the
+    // feature an Original guest's boards stand on. Its pick is the board's plane row. With no
+    // flight check of its own each seat stands Ready under every round, or a host that waits on
+    // Ready would wait forever. Once the host launches, the guest leaves with the exit an Original
+    // guest builds. True when the launch went.
+    private bool TakeCoopGuestLaunch()
+    {
+        if (!_coopWait || _net is not { IsCoopGuest: true } net || net.CoopFlow is not { } flow)
+        {
+            return false;
+        }
+
+        if (!_campaignFeature.IsGuest && !_campaignFeature.OpenCoopGuest(net, Fits, _dataRoot))
+        {
+            return false;
+        }
+
+        if (_campaignFeature.FollowCoopHost(net, flow, _slots.Count) is var lost and >= 0)
+        {
+            _error = _campaignFeature.SeatRefusal(lost);
+        }
+
+        for (int local = 0; local < net.CoopSeats; local++)
+        {
+            var pick = net.PickOf(local);
+            if (!pick.Ready)
+            {
+                pick.Set(pick.Airframe, true, pick.Fit);
+            }
+        }
+
+        if (!net.CoopLaunchDue
+            || _campaignFeature.CoopGuestExit(net, local => local < _slots.Count ? _slots[local].Input.Pads ?? Array.Empty<int>() : Array.Empty<int>()) is not { } exit)
+        {
+            return false;
+        }
+
+        Log.Info("ui", $"launchscreen: co-op guest flying mission seq {exit.MissionSeq.ToString(CultureInfo.InvariantCulture)} behind {net.Advert?.Host}");
+        _campaignFeature.Discard();
+        _host.Exit(exit);
+        return true;
+    }
+
+    // Off the waiting board. The guest campaign goes with it; the door keeps the pick it carried.
+    private void LeaveCoopWait()
+    {
+        _coopWait = false;
+        if (_campaignFeature.IsGuest)
+        {
+            _campaignFeature.Discard();
+        }
+    }
+
+    // The waiting board's rows: the guest's plane, then Leave.
+    private string CoopWaitRowText(int index)
+    {
+        if (index != CoopWaitPlaneRow)
+        {
+            return CoopDoorText.LeaveRow;
+        }
+
+        string plane = _campaignFeature is { IsGuest: true, Profile: { Planes.Count: > 0 } profile }
+            ? profile.Planes[Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1)].Name
+            : "the host's hangar";
+        return $"Plane           {plane}";
     }
 
     // --- the hangar ---
@@ -2591,9 +2597,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         // Two of the aids need a roster to pick from and five need a profile part-way through the
-        // campaign; the seeded store carries both, since a second profile changes no later screen.
+        // campaign. The seeded store carries both, since a second profile changes no later screen.
+        // The scratch store is the one both presentations' aids share, emptied on every open.
         bool seeded = value != "campaign-empty" && value != "campaign-entry";
-        _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
+        _campaign = NewCampaignFlow(CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         _screen = Screen.Campaign;
         _error = "";
         if (_campaign is not { } flow)
@@ -2725,12 +2732,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             page.Advance(slice);
         }
     }
-
-    // The scratch store the campaign screenshot aids read, the one both presentations' aids share
-    // (CampaignAidProfiles): emptied on every open, seeded for the filled-roster shot, progressed
-    // for the screens past the cabin.
-    private CampaignProfileStore AidProfileStore(bool seeded, bool progressed = false) =>
-        CampaignAidProfiles.Store(seeded, progressed);
 
     // One frame of player 1's input on a campaign screen. While a page's text field is armed the
     // keyboard's letters are text, so the cursor axes come from the pad alone.
@@ -2872,6 +2873,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // has the profile open anyway.
     private void FlyCampaignMission(CampaignFlow flow)
     {
+        // A co-op host's launch waits for every guest's Ready, as the Original host's greyed FLY
+        // MISSION does. The press stays on the check and says why.
+        if (flow.Feature.CoopLaunchWaits(_net))
+        {
+            flow.Resume();
+            flow.SetMessage(CoopDoorText.GuestsNotReady);
+            _error = flow.Message;
+            return;
+        }
+
         int players = _slots.Count;
         var pads = new List<IReadOnlyList<int>>(players);
         for (int player = 0; player < players; player++)
@@ -2893,9 +2904,12 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         StopNarration();
 
-        // No campaign mission carries a wire yet, so the door closes rather than stranding its
-        // guests on a socket nobody steps.
-        CloseCoopDoor();
+        // A co-op host's guests fly with it, so the door's wire leaves with the launch.
+        if (_net is { IsCoopHost: true } net)
+        {
+            exit = exit with { Net = net.BuildLaunch() };
+        }
+
         _campaign = null;
         _campaignFeature.Discard();
         _screen = Screen.Mode;
@@ -2919,7 +2933,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // A waiting board whose link dropped has nothing left to wait for; the board says why.
         if (_coopWait && !net.IsCoopGuest)
         {
-            _coopWait = false;
+            LeaveCoopWait();
             _netIndex = NetJoinRow;
             _error = net.Fault;
         }
@@ -2969,17 +2983,35 @@ public sealed partial class LaunchMenu : CanvasLayer
         flow.SetMessage(net.Fault.Length > 0 ? $"The network did not open: {net.Fault}" : "");
     }
 
-    // What the open door advertises: the mission the boards are about, else the profile's next.
-    // Re-offered every frame; the lobby sends only a change, a guest arriving or a mission picked.
+    // The open door's word to its guests, re-offered every frame through the feature both
+    // presentations share; the lobby sends only a change. The guests are shown the board this
+    // host stands on, so they brief, pick and Ready on its check as under an Original host.
     private void OfferCoopMission(CampaignFlow flow)
     {
-        if (_net is not { IsCoopHost: true } net || flow.Profile is not { } profile)
+        if (_net is not { IsCoopHost: true } net)
         {
             return;
         }
 
-        int seq = flow.MissionSeq >= 0 ? flow.MissionSeq : flow.Feature.NextMissionSeq;
-        net.Offer(seq, profile.Name, _slots.Count);
+        // The book stays the debrief until the cabin or a briefing is entered with no film up.
+        var feature = flow.Feature;
+        if (!flow.Film.Up && flow.Screen is CampaignScreen.Cabin or CampaignScreen.Briefing or CampaignScreen.Roster)
+        {
+            feature.CloseDebrief();
+        }
+
+        var board = flow.Screen switch
+        {
+            CampaignScreen.Briefing => NetCoopScreen.Briefing,
+            CampaignScreen.FlightCheck or CampaignScreen.Ammo or CampaignScreen.PlaneSelection => NetCoopScreen.FlightCheck,
+            _ when feature.Debriefing => NetCoopScreen.Debrief,
+            _ => NetCoopScreen.Cabin,
+        };
+        feature.OfferCoop(net, board, _slots.Count);
+        if (flow.Message == CoopDoorText.GuestsNotReady && !feature.CoopLaunchWaits(net))
+        {
+            flow.SetMessage(string.Empty);
+        }
     }
 
     // Leaving the campaign, flying out of it and a menu reopened all close the carrier and give
@@ -3142,31 +3174,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         _slots[0].Fit.ResetToStock();
     }
 
-    // Keeps the 14-row window over the cursor, and never scrolls past the end of the list. The
-    // cursor wraps (Wrap, like every other screen), so top-to-bottom jumps both ways are normal
-    // here rather than an edge case.
-    private void ScrollPresetsToCursor()
-    {
-        int last = Math.Max(0, InstantActionPresets.All.Count - PresetWindow);
-        int top = Math.Clamp(_presetTop, 0, last);
-        if (_presetCursor < top)
-            top = _presetCursor;
-        else if (_presetCursor >= top + PresetWindow)
-            top = _presetCursor - PresetWindow + 1;
-        _presetTop = Math.Clamp(top, 0, last);
-    }
+    private void ScrollPresetsToCursor() =>
+        _presetTop = ScrollTop(_presetTop, _presetCursor, InstantActionPresets.All.Count, PresetWindow);
 
-    // The Options window's counterpart of the one above, the cursor wrapping the same way.
-    private void ScrollOptionsToCursor()
-    {
-        int last = Math.Max(0, CurrentCount() - OptionsWindow);
-        int top = Math.Clamp(_optionsTop, 0, last);
-        if (_optionsIndex < top)
-            top = _optionsIndex;
-        else if (_optionsIndex >= top + OptionsWindow)
-            top = _optionsIndex - OptionsWindow + 1;
-        _optionsTop = Math.Clamp(top, 0, last);
-    }
+    private void ScrollOptionsToCursor() =>
+        _optionsTop = ScrollTop(_optionsTop, _optionsIndex, CurrentCount(), OptionsWindow);
 
     // Whether the Plane screen's launch gesture is live right now. The gate reads CONFIRMED, the
     // second stage, which leaves a window between selecting an airframe and flying it for the
@@ -3209,8 +3221,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (networked && HostLobbyRefusal(exit) is { } refusal)
         {
             _error = refusal;
+            _launchRefusedAt = _net!.Revision;
             return;
         }
+
+        _launchRefusedAt = null;
 
         // The open wire rides out with the launch, and the door keeps nothing: from here the
         // session owns the transport, steps it and closes it.
@@ -3457,27 +3472,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         _optionsIndex = 0;
         _optionsTop = 0;
-        var saved = OptionsStore.UserOptions().Load();
-        _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
-        _nearestAfterKillChoice = saved.NearestAfterKill;
-        _rumbleChoice = saved.Rumble;
-        _defaultViewChoice = saved.DefaultView;
-        _autoHeadTurnChoice = saved.AutoHeadTurn;
-        _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
-        _viewDistanceChoice = saved.ViewDistance;
-        _monitorChoice = saved.MonitorIndex;
-        _resolutionChoice = saved.Resolution;
-        _savedResolution = saved.Resolution;
-        _displayModeChoice = saved.DisplayMode;
-        _vsyncChoice = saved.VSync;
-        _renderScaleChoice = saved.RenderScale;
-        _antiAliasingChoice = saved.AntiAliasing;
-        _shadowQualityChoice = saved.ShadowQuality;
-        _waterQualityChoice = saved.WaterQuality;
-        _audioMasterChoice = saved.AudioMaster;
-        _audioMusicChoice = saved.AudioMusic;
-        _audioEffectsChoice = saved.AudioEffects;
-        _audioVoiceChoice = saved.AudioVoice;
+        _choices.Load(OptionsStore.UserOptions().Load());
     }
 
     // Opens the rebinding screen on the joined seats' live keymaps, one per pad seat the join board
@@ -3624,7 +3619,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             return StepControlsSensitivity(dir);
         if (_controlsIndex == ControlsContextRow)
             return StepControlsContext(dir);
-        return ControlsButton(_controlsIndex) >= 0 ? false : StepControlsSlot(dir);
+        if (ControlsButton(_controlsIndex) >= 0)
+            return false;
+        _controls.MoveSlot(dir);
+        return true;
     }
 
     private bool StepControlsPlayer(int dir)
@@ -3663,23 +3661,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         return true;
     }
 
-    private bool StepControlsSlot(int dir)
-    {
-        _controls.MoveSlot(dir);
-        return true;
-    }
-
     // Keeps the window over the cursor and the feature's focused action under it, so the row the
     // player is looking at is the row a capture binds.
     private void SyncControlsCursor()
     {
-        int last = Math.Max(0, CurrentCount() - ControlsWindow);
-        int top = Math.Clamp(_controlsTop, 0, last);
-        if (_controlsIndex < top)
-            top = _controlsIndex;
-        else if (_controlsIndex >= top + ControlsWindow)
-            top = _controlsIndex - ControlsWindow + 1;
-        _controlsTop = Math.Clamp(top, 0, last);
+        _controlsTop = ScrollTop(_controlsTop, _controlsIndex, CurrentCount(), ControlsWindow);
         if (IsControlsActionRow(_controlsIndex))
             _controls.Focus(_controlsIndex - ControlsHeaderRows);
     }
@@ -3777,224 +3763,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         return "↑↓  Choose       ←→  Which control       Enter / A  Rebind"
             + "       Del / Backspace / Y  Unbind       P / X  Defaults       Esc / B  Back without saving";
     }
-
-    // A three-way stepper with wrap, Normal / Hard / Hardest in the campaign selector's order.
-    private void StepDifficultyChoice(int dir) =>
-        _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
-
-    // A three-way stepper with wrap over PilotView.Selectable, the order the original's own Default
-    // View dropdown offers. A never-set view steps from Chase, which is what its absence reads as.
-    private void StepDefaultViewChoice(int dir) =>
-        _defaultViewChoice = PilotView.Name(PilotView.Step(
-            PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase, dir));
-
-    private string DefaultViewChoiceLabel() =>
-        PilotView.Label(PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase);
-
-    // A two-way toggle over a setting the flight reads three ways: on, off, and never set, which
-    // leaves the headLook.autohead config key deciding. A first press turns it on, since the key
-    // ships off, so a press has to change something.
-    private void ToggleAutoHeadTurnChoice() => _autoHeadTurnChoice = _autoHeadTurnChoice != true;
-
-    private string AutoHeadTurnChoiceLabel() => _autoHeadTurnChoice == true ? "On" : "Off";
-
-    // A two-way toggle. A never-set field steps to on, since off is what its absence already reads
-    // as and a first press has to change something.
-    private void ToggleNearestAfterKillChoice() =>
-        _nearestAfterKillChoice = _nearestAfterKillChoice != true;
-
-    private string NearestAfterKillChoiceLabel() => _nearestAfterKillChoice == true ? "On" : "Off";
-
-    // The same two-way toggle read the other way round. A never-set rumble is ON, the way the
-    // original ships force feedback, so a first press has to turn it off.
-    private void ToggleRumbleChoice() => _rumbleChoice = _rumbleChoice == false;
-
-    private string RumbleChoiceLabel() => _rumbleChoice != false ? "On" : "Off";
-
-    private void ToggleGraphicsChoice() =>
-        _graphicsChoice = _graphicsChoice == GraphicsMode.EnhancedWord
-            ? GraphicsMode.Default
-            : GraphicsMode.EnhancedWord;
-
-    private string GraphicsChoiceLabel() =>
-        _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
-
-    // Dead under Original, as the resolution row is under borderless: the faithful world keeps the
-    // decoded fade. Clamped at both ends, so a held arrow settles on Normal or Unlimited.
-    private void StepViewDistanceChoice(int dir)
-    {
-        if (_graphicsChoice != GraphicsMode.EnhancedWord)
-        {
-            return;
-        }
-
-        _viewDistanceChoice = ViewDistance.Words[Math.Clamp(ViewDistance.Index(_viewDistanceChoice) + dir, 0, ViewDistance.Words.Length - 1)];
-    }
-
-    private string ViewDistanceChoiceLabel() => ViewDistance.Label(_viewDistanceChoice);
-
-    // The row says why it does not step rather than refusing in silence.
-    private string ViewDistanceDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
-        ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
-        : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.";
-
-    // The monitor and resolution rows ask the engine on every read rather than holding a list from
-    // when the screen opened, since a monitor can be plugged in while the row stands focused and the
-    // sizes are the standing screen's own. A saved index no screen answers to draws as the screen
-    // the window already stands on, MonitorSetting.Resolve's own forgiving read, so the row cannot
-    // name a screen the apply would not move the window to.
-    private string MonitorChoiceLabel()
-    {
-        var screens = MonitorSetting.Screens();
-        return screens.Labels[MonitorSetting.Resolve(_monitorChoice, screens).Screen];
-    }
-
-    private string ResolutionChoiceLabel()
-    {
-        var sizes = ResolutionSizes();
-        return sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice)];
-    }
-
-    // The sizes the resolution row offers: the standing screen's own list, widened with the size the
-    // options file named when the screen opened. A size written in by hand therefore stands in the
-    // row where it sorts for as long as the page is open. A step off it can step back onto it, and
-    // only a step the player makes replaces it.
-    private SizeList ResolutionSizes() => ResolutionSetting.ScreenSizes().Including(_savedResolution);
-
-    private string DisplayModeChoiceLabel() =>
-        DisplaySettingRows.DisplayModeLabels[DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, _displayModeChoice, DisplayModeSetting.Default)];
-
-    private string VSyncChoiceLabel() =>
-        DisplaySettingRows.VSyncLabels[DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, _vsyncChoice, VSyncSetting.Default)];
-
-    // The scales the render-scale row offers under the method the anti-aliasing row stands on.
-    private IReadOnlyList<string> RenderScaleWords() =>
-        RenderScaleSetting.ChoicesFor(DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice));
-
-    private string RenderScaleChoiceLabel()
-    {
-        var words = RenderScaleWords();
-        return DisplaySettingRows.RenderScaleLabels(words)[DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default)];
-    }
-
-    private string AntiAliasingChoiceLabel()
-    {
-        string word = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
-        return DisplaySettingRows.AntiAliasingLabels[DisplaySettingRows.WordIndex(DisplayWords.AntiAliasingChoices, word, word)];
-    }
-
-    // The six display steppers. Each writes back the word the options file carries, not the row's
-    // position, since the apply hands the word to the setting's own resolver. A step off a value
-    // the machine no longer offers therefore starts from the forgiving read, not from -1.
-    private void StepMonitorChoice(int dir)
-    {
-        var screens = MonitorSetting.Screens();
-        int at = MonitorSetting.Resolve(_monitorChoice, screens).Screen;
-        _monitorChoice = MonitorSetting.Word(DisplaySettingRows.Step(at, dir, screens.Labels.Count));
-    }
-
-    // Dead while the display mode owns the size, which borderless does. The saved size is left
-    // where it is rather than overwritten with the screen's. Picking Windowed or Fullscreen again
-    // then gives the player back the size they chose.
-    private void StepResolutionChoice(int dir)
-    {
-        if (ResolutionSetting.Pinned(_displayModeChoice))
-        {
-            return;
-        }
-
-        var sizes = ResolutionSizes();
-        int at = DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice);
-        _resolutionChoice = sizes.Words[DisplaySettingRows.Step(at, dir, sizes.Words.Count)];
-    }
-
-    private void StepDisplayModeChoice(int dir)
-    {
-        var words = DisplayWords.DisplayModes;
-        int at = DisplaySettingRows.WordIndex(words, _displayModeChoice, DisplayModeSetting.Default);
-        _displayModeChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    private void StepVSyncChoice(int dir)
-    {
-        var words = DisplayWords.VSyncChoices;
-        int at = DisplaySettingRows.WordIndex(words, _vsyncChoice, VSyncSetting.Default);
-        _vsyncChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    private void StepRenderScaleChoice(int dir)
-    {
-        var words = RenderScaleWords();
-        int at = DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default);
-        _renderScaleChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    // FSR 2.2 refuses a scale above native, so stepping onto it moves such a scale to native. The
-    // launch applies the same clamp to a saved pair.
-    private void StepAntiAliasingChoice(int dir)
-    {
-        var words = DisplayWords.AntiAliasingChoices;
-        string standing = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
-        int at = DisplaySettingRows.WordIndex(words, standing, standing);
-        _antiAliasingChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-        _renderScaleChoice = RenderScaleSetting.ClampFor(_renderScaleChoice, _antiAliasingChoice);
-    }
-
-    private string ShadowQualityChoiceLabel() =>
-        DisplaySettingRows.ShadowQualityLabels[DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, _shadowQualityChoice, ShadowQualitySetting.Word)];
-
-    // Dead while the graphics row stands on Original, whose world casts no sun shadow. The saved
-    // word is kept, so flipping to Enhanced gives the player back the level they chose.
-    private void StepShadowQualityChoice(int dir)
-    {
-        if (_graphicsChoice != GraphicsMode.EnhancedWord)
-        {
-            return;
-        }
-
-        var words = ShadowQualitySetting.Words;
-        int at = DisplaySettingRows.WordIndex(words, _shadowQualityChoice, ShadowQualitySetting.Word);
-        _shadowQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    // Dead under Original, whose sea is the flat sheet whatever the word. The saved word is kept for
-    // a later flip, as the shadow row keeps its own.
-    private void StepWaterQualityChoice(int dir)
-    {
-        if (_graphicsChoice != GraphicsMode.EnhancedWord)
-        {
-            return;
-        }
-
-        var words = WaterQualitySetting.Words;
-        int at = DisplaySettingRows.WordIndex(words, _waterQualityChoice, WaterQualitySetting.Word);
-        _waterQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
-    }
-
-    // The row says why it does not step rather than refusing in silence.
-    private string WaterQualityDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
-        ? "Flat draws the original's sea; Waves draws a swell in its place. Flat runs faster. Applies at once."
-        : "Enhanced Graphics only: the original world's sea is always flat.";
-
-    // The size row's detail says what the size does under the mode standing with it. The size does
-    // something different in each mode, and under borderless the row does not step at all. A
-    // stepper that refuses without saying why reads as a broken row.
-    private string ResolutionDetail()
-    {
-        if (ResolutionSetting.Pinned(_displayModeChoice))
-        {
-            return "Borderless runs at the desktop's own size. Pick Windowed or Fullscreen to choose one.";
-        }
-
-        return _displayModeChoice == DisplayWords.Fullscreen
-            ? "Select the size the game draws at, scaled up to fill the fullscreen window."
-            : "Select the window size. The list is what the screen the window stands on can hold.";
-    }
-
-    // The graphics row's detail. The apply switches the running world (Launcher.SwitchGraphicsMode),
-    // so no restart is owed and the line does not read the running mode.
-    private string GraphicsDetail() =>
-        "Original is the faithful world; Enhanced lights it. Applies at once.";
 
     // What this screen is, the middle band's first line.
     private string Heading()
@@ -4446,11 +4214,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int CurrentCount() => _screen switch
     {
         Screen.Mode => Modes.Length + ModeDoors,
-        Screen.Network => _coopWait ? 1 : NetworkRows,
+        Screen.Network => _coopWait ? CoopWaitRows : NetworkRows,
         Screen.Join => JoinRows,
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => OptionsStepperRows + 2, // + the controls door and the apply row
+        Screen.Options => OptionsChoices.Count + 2, // + the controls door and the apply row
         Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
         Screen.Chapter => CurrentChapters.Length + MatchRowCount,
         Screen.Presets => InstantActionPresets.All.Count,
@@ -4513,30 +4281,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Join => index == JoinBackRow ? "Back" : "Continue",
             Screen.Hangar => _hangar?.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
-            Screen.Options => index switch
-            {
-                0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
-                1 => $"Default View: {DefaultViewChoiceLabel()}",
-                2 => $"Auto Head Turn: {AutoHeadTurnChoiceLabel()}",
-                3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
-                4 => $"Controller rumble: {RumbleChoiceLabel()}",
-                5 => $"Graphics: {GraphicsChoiceLabel()}",
-                6 => $"View distance (Enhanced only): {ViewDistanceChoiceLabel()}",
-                7 => $"Monitor: {MonitorChoiceLabel()}",
-                8 => $"Resolution: {ResolutionChoiceLabel()}",
-                9 => $"Display mode: {DisplayModeChoiceLabel()}",
-                10 => $"V-Sync: {VSyncChoiceLabel()}",
-                11 => $"Render scale: {RenderScaleChoiceLabel()}",
-                12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
-                13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
-                14 => $"Water quality: {WaterQualitySetting.Label(_waterQualityChoice)}",
-                15 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                16 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                17 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                18 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                19 => ControlsRow,
-                _ => "Apply and restart the menu",
-            },
+            Screen.Options => index < OptionsChoices.Count ? _choices.Label(index)
+                : index == OptionsChoices.Count ? ControlsRow : "Apply and restart the menu",
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
             Screen.Chapter => index < CurrentChapters.Length
                 ? CurrentChapters[index].Name
@@ -4563,7 +4309,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // status line under them says instead.
     // A guest linked to a campaign host is not walking on to a map, so its way on says where it
     // does go. The waiting board's one row replaces all five.
-    private string NetworkRowText(int index) => _coopWait ? CoopDoorText.LeaveRow : index switch
+    private string NetworkRowText(int index) => _coopWait ? CoopWaitRowText(index) : index switch
     {
         NetPortRow => $"Port            {(_net?.Port ?? NetPorts.Game).ToString(CultureInfo.InvariantCulture)}",
         NetAddressRow => $"Address         {_net?.Address ?? NetPlayFeature.DefaultAddress}",
@@ -4852,7 +4598,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WaveEdit or Screen.Wingmen or Screen.Options => "↑↓  Choose field       ←→  Change",
             // W/A/S/D are dead on the address row (MenuInput.TextEntry), so the arrows are named
             // alone, as the hangar's own name screen names them.
-            Screen.Network when _coopWait => "↑↓  Navigate",
+            Screen.Network when _coopWait => "↑↓  Navigate       ←→  Plane",
             Screen.Network => "↑↓  Choose row       ←→  Port, players, voice, listing       Type / Backspace  Address, names",
             // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
             // nobody can guess at. Free Flight's map screen has nothing sideways and says so.
@@ -4926,33 +4672,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             : "Keep the seats as signed on and return to the Mode screen.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
-        // One arm per row of the Options screen, in the order RowText writes them. A row that lost
-        // its arm would take the one under it, and every row below would read one line wrong. The
-        // two lists stay the same length.
-        Screen.Options => focus switch
-        {
-            0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
-            1 => "Select your default view. A --view= on the command line still outranks it.",
-            2 => "Select to turn your head automatically as your aircraft turns. Cockpit views only.",
-            3 => "Take the nearest target after a kill instead of the first of the list.",
-            4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
-            5 => GraphicsDetail(),
-            6 => ViewDistanceDetail(),
-            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            8 => ResolutionDetail(),
-            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            11 => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
-            12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
-            13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
-            14 => WaterQualityDetail(),
-            15 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            16 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            17 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            18 => "Set the volume of the voices. Heard once the choices are applied.",
-            19 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
-            _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
-        },
+        Screen.Options => focus < OptionsChoices.Count ? _choices.Detail(focus)
+            : focus == OptionsChoices.Count
+                ? "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away."
+                : "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         Screen.Controls => ControlsDetail(focus),
         Screen.Presets => PresetDetail(focus),
         Screen.Chapter => focus < CurrentChapters.Length
@@ -5019,13 +4742,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (s == null)
             return "(stats unavailable)";
         return $"Top Speed  {Mph(s)} mph        Weight  {s.VehWeight:0}";
-    }
-
-    // Just the top speed, the compact form used in the per-player pick lines.
-    private string PlaneSpeed(string node)
-    {
-        var s = StatsFor(node);
-        return s == null ? "stats n/a" : $"{Mph(s)} mph";
     }
 
     private PlaneStats? StatsFor(string node)

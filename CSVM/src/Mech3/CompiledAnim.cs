@@ -245,7 +245,7 @@ public sealed class AnimDefinition
     /// <summary>The compiled destruction slot, mech3ax's <c>unknown_seq</c> (decode and census:
     /// docs/formats/destructibles.md). ⚠ Deliberately kept OFF <see cref="Sequences"/> so
     /// bootstrap and every sequence-walking derivation stay untouched;
-    /// <c>AnimRuntime.RunDeathSequence</c> is the one dispatcher. Null on reader-sourced
+    /// <c>DestructibleDamage.RunDeathSequence</c> is the one dispatcher. Null on reader-sourced
     /// defs.</summary>
     public AnimSequence? DeathSlot;
 

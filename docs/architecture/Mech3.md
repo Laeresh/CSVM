@@ -453,7 +453,7 @@ Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): ty
 events, and the SI-script pool, where `Script(index)` parses lazily in `metadata.json` order. The
 `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately off `Sequences`
 so bootstrap and the sequence-walking derivations never see it and only
-`AnimRuntime.RunDeathSequence` dispatches it. The `ACTIVATION_PREREQUISITE` node-state form parses
+`DestructibleDamage.RunDeathSequence` dispatches it. The `ACTIVATION_PREREQUISITE` node-state form parses
 into `AnimDefinition.PrereqNodes` beside the anim-list form's `PrereqAnims`, and `AnimDefs.cs`
 reads the reader spelling into the same list. Decode, including the `active_raw` bit a leaf's state
 is read from: [../formats/anim-definitions.md](../formats/anim-definitions.md), [../formats/destructibles.md](../formats/destructibles.md).
@@ -541,22 +541,21 @@ in cell space and the two axes run opposite ways; both are in [../formats/interp
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims, a safety net), then dispatch-table
 event playback; an unhandled event kind is counted, never fatal. It owns the live definition instances and their condition evaluation, the
-destructible-damage entries (`DamageAt`, which also raises `DestructibleKilled` on a healthy-role
-kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`; a host publishes each stage change and kill off `DestructibleDamaged` and the health between stages off `DestructibleChipped`, and a guest's runtime is `DamageReplicated`, spending only through `ApplyReplicatedHealth`), the world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
+destructible-damage entries and the sinks callers configure (`DamageAt`, `ApplyDamageStages`, `CarryState`, `ResetDestructible`, `ApplyReplicatedHealth`; `DestructibleKilled`, `DestructibleDamaged`, `DestructibleChipped`, `DamageReplicated`), which forward to `Anim/DestructibleDamage.cs`, the world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
 with a frame budget, which never splits one def), the range-deferred start sweep
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
-probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. `ClaimedNodes` and `NodeClaimed` say which nodes a name query has handed out, the set `WorldMerge` leaves alone. Decode: docs/org/sequences.md.
+probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/DestructibleDamage.cs`, `Anim/TemplateStage.cs`. `ClaimedNodes` and `NodeClaimed` say which nodes a name query has handed out, the set `WorldMerge` leaves alone. Decode: docs/org/sequences.md.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own namespace,
 purely for file size: `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
 `MotionRuntime`), `AnimLight` (built only by `LightChannel`) and the bind-census `AnchorKind` enum.
 Not an independently owned subsystem; `AnimRuntime` drives all of it. `MotionSet`, `EmitterDirector`,
-`SoundChannel`, `LightChannel`, `PoseChannel`, `NameResolver` and `TemplateStage` share the
+`SoundChannel`, `LightChannel`, `PoseChannel`, `DestructibleDamage`, `NameResolver` and `TemplateStage` share the
 namespace and ARE owned in their own right, each with its entry below. `SpinMotion.ComposeSpin` is
 the one member reached from outside without `AnimRuntime` at all, by `Flight/Airframe/PropAnimator.cs`. The
 motion decode, both contact tiers and the readings they supersede: [../org/objectMotion.md](../org/objectMotion.md).
@@ -610,6 +609,15 @@ motion-BUILDER role, parsing the motion events into `MotionRuntime`/`FromToMotio
 container, while the tick spine stays in `AnimRuntime.Advance`. The two `AT_NODE` rotate spellings
 and the SI-script duration rules are on their own members. Spellings and census:
 docs/formats/anim-definitions/cutscenes.md.
+
+## src/Mech3/Anim/DestructibleDamage.cs
+One runtime's destructible damage and death as a module: `SpendHealth` (the one place a pool is
+lowered, shared by a local and a replicated hit, which raises the host's publish sinks), the
+`DAMAGE_SEQUENCE` stages, `RunDeathSequence` with its RESET-derived swap fallback, the silent
+`CarryState` pose, `ResetDestructible`, the `CALL_ANIMATION` kill and the pool sync an
+`OBJECT_ACTIVE_STATE` role swap drives. It owns the death bracket (`InDeathCall`, `Dying`) the
+dispatch reads to relocate and record a death's calls. The registry and `_rest` stay on
+`AnimRuntime`, which keeps the public entries and sinks as forwards. Decode: docs/formats/destructibles.md.
 
 ## src/Mech3/Anim/OpacityWriter.cs
 Writes a subtree's opacity per instance: the `csky_opacity` instance shader parameter on every

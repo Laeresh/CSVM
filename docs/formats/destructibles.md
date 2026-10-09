@@ -141,7 +141,7 @@ actual death swap `destroy_h2twr` sits in the regular `sequences` array. Do not 
 
 **The slot is loaded and dispatched at death.** `CompiledAnim` parses it
 into `AnimDefinition.DeathSlot`, deliberately OFF `Sequences`, so bootstrap and the
-sequence-walking derivations never see it, and `AnimRuntime.RunDeathSequence` runs it as an
+sequence-walking derivations never see it, and `DestructibleDamage.RunDeathSequence` runs it as an
 extra runner on the death's own instance. Across all 12,693 compiled defs:
 every non-empty slot sits on a `health > 0` destructible (none elsewhere), and 1,429 of the
 1,430 mission-archive slots dispatch calls no listed sequence reaches, this block is where
@@ -153,7 +153,7 @@ most-called death fire never played from a compiled death site at all.
 An object can read destroyed from the first frame without ever taking a hit: a start-state
 script or an `ON_STARTUP` sequence can author the same healthy→destroyed
 `OBJECT_ACTIVE_STATE` swap the death sequence runs, outside `DamageAt`. The engine's
-`AnimRuntime.SyncDestructiblePool` mirrors that swap into the object's `DestructibleRegistry`
+`DestructibleDamage.SyncDestructiblePool` mirrors that swap into the object's `DestructibleRegistry`
 pool (`Health` to 0, `Status` to `Destroyed`) whenever the dispatched event's role name matches
 the healthy/destroyed/`dbase` convention, so a later hit finds the pool already dead instead of
 replaying the whole death choreography on an object that already looks wrecked. Bootstrap
@@ -179,7 +179,7 @@ suite asserts both cannons boot standing, and `called-death-chain` asserts the b
 wreck that clears itself away switches its own destroyed-role nodes back off as a late step of
 dying, and `dbase` is a destroyed-role name here, so taking those events for a repair hands a
 killed pool full HP back after the visible death has played. The death chain that reading covers
-is `AnimRuntime.OwnDeathSequencesOf`: the def's non-ON_CALL sequences, its compiled destruction
+is `DestructibleDamage.OwnDeathSequencesOf`: the def's non-ON_CALL sequences, its compiled destruction
 slot, and the ON_CALL sequences those two reach through `CALL_SEQUENCE`. A sweep of the 2,603 defs
 carrying `HEALTH` across all eight chapters' mission programs (a def with no pool has nothing to
 revive, which leaves the aircraft crash defs out of scope) finds fifteen whose death chain authors

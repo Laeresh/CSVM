@@ -53,7 +53,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
         "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "ObjectDeleteChild",
-        "Callback", "FogState",
+        "Callback", "FogState", "FbfxColorFromTo",
     };
 
     /// <summary>Kinds with a handler that covers only part of what the event does, reported
@@ -414,10 +414,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // trip is counted and named (ReportUnhandled).
     private const float WaitCeilingS = 120f;
 
-    // The magic sequence name a destructible's progressive-damage script carries in both the reader
-    // and compiled forms (docs/formats/destructibles.md).
-    private const string DamageSequenceName = "DAMAGE_SEQUENCE";
-
     // The deferred-EXECUTION_BY_RANGE sweep quantises the player position to this cell size and
     // re-checks the deferred list only on a cell crossing (the MapEdgeExtender cadence).
     // ⚠ Keep it well under the smallest authored radius in the install, 50 m: the sweep lags an
@@ -479,12 +475,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // event lands after the caller's remaining events (docs/org/sequences.md).
     private readonly List<(AnimInstance Inst, bool Protect)> _queuedStarts = new();
 
-    // The destructible whose death is directly dispatching right now (a stack, since deaths nest).
-    // Lets a death-triggered CALL_ANIMATION landing on the SAME anchor as the dying instance
-    // register on its LocalCallTargets, so a reset can Stop and restore it too. Without that, a
-    // reset arriving before the called def's own motions finish leaves its pieces flown.
-    private readonly Stack<DestructibleRegistry.Instance> _dyingInstances = new();
-
     // The instance whose own t=0 burst is directly dispatching, one entry per nested CALL_ANIMATION
     // level, paired with whether this Start opted into self-invalidate protection. It stops a
     // same-name self STOP/INVALIDATE_ANIMATION authored early in that burst from tearing its own
@@ -494,8 +484,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Stack<(AnimInstance Inst, bool Protect)> _startingInstances = new();
 
     // Definitions an INVALIDATE_ANIMATION has latched off. ⚠ Treat the event as a one-shot latch,
-    // never a stop, and clear it only from RESET_ANIMATION; the original's animation state byte
-    // works that way (docs/formats/anim-definitions.md). Keyed by DEFINITION, not (def, anchor),
+    // never a stop. Clear it only where RESET_STATE is re-posed (RESET_ANIMATION, Play,
+    // ResetInstance), as the original's animation state byte does
+    // (docs/formats/anim-definitions.md). Keyed by DEFINITION, not (def, anchor),
     // because the event resolves one animation record and never walks the per-node copies.
     private readonly HashSet<AnimDefinition> _invalidated = new();
 
@@ -523,6 +514,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly DestructibleRegistry _destructibles = new();
 
+    // The destructible damage and death family (Anim/DestructibleDamage.cs), built in the
+    // constructor over the registry above.
+    private readonly DestructibleDamage _damage;
+
     // The call-site node a PlayEffectAt instance was invoked WITH, the callee's INPUT_NODE. The
     // local CALL_ANIMATION path expresses this by anchoring the callee on the site node; the
     // external path anchors on the staged template root instead, so the sentinel's referent is
@@ -539,10 +534,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // per event.
     private readonly Dictionary<AnimDefinition, float> _washGates = new();
 
-    // Keyed by (light name, anchor). The anchor identifies the *instance* of the definition,
-    // and a definition's `lights` array is its own symbol table, so two refineries each get
-    // their own orange_light. It cannot be keyed by host node the way puffers are: the flicker
-    // events are partial updates carrying only {name, range}, with no AT_NODE to resolve from.
+    // The deadline each TTL-bounded PlayEffectAt instance is stopped at, one entry per (def, anchor)
+    // on the effect clock. An input-governed def takes none, since its lifetime is authored.
     private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
 
     // Per effect anim name, the definitions one PlayEffectAt reaches through CALL_ANIMATION, the
@@ -624,6 +617,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // resolver's own identity keys a node.
     private readonly Dictionary<ulong, Node3D> _claimed = new();
 
+    // Set while an Advance runs on a fresh sample; outside one, a gate asks the seam live.
+    private bool _rangeSampled;
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
@@ -657,13 +653,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // outside a guest's catch-up, so an ordinary start costs one null test.
     private HashSet<AnimInstance>? _lateStarts;
 
-    // Nonzero while a death's own Start burst (RunDeathSequence) is on the call stack, a counter
-    // because a chained CALL_ANIMATION can call again. It lets a death-triggered call relocate its
-    // callee's effect-template root onto the struck node, the way TemplateStage.Places does.
-    // ⚠ Never widen this to the ambient world boot or RESET_STATE; those must leave a shared
-    // template at its gamez origin, and the goldens are byte-identical on that.
-    private int _deathCallDepth;
-
     // Nonzero while a deferred EXECUTION_BY_RANGE definition starts. Its immediate calls may
     // summon mission props from the gamez library; unrelated ambient bootstrap calls may not.
     private int _rangeCallDepth;
@@ -686,8 +675,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private PoseChannel? _pose;
 
     private float _effectClock;
-
-    private int _damagesLogged;
 
     // CALL_ANIMATION retargeting tallies. Deliberately NOT routed through Count(), which is
     // the "event kinds not yet acted on" channel, a retargeted call is acted on, and filing
@@ -763,6 +750,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             NameOf,
             s => IndexWorld(s, indexByPointer: false),
             ApplyResetStatesWithin);
+        _damage = new DestructibleDamage(this, _destructibles, Targets, ResetInstance, RunDeathSlot,
+            DamageNodeOf);
     }
 
     /// <summary>Raised the first time a name query hands a node out, this runtime's own or a caller's
@@ -970,9 +959,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         };
     }
 
-    /// <summary>The world nodes a definition anchors to, for the inspect tools, the runtime's own
-    /// answer, so a readout shows what the bootstrap actually bound rather than a re-derivation.
-    /// A null entry is a global (anchorless) instance. Read-only: the list is the cached one.</summary>
+    /// <summary>The world nodes a definition anchors to, for the inspect tools. It is the runtime's
+    /// own answer, so a readout shows what the bootstrap bound rather than a re-derivation.
+    /// A null entry is a global (anchorless) instance. Each call computes a fresh list.</summary>
     public IReadOnlyList<Node3D?> AnchorsOf(AnimDefinition def) => Anchors(def);
 
     /// <summary>Every world node matching a NAME pattern, optionally restricted to one subtree,
@@ -1074,35 +1063,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// definition in this program. This is the animation debugger's <c>--play-anim</c> path; its
     /// Restart is <see cref="Stop"/> → <see cref="Reseed"/> → Play.</summary>
     public List<(AnimDefinition Def, Node3D? Anchor)> Play(string animName, Node3D? fallbackAnchor = null,
-        bool applyReset = true)
-    {
-        var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
-        foreach (var def in _program.ByAnimName(animName))
-        {
-            var anchors = Anchors(def);
-            if (anchors.Count == 0)
-            {
-                // A placeless def (its NAME resolves nothing): fall back to the caller's staging
-                // anchor, the animation debugger's in-front-of-camera dummy, or null, which is
-                // global resolution (the def names world nodes directly). Bootstrap passes null.
-                anchors.Add(fallbackAnchor);
-            }
-            foreach (var anchor in anchors)
-            {
-                // ⚠ Pass applyReset:false for the crash trigger; its reset restores the healthy
-                // panels and hides the wreck. Re-posing IS the reset, so it clears the invalidation
-                // latch too, or a self-invalidating def could only ever replay once per session.
-                if (applyReset && def.ResetState != null)
-                {
-                    _invalidated.Remove(def);
-                    ApplyInstant(def.ResetState.Events, def, anchor);
-                }
-                Start(def, anchor);
-                started.Add((def, anchor));
-            }
-        }
-        return started;
-    }
+        bool applyReset = true) =>
+        PlayCore(animName, fallbackAnchor, applyReset, scope: null, park: null);
 
     /// <summary>Starts a mission trigger and lets its immediate <c>CALL_ANIMATION</c> and
     /// <c>OBJECT_ADD_CHILD</c> closure materialize library-root actors. Use for authored runtime
@@ -1174,20 +1136,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public List<(AnimDefinition Def, Node3D? Anchor)> PlayWithin(Node3D scope, string animName,
         bool applyReset = true)
     {
-        var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
-        foreach (var def in _program.ByAnimName(animName))
-        {
-            foreach (var anchor in Anchors(def))
-            {
-                if (anchor == null || (anchor != scope && !scope.IsAncestorOf(anchor)))
-                    continue;
-                if (applyReset && def.ResetState != null)
-                    ApplyInstant(def.ResetState.Events, def, anchor);
-                Start(def, anchor);
-                started.Add((def, anchor));
-            }
-        }
-        return started;
+        ArgumentNullException.ThrowIfNull(scope);
+        return PlayCore(animName, fallbackAnchor: null, applyReset, scope, park: null);
     }
 
     /// <summary><see cref="Stop"/>, scoped like <see cref="PlayWithin"/>: tears down only the
@@ -1306,14 +1256,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Indexes a subtree added to the world AFTER the bootstrap (the effect-template stage
-    /// <see cref="WorldBuilder"/> deliberately skips), then applies the RESET_STATE of every
-    /// definition now anchored within it, exactly as bootstrap pass 1 would have. The find cache is
-    /// cleared, since the bootstrap may have cached these names as resolving to nothing. Additive:
-    /// nothing running is disturbed, and mission setup does not re-run.</summary>
+    /// <see cref="WorldBuilder"/> deliberately skips). It then applies the RESET_STATE of every
+    /// definition now anchored within it, as bootstrap pass 1 would have. A name the
+    /// bootstrap cached as resolving to nothing extends over the appended rows on its next query.
+    /// Additive: nothing running is disturbed, and mission setup does not re-run.</summary>
     public void IndexStage(Node3D subtree)
     {
         IndexWorld(subtree);   // appends the subtree's nodes to the resolver (name + gamez index)
-        _resolver.ClearFindCache();    // drop stale "resolves to nothing" results cached during bootstrap
         ApplyResetStatesWithin(subtree);
     }
 
@@ -1325,7 +1274,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public List<DestructibleRegistry.Instance> IndexSpawnedCopy(Node3D subtree)
     {
         IndexWorld(subtree, indexByPointer: false);
-        _resolver.ClearFindCache();
         var pools = new List<DestructibleRegistry.Instance>();
         foreach (var def in _program.Defs)
         {
@@ -1351,7 +1299,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // have freed, an airframe swapped for another on the same rig.
         RetireFreedNodes();
         IndexWorld(subtree, indexOffset: indexOffset);
-        _resolver.ClearFindCache();
     }
 
     /// <summary>Takes a subtree <see cref="IndexRebasedStage"/> put in the node table back out,
@@ -1452,7 +1399,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public void IndexSpawnedVehicle(Node3D rig, string libraryRootName, int gamezIndex)
     {
         _resolver.Add(rig, libraryRootName, rig.GetParent() as Node3D, gamezIndex);
-        _resolver.ClearFindCache();
         var parts = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
         CollectNamed(rig, parts);
         _vehicleParts[rig.GetInstanceId()] = parts;
@@ -1612,6 +1558,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             WalkInstances(dt, passes, pass == passes - 1);
         }
+        _rangeSampled = false;
     }
 
     /// <summary>Records every instance started from here until <see cref="CatchUp"/>. A guest
@@ -1887,61 +1834,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary><see cref="DamageAt(Node, float)"/> for a hit <paramref name="shooter"/> fired, which
     /// the pool keeps as its <see cref="DestructibleRegistry.Instance.LastShooter"/>. A replicated
     /// world records nothing, since it spends nothing.</summary>
-    public bool DamageAt(Node? struck, float healthDamage, int shooter)
-    {
-        var inst = _destructibles.Resolve(struck);
-        if (inst == null)
-            return false;
-        // Read live, never captured: a pool dormant at mission start wakes later and must then
-        // take damage. Checked before Destroyed so out-of-the-world wins unconditionally.
-        if (inst.Dormant)
-            return false;
-        if (inst.Status == DestructibleRegistry.State.Destroyed)
-            return true;   // already dead, the death sequence owns it from here
-        if (DamageReplicated)
-            return true;   // struck, but another machine decides what it cost
-        inst.LastShooter = shooter;
-        SpendHealth(inst, inst.Health - Math.Max(0f, healthDamage), healthDamage);
-        return true;
-    }
+    public bool DamageAt(Node? struck, float healthDamage, int shooter) =>
+        _damage.DamageAt(struck, healthDamage, shooter);
 
     /// <summary>Sets a destructible to the health another machine decided, through the same
     /// stages and death a local hit takes. Only ever lowers it. False when the pool is out of the
     /// world, already dead, or at or below <paramref name="health"/> already.</summary>
-    public bool ApplyReplicatedHealth(DestructibleRegistry.Instance inst, float health)
-    {
-        ArgumentNullException.ThrowIfNull(inst);
-        if (inst.Dormant || inst.Status == DestructibleRegistry.State.Destroyed || health >= inst.Health)
-            return false;
-        SpendHealth(inst, health, inst.Health - health);
-        return true;
-    }
+    public bool ApplyReplicatedHealth(DestructibleRegistry.Instance inst, float health) =>
+        _damage.ApplyReplicatedHealth(inst, health);
 
     /// <summary>Puts a destructible into the state an earlier mission left it in, silently: the
     /// pool reads destroyed at HP 0 (or the carried HP at its damage stage) and its nodes take the
     /// pose the death ends in, with no effects, sounds or choreography. Returns false when there is
     /// nothing to carry. ⚠ Never route a carried state through <see cref="DamageAt"/>; that
     /// replays the death at mission open (docs/formats/destructibles.md "Starting destroyed").</summary>
-    public bool CarryState(DestructibleRegistry.Instance inst, bool destroyed, float health)
-    {
-        if (inst.Status == DestructibleRegistry.State.Destroyed)
-            return false;
-        if (!destroyed && health >= inst.Health)
-            return false;
-        inst.Health = destroyed ? 0f : Math.Max(0f, health);
-        var stages = inst.Def.Sequences.FirstOrDefault(s =>
-            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
-        if (stages != null)
-            inst.DamageStage = Math.Max(inst.DamageStage, DamageStageFor(stages, inst.Health));
-        if (!destroyed)
-        {
-            inst.Status = DestructibleRegistry.State.Damaged;
-            return true;
-        }
-        inst.Status = DestructibleRegistry.State.Destroyed;
-        ApplyDeathPose(inst);
-        return true;
-    }
+    public bool CarryState(DestructibleRegistry.Instance inst, bool destroyed, float health) =>
+        _damage.CarryState(inst, destroyed, health);
 
     /// <summary>A plane collision with a world node. EVERY destructible takes the damage, through
     /// <see cref="DamageAt"/>, so the death is identical to a weapon kill; the return value says
@@ -1949,71 +1857,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// THROUGH and false for a solid one it grazes or crashes on.
     /// ⚠ <c>ACTIVATION</c> gates the plane's fate, never the object's. A damage-side gate here
     /// would leave every rammed building untouched (docs/formats/destructibles.md).</summary>
-    public bool CollideDamageAt(Node? struck, float healthDamage)
-    {
-        var inst = _destructibles.Resolve(struck);
-        if (inst == null)
-        {
-            return false;
-        }
-        bool flyThrough =
-            inst.Def.Activation.Equals("WeaponOrCollideHit", StringComparison.OrdinalIgnoreCase);
-        if (CollideDamageGate != null && !CollideDamageGate(inst))
-        {
-            return flyThrough;   // refused the damage, not the contact
-        }
-        DamageAt(struck, healthDamage);
-        return flyThrough;
-    }
+    public bool CollideDamageAt(Node? struck, float healthDamage) =>
+        _damage.CollideDamageAt(struck, healthDamage);
 
     /// <summary>Returns a destroyed destructible to healthy, for the debug tools and respawn: stop
     /// the live death, restore the authored pose of every node it moved, re-apply the def's
     /// <c>RESET_STATE</c>, and restore the HP pool. ⚠ All four steps are needed for idempotence.
     /// Skipping the pose restore leaves the ballistic pieces wherever they flew, so a re-destroy
     /// launches from the wrong place, whether or not a chained death call has fired yet.</summary>
-    public void ResetDestructible(DestructibleRegistry.Instance inst)
-    {
-        var def = inst.Def;
-        Stop(def.AnimName, inst.Anchor);
-        // ⚠ Re-apply a called def's OWN reset state, on the anchor its call actually ran on (a
-        // pooled copy, not necessarily inst.Anchor). It is never inherited from the caller, so
-        // without it an ACTIVE_STATE the call flipped on sits inert but still shown.
-        void ResetCalled(AnimDefinition called, Node3D calledAnchor)
-        {
-            Stop(called.AnimName, calledAnchor);
-            RestoreRestPoses(called, calledAnchor);
-            if (called.ResetState != null)
-                ApplyInstant(called.ResetState.Events, called, calledAnchor);
-        }
-        if (inst.ChainedDeathDef is { } chained)
-        {
-            ResetCalled(chained, inst.Anchor);
-            inst.ChainedDeathDef = null;
-        }
-        // Every CALL_ANIMATION target the death dispatched onto its own anchor, reset the same way,
-        // so the result does not depend on whether the called def's motions had finished.
-        foreach (var (local, localAnchor) in inst.LocalCallTargets)
-            ResetCalled(local, localAnchor);
-        inst.LocalCallTargets.Clear();
-        // ⚠ The reset must stop the damage-stage effects itself. They live on the external runtime
-        // and loop while the healthy node stays active, which a heal never interrupts. Take the
-        // names from the def's own DAMAGE_SEQUENCE calls, never from a hardcoded list.
-        if (ExternalEffectStop != null
-            && inst.DamageStage > 0
-            && def.Sequences.FirstOrDefault(s =>
-                string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase)) is { } damageSeq)
-        {
-            foreach (var ev in damageSeq.Events)
-                if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } stageEffect)
-                    ExternalEffectStop(stageEffect);
-        }
-        RestoreRestPoses(def, inst.Anchor);
-        if (def.ResetState != null)
-            ApplyInstant(def.ResetState.Events, def, inst.Anchor);
-        inst.Health = inst.MaxHealth;
-        inst.Status = DestructibleRegistry.State.Healthy;
-        inst.DamageStage = 0;
-    }
+    public void ResetDestructible(DestructibleRegistry.Instance inst) => _damage.ResetDestructible(inst);
 
     // ---- state application ----
     /// <summary>Clamps each near-zero scale component to <see cref="MinPoseScale"/> (sign
@@ -2152,9 +2004,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             inst.AddRunner(seq);
         if (inst.Finished)
             return;
-        _instances.Add(inst);
-        _lateStarts?.Add(inst);
-        OnInstanceStarted?.Invoke(def, anchor);
+        AddLive(inst);
         // A call made by the tick's own walk hands its callee to the drain that closes the walk;
         // everything else fires whatever is due at t=0 immediately, so instantaneous sequences
         // (zepstate's active-state roster) settle during the build rather than one frame later.
@@ -2179,26 +2029,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// threshold was crossed, or the def carries no such sequence.
     /// ⚠ Keep the stage gate. Without it a one-shot damage effect re-fires on every hit inside a
     /// band; only a sustained one is spared by CALL_ANIMATION's own live guard.</summary>
-    internal bool ApplyDamageStages(DestructibleRegistry.Instance inst)
-    {
-        var seq = inst.Def.Sequences.FirstOrDefault(s =>
-            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
-        if (seq == null)
-            return false;
-        int stage = DamageStageFor(seq, inst.Health);
-        if (stage <= inst.DamageStage)
-            return false;
-        inst.DamageStage = stage;
-        if (inst.Status == DestructibleRegistry.State.Healthy)
-            inst.Status = DestructibleRegistry.State.Damaged;
-        // A one-shot selector, not a persistent instance: the cascade carries no timed events, so
-        // one zero-dt advance resolves the whole IF chain. The effect it starts becomes its own
-        // live instance and this host is discarded.
-        var host = new AnimInstance(inst.Def, inst.Anchor);
-        host.AddRunner(seq);
-        host.Advance(this, 0f);
-        return true;
-    }
+    internal bool ApplyDamageStages(DestructibleRegistry.Instance inst) => _damage.ApplyDamageStages(inst);
 
     /// <summary>Hands this instance the velocity a <c>Callback 16</c> carries, on the original's own
     /// terms (<c>FUN_004ee0e0</c>): the vector is stored whatever it is, and it ARMS only if some
@@ -2250,112 +2081,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     internal List<(string Name, bool Active, float RangeMin, float RangeMax, Color Color)> LightSnapshot() =>
         Light.Snapshot();
 
-    // How many of a DAMAGE_SEQUENCE's health thresholds hp has fallen at or below, the object's
-    // current damage stage. Monotonic in falling HP, so it is a safe escalation gate.
-    private static int DamageStageFor(AnimSequence seq, float hp)
-    {
-        int stage = 0;
-        foreach (var ev in seq.Events)
-        {
-            if (ev.Kind != "If" && ev.Kind != "Elseif")
-                continue;
-            if (DamageThreshold(ev.Data.Obj("condition")) is { } t && hp <= t)
-                stage++;
-        }
-        return stage;
-    }
-
-    // The HP a health condition first becomes true at as HP falls: ANIM_HEALTH's operand, or a
-    // range's upper bound (its lower bound is left to EvaluateCondition when the cascade actually
-    // runs). Null for a non-health condition, which does not stage.
-    private static float? DamageThreshold(AnimData? condition)
-    {
-        if (condition?.Union() is not { } union)
-            return null;
-        var (kind, value) = union;
-        return kind switch
-        {
-            "AnimHealth" => AnimData.AsNum(value),
-            "AnimHealthRange" => value is Dictionary<string, object?> fields
-                                 ? new AnimData(fields).Num("max")
-                                 : null,
-            _ => null,
-        };
-    }
-
-    // The node name an event targets, node for most compiled kinds (ObjectMotion), name for others
-    // (ObjectActiveState's hand-authored shape, ObjectMotionFromTo,
-    // ObjectOpacityFromTo/ObjectOpacityState). Matches the exact healthy/destroyed/dbase role words
-    // where that matters, never a _dest suffix (docs/formats/destructibles.md).
-    private static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
-
-    // Does this event come from the definition's RESET_STATE rather than one of its sequences?
-    // Reference identity on the authored event, since a baseline and a death name the same roles.
-    private static bool AuthoredInResetState(AnimDefinition def, AnimEvent ev) =>
-        def.ResetState is { } reset && reset.Events.Contains(ev);
-
-    // The name of def's own healthy-role node, for DestructibleKilled: the node an OBJECT_ACTIVE_
-    // STATE switches off in def's own Initial sequences (the visible-death case), or else the one
-    // RESET_STATE holds ACTIVE (the RESET-derived swap ApplyDeathSwap plays instead). Null for a
-    // def that authors no healthy/destroyed pair at all, which most destructibles do not.
-    private static string? HealthyNodeNameOf(AnimDefinition def)
-    {
-        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
-            foreach (var ev in seq.Events)
-                if (ev.Kind == "ObjectActiveState" && !ev.Data.Bool("state")
-                    && RoleName(ev).Contains("healthy", StringComparison.OrdinalIgnoreCase))
-                    return RoleName(ev);
-        if (def.ResetState is { } reset)
-            foreach (var ev in reset.Events)
-                if (ev.Kind == "ObjectActiveState"
-                    && RoleName(ev).Contains("healthy", StringComparison.OrdinalIgnoreCase))
-                    return RoleName(ev);
-        return null;
-    }
-
-    // Does target's own sequences author the healthy/destroyed swap, an OBJECT_ACTIVE_STATE that
-    // activates a destroyed/dbase-role node or deactivates a healthy-role one? Used by
-    // ChainedSwapTarget to find a CALL_ANIMATION target that owns the swap the caller's own
-    // RESET-derived fallback would otherwise fire early.
-    private static bool AuthorsSwap(AnimDefinition target) =>
-        target.Sequences.Any(seq => seq.Events.Any(ev =>
-        {
-            if (ev.Kind != "ObjectActiveState")
-                return false;
-            var name = RoleName(ev);
-            bool active = ev.Data.Bool("state");
-            return (active && (name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
-                                || name.Contains("dbase", StringComparison.OrdinalIgnoreCase)))
-                || (!active && name.Contains("healthy", StringComparison.OrdinalIgnoreCase));
-        }));
-
-    // Does def's own Initial sequences author a visible death on a node outside the
-    // healthy/destroyed/dbase role set: a piece moved, faded or switched off? ⚠ RunDeathSequence
-    // uses this to withhold ApplyDeathSwap's RESET-derived rescue. A def whose death look is
-    // authored that way must keep it; the rescue is only for a def with nothing but puffer calls,
-    // where the kill would otherwise be invisible.
-    private static bool AuthorsVisibleDeath(AnimDefinition def) =>
-        def.Sequences.Where(s => !s.OnCallOnly).Any(seq => seq.Events.Any(ev =>
-        {
-            bool isDeathKind = ev.Kind is "ObjectMotionFromTo" or "ObjectMotion"
-                or "ObjectOpacityFromTo" or "ObjectOpacityState"
-                or "ObjectActiveState";
-            if (!isDeathKind)
-                return false;
-            var name = RoleName(ev);
-            if (name.Length == 0)
-                return false;
-            bool isRoleNode = name.Contains("healthy", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
-            if (isRoleNode)
-                return false;
-            // An ACTIVE_STATE only counts switching a piece OFF, turning one ON authors
-            // nothing visible on its own (and would otherwise flag every def with an
-            // unrelated startup toggle).
-            return ev.Kind != "ObjectActiveState" || !ev.Data.Bool("state");
-        }));
-
     private static string Describe(object? value) => value switch
     {
         null => "",
@@ -2368,15 +2093,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // GlobalPosition both returns identity and logs an error for a node outside the tree, one line
     // per evaluation, which is thousands. Accumulate the local transforms instead; the world node
     // itself rests at the origin, so the result is the same number either way.
-    private static Vector3 WorldPos(Node3D node)
-    {
-        if (node.IsInsideTree())
-            return node.GlobalPosition;
-        var xform = node.Transform;
-        for (var p = node.GetParent() as Node3D; p != null; p = p.GetParent() as Node3D)
-            xform = p.Transform * xform;
-        return xform.Origin;
-    }
+    private static Vector3 WorldPos(Node3D node) => WorldTransform(node, out _).Origin;
 
     private static Vector3I CheckCellOf(Vector3 pos) => new(
         Mathf.FloorToInt(pos.X / RangeCheckCellSize),
@@ -2408,14 +2125,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         root.GlobalTransform = xf;
     }
 
-    /// <summary>Whether this start's first advance belongs at the tail of the tick's instance walk,
-    /// which is where the original reaches a definition started during a walk.
+    /// <summary>Whether this start's first advance belongs at the tail of the tick's instance walk.
+    /// That is where the original reaches a definition started during a walk.
     /// ⚠ Only a call the walk itself dispatched qualifies. A bootstrap, a mission or range trigger
-    /// and a death burst all need their t=0 events inside the bracket that started them, which
-    /// <see cref="RunDeathSequence"/> reads through <see cref="_dyingInstances"/>.</summary>
+    /// and a death burst all need their t=0 events inside the bracket that started them. For a
+    /// death that bracket is <see cref="DestructibleDamage.InDeathCall"/>.</summary>
     private bool QueueFirstAdvance(AnimInstance inst, bool protectSelfInvalidate)
     {
-        if (!_walkingInstances || _deathCallDepth > 0 || _rangeCallDepth > 0
+        if (!_walkingInstances || _damage.InDeathCall || _rangeCallDepth > 0
             || _missionCallDepth > 0)
         {
             return false;
@@ -2635,51 +2352,66 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var missing = new List<string>();
         foreach (var animName in _program.StartAnims)
         {
-            var defs = _program.ByAnimName(animName).ToList();
-            if (defs.Count == 0)
+            if (_program.ByAnimName(animName).Count == 0)
             {
                 missing.Add(animName);
                 continue;
             }
-
-            bool needsRangeDeferral = defs.Any(def => def.ByRange
-                && CallsUnplacedDefinition(def) && Anchors(def).Count > 0);
-            if (!needsRangeDeferral)
-            {
-                Play(animName);
-                ran.Add(animName);
-                continue;
-            }
-
-            foreach (var def in defs)
-            {
-                var anchors = Anchors(def);
-                if (anchors.Count == 0)
-                    anchors.Add(null);
-                foreach (var anchor in anchors)
-                {
-                    if (def.ResetState != null)
-                    {
-                        _invalidated.Remove(def);
-                        ApplyInstant(def.ResetState.Events, def, anchor);
-                    }
-                    if (def.ByRange && anchor != null && CallsUnplacedDefinition(def))
-                    {
-                        _rangeDeferred.Add((def, anchor));
-                        _rangeLibraryCallDefs.Add(def);
-                    }
-                    else
-                    {
-                        Start(def, anchor);
-                    }
-                }
-            }
+            PlayCore(animName, fallbackAnchor: null, applyReset: true, scope: null, ParkLibraryCall);
             ran.Add(animName);
         }
         _rangeCheckCells.Clear();
         if (_rangeDeferred.Count > 0)
             Log.Info("anim", $"anim: {_rangeDeferred.Count} ambient def(s) deferred by EXECUTION_BY_RANGE: {string.Join(", ", _rangeDeferred.Select(e => $"{e.Def.AnimName ?? e.Def.Name}({Mathf.Sqrt(e.Def.RangeMax):0} m)").Distinct().Take(10))}{(_rangeDeferred.Count > 10 ? ", ..." : "")}");
         return (startupRun, ran, missing);
+    }
+
+    // Play's one loop. scope keeps only anchors at or under it. park is asked after the reset, and
+    // a true answer withholds that instance's start.
+    private List<(AnimDefinition Def, Node3D? Anchor)> PlayCore(string animName, Node3D? fallbackAnchor,
+        bool applyReset, Node3D? scope, Func<AnimDefinition, Node3D?, bool>? park)
+    {
+        var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            var anchors = Anchors(def);
+            if (anchors.Count == 0)
+            {
+                // A placeless def (its NAME resolves nothing) falls back to the caller's staging
+                // anchor, such as the animation debugger's dummy. Null is global resolution, the
+                // def naming world nodes directly, and is what the bootstrap passes.
+                anchors.Add(fallbackAnchor);
+            }
+            foreach (var anchor in anchors)
+            {
+                if (scope != null && (anchor == null || (anchor != scope && !scope.IsAncestorOf(anchor))))
+                    continue;
+                // ⚠ Pass applyReset:false for the crash trigger; its reset restores the healthy
+                // panels and hides the wreck. Re-posing IS the reset, so it clears the invalidation
+                // latch too, or a self-invalidating def could only ever replay once per session.
+                if (applyReset && def.ResetState != null)
+                {
+                    _invalidated.Remove(def);
+                    ApplyInstant(def.ResetState.Events, def, anchor);
+                }
+                if (park != null && park(def, anchor))
+                    continue;
+                Start(def, anchor);
+                started.Add((def, anchor));
+            }
+        }
+        return started;
+    }
+
+    // Pass 3's park: a ranged start animation whose immediate call reaches unplaced library content
+    // waits for proximity instead of starting. An unanchored one has no position to measure from.
+    private bool ParkLibraryCall(AnimDefinition def, Node3D? anchor)
+    {
+        if (!def.ByRange || anchor == null || !CallsUnplacedDefinition(def))
+            return false;
+        _rangeDeferred.Add((def, anchor));
+        _rangeLibraryCallDefs.Add(def);
+        return true;
     }
 
     // A CALL_ANIMATION onto a range-gated cutscene definition: the call ARMS it, and the player
@@ -2853,15 +2585,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             {
                 if (a == null || !IsInstanceValid(a) || !slots.Contains(_templateStage.SlotOf(a)))
                     continue;
-                // The respawn's three steps (ResetCalled), for its reason: a copy handed out again
-                // must match the fresh one the original instances per call. ⚠ RESET_STATE alone
-                // leaves the last play's motions driving these nodes, mid-flight, into the new one.
-                Stop(def.AnimName, a);
-                RestoreRestPoses(def, a);
-                if (def.ResetState != null)
-                    ApplyInstant(def.ResetState.Events, def, a);
+                // A copy handed out again must match the fresh one the original instances per call.
+                ResetInstance(def, a);
             }
         }
+    }
+
+    // Returns one (def, anchor) instance to its authored start. It stops it, restores the rest pose
+    // of every node it moved, re-applies RESET_STATE and clears the invalidation latch.
+    // ⚠ Keep all four steps. RESET_STATE alone leaves the last run's motions driving the nodes, and
+    // a latch left set refuses the next Start of a def that invalidated itself.
+    private void ResetInstance(AnimDefinition def, Node3D anchor)
+    {
+        Stop(def.AnimName, anchor);
+        RestoreRestPoses(def, anchor);
+        _invalidated.Remove(def);
+        if (def.ResetState != null)
+            ApplyInstant(def.ResetState.Events, def, anchor);
+    }
+
+    // Makes a new instance live. ⚠ Every new instance comes through here, or a guest's CatchUp
+    // never steps it and the debugger's timeline never sees it start.
+    private void AddLive(AnimInstance inst)
+    {
+        _instances.Add(inst);
+        _lateStarts?.Add(inst);
+        OnInstanceStarted?.Invoke(inst.Def, inst.Anchor);
     }
 
     // Records a flagged call whose callee was handed to the world-effects runtime, where this
@@ -2881,7 +2630,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // live: a callee whose whole choreography fires at t=0 never becomes an instance.
     private void InstallWait(string callName, List<(AnimDefinition Def, Node3D? Anchor)> waitOn)
     {
-        if (!waitOn.Any(w => IsLive(w.Def, w.Anchor)))
+        if (!AnyLive(waitOn))
         {
             // ⚠ Keep this log. "Reached but holding nothing" is a different state from "never
             // dispatched", and without it a probe reports an inert mechanism as untested.
@@ -2894,7 +2643,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         float deadline = _elapsed + WaitCeilingS;
         _pendingWait = () =>
         {
-            if (!waitOn.Any(w => IsLive(w.Def, w.Anchor)))
+            if (!AnyLive(waitOn))
                 return false;
             if (_elapsed < deadline)
                 return true;
@@ -2906,8 +2655,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Is this definition already running on this anchor? (Instance identity is (definition, anchor)
     // throughout.)
-    private bool IsLive(AnimDefinition def, Node3D? anchor) =>
-        _instances.Any(i => i.Def == def && i.Anchor == anchor);
+    private bool IsLive(AnimDefinition def, Node3D? anchor) => InstanceOf(def, anchor) != null;
+
+    // A held wait's per-frame poll, as a loop for the same reason InstanceOf is one.
+    private bool AnyLive(List<(AnimDefinition Def, Node3D? Anchor)> waitOn)
+    {
+        for (int i = 0; i < waitOn.Count; i++)
+        {
+            if (IsLive(waitOn[i].Def, waitOn[i].Anchor))
+                return true;
+        }
+        return false;
+    }
 
     // Removes matching live instances. tearDown chooses whether to also clear each instance's
     // motions/puffers/lights/sounds: true for an explicit Stop, false for Start's seamless restart,
@@ -3068,7 +2827,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 if (Sound.TrySetActive(ev, anchor))
                     return true;
                 _opsApplied += Pose.HandleActiveState(ev, def, anchor, instant);
-                SyncDestructiblePool(ev, def, anchor);
+                _damage.SyncDestructiblePool(ev, def, anchor);
                 return true;
 
             case "ObjectTranslateState":
@@ -3171,8 +2930,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // different copy from the one running.
                     List<(AnimDefinition Def, Node3D? Anchor)>? waitOn =
                         ev.WaitsForCompletion && !instant ? new() : null;
-                    foreach (var target in _program.ByAnimName(callName))
+                    // Indexed, not foreach: the poll idiom re-issues this every frame, and foreach over
+                    // the interface boxes an enumerator each time.
+                    var targets = _program.ByAnimName(callName);
+                    for (int t = 0; t < targets.Count; t++)
                     {
+                        var target = targets[t];
                         // A range-gated cutscene: the call arms it, the player arriving runs it.
                         if (!instant && DeferRangedCall(target, callAnchor))
                             continue;
@@ -3187,7 +2950,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // A call naming a destructible's own death definition kills that
                         // destructible (KillCalledDestructible); the wait, if any, is on the
                         // death now running on its own anchor.
-                        if (!instant && !operandRedirect && KillCalledDestructible(target) is { } killed)
+                        if (!instant && !operandRedirect && _damage.KillCalledDestructible(target) is { } killed)
                         {
                             waitOn?.Add((target, killed.Anchor));
                             continue;
@@ -3203,7 +2966,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             {
                                 relocate = true;
                             }
-                            else if ((_deathCallDepth > 0 || _rangeCallDepth > 0
+                            else if ((_damage.InDeathCall || _rangeCallDepth > 0
                                     || _missionCallDepth > 0 || StartedByMissionTrigger(def))
                                 && !operandRedirect && ResolveLibraryRoot != null)
                             {
@@ -3262,7 +3025,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 // A death's callee rides its call site: a carried ring's debris
                                 // moves with the hull (the pieces integrate in the root's frame,
                                 // docs/org/sequences.md). Other relocating calls hold their placement.
-                                bool rides = _deathCallDepth > 0;
+                                bool rides = _damage.InDeathCall;
                                 // Null for every callee the play did not name, which is the whole
                                 // faithful path: those keep the axis their template stands on.
                                 var placeOrient = OrientedCall(target);
@@ -3290,10 +3053,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // A relocated death call on the dying instance's own anchor is the
                             // caller's own choreography, so a reset must restore it too. ⚠ Scope
                             // this to the same test as relocation, or a shared template goes too.
-                            if (relocate && startAnchor != null && _dyingInstances.Count > 0
-                                && ReferenceEquals(_dyingInstances.Peek().Anchor, callAnchor))
+                            if (relocate && startAnchor != null && _damage.Dying is { } dying
+                                && ReferenceEquals(dying.Anchor, callAnchor))
                             {
-                                _dyingInstances.Peek().LocalCallTargets.Add((target, startAnchor));
+                                dying.LocalCallTargets.Add((target, startAnchor));
                             }
                         }
                     }
@@ -3626,7 +3389,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // ordinary ticks long after the ranged call that staged it (the passenger's wave loop is
         // re-entered from a poll), and its add-child of a further root (the flare) must build it.
         if (child == null && adopt && ResolveLibraryRoot != null
-            && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0
+            && (_damage.InDeathCall || _rangeCallDepth > 0 || _missionCallDepth > 0
                 || StagedCopyRootOf(anchor) != null))
             child = ResolveLibraryRoot(childName, named, null);
         if (child == null)
@@ -3765,8 +3528,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Both sequence events act on the live instance of (def, anchor); on the instant/bootstrap
     // dispatch path no instance exists and both are no-ops.
-    private AnimInstance? InstanceOf(AnimDefinition def, Node3D? anchor) =>
-        _instances.FirstOrDefault(i => i.Def == def && i.Anchor == anchor);
+    // A plain loop: the CALL_ANIMATION poll idiom asks this every frame, and a lambda would
+    // allocate its closure on each ask.
+    private AnimInstance? InstanceOf(AnimDefinition def, Node3D? anchor)
+    {
+        for (int i = 0; i < _instances.Count; i++)
+        {
+            if (_instances[i].Def == def && _instances[i].Anchor == anchor)
+                return _instances[i];
+        }
+        return null;
+    }
 
     private void CallSequence(AnimDefinition def, Node3D? anchor, string name)
     {
@@ -3965,103 +3737,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
-    // A CALL_ANIMATION naming a destructible's own death definition is that destructible's kill,
-    // run through its pool on its own anchor: a gasbag burn "destroys" the ring's other cannons this
-    // way, and a plain Start on the CALLER's anchor hid their guns through the symbol table while
-    // their pools stayed healthy and the broadside kept firing from them. Null when the def is no
-    // sole registered pool (a template with several copies stays a plain call); the instance,
-    // untouched, when it is already dead or out of the world.
-    private DestructibleRegistry.Instance? KillCalledDestructible(AnimDefinition target)
-    {
-        DestructibleRegistry.Instance? own = null;
-        foreach (var inst in _destructibles.All)
-        {
-            if (inst.Def != target)
-                continue;
-            if (own != null)
-                return null;
-            own = inst;
-        }
-        if (own == null)
-            return null;
-        if (own.Dormant || own.Status == DestructibleRegistry.State.Destroyed)
-            return own;
-        own.Health = 0f;
-        own.Status = DestructibleRegistry.State.Destroyed;
-        own.LastShooter = -1;
-        // In the `damage:` family on purpose, since this kill spends no HP. Without a line of its
-        // own, a sweep for what died reads a demolished part as one nobody ever touched.
-        Log.Info("anim", $"damage: {NameOf(own.Anchor)} DESTROYED by a call to '{target.AnimName ?? target.Name}', death sequence run");
-        if (HealthyNodeNameOf(own.Def) is { } healthyNode)
-            DestructibleKilled?.Invoke(healthyNode);
-        RunDeathSequence(own);
-        return own;
-    }
-
-    // The one place a destructible's pool is lowered, shared by a local hit and a replicated one
-    // so the two cannot stage or die differently.
-    private void SpendHealth(DestructibleRegistry.Instance inst, float health, float healthDamage)
-    {
-        float before = inst.Health;
-        int stageBefore = inst.DamageStage;
-        inst.Health = Math.Max(0f, health);
-        ApplyDamageStages(inst);
-        bool destroyed = inst.Health <= 0f;
-        if (destroyed)
-        {
-            inst.Status = DestructibleRegistry.State.Destroyed;
-            if (HealthyNodeNameOf(inst.Def) is { } healthyNode)
-                DestructibleKilled?.Invoke(healthyNode);
-            RunDeathSequence(inst);
-        }
-        // ⚠ Never let the ceiling swallow a death. It exists to keep a firefight's chip hits out of
-        // the log, and which parts died is what a sortie is read back for.
-        if (destroyed || _damagesLogged < 12)
-        {
-            if (!destroyed)
-                _damagesLogged++;
-            Log.Info("anim", $"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} HP {before:0.##}→{inst.Health:0.##}{(destroyed ? " DESTROYED, death sequence run" : $" [stage {inst.DamageStage}]")}");
-        }
-        if (destroyed || inst.DamageStage != stageBefore)
-            DestructibleDamaged?.Invoke(inst);
-        else if (inst.Health < before)
-            DestructibleChipped?.Invoke(inst);
-    }
-
-    // Runs a destructible's death the instant its HP reaches zero.
-    // ⚠ Play ALL the def's Initial sequences through Start; never try to pick "the death sequence"
-    // out by name. The swap sits in a sequence whose name varies and is only reliably Initial
-    // (docs/formats/destructibles.md).
-    // ⚠ Withhold the ApplyDeathSwap fallback when the swap is one CALL_ANIMATION down, or when the
-    // def authors its own visible death; firing it blanks a wreck early or swaps an archway.
-    private void RunDeathSequence(DestructibleRegistry.Instance inst)
-    {
-        _deathCallDepth++;
-        _dyingInstances.Push(inst);
-        try
-        {
-            // The same span _deathCallDepth brackets as the whole burst.
-            using (PerfSample.Scope(PerfSite.DebrisSpawn))
-            {
-                Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
-                RunDeathSlot(inst.Def, inst.Anchor);
-            }
-        }
-        finally
-        {
-            _dyingInstances.Pop();
-            _deathCallDepth--;
-        }
-        if (ChainedSwapTarget(inst.Def) is { } chained)
-        {
-            inst.ChainedDeathDef = chained;
-            return;
-        }
-        if (AuthorsVisibleDeath(inst.Def))
-            return;
-        ApplyDeathSwap(inst);
-    }
-
     // Dispatches the def's compiled destruction slot alongside the Initial sequences Start just
     // ran; it carries most of the install's death calls, which the listed sequences never reach.
     // ⚠ Run it as a runner ON the live instance, so its timed events advance with the death and a
@@ -4075,8 +3750,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (live == null)
         {
             live = new AnimInstance(def, anchor);
-            _instances.Add(live);
-            OnInstanceStarted?.Invoke(def, anchor);
+            AddLive(live);
         }
         live.AddRunner(slot);
         _startDepth++;
@@ -4094,186 +3768,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // runs the full finish path (emitters, TTLs, template hides), nothing special here.
     }
 
-    // The first CALL_ANIMATION target, one level down from def's own Initial sequences, whose OWN
-    // sequences author the healthy/destroyed swap, an OBJECT_ACTIVE_STATE that activates a
-    // destroyed/dbase-role node or deactivates a healthy-role one. Resolved via the same
-    // _program.ByAnimName the CALL_ANIMATION dispatch itself uses. Null for the ~90%/~10% cases the
-    // def's own sequences/RESET_STATE already cover (gate1, the AA guns, everything else).
-    private AnimDefinition? ChainedSwapTarget(AnimDefinition def)
-    {
-        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
-            foreach (var ev in seq.Events)
-                if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } callName)
-                    foreach (var target in _program.ByAnimName(callName))
-                        if (AuthorsSwap(target))
-                            return target;
-        return null;
-    }
-
-    // The generic healthy-to-destroyed swap, for destructibles that declare the pair but author no
-    // explicit swap sequence. ⚠ Read it off the def's own RESET_STATE targets, never a world-wide
-    // name scan, and apply it only when RESET names a destroyed node; an object with no destroyed
-    // variant must be left intact rather than blanked. Match the exact role words, not a suffix.
-    private void ApplyDeathSwap(DestructibleRegistry.Instance inst)
-    {
-        if (inst.Def.ResetState is not { } reset)
-            return;
-        bool hasDestroyed = reset.Events.Any(ev => ev.Kind == "ObjectActiveState"
-            && RoleName(ev).Contains("destroyed", StringComparison.OrdinalIgnoreCase));
-        if (!hasDestroyed)
-            return;
-        foreach (var ev in reset.Events)
-        {
-            if (ev.Kind != "ObjectActiveState")
-                continue;
-            var name = RoleName(ev);
-            bool? active =
-                name.Contains("healthy", StringComparison.OrdinalIgnoreCase) ? false
-                : name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
-                  || name.Contains("dbase", StringComparison.OrdinalIgnoreCase) ? true
-                : null;
-            if (active is not { } state)
-                continue;
-            foreach (var node in Targets(ev, inst.Def, inst.Anchor))
-                SetSubtreeActive(node, state);
-        }
-    }
-
-    // The pose a death ends in, read off the sequences RunDeathSequence would play: every
-    // OBJECT_ACTIVE_STATE switching a node off, and the destroyed/dbase role nodes switched on.
-    // ⚠ Leave a non-role piece switched on mid-death off; it flies and is hidden, so switching it
-    // on parks debris at its rest pose. A def with no role swap of its own takes the RESET-derived
-    // one, under the same visible-death withholding RunDeathSequence applies.
-    private void ApplyDeathPose(DestructibleRegistry.Instance inst)
-    {
-        bool swapped = false;
-        foreach (var (def, seq) in DeathSequencesOf(inst.Def))
-        {
-            foreach (var ev in seq.Events)
-            {
-                if (ev.Kind != "ObjectActiveState")
-                    continue;
-                var name = RoleName(ev);
-                bool active = ev.Data.Bool("state");
-                bool destroyedRole = name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
-                bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
-                if (active && !destroyedRole)
-                    continue;
-                foreach (var node in Targets(ev, def, inst.Anchor))
-                {
-                    SetTargetActive(node, active);
-                    swapped |= destroyedRole || healthyRole;
-                }
-            }
-        }
-        if (!swapped && !AuthorsVisibleDeath(inst.Def))
-            ApplyDeathSwap(inst);
-    }
-
-    // The sequences a death plays, with the def each resolves its targets through: the def's own
-    // Initial sequences, its compiled destruction slot, the ON_CALL sequences those two reach
-    // through CALL_SEQUENCE, and every sequence of a chained swap target (AuthorsSwap accepts its
-    // swap in an ON_CALL sequence too).
-    private IEnumerable<(AnimDefinition Def, AnimSequence Seq)> DeathSequencesOf(AnimDefinition def)
-    {
-        foreach (var seq in OwnDeathSequencesOf(def))
-            yield return (def, seq);
-        if (ChainedSwapTarget(def) is { } chained)
-            foreach (var seq in chained.Sequences)
-                yield return (chained, seq);
-    }
-
-    // ⚠ Follow CALL_SEQUENCE into def's own ON_CALL sequences. Nothing replays a call in a pose
-    // applied without choreography, so a piece hidden from a called sequence is left standing:
-    // susp_bridge parks part1 and part5 in part1_fire_puffer and part5_fire_puffer. Breadth-first
-    // over a seen set, because the authored call graph is not required to be acyclic.
-    private IEnumerable<AnimSequence> OwnDeathSequencesOf(AnimDefinition def)
-    {
-        var seen = new HashSet<AnimSequence>();
-        var pending = new Queue<AnimSequence>();
-        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
-            if (seen.Add(seq))
-                pending.Enqueue(seq);
-        if (def.DeathSlot is { } slot && seen.Add(slot))
-            pending.Enqueue(slot);
-        while (pending.Count > 0)
-        {
-            var seq = pending.Dequeue();
-            yield return seq;
-            foreach (var ev in seq.Events)
-            {
-                if (ev.Kind != "CallSequence" || ev.Data.Str("name") is not { } called)
-                    continue;
-                foreach (var target in def.Sequences)
-                    if (target.Name.Equals(called, StringComparison.OrdinalIgnoreCase)
-                        && seen.Add(target))
-                        pending.Enqueue(target);
-            }
-        }
-    }
-
-    // Does this event come from the definition's own death choreography, one of the sequences
-    // OwnDeathSequencesOf names? Reference identity on the authored event, and a test of where it
-    // was authored rather than of what is dying. A death's later events land minutes after its
-    // burst has returned. ⚠ Read the chain through that one method. A wreck clearing itself away
-    // from a called ON_CALL sequence is as much a death as one doing it from an Initial sequence.
-    private bool AuthoredInDeathChoreography(AnimDefinition def, AnimEvent ev) =>
-        OwnDeathSequencesOf(def).Any(seq => seq.Events.Contains(ev));
-
-    // Keeps a destructible's HP pool in step with a healthy/destroyed OBJECT_ACTIVE_STATE swap
-    // dispatched outside DamageAt's own kill, such as a start-state script authoring an object
-    // destroyed before the player arrives. Without this the pool stays Healthy at full HP
-    // while the node reads destroyed, so a later hit replays the whole death sequence on an
-    // object that already looks dead. A live kill reaches this same event after DamageAt has
-    // already set the pool, so the status guards below make it a no-op there.
-    private void SyncDestructiblePool(AnimEvent ev, AnimDefinition def, Node3D? anchor)
-    {
-        if (_destructibles.Get(def, anchor) is not { } inst)
-            return;
-        var name = RoleName(ev);
-        bool active = ev.Data.Bool("state");
-        bool dbaseRole = name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
-        bool destroyedRole = dbaseRole
-            || name.Contains("destroyed", StringComparison.OrdinalIgnoreCase);
-        bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
-        // A RESET_STATE is the baseline of a whole object, so a `dbase` switched on there is the
-        // ground under it and never half a death.
-        if (active && dbaseRole && AuthoredInResetState(def, ev))
-            return;
-        if (active && dbaseRole && HealthyRootStands(inst))
-            return;
-        if ((active && destroyedRole) || (!active && healthyRole))
-        {
-            if (inst.Status != DestructibleRegistry.State.Destroyed)
-            {
-                inst.Health = 0f;
-                inst.Status = DestructibleRegistry.State.Destroyed;
-            }
-        }
-        else if ((active && healthyRole) || (!active && destroyedRole))
-        {
-            // Dying is not reviving. A wreck that clears itself away switches its own destroyed-role
-            // nodes back off, so only a baseline or another script may put the pool back.
-            if (inst.Status == DestructibleRegistry.State.Destroyed
-                && !AuthoredInDeathChoreography(def, ev))
-            {
-                inst.Health = inst.MaxHealth;
-                inst.Status = DestructibleRegistry.State.Healthy;
-            }
-        }
-    }
-
-    // Is this pool's own healthy geometry still standing? A `dbase` node is the wreck's ground
-    // base, so switching it on is normally half of a death. The two 8-inch cannons author it ON in
-    // their RESET_STATE beside `healthy` ACTIVE, where it is a concrete plinth under a live gun and
-    // not a death at all (docs/formats/destructibles.md). Every genuine death that touches `dbase`
-    // also switches its healthy-role node OFF, so the death still reads.
-    private bool HealthyRootStands(DestructibleRegistry.Instance inst) =>
-        inst.Def.RootName is { Length: > 0 } root
-        && root.Contains("healthy", StringComparison.OrdinalIgnoreCase)
-        && DamageNodeOf(inst.Def, inst.Anchor).Visible;
-
     private bool Flipped(string kind, Node3D? anchor, bool result)
     {
         var key = (kind, anchor);
@@ -4289,13 +3783,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// and every mission intro keeps the answer it had.</summary>
     private IReadOnlyList<Vector3> RangePositions()
     {
-        if (PlayerRangeHeld && _rangePositions.Count > 0)
+        if ((PlayerRangeHeld || _rangeSampled) && _rangePositions.Count > 0)
             return _rangePositions;
         var live = PlayerPositions?.Invoke();
         return live is { Count: > 0 } ? live : new[] { PlayerPos() };
     }
 
     // The last flying pose, refreshed once a frame so a held range gate has one to answer with.
+    // Every gate inside this Advance reads it rather than asking the seam again.
+    // ⚠ Copy, never keep the seam's collection; its owner may reuse it on the next call.
     private void SampleRangePositions()
     {
         if (PlayerRangeHeld)
@@ -4303,9 +3799,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _rangePositions.Clear();
         var live = PlayerPositions?.Invoke();
         if (live is { Count: > 0 })
-            _rangePositions.AddRange(live);
+        {
+            for (int i = 0; i < live.Count; i++)
+                _rangePositions.Add(live[i]);
+        }
         else if (PlayerPosition != null)
             _rangePositions.Add(PlayerPosition());
+        _rangeSampled = true;
     }
 
     private Vector3 PlayerPos()
@@ -4890,7 +4390,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var hidden = new List<string>();
         foreach (var (node, srcName) in _resolver.Rows)
         {
-            if (!srcName.Contains("destroyed", StringComparison.OrdinalIgnoreCase))
+            if (!DestructibleDamage.IsDestroyedRole(srcName))
                 continue;
             if (!node.Visible || HasHiddenAncestor(node))
                 continue;

@@ -93,6 +93,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
     private readonly IOriginalScreenHost _host;
     private readonly Func<CSVM.Utils.OptionsDef>? _options;
     private readonly IOriginalOptionsPage[] _pages;
+    // The settings the three settings pages stage, one instance among them, so every page's apply
+    // carries the others' unchanged.
+    private readonly OptionsChoices _choices;
 
     /// <summary>An options form over <paramref name="layout"/>'s own five sections, calling back
     /// into <paramref name="host"/> for the state every screen family shares. The reader
@@ -111,10 +114,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _options = options;
+        _choices = new OptionsChoices(screenSizes, screens);
         var chrome = new OriginalOptionsChrome(layout, host);
-        GameOptions = new OriginalGameOptionsPage(chrome, this);
-        Audio = new OriginalAudioPage(chrome, this);
-        Video = new OriginalVideoPage(chrome, this, screenSizes, screens);
+        GameOptions = new OriginalGameOptionsPage(chrome, this, _choices);
+        Audio = new OriginalAudioPage(chrome, this, _choices);
+        Video = new OriginalVideoPage(chrome, this, _choices);
         Keys = new OriginalKeysPage(chrome, controls);
         Controls = new OriginalControlsPage(chrome, this, controls, Keys);
         _pages = new IOriginalOptionsPage[] { GameOptions, Audio, Video, Controls, Keys };
@@ -260,14 +264,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
     // Every settings page's ACCEPT CHANGES. A page writes the settings it shows and hands the rest
     // back as ReadSavedOptions read them, which keeps Launcher.ApplyOptions the options file's one
     // writer.
-    OptionsApplyExit IOriginalOptionsForm.Apply() =>
-        new(Video.GraphicsChoice, CSVM.Flight.Hangar.Difficulty.Word(GameOptions.DifficultyChoice),
-            Video.MonitorChoice, Video.ResolutionChoice, Video.DisplayModeChoice, Video.VSyncChoice,
-            Video.RenderScaleChoice, Video.AntiAliasingChoice, Video.ShadowQualityChoice,
-            Audio.MasterChoice, Audio.MusicChoice, Audio.EffectsChoice, Audio.VoiceChoice,
-            GameOptions.NearestAfterKillChoice, GameOptions.RumbleChoice,
-            GameOptions.DefaultViewChoice, GameOptions.AutoHeadTurnChoice, Video.ViewDistanceChoice,
-            Video.WaterQualityChoice);
+    OptionsApplyExit IOriginalOptionsForm.Apply() => _choices.ToExit();
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     void IOriginalOptionsForm.Leave()
@@ -278,15 +275,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
 
     // The saved options every settings page shows back. They are what was asked for, not what this
     // process resolved. A flag or the config key can have decided either, and the page still owes
-    // the player the words their own ACCEPT CHANGES saved. Every page reads its own, since the
-    // apply carries all of them. A form with no reader opens on the shipped defaults.
-    private void ReadSavedOptions()
-    {
-        var saved = _options?.Invoke();
-        GameOptions.Read(saved);
-        Audio.Read(saved);
-        Video.Read(saved);
-    }
+    // the player the words their own ACCEPT CHANGES saved. A form with no reader opens on the
+    // shipped defaults.
+    private void ReadSavedOptions() => _choices.Load(_options?.Invoke());
 
     // Every page draws the hub's logo, its own section authoring none. Each puts its own plate in
     // the backdrop rather than among the pictures. A board draws its fills between the two layers.

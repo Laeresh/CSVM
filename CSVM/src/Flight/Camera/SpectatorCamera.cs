@@ -289,7 +289,7 @@ public sealed partial class SpectatorCamera : Node
     }
 
     // The pad's half of the locked orbit: right stick swings it, triggers dolly it (RT out, LT in,
-    // the sense FlightController.OrbitInput already uses). Without this the lock is mouse-only and
+    // the sense SeatControls.Orbit already uses). Without this the lock is mouse-only and
     // a pad's sole effect on it is TranslationRequested, which throws it away.
     private void OrbitPad(float dt)
     {
