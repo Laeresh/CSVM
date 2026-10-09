@@ -8,8 +8,8 @@ namespace CSVM.Extraction;
 /// <summary>What <see cref="InstallLocator.Check"/> found in a folder the player picked.</summary>
 public enum InstallCheckKind
 {
-    /// <summary>The folder is an install: it holds <c>ZBD</c> with archives in it and
-    /// <c>GOSDATA/ASSETS</c>.</summary>
+    /// <summary>The folder is an install: it holds <c>ZBD</c> with a chapter folder's archives in
+    /// it and <c>GOSDATA/ASSETS</c>.</summary>
     Install,
 
     /// <summary>No folder exists at that path.</summary>
@@ -30,6 +30,11 @@ public enum InstallCheckKind
     /// <summary>The layout is right but <c>ZBD</c> holds no <c>.zbd</c> archive, an interrupted
     /// install or an image nothing was copied out of.</summary>
     EmptyZbd,
+
+    /// <summary><c>ZBD</c> holds only its root archives and no chapter folder (<c>C1</c>,
+    /// <c>C3</c>…) with one in it: a disc's contents or a partial install. The menus would load
+    /// from it and every flight would fail on its missing chapter world.</summary>
+    NoChapters,
 }
 
 /// <summary>The answer for one picked folder. <see cref="InstallRoot"/> is the install itself on
@@ -179,11 +184,19 @@ public static class InstallLocator
         string? zbd = ResolveDirectory(folder, "ZBD");
         if (zbd != null && ResolveDirectory(folder, "GOSDATA/ASSETS") != null)
         {
-            return HasArchives(zbd)
-                ? new InstallCheck(InstallCheckKind.Install, folder, folder, null)
-                : new InstallCheck(InstallCheckKind.EmptyZbd, folder, null,
+            if (!HasArchives(zbd))
+            {
+                return new InstallCheck(InstallCheckKind.EmptyZbd, folder, null,
                     $"The folder '{zbd}' holds no .zbd archives, so there is nothing to extract. '{folder}' looks like an "
                     + $"incomplete Crimson Skies install. Reinstall the game, or choose a complete install: {ExpectedFolder}.");
+            }
+
+            return HasChapterArchives(zbd)
+                ? new InstallCheck(InstallCheckKind.Install, folder, folder, null)
+                : new InstallCheck(InstallCheckKind.NoChapters, folder, null,
+                    $"The folder '{zbd}' has no chapter folders (C1, C2, C3 and the others), so no mission could be flown. "
+                    + $"'{folder}' looks like the contents of the game disc or a partial install. Install the game in full, "
+                    + $"then choose that install: {ExpectedFolder}.");
         }
 
         if (InstallAbove(folder) is { } above)
@@ -383,6 +396,9 @@ public static class InstallLocator
             return false;
         }
     }
+
+    // A chapter's world sits in a folder below ZBD; only the shared archives sit at its root.
+    private static bool HasChapterArchives(string zbd) => SortedSubdirectories(zbd).Any(HasArchives);
 
     private static string? InstallAbove(string folder)
     {

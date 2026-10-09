@@ -305,13 +305,14 @@ public class ExtractionFlowTests
     private static ExtractionFlow Flow(string root, FakeRunner runner, string preFill, Action<string>? remember = null, DataProblem problem = DataProblem.Missing) =>
         new(problem, root, "unzbd", preFill, runner.Run, remember ?? (_ => { }), work => work());
 
-    // Enough of an install for InstallLocator.Check: ZBD with one archive, and GOSDATA/ASSETS.
+    // Enough of an install for InstallLocator.Check: ZBD with a root and a chapter archive, and GOSDATA/ASSETS.
     private static string Install(string root)
     {
         string install = Path.Combine(root, "Crimson Skies");
-        Directory.CreateDirectory(Path.Combine(install, "ZBD"));
+        Directory.CreateDirectory(Path.Combine(install, "ZBD", "C1"));
         Directory.CreateDirectory(Path.Combine(install, "GOSDATA", "ASSETS"));
         File.WriteAllText(Path.Combine(install, "ZBD", "planes.zbd"), "x");
+        File.WriteAllText(Path.Combine(install, "ZBD", "C1", "gamez.zbd"), "x");
         return install;
     }
 

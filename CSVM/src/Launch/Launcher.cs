@@ -1400,11 +1400,22 @@ public partial class Launcher : Node3D
             return; // a CLI launch leaves the log to tell the story, as it always did
         }
         ReturnToMenu(MenuReturnDestination.TopLevel);
-        // Built-in's error line is its own; Original has no note and its top level shows bare, so
-        // the log carries the fact for both presentations.
+        // Each presentation says so in its own chrome, Built-in on its error line and Original in
+        // its warning box. Without the box Original's top level shows bare, which reads as a misclick.
         Log.Warn("ui", $"menu: the build failed, back at the top level of {_menuHost?.Selected}");
         BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)}, see the log.");
+        if (_menuHost?.Active is UI.Menu.Original.OriginalPresentation original)
+        {
+            original.RaiseWarning(FailedBuildWarning());
+        }
     }
+
+    // The words of Original's failed-build box. An extraction with no chapter world fails every
+    // flight the same way, so it names the fix; anything else is the log's to explain.
+    private string FailedBuildWarning() => SessionPaths.HasAnyChapterWorld(_dataRoot)
+        ? $"The mission could not be loaded. The log says why: open it with the \"{UI.Screens.BuildStamp.LogsTooltip}\" icon beside the version number."
+        : "The extracted game data holds no chapter worlds, so no mission can be flown. "
+            + $"Extract again from a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}.";
 
     // A build that throws counts as one that failed. The caller's own failure path then takes the
     // load screen down and returns a menu launch to the menu. An escaped exception would leave the

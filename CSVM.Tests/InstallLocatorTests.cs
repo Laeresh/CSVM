@@ -124,6 +124,26 @@ public class InstallLocatorTests
     }
 
     [Fact]
+    public void AZbdWithOnlyItsRootArchivesIsNoInstall()
+    {
+        string disc = TestData.TempDir();
+        Directory.CreateDirectory(Path.Combine(disc, "GOSDATA", "ASSETS"));
+        Directory.CreateDirectory(Path.Combine(disc, "ZBD", "C1"));
+        foreach (string shared in new[] { "interp.zbd", "planes.zbd", "rimage.zbd", "soundsh.zbd", "zrdr.zbd" })
+        {
+            File.WriteAllBytes(Path.Combine(disc, "ZBD", shared), new byte[] { 0 });
+        }
+
+        var check = InstallLocator.Check(disc);
+
+        Assert.Equal(InstallCheckKind.NoChapters, check.Kind);
+        Assert.False(check.IsInstall);
+        Assert.Null(check.InstallRoot);
+        Assert.Contains("chapter folders", check.Message);
+        Assert.Contains(InstallLocator.ExpectedFolder, check.Message);
+    }
+
+    [Fact]
     public void WindowsCandidatesComeRememberedFirstThenProgramFilesThenEachDrive()
     {
         string machine = TestData.TempDir();
