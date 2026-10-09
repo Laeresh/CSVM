@@ -31,8 +31,8 @@ public enum InstallCheckKind
     /// install or an image nothing was copied out of.</summary>
     EmptyZbd,
 
-    /// <summary><c>ZBD</c> holds only its root archives and no chapter folder (<c>C1</c>,
-    /// <c>C3</c>…) with one in it: a disc's contents or a partial install. The menus would load
+    /// <summary><c>ZBD</c> holds only its root archives, and no chapter folder (<c>C1</c>,
+    /// <c>C3</c>…) holds one. It is a disc's contents or a partial install. The menus would load
     /// from it and every flight would fail on its missing chapter world.</summary>
     NoChapters,
 }
