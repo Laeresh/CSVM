@@ -155,8 +155,8 @@
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "d36e8944eb413700e80a4b888714b86f",
-      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, the wave ocean on the far waterline, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
+      "hash": "14bb1ca0ec4ab880ac61d069120b6d18",
+      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, the far skyline fading into the authored black fog, TAA, well outside the whiteout; frame-sensitive 23.30 %.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {
@@ -183,7 +183,7 @@
     {
       "name": "c1b-ocean-enhanced",
       "frame": 120,
-      "hash": "39600594889f1eb291563bf5168e2a63",
+      "hash": "3edfd2002537126556f3d53833c0e678",
       "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming toward each shore, the surf ring, SSR, TAA, in the shipped C1B sea.",
       "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }

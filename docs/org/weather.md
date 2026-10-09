@@ -351,6 +351,11 @@ lights a night city at noon level and the data carries no other handle. **The sk
 handle**: a daylit mission draws a moon and a star field too (C1 and C4 both wear `horizon/zone2`),
 which is why the dome's night art cannot separate the two populations.
 
+The same key keeps a night zone's authored fog range under Enhanced, where a day zone's is pushed
+out 2x for its shadows. Pushed, C5's black fog let the lit walls of its far city stand out over
+ground already gone dark, and inside a fog volume (`ZONE3`, 50 to 250 m) it showed streets the
+original fogs to flat 16 grey.
+
 ## The lens flare (measured, not decoded)
 
 ⚠ Everything in this section is **footage**, not the executable, no `FUN_` address backs it. It is

@@ -89,6 +89,29 @@ public class GraphicsModeTests
         GraphicsMode.Resolve("original");
     }
 
+    /// <summary>Enhanced pushes a day zone's fog out and leaves a night zone's authored, so a night
+    /// city fades with its ground. Original keeps both authored.</summary>
+    [Fact]
+    public void EnhancedPushesADayZonesFogAndLeavesANightZonesAuthored()
+    {
+        var authored = new Godot.Vector2(1500f, 2250f);
+        var day = Zone(Godot.Colors.Gray);
+        var night = Zone(Godot.Colors.Black);
+        try
+        {
+            GraphicsMode.Resolve("enhanced");
+            Assert.Equal(authored * 2f, WeatherRig.FogRangeFor(authored, day));
+            Assert.Equal(authored, WeatherRig.FogRangeFor(authored, night));
+            Assert.Equal(authored * 2f, WeatherRig.FogRangeFor(authored, null));
+            GraphicsMode.Resolve("original");
+            Assert.Equal(authored, WeatherRig.FogRangeFor(authored, day));
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+        }
+    }
+
     /// <summary>The View Distance layers as the graphics mode does: the flag beats the saved word,
     /// which beats the config key, which beats the default. A word outside the four falls through.
     /// Kept in this class because the resolve sets the process-wide reach.</summary>
@@ -133,4 +156,7 @@ public class GraphicsModeTests
             ViewDistance.Set(null);
         }
     }
+
+    private static CSVM.Effects.WeatherState.ZoneWeather Zone(Godot.Color fog)
+        => new(fog, 1500f, 2250f, 0f, 1f, 2500f, 1f, Godot.Vector3.Zero, 1.5f, 0.5f, Godot.Colors.White, Godot.Colors.White);
 }

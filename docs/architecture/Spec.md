@@ -21,8 +21,9 @@ world with real Godot lighting. The world shades under decoded, pre-negated vert
 matte material (`SceneBuilder.cs`'s lit-world arm); a `DirectionalLight3D` and the Environment's
 ambient are driven from the mission's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` values and
 colours instead of the launcher's hardcoded numbers (`WeatherRig.cs`); the sun casts PSSM shadow
-maps, with each zone's authored fog pushed out 2x and the shadow's max distance following that
-pushed far so shadows never end in clear air; the clutter's far fade follows the same push, and
+maps, with each day zone's authored fog pushed out 2x (a night zone keeps its own) and the
+shadow's max distance following that pushed far so shadows never end in clear air; the clutter's
+far fade takes the same 2x in every zone, night zones included, and
 the View Distance option (`Utils/ViewDistance.cs`) pushes that fade alone further, up to no fade,
 leaving the fog where it is; `LIGHT_STATE` point lights are mirrored onto real
 `OmniLight3D` nodes that light the world and the aircraft, not only the per-vertex point term's data texture
