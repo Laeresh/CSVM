@@ -1771,6 +1771,147 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // Read off the built tree in airframe space against the model's own fixed geometry. A hinge or
+    // flare pushed off its mount (a transform applied twice, a pivot off the wrong node) reads as a
+    // gap in metres. The same hinge moved half a metre aft must read that gap.
+    [Suite("rudder-hinge-mount",
+        "the Warhawk's rudder hinge lines lie on the fin's trailing edge, a full-rudder deflection leaves "
+        + "each rudder's leading edge in place, and each wing-light flare sits within 10 cm of an airframe vertex, "
+        + "with the Devastator as the control and a hinge moved half a metre aft reading the gap; every "
+        + "stock airframe's gaps are noted")]
+    internal static void RudderHingeMount(TestContext ctx)
+    {
+        // A fifth of the half metre reported; the Devastator's wingtip flares float 3-5 cm off the tip.
+        const float onMount = 0.1f;
+        const float aftShift = 0.5f;
+        string[] judged = { "player_warhawk", "player_pfighter" };
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(judged);
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
+        {
+            if (gamez.FindByName(plane) == null)
+            {
+                continue;
+            }
+
+            bool strict = judged.Contains(plane);
+            var built = new PlaneBuilder(gamez, textures).Build(plane);
+            var fixedPoints = new List<Vector3>();
+            var rudders = new List<(Node3D Node, Transform3D ParentAcc, List<Vector3> Local)>();
+            var flares = new List<(string Name, Vector3 At)>();
+
+            static IEnumerable<Vector3> Vertices(MeshInstance3D mi)
+            {
+                if (mi.Mesh is not ArrayMesh mesh)
+                {
+                    yield break;
+                }
+                for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                {
+                    foreach (var v in mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Vertex].AsVector3Array())
+                    {
+                        yield return mi.Transform * v;
+                    }
+                }
+            }
+
+            void Walk(Node node, Transform3D parentAcc, bool moving)
+            {
+                if (node is not Node3D n3d || !n3d.Visible && !WingLights.IsFlare(n3d.Name))
+                {
+                    return;
+                }
+                var acc = parentAcc * n3d.Transform;
+                string name = n3d.Name.ToString();
+                if (WingLights.IsFlare(name))
+                {
+                    flares.Add((name, acc.Origin));
+                    return;
+                }
+                var kind = ControlSurfaces.Classify(name);
+                if (kind == ControlSurfaces.Kind.Rudder)
+                {
+                    rudders.Add((n3d, parentAcc, n3d.GetChildren().OfType<MeshInstance3D>().SelectMany(Vertices).ToList()));
+                }
+                moving |= kind != ControlSurfaces.Kind.None;
+                foreach (var child in n3d.GetChildren())
+                {
+                    if (child is MeshInstance3D mi && !moving)
+                    {
+                        fixedPoints.AddRange(Vertices(mi).Select(v => parentAcc * n3d.Transform * v));
+                    }
+                    Walk(child, acc, moving);
+                }
+            }
+
+            foreach (var child in built.GetChildren())
+            {
+                Walk(child, Transform3D.Identity, false);
+            }
+
+            // The fixed vertex nearest the hinge line, within the rudder's own span along it.
+            float FinGap(Vector3 origin, Vector3 axis, float lo, float hi) =>
+                fixedPoints.Select(p => (Along: (p - origin).Dot(axis), Off: p - origin))
+                    .Where(q => q.Along > lo - onMount && q.Along < hi + onMount)
+                    .Select(q => (q.Off - q.Along * axis).Length())
+                    .DefaultIfEmpty(float.MaxValue).Min();
+
+            var rest = rudders.Select(r => r.ParentAcc * r.Node.Transform).ToList();
+            var animator = ControlSurfaceAnimator.Build(built);
+            animator?.Advance(5.0, new FlightInput { Yaw = 1f }, animate: true);
+            for (int i = 0; i < rudders.Count; i++)
+            {
+                var (node, parentAcc, local) = rudders[i];
+                if (local.Count == 0)
+                {
+                    continue;
+                }
+                var axis = (rest[i].Basis * Vector3.Up).Normalized();
+                var origin = rest[i].Origin;
+                float edgeGap = local.Min(v => new Vector2(v.X, v.Z).Length());
+                var edge = local.MinBy(v => new Vector2(v.X, v.Z).Length());
+                float lo = local.Min(v => v.Y), hi = local.Max(v => v.Y);
+                float finGap = FinGap(origin, axis, lo, hi);
+                float shiftedGap = FinGap(origin + aftShift * Vector3.Back, axis, lo, hi);
+                var deflected = parentAcc * node.Transform;
+                float edgeSwing = (deflected * edge - rest[i] * edge).Length();
+                float tailSwing = local.Max(v => (deflected * v - rest[i] * v).Length());
+                ctx.Note($"{plane}/{node.Name}: hinge at {origin:F3}, leading edge {edgeGap:F3} m off the hinge, fin edge {finGap:F3} m off it ({shiftedGap:F3} m with the hinge {aftShift} m aft); full rudder moves the leading edge {edgeSwing:F3} m, the trailing edge {tailSwing:F3} m");
+                if (!strict)
+                {
+                    continue;
+                }
+                ctx.Check(edgeGap < onMount && finGap < onMount,
+                    $"{plane}/{node.Name} hinges on the fin's trailing edge edge={edgeGap:F3} fin={finGap:F3}");
+                ctx.Check(shiftedGap > 0.8f * aftShift,
+                    $"{plane}/{node.Name} reads a hinge moved {aftShift} m aft as a gap gap={shiftedGap:F3}");
+                ctx.Check(edgeSwing < onMount && tailSwing > 0.2f,
+                    $"{plane}/{node.Name} pivots about its leading edge edge={edgeSwing:F3} tail={tailSwing:F3}");
+            }
+            foreach (var (name, at) in flares)
+            {
+                float gap = fixedPoints.Min(p => p.DistanceTo(at));
+                float shifted = fixedPoints.Min(p => p.DistanceTo(at + aftShift * Vector3.Back));
+                ctx.Note($"{plane}/{name}: flare at {at:F3}, {gap:F3} m from the nearest airframe vertex ({shifted:F3} m moved {aftShift} m aft)");
+                if (strict)
+                {
+                    ctx.Check(gap < onMount && shifted > onMount,
+                        $"{plane}/{name} sits on an airframe vertex gap={gap:F3} shifted={shifted:F3}");
+                }
+            }
+            if (strict)
+            {
+                ctx.Check(rudders.Count == 2 && flares.Count == 2,
+                    $"{plane} carries two rudders and two flares rudders={rudders.Count} flares={flares.Count}");
+            }
+            built.Free();
+        }
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or
