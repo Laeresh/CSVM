@@ -446,7 +446,10 @@ member, and it does not go here.
   waits for the previous draw, so its wait reads as `proc_ms` or `phys_tick_ms`, and `draw_ms` is
   only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
   every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
-  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms. Two
+  draw-count getters per spyglass disc, read from the main thread, took a two-pane Enhanced C3
+  `--perf` frame on the author's PC from 8.3 to 17 ms (`proc_ms` 1.6 to 16); queued on the render
+  thread (`SpyglassView.Census`) they leave it at the run without `--perf`.
 - **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
   for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
   beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
