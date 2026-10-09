@@ -508,6 +508,19 @@ member, and it does not go here.
   With the old fixed ports held by another process,
   `lan-discovery` failed and three `Couldn't create an ENet host` lines failed the run, though
   every walking suite then found a free port.
+- **LOG-27**, **A process that crashes after its report or shot (`0xC0000005`, `0xC000001D`, a
+  `FATAL ... script_bindings` or `!rc_owner` line) died of a .NET finalizer racing Godot's
+  teardown, not of the work it reported.** A garbage collection during the quit, often a background
+  one still running at `_ExitTree`, queues Godot wrappers whose `GodotObject.Finalize` then runs
+  beside `CSharpLanguage::finalize` freeing the bindings (`GC.RunFinalizers` or
+  `DisposablesTracker.OnGodotShuttingDown` on the crash stack). The tell is `Leaked unsafe reference`
+  lines in the `.err` file, which count the queued wrappers; Godot prints them after the disposal
+  tracker, so a crash under the tracker shows none. The natural rate is low and rises with other
+  Godots running and with the unreferenced wrappers a run leaves, so prove a change on the quit path
+  under a forced race: 20000 dropped `RefCounted` wrappers and an allocating thread at `_ExitTree`,
+  with `DOTNET_GCgen0size=0x200000`, crashed a one-suite run after its report 12 times in 16;
+  with `Launcher.SettleFinalizers` it crashed 0 times in 16, and no collection ran after the
+  settle. A new exit path must run it too.
 
 ## WORLD, world data and runtime traps
 
@@ -1108,10 +1121,6 @@ not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs
 - **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
   or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
   `.scratch\goldens-failures\<stamp>\`. Rerun: `.\RunTests.ps1 -SkipUnits -SkipEngine -WaitQuiet`.
-- **A shard crashed at exit after a full report**: `!! sN: Godot exited -1073741819 though it wrote
-  a report`, its `.log.err` ending in `Fatal error. 0xC0000005` under
-  `DisposablesTracker.OnGodotShuttingDown` or `GodotObject.Finalize`. Owner #169. Rerun:
-  `.\RunTests.ps1 -SkipUnits -SkipGoldens -WaitQuiet`.
 - **A shard ran past the watchdog under load**: `!! s1: timed out after 300s (exit 124)` while
   other sessions' Godots ran. Owner #170. Rerun:
   `.\RunTests.ps1 -SkipUnits -SkipGoldens -WaitQuiet`.

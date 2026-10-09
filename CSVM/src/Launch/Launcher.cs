@@ -905,6 +905,7 @@ public partial class Launcher : Node3D
         _instruments.Exit();
         _musicArchive?.Dispose();
         _musicArchive = null;
+        SettleFinalizers();
         MirrorEngineLog();
     }
 
@@ -1234,6 +1235,34 @@ public partial class Launcher : Node3D
         long sentinel = WorkerThreadPool.AddTask(Callable.From(() => { }), highPriority: false, "ExitDrain");
         WorkerThreadPool.WaitForTaskCompletion(sentinel);
         Log.Info("core", $"exit drain: low-priority tasks settled in {watch.Elapsed.TotalMilliseconds:0.0} ms");
+    }
+
+    /// <summary>Runs every pending finalizer while the engine is whole, then forbids any further
+    /// collection. A collection during teardown, often a background one already running here, queues
+    /// Godot wrappers for finalizing. Those finalizers race CSharpLanguage::finalize and crash the
+    /// process after its work is done. docs/verification.md LOG-27 holds the mechanism and the rates.
+    /// ⚠ Keep it last before the log mirror, and never end the region: the quit must not collect.</summary>
+    private void SettleFinalizers()
+    {
+        // Room for the teardown's own allocations, the disposal tracker's wrapper snapshot among them.
+        // Past it the runtime collects again and the race is back.
+        const long noCollectionBytes = 256L << 20;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        // A blocking collection also waits out a background one in flight.
+        System.GC.Collect();
+        System.GC.WaitForPendingFinalizers();
+        string region;
+        try
+        {
+            // Its own full collection finds what the first round's finalizers let go.
+            region = System.GC.TryStartNoGCRegion(noCollectionBytes) ? "held" : "refused";
+        }
+        catch (System.Exception e) when (e is System.ArgumentOutOfRangeException or System.InvalidOperationException)
+        {
+            region = $"refused ({e.GetType().Name})";
+        }
+        System.GC.WaitForPendingFinalizers();
+        Log.Info("core", $"exit finalizers: settled in {watch.Elapsed.TotalMilliseconds:0.0} ms, no-collection region {region}");
     }
 
     // The boot sequence in fmv.zrd's own order, its card and waits and fade included: the reader's
