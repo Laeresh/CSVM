@@ -522,7 +522,7 @@ score, kills and deaths from `VersusMatch.Standings()`; score is the ranked colu
 from that completion alone, so `Restart()` zeroing the live state never redraws them. Restart
 routes through `VersusDirector.Restart`, which R and pad Y reach directly. A network guest's
 board offers no Restart and reads `HostCallsTheRematch`, since that call refuses off the host;
-Zeppelin vs Zeppelin keeps the row, which leaves for the lobby. `StuntRaceBoard` is its twin.
+Zeppelin vs Zeppelin keeps the row, which leaves for the lobby. A match under an Original lobby host builds no board and lands on Game Scores. `StuntRaceBoard` is its twin.
 
 ## src/UI/Screens/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for

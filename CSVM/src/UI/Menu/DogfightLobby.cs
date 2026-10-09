@@ -230,8 +230,11 @@ public sealed class DogfightLobby
     public bool HasOptions => IsHost || _wire.DogfightOptions.HasValue;
 
     /// <summary>The Mission Options as this end stands on them: its own on the host, the host's word
-    /// on a guest. A guest that has heard nothing reads the opening defaults.</summary>
-    public DogfightOptionsMessage Options => IsHost ? _options : _wire.DogfightOptions ?? _options with { Epoch = 0 };
+    /// on a guest. A guest that has heard nothing reads the opening defaults. A host's carries
+    /// <see cref="DogfightOptionsMessage.HostLandsOnScores"/> while a lobby screen stands on it.</summary>
+    public DogfightOptionsMessage Options => IsHost
+        ? _options with { HostLandsOnScores = Shown }
+        : _wire.DogfightOptions ?? _options with { Epoch = 0 };
 
     /// <summary>The stock airframe this pilot picked, an index into the eleven.</summary>
     public byte Airframe => _airframe;
@@ -1390,10 +1393,10 @@ public sealed class DogfightLobby
                 _rulesSent[peer] = rules;
             }
 
-            if (!_optionsSent.TryGetValue(peer, out var sent) || sent != _options)
+            if (!_optionsSent.TryGetValue(peer, out var sent) || sent != Options)
             {
-                _wire.Tell(peer, _options);
-                _optionsSent[peer] = _options;
+                _wire.Tell(peer, Options);
+                _optionsSent[peer] = Options;
             }
 
             // The team list goes before the rows that name its teams.

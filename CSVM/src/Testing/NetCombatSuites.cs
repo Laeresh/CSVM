@@ -1594,7 +1594,8 @@ internal static class NetCombatSuites
             IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
             Func<CoopWingmanMessage?>? coopWingman = null,
             Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
-            IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null)
+            IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null,
+            Action? lobbyLanding = null, UI.Menu.PresentationId? presentation = null)
         {
             var pane = new SubViewport
             {
@@ -1628,11 +1629,14 @@ internal static class NetCombatSuites
                 Sun = sun,
                 Env = new Godot.Environment(),
                 // A suite that hands over its own exit stands in for the launcher's menu, as a lobby
-                // flight's is.
-                MenuDriven = exitSession != null,
+                // flight's is. A landing stands in for a lobby whose host lands on Game Scores, by
+                // default an Original host's.
+                MenuDriven = exitSession != null || lobbyLanding != null,
                 MenuPads = null,
-                Presentation = UI.Menu.PresentationId.BuiltIn,
+                Presentation = presentation
+                    ?? (lobbyLanding != null ? UI.Menu.PresentationId.Original : UI.Menu.PresentationId.BuiltIn),
                 ExitSession = exitSession ?? (() => { }),
+                VersusLobbyLanding = lobbyLanding,
                 RestartSession = () => { },
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,

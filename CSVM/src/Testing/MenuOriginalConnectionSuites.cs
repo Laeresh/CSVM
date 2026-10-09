@@ -38,6 +38,12 @@ internal static class MenuOriginalConnectionSuites
     // The suite whose scratch store holds the plane the Connection page builds.
     private const string BuildSuite = "menu-original-connection-build";
 
+    // The landing's flown match: the host's seed, the steps both sessions settle through, and a
+    // fifth of a second either side of the end's hold.
+    private const ulong FlightSeed = 0x139UL;
+    private const int SettleSteps = 20;
+    private const int ShortSteps = 12;
+
     [Suite("menu-original-connection",
         "The Original presentation's network doors over the loopback and an in-process LAN: the "
         + "cabin's HOST CO-OP asks GAME INFORMATION, which opens on Private, whose Cancel opens nothing and whose cap of "
@@ -150,8 +156,13 @@ internal static class MenuOriginalConnectionSuites
         + "on both ends, the guest's second stock plane and a non-default shell build its seat "
         + "in the host's field, one chat line arrives once on each end, a guest's line past the "
         + "chat's depth repaints the host's lobby with no input at the host, LAUNCH waits for every "
-        + "Ready, the guest launches behind the host on the same rules, a completed match lands "
-        + "both ends on Game Scores with the same scores and every Ready cleared, a second LAUNCH "
+        + "Ready, the guest launches behind the host on the same rules, the host's options tell the "
+        + "guest that an Original host lands its match, whose ending the host's presentation decides "
+        + "for both machines (a Built-in host's guest keeps the board, an Original host's Built-in "
+        + "guest lands, and a match run again inside the hold holds again from zero), a match flown "
+        + "to its end on two Original sessions builds no results board and holds each ended world "
+        + "five seconds, the guest's from the host's end message, and then lands both ends on Game "
+        + "Scores with the same scores and every Ready cleared, a second LAUNCH "
         + "goes out with nobody rejoining, and Leave Game lands a second guest on the Connection "
         + "page, whose games list's Create Game opens a hosted lobby of its own")]
     internal static void TheLobby(TestContext ctx)
@@ -2638,25 +2649,23 @@ internal static class MenuOriginalConnectionSuites
             $"the guest launches behind the host on the same chapter and rules in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 
-    // A completed match's Exit on both ends, as the launcher runs it. Each door takes its wire back,
-    // and the menu comes back on a LobbyReturn built off that end's own match.
+    // A completed match's landing on both ends, as the launcher runs it once the end has held. Each
+    // door takes its wire back, and the menu comes back on a LobbyReturn built off that end's own
+    // match. The guest's holds the host's scores as they reached it.
     private static void LandOnTheScores(TestContext ctx, End host, End guest, List<End> ends, IReadOnlyList<LoopbackTransport> mesh, List<MenuExit> guestExits)
     {
-        var played = new VersusMatch(2, killTarget: 0, timeLimit: 60f);
-        played.RegisterKill(1, 0);
-        played.RegisterKill(1, 0);
-        played.RegisterDeath(1);
-        var heard = new VersusMatch(2, killTarget: 0, timeLimit: 60f);
-        heard.Replicate();
-        foreach (var line in played.Standings())
+        // The host's presentation decides the ending for both: an Original host lands, and says so
+        // in the options its guest heard.
+        ctx.Check(CSVM.Launch.Launcher.LandsOnScores(true, host.Door.Dogfight) && guest.Door.Dogfight!.Options.HostLandsOnScores
+                  && CSVM.Launch.Launcher.LandsOnScores(false, guest.Door.Dogfight),
+            $"an Original host lands its match on Game Scores, and its guest reads that in the host's options");
+        MixedEnding(ctx, "a Built-in host and an Original guest", PresentationId.BuiltIn, PresentationId.Original, hostLands: false);
+        MixedEnding(ctx, "an Original host and a Built-in guest", PresentationId.Original, PresentationId.BuiltIn, hostLands: true);
+        if (FlyToTheEnd(ctx, host) is not var (played, heard))
         {
-            heard.ApplyScore(line.PlayerIndex, line.Score, line.Kills, line.Deaths);
+            return;
         }
 
-        ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played) == null,
-            $"ABLE-TO-FAIL CONTROL: a match still running lands nowhere near the lobby");
-        played.Advance(60f);
-        heard.ApplyState(0, 60f, 0f, ended: true);
         var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played);
         var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, heard);
         ctx.Check(hostLanding != null && guestLanding != null, $"a completed match lands both ends on their lobby");
@@ -2683,13 +2692,181 @@ internal static class MenuOriginalConnectionSuites
             $"both ends stand in the lobby on Game Scores ({host.Shell.Screen}/{host.Shell.Lobby.Tab}, {guest.Shell.Screen}/{guest.Shell.Lobby.Tab})");
         string board = string.Join(" ", here.Scores.Select(s => $"{s.Name}:{s.Points}/{s.Kills}K/{s.Deaths}D"));
         ctx.Check(here.Scores.Count == 2 && here.Scores.SequenceEqual(there.Scores)
-                  && here.Scores[0] is { Points: 1, Kills: 2, Deaths: 1 } && here.Scores[0].Name == here.LaunchNames[1],
+                  && here.Scores[0] is { Kills: 2, Deaths: 1 } && here.Scores[0].Points == played.ScoreOf(1)
+                  && here.Scores[0].Name == here.LaunchNames[1],
             $"and both show the match's scores, the guest's seat first by name ({board} | {string.Join(" ", there.Scores.Select(s => s.Name))})");
         ctx.Check(Row(host.Shell, OriginalLobbyScreen.ScoresTabKey) is { Enabled: true }, $"Game Scores is live once a match has landed");
         ctx.Check(!here.Ready && !there.Ready && here.Players.All(p => !p.Ready),
             $"every Ready is cleared for the next round ({string.Join(",", here.Players.Select(p => p.Ready))})");
         ctx.Check(guestExits.Count == launched && !guest.Door.DogfightLaunchDue,
             $"and the payload left over from the match launches the guest into nothing ({guestExits.Count - launched} exit(s))");
+    }
+
+    // A lobby Dogfight flown to its end on two sessions in the Original presentation, on a wire of
+    // its own. Neither machine builds a board or halts its world, and each lands once its end has
+    // held. The guest's hold starts on the host's end message. Null when a session does not build.
+    private static (VersusMatch Played, VersusMatch Heard)? FlyToTheEnd(TestContext ctx, End lobbyHost)
+    {
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, "--vs-lives=2");
+        var words = NetCombatSuites.MatchWording.Read(ctx);
+        var landed = new int[2];
+        var exited = new int[2];
+        var flights = new List<NetCombatSuites.Ends>();
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            if (OpenPair(ctx, spec, PresentationId.Original, PresentationId.Original, hostLands: true, landed, exited, flights) is not { } both)
+            {
+                return null;
+            }
+
+            var (host, guest) = (both[0], both[1]);
+            ctx.Check(both.All(p => p.Boards is { DogfightBoard: null } && p.SeatRigs.All(r => r.Controller is not { RestartMatch: not null })),
+                $"neither machine builds the Built-in results board, nor arms a rematch key");
+            var director = host.Dogfight!;
+            var (played, heard) = (director.Match, guest.Dogfight!.Match);
+            director.ScoreDeath(new DeathMessage(1, NetMessage.NoSeat, NetDeathCause.Suicide, 0));
+            director.ScoreDeath(new DeathMessage(0, 1, NetDeathCause.Killer, 0));
+            ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, lobbyHost.Door.Dogfight, played) == null,
+                $"ABLE-TO-FAIL CONTROL: a match still running lands nowhere near the lobby");
+            director.ScoreDeath(new DeathMessage(0, 1, NetDeathCause.Killer, 0));
+            ctx.Check(played.Completed && !heard.Completed,
+                $"the host's last life spent ends its match, which the guest has not yet heard ({played.Completed}, {heard.Completed})");
+
+            // The host flies the hold alone, so nothing the guest counts can land the host.
+            int hold = (int)Math.Ceiling(CSVM.Session.World.VersusDirector.EndHoldS / CSVM.Utils.GameClock.FixedDt);
+            Fly(hold - ShortSteps, host);
+            ctx.Check(landed[0] == 0 && host.Pause is { Ended: false },
+                $"ABLE-TO-FAIL CONTROL: a fifth of a second short of the hold the host has not landed, its world flying on ({landed[0]}, halted {host.Pause?.Ended})");
+            Fly(2 * ShortSteps, host);
+            ctx.Check(landed[0] == 1 && landed[1] == 0 && !heard.Completed,
+                $"the host lands once its end has held {CSVM.Session.World.VersusDirector.EndHoldS:0.#} s, the guest still flying ({string.Join(",", landed)} landings)");
+
+            Fly(ShortSteps, both);
+            string lines = string.Join(" / ", Enumerable.Range(0, CSVM.Flight.Hud.HudMessages.Slots).Select(s => guest.SeatRigs[1].Controller?.MessageStack?.LineAt(s)));
+            ctx.Check(heard.Completed && guest.Pause is { Ended: false } && lines.Contains(words.Row(CSVM.Flight.Hud.HudMessages.GameOverKey), StringComparison.Ordinal),
+                $"the host's end message ends the guest's match under the end lines, its world flying on ({lines})");
+            Fly(hold - (2 * ShortSteps), both);
+            ctx.Check(landed[1] == 0, $"ABLE-TO-FAIL CONTROL: the guest's hold counts from that message, not from the host's end");
+            Fly(2 * ShortSteps, both);
+            ctx.Check(landed[0] == 1 && landed[1] == 1 && exited.All(e => e == 0),
+                $"the guest lands once its own hold is up, and neither machine lands twice or leaves any other way ({string.Join(",", landed)} landings, {string.Join(",", exited)} exits)");
+            return (played, heard);
+        }
+        finally
+        {
+            foreach (var flight in Enumerable.Reverse(flights))
+            {
+                flight.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    // One match under mixed presentations, which the host's decides for both machines. A guest is
+    // handed the landing exactly when its host lands, as the launcher reads it off the options.
+    private static void MixedEnding(TestContext ctx, string what, PresentationId hostLook, PresentationId guestLook, bool hostLands)
+    {
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, "--vs-lives=2");
+        var landed = new int[2];
+        var exited = new int[2];
+        var flights = new List<NetCombatSuites.Ends>();
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            if (OpenPair(ctx, spec, hostLook, guestLook, hostLands, landed, exited, flights) is not { } both)
+            {
+                return;
+            }
+
+            var director = both[0].Dogfight!;
+            int hold = (int)Math.Ceiling(CSVM.Session.World.VersusDirector.EndHoldS / CSVM.Utils.GameClock.FixedDt);
+            EndTheMatch(director);
+            if (hostLands)
+            {
+                // A match that runs again inside the hold starts the next hold from zero.
+                Fly(hold - ShortSteps, both);
+                director.Restart();
+                Fly(SettleSteps, both);
+                ctx.Check(both.All(p => !p.Dogfight!.Match.Completed) && landed.All(n => n == 0),
+                    $"[{what}] a match run again inside the hold lands nobody ({string.Join(",", landed)} landings)");
+                EndTheMatch(director);
+                Fly(hold - ShortSteps, both);
+                ctx.Check(landed.All(n => n == 0),
+                    $"ABLE-TO-FAIL CONTROL: [{what}] its next end holds a whole {CSVM.Session.World.VersusDirector.EndHoldS:0.#} s again ({string.Join(",", landed)} landings)");
+            }
+
+            Fly(hold + (2 * ShortSteps), both);
+            string seen = string.Join(" | ", both.Select(p => $"board {p.Boards?.DogfightBoard != null}, halted {p.Pause?.Ended}"));
+            ctx.Check(both.All(p => p.Dogfight!.Match.Completed), $"[{what}] the match ends on both machines ({seen})");
+            if (hostLands)
+            {
+                ctx.Check(landed.All(n => n == 1) && both.All(p => p.Boards is { DogfightBoard: null }),
+                    $"[{what}] both machines land on the host's word once the end has held, with no board on either ({string.Join(",", landed)} landings; {seen})");
+            }
+            else
+            {
+                ctx.Check(landed.All(n => n == 0) && both.All(p => p.Boards?.DogfightBoard != null && p.Pause is { Ended: true }),
+                    $"[{what}] neither machine lands, the guest keeping the results board its host shows ({string.Join(",", landed)} landings; {seen})");
+            }
+            ctx.Check(exited.All(e => e == 0), $"[{what}] and neither leaves any other way ({string.Join(",", exited)} exits)");
+        }
+        finally
+        {
+            foreach (var flight in Enumerable.Reverse(flights))
+            {
+                flight.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    // The guest's seat spends one life on a crash, then downs the host's twice: reason 4 on two lives.
+    private static void EndTheMatch(CSVM.Session.World.VersusDirector director)
+    {
+        director.ScoreDeath(new DeathMessage(1, NetMessage.NoSeat, NetDeathCause.Suicide, 0));
+        director.ScoreDeath(new DeathMessage(0, 1, NetDeathCause.Killer, 0));
+        director.ScoreDeath(new DeathMessage(0, 1, NetDeathCause.Killer, 0));
+    }
+
+    // A host and a guest session on a wire of their own, each counting its landings and exits, and
+    // settled. A guest is handed the landing exactly when its host lands. Null when a build fails.
+    private static CSVM.Launch.GameSession[]? OpenPair(TestContext ctx, SessionSpec spec, PresentationId hostLook,
+        PresentationId guestLook, bool hostLands, int[] landed, int[] exited, List<NetCombatSuites.Ends> flights)
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(139));
+        var looks = new[] { hostLook, guestLook };
+        for (int i = 0; i < 2; i++)
+        {
+            int machine = i;
+            flights.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[i], isHost: i == 0, FlightSeed + (ulong)i,
+                i == 0 ? NetCombatSuites.Roster(2, spec) : null, exitSession: () => exited[machine]++,
+                lobbyLanding: hostLands ? () => landed[machine]++ : null, presentation: looks[i]));
+        }
+
+        ctx.Check(flights.All(f => f.Built), $"both lobby sessions build, the host {hostLook} and the guest {guestLook} ({string.Join(", ", flights.Select(f => f.Built))})");
+        if (!flights.All(f => f.Built))
+        {
+            return null;
+        }
+
+        var both = flights.Select(f => f.Session).ToArray();
+        Fly(SettleSteps, both);
+        return both;
+    }
+
+    // Each session through the same fixed steps, host first, the order a listen server runs in.
+    private static void Fly(int steps, params CSVM.Launch.GameSession[] sessions)
+    {
+        for (int i = 0; i < steps; i++)
+        {
+            foreach (var session in sessions)
+            {
+                session._PhysicsProcess(CSVM.Utils.GameClock.FixedDt);
+            }
+        }
     }
 
     // The next round off the landed lobby, with nobody rejoining. Both mark Ready, and LAUNCH!

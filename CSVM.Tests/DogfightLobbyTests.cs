@@ -935,6 +935,27 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void AGuestReadsWhetherItsHostLandsOnGameScores()
+    {
+        var (host, guests, _) = Lobbies(2);
+        var guest = guests[0];
+        Settle(host, guests);
+
+        // ABLE-TO-FAIL CONTROL: an unshown host, as a Built-in board's is, ends on its results board.
+        Assert.False(guest.Options.HostLandsOnScores);
+
+        host.Show();
+        Settle(host, guests);
+        Assert.True(guest.Options.HostLandsOnScores);
+        Assert.Equal(host.Options.Epoch, guest.Options.Epoch);
+
+        var wire = new byte[DogfightOptionsMessage.Size];
+        guest.Options.Write(wire);
+        Assert.True(DogfightOptionsMessage.TryRead(wire, out var heard));
+        Assert.Equal(guest.Options, heard);
+    }
+
+    [Fact]
     public void AStuntRaceLaunchFliesTheChaptersIa1WithTheLobbysWindow()
     {
         var cli = SessionSpec.Parse(new[] { "--mission=MP2" });

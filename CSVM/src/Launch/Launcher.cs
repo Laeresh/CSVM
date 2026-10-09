@@ -211,6 +211,10 @@ public partial class Launcher : Node3D
     // The reason is the debrief's: the ending arrives inside the session's own step.
     private IaWrapupSnapshot? _pendingWrapup;
 
+    // A finished lobby match's landing on Game Scores, acted on at the top of the next frame for
+    // the debrief's reason.
+    private bool _pendingLobbyLanding;
+
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
     // synchronous block, so the screen has to be DRAWN before it starts: _launchFramesWaited counts
     // the frames since the request and the build runs on the first one that proves a frame rendered.
@@ -1184,6 +1188,17 @@ public partial class Launcher : Node3D
             ReturnToMenu(new InstantActionWrapupReturn(wrapup));
         }
 
+        // ⚠ Only while the session still flies: a pause-sheet exit in the same frame already left,
+        // and ExitSession with no session quits the game.
+        if (_pendingLobbyLanding)
+        {
+            _pendingLobbyLanding = false;
+            if (_session is { InSession: true })
+            {
+                ExitSession();
+            }
+        }
+
         TickCoopFlight(delta);
         TickVersusFlight(delta);
 
@@ -1563,6 +1578,12 @@ public partial class Launcher : Node3D
 
         return RaceLanding(race) is { } table ? new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>(), table) : null;
     }
+
+    /// <summary>Whether a lobby flight's match ends on Game Scores rather than on a results board.
+    /// The host's presentation decides for every machine. A host lands when a lobby screen stands on
+    /// its lobby, and a guest when its host's options say so.</summary>
+    internal static bool LandsOnScores(bool isHost, UI.Menu.DogfightLobby? lobby) =>
+        lobby != null && (isHost ? lobby.Shown : lobby.Options.HostLandsOnScores);
 
     /// <summary>An ended stunt race's table as the lobby's Game Scores draws it, a pilot who left
     /// marked; null for no race or one still running.</summary>
@@ -2247,6 +2268,9 @@ public partial class Launcher : Node3D
                 ? (profile, result) => _pendingDebrief = (profile, result)
                 : null,
             InstantActionWrapup = _menuDriven ? snapshot => _pendingWrapup = snapshot : null,
+            VersusLobbyLanding = _menuDriven && _lobbyFlight && LandsOnScores(_netIsHost, _netDoor?.Dogfight)
+                ? () => _pendingLobbyLanding = true
+                : null,
             Music = _music,
             NetTransport = _netWire,
             NetHost = _netIsHost,
@@ -3810,6 +3834,11 @@ public sealed class LauncherContext
     /// final numbers the ending left. Null when this process was not launched into the menu, and
     /// unused by a presentation whose own board takes the ending inside the flight.</summary>
     public System.Action<IaWrapupSnapshot>? InstantActionWrapup { get; init; }
+
+    /// <summary>A finished match's way to its lobby's Game Scores: the Launcher leaves the session a
+    /// frame later, as <see cref="ExitSession"/> does. Null outside a lobby flight whose host lands
+    /// there (<c>Launcher.LandsOnScores</c>), where a results board takes the ending.</summary>
+    public System.Action? VersusLobbyLanding { get; init; }
 
     /// <summary>The process's music channel, so a mission's own cues reach the one player that
     /// outlives every session. Null when the sound archive or the sound definitions would not

@@ -29,6 +29,11 @@ public sealed class VersusDirector
     /// (docs/org/multiplayer-scoring.md). An Instant Action life spends the same delay.</summary>
     internal const float RespawnDelay = 3f;
 
+    /// <summary>Seconds the ended world flies on, its end lines up, before a lobby match lands on
+    /// Game Scores. It is the original's wait at <c>0071c19c</c> (docs/org/multiplayer-scoring.md).
+    /// </summary>
+    internal const float EndHoldS = 5f;
+
     private readonly SessionSpec _spec;
     private readonly Field _field;
 
@@ -55,6 +60,10 @@ public sealed class VersusDirector
     // The leave-the-session door a Zeppelin vs Zeppelin rematch takes, null where no menu stands
     // behind the flight.
     private Action? _toLobby;
+    // The landing on Game Scores, null where a results board takes the ending. Spent once taken.
+    private Action? _landOnScores;
+    // Sim seconds since the match ended, counted here because no board halts this world.
+    private float _endHeld;
     // --debug-scoreboard: fires once, on the first sim step.
     private bool _debugKillFired;
 
@@ -157,6 +166,7 @@ public sealed class VersusDirector
         _spawnList = inputs.SpawnList;
         _spawnListName = inputs.SpawnListName;
         _toLobby = inputs.ToLobby;
+        _landOnScores = inputs.LandOnScores;
         // Spawn rotation: a downed seat comes back on a point picked against the living field,
         // since a fixed spawn can be camped at. Its Rng comes off the master alone, so no pick
         // here shifts Rng.Spawn. A team match rotates each seat inside its own team's block.
@@ -184,7 +194,9 @@ public sealed class VersusDirector
                 pilot.AutoRespawnAfter = RespawnDelay;
                 pilot.RespawnOnFire = !_spec.VsAutoRespawn && !IsBot(seat);
                 pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
-                pilot.RestartMatch = Restart;
+                // ⚠ No rematch key on the way to Game Scores. The next round is a lobby launch, and
+                // Zeppelin vs Zeppelin's Restart would land twice.
+                pilot.RestartMatch = _landOnScores == null ? Restart : null;
                 if (Wired)
                     pilot.RespawnRequest = () => AskSpawn(seat);
                 else if (_rotation != null)
@@ -388,6 +400,7 @@ public sealed class VersusDirector
     {
         Match.Advance(dt);
         HoldSpentPilots();
+        HoldTheEnd(dt);
         if (_matchCadence is not { } cadence)
         {
             return;
@@ -750,6 +763,33 @@ public sealed class VersusDirector
         }
     }
 
+    // A lobby match's end on Game Scores: the world flies on under its end lines, and then this
+    // machine lands once. A guest's match completes on the host's end message alone, and a match
+    // running again starts the next hold from zero.
+    private void HoldTheEnd(float dt)
+    {
+        if (!Match.Completed)
+        {
+            _endHeld = 0f;
+            return;
+        }
+
+        if (_landOnScores is not { } land)
+        {
+            return;
+        }
+
+        _endHeld += dt;
+        if (_endHeld < EndHoldS)
+        {
+            return;
+        }
+
+        _landOnScores = null;
+        Log.Info("flight", $"dogfight: the end held {EndHoldS:0.#} s, landing on the lobby's Game Scores");
+        land();
+    }
+
     // The lobby's Limited Lives. A pilot whose deaths reach the limit watches the next aircraft
     // still flying. A rematch's zeroed deaths put it back. Every machine reads the host's death
     // count, so both ends hold the same pilots down, and each death tells its own pilot the lives
@@ -1000,6 +1040,9 @@ public sealed class VersusDirector
         public Action<int, int?> ReportDeath = null!;
         // Leave the flight for the lobby, null where no menu stands behind it.
         public Action? ToLobby;
+        // Land on the lobby's Game Scores once the end has held, null where a results board takes
+        // the ending instead.
+        public Action? LandOnScores;
     }
 
     /// <summary>What Capture the Flag lays its flags out with.</summary>
