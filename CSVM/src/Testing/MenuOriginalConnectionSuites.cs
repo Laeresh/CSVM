@@ -2625,12 +2625,12 @@ internal static class MenuOriginalConnectionSuites
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
         var stock = StockLoadouts.Load();
-        var (roster, seatFits) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, stock);
+        var (roster, seatFits) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, stock);
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(1)
                   && slot >= 0 && seatFits[1].AmmoAt(slot) == 2,
             $"the host's roster builds the guest's seat on its pick and fit ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
         var bare = ((NetLobby)wire.Transport).Inner;
-        var (withheld, _) = CSVM.Launch.Launcher.VersusLaunchField(bare, planes, fits, stock);
+        var (withheld, _) = CSVM.Launch.SeatFields.VersusLaunchField(bare, planes, fits, stock);
         ctx.Check(withheld.Length == 2 && withheld[1].PlaneNode == planes[0],
             $"ABLE-TO-FAIL CONTROL: with the pick withheld the seat takes the local airframe ({withheld.LastOrDefault()?.PlaneNode})");
         return roster;
@@ -2661,8 +2661,8 @@ internal static class MenuOriginalConnectionSuites
     {
         // The host's presentation decides the ending for both: an Original host lands, and says so
         // in the options its guest heard.
-        ctx.Check(CSVM.Launch.Launcher.LandsOnScores(true, host.Door.Dogfight) && guest.Door.Dogfight!.Options.HostLandsOnScores
-                  && CSVM.Launch.Launcher.LandsOnScores(false, guest.Door.Dogfight),
+        ctx.Check(CSVM.Launch.NetFlight.LandsOnScores(true, host.Door.Dogfight) && guest.Door.Dogfight!.Options.HostLandsOnScores
+                  && CSVM.Launch.NetFlight.LandsOnScores(false, guest.Door.Dogfight),
             $"an Original host lands its match on Game Scores, and its guest reads that in the host's options");
         MixedEnding(ctx, "a Built-in host and an Original guest", PresentationId.BuiltIn, PresentationId.Original, hostLands: false);
         MixedEnding(ctx, "an Original host and a Built-in guest", PresentationId.Original, PresentationId.BuiltIn, hostLands: true);
@@ -2671,8 +2671,8 @@ internal static class MenuOriginalConnectionSuites
             return;
         }
 
-        var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, played);
-        var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, heard);
+        var hostLanding = CSVM.Launch.NetFlight.LobbyLanding(true, host.Door.Dogfight, played);
+        var guestLanding = CSVM.Launch.NetFlight.LobbyLanding(true, guest.Door.Dogfight, heard);
         ctx.Check(hostLanding != null && guestLanding != null, $"a completed match lands both ends on their lobby");
         ctx.Check(host.Door.Reclaim() && guest.Door.Reclaim(), $"and both doors take their wire back");
         if (hostLanding == null || guestLanding == null)
@@ -2732,7 +2732,7 @@ internal static class MenuOriginalConnectionSuites
             var (played, heard) = (director.Match, guest.Dogfight!.Match);
             director.ScoreDeath(new DeathMessage(1, NetMessage.NoSeat, NetDeathCause.Suicide, 0));
             director.ScoreDeath(new DeathMessage(0, 1, NetDeathCause.Killer, 0));
-            ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, lobbyHost.Door.Dogfight, played) == null,
+            ctx.Check(CSVM.Launch.NetFlight.LobbyLanding(true, lobbyHost.Door.Dogfight, played) == null,
                 $"ABLE-TO-FAIL CONTROL: a match still running lands nowhere near the lobby");
             director.ScoreDeath(new DeathMessage(0, 1, NetDeathCause.Killer, 0));
             ctx.Check(played.Completed && !heard.Completed,
@@ -2901,7 +2901,7 @@ internal static class MenuOriginalConnectionSuites
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
-        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
+        var (roster, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
         GuestLaunch(ctx, wire, roster, guest, guestExits);
     }
 
@@ -3233,7 +3233,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
-        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, launch.Seats.Select(s => s.Fit).ToList(), StockLoadouts.Load());
+        var (roster, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, launch.Seats.Select(s => s.Fit).ToList(), StockLoadouts.Load());
         int guestBefore = guestExits.Count;
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         for (int frame = 0; frame < 4 && guestExits.Count == guestBefore; frame++)
@@ -3259,12 +3259,12 @@ internal static class MenuOriginalConnectionSuites
     {
         var names = host.Door.Dogfight!.LaunchNames;
         var race = FlownRace(names);
-        ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: race) == null,
+        ctx.Check(CSVM.Launch.NetFlight.LobbyLanding(true, host.Door.Dogfight, null, race: race) == null,
             $"ABLE-TO-FAIL CONTROL: a race still running lands nowhere near the lobby");
         race.MarkLeft(1);
         race.Advance(421f);
-        var hostLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: race);
-        var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, null, race: race);
+        var hostLanding = CSVM.Launch.NetFlight.LobbyLanding(true, host.Door.Dogfight, null, race: race);
+        var guestLanding = CSVM.Launch.NetFlight.LobbyLanding(true, guest.Door.Dogfight, null, race: race);
         ctx.Check(hostLanding is { Scores.Count: 0, Race.Count: 2 } && guestLanding is { Race.Count: 2 } && hostLanding.Race![0].Left,
             $"an ended race lands both ends on their lobby with its table, the guest who left first ({hostLanding?.Race?.Count} rows)");
 
@@ -3272,7 +3272,7 @@ internal static class MenuOriginalConnectionSuites
         var flown = FlownRace(names);
         flown.Advance(421f);
         bool marked = flown.MarkLeft(1);
-        var flownLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race: flown);
+        var flownLanding = CSVM.Launch.NetFlight.LobbyLanding(true, host.Door.Dogfight, null, race: flown);
         ctx.Check(!marked && flownLanding?.Race is { Count: 2 } table && !table[0].Left && !table[1].Left,
             $"a guest leaving after the end lands unflagged ({marked}, {string.Join(" | ", flownLanding?.Race?.Select(r => $"{r.Pilot} {r.Left}") ?? Array.Empty<string>())})");
         ctx.Check(host.Door.Reclaim() && guest.Door.Reclaim(), $"and both doors take their wire back");
@@ -3330,10 +3330,10 @@ internal static class MenuOriginalConnectionSuites
     private static void HostLeavesTheRace(TestContext ctx, End host, End guest, List<End> ends, MenuNetLaunch hostWire, MenuNetLaunch guestWire)
     {
         Pump(ends.ToArray());
-        ctx.Check(!CSVM.Launch.Launcher.VersusGuestFlightOver(guest.Door),
+        ctx.Check(!CSVM.Launch.NetFlight.VersusGuestFlightOver(guest.Door),
             $"ABLE-TO-FAIL CONTROL: while the host flies, the guest's flight goes on ({guest.Door.Stage})");
-        CSVM.Launch.Launcher.EndNetWire(host.Door, hostWire.Transport, keepLobby: false);
-        for (int frame = 0; frame < 6 && !CSVM.Launch.Launcher.VersusGuestFlightOver(guest.Door); frame++)
+        CSVM.Launch.NetFlight.EndNetWire(host.Door, hostWire.Transport, keepLobby: false);
+        for (int frame = 0; frame < 6 && !CSVM.Launch.NetFlight.VersusGuestFlightOver(guest.Door); frame++)
         {
             // The launcher's in-flight upkeep steps a lobby guest's door, as the session steps its wire.
             guestWire.Transport.Step(Dt);
@@ -3341,7 +3341,7 @@ internal static class MenuOriginalConnectionSuites
             Pump(host);
         }
 
-        ctx.Check(CSVM.Launch.Launcher.VersusGuestFlightOver(guest.Door) && guest.Door.Fault is CoopDoorText.HostClosed or CoopDoorText.HostLeft,
+        ctx.Check(CSVM.Launch.NetFlight.VersusGuestFlightOver(guest.Door) && guest.Door.Fault is CoopDoorText.HostClosed or CoopDoorText.HostLeft,
             $"the host leaving the race ends the guest's flight ({guest.Door.Stage}, {guest.Door.Fault})");
         guest.Host.Show(new LobbyReturn(Array.Empty<DogfightScore>()));
         Pump(guest);
@@ -3398,7 +3398,7 @@ internal static class MenuOriginalConnectionSuites
 
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
-        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), null,
+        var (roster, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), null,
             host.Door.Dogfight!.TeamOfPeer);
         ctx.Check(roster.Length == 2 && roster[0].TeamId == team && roster[1].TeamId == theirs,
             $"the host's field carries each seat's team ({string.Join(", ", roster.Select(s => s.TeamId))})");
@@ -3518,7 +3518,7 @@ internal static class MenuOriginalConnectionSuites
         var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
         var fits = launch.Seats.Select(s => s.Fit).ToList();
         var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
-        var (roster, seatFits) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), lobby.Rules,
+        var (roster, seatFits) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), lobby.Rules,
             lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
         string random = roster.Length == 4 ? roster[3].PlaneNode : string.Empty;
         ctx.Check(roster.Length == 4 && seatFits.Length == 4 && !roster[1].IsBot && roster[2] is { IsBot: true, Skill: NetBotSkill.Ace, Callsign: "Red Ace" }
@@ -3644,7 +3644,7 @@ internal static class MenuOriginalConnectionSuites
     {
         var planes = new[] { StockAirframes.Node(0) };
         var fits = new LoadoutChoice?[] { null };
-        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
+        var (roster, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(2),
             $"the host's roster builds the guest's seat on its pick ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
         ctx.Check(roster.Length == 2 && roster[0].Callsign == SplitScreen.PlayerTag(0),

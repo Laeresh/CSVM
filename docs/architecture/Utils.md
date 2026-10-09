@@ -62,7 +62,7 @@ from a failure; `Shell` is the seam a suite records. The two folder icons in
 The IPv4 networks this machine sits on, for the LAN search: `Ipv4()` lists the address and mask of
 every adapter that is up and not the loopback, and an empty list when the system will not say, so a
 search still asks at the limited broadcast. It lives here because `CSVM.Net` may not name
-`System.Net`, and Godot's interface list carries no masks. `Launcher.cs` hands it to the door as
+`System.Net`, and Godot's interface list carries no masks. `Launch/NetFlight.cs` hands it to the door as
 `UI/Menu/LanDoor.cs`'s `Networks`; `Net/LanBroadcast.cs` turns it into addresses.
 
 ## src/Utils/HostAddress.cs
@@ -121,7 +121,7 @@ shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Launc
 one is raised.
 
 ## src/Utils/HitchMonitor.cs
-The always-on frame-hitch detector, ticked from `Launcher._Process` in every mode: a frame costing
+The always-on frame-hitch detector, ticked by `Launch/FrameInstruments.cs` every frame in every mode: a frame costing
 far more than its recent neighbours gets a `HitchRecord` assembled for it, describing the frame's
 cost split, its engine counts as absolutes and as deltas, its GC activity, the ring of frames
 leading up to it, and the named work `PerfSample` attributed. It only detects, and nothing is
@@ -144,7 +144,7 @@ Ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.DebrisSpawn))` adds
 that site's total for the frame in progress, and any code path can do it without knowing the
 monitor, the readout, or whether anything is listening. Statics over a preallocated per-site array,
 the same ambient shape `StartupProfile` uses and for the same reason, since a scope several call
-layers down cannot be handed an accumulator. `Launcher._Process` calls `EndFrame()` where it stamps
+layers down cannot be handed an accumulator. `Launch/FrameInstruments.cs` calls `EndFrame()` where it stamps
 the frame's wall cost, so the scopes and the `frame_ms` they ran inside describe the same span. The
 site vocabulary, the seeded call sites and the attribution terms a record carries:
 [../org/hitch.md](../org/hitch.md).

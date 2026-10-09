@@ -189,7 +189,7 @@ internal static class MenuOriginalCoopFlowSuites
             }
 
             var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-            var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+            var (roster, _) = CSVM.Launch.SeatFields.CoopLaunchField(
                 host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
             ctx.Check(roster.Length == 3 && roster[1].PeerId == roster[2].PeerId && roster[1].PeerId != roster[0].PeerId,
                 $"the host's launch field seats the guest's machine at seats 1 and 2 ({roster.Length} seat(s))");
@@ -395,7 +395,7 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(picked != CoopGuestPick.StarterAirframe && fit.AmmoAt(0) == 3,
             $"ABLE-TO-FAIL CONTROL: the pick the guest flew is not a fresh join's starter and stock fit ({picked}, {fit.AmmoAt(0)})");
         var guestWire = guest.Door.BuildLaunch();
-        var relaunch = CSVM.Launch.Launcher.CoopRelaunch(host.Door);
+        var relaunch = CSVM.Launch.NetFlight.CoopRelaunch(host.Door);
         ctx.Check(guestWire != null && relaunch != null, $"the guest flies and the host's Restart relaunches its door");
         if (guestWire == null || relaunch == null)
         {
@@ -403,12 +403,12 @@ internal static class MenuOriginalCoopFlowSuites
         }
 
         GuestFliesItsPick(ctx, host, relaunch, (picked, fit), "the restart's field builds the guest on the pick it flew");
-        for (int i = 0; i < 20 && !CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
+        for (int i = 0; i < 20 && !CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door); i++)
         {
             StepInFlight(host, guest, relaunch, guestWire);
         }
 
-        ctx.Check(CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's new round ends the guest's flight");
+        ctx.Check(CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door), $"the host's new round ends the guest's flight");
         GuestReturns(ctx, host, guest, relaunch, (picked, fit), "after the restart");
         ctx.Check(((NetLobby)relaunch.Transport).Picks.Values.All(pick => pick.Epoch == host.Door.CoopEpoch),
             $"and it answers under the restart's round, which the host waits for");
@@ -504,14 +504,14 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(host.Door.Reclaim(), $"the host takes its wire back after the lost mission");
         int seq = Math.Max(0, CampaignAidProfiles.MissionsFlown - 1);
         host.Host.Show(new DebriefReturn(CampaignAidProfiles.Pilot, seq, MissionWon: false));
-        for (int i = 0; i < 20 && !CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
+        for (int i = 0; i < 20 && !CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door); i++)
         {
             host.Host.Tick(Dt);
             guestWire.Transport.Step(Dt);
             guest.Door.Step(Dt);
         }
 
-        ctx.Check(CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's lost debrief ends the guest's flight");
+        ctx.Check(CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door), $"the host's lost debrief ends the guest's flight");
         GuestReturns(ctx, host, guest, hostWire, remembered, "after the lost mission");
         Pump(host, guest, frames: 4);
         byte debriefRound = host.Door.CoopEpoch;
@@ -553,7 +553,7 @@ internal static class MenuOriginalCoopFlowSuites
     private static void GuestFliesItsPick(TestContext ctx, End host, MenuNetLaunch launch, (byte Airframe, CoopFit Fit) pick, string what)
     {
         var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-        var (roster, seatFits) = CSVM.Launch.Launcher.CoopLaunchField(
+        var (roster, seatFits) = CSVM.Launch.SeatFields.CoopLaunchField(
             host.Door, launch.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == Flight.Hangar.StockAirframes.Node(pick.Airframe) && seatFits[1] == pick.Fit,
             $"{what} ({(roster.Length == 2 ? roster[1].PlaneNode : "-")}, ammo {(seatFits.Length == 2 ? seatFits[1].AmmoAt(0) : -9)})");

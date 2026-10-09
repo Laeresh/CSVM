@@ -87,7 +87,7 @@ internal static class NetPlayerVoiceSuites
             }
 
             var planes = new[] { CSVM.Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
-            var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+            var (roster, _) = SeatFields.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             ctx.Check(roster.Length == 2 && roster[0].Voice == UI.Menu.PilotVoices.Wire(HostVoice)
                       && roster[1].Voice == UI.Menu.PilotVoices.Wire(GuestVoice),
                 $"the host's field names its own seat's voice and the voice the guest's pick carried ({string.Join(", ", roster.Select(s => s.Voice))})");

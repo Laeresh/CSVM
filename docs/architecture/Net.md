@@ -136,7 +136,7 @@ a fault as a player reads it. `HeldPayloads` is the one depth every carrier hold
 `Bind`. A carrier without it, the loopback, is read through its peer roster instead.
 
 ## src/Net/NetCarrier.cs
-Which carrier a match runs over, chosen once: the menu door's registration in `Launcher.cs` and
+Which carrier a match runs over, chosen once: the menu door's registration in `Launch/NetFlight.cs` and
 the command line's own open both come through `Host` and `Join`, so a build changes carrier with
 no edit above the seam. `Name` is the log word. `PortMap`/`PortUnmap` are
 the router door a direct-IP host asks for, `Pinhole` (given the address) and `PinholeClose` its

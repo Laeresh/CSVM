@@ -226,7 +226,7 @@ internal static class BotContactSuites
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, "--plane=player_fury", "--vs-bot=player_fury");
         var ambient = NetCombatSuites.Ambient.Save();
-        var roster = Launcher.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
         ctx.Check(roster is { Length: 2 } && roster[BotSeat].IsBot, $"the local launch seats a pane and a bot");
         if (roster == null)
         {

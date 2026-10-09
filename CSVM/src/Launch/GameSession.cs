@@ -2169,7 +2169,7 @@ public partial class GameSession : Node3D
         if (_dogfight is { } dogfight)
         {
             // The host's presentation decides the ending for every machine, so a guest follows its
-            // host's word (Launcher.LandsOnScores) whatever its own presentation is.
+            // host's word (NetFlight.LandsOnScores) whatever its own presentation is.
             var toScores = (_wire.Link is { IsHost: false } ? _menuDriven : LandsInMenu)
                 ? _versusLobbyLanding : null;
             dogfight.Wire(new VersusDirector.WireInputs

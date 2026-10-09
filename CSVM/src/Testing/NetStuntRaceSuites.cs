@@ -464,7 +464,7 @@ internal static class NetStuntRaceSuites
             Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
             FlyBoth(s, hostGap: HostGap, guestGap: GuestFirstGap);
             Until(s.Peers, () => s.GuestRace.Of(0)!.RunsFinished == 1 && s.GuestRace.Of(1)!.RunsFinished == 1);
-            ctx.Check(Launcher.RaceLanding(s.HostRace) == null, $"ABLE-TO-FAIL CONTROL: [{cell}] a race still running lands no table");
+            ctx.Check(NetFlight.RaceLanding(s.HostRace) == null, $"ABLE-TO-FAIL CONTROL: [{cell}] a race still running lands no table");
             CloseWindow(s);
             Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
             var guestLink = s.Peers[1].Wire.Race!;
@@ -473,8 +473,8 @@ internal static class NetStuntRaceSuites
 
             s.Peers[0].LeaveFlight();
             bool called = Until(s.Peers, () => guestLink.LobbyCalled);
-            var here = Launcher.RaceLanding(s.HostRace);
-            var there = Launcher.RaceLanding(s.GuestRace);
+            var here = NetFlight.RaceLanding(s.HostRace);
+            var there = NetFlight.RaceLanding(s.GuestRace);
             ctx.Check(exits[0] == 1 && called && s.Peers[0].Wire.Race!.CallsTaken == 0,
                 $"[{cell}] the host's Lobby leaves its flight and calls the guest to the lobby ({exits[0]} exit, called={called})");
             ctx.Check(here is { Count: 2 } && there != null && here.SequenceEqual(there),

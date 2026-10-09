@@ -18,7 +18,7 @@ namespace CSVM.Testing;
 
 /// <summary>A local Dogfight with bots: one pane and its bots on a seat roster with no wire. The
 /// roster is the one a command-line <c>--vs --vs-bots=</c> launch, or a menu launch carrying the
-/// join board's bots, builds through <see cref="Launcher.LocalVersusField"/>. This machine is the authority over every seat, as a
+/// join board's bots, builds through <see cref="SeatFields.LocalVersusField"/>. This machine is the authority over every seat, as a
 /// network host is over its bots. It scores each death off the Downed report, places each return
 /// from its own rotation and runs the rematch. The session rig is <see cref="NetCombatSuites"/>'s,
 /// opened with no transport.</summary>
@@ -73,7 +73,7 @@ internal static class LocalBotSuites
     // One local launch, built as the launcher builds it, flown through the readings and freed.
     private static void Fly(TestContext ctx, SessionSpec spec, string cell, Action<GameSession> readings)
     {
-        var roster = Launcher.LocalVersusField(spec, ctx.MessagesPath);
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
         ctx.Check(roster is { Length: > 1 } && roster[0].HasPane
                   && roster.Skip(1).All(s => s is { IsBot: true, FlownHere: true } && s.PeerId == roster[0].PeerId),
             $"[{cell}] the local launch seats its pane first and then {spec.VsBots.Count} bot(s) on the pane's own peer ({Seats(roster)})");
@@ -266,7 +266,7 @@ internal static class LocalBotSuites
     private static void PanesAlone(TestContext ctx, SessionSpec spec, IReadOnlyList<SpawnPoint> table)
     {
         const string cell = "panes alone";
-        ctx.Check(Launcher.LocalVersusField(spec, ctx.MessagesPath) == null,
+        ctx.Check(SeatFields.LocalVersusField(spec, ctx.MessagesPath) == null,
             $"[{cell}] a local launch with no bots builds no roster");
         var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster: null);
         try

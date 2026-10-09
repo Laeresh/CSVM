@@ -240,7 +240,7 @@ the fastest worker count that stayed bit-identical on the one machine measured, 
 
 **The hitch stage is opt-in (`-Hitch`), not part of the landing gate**, because it never changes
 the exit code: run it when landing a change to `HitchMonitor.cs`, `HitchSidecar.cs` or the hitch
-tick in `Launcher.cs`. **`-SkipHitch`** forces it off even when `-Hitch` is given, and `-Quick`
+tick in `Launch/FrameInstruments.cs`. **`-SkipHitch`** forces it off even when `-Hitch` is given, and `-Quick`
 never runs it. A clean `--frames=180` launch should
 stay silent and `--hitch-inject=50@300 --frames=310` should trip once on frame 300; it runs last so
 its evidence is never taken beside another stage's load (LOG-13, PERF-12/13/14).

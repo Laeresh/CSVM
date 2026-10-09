@@ -689,6 +689,9 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 The process and the per-launch session: the top family bar `Testing`, so nothing else names it.
 
 - `src/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
+- `src/Launch/FrameInstruments.cs`, the process's frame instruments on wall time: the hitch monitor and sidecar, the rate line, the F14 readout, and the opt-in `--perf`, `--debug-mem` and `--hitch-inject`.
+- `src/Launch/NetFlight.cs`, the multiplayer door and the wire a flight carries: the command line's socket, a menu launch's wire and field, the in-flight door upkeep, the lobby landing and the wire's end.
+- `src/Launch/SeatFields.cs`, who sits where at a launch: the co-op, lobby Dogfight, command-line and local-bot seat rosters, with each seat's fit and custom plane.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
 - `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.

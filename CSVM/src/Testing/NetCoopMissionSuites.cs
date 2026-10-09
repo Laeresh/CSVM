@@ -729,8 +729,8 @@ internal static class NetCoopMissionSuites
         Ends hostEnd, Ends guestEnd, NetPlayFeature hostDoor, NetPlayFeature guestDoor)
     {
         hostEnd.Close();
-        var launch = Launcher.CoopRelaunch(hostDoor);
-        ctx.Check(!Launcher.CoopGuestFlightOver(guestDoor),
+        var launch = NetFlight.CoopRelaunch(hostDoor);
+        ctx.Check(!NetFlight.CoopGuestFlightOver(guestDoor),
             $"ABLE-TO-FAIL CONTROL: the guest's flight goes on until the host's new round crosses the link");
         Ends? next = null;
         string threw = "";
@@ -755,7 +755,7 @@ internal static class NetCoopMissionSuites
         int steps = 0;
         var hostPlane = next.Session.SeatRigs[0].Controller;
         var hostFrom = hostPlane?.GlobalPosition ?? Vector3.Zero;
-        for (; steps < OpenerSteps && !Launcher.CoopGuestFlightOver(guestDoor); steps++)
+        for (; steps < OpenerSteps && !NetFlight.CoopGuestFlightOver(guestDoor); steps++)
         {
             next.Session._PhysicsProcess(GameClock.FixedDt);
             hostDoor.Step(GameClock.FixedDt);
@@ -763,7 +763,7 @@ internal static class NetCoopMissionSuites
             guestDoor.Step(GameClock.FixedDt);
         }
 
-        ctx.Check(Launcher.CoopGuestFlightOver(guestDoor) && guestDoor.Stage == NetDoorStage.Joined,
+        ctx.Check(NetFlight.CoopGuestFlightOver(guestDoor) && guestDoor.Stage == NetDoorStage.Joined,
             $"the host's new round ends the guest's flight after {steps} step(s), its link still up ({guestDoor.Stage})");
         // The restarted mission waits for the guest's new world, so the host flies nowhere meanwhile.
         float held = hostPlane == null ? -1f : hostPlane.GlobalPosition.DistanceTo(hostFrom);
@@ -873,7 +873,7 @@ internal static class NetCoopMissionSuites
             var doors = new[] { host, third };
             SkipAcross(ctx, "the host", hostEnd, ends, doors);
             Fly(SettleSteps, ends, doors);
-            ctx.Check(third.Stage == NetDoorStage.Joined && !Launcher.CoopGuestFlightOver(third),
+            ctx.Check(third.Stage == NetDoorStage.Joined && !NetFlight.CoopGuestFlightOver(third),
                 $"ABLE-TO-FAIL CONTROL: with the host on the wire the guest's flight goes on ({third.Stage})");
             ctx.Check(thirdEnd.Session.NetSeats[1].Callsign == "P2",
                 $"a guest with no player name is seated under its player number in the new field ({thirdEnd.Session.NetSeats[1].Callsign})");
@@ -882,7 +882,7 @@ internal static class NetCoopMissionSuites
             Fly(SettleSteps, ends, doors);
             ctx.Check(third.Stage == NetDoorStage.Failed && third.Fault == CoopDoorText.HostLeft,
                 $"a dropped host fails the guest's door with \"{CoopDoorText.HostLeft}\" ({third.Stage}, \"{third.Fault}\")");
-            ctx.Check(Launcher.CoopGuestFlightOver(third),
+            ctx.Check(NetFlight.CoopGuestFlightOver(third),
                 $"and the launcher's rule ends the guest's flight, which returns it to the Connection page");
             ctx.Check(hostEnd.Session.SeatRigs[1].Controller is { Inert: true }
                       && Shows(hostEnd, CoopDoorText.Left("P2")) && hostEnd.Session.Campaign?.Result == null,
@@ -1063,7 +1063,7 @@ internal static class NetCoopMissionSuites
             thirdDoor.Step(GameClock.FixedDt);
         }
 
-        ctx.Check(Launcher.CoopGuestFlightOver(thirdDoor) && thirdDoor.CoopFlow is { Screen: NetCoopScreen.Debrief, Won: false },
+        ctx.Check(NetFlight.CoopGuestFlightOver(thirdDoor) && thirdDoor.CoopFlow is { Screen: NetCoopScreen.Debrief, Won: false },
             $"the guest's flight ends on the host's debrief, which names the loss ({thirdDoor.CoopFlow?.Screen}, won {thirdDoor.CoopFlow?.Won})");
         ctx.Check(result?.Outcome == MissionOutcome.Lost,
             $"and the guest carries the host's result to it ({result?.Outcome})");
@@ -1089,13 +1089,13 @@ internal static class NetCoopMissionSuites
     {
         var own = CampaignLoadout.For(CoopFit.Of(ammo, null), stock);
         var planes = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-        (var roster, seatFits) = Launcher.CoopLaunchField(door, launch.Transport, planes, new[] { own }, stock);
+        (var roster, seatFits) = SeatFields.CoopLaunchField(door, launch.Transport, planes, new[] { own }, stock);
         door.TellSeatFits(seatFits);
-        door.TellCoopWingman(Launcher.CoopWingmanFor(profile, profilesDir));
+        door.TellCoopWingman(SeatFields.CoopWingmanFor(profile, profilesDir));
         var fits = seatFits;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir), launch.Transport,
             isHost: true, HostSeed, roster, Flight.Hangar.StockAirframes.Nodes,
-            seat => Launcher.CoopSeatFitFor(seat, fits, null, stock));
+            seat => SeatFields.CoopSeatFitFor(seat, fits, null, stock));
     }
 
     // A guest's launch: its door waits for the host's opener while the host flies. It then builds a
@@ -1118,7 +1118,7 @@ internal static class NetCoopMissionSuites
         var launch = door.BuildLaunch()!;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock)), launch.Transport,
             isHost: false, HostSeed + 1, null, Flight.Hangar.StockAirframes.Nodes,
-            seat => Launcher.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman);
+            seat => SeatFields.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman);
     }
 
     // A guest flying several seats launches as a guest with one: one pane per seat its host gave it.
@@ -1138,7 +1138,7 @@ internal static class NetCoopMissionSuites
         var spec = SessionSpec.FromCampaign(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), "", mission.Seq,
             Enumerable.Repeat(plane, seats).ToArray(), seats, Enumerable.Repeat<LoadoutChoice?>(null, seats).ToArray());
         return NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: false, HostSeed + 1, null,
-            Flight.Hangar.StockAirframes.Nodes, seat => Launcher.CoopSeatFitFor(seat, null, door, stock),
+            Flight.Hangar.StockAirframes.Nodes, seat => SeatFields.CoopSeatFitFor(seat, null, door, stock),
             () => door.CoopWingman);
     }
 

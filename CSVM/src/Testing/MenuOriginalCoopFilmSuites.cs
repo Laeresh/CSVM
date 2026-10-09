@@ -202,7 +202,7 @@ internal static class MenuOriginalCoopFilmSuites
         }
 
         var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-        var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+        var (roster, _) = CSVM.Launch.SeatFields.CoopLaunchField(
             host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         int before = guestExits.Count;

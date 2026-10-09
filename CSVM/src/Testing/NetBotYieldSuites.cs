@@ -110,7 +110,7 @@ internal static class NetBotYieldSuites
 
             director.Match.Advance(MatchSeconds);
             Fly(SettleSteps, host, hostDoor, lateDoor);
-            var landing = Launcher.LobbyLanding(true, lobby, director.Match, host.Session.NetSeats);
+            var landing = NetFlight.LobbyLanding(true, lobby, director.Match, host.Session.NetSeats);
             ctx.Check(landing != null && hostDoor.Reclaim(), $"the finished match lands the host on its lobby and the door takes its wire back");
             var lines = landing?.Scores ?? Array.Empty<DogfightScore>();
             ctx.Check(lines.Select(l => l.Name).OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(seats.OrderBy(n => n, StringComparer.Ordinal))
@@ -237,7 +237,7 @@ internal static class NetBotYieldSuites
     private static NetSeat[] Field(MenuNetLaunch launch, DogfightLobby lobby, IReadOnlyList<string> pool)
     {
         var planes = new[] { StockAirframes.Node(lobby.Airframe) };
-        var (roster, _) = Launcher.VersusLaunchField(launch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load(),
+        var (roster, _) = SeatFields.VersusLaunchField(launch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load(),
             lobby.Rules, lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
         return roster;
     }

@@ -115,9 +115,9 @@ public static class PerfSample
     }
 
     /// <summary>Closes the frame in progress: its totals become the ones a record snapshots, and
-    /// the accumulators start again from zero. Called from <c>Launcher._Process</c> at the same
+    /// the accumulators start again from zero. Called from <c>FrameInstruments.BeginFrame</c> at the same
     /// instant the frame's wall cost is stamped, so the two describe the same window.
-    /// ⚠ A scope still open here has escaped its frame and counts as a violation; the open flag
+    /// ⚠ A scope still open here has escaped its frame and counts as a violation. The open flag
     /// clears regardless, so a leak costs one frame's attribution, not every frame after it.</summary>
     public static void EndFrame()
     {

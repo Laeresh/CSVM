@@ -159,7 +159,7 @@
     Off by default, even in a full run: the check is awareness-only, never changes the exit code,
     and its own subject changes rarely, so it is not part of the retained landing gate (build,
     units, engine, goldens). Run it explicitly when landing a change that touches
-    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launcher.cs, or periodically otherwise;
+    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launch/FrameInstruments.cs, or periodically otherwise;
     a run without -Hitch names it in the summary's "not checked:" lines with that same cadence.
     Ignored under -Quick, which never runs it. Always the last stage to launch Godot, so its
     wall-time evidence is never taken beside engine, golden, or perf load (LOG-13, PERF-12/13/14).
@@ -234,7 +234,7 @@
 .EXAMPLE
     .\RunTests.ps1 -Hitch -SkipUnits -SkipEngine -SkipGoldens
     Build, then only the hitch-detector check -- the isolated loop for a change to
-    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launcher.cs.
+    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launch/FrameInstruments.cs.
 
 .EXAMPLE
     .\RunTests.ps1 -Shards 1
@@ -2105,7 +2105,7 @@ if ($RunHitchNow) { Enter-GamingStage "hitch" -NoWait }
 if (-not $RunHitchNow) {
     $why = if ($SkipHitch) { "-SkipHitch" } elseif ($Quick) { "-Quick" } else { "opt-in, pass -Hitch" }
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail $why
-    Add-Unchecked "the hitch-detector check did not run ($why): its cadence is explicit, not automatic -- run it with -Hitch when landing a change to HitchMonitor.cs, HitchSidecar.cs or the hitch tick in Launcher.cs, or periodically otherwise"
+    Add-Unchecked "the hitch-detector check did not run ($why): its cadence is explicit, not automatic -- run it with -Hitch when landing a change to HitchMonitor.cs, HitchSidecar.cs or the hitch tick in Launch/FrameInstruments.cs, or periodically otherwise"
 } elseif (-not $buildOk) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the hitch-detector check did not run (the build failed)"
