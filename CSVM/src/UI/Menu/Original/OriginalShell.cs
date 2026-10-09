@@ -760,9 +760,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         start ??= RememberedNetInfo(net);
         NetInfo.Open(hosting, start, info =>
         {
-            net.Take(info, hosting != null);
+            net.Identity.Take(info, hosting != null);
             then();
-        }, asksPassword, listable: net.Master != null);
+        }, asksPassword, listable: net.Internet.Master != null);
     }
 
     /// <summary>Stands <paramref name="door"/> in for the network door, the screenshot aids' and
@@ -863,9 +863,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         var info = NetPlayerInfo.Remembered(saved, _profiles?.Invoke().LastPlayedPilotName);
         if (_netOptions == null)
         {
-            info.Callsign = net.PlayerName.Length > 0 ? net.PlayerName : info.Callsign;
-            info.GameName = net.GameName.Length > 0 ? net.GameName : info.GameName;
-            info.Voice = net.Voice >= 0 ? net.Voice : info.Voice;
+            info.Callsign = net.Identity.PlayerName.Length > 0 ? net.Identity.PlayerName : info.Callsign;
+            info.GameName = net.Identity.GameName.Length > 0 ? net.Identity.GameName : info.GameName;
+            info.Voice = net.Identity.Voice >= 0 ? net.Identity.Voice : info.Voice;
         }
 
         return info;

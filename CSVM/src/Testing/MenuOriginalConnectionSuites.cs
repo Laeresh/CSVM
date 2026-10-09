@@ -98,7 +98,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in doors)
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -203,7 +203,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in doors)
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -293,7 +293,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -374,7 +374,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -451,7 +451,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -526,7 +526,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -601,7 +601,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -686,7 +686,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -815,7 +815,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in new[] { hostDoor, guestDoor, patched })
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -1033,7 +1033,7 @@ internal static class MenuOriginalConnectionSuites
             (_, _, _) => LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(115))[0],
             (_, _) => throw new InvalidOperationException("the host does not join"));
         door.BindAddress = Loopback;
-        door.SearchAddress = Loopback;
+        door.Lan.SearchAddress = Loopback;
         var ends = new List<End>();
         var store = MenuSuiteHost.ScratchPlanes(ctx, BuildSuite);
         string? options = MenuSuiteHost.ScratchOptions(ctx, BuildSuite);
@@ -1195,7 +1195,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in doors)
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -1294,7 +1294,7 @@ internal static class MenuOriginalConnectionSuites
         foreach (var door in doors)
         {
             door.BindAddress = Loopback;
-            door.SearchAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
         }
 
         var ends = new List<End>();
@@ -1392,8 +1392,8 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => NetDoorAid.Listed(gate), (_, _) => throw new InvalidOperationException("the host does not join"))
         {
-            CopyText = copied.Add,
-            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
+            Reach = { CopyText = copied.Add },
+            Internet = { Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)) },
         };
         var opened = new List<string>();
         var guestDoor = CodeGuest(listed, opened, gate, mesh[1]);
@@ -1564,8 +1564,8 @@ internal static class MenuOriginalConnectionSuites
         var dogfight = new NetPlayFeature(
             (_, _, _) => NetDoorAid.Listed(dogfightEnd), (_, _) => throw new InvalidOperationException("the host does not join"))
         {
-            CopyText = copied.Add,
-            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")),
+            Reach = { CopyText = copied.Add },
+            Internet = { Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")) },
         };
         var coopEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(42))[0];
         var coop = new NetPlayFeature(
@@ -1575,7 +1575,7 @@ internal static class MenuOriginalConnectionSuites
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
                 _ => { }))
         {
-            CopyText = copied.Add,
+            Reach = { CopyText = copied.Add },
         };
         const string stable = "2001:db8::7";
         AwaitedListing? pending = null;
@@ -1587,8 +1587,7 @@ internal static class MenuOriginalConnectionSuites
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
                 _ => { }))
         {
-            CopyText = copied.Add,
-            StableIpv6 = () => stable,
+            Reach = { CopyText = copied.Add, StableIpv6 = () => stable },
         };
         var ends = new List<End>();
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-copy-code");
@@ -1605,8 +1604,8 @@ internal static class MenuOriginalConnectionSuites
             ClickRow(ctx, lobby, OriginalConnectionScreen.HostKey);
             Answer(ctx, lobby, "Zachary", "Pirates");
             Pump(lobby);
-            ctx.Check(lobby.Shell.Screen == OriginalScreen.Lobby && dogfight.JoinCode == NetDoorAid.SampleCode,
-                $"Host opens the lobby under the listed code ({lobby.Shell.Screen}, {dogfight.JoinCode})");
+            ctx.Check(lobby.Shell.Screen == OriginalScreen.Lobby && dogfight.Internet.JoinCode == NetDoorAid.SampleCode,
+                $"Host opens the lobby under the listed code ({lobby.Shell.Screen}, {dogfight.Internet.JoinCode})");
             string listed = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
             CopyEveryWay(ctx, lobby, copied, OriginalLobbyScreen.CopyKey, "the lobby",
                 $"{listed} {CoopDoorText.CopyPress} copies it.", listed, $"{listed} It is copied.");
@@ -1628,8 +1627,8 @@ internal static class MenuOriginalConnectionSuites
             waiting.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
             OpenForTheMatch(ctx, waiting, asking);
             var asked = waiting.Shell.Compose();
-            ctx.Check(asking.AwaitingCode && DrawsExactly(asked, CoopDoorText.AwaitingCode) && !Draws(asked, stable),
-                $"while the master server is still answering the cabin's band names the wait alone, no address ({asking.AwaitingCode}, {Lines(waiting, "NETWORK")})");
+            ctx.Check(asking.Internet.AwaitingCode && DrawsExactly(asked, CoopDoorText.AwaitingCode) && !Draws(asked, stable),
+                $"while the master server is still answering the cabin's band names the wait alone, no address ({asking.Internet.AwaitingCode}, {Lines(waiting, "NETWORK")})");
             ctx.Check(Row(waiting.Shell, OriginalCampaignScreen.CoopCopyKey) == null,
                 $"and offers no {CoopDoorText.CopyButton}, since that line names nothing to copy");
             if (pending != null)
@@ -1740,11 +1739,14 @@ internal static class MenuOriginalConnectionSuites
         (_, _, _) => throw new InvalidOperationException("a guest does not host"),
         (_, _) => throw new InvalidOperationException("this guest joins nothing"))
     {
-        Master = new MasterDirectory(_ =>
+        Internet =
         {
-            fetched();
-            return System.Threading.Tasks.Task.FromResult(listed);
-        }),
+            Master = new MasterDirectory(_ =>
+            {
+                fetched();
+                return System.Threading.Tasks.Task.FromResult(listed);
+            }),
+        },
     };
 
     // One host's code line through every way. A key's step names Ctrl+C and a pointer's or a pad's
@@ -1839,8 +1841,8 @@ internal static class MenuOriginalConnectionSuites
         var end = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(seed))[0];
         return new NetPlayFeature((_, _, _) => carrier(end), (_, _) => throw new InvalidOperationException("the host does not join"))
         {
-            Master = master ? new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")) : null,
-            StableIpv6 = () => ipv6,
+            Internet = { Master = master ? new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")) : null },
+            Reach = { StableIpv6 = () => ipv6 },
         };
     }
 
@@ -1872,8 +1874,8 @@ internal static class MenuOriginalConnectionSuites
         var rows = host.Shell.Lobby.NetworkRows.ToArray();
         ctx.Check(rows.Length > 0 && board.Lines.Any(line => line.Text == CoopDoorText.NoteName) && rows.All(row => board.Lines.Any(line => line.Text == row)),
             $"the lobby draws its {CoopDoorText.NoteName} rows over the chat ({Joined(rows)})");
-        ctx.Check(rows.Any(row => row.Contains(door.HostIpv6 ?? "-", StringComparison.Ordinal))
-                  == board.Lines.Any(line => line.Text.Contains(door.HostIpv6 ?? "-", StringComparison.Ordinal)),
+        ctx.Check(rows.Any(row => row.Contains(door.Reach.HostIpv6 ?? "-", StringComparison.Ordinal))
+                  == board.Lines.Any(line => line.Text.Contains(door.Reach.HostIpv6 ?? "-", StringComparison.Ordinal)),
             $"and names the address nowhere else on the board");
         return rows;
     }
@@ -1901,7 +1903,7 @@ internal static class MenuOriginalConnectionSuites
         string pinned = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
         ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && Draws(host.Shell.Compose(), pinned),
             $"the host's lobby pins its code over the chat ({host.Shell.Screen}, {CoopDoorText.HostCodeLine(door)})");
-        bool took = door.CopyForGuests();
+        bool took = door.Reach.CopyForGuests();
         Pump(host);
         ctx.Check(took && copied.SequenceEqual(new[] { NetDoorAid.SampleCode }) && Draws(host.Shell.Compose(), "It is copied."),
             $"the copy key copies the code and the line says so ({string.Join(", ", copied)})");
@@ -1913,12 +1915,15 @@ internal static class MenuOriginalConnectionSuites
         (_, _, _) => throw new InvalidOperationException("a guest does not host"),
         (_, _) => throw new InvalidOperationException("a guest with a master server joins by code"))
     {
-        Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
-        OpenCode = code =>
+        Internet =
         {
-            opened.Add(code);
-            gate.Arrive(end.LocalPeer);
-            return end;
+            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
+            OpenCode = code =>
+            {
+                opened.Add(code);
+                gate.Arrive(end.LocalPeer);
+                return end;
+            },
         },
     };
 
@@ -2008,9 +2013,9 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
         Pump(host);
         var door = host.Door;
-        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Password == LobbyPassword
-                  && !door.Private,
-            $"Host opens the lobby Public and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password}, {door.Private})");
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Identity.Password == LobbyPassword
+                  && !door.Identity.Private,
+            $"Host opens the lobby Public and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password}, {door.Identity.Private})");
         return host.Shell.Screen == OriginalScreen.Lobby && door.Dogfight != null;
     }
 
@@ -3598,7 +3603,7 @@ internal static class MenuOriginalConnectionSuites
             menu.Drive(accept); // the board, its cursor on Continue while the door hosts
 
             // The board seeds the callsign the guest's answer saved, and the roster below checks a host that names nobody.
-            hostDoor.PlayerName = string.Empty;
+            hostDoor.Identity.PlayerName = string.Empty;
             menu.Drive(accept); // the map screen
             for (int i = Array.IndexOf(LaunchMenu.ChapterCodesFor(MenuMode.Versus), chapter); i > 0; i--)
             {
@@ -4012,8 +4017,8 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
         host.Shell.NetInfo.Draft.MaxPlayers = NetSeats.MaxPlayers;
         Answer(ctx, host, "Zachary", CampaignAidProfiles.Pilot);
-        ctx.Check(door.IsCoopHost && door.Answering && door.Private,
-            $"HOST CO-OP opens the carrier as a Private campaign host still answering the LAN ({door.Stage}, {door.Answering}, {door.Private})");
+        ctx.Check(door.IsCoopHost && door.Lan.Answering && door.Identity.Private,
+            $"HOST CO-OP opens the carrier as a Private campaign host still answering the LAN ({door.Stage}, {door.Lan.Answering}, {door.Identity.Private})");
         ctx.Check(door.Advertising?.Cap == NetPlayFeature.CoopHumans,
             $"a cap of sixteen asked for a campaign is held to four humans ({door.Advertising?.Cap})");
         AwaitMapping(door);
@@ -4022,8 +4027,8 @@ internal static class MenuOriginalConnectionSuites
                   && Draws(host.Shell.Compose(), "NETWORK OPEN"),
             $"the plaque turns to {CoopDoorText.CloseNetworkButton} over the host's band");
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
-        ctx.Check(door.Stage == NetDoorStage.Shut && !door.Answering && unmapped.Count == 1,
-            $"ABLE-TO-FAIL CONTROL: CLOSE NETWORK closes the carrier, the LAN answer and the mapping ({door.Stage}, {door.Answering}, {unmapped.Count} unmapped)");
+        ctx.Check(door.Stage == NetDoorStage.Shut && !door.Lan.Answering && unmapped.Count == 1,
+            $"ABLE-TO-FAIL CONTROL: CLOSE NETWORK closes the carrier, the LAN answer and the mapping ({door.Stage}, {door.Lan.Answering}, {unmapped.Count} unmapped)");
     }
 
     // The open the match stands on: the advert names the cabin's next mission under the profile.

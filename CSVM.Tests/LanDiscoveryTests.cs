@@ -218,7 +218,7 @@ public class LanDiscoveryTests
             (_, _) => throw new InvalidOperationException("no join here"),
             lan: (_, _) => socket)
         {
-            LanNetworks = () => new[] { ("192.168.178.26", "255.255.255.0") },
+            Lan = { Networks = () => new[] { ("192.168.178.26", "255.255.255.0") } },
         };
 
         door.Search();
@@ -227,7 +227,7 @@ public class LanDiscoveryTests
         // ABLE-TO-FAIL CONTROL: a door a suite pointed elsewhere asks there alone.
         door.StopSearch();
         socket.Sent.Clear();
-        door.SearchAddress = "127.0.0.1";
+        door.Lan.SearchAddress = "127.0.0.1";
         door.Search();
         Assert.Equal(new[] { "127.0.0.1" }, socket.Sent);
     }

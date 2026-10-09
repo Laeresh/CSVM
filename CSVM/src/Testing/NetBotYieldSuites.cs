@@ -55,7 +55,7 @@ internal static class NetBotYieldSuites
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(5121));
         var gate = new ArrivalGate(mesh[0]);
         var hostDoor = new NetPlayFeature((_, _, _) => gate, (_, _) => throw new InvalidOperationException("the host does not join"));
-        hostDoor.Take(new NetPlayerInfo { Callsign = HostName, GameName = "Bots" }, game: true);
+        hostDoor.Identity.Take(new NetPlayerInfo { Callsign = HostName, GameName = "Bots" }, game: true);
         var lateDoor = GuestDoor(gate, mesh[1], LateName);
         var earlyDoor = GuestDoor(gate, mesh[2], EarlyName);
         var ambient = NetCombatSuites.Ambient.Save();
@@ -251,7 +251,7 @@ internal static class NetBotYieldSuites
             gate.Arrive(end.LocalPeer);
             return end;
         });
-        door.Take(new NetPlayerInfo { Callsign = callsign }, game: false);
+        door.Identity.Take(new NetPlayerInfo { Callsign = callsign }, game: false);
         return door;
     }
 

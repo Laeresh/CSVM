@@ -67,9 +67,9 @@ internal static class NetPlayerVoiceSuites
         var ambient = NetCombatSuites.Ambient.Save();
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(2929));
         var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
-        hostDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = "Hostile", Voice = HostVoice, GameName = "Voices" }, game: true);
+        hostDoor.Identity.Take(new UI.Menu.NetPlayerInfo { Callsign = "Hostile", Voice = HostVoice, GameName = "Voices" }, game: true);
         var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
-        guestDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = "Gruff", Voice = GuestVoice }, game: false);
+        guestDoor.Identity.Take(new UI.Menu.NetPlayerInfo { Callsign = "Gruff", Voice = GuestVoice }, game: false);
         NetCombatSuites.Ends? host = null;
         NetCombatSuites.Ends? guest = null;
         try

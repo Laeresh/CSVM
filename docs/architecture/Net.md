@@ -338,7 +338,7 @@ Where a search asks each round: `Limited` (255.255.255.255) first, then the dire
 (address with every host bit set) of each IPv4 network the machine sits on, once each, loopback and
 single-host masks skipped. ⚠ The limited broadcast alone is not enough: Windows sends it out of one
 adapter only, so a machine with several adapters can miss its host's network. The networks come
-from `Utils/LocalNetworks.cs` through `NetPlayFeature.LanNetworks`.
+from `Utils/LocalNetworks.cs` through `UI/Menu/LanDoor.cs`'s `Networks`.
 
 ## src/Net/LoopbackLan.cs
 The in-process datagram network the suites and the screenshot aids run the LAN search on, the

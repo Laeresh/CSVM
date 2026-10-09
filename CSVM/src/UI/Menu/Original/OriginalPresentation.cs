@@ -1262,7 +1262,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 int.TryParse(coop[0], System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out int guests);
                 var door = NetDoorAid.Host(guests, out _, out var named, NetDoorAid.InternetOf(coop.Length > 1 ? coop[1] : string.Empty));
-                door.PlayerName = NetDoorAid.HostName;
+                door.Identity.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(door);
                 NetDoorAid.OpenCoopHost(door, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.StepNet(0.0);
@@ -1284,7 +1284,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             case CampaignCoopReadyAid:
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 var ready = NetDoorAid.Host(2, out _, out var guestEnds);
-                ready.PlayerName = NetDoorAid.HostName;
+                ready.Identity.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(ready);
                 NetDoorAid.OpenCoopHost(ready, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);

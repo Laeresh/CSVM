@@ -117,7 +117,7 @@ internal static class MenuNetPlaySuites
             ctx.Check(keyboard.Urls.Count == 4 && keyboard.Urls[3] == CSVM.Utils.ScreenKeyboard.CloseUrl && menu.ShownRow == 1,
                 $"a key's Enter in the field lowers it ({keyboard.Said}, {menu.ShownRow})");
 
-            door.Password = "abc";
+            door.Identity.Password = "abc";
             for (int i = 0; i < 5; i++)
             {
                 menu.Drive(Down);
@@ -155,9 +155,7 @@ internal static class MenuNetPlaySuites
             (address, port) => EnetTransport.Join(address, port))
         {
             BindAddress = "127.0.0.1",
-            StableIpv6 = () => Stable,
-            LanIpv4 = () => Lan,
-            CopyText = copied.Add,
+            Reach = { StableIpv6 = () => Stable, LanIpv4 = () => Lan, CopyText = copied.Add },
         };
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat, netDoor: door);
@@ -187,7 +185,7 @@ internal static class MenuNetPlaySuites
                 $"ABLE-TO-FAIL CONTROL: Ctrl+V, a bare C and Ctrl+Shift+C are not");
 
             int revision = door.Revision;
-            bool took = door.CopyGuestAddress();
+            bool took = door.Reach.CopyGuestAddress();
             door.Step(0.016);
             ctx.Check(took && copied.Count == 1 && copied[0] == dialled,
                 $"the copy puts the bracketed address on the clipboard ({took}, {string.Join(" | ", copied)})");
@@ -206,7 +204,7 @@ internal static class MenuNetPlaySuites
         {
             mute.StepPort(1);
             mute.OpenHost(1);
-            ctx.Check(mute.IsHost && !mute.CopyGuestAddress() && CoopDoorText.HostAddressStatus(mute).Length == 0,
+            ctx.Check(mute.IsHost && !mute.Reach.CopyGuestAddress() && CoopDoorText.HostAddressStatus(mute).Length == 0,
                 $"ABLE-TO-FAIL CONTROL: a door with no address seam and no clipboard names nothing and copies nothing ({mute.Stage}, {mute.Fault})");
         }
         finally
@@ -254,26 +252,26 @@ internal static class MenuNetPlaySuites
         menu.Drive(Down);
         ctx.Check(menu.ShownRowText == "Max players     8", $"the cap opens on the original's eight ({menu.ShownRowText})");
         menu.Drive(Right);
-        ctx.Check(door.MaxPlayers == 9 && menu.ShownRowText == "Max players     9", $"and Right steps it ({door.MaxPlayers})");
+        ctx.Check(door.Identity.MaxPlayers == 9 && menu.ShownRowText == "Max players     9", $"and Right steps it ({door.Identity.MaxPlayers})");
         for (int i = 0; i < 10; i++)
         {
             menu.Drive(Right);
         }
 
-        ctx.Check(door.MaxPlayers == NetSeats.MaxPlayers, $"ABLE-TO-FAIL CONTROL: the cap stops at sixteen ({door.MaxPlayers})");
-        door.PlayerName = "Laeresh";
+        ctx.Check(door.Identity.MaxPlayers == NetSeats.MaxPlayers, $"ABLE-TO-FAIL CONTROL: the cap stops at sixteen ({door.Identity.MaxPlayers})");
+        door.Identity.PlayerName = "Laeresh";
         menu.Drive(Down);
         ctx.Check(menu.ShownRowText == "Callsign        Laeresh", $"the callsign row shows the door's callsign ({menu.ShownRowText})");
         menu.Drive(Down);
         ctx.Check(menu.ShownRowText == "Voice           Nathan Zachary", $"the voice opens on the list's first ({menu.ShownRowText})");
         menu.Drive(Right);
-        ctx.Check(door.Voice == 1 && menu.ShownRowText == "Voice           Jack", $"and Right picks the next ({door.Voice}, {menu.ShownRowText})");
+        ctx.Check(door.Identity.Voice == 1 && menu.ShownRowText == "Voice           Jack", $"and Right picks the next ({door.Identity.Voice}, {menu.ShownRowText})");
         menu.Drive(Down);
-        ctx.Check(menu.ShownRowText == "Listing         Public" && !door.Private, $"the listing opens on a Dogfight's Public ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == "Listing         Public" && !door.Identity.Private, $"the listing opens on a Dogfight's Public ({menu.ShownRowText})");
         menu.Drive(Right);
-        bool flipped = door.Private && menu.ShownRowText == "Listing         Private";
+        bool flipped = door.Identity.Private && menu.ShownRowText == "Listing         Private";
         menu.Drive(Right);
-        ctx.Check(flipped && !door.Private, $"and Right flips it to Private and back ({flipped}, {door.Private})");
+        ctx.Check(flipped && !door.Identity.Private, $"and Right flips it to Private and back ({flipped}, {door.Identity.Private})");
         for (int i = 0; i < 3; i++)
         {
             menu.Drive(Down);

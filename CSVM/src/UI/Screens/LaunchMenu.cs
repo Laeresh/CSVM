@@ -1911,14 +1911,14 @@ public sealed partial class LaunchMenu : CanvasLayer
                         door.StepPort(dir);
                         return true;
                     case NetPlayersRow:
-                        door.MaxPlayers = NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, ShownCap(door) + dir);
+                        door.Identity.MaxPlayers = NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, ShownCap(door) + dir);
                         return true;
                     case NetVoiceRow:
                         int voices = PilotVoices.All.Count;
-                        door.Voice = (((PilotVoices.Clamp(door.Voice) + dir) % voices) + voices) % voices;
+                        door.Identity.Voice = (((PilotVoices.Clamp(door.Identity.Voice) + dir) % voices) + voices) % voices;
                         return true;
                     case NetListingRow:
-                        door.Private = !door.Private;
+                        door.Identity.Private = !door.Identity.Private;
                         return true;
                     default:
                         return false;
@@ -2178,9 +2178,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             return row switch
             {
-                NetGameNameRow => new ScreenKeyboardField(KeyboardOwner, "game-name", "Game name", () => net.GameName),
-                NetPasswordRow => new ScreenKeyboardField(KeyboardOwner, "password", "Password", () => new string('*', net.Password.Length)),
-                _ => new ScreenKeyboardField(KeyboardOwner, "callsign", "Callsign", () => net.PlayerName),
+                NetGameNameRow => new ScreenKeyboardField(KeyboardOwner, "game-name", "Game name", () => net.Identity.GameName),
+                NetPasswordRow => new ScreenKeyboardField(KeyboardOwner, "password", "Password", () => new string('*', net.Identity.Password.Length)),
+                _ => new ScreenKeyboardField(KeyboardOwner, "callsign", "Callsign", () => net.Identity.PlayerName),
             };
         }
 
@@ -2237,7 +2237,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         _netSeeded = true;
-        net.Take(NetPlayerInfo.Remembered(OptionsStore.UserOptions().Load()), game: true);
+        net.Identity.Take(NetPlayerInfo.Remembered(OptionsStore.UserOptions().Load()), game: true);
     }
 
     // A host or a join keeps the callsign, the voice and the game's name for the next session.
@@ -2245,7 +2245,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         var store = OptionsStore.UserOptions();
         var saved = store.Load();
-        new NetPlayerInfo { Callsign = net.PlayerName, Voice = PilotVoices.Clamp(net.Voice), GameName = net.GameName }
+        new NetPlayerInfo { Callsign = net.Identity.PlayerName, Voice = PilotVoices.Clamp(net.Identity.Voice), GameName = net.Identity.GameName }
             .Remember(saved, game: true);
         store.Save(saved);
     }
@@ -2255,9 +2255,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         string text = row switch
         {
-            NetGameNameRow => net.GameName,
-            NetPasswordRow => net.Password,
-            _ => net.PlayerName,
+            NetGameNameRow => net.Identity.GameName,
+            NetPasswordRow => net.Identity.Password,
+            _ => net.Identity.PlayerName,
         };
         int limit = row switch
         {
@@ -2279,13 +2279,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (row)
         {
             case NetGameNameRow:
-                net.GameName = text;
+                net.Identity.GameName = text;
                 break;
             case NetPasswordRow:
-                net.Password = text;
+                net.Identity.Password = text;
                 break;
             default:
-                net.PlayerName = text;
+                net.Identity.PlayerName = text;
                 break;
         }
 
@@ -2963,7 +2963,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // whatever the Multiplayer board holds.
         SeedNetInfo();
         net.Close();
-        net.ForgetAnswers();
+        net.Identity.ForgetAnswers();
         net.OpenCoopHost(NetSeats.MaxPlayers - _slots.Count);
         OfferCoopMission(flow);
         flow.SetMessage(net.Fault.Length > 0 ? $"The network did not open: {net.Fault}" : "");
@@ -4569,12 +4569,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         NetAddressRow => $"Address         {_net?.Address ?? NetPlayFeature.DefaultAddress}",
         NetHostRow => "Host a match",
         NetJoinRow => "Join that address",
-        NetGameNameRow => $"Game name       {_net?.GameName}",
-        NetPasswordRow => $"Password        {new string('*', _net?.Password.Length ?? 0)}",
+        NetGameNameRow => $"Game name       {_net?.Identity.GameName}",
+        NetPasswordRow => $"Password        {new string('*', _net?.Identity.Password.Length ?? 0)}",
         NetPlayersRow => $"Max players     {(_net is { } door ? ShownCap(door) : NetPlayerInfo.DefaultPlayers).ToString(CultureInfo.InvariantCulture)}",
-        NetCallsignRow => $"Callsign        {_net?.PlayerName}",
-        NetVoiceRow => $"Voice           {PilotVoices.All[PilotVoices.Clamp(_net?.Voice ?? PilotVoices.Default)].Name}",
-        NetListingRow => $"Listing         {CoopDoorText.ListingWord(_net?.Private ?? false)}",
+        NetCallsignRow => $"Callsign        {_net?.Identity.PlayerName}",
+        NetVoiceRow => $"Voice           {PilotVoices.All[PilotVoices.Clamp(_net?.Identity.Voice ?? PilotVoices.Default)].Name}",
+        NetListingRow => $"Listing         {CoopDoorText.ListingWord(_net?.Identity.Private ?? false)}",
         _ when _net is { } net && net.IsCoopGuest => CoopDoorText.WaitRow,
         _ => "Continue → Map",
     };
@@ -4582,7 +4582,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The cap the board's row shows: the chosen one inside the spinner's range, or a Dogfight's
     // sixteen where none was chosen. A campaign door holds it to four when it opens.
     private int ShownCap(NetPlayFeature door) =>
-        door.MaxPlayers > 0 ? NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, door.MaxPlayers) : NetSeats.MaxPlayers;
+        door.Identity.MaxPlayers > 0 ? NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, door.Identity.MaxPlayers) : NetSeats.MaxPlayers;
 
     // The line under the door's rows: what the socket is doing, who is on it, and what the
     // router said. This is the whole readout, so a player who cannot fly can see why.

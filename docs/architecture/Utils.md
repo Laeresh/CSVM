@@ -63,7 +63,7 @@ The IPv4 networks this machine sits on, for the LAN search: `Ipv4()` lists the a
 every adapter that is up and not the loopback, and an empty list when the system will not say, so a
 search still asks at the limited broadcast. It lives here because `CSVM.Net` may not name
 `System.Net`, and Godot's interface list carries no masks. `Launcher.cs` hands it to the door as
-`NetPlayFeature.LanNetworks`; `Net/LanBroadcast.cs` turns it into addresses.
+`UI/Menu/LanDoor.cs`'s `Networks`; `Net/LanBroadcast.cs` turns it into addresses.
 
 ## src/Utils/HostAddress.cs
 The addresses a host names to its guests. `StableGlobalIPv6()` is the first global unicast IPv6

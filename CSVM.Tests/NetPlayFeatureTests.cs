@@ -479,13 +479,13 @@ public class NetPlayFeatureTests
     {
         var mesh = LoopbackTransport.Mesh(4, Clean, new Random(43));
         var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
-        host.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Laeresh", MaxPlayers = 3 }, game: true);
+        host.Identity.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Laeresh", MaxPlayers = 3 }, game: true);
         host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         var guests = new List<NetPlayFeature>();
         for (int i = 1; i < mesh.Count; i++)
         {
             int end = i;
-            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { PlayerName = $"G{i}" };
+            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { Identity = { PlayerName = $"G{i}" } };
             guest.OpenJoin();
             guests.Add(guest);
         }
@@ -519,14 +519,14 @@ public class NetPlayFeatureTests
     {
         var alone = LoopbackTransport.Mesh(1, Clean, new Random(46));
         var wide = new NetPlayFeature((_, _, _) => alone[0], (_, _) => alone[0]);
-        wide.Take(new NetPlayerInfo { GameName = "Zachary", Callsign = "Zachary", MaxPlayers = 16 }, game: true);
+        wide.Identity.Take(new NetPlayerInfo { GameName = "Zachary", Callsign = "Zachary", MaxPlayers = 16 }, game: true);
         wide.OpenCoopHost(NetSeats.MaxPlayers - 1);
         wide.Offer(3, "Nathan", 1);
         Assert.Equal(NetPlayFeature.CoopHumans, wide.Advertising!.Value.Cap);
         Assert.Equal("Zachary", wide.Advertising!.Value.Host);
 
         var mesh = LoopbackTransport.Mesh(4, Clean, new Random(47));
-        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { MaxPlayers = 2 };
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Identity = { MaxPlayers = 2 } };
         host.OpenCoopHost(NetSeats.MaxPlayers - 1);
         host.Offer(3, "Nathan", 1);
         var guests = new List<NetPlayFeature>();
@@ -555,7 +555,7 @@ public class NetPlayFeatureTests
         var mesh = LoopbackTransport.Mesh(2, Clean, new Random(59));
         var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
         var guest = new NetPlayFeature((_, _, _) => mesh[1], (_, _) => mesh[1]);
-        guest.Take(new NetPlayerInfo { Callsign = "Laeresh", Voice = 5 }, game: false);
+        guest.Identity.Take(new NetPlayerInfo { Callsign = "Laeresh", Voice = 5 }, game: false);
         host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         guest.OpenJoin();
         Pump(host, guest);
@@ -567,7 +567,7 @@ public class NetPlayFeatureTests
         Assert.Equal("Laeresh", host.Dogfight!.Players[1].Name);
 
         // ABLE-TO-FAIL CONTROL: a guest that chose no voice sends none.
-        guest.Voice = -1;
+        guest.Identity.Voice = -1;
         guest.Dogfight.Pick(3, default);
         Pump(host, guest);
         Assert.Equal(-1, host.PickedVoice(peer));
@@ -603,7 +603,7 @@ public class NetPlayFeatureTests
         Assert.Equal("", patched.Fault);
 
         // The refused guest is off the host's carrier once the grace has passed.
-        host.Step(NetPlayFeature.RefuseGraceSeconds + 0.1);
+        host.Step(NetAdmission.RefuseGraceSeconds + 0.1);
         host.Step(0.016);
         Assert.Equal(new[] { mesh[1].LocalPeer }, mesh[0].Peers);
     }
@@ -734,7 +734,7 @@ public class NetPlayFeatureTests
 
         host.OpenCoopHost(NetSeats.MaxPlayers - 1);
         host.Offer(7, "Zachary", 1);
-        Assert.True(host.Answering);
+        Assert.True(host.Lan.Answering);
         guest.Search();
         host.Step(0.016);
         guest.Step(0.016);
@@ -750,7 +750,7 @@ public class NetPlayFeatureTests
         Assert.Equal(NetDoorStage.Joined, guest.Stage);
 
         host.Close();
-        Assert.False(host.Answering);
+        Assert.False(host.Lan.Answering);
         guest.StopSearch();
         Assert.False(guest.Searching);
         Assert.Empty(guest.Games);
@@ -764,7 +764,7 @@ public class NetPlayFeatureTests
         door.Search();
         Assert.False(door.Searching);
         door.OpenCoopHost(3);
-        Assert.False(door.Answering);
+        Assert.False(door.Lan.Answering);
     }
 
     [Fact]
@@ -885,7 +885,7 @@ public class NetPlayFeatureTests
 
         // ABLE-TO-FAIL CONTROL: a guest with no player name is seated with none.
         Assert.Equal(string.Empty, Assert.Single(host.CoopGuests).Name);
-        guest.PlayerName = "Lucy";
+        guest.Identity.PlayerName = "Lucy";
         Pump(host, guest);
         var seated = Assert.Single(host.CoopGuests);
         Assert.Equal(fit, seated.Fit);
@@ -997,7 +997,7 @@ public class NetPlayFeatureTests
     public void AGuestWithTwoPlayersTakesTwoSeatsAndTheLaunchWaitsOnEachOnesReady()
     {
         var (host, guest) = CoopPair(73);
-        guest.PlayerName = "Lucy";
+        guest.Identity.PlayerName = "Lucy";
         guest.LocalSeats = 2;
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
         Pump(host, guest);
@@ -1050,7 +1050,7 @@ public class NetPlayFeatureTests
     public void AGuestsFurtherSeatsCountAgainstTheCapAndALaterGuestPastItIsRefused()
     {
         var mesh = LoopbackTransport.Mesh(4, Clean, new Random(79));
-        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Password = "kestrel" };
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Identity = { Password = "kestrel" } };
         host.OpenCoopHost(NetSeats.MaxPlayers - 1);
         host.Offer(3, "Zachary", 1);
         var pair = Guest(mesh[1]);
@@ -1130,7 +1130,7 @@ public class NetPlayFeatureTests
     public void EveryCoopSeatIsNamedByItsCallsignOnEveryMachine()
     {
         var mesh = LoopbackTransport.Mesh(4, Clean, new Random(59));
-        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { PlayerName = "Zachary" };
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Identity = { PlayerName = "Zachary" } };
         host.OpenCoopHost(NetSeats.MaxPlayers - 1);
         host.Offer(3, "Zachary", 1);
         string[] callsigns = { "Nathan", "", "Sheila" };
@@ -1138,7 +1138,7 @@ public class NetPlayFeatureTests
         for (int i = 1; i < mesh.Count; i++)
         {
             int end = i;
-            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { PlayerName = callsigns[i - 1] };
+            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { Identity = { PlayerName = callsigns[i - 1] } };
             guest.OpenJoin();
             guests.Add(guest);
         }
@@ -1179,7 +1179,7 @@ public class NetPlayFeatureTests
     }
 
     private static NetPlayFeature Guest(LoopbackTransport wire) =>
-        new((_, _, _) => wire, (_, _) => wire) { Password = "kestrel" };
+        new((_, _, _) => wire, (_, _) => wire) { Identity = { Password = "kestrel" } };
 
     // A payload no lobby reads, sent host to guest, which the guest's lobby holds for a session.
     private static void SessionPayload(IReadOnlyList<LoopbackTransport> mesh) =>

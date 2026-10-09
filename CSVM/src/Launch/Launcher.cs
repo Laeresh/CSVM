@@ -1030,7 +1030,7 @@ public partial class Launcher : Node3D
                 // else its address.
                 if (_menuHost is { Shown: true })
                 {
-                    _netDoor?.CopyForGuests();
+                    _netDoor?.Reach.CopyForGuests();
                 }
             }
             else
@@ -1376,7 +1376,7 @@ public partial class Launcher : Node3D
             }
         }
 
-        string hostName = Net.SeatRosterMessage.Carried(door.PlayerName.Trim()).Trim();
+        string hostName = Net.SeatRosterMessage.Carried(door.Identity.PlayerName.Trim()).Trim();
         var roster = Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName);
         // The host's first seat is the scripted player and speaks as Nathan Zachary. Its splitscreen
         // seats have no voice, and each guest speaks in the voice its pick carried.
@@ -2649,13 +2649,19 @@ public partial class Launcher : Node3D
             Net.NetCarrier.Lan)
         {
             Version = version,
-            LanNetworks = LocalNetworks.Ipv4,
-            StableIpv6 = Net.NetCarrier.StableIpv6,
-            LanIpv4 = Net.NetCarrier.LanIpv4,
-            CopyText = DisplayServer.ClipboardSet,
-            Master = master == null ? null : new Net.MasterDirectory(cancel => MasterServerLink.FetchGames(master, cancel)),
-            OpenCode = master == null ? null : code => Net.NetCarrier.JoinCode(() => MasterServerLink.Open(master), code, version),
-            WebRtcReady = Net.WebRtcTransport.Available,
+            Lan = { Networks = LocalNetworks.Ipv4 },
+            Reach =
+            {
+                StableIpv6 = Net.NetCarrier.StableIpv6,
+                LanIpv4 = Net.NetCarrier.LanIpv4,
+                CopyText = DisplayServer.ClipboardSet,
+            },
+            Internet =
+            {
+                Master = master == null ? null : new Net.MasterDirectory(cancel => MasterServerLink.FetchGames(master, cancel)),
+                OpenCode = master == null ? null : code => Net.NetCarrier.JoinCode(() => MasterServerLink.Open(master), code, version),
+                WebRtcReady = Net.WebRtcTransport.Available,
+            },
         };
         host.Features.Add(_netDoor);
         host.AddSeat(seat);

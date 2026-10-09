@@ -853,7 +853,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 Leave();
                 return null;
             case CopyKey:
-                _net()?.CopyForGuests();
+                _net()?.Reach.CopyForGuests();
                 return null;
             case BootKey:
                 // The script re-presses the picked row after the boot, which lets the pick go.
@@ -1294,9 +1294,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // pilot's own name.
     private void TakePilotName(NetPlayFeature net)
     {
-        if (net.PlayerName.Length == 0)
+        if (net.Identity.PlayerName.Length == 0)
         {
-            net.PlayerName = _pilotName() ?? string.Empty;
+            net.Identity.PlayerName = _pilotName() ?? string.Empty;
         }
     }
 
@@ -1380,7 +1380,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // answering (the row names neither yet), and on a guest.
     private OriginalRow? CopyRow()
     {
-        if (_net() is not { } net || net.AwaitingCode || CoopDoorText.CopyTarget(net).Length == 0)
+        if (_net() is not { } net || net.Internet.AwaitingCode || CoopDoorText.CopyTarget(net).Length == 0)
         {
             return null;
         }

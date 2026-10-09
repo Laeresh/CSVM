@@ -47,7 +47,7 @@ internal static class MenuOriginalScoresSuites
             lan.Bind)
         {
             BindAddress = Loopback,
-            SearchAddress = Loopback,
+            Lan = { SearchAddress = Loopback },
         };
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-scores");
         MenuHost? host = null;

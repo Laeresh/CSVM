@@ -109,8 +109,8 @@ internal static class NetCoopMissionSuites
         var host = Door(mesh[0]);
         var lucy = Door(mesh[1]);
         var third = Door(mesh[2]);
-        lucy.PlayerName = GuestName;
-        lucy.Voice = GuestVoice;
+        lucy.Identity.PlayerName = GuestName;
+        lucy.Identity.Voice = GuestVoice;
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
@@ -155,7 +155,7 @@ internal static class NetCoopMissionSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2404));
         var host = Door(mesh[0]);
         var guest = Door(mesh[1]);
-        guest.PlayerName = GuestName;
+        guest.Identity.PlayerName = GuestName;
         var ambient = NetCombatSuites.Ambient.Save();
         Ends? hostEnd = null;
         Ends? guestEnd = null;
@@ -212,7 +212,7 @@ internal static class NetCoopMissionSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2406));
         var host = Door(mesh[0]);
         var guest = Door(mesh[1]);
-        guest.PlayerName = GuestName;
+        guest.Identity.PlayerName = GuestName;
         guest.LocalSeats = 2;
         var ambient = NetCombatSuites.Ambient.Save();
         Ends? hostEnd = null;

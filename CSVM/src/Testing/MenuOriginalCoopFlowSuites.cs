@@ -221,8 +221,8 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: false } && field.Current == 0,
             $"ABLE-TO-FAIL CONTROL: before any Ready the host's FLY MISSION is greyed, the guest on its first check");
         var chips = guest.Shell.Compose().Overlays.SelectMany(panel => panel.Lines).Select(line => line.Text).ToArray();
-        string hostChip = host.Door.PlayerName + CSVM.UI.Screens.LaunchMenu.RemoteChipMark;
-        ctx.Check(host.Door.PlayerName.Length > 0 && chips.Contains("P2") && chips.Contains("P3") && chips.Contains(hostChip),
+        string hostChip = host.Door.Identity.PlayerName + CSVM.UI.Screens.LaunchMenu.RemoteChipMark;
+        ctx.Check(host.Door.Identity.PlayerName.Length > 0 && chips.Contains("P2") && chips.Contains("P3") && chips.Contains(hostChip),
             $"the guest's strip marks P2 and P3 its own and names the host's seat by its callsign ({string.Join(" | ", chips)})");
         ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
         Pump(host, guest, frames: 4);
@@ -603,9 +603,9 @@ internal static class MenuOriginalCoopFlowSuites
     {
         host.Host.Tick(Dt);
         var lines = host.Shell.Compose().Lines.Select(line => line.Text).ToList();
-        ctx.Check(door.Private && lines.Any(text => text.Contains($"CODE {NetDoorAid.SampleCode}", StringComparison.Ordinal))
+        ctx.Check(door.Identity.Private && lines.Any(text => text.Contains($"CODE {NetDoorAid.SampleCode}", StringComparison.Ordinal))
                   && lines.Any(text => text.StartsWith("PRIVATE", StringComparison.Ordinal)),
-            $"the host's band names its code and that the game is Private ({door.Private}, {CoopDoorText.HostBand(door)})");
+            $"the host's band names its code and that the game is Private ({door.Identity.Private}, {CoopDoorText.HostBand(door)})");
         ctx.Check(!lines.Any(text => text.Contains(NetDoorAid.ExternalAddress, StringComparison.Ordinal)),
             $"and leaves out the router's address, which it shows without a code ({door.Router.PortMap?.ExternalAddress})");
     }

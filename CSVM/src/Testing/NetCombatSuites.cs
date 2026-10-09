@@ -562,9 +562,9 @@ internal static class NetCombatSuites
         const string GuestName = "Laeresh";
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
         var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
-        hostDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = HostName, GameName = GameName }, game: true);
+        hostDoor.Identity.Take(new UI.Menu.NetPlayerInfo { Callsign = HostName, GameName = GameName }, game: true);
         var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
-        guestDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = GuestName, Voice = 1 }, game: false);
+        guestDoor.Identity.Take(new UI.Menu.NetPlayerInfo { Callsign = GuestName, Voice = 1 }, game: false);
         Ends? host = null;
         Ends? guest = null;
         try
