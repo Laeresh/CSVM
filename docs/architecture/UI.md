@@ -1500,7 +1500,7 @@ seat picks from, set by the presentation and built by the shared rule (the stock
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
 the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit and survive a return from flight. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
-and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
+and `BuildExit` are the typed result; a networked launch skips the minimum in `Refusal` and `BuildExit` alike, given the one answer the caller gated on. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs
 The multiplayer door as a shared `IMenuFeature`, engine-free and carrier-free: the port and address a board edits (`TypeAddress`, `PasteAddress`, up to `AddressLimit`), the socket it opens, and the readouts a board draws (`Stage`, `Peers`, `Link`, `Fault`, `HostStarted`, `Advert`). `OpenJoin` opens on `JoinTarget`, the address parsed by `Net/NetEndpoint.cs`.

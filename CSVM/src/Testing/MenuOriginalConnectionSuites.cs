@@ -3392,7 +3392,7 @@ internal static class MenuOriginalConnectionSuites
 
     // The Built-in host's wire taken out and its field built off the guest's pick. The session
     // opener then launches the guest on the host's map and time in its own pick.
-    // The Built-in board's own launch press over the guest's team, the host flying two local seats.
+    // The Built-in board's own launch press over the guest's team, the host flying one local seat.
     // The guest's one team is refused with langui 10519 on the board's error strip; once the guest
     // leaves it the same press launches. Null when it did not, else the wire the launch carries.
     private static MenuNetLaunch? PressTheBoardsLaunch(TestContext ctx, NetPlayFeature hostDoor, End guest, string chapter)
@@ -3430,10 +3430,9 @@ internal static class MenuOriginalConnectionSuites
 
             menu.Drive(accept); // aircraft select
 
-            // A splitscreen seat beside the host's, picked and confirmed: the issue's rig.
-            menu.DebugJoin(1);
+            // One local seat: a networked Dogfight's opponent sits at the other machine, so the setup's two-seat minimum does not apply.
             var setup = host.Features.Get<PlayerSetupFeature>();
-            ctx.Check(setup.Seats.Count == 2 && setup.Confirm(setup.Seats[1]), $"a second local seat joins and confirms ({setup.Seats.Count})");
+            ctx.Check(setup.Seats.Count == 1, $"the host flies one local seat ({setup.Seats.Count})");
             menu.Drive(accept); // the airframe picked
             menu.Drive(accept); // and confirmed, which fires the launch
             string refusal = DogfightLobby.RefusalText(TeamLaunchRefusal.TooFewTeams);
@@ -3448,8 +3447,8 @@ internal static class MenuOriginalConnectionSuites
             ctx.Check(!lobby.Teamed && lobby.Players[1].Ready, $"the guest's Leave Team leaves no team standing ({lobby.Players[1].Team}, {lobby.Players[1].Ready})");
             menu.Drive(MenuCommands.None);
             var launch = exits.OfType<LaunchExit>().FirstOrDefault();
-            ctx.Check(launch is { Net.IsHost: true } && launch.Chapter == chapter,
-                $"ABLE-TO-FAIL CONTROL: with no team standing the same press launches a free-for-all ({launch?.Chapter}, {menu.ShownDetail})");
+            ctx.Check(launch is { Net.IsHost: true, Seats.Count: 1 } && launch.Chapter == chapter,
+                $"ABLE-TO-FAIL CONTROL: with no team standing the same press launches a free-for-all from one local seat ({launch?.Chapter}, {launch?.Seats.Count}, {menu.ShownDetail})");
             return launch?.Net;
         }
         finally

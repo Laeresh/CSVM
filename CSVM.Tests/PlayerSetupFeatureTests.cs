@@ -295,6 +295,19 @@ public class PlayerSetupFeatureTests
         Assert.Throws<ArgumentException>(() => setup.BuildExit(string.Empty, MenuMode.Free, _ => Array.Empty<int>()));
     }
 
+    /// <summary>A networked Dogfight's opponent sits at another machine, so one local seat builds
+    /// the exit the gate opened for; a local one-seat Dogfight still refuses.</summary>
+    [Fact]
+    public void ANetworkedDogfightBuildsFromOneSeatAndALocalOneRefuses()
+    {
+        var setup = Seated(1, 1);
+
+        Assert.True(setup.CanLaunch(MenuMode.Versus, networked: true));
+        Assert.Single(setup.BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>(), networked: true).Seats);
+        Assert.False(setup.CanLaunch(MenuMode.Versus));
+        Assert.Throws<InvalidOperationException>(() => setup.BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>()));
+    }
+
     [Fact]
     public void TheRosterRuleAgreesWithThePickerRosterRowForRow()
     {

@@ -3203,8 +3203,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        var exit = _setup.BuildExit(CurrentChapters[_chapterIndex].Code, _mode, _devices.FlightPads);
-        if (Networked() && HostLobbyRefusal(exit) is { } refusal)
+        // One answer for the setup's seat minimum, the lobby's refusal and the wire, the same one CanLaunch gated on.
+        bool networked = Networked();
+        var exit = _setup.BuildExit(CurrentChapters[_chapterIndex].Code, _mode, _devices.FlightPads, networked);
+        if (networked && HostLobbyRefusal(exit) is { } refusal)
         {
             _error = refusal;
             return;
@@ -3212,7 +3214,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         // The open wire rides out with the launch, and the door keeps nothing: from here the
         // session owns the transport, steps it and closes it.
-        _host.Exit(Networked() ? exit with { Net = _net!.BuildLaunch() } : exit);
+        _host.Exit(networked ? exit with { Net = _net!.BuildLaunch() } : exit);
     }
 
     // An Original guest in this host's lobby waits on its Ready and flies the host's map and rules,
