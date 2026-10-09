@@ -104,7 +104,7 @@ public static class NetDoorAid
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
                 port => given = port))
         {
-            Master = MasterOf(internet),
+            Internet = { Master = MasterOf(internet) },
         };
     }
 
@@ -159,7 +159,7 @@ public static class NetDoorAid
             new RouterAccess(
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
                 port => { }))
-        { PlayerName = HostName, Master = MasterOf(internet) };
+        { Identity = { PlayerName = HostName }, Internet = { Master = MasterOf(internet) } };
         string[] names = { "Nathan", "Sheila" };
         var guests = new List<NetPlayFeature>();
         for (int i = 0; i < names.Length; i++)
@@ -168,7 +168,7 @@ public static class NetDoorAid
             guests.Add(new NetPlayFeature(
                 (port, maxGuests, bind) => throw new InvalidOperationException("the aid's guest door hosts nothing"),
                 (address, port) => end)
-            { PlayerName = names[i] });
+            { Identity = { PlayerName = names[i] } });
         }
 
         return (host, guests);
@@ -266,7 +266,7 @@ public static class NetDoorAid
         var door = new NetPlayFeature(
             (port, maxGuests, bind) => throw new InvalidOperationException("the aid's guest door hosts nothing"),
             (address, port) => mesh[1])
-        { PlayerName = "Lucy" };
+        { Identity = { PlayerName = "Lucy" } };
         door.OpenJoin();
         for (int step = 0; step < 4; step++)
         {
@@ -311,8 +311,11 @@ public static class NetDoorAid
         (address, port) => throw new InvalidOperationException("the aid's code door joins nothing"))
     {
         Version = SampleVersion,
-        Master = MasterOf(AidInternet.Code),
-        OpenCode = code => throw new InvalidOperationException("the aid's code door joins nothing"),
+        Internet =
+        {
+            Master = MasterOf(AidInternet.Code),
+            OpenCode = code => throw new InvalidOperationException("the aid's code door joins nothing"),
+        },
     };
 
     /// <summary>A door joined over the loopback to a host advertising a campaign mission at
@@ -341,7 +344,7 @@ public static class NetDoorAid
             rows.Add(new DogfightLobbySeat(slot - 1 < GuestNames.Count ? GuestNames[slot - 1] : "", 0, false, false));
         }
 
-        door.PlayerName = flow.Slot >= 1 && flow.Slot - 1 < GuestNames.Count ? GuestNames[flow.Slot - 1] : "";
+        door.Identity.PlayerName = flow.Slot >= 1 && flow.Slot - 1 < GuestNames.Count ? GuestNames[flow.Slot - 1] : "";
         Span<byte> names = stackalloc byte[DogfightRosterMessage.Size];
         new DogfightRosterMessage(0, flow.Slot, rows).Write(names);
         host.Send(host.Peers[0], names, NetReliability.Reliable);

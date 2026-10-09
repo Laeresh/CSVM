@@ -686,11 +686,12 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("graphics-retext-compiles",
-        "a key whose Original shader nobody wears any more, rewritten in place by a first switch to "
-        + "Enhanced before an Enhanced frame has drawn, stays pinned on a material of its own; after "
+        "a key whose Original shader drew red and nobody wears any more, rewritten in place by a "
+        + "first switch to Enhanced before an Enhanced frame has drawn while that draw's pipeline "
+        + "compiles still wait in a busy worker pool, stays pinned on a material of its own; after "
         + "one TAA frame builds Godot's advanced variants, a fresh material on the key draws the "
-        + "Enhanced text with no engine error, and the Original text on a shader of its own draws "
-        + "red. Only a process that has drawn no TAA frame before can show the draw fail; the pin "
+        + "Enhanced text, and the rewrite and draws print no engine error (no free_rid off the render "
+        + "thread). Only a process that has drawn no TAA frame before can show the draw fail; the pin "
         + "check fails in any")]
     internal static void RetextCompiles(TestContext ctx)
     {
@@ -699,6 +700,7 @@ internal static class GraphicsSwitchSuites
         var host = new Node { Name = "retext_probe" };
         ctx.Host.AddChild(host);
         ShaderMaterial? fresh = null;
+        var busy = new List<long>();
         try
         {
             GraphicsMode.Set(false);
@@ -707,14 +709,18 @@ internal static class GraphicsSwitchSuites
             RenderingServer.ForceSync();
             int? errorsBefore = TestHarness.EngineErrorsSoFar();
 
-            // ⚠ Draw nothing before the rewrite. A draw leaves Godot compiling pipelines on worker
-            // threads, and a rewrite then has a worker rebuild the shader and fail its free_rid calls.
             var key = Mech3.ShaderTwins.Make(() => GraphicsMode.Enhanced ? EnhancedProbe : OriginalProbe,
                 "retext-probe", "retext-probe");
+            var (view, quad) = ProbeView(host);
             var worn = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
             var original = worn.Shader;
-            worn.GetRid();
+            // A busy pool keeps the draw's pipeline compiles queued through the rewrite, as a loaded
+            // shard's does; a plain Code assignment then prints free_rid errors.
+            busy = HoldWorkerPool(150);
+            quad.MaterialOverride = worn;
+            var drawnOriginal = ProbePixel(view);
             // The key keeps no wearer, so the rewrite queues no material update of Godot's own.
+            quad.MaterialOverride = null;
             worn.Dispose();
 
             GraphicsMode.Set(true);
@@ -723,12 +729,9 @@ internal static class GraphicsSwitchSuites
             bool pinned = Mech3.ShaderTwins.IsPinned(original);
             AdvancedFrame(host);
 
-            var (view, quad) = ProbeView(host);
             fresh = Mech3.ShaderTwins.Follow(new ShaderMaterial(), key);
             quad.MaterialOverride = fresh;
             var drawnEnhanced = ProbePixel(view);
-            quad.MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = OriginalProbe } };
-            var drawnOriginal = ProbePixel(view);
             RenderingServer.ForceSync();
             int? errorsAfter = TestHarness.EngineErrorsSoFar();
 
@@ -743,10 +746,56 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            foreach (long task in busy)
+                WorkerThreadPool.WaitForTaskCompletion(task);
             host.Free();
             fresh?.Dispose();
             Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
             Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-twins-world-release",
+        "the shader cache stops following a test world's materials, a fade copy made after the build "
+        + "included, once the harness destroys that world, and keeps following the cached chapter "
+        + "world's, its fade copy held only from C# included, through the release a session build runs")]
+    internal static void TwinsWorldRelease(TestContext ctx)
+    {
+        ShaderMaterial? cachedSource = null, cachedFade = null, privateSource = null, privateFade = null;
+        bool privateTracked = false;
+        try
+        {
+            ctx.WithWorld(ctx.Chapter, collision: false, world =>
+            {
+                cachedSource = FadeSource(world.Stage);
+                cachedFade = cachedSource != null ? Mech3.ShaderTwins.FadeCopy(cachedSource) : null;
+            });
+            ctx.WithPrivateWorld(ctx.Chapter, collision: false, world =>
+            {
+                privateSource = FadeSource(world.Stage);
+                privateFade = privateSource != null ? Mech3.ShaderTwins.FadeCopy(privateSource) : null;
+                privateTracked = privateSource != null && privateFade != null
+                    && Mech3.ShaderTwins.IsTracked(privateSource) && Mech3.ShaderTwins.IsTracked(privateFade);
+            });
+            if (cachedSource == null || cachedFade == null || privateSource == null || privateFade == null)
+            {
+                ctx.Check(false, $"each {ctx.Chapter} world holds a tracked material that takes a fade copy");
+                return;
+            }
+            int heldFromCs = cachedFade.GetReferenceCount();
+            Mech3.ShaderTwins.ReleaseUnused();
+
+            ctx.Check(privateTracked, $"ABLE-TO-FAIL CONTROL: the private world's material and its fade copy are followed while it stands");
+            ctx.Check(!Mech3.ShaderTwins.IsTracked(privateSource) && !Mech3.ShaderTwins.IsTracked(privateFade),
+                $"once the harness destroys that world, neither is followed");
+            ctx.Check(heldFromCs <= 1, $"CONTROL: the cached world's fade copy is held only from C# (reference count {heldFromCs})");
+            ctx.Check(Mech3.ShaderTwins.IsTracked(cachedSource) && Mech3.ShaderTwins.IsTracked(cachedFade),
+                $"the cached world's material and its fade copy are still followed after the release a session build runs");
+        }
+        finally
+        {
+            cachedFade?.Dispose();
+            privateFade?.Dispose();
         }
     }
 
@@ -880,6 +929,11 @@ internal static class GraphicsSwitchSuites
         var image = view.GetTexture()?.GetImage();
         return image == null || image.IsEmpty() ? new Color(0f, 0f, 0f, 0f) : image.GetPixel(32, 32);
     }
+
+    // Fills Godot's worker pool with sleeps of ms each, so a pipeline compile a draw queues waits
+    // behind them. The caller waits each task out once.
+    private static List<long> HoldWorkerPool(int ms) => Enumerable.Range(0, 2 * OS.GetProcessorCount())
+        .Select(_ => WorkerThreadPool.AddTask(Callable.From(() => System.Threading.Thread.Sleep(ms)))).ToList();
 
     // One drawn TAA frame, which is what has Godot build its advanced variants for every shader alive.
     private static void AdvancedFrame(Node host)
@@ -1086,7 +1140,9 @@ internal static class GraphicsSwitchSuites
         return stale;
     }
 
-    // The process back on the mode and fade the suite found, its shaders' text included.
+    // The process back on the mode, fade and anti-aliasing the suite found, its shaders' text included.
+    // ⚠ Keep the anti-aliasing. A switch leaves the window's viewport on TAA. The next suite to draw
+    // it then has Godot build every live shader's advanced variants, 5 GB in a shard.
     private static void Restore(bool wasEnhanced)
     {
         GraphicsMode.Set(wasEnhanced);
@@ -1094,6 +1150,7 @@ internal static class GraphicsSwitchSuites
         Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
+        EnhancedLook.ReapplyDisplayQuality(det: true, "a suite's restore");
     }
 
     // One copy for the whole session, matching the session's sun after one frame of its own. The
@@ -1600,6 +1657,19 @@ internal static class GraphicsSwitchSuites
                 found.Add(shared.SurfaceGetMaterial(s));
         }
         return found.OfType<ShaderMaterial>().Where(m => m.Shader != null);
+    }
+
+    // The first followed material under root whose text takes a fade line, or null.
+    private static ShaderMaterial? FadeSource(Node root)
+    {
+        ShaderMaterial? found = null;
+        Walk(root, node =>
+        {
+            if (found == null && node is GeometryInstance3D geometry)
+                found = Materials(geometry).FirstOrDefault(m => Mech3.ShaderTwins.IsTracked(m)
+                    && Mech3.ShaderTwins.FadeCode(m.Shader.Code) != null);
+        });
+        return found;
     }
 
     private static void Count(SortedDictionary<string, int> into, string key) =>

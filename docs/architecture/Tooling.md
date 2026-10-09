@@ -32,6 +32,14 @@ The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-cas
 line and compares against `analysis/goldens/manifest.json`. The Launcher's `[perf] gpu=` line
 reads `Adapter()` too.
 
+## src/Tooling/MemoryAdmission.cs
+The engine's side of the machine-wide memory ledger `MemoryLedger.ps1` keeps in `%TEMP%\csvm-mem`
+(docs/tooling.md, "The memory ledger"). `Refuses`, called once from `Launcher._Ready` after the log
+opens (editor builds on Windows only), judges a non-interactive launch: below the floor it logs the
+reason and the Launcher quits with `TripwireExitCode` (75); started without `CSVM_MEM_RESERVATION`
+it holds a delete-on-close reservation file for the process lifetime. `Kind`, `IsNonInteractive`
+and the floor mirror the script's rules.
+
 ## src/Tooling/ProbeRunner.cs
 The `--dump-markers`/`--dump-weapons`/`--dump-flight`/`--dump-loadout`/`--dump-mips`/`--run-tests`/
 `--effects-test`/`--damage-test`/`--destroy=` probe wrappers, constructed once in `Launcher._Ready`

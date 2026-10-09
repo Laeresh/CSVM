@@ -219,7 +219,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
 
     /// <summary>Why the Join by code way is shut, or "" while it is live. A shell with no network
     /// door names no master server.</summary>
-    public string CodeFault => _net()?.CodeFault ?? CoopDoorText.NoMasterServer;
+    public string CodeFault => _net()?.Internet.CodeFault ?? CoopDoorText.NoMasterServer;
 
     /// <summary>Whether seat 0's typed characters feed an edit box. The page is showing, no box
     /// stands over it, and the IP Address or Join code box has the focus.</summary>
@@ -425,7 +425,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             }
 
             // A box already up, or a join's, keeps the screen; the word waits until it is clear.
-            if (net.MasterOutdated && !_toldOutdated && !_following && !_host.DialogOpen)
+            if (net.Internet.MasterOutdated && !_toldOutdated && !_following && !_host.DialogOpen)
             {
                 _toldOutdated = true;
                 _host.RaiseDialog(CoopDoorText.MasterOutdated, DialogIcon.Warning, Ok(null));
@@ -729,7 +729,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     // box stays live in case the host asks one.
     private void ConnectByCode(NetPlayFeature net)
     {
-        if (net.CodeFault is { Length: > 0 } why)
+        if (net.Internet.CodeFault is { Length: > 0 } why)
         {
             _host.RaiseDialog(CoopDoorText.CodeJoinUnavailable(why), DialogIcon.Warning, Ok(null));
             return;

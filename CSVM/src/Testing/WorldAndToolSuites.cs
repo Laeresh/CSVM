@@ -282,8 +282,9 @@ internal static class WorldAndToolSuites
 
     // A build that throws part way must free what it already made. An orphaned mesh instance outlives
     // the renderer, and a release build then crashes in its teardown, after the verdict is written.
-    // Counted on ObjectDB rather than on orphan ids, which a release export does not track. Able to
-    // fail: with BuildSubtree's catch removed, the parent and its mesh instance stay alive.
+    // Checked on the build's own nodes by instance id, which a release export still answers, unlike
+    // orphan ids. Able to fail: with BuildSubtree's catch removed, the parent and its mesh instance
+    // stay alive.
     [Suite("scene-build-throw-frees",
         "a subtree build that throws below a meshed node frees that node and its mesh instance before the exception leaves, so no render instance outlives the renderer and crashes the process at exit")]
     internal static void SceneBuildThrowFrees(TestContext ctx)
@@ -304,7 +305,6 @@ internal static class WorldAndToolSuites
             {
                 continue;
             }
-            // The full build also fills the mesh and material caches, so the count below sees nodes only.
             var warm = scene.BuildSubtree(node);
             bool meshed = warm?.GetNodeOrNull("mesh") is MeshInstance3D;
             warm?.Free();
@@ -321,27 +321,40 @@ internal static class WorldAndToolSuites
             return;
         }
 
-        // A collection during the build lets earlier suites' finalizers free their objects, so both
-        // readings are taken once the count has stopped moving.
-        long? before = FinalizerGate.SettledObjectCount();
+        // Not Godot's global object count: other threads move it inside any span, settled or not
+        // (docs/verification.md INSTR-100). The ids are taken at the throw, the last moment the
+        // half-built nodes are known alive.
+        var made = new List<Node3D>();
+        var ids = new HashSet<ulong>();
+        scene.NodeMade = made.Add;
         bool threw = false;
         try
         {
-            scene.BuildSubtree(parent, skip: n => n.Index == throwAt
-                ? throw new System.InvalidOperationException("staged build failure")
-                : false);
+            scene.BuildSubtree(parent, skip: n =>
+            {
+                if (n.Index != throwAt)
+                {
+                    return false;
+                }
+                foreach (var node in made)
+                {
+                    ids.Add(node.GetInstanceId());
+                    ids.UnionWith(node.FindChildren("*", owned: false).Select(c => c.GetInstanceId()));
+                }
+                throw new System.InvalidOperationException("staged build failure");
+            });
         }
         catch (System.InvalidOperationException)
         {
             threw = true;
         }
-        long? after = FinalizerGate.SettledObjectCount();
-        ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
-        ctx.Check(before != null && after != null, $"the object count settled on both sides of the build");
-        if (before is long b && after is long a)
+        finally
         {
-            ctx.Same(b, a, $"objects alive across the failed build of {parent.Name}");
+            scene.NodeMade = null;
         }
+        ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
+        ctx.Check(ids.Count >= 2, $"the build had made {parent.Name} and its mesh instance when it threw made={ids.Count}");
+        ctx.Same(0, ids.Count(GodotObject.IsInstanceIdValid), $"nodes the failed build of {parent.Name} left alive");
     }
 
     // The distinct Shader resources every ShaderMaterial in the subtree points at, by reference:
@@ -1758,6 +1771,147 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // Read off the built tree in airframe space against the model's own fixed geometry. A hinge or
+    // flare pushed off its mount (a transform applied twice, a pivot off the wrong node) reads as a
+    // gap in metres. The same hinge moved half a metre aft must read that gap.
+    [Suite("rudder-hinge-mount",
+        "the Warhawk's rudder hinge lines lie on the fin's trailing edge, a full-rudder deflection leaves "
+        + "each rudder's leading edge in place, and each wing-light flare sits within 10 cm of an airframe vertex, "
+        + "with the Devastator as the control and a hinge moved half a metre aft reading the gap; every "
+        + "stock airframe's gaps are noted")]
+    internal static void RudderHingeMount(TestContext ctx)
+    {
+        // A fifth of the half metre reported; the Devastator's wingtip flares float 3-5 cm off the tip.
+        const float onMount = 0.1f;
+        const float aftShift = 0.5f;
+        string[] judged = { "player_warhawk", "player_pfighter" };
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(judged);
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
+        {
+            if (gamez.FindByName(plane) == null)
+            {
+                continue;
+            }
+
+            bool strict = judged.Contains(plane);
+            var built = new PlaneBuilder(gamez, textures).Build(plane);
+            var fixedPoints = new List<Vector3>();
+            var rudders = new List<(Node3D Node, Transform3D ParentAcc, List<Vector3> Local)>();
+            var flares = new List<(string Name, Vector3 At)>();
+
+            static IEnumerable<Vector3> Vertices(MeshInstance3D mi)
+            {
+                if (mi.Mesh is not ArrayMesh mesh)
+                {
+                    yield break;
+                }
+                for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                {
+                    foreach (var v in mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Vertex].AsVector3Array())
+                    {
+                        yield return mi.Transform * v;
+                    }
+                }
+            }
+
+            void Walk(Node node, Transform3D parentAcc, bool moving)
+            {
+                if (node is not Node3D n3d || !n3d.Visible && !WingLights.IsFlare(n3d.Name))
+                {
+                    return;
+                }
+                var acc = parentAcc * n3d.Transform;
+                string name = n3d.Name.ToString();
+                if (WingLights.IsFlare(name))
+                {
+                    flares.Add((name, acc.Origin));
+                    return;
+                }
+                var kind = ControlSurfaces.Classify(name);
+                if (kind == ControlSurfaces.Kind.Rudder)
+                {
+                    rudders.Add((n3d, parentAcc, n3d.GetChildren().OfType<MeshInstance3D>().SelectMany(Vertices).ToList()));
+                }
+                moving |= kind != ControlSurfaces.Kind.None;
+                foreach (var child in n3d.GetChildren())
+                {
+                    if (child is MeshInstance3D mi && !moving)
+                    {
+                        fixedPoints.AddRange(Vertices(mi).Select(v => parentAcc * n3d.Transform * v));
+                    }
+                    Walk(child, acc, moving);
+                }
+            }
+
+            foreach (var child in built.GetChildren())
+            {
+                Walk(child, Transform3D.Identity, false);
+            }
+
+            // The fixed vertex nearest the hinge line, within the rudder's own span along it.
+            float FinGap(Vector3 origin, Vector3 axis, float lo, float hi) =>
+                fixedPoints.Select(p => (Along: (p - origin).Dot(axis), Off: p - origin))
+                    .Where(q => q.Along > lo - onMount && q.Along < hi + onMount)
+                    .Select(q => (q.Off - q.Along * axis).Length())
+                    .DefaultIfEmpty(float.MaxValue).Min();
+
+            var rest = rudders.Select(r => r.ParentAcc * r.Node.Transform).ToList();
+            var animator = ControlSurfaceAnimator.Build(built);
+            animator?.Advance(5.0, new FlightInput { Yaw = 1f }, animate: true);
+            for (int i = 0; i < rudders.Count; i++)
+            {
+                var (node, parentAcc, local) = rudders[i];
+                if (local.Count == 0)
+                {
+                    continue;
+                }
+                var axis = (rest[i].Basis * Vector3.Up).Normalized();
+                var origin = rest[i].Origin;
+                float edgeGap = local.Min(v => new Vector2(v.X, v.Z).Length());
+                var edge = local.MinBy(v => new Vector2(v.X, v.Z).Length());
+                float lo = local.Min(v => v.Y), hi = local.Max(v => v.Y);
+                float finGap = FinGap(origin, axis, lo, hi);
+                float shiftedGap = FinGap(origin + aftShift * Vector3.Back, axis, lo, hi);
+                var deflected = parentAcc * node.Transform;
+                float edgeSwing = (deflected * edge - rest[i] * edge).Length();
+                float tailSwing = local.Max(v => (deflected * v - rest[i] * v).Length());
+                ctx.Note($"{plane}/{node.Name}: hinge at {origin:F3}, leading edge {edgeGap:F3} m off the hinge, fin edge {finGap:F3} m off it ({shiftedGap:F3} m with the hinge {aftShift} m aft); full rudder moves the leading edge {edgeSwing:F3} m, the trailing edge {tailSwing:F3} m");
+                if (!strict)
+                {
+                    continue;
+                }
+                ctx.Check(edgeGap < onMount && finGap < onMount,
+                    $"{plane}/{node.Name} hinges on the fin's trailing edge edge={edgeGap:F3} fin={finGap:F3}");
+                ctx.Check(shiftedGap > 0.8f * aftShift,
+                    $"{plane}/{node.Name} reads a hinge moved {aftShift} m aft as a gap gap={shiftedGap:F3}");
+                ctx.Check(edgeSwing < onMount && tailSwing > 0.2f,
+                    $"{plane}/{node.Name} pivots about its leading edge edge={edgeSwing:F3} tail={tailSwing:F3}");
+            }
+            foreach (var (name, at) in flares)
+            {
+                float gap = fixedPoints.Min(p => p.DistanceTo(at));
+                float shifted = fixedPoints.Min(p => p.DistanceTo(at + aftShift * Vector3.Back));
+                ctx.Note($"{plane}/{name}: flare at {at:F3}, {gap:F3} m from the nearest airframe vertex ({shifted:F3} m moved {aftShift} m aft)");
+                if (strict)
+                {
+                    ctx.Check(gap < onMount && shifted > onMount,
+                        $"{plane}/{name} sits on an airframe vertex gap={gap:F3} shifted={shifted:F3}");
+                }
+            }
+            if (strict)
+            {
+                ctx.Check(rudders.Count == 2 && flares.Count == 2,
+                    $"{plane} carries two rudders and two flares rudders={rudders.Count} flares={flares.Count}");
+            }
+            built.Free();
+        }
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or
@@ -2243,6 +2397,117 @@ internal static class WorldAndToolSuites
                 selection.Free();
             }
         });
+    }
+
+    // Clicks a lazily loaded branch's fold arrow through the viewport, the path where Godot refuses
+    // Tree.CreateItem. The first click also fills the branch from inside the click, which must
+    // leave it collapsed on its placeholder. The second must expand it with no engine error and
+    // leave the fill to the deferred call. ExpandForTest stands in for that call.
+    [Suite("nodelab-click-expand", "a click on a node lab fold arrow expands a lazy branch with no engine error, and a fill Godot refuses inside the click leaves the branch collapsed on its placeholder for the next expand")]
+    internal static void NodeLabClickExpand(TestContext ctx)
+    {
+        EffectStageSuiteHelper.WithAnimWorld(ctx, "C2", world =>
+        {
+            var selection = new SelectionService(world.Root, ctx.Camera);
+            var lab = new NodeLab(world.Root, selection, world.Runtime, world.Program,
+                world.Scene, collisionBuilt: false);
+            ctx.Host.AddChild(selection);
+            ctx.Host.AddChild(lab);
+            try
+            {
+                lab.Toggle();
+                var tree = lab.TreeForTest()!;
+                var target = tree.GetRoot()?.GetChildren().FirstOrDefault(OnPlaceholder);
+                ctx.Check(target != null, $"the world root has a collapsed branch on its placeholder");
+                if (target == null)
+                {
+                    return;
+                }
+                Control top = tree;
+                while (top.GetParent() is Control parent)
+                {
+                    top = parent;
+                }
+                PauseBoardSuites.Settle(top);
+
+                // Godot's fold check for a depth-1 row is x below two item margins past the panel's
+                // content edge. The row's y comes from asking the tree, not from its layout.
+                var panel = tree.GetThemeStylebox("panel").GetOffset();
+                float x = panel.X + 1.5f * tree.GetThemeConstant("item_margin");
+                float? y = null;
+                for (float probe = 0f; probe < tree.Size.Y && y == null; probe += 2f)
+                {
+                    if (tree.GetItemAtPosition(new Vector2(tree.Size.X / 2f, probe)) == target)
+                    {
+                        y = probe + 4f;
+                    }
+                }
+                ctx.Check(y != null, $"the target row is on screen in a tree of size {tree.Size}");
+                if (y == null)
+                {
+                    return;
+                }
+                var at = tree.GetGlobalTransform() * new Vector2(x, y.Value);
+                void Click()
+                {
+                    var viewport = tree.GetViewport();
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
+                }
+
+                // The refused fill: Godot prints its refusal by design, so printing is off for it.
+                bool ranInside = false;
+                System.Exception? thrown = null;
+                void FillInside(TreeItem item)
+                {
+                    if (item != target || item.Collapsed)
+                    {
+                        return;
+                    }
+                    ranInside = true;
+                    Engine.PrintErrorMessages = false;
+                    try
+                    {
+                        lab.ExpandForTest(item);
+                    }
+                    catch (System.Exception e)
+                    {
+                        thrown = e;
+                    }
+                    finally
+                    {
+                        Engine.PrintErrorMessages = true;
+                    }
+                }
+                tree.ItemCollapsed += FillInside;
+                Click();
+                tree.ItemCollapsed -= FillInside;
+                ctx.Check(ranInside, $"the click at {at} reached the fold arrow and expanded the branch");
+                ctx.Check(thrown == null, $"a fill inside the click does not throw ({thrown?.GetType().Name}: {thrown?.Message})");
+                ctx.Check(OnPlaceholder(target),
+                    $"and leaves the branch collapsed on its placeholder collapsed={target.Collapsed} rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+
+                int? errorsBefore = TestHarness.EngineErrorsSoFar();
+                Click();
+                int? errorsAfter = TestHarness.EngineErrorsSoFar();
+                ctx.Check(!target.Collapsed && target.GetChildCount() == 1 && target.GetFirstChild().GetText(0) == "…",
+                    $"a plain click expands the branch and leaves the fill for later collapsed={target.Collapsed} rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+                ctx.Check((errorsAfter ?? 0) == (errorsBefore ?? 0),
+                    $"with no engine error ({(errorsAfter ?? 0) - (errorsBefore ?? 0)} new line(s), log {(errorsBefore != null ? "read" : "missing")})");
+
+                lab.ExpandForTest(target);
+                ctx.Check(target.GetChildCount() >= 1 && target.GetFirstChild().GetText(0) != "…",
+                    $"the fill after the click turns the placeholder into real rows rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+            }
+            finally
+            {
+                lab.Free();
+                selection.Free();
+            }
+        });
+
+        static bool OnPlaceholder(TreeItem item) =>
+            item.Collapsed && item.GetChildCount() == 1 && item.GetFirstChild().GetText(0) == "…";
     }
 
     // Aims straight down at a sample of C4's 1024 m terrain tiles with the cloud deck hidden. The

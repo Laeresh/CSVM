@@ -22,6 +22,13 @@ if (-not $command) { exit 0 }
 $here = git rev-parse --show-toplevel 2>$null
 if (-not $here) { exit 0 }
 
+# No direct Godot launch from an agent command; the decision is CheckGodotCommand.ps1's.
+$godot = Join-Path $here 'CheckGodotCommand.ps1'
+if (Test-Path -LiteralPath $godot -PathType Leaf) {
+    & $godot -Command $command
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
 # Format and StyleCop-check before a test run or a commit. The trigger (an invocation, never a
 # mention) and the tree resolution live in FormatBeforeTests.ps1, shared with the other harnesses.
 $format = Join-Path $here 'FormatBeforeTests.ps1'

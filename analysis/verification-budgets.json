@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "readme": "Wall-time budgets for RunTests.ps1's stages. They are AWARENESS thresholds, never verdicts: a stage over budget prints an 'over budget' marker and NEVER changes the exit code, because this is a workstation and load the script cannot see must not turn a correct tree red. The numbers live here rather than in RunTests.ps1's help so the help can name this file instead of figures that would drift out of it.",
-  "rule": "Each budget is the slowest of three back-to-back warm runs on the development machine, plus 50 percent, rounded up to the next 5 seconds, with a 10 second floor so a sub-second stage is not tripped by ordinary process startup. The engine budget is then capped at 80 percent of the engine stage's per-launch watchdog (RunTests.ps1's $EngineBudgetCapSec, which enforces the cap whatever this file says), so a growing catalog prints 'over budget' before a shard is killed. Build is not budgeted: only cutting features shortens it. There is no total budget: one set by this rule is never below the stage budgets' sum, so it could only trip after a stage had. A stage this file does not name is printed without a budget. Re-measure the same way and rewrite this file when the numbers stop describing the machine.",
+  "rule": "Each budget is the slowest of three back-to-back warm runs on the development machine, plus 50 percent, rounded up to the next 5 seconds, with a 10 second floor so a sub-second stage is not tripped by ordinary process startup. The engine budget is then capped at 80 percent of an engine shard's ceiling (RunTests.ps1's $EngineBudgetCapSec, which enforces the cap whatever this file says), so no budget written here sits at the kill line, where a stage would go red without printing 'over budget' first. Build is not budgeted: only cutting features shortens it. There is no total budget: one set by this rule is never below the stage budgets' sum, so it could only trip after a stage had. A stage this file does not name is printed without a budget. Re-measure the same way and rewrite this file when the numbers stop describing the machine.",
   "measured": {
     "conditions": "warm, CSVM_DATA_ROOT at the primary tree, no game running beside the battery, engine at the default 6 shards over the 543-suite catalog, goldens at the default 4 workers over 24 shots, hitch in the same full runs (-Hitch)",
     "full": {
@@ -19,10 +19,10 @@
   },
   "lanes": {
     "full": {
-      "what": "the complete landing gate: build, units, every engine suite, goldens, and the opt-in -Hitch stage. The rule gives the engine 280 seconds; the watchdog cap holds it at 240.",
+      "what": "the complete landing gate: build, units, every engine suite, goldens, and the opt-in -Hitch stage.",
       "stages": {
         "units": 50,
-        "engine": 240,
+        "engine": 280,
         "goldens": 90,
         "hitch": 30
       }
@@ -37,6 +37,6 @@
   },
   "notes": [
     "The perf stage carries no budget on purpose. It records rather than judges, and a committed wall-time number for it would be the threshold verification METHOD-3 and PERF-5 rule out; its verdict comes from a paired A/B (-PerfCompare) against a freshly measured same-build band.",
-    "The engine stage's 300 second per-launch watchdog in RunTests.ps1 is not a budget: it kills a hung launch and fails the stage, where these numbers only print. It does bound the engine budget, through the cap in the rule."
+    "An engine shard's watchdog in RunTests.ps1 (killed once its log has not grown for 120 seconds, or at a 1200 second ceiling) is not a budget: it kills a hung launch and fails the stage, where these numbers only print. Its ceiling does bound the engine budget, through the cap in the rule."
   ]
 }

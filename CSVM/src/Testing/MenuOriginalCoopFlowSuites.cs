@@ -190,7 +190,7 @@ internal static class MenuOriginalCoopFlowSuites
             }
 
             var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-            var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+            var (roster, _) = CSVM.Launch.SeatFields.CoopLaunchField(
                 host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
             ctx.Check(roster.Length == 3 && roster[1].PeerId == roster[2].PeerId && roster[1].PeerId != roster[0].PeerId,
                 $"the host's launch field seats the guest's machine at seats 1 and 2 ({roster.Length} seat(s))");
@@ -398,7 +398,7 @@ internal static class MenuOriginalCoopFlowSuites
     {
         string spare = Flight.Hangar.StockAirframes.Node(SpareAirframe);
         var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-        var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+        var (roster, _) = CSVM.Launch.SeatFields.CoopLaunchField(
             hostDoor, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == spare,
             $"the host's field builds the guest's seat on the spare ({(roster.Length == 2 ? roster[1].PlaneNode : "-")})");
@@ -501,8 +501,8 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: false } && field.Current == 0,
             $"ABLE-TO-FAIL CONTROL: before any Ready the host's FLY MISSION is greyed, the guest on its first check");
         var chips = guest.Shell.Compose().Overlays.SelectMany(panel => panel.Lines).Select(line => line.Text).ToArray();
-        string hostChip = host.Door.PlayerName + CSVM.UI.Screens.LaunchMenu.RemoteChipMark;
-        ctx.Check(host.Door.PlayerName.Length > 0 && chips.Contains("P2") && chips.Contains("P3") && chips.Contains(hostChip),
+        string hostChip = host.Door.Identity.PlayerName + CSVM.UI.Screens.LaunchMenu.RemoteChipMark;
+        ctx.Check(host.Door.Identity.PlayerName.Length > 0 && chips.Contains("P2") && chips.Contains("P3") && chips.Contains(hostChip),
             $"the guest's strip marks P2 and P3 its own and names the host's seat by its callsign ({string.Join(" | ", chips)})");
         ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
         Pump(host, guest, frames: 4);
@@ -675,7 +675,7 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(picked != CoopGuestPick.StarterAirframe && fit.AmmoAt(0) == 3,
             $"ABLE-TO-FAIL CONTROL: the pick the guest flew is not a fresh join's starter and stock fit ({picked}, {fit.AmmoAt(0)})");
         var guestWire = guest.Door.BuildLaunch();
-        var relaunch = CSVM.Launch.Launcher.CoopRelaunch(host.Door);
+        var relaunch = CSVM.Launch.NetFlight.CoopRelaunch(host.Door);
         ctx.Check(guestWire != null && relaunch != null, $"the guest flies and the host's Restart relaunches its door");
         if (guestWire == null || relaunch == null)
         {
@@ -683,12 +683,12 @@ internal static class MenuOriginalCoopFlowSuites
         }
 
         GuestFliesItsPick(ctx, host, relaunch, (picked, fit), "the restart's field builds the guest on the pick it flew");
-        for (int i = 0; i < 20 && !CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
+        for (int i = 0; i < 20 && !CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door); i++)
         {
             StepInFlight(host, guest, relaunch, guestWire);
         }
 
-        ctx.Check(CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's new round ends the guest's flight");
+        ctx.Check(CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door), $"the host's new round ends the guest's flight");
         GuestReturns(ctx, host, guest, relaunch, (picked, fit), "after the restart");
         ctx.Check(((NetLobby)relaunch.Transport).Picks.Values.All(pick => pick.Epoch == host.Door.CoopEpoch),
             $"and it answers under the restart's round, which the host waits for");
@@ -784,14 +784,14 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(host.Door.Reclaim(), $"the host takes its wire back after the lost mission");
         int seq = Math.Max(0, CampaignAidProfiles.MissionsFlown - 1);
         host.Host.Show(new DebriefReturn(CampaignAidProfiles.Pilot, seq, MissionWon: false));
-        for (int i = 0; i < 20 && !CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door); i++)
+        for (int i = 0; i < 20 && !CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door); i++)
         {
             host.Host.Tick(Dt);
             guestWire.Transport.Step(Dt);
             guest.Door.Step(Dt);
         }
 
-        ctx.Check(CSVM.Launch.Launcher.CoopGuestFlightOver(guest.Door), $"the host's lost debrief ends the guest's flight");
+        ctx.Check(CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door), $"the host's lost debrief ends the guest's flight");
         GuestReturns(ctx, host, guest, hostWire, remembered, "after the lost mission");
         Pump(host, guest, frames: 4);
         byte debriefRound = host.Door.CoopEpoch;
@@ -833,7 +833,7 @@ internal static class MenuOriginalCoopFlowSuites
     private static void GuestFliesItsPick(TestContext ctx, End host, MenuNetLaunch launch, (byte Airframe, CoopFit Fit) pick, string what)
     {
         var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-        var (roster, seatFits) = CSVM.Launch.Launcher.CoopLaunchField(
+        var (roster, seatFits) = CSVM.Launch.SeatFields.CoopLaunchField(
             host.Door, launch.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == Flight.Hangar.StockAirframes.Node(pick.Airframe) && seatFits[1] == pick.Fit,
             $"{what} ({(roster.Length == 2 ? roster[1].PlaneNode : "-")}, ammo {(seatFits.Length == 2 ? seatFits[1].AmmoAt(0) : -9)})");
@@ -883,9 +883,9 @@ internal static class MenuOriginalCoopFlowSuites
     {
         host.Host.Tick(Dt);
         var lines = host.Shell.Compose().Lines.Select(line => line.Text).ToList();
-        ctx.Check(door.Private && lines.Any(text => text.Contains($"CODE {NetDoorAid.SampleCode}", StringComparison.Ordinal))
+        ctx.Check(door.Identity.Private && lines.Any(text => text.Contains($"CODE {NetDoorAid.SampleCode}", StringComparison.Ordinal))
                   && lines.Any(text => text.StartsWith("PRIVATE", StringComparison.Ordinal)),
-            $"the host's band names its code and that the game is Private ({door.Private}, {CoopDoorText.HostBand(door)})");
+            $"the host's band names its code and that the game is Private ({door.Identity.Private}, {CoopDoorText.HostBand(door)})");
         ctx.Check(!lines.Any(text => text.Contains(NetDoorAid.ExternalAddress, StringComparison.Ordinal)),
             $"and leaves out the router's address, which it shows without a code ({door.Router.PortMap?.ExternalAddress})");
     }

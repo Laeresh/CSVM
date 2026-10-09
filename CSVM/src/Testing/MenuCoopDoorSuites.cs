@@ -127,10 +127,10 @@ internal static class MenuCoopDoorSuites
     private static void OpenForTheMatch(TestContext ctx, LaunchMenu menu, NetPlayFeature door)
     {
         // A password the Multiplayer board left behind must not gate a door that never showed it.
-        door.Password = "leftover";
+        door.Identity.Password = "leftover";
         menu.Drive(Network);
-        ctx.Check(door.IsCoopHost && door.Private && door.Advertising is { Password: false } && door.Password.Length == 0,
-            $"L / Y opens Private, the campaign's default, asking no leftover password ({door.Private}, {door.Advertising?.Password})");
+        ctx.Check(door.IsCoopHost && door.Identity.Private && door.Advertising is { Password: false } && door.Identity.Password.Length == 0,
+            $"L / Y opens Private, the campaign's default, asking no leftover password ({door.Identity.Private}, {door.Advertising?.Password})");
         AwaitMapping(door);
         menu.Drive(MenuCommands.None);
         string address = $"{NetDoorAid.ExternalAddress}:{NetPorts.Game.ToString(CultureInfo.InvariantCulture)}";
@@ -242,7 +242,7 @@ internal static class MenuCoopDoorSuites
 
         ctx.Check(hostExit.Profile == CampaignAidProfiles.Pilot && hostDoor.IsCoopHost && hostDoor.Released,
             $"the host's FLY MISSION leaves with the door's wire and the door stays open ({hostExit.Profile}, {hostDoor.Stage})");
-        var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(hostDoor, hostLaunch.Transport, new[] { Plane },
+        var (roster, _) = CSVM.Launch.SeatFields.CoopLaunchField(hostDoor, hostLaunch.Transport, new[] { Plane },
             Array.Empty<CSVM.Flight.Weapons.LoadoutChoice?>(), CSVM.Flight.Weapons.StockLoadouts.Load());
         string picked = CSVM.Flight.Hangar.StockAirframes.Node(guestDoor.Pick.Airframe);
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == picked,

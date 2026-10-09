@@ -212,12 +212,6 @@ public sealed class InstantActionFeature : IMenuFeature
     /// wingman), edited in place by a presentation's loadout screen; stock until it is.</summary>
     public LoadoutChoice WingmanFit { get; private set; } = new();
 
-    /// <summary>The fit a launch hands the wingmen: <see cref="WingmanFit"/> once it is edited, and
-    /// null for the stock fit. Also null when no wingmen fly (none set, or the ace duel), so a stale
-    /// pick cannot outlive the count going to 0.</summary>
-    public LoadoutChoice? LaunchWingmanFit =>
-        IsAceDuel || NumWingmen <= 0 || WingmanFit.IsStock ? null : WingmanFit;
-
     /// <summary>The player's airframe row, as the presets and a single-seat presentation pick it.
     /// A presentation with its own roster passes the flown name to <see cref="BuildExit"/> instead.</summary>
     public int PlayerPlaneIndex { get; private set; }
@@ -341,6 +335,17 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>Whether the setup offers the race window: stunt flying with more than one seat
     /// joined, the one setup that launches a race.</summary>
     public bool OffersRaceWindow(int joinedSeats) => MissionType.Key == StuntKey && joinedSeats > 1;
+
+    /// <summary>Whether the setup takes no waves and no wingmen with <paramref name="joinedSeats"/>
+    /// joined: the ace duel, and the race, whose weapons-off rule the AI would not keep. The wave
+    /// and wingman cursors stay as configured, so a setup that leaves the rule gets them back.</summary>
+    public bool TakesNoWaves(int joinedSeats) => IsAceDuel || OffersRaceWindow(joinedSeats);
+
+    /// <summary>The fit a launch hands the wingmen: <see cref="WingmanFit"/> once it is edited, and
+    /// null for the stock fit. Also null when no wingmen fly (none set, or <see cref="TakesNoWaves"/>
+    /// holds for the joined seats), so a stale pick cannot outlive the count going to 0.</summary>
+    public LoadoutChoice? LaunchWingmanFit(int joinedSeats) =>
+        TakesNoWaves(joinedSeats) || NumWingmen <= 0 || WingmanFit.IsStock ? null : WingmanFit;
 
     /// <summary>One wave's aircraft roster, its militia's.</summary>
     public IReadOnlyList<string> WaveAircraft(int wave) => MilitiaRows[_waves[Slot(wave)].MilitiaIndex].Aircraft;
@@ -493,20 +498,24 @@ public sealed class InstantActionFeature : IMenuFeature
         return waves;
     }
 
-    /// <summary>The built def over the confirmed environment's base (the built-in defaults when
-    /// no environment was confirmed, which only an aid that skips the confirm can reach).
-    /// <paramref name="playerPlane"/> names the flown aircraft where a presentation's roster is
-    /// wider than the stock eleven; null takes <see cref="PlayerPlane"/>.</summary>
-    public InstantActionDef BuildDef(string? playerPlane = null) =>
-        InstantAction.BuildFromWizard(
+    /// <summary>The built def over the confirmed environment's base, or the built-in defaults when
+    /// none was confirmed (only an aid that skips the confirm reaches that). The
+    /// player plane names the flown aircraft where a roster is wider than the stock eleven, and
+    /// null takes <see cref="PlayerPlane"/>. Where <see cref="TakesNoWaves"/> holds for the joined
+    /// seats, the def carries no wingmen and every wave empty.</summary>
+    public InstantActionDef BuildDef(int joinedSeats, string? playerPlane = null)
+    {
+        bool none = TakesNoWaves(joinedSeats);
+        return InstantAction.BuildFromWizard(
             BaseDef ?? InstantAction.Defaults(),
             MissionType.Key,
             playerPlane ?? PlayerPlane.Name,
-            NumWingmen,
+            none ? 0 : NumWingmen,
             WingmanPlane.Name,
-            BuildWaves(),
+            none ? Array.Empty<InstantActionWave>() : BuildWaves(),
             Lives,
             RaceWindowMinutes);
+    }
 
     /// <summary>The typed exit for the confirmed seats, in seat order. It carries the environment's
     /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. Throws when the gate is closed or a
@@ -527,8 +536,8 @@ public sealed class InstantActionFeature : IMenuFeature
             }
         }
 
-        return new LaunchExit(Environment.Code, seats, Mode, BuildDef(playerPlane),
-            WingmanLoadout: LaunchWingmanFit);
+        return new LaunchExit(Environment.Code, seats, Mode, BuildDef(seats.Count, playerPlane),
+            WingmanLoadout: LaunchWingmanFit(seats.Count));
     }
 
     /// <summary>Puts every field back to the screen's opening state. That is the first

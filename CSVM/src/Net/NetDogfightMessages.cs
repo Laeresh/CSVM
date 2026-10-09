@@ -23,12 +23,15 @@ public enum DogfightVictory : byte
 /// are the environment, the mission type, the victory condition, Restrict Number of Teams with its
 /// minimum and maximum, and the lives rule. Capture the Flag adds its own-flag-home rule. The host
 /// sends one to each guest whenever an option moves. Kept in the lobby and never passed to a session.
+/// <c>HostLandsOnScores</c> (a spare flag bit) says the host's match ends on Game Scores, not a
+/// results board, and every guest's match follows it.
 /// </summary>
 public readonly record struct DogfightOptionsMessage(
     byte Epoch, byte Environment, byte MissionType, DogfightVictory Victory, byte TimeMinutes,
     ushort Score, bool LimitedLives, byte Lives, bool AutoRespawn,
     bool RestrictTeams = false, byte MinTeams = DogfightOptionsMessage.DefaultMinTeams,
-    byte MaxTeams = DogfightOptionsMessage.DefaultMaxTeams, bool FlagHomeToCapture = false)
+    byte MaxTeams = DogfightOptionsMessage.DefaultMaxTeams, bool FlagHomeToCapture = false,
+    bool HostLandsOnScores = false)
     : INetMessage<DogfightOptionsMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -65,7 +68,8 @@ public readonly record struct DogfightOptionsMessage(
         byte maxTeams = reader.ReadByte();
         var victory = (flags & 8) != 0 ? DogfightVictory.Both : (flags & 1) != 0 ? DogfightVictory.Score : DogfightVictory.Time;
         message = new DogfightOptionsMessage(epoch, environment, type, victory, minutes, score,
-            (flags & 2) != 0, lives, (flags & 4) != 0, (flags & 16) != 0, minTeams, maxTeams, (flags & 32) != 0);
+            (flags & 2) != 0, lives, (flags & 4) != 0, (flags & 16) != 0, minTeams, maxTeams, (flags & 32) != 0,
+            (flags & 64) != 0);
         return true;
     }
 
@@ -77,7 +81,8 @@ public readonly record struct DogfightOptionsMessage(
         writer.WriteByte(Environment);
         writer.WriteByte(MissionType);
         int flags = (Victory == DogfightVictory.Score ? 1 : 0) | (LimitedLives ? 2 : 0) | (AutoRespawn ? 4 : 0)
-            | (Victory == DogfightVictory.Both ? 8 : 0) | (RestrictTeams ? 16 : 0) | (FlagHomeToCapture ? 32 : 0);
+            | (Victory == DogfightVictory.Both ? 8 : 0) | (RestrictTeams ? 16 : 0) | (FlagHomeToCapture ? 32 : 0)
+            | (HostLandsOnScores ? 64 : 0);
         writer.WriteByte((byte)flags);
         writer.WriteByte(TimeMinutes);
         writer.WriteByte(Lives);

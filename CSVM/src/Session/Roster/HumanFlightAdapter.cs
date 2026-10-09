@@ -95,6 +95,37 @@ internal sealed class HumanFlightAdapter
             cockpitPanels: planeBuilder.CockpitDamagePanels);
     }
 
+    /// <summary>Where every person in the field flies, this machine's panes and seats flown
+    /// elsewhere alike. Every AI-flown aircraft picks its far-field plant on it, bots and roster AI
+    /// alike. A bot is no person, nor is a guest who left. ⚠ Never the pane snapshot in a network
+    /// match: an AI fighting a guest a kilometre from the host would fly the speed-hold plant.
+    /// Outside one the panes are every person.</summary>
+    public static Func<IReadOnlyList<Vector3>> PersonSeatPositions(FlightWorldBindings world, HumanRosterBindings human)
+    {
+        var seats = human.NetSeats;
+        var rigs = human.Rigs;
+        var positions = new List<Vector3>(seats.Count);
+        return () =>
+        {
+            if (seats.Count == 0)
+            {
+                return world.HumanPositions?.Invoke() ?? Array.Empty<Vector3>();
+            }
+
+            positions.Clear();
+            for (int i = 0; i < seats.Count && i < rigs.Count; i++)
+            {
+                if (!seats[i].IsBot && human.SeatLeft?.Invoke(i) != true
+                    && rigs[i].Controller is { } person && GodotObject.IsInstanceValid(person))
+                {
+                    positions.Add(person.WorldPosition);
+                }
+            }
+
+            return positions;
+        };
+    }
+
     /// <summary>What rig <paramref name="rigIndex"/> is flying, or null before its first assembly.
     /// </summary>
     public FlyingAirframe? Flying(int rigIndex) =>
@@ -239,7 +270,7 @@ internal sealed class HumanFlightAdapter
             GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _world.TouchdownDefs,
             Projectiles = _world.Projectiles,
-            HumanPositions = botPilot != null ? PersonSeatPositions() : _world.HumanPositions,
+            HumanPositions = botPilot != null ? _botPilots.PersonPositions : _world.HumanPositions,
             // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
             // reads every connected pad (what AssignPads returns for one player), empty reads none.
             // Coalescing flew a single player pad-dead; a remote seat takes empty, it reads none.
@@ -534,24 +565,20 @@ internal sealed class HumanFlightAdapter
                 racer.Callsign = seat.Callsign;
         }
 
-        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
-        // match GameSession built before this loop ran; kill facts arrive later via Downed.
+        // Every versus mode (--vs): the per-pane match timer/K-D/leader line, bound to the match
+        // GameSession built before this loop ran.
         if (!paneless && _human.VersusMatch is { } versus)
         {
-            // Rigs is the SAME list GameSession keeps live for the whole session, every seat
-            // already exists (BuildRigs ran before this loop), only .Controller fills in as each
-            // player assembles, so by the time this pane draws, every opponent's is populated.
-            controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
-            controller.VersusHud.Rigs = _human.Rigs;
-            controller.VersusHud.StatusHiddenWhile = () => controller.ScoresShown;
+            controller.VersusStatusLine = VersusStatusLine.Build(versus, pi);
+            controller.VersusStatusLine.StatusHiddenWhile = () => controller.ScoresShown;
             var seats = _human.NetSeats;
-            controller.VersusHud.BotName = s => Net.NetSeats.BotCallsign(seats, s);
+            controller.VersusStatusLine.BotName = s => Net.NetSeats.BotCallsign(seats, s);
             if (verbose)
-                Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
+                Log.Info("flight", $"versus HUD: match timer/K-D/leader line");
         }
 
-        // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
-        // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
+        // One per human pane, in EVERY flight session: built unconditionally because generators
+        // spawn hostiles mid-session, and it draws nothing with an empty pool.
         // A remote seat picks its own targets on its own machine, so it takes neither.
         if (!paneless)
         {
@@ -768,29 +795,6 @@ internal sealed class HumanFlightAdapter
         int menu when menu < _policy.MenuCustomPlanes.Count => _policy.MenuCustomPlanes[menu],
         _ => null,
     };
-
-    // Where every person in the field flies, this machine's panes and seats flown elsewhere alike,
-    // which a bot's far-field plant is selected on. ⚠ Never the session's pane snapshot: a bot
-    // fighting a guest a kilometre from the host would then fly the speed-hold plant.
-    private Func<IReadOnlyList<Vector3>> PersonSeatPositions()
-    {
-        var seats = _human.NetSeats;
-        var rigs = _human.Rigs;
-        var positions = new List<Vector3>(seats.Count);
-        return () =>
-        {
-            positions.Clear();
-            for (int i = 0; i < seats.Count && i < rigs.Count; i++)
-            {
-                if (!seats[i].IsBot && rigs[i].Controller is { } person && GodotObject.IsInstanceValid(person))
-                {
-                    positions.Add(person.WorldPosition);
-                }
-            }
-
-            return positions;
-        };
-    }
 
     // Which of this machine's menu seats flies seat pi. The menu lists only the local seats, and a
     // guest's own seat stands behind its host's in the roster. A seat flown elsewhere has none.

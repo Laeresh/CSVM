@@ -44,6 +44,12 @@ internal static class SuitePorts
     /// <summary>enet-shaped-link's host.</summary>
     internal const int Shaped = 70;
 
+    /// <summary>enet-quit-close's host that the suite closes.</summary>
+    internal const int QuitClose = 75;
+
+    /// <summary>enet-quit-close's host left open to the process's quit.</summary>
+    internal const int QuitOpen = 90;
+
     /// <summary>How far above its host's port a guest that names its own source port sends from.
     /// Lands the stable-reply guests on offsets 80 to 89.</summary>
     internal const int GuestSource = 20;

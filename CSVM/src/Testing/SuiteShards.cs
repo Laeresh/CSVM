@@ -59,10 +59,12 @@ public static class SuiteShards
         return error == null ? found : null;
     }
 
-    /// <summary>Divides <paramref name="items"/> into <paramref name="shardCount"/> shards, longest
-    /// unit first onto the lightest shard so far. Deterministic: ties break on the item's own
-    /// position, so the same inputs always produce the same plan. Each shard keeps the input's
-    /// order, which for a suite list is registry order.</summary>
+    /// <summary>Divides <paramref name="items"/> into <paramref name="shardCount"/> shards. Each
+    /// suite the weights run alone takes one of the last shards by itself. The rest go longest unit
+    /// first onto the lightest shared shard so far. The launcher asks for its shared count plus
+    /// one per alone suite, so an alone suite never takes a shared shard's place. Deterministic: ties
+    /// break on the item's own position, so the same inputs always produce the same plan. Each shard
+    /// keeps the input's order, which for a suite list is registry order.</summary>
     public static IReadOnlyList<IReadOnlyList<T>> Plan<T>(IReadOnlyList<T> items,
         Func<T, string> name, SuiteWeights weights, int shardCount)
     {
@@ -82,10 +84,21 @@ public static class SuiteShards
             positions[name(items[i])] = i;
         }
 
+        // The last shards hold one alone suite each. A count short of the launcher's (a hand-typed
+        // term) still leaves one shard for everything else.
+        var alone = items.Where(item => weights.Alone.Contains(name(item), StringComparer.OrdinalIgnoreCase))
+            .Take(shardCount - 1).ToList();
+        int open = shardCount - alone.Count;
+        for (int i = 0; i < alone.Count; i++)
+        {
+            shards[open + i].Add(alone[i]);
+        }
+
         // One unit per suite, except that a group's present members become a single unit: the
         // balancer may not split a set the weights file says must share a process.
         var unitOf = GroupKeys(items, name, weights, positions);
         var units = items
+            .Where(item => !alone.Contains(item))
             .GroupBy(item => unitOf[name(item)])
             .Select(g => new
             {
@@ -100,7 +113,7 @@ public static class SuiteShards
         foreach (var unit in units)
         {
             int target = 0;
-            for (int i = 1; i < shardCount; i++)
+            for (int i = 1; i < open; i++)
             {
                 if (load[i] < load[target])
                 {
@@ -152,11 +165,15 @@ public static class SuiteShards
                     groups.Add(group.EnumerateArray().Select(e => e.GetString() ?? "").ToList());
                 }
             }
+            var alone = root.TryGetProperty("alone", out var aloneList)
+                ? aloneList.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
+                : new List<string>();
             return new SuiteWeights
             {
                 DefaultSeconds = root.TryGetProperty("defaultSeconds", out var d) ? d.GetDouble() : 1.0,
                 Seconds = seconds,
                 Groups = groups,
+                Alone = alone,
                 Source = path,
             };
         }
@@ -211,6 +228,11 @@ public sealed class SuiteWeights
     /// The two seven-world censuses are one such set: whichever runs second reads its chapters out
     /// of the process-scoped <c>DecodeCache</c> instead of decoding them again.</summary>
     public required IReadOnlyList<IReadOnlyList<string>> Groups { get; init; }
+
+    /// <summary>Suites that each get a shard of their own on top of a complete run's shared shards,
+    /// one shared shard included. A TAA frame has Godot build the advanced variants of every shader
+    /// alive in its process, which beside a shard's worlds is about 5 GB.</summary>
+    public IReadOnlyList<string> Alone { get; init; } = Array.Empty<string>();
 
     public string Source { get; init; } = "";
 

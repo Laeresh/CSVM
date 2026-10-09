@@ -933,9 +933,11 @@ and reads same-or-either-zero as a friend (`0x4a5f86`..`0x4a5f9c`).
 
 The remake asks the same rule as `AimAssist.Friendly`, the negation of `AimAssist.Hostile`, over
 the banded team ids a team mode flies. It answers per pane rather than per machine, since
-splitscreen panes may sit on different sides. The Dogfight HUD's per-seat markers
-(`VersusHud`, a remake aid with no counterpart in the original) draw a teammate in the friendly
-green and every other seat in its identity colour.
+splitscreen panes may sit on different sides. A versus pilot finds and marks another seat through
+this marker alone, as in the original: a teammate in the friendly green, every other seat in red.
+No session draws per-seat player-tag markers. After Target Nothing, which in the decode clears
+every class, a bot opponent stays marked through `TargetHud`'s `TrackedHostile` fallback (a
+remake-only aid) while a person does not.
 
 ## The HUD: the label
 
@@ -1103,9 +1105,8 @@ there.
 | Colour | red hostile, green friendly, blue non-destructive objective | the same, `TargetHud.MarkerColor`, with the four destructive objective categories red and the rest blue |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same edge position, `EdgeMarker.Resolve`, with `TargetHud.EdgeLabelAnchor` hanging the three lines off it by the decoded +3 / -45; the per-line 3 px clamp is not ported |
 
-⚠ **The "no reference to copy" claim once made in `VersusHud`'s module doc was false.** The
-original draws an edge arrow with a stacked tag and clock bearing, which is what CSVM's
-`DrawOpponent` edge branch already does, corrected in the code itself.
+⚠ **The off-screen marker has a reference to copy.** The original draws an edge arrow with a
+stacked tag and clock bearing, which is what `TargetHud`'s edge branch draws.
 
 ⚠ **Fixed 20 × 16 pixels does not port literally.** The original never scales its box, so on a
 modern display it would be nearly invisible. Scaling through `HudMetrics` like every other CSVM HUD

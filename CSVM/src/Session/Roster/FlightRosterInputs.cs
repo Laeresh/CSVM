@@ -182,6 +182,11 @@ internal sealed class HumanRosterBindings
     /// machine's launch flags: every peer has to build the same field.</summary>
     public IReadOnlyList<Net.NetSeat> NetSeats { get; init; } = Array.Empty<Net.NetSeat>();
 
+    /// <summary>Whether a guest's seat left the mission, by seat. Its inert aeroplane stays in the
+    /// world but is no person an AI's far-field plant measures against. Null: nobody has left.
+    /// </summary>
+    public Func<int, bool>? SeatLeft { get; init; }
+
     /// <summary>The fit a seat with no pane here carries, by seat, or null for its stock fit.
     /// </summary>
     public Func<int, LoadoutChoice?>? SeatFit { get; init; }

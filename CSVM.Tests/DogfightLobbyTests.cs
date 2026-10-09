@@ -935,6 +935,27 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void AGuestReadsWhetherItsHostLandsOnGameScores()
+    {
+        var (host, guests, _) = Lobbies(2);
+        var guest = guests[0];
+        Settle(host, guests);
+
+        // ABLE-TO-FAIL CONTROL: an unshown host, as a Built-in board's is, ends on its results board.
+        Assert.False(guest.Options.HostLandsOnScores);
+
+        host.Show();
+        Settle(host, guests);
+        Assert.True(guest.Options.HostLandsOnScores);
+        Assert.Equal(host.Options.Epoch, guest.Options.Epoch);
+
+        var wire = new byte[DogfightOptionsMessage.Size];
+        guest.Options.Write(wire);
+        Assert.True(DogfightOptionsMessage.TryRead(wire, out var heard));
+        Assert.Equal(guest.Options, heard);
+    }
+
+    [Fact]
     public void AStuntRaceLaunchFliesTheChaptersIa1WithTheLobbysWindow()
     {
         var cli = SessionSpec.Parse(new[] { "--mission=MP2" });
@@ -1102,6 +1123,30 @@ public sealed class DogfightLobbyTests
         // ABLE-TO-FAIL CONTROL: the lobby's own round moved on, so the rows were not frozen with it.
         Assert.False(host.Ready);
         Assert.True(host.AddBot());
+    }
+
+    [Fact]
+    public void ABuiltInLaunchRefusesTheOneTeamAnOriginalGuestFormed()
+    {
+        // The Built-in host forms no team itself, so a guest's team is the only one standing.
+        var (host, guests, _) = Lobbies(2);
+        Settle(host, guests);
+        Assert.True(guests[0].CreateTeam("Away"));
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Teamed);
+        var rules = new VersusRules(0, 5);
+        Assert.Equal(DogfightLobby.RefusalText(TeamLaunchRefusal.TooFewTeams), host.CheckBuiltInLaunch("C5", rules));
+
+        // ABLE-TO-FAIL CONTROL: with no team standing the same pair flies a free-for-all.
+        Assert.True(guests[0].SetReady(false));
+        Settle(host, guests);
+        Assert.True(guests[0].LeaveTeam());
+        Settle(host, guests);
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests);
+        Assert.False(host.Teamed);
+        Assert.Null(host.CheckBuiltInLaunch("C5", rules));
     }
 
     [Fact]

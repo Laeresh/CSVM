@@ -52,15 +52,18 @@ path: [../org/logging.md](../org/logging.md). `HitchSidecar.cs` shares this sink
 ## src/Utils/FolderOpener.cs
 Shows a folder in the system file browser: `Open` creates it if missing, hands it to
 `OS.ShellOpen` (a directory path opens the file browser on Windows and Linux alike) and logs the
-open or the failure under `core`. The two folder icons in `UI/Screens/BuildStamp.cs` and
-`Sticks/StickScreens.cs`'s profiles folder button go through it.
+open or the failure under `core`. In Game Mode (`SteamOs.cs`) it refuses before the shell and logs
+the refusal, since gamescope shows no file browser and the shell still answers `Ok`. It returns a
+`FolderOpenResult` (opened, failed or refused, and the path), so a caller's screen tells a refusal
+from a failure; `Shell` is the seam a suite records. The two folder icons in
+`UI/Screens/BuildStamp.cs` and `Sticks/StickScreens.cs`'s profiles folder button go through it.
 
 ## src/Utils/LocalNetworks.cs
 The IPv4 networks this machine sits on, for the LAN search: `Ipv4()` lists the address and mask of
 every adapter that is up and not the loopback, and an empty list when the system will not say, so a
 search still asks at the limited broadcast. It lives here because `CSVM.Net` may not name
-`System.Net`, and Godot's interface list carries no masks. `Launcher.cs` hands it to the door as
-`NetPlayFeature.LanNetworks`; `Net/LanBroadcast.cs` turns it into addresses.
+`System.Net`, and Godot's interface list carries no masks. `Launch/NetFlight.cs` hands it to the door as
+`UI/Menu/LanDoor.cs`'s `Networks`; `Net/LanBroadcast.cs` turns it into addresses.
 
 ## src/Utils/HostAddress.cs
 The addresses a host names to its guests. `StableGlobalIPv6()` is the first global unicast IPv6
@@ -118,7 +121,7 @@ shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Launc
 one is raised.
 
 ## src/Utils/HitchMonitor.cs
-The always-on frame-hitch detector, ticked from `Launcher._Process` in every mode: a frame costing
+The always-on frame-hitch detector, ticked by `Launch/FrameInstruments.cs` every frame in every mode: a frame costing
 far more than its recent neighbours gets a `HitchRecord` assembled for it, describing the frame's
 cost split, its engine counts as absolutes and as deltas, its GC activity, the ring of frames
 leading up to it, and the named work `PerfSample` attributed. It only detects, and nothing is
@@ -141,7 +144,7 @@ Ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.DebrisSpawn))` adds
 that site's total for the frame in progress, and any code path can do it without knowing the
 monitor, the readout, or whether anything is listening. Statics over a preallocated per-site array,
 the same ambient shape `StartupProfile` uses and for the same reason, since a scope several call
-layers down cannot be handed an accumulator. `Launcher._Process` calls `EndFrame()` where it stamps
+layers down cannot be handed an accumulator. `Launch/FrameInstruments.cs` calls `EndFrame()` where it stamps
 the frame's wall cost, so the scopes and the `frame_ms` they ran inside describe the same span. The
 site vocabulary, the seeded call sites and the attribution terms a record carries:
 [../org/hitch.md](../org/hitch.md).
@@ -251,6 +254,16 @@ figure it is judged on; every line carries process uptime so the world-build reg
 uptime rather than by guesswork. What the two numbers mean and why the per-collection pause is the
 wrong one to read is `docs/verification.md` PERF-19 and PERF-20. Under `--gc-types` the listener
 runs Verbose and adds a `[perf] gc-types` line naming the allocation sampler's most-seen types.
+
+## src/Utils/MemoryCensus.cs
+The `--debug-mem` readout: one line of `key=value` terms splitting the process's memory by holder.
+Private bytes and their peak come from the process; the managed heap from the GC; Godot's own
+allocations, texture, buffer and video memory and the object, node and pipeline counts from its
+`Performance` monitors. The caller hands in the shader cache's count, which this layer cannot read,
+so every line has one shape. Private bytes well above the named holders is native memory no Godot
+monitor counts: on the development machine's Vulkan driver, mostly each compiled shader's variants
+(`analysis/shard-memory/FINDINGS.md`). It opens a process handle, so it runs at a suite boundary
+or once a wall second, never every frame.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
@@ -486,8 +499,7 @@ hidden. Read `Launch/Launcher.cs` next for the three sites.
 ## src/Utils/ScreenKeyboard.cs
 Steam's on-screen keyboard, raised through `OS.ShellOpen("steam://open/keyboard")` and lowered
 through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam shortcut gets it.
-`Available` is read once from the environment: `SteamDeck` or `SteamOS` set to 1, under
-`XDG_CURRENT_DESKTOP=gamescope`, which is Game Mode; Desktop Mode would open it behind the window.
+`Available` starts as `SteamOs.InGameMode`; Desktop Mode would open it behind the window.
 One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
 tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
 `Original/OriginalShell.cs`, `Screens/LaunchMenu.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
@@ -496,3 +508,9 @@ tap, never on focus, and calls `Follow` each frame so leaving its field lowers i
 One field the on-screen keyboard can be raised for: its owner and id, the label and the live text
 the echo strip repeats (masked where the field masks it), and whether the strip repeats it at all.
 The in-flight chat opts out, its line being drawn at the top left already. `ScreenKeyboard.cs` holds it.
+
+## src/Utils/SteamOs.cs
+Whether the run is in SteamOS Game Mode: `InGameMode` is read once from the environment
+(`SteamDeck` or `SteamOS` set to 1, under `XDG_CURRENT_DESKTOP=gamescope`) and is settable, so a
+suite takes either branch. `ScreenKeyboard.cs` raises its keyboard only there, and
+`FolderOpener.cs` refuses to open a folder there.

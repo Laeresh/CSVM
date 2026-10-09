@@ -83,8 +83,9 @@ Every step in order, for one agent at a time:
    the message with its number. Run
    `.\CheckWaiver.ps1 -MessageFile <message> -Root <agent>` for the form. A waiver is a record,
    not a way past the owner: never waive a failure the item itself caused.
-2. Normalise the trailer in the message to `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
-   (agents write a longer model name). Count em dashes (U+2014) in the message, in
+2. Check the message's trailer names the model the agent ran as, per `PROJECT_CONTEXT.md`'s
+   AI-assistance rule (e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`); never
+   rename it to another model. Count em dashes (U+2014) in the message, in
    `git -C <agent> diff -U0` and in every untracked file; fix any in place before committing.
 3. `git -C <agent> add -A; git -C <agent> commit -q -F <message>`. The format hook builds the
    agent's tree; a ` M` it leaves on a file the agent never touched is a line-ending rewrite, check
@@ -131,13 +132,15 @@ Every step in order, for one agent at a time:
    goldens; `-Suite <name>` for one; "selector matched nothing" is a FAIL). Read the log's tail.
    - A moved golden the agent re-pinned is fine when the agent proved confinement (pixel diff
      inside the mechanism's footprint) and the manifest carries the new hash.
-   - A moved golden nobody re-pinned: re-run goldens alone with two workers on a quiet machine.
-     `c1-flight-kill` flakes under load and reads back at its pinned hash; a reproducible move from
-     a change that cannot reach the shot is bisected before landing, never re-pinned to pass.
+   - A moved golden nobody re-pinned: re-run goldens alone with two workers and `-WaitQuiet`.
+     A reproducible move from a change that cannot reach the shot is bisected before landing,
+     never re-pinned to pass.
    - Two items moving the same shots: take HEAD's hashes, run goldens (expect exactly those shots
      MOVED), `-RegenGoldens`, re-check 18/18, note it in the commit message.
-   - "Cannot instantiate C# script" or "no PNG" on shots: the assembly was rebuilt under a running
-     Godot, usually another test pass on the machine; re-run when quiet.
+   - `DEFERRED: rebuild`: `CSVM.dll` changed under the run (a commit's format gate rebuilding the
+     run tree, or an agent building it), and the runner stopped; re-run once that build is done.
+   - A red listed in `docs/verification.md`'s known environmental reds: rerun it alone with the
+     command given there; green alone, land with a `Waiver:` naming the listed owner.
    - A real failure: do not commit. Send the agent the failure with `SendMessage` (it resumes with
      its context) or fix a one-line cause yourself and say so in the message.
    - A failure that is red on the run branch's HEAD without this squash is not the item's; the
@@ -185,8 +188,9 @@ is" merges.
 The merge itself: `git -C Z:\CSVM merge --ff-only <run>`
 after the run branch contains main, then `.\CheckItemIds.ps1` on main. "Not possible to
 fast-forward" means main moved again: merge it in first. Never push. Then post every close in the
-log's `## Closes pending` section, `gh issue close N --comment-file <close.txt>` with the landing
-commit's hash added, and move each to the item's log line.
+log's `## Closes pending` section: `gh issue comment N --body-file <close.txt>` with the landing
+commit's hash added, then `gh issue close N` (it takes no comment file), and move each to the
+item's log line.
 
 ## 6. Batteries
 

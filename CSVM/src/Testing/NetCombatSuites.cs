@@ -564,9 +564,9 @@ internal static class NetCombatSuites
         const string GuestName = "Laeresh";
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
         var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
-        hostDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = HostName, GameName = GameName }, game: true);
+        hostDoor.Identity.Take(new UI.Menu.NetPlayerInfo { Callsign = HostName, GameName = GameName }, game: true);
         var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
-        guestDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = GuestName, Voice = 1 }, game: false);
+        guestDoor.Identity.Take(new UI.Menu.NetPlayerInfo { Callsign = GuestName, Voice = 1 }, game: false);
         Ends? host = null;
         Ends? guest = null;
         try
@@ -587,7 +587,7 @@ internal static class NetCombatSuites
             }
 
             var planes = new[] { Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
-            var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+            var (roster, _) = SeatFields.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             string named = SeatRosterMessage.Carried(HostName).Trim();
             ctx.Check(roster[0].Callsign == named && named.Length > 0 && named != HostName && HostName.StartsWith(named, StringComparison.Ordinal),
                 $"[named host] the host's seat takes its callsign, not the game's name, cut to the roster's width ({roster[0].Callsign})");
@@ -669,7 +669,7 @@ internal static class NetCombatSuites
             }
 
             var planes = new[] { Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
-            var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+            var (roster, _) = SeatFields.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
                 Flight.Hangar.StockAirframes.Nodes);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
@@ -694,14 +694,14 @@ internal static class NetCombatSuites
             }
 
             FlyTogether(SettleSteps, host, guest, hostDoor, guestDoor);
-            ctx.Check(guestDoor.Stage == UI.Menu.NetDoorStage.Joined && !Launcher.VersusGuestFlightOver(guestDoor),
+            ctx.Check(guestDoor.Stage == UI.Menu.NetDoorStage.Joined && !NetFlight.VersusGuestFlightOver(guestDoor),
                 $"ABLE-TO-FAIL CONTROL: [{how}] with the host flying the guest's flight goes on ({guestDoor.Stage})");
 
             var guestWire = (NetLobby)guestLaunch.Transport;
             int steps = quits
                 ? QuitThroughThePause(host, guest, hostDoor, guestDoor, hostLaunch.Transport)
                 : DropTheHost(ctx, mesh, host, guest, hostDoor, guestDoor);
-            ctx.Check(Launcher.VersusGuestFlightOver(guestDoor) && guestDoor.Fault == UI.Menu.CoopDoorText.HostLeft,
+            ctx.Check(NetFlight.VersusGuestFlightOver(guestDoor) && guestDoor.Fault == UI.Menu.CoopDoorText.HostLeft,
                 $"[{how}] the guest's flight ends {steps} step(s) later with \"{UI.Menu.CoopDoorText.HostLeft}\" ({guestDoor.Stage}, \"{guestDoor.Fault}\")");
             ctx.Check(quits ? guestWire.Closed is { Reason: NetCloseReason.Closed } : guestWire.Closed == null,
                 $"[{how}] {(quits ? "on the host's close notice" : "with no close notice, off the link alone")} ({guestWire.Closed?.Reason.ToString() ?? "none"})");
@@ -722,7 +722,7 @@ internal static class NetCombatSuites
     {
         mesh[0].Disconnect(mesh[1].LocalPeer);
         int steps = 0;
-        while (steps < SettleSteps && !Launcher.VersusGuestFlightOver(guestDoor))
+        while (steps < SettleSteps && !NetFlight.VersusGuestFlightOver(guestDoor))
         {
             FlyTogether(1, host, guest, hostDoor, guestDoor);
             steps++;
@@ -739,9 +739,9 @@ internal static class NetCombatSuites
         UI.Menu.NetPlayFeature guestDoor, INetTransport hostWire)
     {
         host.Close();
-        Launcher.EndNetWire(hostDoor, hostWire, keepLobby: false);
+        NetFlight.EndNetWire(hostDoor, hostWire, keepLobby: false);
         int steps = 0;
-        while (steps < SettleSteps && !Launcher.VersusGuestFlightOver(guestDoor))
+        while (steps < SettleSteps && !NetFlight.VersusGuestFlightOver(guestDoor))
         {
             guest.Session._PhysicsProcess(GameClock.FixedDt);
             StepDoors(1, hostDoor, guestDoor);
@@ -1649,7 +1649,8 @@ internal static class NetCombatSuites
             IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
             Func<CoopWingmanMessage?>? coopWingman = null,
             Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
-            IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null)
+            IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null,
+            Action? lobbyLanding = null, UI.Menu.PresentationId? presentation = null)
         {
             var pane = new SubViewport
             {
@@ -1683,11 +1684,14 @@ internal static class NetCombatSuites
                 Sun = sun,
                 Env = new Godot.Environment(),
                 // A suite that hands over its own exit stands in for the launcher's menu, as a lobby
-                // flight's is.
-                MenuDriven = exitSession != null,
+                // flight's is. A landing stands in for a lobby whose host lands on Game Scores, by
+                // default an Original host's.
+                MenuDriven = exitSession != null || lobbyLanding != null,
                 MenuPads = null,
-                Presentation = UI.Menu.PresentationId.BuiltIn,
+                Presentation = presentation
+                    ?? (lobbyLanding != null ? UI.Menu.PresentationId.Original : UI.Menu.PresentationId.BuiltIn),
                 ExitSession = exitSession ?? (() => { }),
+                VersusLobbyLanding = lobbyLanding,
                 RestartSession = () => { },
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,

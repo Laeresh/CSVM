@@ -119,14 +119,14 @@ payload at or below the newest on its channel is discarded. `Lost` (per channel 
 channel, which no sequence stream rides. Read `LoopbackTransportTests.cs`.
 
 ## src/Net/EnetTransport.cs
-The shipped carrier over Godot's ENet peer, and the one type under `CSVM/` allowed to name a Godot
-networking type. `Host` opens a listen server on every address `ListenAddresses` names (for `*`:
-IPv4's wildcard, the stable global IPv6 address and `::1`) as one roster, so a reply leaves from the
-address a guest dialled; a guest drops a reply from a temporary one. `Join` reports the host (peer 1)
-joining. Every roster change and payload comes out of `Step`. A service thread polls ENet when the
-main thread has not stepped for `ServiceGapSeconds`, up to `Keepalive.CeilingSeconds`, so a
-blocking mission load keeps acknowledging. `INetLink` is where a board reads the socket, and a
-socket with no listener holds what lands and replays it on `Bind`. Read `NetLink.cs` next.
+The shipped carrier over Godot's ENet peer, the one type under `CSVM/` allowed to name a Godot
+networking type. `Host` opens one roster over every address `ListenAddresses` names (for `*`:
+IPv4's wildcard, the stable global IPv6 address, `::1`), so a reply leaves from the address a guest
+dialled; a guest drops one from a temporary address. `Join` reports the host as peer 1. Every roster
+change and payload comes out of `Step`. A service thread polls when the main thread has not stepped
+for `ServiceGapSeconds`, up to the keepalive's ceiling, so a blocking load keeps acknowledging. A
+socket with no listener holds what lands and replays it on `Bind`. At quit, the launcher's
+`CloseAll` ends every service thread before the engine disposes the peers. Read `NetLink.cs` next.
 
 ## src/Net/NetLink.cs
 `NetLinkState`, where one end's link stands (connecting, up, down) in words a board can show
@@ -136,7 +136,7 @@ a fault as a player reads it. `HeldPayloads` is the one depth every carrier hold
 `Bind`. A carrier without it, the loopback, is read through its peer roster instead.
 
 ## src/Net/NetCarrier.cs
-Which carrier a match runs over, chosen once: the menu door's registration in `Launcher.cs` and
+Which carrier a match runs over, chosen once: the menu door's registration in `Launch/NetFlight.cs` and
 the command line's own open both come through `Host` and `Join`, so a build changes carrier with
 no edit above the seam. `Name` is the log word. `PortMap`/`PortUnmap` are
 the router door a direct-IP host asks for, `Pinhole` (given the address) and `PinholeClose` its
@@ -338,7 +338,7 @@ Where a search asks each round: `Limited` (255.255.255.255) first, then the dire
 (address with every host bit set) of each IPv4 network the machine sits on, once each, loopback and
 single-host masks skipped. ⚠ The limited broadcast alone is not enough: Windows sends it out of one
 adapter only, so a machine with several adapters can miss its host's network. The networks come
-from `Utils/LocalNetworks.cs` through `NetPlayFeature.LanNetworks`.
+from `Utils/LocalNetworks.cs` through `UI/Menu/LanDoor.cs`'s `Networks`.
 
 ## src/Net/LoopbackLan.cs
 The in-process datagram network the suites and the screenshot aids run the LAN search on, the
@@ -383,7 +383,7 @@ wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.
 
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
-`DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3), `DogfightRosterMessage`
+`DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3) and a spare flag bit saying whether the host's match lands on Game Scores, `DogfightRosterMessage`
 the whole player list with each row's team, a bot row's tier and Random plane, and the reading
 guest's own row marked, and `LobbyChatMessage` one typed line, which the host relays.
 `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's

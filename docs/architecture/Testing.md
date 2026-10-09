@@ -23,16 +23,15 @@ chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-repo
 Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
 (a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
-cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
+cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. After a suite that grew Godot's static memory it collects and finalizes, so dead wrappers free their sessions before the next suite (`CollectAfterStaticGrowth`). A destroyed `TestWorld` takes the shader cache's tracked materials with it. Under `--debug-mem` the harness logs a `MemoryCensus` line per suite, with the cache's tracked count. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/FinalizerGate.cs
 The `--debug-finalizers` instrument: `TestHarness.Run` wraps each suite in one gate, which parks the
 .NET finalizer thread on a sentinel, forces a collection every few milliseconds while the suite runs,
 then releases and drains the queue before the next suite. A Godot wrapper finalized after its object
 was reached again natively then logs its error at the boundary of the suite that dropped it, and the
-gate's own `finalizer gate` line counts those throws. Off unless the flag is given. It also gives
-any suite Godot's global object count after finalizer drains have settled it, without waiting on a
-gate it holds. Read `docs/verification.md` for the binding states it exposes.
+gate's own `finalizer gate` line counts those throws. Off unless the flag is given. Read
+`docs/verification.md` for the binding states it exposes.
 
 ## src/Testing/SuiteShards.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
@@ -40,8 +39,9 @@ and the division behind it. `Parse` lifts that term out of a `--run-tests=` valu
 back as the selector; `Plan` divides an already-selected list longest-unit-first onto the lightest
 shard and returns each shard in the input's order, so one tree always divides the same way.
 `SuiteWeights` reads the measured per-suite seconds in `analysis/engine-suite-weights.json`, with a
-default for a suite the file does not name and `Groups` for the sets a shard may not split. Read
-`TestHarness.cs` for where a plan is applied.
+default for a suite the file does not name, `Groups` for the sets a shard may not split and `Alone`
+for the suites `Plan` puts last, one to a shard, which `RunTests.ps1` adds on top of its shared
+count. Read `TestHarness.cs` for where a plan is applied.
 
 ## src/Testing/SuitePorts.cs
 The one table of where each suite that opens a real socket opens it: an offset into this process's

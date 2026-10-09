@@ -327,16 +327,23 @@ public sealed class WeatherRig
         => (0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
            < NightFogLuminance;
 
-    /// <summary>The fog range as written: the authored pair in the faithful path, pushed out by
-    /// <c>EnhancedFogRangeScale</c> in enhanced mode so shadowed ground is not already grey. Pure
-    /// and identity in original mode, which is what keeps that path byte-for-byte the authored
-    /// one.</summary>
-    public static Vector2 FogRangeFor(Vector2 authored)
-        => GraphicsMode.Enhanced ? authored * EnhancedFogRangeScale : authored;
+    /// <summary>The fog range as written. Enhanced mode pushes the authored pair out by
+    /// <c>EnhancedFogRangeScale</c>, so shadowed ground is not already grey. Pure and identity in
+    /// original mode, which keeps that path byte-for-byte the authored one. A night
+    /// <paramref name="zone"/> keeps its authored range in both modes. Its fog is near black, and a
+    /// pushed range leaves lit walls standing far out over ground already gone dark. A view with
+    /// no zone takes the push.</summary>
+    public static Vector2 FogRangeFor(Vector2 authored, WeatherState.ZoneWeather? zone)
+        => GraphicsMode.Enhanced && !(zone is { } night && IsNightZone(night)) ? authored * EnhancedFogRangeScale : authored;
 
-    /// <summary>The push factor <see cref="FogRangeFor"/> applies as a plain scalar (identity, 1,
-    /// in original mode), so another distance-gated population can follow the same pushed fog
-    /// without this class exposing <c>EnhancedFogRangeScale</c> itself.</summary>
+    /// <summary>One zone's own authored fog range, as <see cref="FogRangeFor(Vector2, WeatherState.ZoneWeather?)"/>
+    /// writes it.</summary>
+    public static Vector2 FogRangeFor(WeatherState.ZoneWeather zone)
+        => FogRangeFor(new Vector2(zone.FogNear, zone.FogFar), zone);
+
+    /// <summary>The Enhanced fog push as a plain scalar, identity in original mode. The fog itself
+    /// skips it in a night zone. The clutter reach (<c>EnhancedLook.ClutterFadeScaleSq</c>) still
+    /// takes it in every zone.</summary>
     public static float EnhancedFogScale() => GraphicsMode.Enhanced ? EnhancedFogRangeScale : 1f;
 
     /// <summary>Paints one Environment's sky a single flat colour, enhanced mode's stand-in for
@@ -424,11 +431,11 @@ public sealed class WeatherRig
         // The event is the world's, so every view takes it; each view's own next edge writes its
         // zone back over it.
         _baseFog.Over = fog;
-        _baseFog.Fog = WithFogState(_baseFog.Fog, fog);
+        _baseFog.Fog = WithFogState(_baseFog.Fog, fog, _baseFog.Zone);
         foreach (var view in _views.Values)
         {
             view.Over = fog;
-            view.Fog = WithFogState(view.Fog, fog);
+            view.Fog = WithFogState(view.Fog, fog, view.Zone);
         }
         WriteGlobals(PrimaryView().Fog, FieldsOf(fog));
         Log.Info("world", $"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': {(fog.Color is { } c ? Log.Format($"fog {c.R:0.00} gray, ") : "")}{(fog.Range is { } r ? Log.Format($"range {r.X:0}–{r.Y:0} m, ") : "")}{(fog.Altitude is { } a ? Log.Format($"altitude {a.X:0}–{a.Y:0} m") : "")}{(_spec.NoFog ? " (--no-fog: range untouched)" : "")}");
@@ -675,7 +682,7 @@ public sealed class WeatherRig
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         return Log.Format($"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
                + Log.Format($"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), ")
-               + Log.Format($"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X:0} m")
+               + Log.Format($"shadows to {FogRangeFor(fog).X:0} m")
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
@@ -984,7 +991,7 @@ public sealed class WeatherRig
         // (docs/org/weather.md). FogRangeFor is identity there; only enhanced mode pushes them out.
         var fogRange = _spec.NoFog
             ? new Vector2(1e8f, 1e9f)   // out of reach; --no-fog writes the range, not the unused csky_fog_on toggle
-            : FogRangeFor(new Vector2(fog.FogNear, fog.FogFar));
+            : FogRangeFor(fog);
         // FOG_ALTITUDE: the fog cylinder's vertical extent, full fog below FogLow, fading to
         // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original,
         // see csky_atmosphere.gdshaderinc and docs/org/weather.md).
@@ -999,7 +1006,7 @@ public sealed class WeatherRig
     }
 
     // One FOG_STATE over a view's fog: only the fields the event carries, the record's dirty bits.
-    private FogWritten WithFogState(FogWritten fog, AnimRuntime.FogStateChange over)
+    private FogWritten WithFogState(FogWritten fog, AnimRuntime.FogStateChange over, WeatherState.ZoneWeather? zone)
     {
         if (over.Color is { } color)
         {
@@ -1009,7 +1016,7 @@ public sealed class WeatherRig
         if (over.Range is { } range && !_spec.NoFog)
             // Through the same push the zone's range takes. Otherwise a FOG_STATE edge in enhanced
             // mode would snap the haze back to the authored distance mid-flight.
-            fog = fog with { Range = FogRangeFor(range) };
+            fog = fog with { Range = FogRangeFor(range, zone) };
         if (over.Altitude is { } altitude)
             fog = fog with { Altitude = altitude };
         return fog;
@@ -1028,7 +1035,7 @@ public sealed class WeatherRig
         if (view.Zone is { } zone)
             view.Fog = ZoneFog(zone);
         if (view.Over is { } over)
-            view.Fog = WithFogState(view.Fog, over);
+            view.Fog = WithFogState(view.Fog, over, view.Zone);
     }
 
     // The view the session's light and the plain fog globals follow.
@@ -1112,7 +1119,7 @@ public sealed class WeatherRig
         // a registered clone owns its own camera-relative distance (RegisterExtraLighting).
         if (fog.FogFar > 0f)
         {
-            _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X;
+            _sun.DirectionalShadowMaxDistance = FogRangeFor(fog).X;
             _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);

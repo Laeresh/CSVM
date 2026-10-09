@@ -685,10 +685,19 @@ A run's start count, engine-free and one per seat: `Begin` takes the figures (`R
 `Opening` puts READY first for a race window), `Advance` steps it on the sim dt and answers a beat
 per figure and GO, and `Figure` is what the HUD draws, GO lingering for `GoSeconds`. `WalkPose` is
 the kinematic walk the aircraft rides meanwhile, back along the spawn nose by the spawn speed times
-the time left, answering the spawn pose itself at GO. `FlightController.BeginStartCount` drives it,
-holding the controls and the run clock until the step after GO; `StuntRunHud` draws the figure and
-`FlightAudio.OnStartCount` sounds it. `CatchUp` moves a network guest's opening on to its host's.
+the time left, answering the spawn pose itself at GO. `StuntRunControl` owns and steps it, holding
+the run clock until the step after GO; `StuntRunHud` draws the figure and `FlightAudio.OnStartCount`
+sounds it. `CatchUp` moves a network guest's opening on to its host's.
 Coverage: `CSVM.Tests/StartCountTests.cs`, suite `stunt-start-count`.
+
+## src/Flight/Modes/StuntRunControl.cs
+A stunt seat's run control, engine-free and one per seat. The respawn button splits by hold length
+(`TapHoldButton`) into a `StuntRunCall`, a tap's return or a hold's rerun, answered by `StepCrashed`
+(where the crash cam's timer also returns) and `StepLive`. It owns the seat's `StartCount`, begun,
+cancelled and caught up through it: `StepClock` sets `Counting` and ticks the run clock unless the
+count holds it, and `StepCount` answers the cue of a step that is the count's. `ArmReturn` and
+`TakeReturn` hold a tap's pose. `FlightController` performs the answers (the respawn, the walk, the
+cue). Coverage: `CSVM.Tests/StuntRunControlTests.cs`, suite `stunt-start-count`.
 
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
@@ -856,7 +865,7 @@ on the time-out (leader wins, equal top scores draw), `Standings()` ranks by sco
 and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves
 nothing and only `ApplyState` ends or re-arms a match. `OutOfLives` holds a spent pilot down, `Leave` marks a dropped one, fewer than two
-pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home or a gas bag. `EndOnHullLoss` is Zeppelin vs Zeppelin's end, naming the `ObjectiveWinner` and adding to every other team's term (`TeamTermOf`), which `TeamTotalOf` shows and the Score limit never reads; `RegisterZeppelinKill` sets the term of the side whose hull downed a pilot. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
+pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home or a gas bag. `EndOnHullLoss` is Zeppelin vs Zeppelin's end, naming the `ObjectiveWinner` and adding to every other team's term (`TeamTermOf`), which `TeamTotalOf` shows and the Score limit never reads; `RegisterZeppelinKill` sets the term of the side whose hull downed a pilot. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusStatusLine`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
 
 ## src/Flight/Modes/VersusSpawnRotation.cs
 Where a Dogfight seat comes back, engine-free: it owns the per-seat spawn-list ledger the opening
@@ -867,25 +876,23 @@ there is no list, `ForBlocks` keeps each seat of a team match inside its team's 
 caller-supplied `Random` so a pinned run replays. `Session/World/VersusDirector.cs` feeds it the live field; offline it hands the pick to `FlightController.RespawnPlacement`, and in a match only the host holds a rotation at all, its pick crossing the wire as a table entry.
 Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `versus-spawn-rotation` and `net-spawn-rotation`.
 
-## src/Flight/Modes/VersusHud.cs
-The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
-leader, a bot by callsign through `BotName` and a person by player tag, or in a team match this pane's team total and the leading team) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
-on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`,
-a teammate's in `TargetHud`'s friendly green (`MarkerColor`). The status line steps aside while `StatusHiddenWhile` answers true (the seat's held scores); the markers stay.
-`Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
-and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `HudMessages`
-words and shows it, the one message element the original has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
-provenance is in [../org/targeting.md](../org/targeting.md).
+## src/Flight/Modes/VersusStatusLine.cs
+The per-pane match status line of every versus mode: remaining time, this pane's kills and deaths, and the
+leader (`LeaderText`: a bot by callsign through `BotName` and a person by player tag, or in a team match this pane's team total and the leading team), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
+It steps aside while `StatusHiddenWhile` answers true (the seat's held scores).
+`Build` binds the match and this pane's seat; `HumanFlightAdapter` builds one per local pane, `FlightHud.Attach` adds it to the pane's HUD canvas, and nothing feeds it per frame.
+It draws no per-seat markers: players find and mark each other through `TargetHud`, as in the original. A kill has no banner of its own here: `HudMessages`
+words and shows it, the one message element the original has. `CSVM.Tests/VersusLeaderTextTests.cs` pins the leader rule.
 
 ## src/Flight/Hud/HudMessages.cs
 The original's one centred HUD message element: four slots a fifth of the way down the pane, newest
-in slot 0, each with its own colour and five seconds; a newer line pushes the older ones down and
-a re-post of slot 0 refreshes it. `KillLine` words one death as the reading pane sees it (its own
-pilot by name, a wingman with no name, any other aeroplane by its title, anything else destroyed),
-`SideOf` picks the colour arm off the victim's team, `WordsKillLine` keeps a hull flown into the
-world off that line, `PostCrash`/`PostTimeExpired` are the two notices that are not a death, and
-`MatchKillLines` words a Dogfight death the same on every machine and `FlagLine` a Capture the Flag row. All static, so a suite asserts
-the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+in slot 0, each with its own colour and five seconds of sim time, which a pause holds; a newer line
+pushes the older ones down and a re-post of slot 0 refreshes it. `KillLine` words one death as the
+reading pane sees it (its own pilot by name, a wingman with no name, any other aeroplane by its
+title, anything else destroyed), `SideOf` picks the colour arm off the victim's team, `WordsKillLine`
+keeps a hull flown into the world off that line, `PostCrash`/`PostTimeExpired` are the two notices
+that are not a death, and `MatchKillLines` words a Dogfight death the same on every machine and
+`FlagLine` a Capture the Flag row. All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/Hud/PromptLine.cs
 A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's
@@ -1293,7 +1300,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant, while `Respawned` runs after every return for what the seat's assembler owes a fresh airframe), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run's `StuntRunControl` splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant, while `Respawned` runs after every return for what the seat's assembler owes a fresh airframe), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`) and the AI's weapons tick `AiWeaponsDrive`. The seat's keymap and device readers are `SeatControls`; this node performs what each of those

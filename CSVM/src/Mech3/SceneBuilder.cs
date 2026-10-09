@@ -290,6 +290,10 @@ public sealed class SceneBuilder
     /// have always used and keeps them byte-identical.</summary>
     internal IReadOnlyDictionary<int, int>? ConflictRanks;
 
+    /// <summary>Called with each node a build makes, before its contents. A suite's only view of a
+    /// build that throws before it returns its root. Null outside that suite.</summary>
+    internal Action<Node3D>? NodeMade;
+
     private const string LightShaderCode = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
@@ -1079,6 +1083,7 @@ void fragment() {
             collidable = false;
 
         var n3d = new Node3D { Name = Sanitize(node.Name) };
+        NodeMade?.Invoke(n3d);
         try
         {
             FillSubtree(n3d, node, skip, collisionSkip, collidable, forceDoubleSided, forceLit, zoneGate, applyActive);

@@ -291,6 +291,7 @@ rows).
 - `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, a multiplayer `net.zrd` table by block, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
+- `src/Flight/Modes/StuntRunControl.cs`, a stunt seat's run control, engine-free: the tap/hold respawn split, the start count's stepping and the clock it holds, the pose a tap returns to.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
 - `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
@@ -303,7 +304,7 @@ rows).
 - `src/Flight/Modes/ZeppelinVersus.cs`, Zeppelin vs Zeppelin's rules, engine-free: the two sides and their hulls, what a dead gas bag or cannon scores, the return by the pilot's own hull.
 - `src/Flight/Modes/RearmBases.cs`, the multiplayer rearm's rules, engine-free: which bases serve a pilot, the radius, and each seat's once-per-entry latch.
 - `src/Flight/Modes/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
-- `src/Flight/Modes/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
+- `src/Flight/Modes/VersusStatusLine.cs`, per-pane versus match status line: remaining time, this player's kills and deaths, the leader.
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
 - `src/Flight/Modes/SeatPause.cs`, one seat's pause key and the halt it mirrors, the photo-mode and options-leaf silences, and the network sheet over a running flight.
 
@@ -360,7 +361,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 **`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu and the seat input it polls, the list and slider widgets, the splitscreen rig and the canvas-layer order.
 
 - `src/UI/Boards/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
-- `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
+- `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Preferences, Exit, Scroll.
 - `src/UI/Boards/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/Boards/BoardMenuHost.cs`, menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/Boards/BoardMenuPointer.cs`, the menu owner's pointer over a board menu: enter a row to move the cursor, release on the pressed row to fire it.
@@ -527,12 +528,18 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/NetPlayFeature.cs`, the multiplayer door as a shared feature: the port and address, the socket, the link readouts, the session advert, the wire a launch takes.
+- `src/UI/Menu/NetIdentity.cs`, the door's answers from the Game and Player Information boxes: callsign, voice, game name, cap, password and listing, the last two for one session.
+- `src/UI/Menu/InternetDoor.cs`, the door's master server link: the internet games list, the join by code, a host's listing with its code and why there is none.
+- `src/UI/Menu/HostReach.cs`, what a host hands its guests to reach it: the address a guest types and the clipboard copy of it or the join code.
+- `src/UI/Menu/LanDoor.cs`, the door's LAN discovery: the search for open doors and a host's answers to other machines' searches.
+- `src/UI/Menu/NetAdmission.cs`, who a host seats: refusals by version, cap, password and boot with their grace, and a co-op host's seat grants.
 - `src/UI/Menu/NetPlayerInfo.cs`, what the Game and Player Information boxes ask: the game's name, password and cap, the callsign and voice, the cap clamp and their remembered values.
 - `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar with each plane's holder, debrief result and shared film, each guest's words sent again only when they changed.
 - `src/UI/Menu/CoopGuestPick.cs`, a guest's own pick: airframe, fit, Ready and the walk-out mark, sent under the host's round.
 - `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list with the host's bot rows, picks and Ready, chat, and the launch gate.
 - `src/UI/Menu/DogfightBots.cs`, the bot rows a Dogfight host keeps and their rules, shared by the network lobby and the local join board: add, fill, rename, edit, the newest yielding, the launch entries.
 - `src/UI/Menu/CoopDoorText.cs`, the words the campaign's network door is drawn in: the host's band, the advertised session's name, the join and waiting boards' status lines.
+- `src/UI/Menu/FolderButtonText.cs`, the words a folder button's screen shows when SteamOS Game Mode refused the open.
 - `src/UI/Menu/NetDoorAid.cs`, the loopback multiplayer doors the screenshot aids stand on: no socket, no router, a campaign host already advertising.
 - `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, its three partials below, and the dialog and cheats it holds.
 - `src/UI/Menu/Original/OriginalShellDialog.cs`, the standing messagebox the shell holds: the box raised and taken down, the `DIALOG:*` answer keys, its rows and how it composes over the screen.
@@ -553,6 +560,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalWrapupScreen.cs`, the Instant Action wrap-up page as one standalone module: one ended mission's frozen numbers on the notepad, prints that open full size, CONTINUE back to the screen.
 - `src/UI/Menu/Original/OriginalPauseBoard.cs`, the Original presentation's pause screen: the mission's own `escape.zrd` sheet over the held world, on the same seam.
 - `src/UI/Menu/Original/OriginalRaceTable.cs`, a stunt race's standings drawn on the lobby's Game Scores page at any page corner, the piece every Original race board composes.
+- `src/UI/Menu/Original/OriginalScrollBar.cs`, the multiplayer scripts' scroll control, one implementation for Game Scores, the outlaw list and the race board's lists.
 - `src/UI/Menu/Original/OriginalRaceResults.cs`, the Original end-of-race screen, engine-free: the lobby on Game Scores with the standings, zone key, splits and three plaques.
 - `src/UI/Menu/Original/OriginalRaceBoard.cs`, the Original presentation's end-of-race board over the panes: wakes on the race's end, halts, retires on a new window.
 - `src/UI/Menu/Original/OriginalHangarScreen.cs`, the hangar as one standalone module: the name screen, the tabbed hub, the totals page, the inventory.
@@ -590,7 +598,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/DisplayModeSetting.cs`, the window's display mode: the saved word against the shipped borderless default, and the one place the window mode is set.
 - `src/Utils/EffectPools.cs`, the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs`, the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
-- `src/Utils/FolderOpener.cs`, creates a folder if missing and shows it in the system file browser, logging the open or the failure; the stamp's icons and the profiles folder button use it.
+- `src/Utils/FolderOpener.cs`, creates a folder if missing and shows it in the system file browser, logging the open or the failure, and refuses in SteamOS Game Mode, answering which of the three happened; the stamp's icons and the profiles folder button use it.
 - `src/Utils/GameClock.cs`, the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
 - `src/Utils/GraphicsMode.cs`, the opt-in enhanced-lighting setting, resolved at launch into the one boolean every scene builder reads, and switched live after it.
 - `src/Utils/HitchMonitor.cs`, the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record; it logs nothing itself.
@@ -637,6 +645,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/WorldBackdrop.cs`, the persistent environment's background: flat black while the menu owns the screen, the sky again at every launch.
 - `src/Utils/ScreenKeyboard.cs`, Steam's on-screen keyboard by `steam://` URL, raised for a field a pad press or a tap armed, in SteamOS Game Mode only.
 - `src/Utils/ScreenKeyboardField.cs`, one field the on-screen keyboard can be raised for: owner, id, label, live text and whether it is echoed.
+- `src/Utils/SteamOs.cs`, whether the run is in SteamOS Game Mode, read once from the environment and settable for a suite.
 
 ### `src/Testing/`, the in-engine assertion harness
 
@@ -645,7 +654,7 @@ determinism repo-wide; read `docs/verification.md` first.
 `src/Tooling/`.
 
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
-- `src/Testing/FinalizerGate.cs`, `--debug-finalizers`: parks the finalizer thread for a suite and drains it at the suite's end, so a late wrapper finalizer errors beside the suite that dropped it; also the settled global object count.
+- `src/Testing/FinalizerGate.cs`, `--debug-finalizers`: parks the finalizer thread for a suite and drains it at the suite's end, so a late wrapper finalizer errors beside the suite that dropped it.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
 - `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/ScreenKeyboardRecorder.cs`, a suite's stand-in for the on-screen keyboard: available, its URLs recorded, the detected state put back on dispose.
@@ -666,6 +675,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/Probes.cs`, the assertion cores behind the `--dump-*` reports: one pass yields the report text and the verdict a suite asserts on.
 - `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
 - `src/Tooling/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
+- `src/Tooling/MemoryAdmission.cs`, the engine's side of the machine-wide memory ledger: a scripted launch below the floor refuses to start, an unadmitted one registers itself.
 - `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
@@ -684,6 +694,9 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 The process and the per-launch session: the top family bar `Testing`, so nothing else names it.
 
 - `src/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
+- `src/Launch/FrameInstruments.cs`, the process's frame instruments on wall time: the hitch monitor and sidecar, the rate line, the F14 readout, and the opt-in `--perf`, `--debug-mem` and `--hitch-inject`.
+- `src/Launch/NetFlight.cs`, the multiplayer door and the wire a flight carries: the command line's socket, a menu launch's wire and field, the in-flight door upkeep, the lobby landing and the wire's end.
+- `src/Launch/SeatFields.cs`, who sits where at a launch: the co-op, lobby Dogfight, command-line and local-bot seat rosters, with each seat's fit and custom plane.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
 - `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.

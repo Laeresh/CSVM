@@ -55,7 +55,7 @@ internal static class NetBotYieldSuites
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(5121));
         var gate = new ArrivalGate(mesh[0]);
         var hostDoor = new NetPlayFeature((_, _, _) => gate, (_, _) => throw new InvalidOperationException("the host does not join"));
-        hostDoor.Take(new NetPlayerInfo { Callsign = HostName, GameName = "Bots" }, game: true);
+        hostDoor.Identity.Take(new NetPlayerInfo { Callsign = HostName, GameName = "Bots" }, game: true);
         var lateDoor = GuestDoor(gate, mesh[1], LateName);
         var earlyDoor = GuestDoor(gate, mesh[2], EarlyName);
         var ambient = NetCombatSuites.Ambient.Save();
@@ -110,7 +110,7 @@ internal static class NetBotYieldSuites
 
             director.Match.Advance(MatchSeconds);
             Fly(SettleSteps, host, hostDoor, lateDoor);
-            var landing = Launcher.LobbyLanding(true, lobby, director.Match, host.Session.NetSeats);
+            var landing = NetFlight.LobbyLanding(true, lobby, director.Match, host.Session.NetSeats);
             ctx.Check(landing != null && hostDoor.Reclaim(), $"the finished match lands the host on its lobby and the door takes its wire back");
             var lines = landing?.Scores ?? Array.Empty<DogfightScore>();
             ctx.Check(lines.Select(l => l.Name).OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(seats.OrderBy(n => n, StringComparer.Ordinal))
@@ -237,7 +237,7 @@ internal static class NetBotYieldSuites
     private static NetSeat[] Field(MenuNetLaunch launch, DogfightLobby lobby, IReadOnlyList<string> pool)
     {
         var planes = new[] { StockAirframes.Node(lobby.Airframe) };
-        var (roster, _) = Launcher.VersusLaunchField(launch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load(),
+        var (roster, _) = SeatFields.VersusLaunchField(launch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load(),
             lobby.Rules, lobby.TeamOfPeer, lobby.LaunchBots, pool, new Random(3));
         return roster;
     }
@@ -251,7 +251,7 @@ internal static class NetBotYieldSuites
             gate.Arrive(end.LocalPeer);
             return end;
         });
-        door.Take(new NetPlayerInfo { Callsign = callsign }, game: false);
+        door.Identity.Take(new NetPlayerInfo { Callsign = callsign }, game: false);
         return door;
     }
 

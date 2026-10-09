@@ -352,6 +352,35 @@ internal static class EnetTransportSuites
             $"ABLE-TO-FAIL CONTROL: a host on the dual-stack wildcard does not admit the same guest ({dropped.LinkState}, roster {Ids(wild.Peers)})");
     }
 
+    [Suite("enet-quit-close",
+        "a quit closes every ENet socket ahead of the engine's teardown: CloseAll drops a linked pair "
+        + "nobody closed, both links read down and a step after it is harmless. A second linked pair "
+        + "is left open to this process's own quit, whose launcher must close it before the engine "
+        + "disposes its sockets under a polling service thread, so a crash at quit fails the run")]
+    internal static void QuitClosesEverySocket(TestContext ctx)
+    {
+        var closed = Pair.Open(ctx, EnetTransport.Keepalive.Shipped, SuitePorts.QuitClose);
+        if (closed == null)
+        {
+            return;
+        }
+
+        int shut = EnetTransport.CloseAll();
+        closed.Host.Step(0.001);
+        closed.Guest.Step(0.001);
+        ctx.Check(shut >= 2 && closed.Host.LinkState == NetLinkState.Down && closed.Guest.LinkState == NetLinkState.Down,
+            $"CloseAll closes a linked pair nobody closed, and a step after it is harmless ({shut} closed, {closed.Host.LinkState} and {closed.Guest.LinkState})");
+
+        // ⚠ Do not close this pair. The process's quit is this check's second half, and the
+        // shard's exit code is its verdict.
+        if (Pair.Open(ctx, EnetTransport.Keepalive.Shipped, SuitePorts.QuitOpen) is { } open)
+        {
+            // Past the gap, so the service thread is polling when the quit comes.
+            Thread.Sleep(TimeSpan.FromSeconds(EnetTransport.ServiceGapSeconds * 2.0));
+            ctx.Note($"a pair linked on {Loopback}, guest peer {open.GuestPeer}, is left open to this process's quit");
+        }
+    }
+
     private static string Ids(IEnumerable<int> peers) => string.Join(", ", peers);
 
     // The first port of the walk on which the first address binds.
@@ -678,9 +707,9 @@ internal static class EnetTransportSuites
         public int GuestPeer => Guest.LocalPeer;
 
         // Null, with the reason checked as a failure, when the socket will not open or join.
-        public static Pair? Open(TestContext ctx, EnetTransport.Keepalive keepalive)
+        public static Pair? Open(TestContext ctx, EnetTransport.Keepalive keepalive, int offset = SuitePorts.Stall)
         {
-            var host = OpenHost(out int port, out string why, keepalive, SuitePorts.Stall);
+            var host = OpenHost(out int port, out string why, keepalive, offset);
             if (host == null)
             {
                 ctx.Check(false, $"ENet cannot host on {Loopback} in this process: {why}");

@@ -97,11 +97,11 @@ function Get-TargetRoot {
 
 # Formats, rebuilds, and returns the StyleCop lines dotnet format left behind (SA0001 excluded).
 function Invoke-FormatAndBuild {
-    param([string]$Root)
+    param([string]$Root, [string[]]$BuildArgs = @())
     $proj = Join-Path $Root 'CSVM/CSVM.csproj'
     if (-not (Test-Path -LiteralPath $proj)) { return @() }
     dotnet format $proj --verbosity quiet
-    $buildOutput = dotnet build $proj --verbosity quiet --nologo -t:Rebuild 2>&1
+    $buildOutput = dotnet build $proj --verbosity quiet --nologo -t:Rebuild @BuildArgs 2>&1
     return @($buildOutput | Select-String -Pattern 'SA\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' } | ForEach-Object { $_.Line })
 }
 
@@ -298,7 +298,22 @@ if ($target.Unresolved) {
 }
 if (-not $root) { exit 0 }
 
-$remaining = @(Invoke-FormatAndBuild -Root $root)
+# Gaming mode throttles the gate but never waits or locks: a wait would overrun the hook's timeout,
+# and a timed-out hook does not block the command, so the gate would be skipped silently. The
+# priority and affinity set on this short-lived process are inherited by dotnet and its children.
+. (Join-Path $scriptRoot 'GamingModeCore.ps1')
+$gaming = Get-GamingMode
+if ($gaming) {
+    $me = [System.Diagnostics.Process]::GetCurrentProcess()
+    $me.PriorityClass = [System.Diagnostics.ProcessPriorityClass]$gaming.priority
+    $me.ProcessorAffinity = [IntPtr][int64]$gaming.AffinityMask
+}
+$gateWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$remaining = @(Invoke-FormatAndBuild -Root $root -BuildArgs @(Get-GamingDotnetArgs $gaming -Build))
+# The hook's timeout is 600 s; a throttled gate measured 170 s on a busy machine, 69 s unthrottled.
+if ($gaming -and $gateWatch.Elapsed.TotalSeconds -gt 240) {
+    [Console]::Error.WriteLine(('format gate: took {0:0} s throttled in gaming mode; past the hook timeout (600 s) the gate is skipped silently' -f $gateWatch.Elapsed.TotalSeconds))
+}
 if ($remaining.Count -eq 0) { exit 0 }
 foreach ($line in $remaining) { [Console]::Error.WriteLine($line) }
 [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.')

@@ -202,7 +202,7 @@ public sealed partial class Ocean : Node3D
         Sea = sea.Clamped();
         string code = OceanShader.Code(Sea, _level, _zonedSheet);
         if (!string.Equals(code, _material.Shader.Code, StringComparison.Ordinal))
-            _material.Shader.Code = code;
+            ShaderTwins.Rewrite(_material.Shader, code);
         SetSeaUniforms();
     }
 

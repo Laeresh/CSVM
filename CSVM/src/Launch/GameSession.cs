@@ -132,6 +132,9 @@ public partial class GameSession : Node3D
     // Where an ended Instant Action mission's final numbers go on a presentation with a wrap-up
     // page of its own, routed by the Launcher. Null leaves the ending to the in-flight board.
     private readonly Action<IaWrapupSnapshot>? _instantActionWrapup;
+    // A finished lobby match's landing on Game Scores, routed by the Launcher. Null leaves the
+    // ending to the in-flight board.
+    private readonly Action? _versusLobbyLanding;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
@@ -379,6 +382,7 @@ public partial class GameSession : Node3D
         _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
         _instantActionWrapup = ctx.InstantActionWrapup;
+        _versusLobbyLanding = ctx.VersusLobbyLanding;
         _music = ctx.Music;
     }
 
@@ -516,6 +520,10 @@ public partial class GameSession : Node3D
     // ⚠ Do not spell "does this session build colliders" any other way. The labs and the F20
     // overlay read this one definition, so they cannot disagree with what WorldSession built.
     private bool BuildsCollision => _spec.BuildsCollision;
+
+    // An Original menu flight lands in the menu rather than on an in-flight board. Instant Action
+    // lands on its wrap-up page, a lobby match on Game Scores. A command-line launch has no menu.
+    private bool LandsInMenu => _menuDriven && _presentation == UI.Menu.PresentationId.Original;
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -1959,9 +1967,9 @@ public partial class GameSession : Node3D
                 Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
-        // Dogfight (--vs): built here, before the rigs, same reason Race is (HumanFlightAdapter
-        // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
-        // that feeds it Downed reports only runs once every rig exists, further down.
+        // Dogfight (--vs): built here, before the rigs, for the reason Race is. HumanFlightAdapter
+        // binds every pane's VersusStatusLine to this one instance. The score/respawn plumbing that
+        // feeds it Downed reports runs only once every rig exists, further down.
         _dogfight = VersusDirector.TryCreate(_spec, new VersusDirector.Field
         {
             Net = _wire.Link,
@@ -2084,6 +2092,7 @@ public partial class GameSession : Node3D
         {
             RigCount = _seatRigs.Count,
             NetSeats = _wire.Seats,
+            SeatLeft = _wire.HasLeft,
             SeatFit = _wire.SeatFit,
             SeatBuild = _wire.SeatBuild,
             MixGain = mixGain,
@@ -2172,6 +2181,10 @@ public partial class GameSession : Node3D
         // Downed report once every rig exists (src/Session/World/VersusDirector.cs).
         if (_dogfight is { } dogfight)
         {
+            // The host's presentation decides the ending for every machine, so a guest follows its
+            // host's word (NetFlight.LandsOnScores) whatever its own presentation is.
+            var toScores = (_wire.Link is { IsHost: false } ? _menuDriven : LandsInMenu)
+                ? _versusLobbyLanding : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
                 Spawns = _spawnPicker,
@@ -2180,14 +2193,18 @@ public partial class GameSession : Node3D
                 SpawnListName = _spawnPicker.ScenarioOverride ?? _spec.Scenario,
                 ReportDeath = _wire.ReportDeath,
                 ToLobby = _menuDriven ? _exitSession : null,
+                LandOnScores = toScores,
             });
 
             // The match's shared board, its R the director's rematch. A guest's board says why it
             // offers no Restart, except in Zeppelin vs Zeppelin, where each machine's own Restart
             // takes it to the lobby.
-            boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                dogfight.Restart,
-                dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
+            if (toScores == null)
+            {
+                boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                    dogfight.Restart,
+                    dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
+            }
         }
 
         // Fire, hit, damage and death over the wire. It runs after the match so a death report
@@ -2373,10 +2390,7 @@ public partial class GameSession : Node3D
             LockCandidates = LockCandidateAircraft,
             RespawnDelay = VersusDirector.RespawnDelay,
             BuildWrapupBoard = boards.BuildIaWrapupBoard,
-            // Only the Original presentation has a wrap-up page to go to. Everywhere else, and on a
-            // command-line launch with no menu behind it, the in-flight board takes the ending.
-            WrapupToMenu = _menuDriven && _presentation == UI.Menu.PresentationId.Original
-                ? _instantActionWrapup : null,
+            WrapupToMenu = LandsInMenu ? _instantActionWrapup : null,
         });
 
         // World AA emplacements, after the zeppelins and the Instant Action turret arm above.

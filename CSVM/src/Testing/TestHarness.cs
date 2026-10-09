@@ -46,6 +46,11 @@ public static class TestHarness
     /// verdict names the root. Measurement: docs/verification.md INSTR-96.</summary>
     public const int OrphanLeakTolerance = 0;
 
+    /// <summary>How far Godot's static allocations may grow over one suite, in bytes, before the
+    /// harness collects and finalizes at its end. A session build moves it by hundreds of MB, a
+    /// world-free suite by none. Measurement: analysis/shard-memory/FINDINGS.md.</summary>
+    public const double CollectAfterStaticGrowth = 32 * 1024 * 1024;
+
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
     /// the cap does the rest.</summary>
@@ -130,6 +135,10 @@ public static class TestHarness
         double totalBuildSeconds = 0, totalDisposalSeconds = 0, totalRestSeconds = 0, totalOverrunSeconds = 0;
         int totalWorldsBuilt = 0;
         var runGate = ctx.AuditFinalizersAcrossRun ? FinalizerGate.Hold() : null;
+        if (ctx.DebugMem)
+        {
+            Log.Info("test", $"mem after=0/{selected.Count} suite=- {MemoryCensus.Line(ShaderTwins.Made)} tracked={ShaderTwins.TrackedCount}");
+        }
         foreach (var suite in selected)
         {
             ctx.Failures.Clear();
@@ -143,6 +152,7 @@ public static class TestHarness
             // ⚠ Never nest a suite gate inside the run gate. Its opening drain waits on the finalizer
             // thread the run gate holds, and the process hangs.
             var gate = ctx.AuditFinalizers && runGate == null ? FinalizerGate.Hold() : null;
+            double staticAtStart = Performance.GetMonitor(Performance.Monitor.MemoryStatic);
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -170,6 +180,15 @@ public static class TestHarness
                 // watch, so the disposal is charged to the suite that built the world.
                 ctx.EvictCollidableWorlds();
                 ctx.FreeQueuedNodes();
+                // A dead wrapper holds its Godot object until finalized, so sessions ride into the
+                // next suite. A collection costs 0.1 to 0.6 s, so only after Godot's heap grew.
+                // ⚠ Never under a finalizer gate: its parked thread never finishes the wait.
+                if (gate == null && runGate == null
+                    && Performance.GetMonitor(Performance.Monitor.MemoryStatic) - staticAtStart > CollectAfterStaticGrowth)
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                }
                 // A suite ticking two weather rigs in different zones leaves the fog table
                 // published, and the next suite's render would search those freed cameras.
                 Session.World.FogViewTable.Clear();
@@ -241,6 +260,10 @@ public static class TestHarness
             // in the run that brings it in.
             string orphanSuffix = orphansLeft != 0 ? $" orphans_left={orphansLeft} [{orphanRoots}]" : "";
             Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
+            if (ctx.DebugMem)
+            {
+                Log.Info("test", $"mem after={results.Count}/{selected.Count} suite={suite.Name} {MemoryCensus.Line(ShaderTwins.Made)} tracked={ShaderTwins.TrackedCount}");
+            }
             if (gate != null)
             {
                 int handleErrors = gate.ReleaseAndDrain();
@@ -789,6 +812,8 @@ public sealed class TestWorld
         // free would only happen after every suite had already built its own world.
         Stage.Free();
         Textures.Dispose();
+        // A destroyed world draws nothing a switch must move, and a tracked material keeps its textures.
+        ShaderTwins.Untrack(Stage);
     }
 }
 
@@ -857,6 +882,10 @@ public sealed class TestContext
     /// which also catches an object a later suite reaches after an earlier one dropped it.</summary>
     public bool AuditFinalizersAcrossRun { get; init; }
 
+    /// <summary><c>--debug-mem</c>: a <see cref="MemoryCensus"/> line after every suite's
+    /// teardown, so a shard's memory reads against the suites it has run.</summary>
+    public bool DebugMem { get; init; }
+
     /// <summary>Installs a fake in place of the real <c>PufferEmitterFactory</c> for the next world
     /// this builds, null (the default) leaves <see cref="WorldSession.Options.EmitterFactory"/> null
     /// too, so a suite that never touches this gets the real adapter exactly as before. Mutable, not
@@ -901,7 +930,6 @@ public sealed class TestContext
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
-
     /// <summary>The run's decode store. A suite that builds a whole <c>GameSession</c> hands it to
     /// the launcher context, so its sessions share the decodes this run's worlds made.</summary>
     internal DecodeCache Decode => _decode;
@@ -1262,6 +1290,8 @@ public sealed class TestContext
             using var sounds = archives.Sounds;
             var ambience = Ambience;
 
+            // The world's materials leave the shader cache's table with it (TestWorld.Destroy).
+            ShaderTwins.BuildingWorld = stage;
             var session = WorldSession.Build(
                 new WorldSession.Options
                 {
@@ -1312,6 +1342,7 @@ public sealed class TestContext
             // later suite's phases (or a real session's, if one ever ran after in the same
             // process) to this build's profile instead of its own.
             StartupProfile.Current = previousProfile;
+            ShaderTwins.BuildingWorld = null;
             buildWatch.Stop();
             // The outer stopwatch, not profile's own clock, is what "other" closes against: it is
             // the one wall time TestHarness.Run also attributes to this suite.

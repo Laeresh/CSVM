@@ -118,8 +118,8 @@ public sealed partial class PerfHud : Node
 
     /// <summary>Feeds one rendered frame's wall cost and the same <see cref="FrameCounters"/>
     /// <see cref="Utils.HitchMonitor.Tick"/> was just handed, one counters read serves both
-    /// instruments, per <c>Launcher._Process</c>'s own comment. Runs unconditionally, Off or not:
-    /// the worst-frame peak has to already be warm the instant someone presses F14, or the readout
+    /// instruments, per <c>FrameInstruments.BeginFrame</c>'s own comment. Runs unconditionally, Off or
+    /// not: the worst-frame peak must be warm the instant someone presses F14. Otherwise the readout
     /// would have nothing to say about the hitch that made them look.</summary>
     public void Tick(double frameMs, in FrameCounters counters)
     {
@@ -300,7 +300,7 @@ public sealed partial class PerfHud : Node
         // this run" than as a per-refresh delta that is almost always 0 between two 150 ms ticks.
         string gc = string.Create(CultureInfo.InvariantCulture,
             $"gc0 {GC.CollectionCount(0)}  gc1 {GC.CollectionCount(1)}  gc2 {GC.CollectionCount(2)}");
-        // PerfSample.SnapshotInto reads the last CLOSED frame, which Launcher._Process ends in the
+        // PerfSample.SnapshotInto reads the last CLOSED frame, which FrameInstruments.BeginFrame ends in the
         // same call that feeds this Tick, so _lastFrameMs and this snapshot describe one frame.
         PerfSample.SnapshotInto(_samples, _lastFrameMs);
         string samples = string.Create(CultureInfo.InvariantCulture,

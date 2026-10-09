@@ -250,8 +250,8 @@ internal static class NetCoopGuestPlaneSuites
         }
 
         var own = new[] { StockAirframes.Node(rig.Host.Profile!.Planes[SeatedAt].Airframe) };
-        var (roster, fits) = Launcher.CoopLaunchField(rig.HostDoor, launch.Transport, own, new LoadoutChoice?[] { null }, StockLoadouts.Load());
-        var builds = Launcher.CoopSeatBuilds(roster, new CustomPlaneDef?[] { null }, rig.HostDoor, launch.Transport);
+        var (roster, fits) = SeatFields.CoopLaunchField(rig.HostDoor, launch.Transport, own, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+        var builds = SeatFields.CoopSeatBuilds(roster, new CustomPlaneDef?[] { null }, rig.HostDoor, launch.Transport);
         var seats = new List<string>();
         bool agrees = roster.Length == 4;
         for (int g = 0; g < rig.Guests.Length && agrees; g++)

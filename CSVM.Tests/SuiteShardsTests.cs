@@ -4,11 +4,12 @@ using System.IO;
 using System.Linq;
 using CSVM.Testing;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace CSVM.Tests;
 
 [Trait("Tier", "Quick")]
-public sealed class SuiteShardsTests
+public sealed class SuiteShardsTests(ITestOutputHelper output)
 {
     [Fact]
     public void A_shard_term_is_taken_out_of_the_selector_it_rides_in()
@@ -103,6 +104,49 @@ public sealed class SuiteShardsTests
     }
 
     [Fact]
+    public void A_suite_the_weights_run_alone_takes_a_shard_on_top_of_the_shared_ones()
+    {
+        var names = Enumerable.Range(0, 12).Select(i => $"s{i:00}").ToList();
+        var weights = new SuiteWeights
+        {
+            DefaultSeconds = 1.0,
+            Seconds = names.ToDictionary(n => n, _ => 1.0),
+            Groups = Array.Empty<IReadOnlyList<string>>(),
+            Alone = new[] { "s05" },
+        };
+
+        // The launcher asks for its shared count plus one per alone suite.
+        var twoShared = SuiteShards.Plan(names, n => n, weights, 2 + 1);
+        var oneShared = SuiteShards.Plan(names, n => n, weights, 1 + 1);
+        var selection = SuiteShards.Plan(names, n => n, weights, 1);
+
+        Assert.Equal(new[] { "s05" }, twoShared[2]);
+        Assert.Equal(names.Count - 1, twoShared[0].Count + twoShared[1].Count);
+        Assert.InRange(twoShared[0].Count - twoShared[1].Count, -1, 1);
+        Assert.Equal(new[] { "s05" }, oneShared[1]);
+        Assert.Equal(names.Where(n => n != "s05"), oneShared[0]);
+        Assert.Equal(names, selection[0]);
+    }
+
+    [Theory]
+    [InlineData(6)]
+    [InlineData(2)]
+    [InlineData(1)]
+    public void The_checked_in_plan_runs_each_alone_suite_beside_the_shared_count(int shared)
+    {
+        var names = TestHarness.All.Select(s => s.Name).ToList();
+        var weights = SuiteShards.Load(Path.Combine(RepoRoot(), "analysis", "engine-suite-weights.json"));
+
+        var shards = SuiteShards.Plan(names, n => n, weights, shared + weights.Alone.Count);
+
+        output.WriteLine($"{shared} shared + {weights.Alone.Count} alone over {names.Count} suites: "
+            + string.Join(", ", shards.Select((s, i) => $"shard {i + 1}: {s.Count} suites {s.Sum(weights.For):0} s")));
+        Assert.Equal(weights.Alone.OrderBy(n => n), shards.Skip(shared).Select(s => Assert.Single(s)).OrderBy(n => n));
+        Assert.All(shards.Take(shared), s => Assert.NotEmpty(s));
+        Assert.Equal(names.Count, shards.Sum(s => s.Count));
+    }
+
+    [Fact]
     public void A_group_naming_a_suite_the_selection_left_out_still_places_the_rest()
     {
         var names = new[] { "a", "b" };
@@ -145,6 +189,8 @@ public sealed class SuiteShardsTests
         Assert.NotEmpty(weights.Seconds);
         Assert.All(weights.Seconds.Keys, name => Assert.Contains(name, registered));
         Assert.All(weights.Groups.SelectMany(g => g), name => Assert.Contains(name, registered));
+        Assert.All(weights.Alone, name => Assert.Contains(name, registered));
+        Assert.Contains("graphics-retext-compiles", weights.Alone);
         Assert.All(weights.Seconds.Values, seconds => Assert.True(seconds >= 0));
         // Every registered suite carries a measured weight, or the balance is guesswork for it.
         Assert.Empty(SuiteShards.Unweighted(registered, weights));

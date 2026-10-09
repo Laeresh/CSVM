@@ -78,8 +78,6 @@ public sealed class OriginalNetInfoBox
     private const string PlayerArt = "MP_PLAYERINFOBACKGROUND.PNG";
     private const string SmallArt = "MP_B_SMALL.PNG";
     private const string MediumArt = "MP_B_MEDIUM.PNG";
-    private const string UpArt = "MP_B_SCROLLUP.PNG";
-    private const string DownArt = "MP_B_SCROLLDOWN.PNG";
     private const string ListArrowArt = "GN_B_LISTBOXARROWDOWN.PNG";
 
     // The scripts' own corners and sizes. Each box is 272 by 24, its label 3 left and 25 up
@@ -231,16 +229,16 @@ public sealed class OriginalNetInfoBox
             rows.Add(Field(PasswordKey, new string(Mask, _draft.Password.Length), 264f, 244f, true));
             rows.Add(new OriginalRow(PlayersKey, Players(), OriginalRowKind.Dropdown, 264f, 312f, SpinnerWidth, SpinnerHeight, true, 0, null));
             rows.Add(new OriginalRow(MoreKey, string.Empty, OriginalRowKind.Button, 313f, 313f, SpinnerArrowWidth, SpinnerArrowHeight,
-                _draft.MaxPlayers < MaxPlayers(), 0, new BoardArt(BoardArtLibrary.Ui, UpArt, 4)));
+                _draft.MaxPlayers < MaxPlayers(), 0, new BoardArt(BoardArtLibrary.Ui, OriginalScrollBar.UpArt, 4)));
             rows.Add(new OriginalRow(FewerKey, string.Empty, OriginalRowKind.Button, 313f, 324f, SpinnerArrowWidth, SpinnerArrowHeight,
-                _draft.MaxPlayers > NetPlayerInfo.MinPlayers, 0, new BoardArt(BoardArtLibrary.Ui, DownArt, 4)));
+                _draft.MaxPlayers > NetPlayerInfo.MinPlayers, 0, new BoardArt(BoardArtLibrary.Ui, OriginalScrollBar.DownArt, 4)));
             bool isPrivate = _draft.Private ?? false;
             rows.Add(new OriginalRow(ListingKey, CoopDoorText.ListingWord(isPrivate), OriginalRowKind.Dropdown, ListingX, 312f, ListingWidth,
                 SpinnerHeight, ListingLive, 0, null));
             rows.Add(new OriginalRow(PublicKey, string.Empty, OriginalRowKind.Button, ListingX + ListingWidth + 1f, 313f, SpinnerArrowWidth,
-                SpinnerArrowHeight, ListingLive && isPrivate, 0, new BoardArt(BoardArtLibrary.Ui, UpArt, 4)));
+                SpinnerArrowHeight, ListingLive && isPrivate, 0, new BoardArt(BoardArtLibrary.Ui, OriginalScrollBar.UpArt, 4)));
             rows.Add(new OriginalRow(PrivateKey, string.Empty, OriginalRowKind.Button, ListingX + ListingWidth + 1f, 324f, SpinnerArrowWidth,
-                SpinnerArrowHeight, ListingLive && !isPrivate, 0, new BoardArt(BoardArtLibrary.Ui, DownArt, 4)));
+                SpinnerArrowHeight, ListingLive && !isPrivate, 0, new BoardArt(BoardArtLibrary.Ui, OriginalScrollBar.DownArt, 4)));
             rows.Add(_text.Strip(OkKey, SmallArt, OkX, ButtonY, _draft.GameName.Length > 0, 0, 74f, 37f));
             rows.Add(_text.Strip(CancelKey, MediumArt, CancelX, ButtonY, true, 0, 96f, 37f));
             return;

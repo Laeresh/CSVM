@@ -461,7 +461,27 @@ public class OriginalInstantActionTests
         Assert.Equal("IA_D_PLANEE0", host.FocusedKey);
         Assert.False(Row(host, OriginalInstantActionScreen.RaceTimeKey).Enabled);
         Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.RaceTimeKey));
-        Assert.Equal(15, ia.BuildDef().RaceWindowMinutes);
+        Assert.Equal(15, ia.BuildDef(1).RaceWindowMinutes);
+    }
+
+    [Fact]
+    public void TheRaceBlanksTheWingmanAndEnemyBoxesAndOneSeatBringsThemBack()
+    {
+        var host = OpenSeated(out var ia, out var setup);
+        Click(host, 1);
+        ia.SetWingmen(2);
+        ia.SetWave(0, new InstantActionWaveSetup(3, 1, 0, 0));
+        string[] keys = { OriginalInstantActionScreen.WingmenKey, OriginalInstantActionScreen.WingmanPlaneKey, "IA_D_NENEMY0", "IA_D_EGROUP0" };
+        Assert.All(keys, k => Assert.True(Row(host, k).Enabled));
+
+        var guest = setup.Join(new ScriptedMenuSeat())!;
+        Assert.All(keys, k => Assert.False(Row(host, k).Enabled));
+        Assert.All(keys, k => Assert.Equal(string.Empty, Row(host, k).Label));
+
+        Assert.True(setup.Unjoin(guest));
+        Assert.All(keys, k => Assert.True(Row(host, k).Enabled));
+        Assert.Equal("2", Row(host, OriginalInstantActionScreen.WingmenKey).Label);
+        Assert.Equal("3", Row(host, "IA_D_NENEMY0").Label);
     }
 
     [Fact]
@@ -528,7 +548,7 @@ public class OriginalInstantActionTests
         Assert.NotEqual(OriginalInstantActionScreen.LivesKey, host.FocusedKey);
         Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.LivesKey));
         Assert.Equal(2, ia.Lives);
-        Assert.Equal(2, ia.BuildDef().Lives);
+        Assert.Equal(2, ia.BuildDef(1).Lives);
 
         // Another mission type spends lives again, so the box returns with the count it hid.
         Hover(host, OriginalInstantActionScreen.MissionKey);

@@ -4,6 +4,7 @@ using System.IO;
 using CSVM.Bindings;
 using CSVM.Sticks;
 using CSVM.UI.Menu;
+using CSVM.Utils;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -174,14 +175,27 @@ public sealed class ControlsStickTests : IDisposable
     [Fact]
     public void TheProfilesFolderRowReportsWhereItOpenedOrThatItCouldNot()
     {
-        var opened = new ControlsFeature(openProfilesFolder: () => _user);
+        var opened = new ControlsFeature(openProfilesFolder: () => new FolderOpenResult(FolderOpenOutcome.Opened, _user));
+        var failed = new ControlsFeature(openProfilesFolder: () => new FolderOpenResult(FolderOpenOutcome.Failed, _user));
         var missing = new ControlsFeature();
 
         opened.OpenProfilesFolder();
+        failed.OpenProfilesFolder();
         missing.OpenProfilesFolder();
 
         Assert.Contains(_user, opened.Status);
+        Assert.Contains("could not be opened", failed.Status);
         Assert.Contains("could not be opened", missing.Status);
+    }
+
+    [Fact]
+    public void AGameModeRefusalSaysTheFolderButtonsAreDesktopModeOnly()
+    {
+        var refused = new ControlsFeature(openProfilesFolder: () => new FolderOpenResult(FolderOpenOutcome.Refused, _user));
+
+        refused.OpenProfilesFolder();
+
+        Assert.Equal(FolderButtonText.DesktopModeOnly, refused.Status);
     }
 
     private static Binding FullAxis(int axis, bool inverted) =>

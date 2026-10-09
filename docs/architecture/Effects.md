@@ -60,7 +60,7 @@ draws a priority level below the lowest base sheet, one grid per zone-gate group
 (`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the grids, the sea's uniforms and up to 16 ship calm zones
 (`OceanCalmZone.cs`, `OceanMovers.cs`), nearest the eye first; the swell, bent crests, noise detail, foam and coast
 ramps are the shader text `OceanShader.cs` writes from the chapter's `SeaState.cs`, all on `csky_time`. `Apply`
-takes a new sea live, recompiling only when the text changes. `GameSession.FollowOcean` builds and drops it.
+takes a new sea live, recompiling (`ShaderTwins.Rewrite`) only on a text change. `GameSession.FollowOcean` builds and drops it.
 
 ## src/Effects/OceanSeas.cs
 The shipped per-chapter seas, `CSVM/data/ocean_seas.json`, read through `res://` at each sea chapter's build: one

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Bindings;
+using CSVM.Utils;
 
 namespace CSVM.UI.Menu;
 
@@ -32,7 +33,7 @@ public sealed class ControlsFeature : IMenuFeature
     private readonly List<int> _players = new();
     private readonly HashSet<int> _dirty = new();
     private readonly Action<int, BindingProfile>? _save;
-    private readonly Func<string?>? _openProfilesFolder;
+    private readonly Func<FolderOpenResult>? _openProfilesFolder;
     private readonly Func<IStickRows?>? _stickRows;
 
     private InputContext _context = InputContext.Flight;
@@ -44,12 +45,12 @@ public sealed class ControlsFeature : IMenuFeature
 
     /// <summary>A feature whose saves go through <paramref name="save"/>, or nowhere when that is
     /// null. The write is injected rather than reached for. So the feature stays engine-free and a
-    /// test never touches the player's real keymap file. The folder opener returns the stick profile
-    /// folder's path, or null when it could not open it (<paramref name="openProfilesFolder"/>).
+    /// test never touches the player's real keymap file. The folder opener says how opening the stick
+    /// profile folder ended (<paramref name="openProfilesFolder"/>).
     /// A reset takes player 1's stick defaults from the stick side. That is null while sticks are off
     /// (<paramref name="stickRows"/>).</summary>
     public ControlsFeature(
-        Action<int, BindingProfile>? save = null, Func<string?>? openProfilesFolder = null, Func<IStickRows?>? stickRows = null)
+        Action<int, BindingProfile>? save = null, Func<FolderOpenResult>? openProfilesFolder = null, Func<IStickRows?>? stickRows = null)
     {
         _save = save;
         _openProfilesFolder = openProfilesFolder;
@@ -268,13 +269,17 @@ public sealed class ControlsFeature : IMenuFeature
     }
 
     /// <summary>Opens the folder the stick profile files live in, through whatever opener the host
-    /// supplied, and says where it is. The files are where a binding's deadzone is edited.</summary>
+    /// supplied, and says where it is. In Game Mode it says the open was refused. The files are where
+    /// a binding's deadzone is edited.</summary>
     public void OpenProfilesFolder()
     {
-        string? path = _openProfilesFolder?.Invoke();
-        Status = path is null
-            ? "The stick profiles folder could not be opened."
-            : $"Opened {path}. Deadzones are edited per binding in these files.";
+        var opened = _openProfilesFolder?.Invoke();
+        Status = opened?.Outcome switch
+        {
+            FolderOpenOutcome.Opened => $"Opened {opened.Value.Path}. Deadzones are edited per binding in these files.",
+            FolderOpenOutcome.Refused => FolderButtonText.DesktopModeOnly,
+            _ => "The stick profiles folder could not be opened.",
+        };
     }
 
     /// <summary>Stops listening without binding anything.</summary>

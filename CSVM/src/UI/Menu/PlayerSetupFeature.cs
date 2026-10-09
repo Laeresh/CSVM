@@ -456,7 +456,7 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>The typed exit for a mode with no feature of its own (Dogfight): the chapter, the
     /// seats' choices and the mode. Versus adds the match rules and the bot rows. Throws when the
     /// gate is closed, so a half-built launch cannot leave the menu. <paramref name="networked"/>
-    /// is the same flag <see cref="Refusal"/> reads.</summary>
+    /// is the answer the gate was asked with (<see cref="Refusal"/>).</summary>
     public LaunchExit BuildExit(string chapter, MenuMode mode, Func<PlayerSeat, IReadOnlyList<int>> flightDevices, bool networked = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(chapter);

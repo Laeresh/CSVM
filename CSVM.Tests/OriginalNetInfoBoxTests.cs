@@ -61,7 +61,7 @@ public class OriginalNetInfoBoxTests
         var end = LoopbackTransport.Mesh(1, Clean, new Random(1))[0];
         var door = new NetPlayFeature((_, _, _) => end, (_, _) => end)
         {
-            Master = master ? new MasterDirectory(_ => Task.FromResult("{\"games\":[]}")) : null,
+            Internet = { Master = master ? new MasterDirectory(_ => Task.FromResult("{\"games\":[]}")) : null },
         };
         var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), new PlayerSetupFeature(), _ => null);
         shell.StandInNetDoor(door);

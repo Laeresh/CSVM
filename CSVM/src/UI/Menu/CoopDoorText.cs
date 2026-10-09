@@ -286,9 +286,9 @@ public static class CoopDoorText
         string joined = guests == 1 ? "1 guest" : $"{guests.ToString(CultureInfo.InvariantCulture)} guests";
 
         // A code reaches this host from anywhere, so the address a guest would type is not shown.
-        if (net.JoinCode is { } code)
+        if (net.Internet.JoinCode is { } code)
         {
-            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code, way)}\n{Listing(net.Private)}";
+            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code, way)}\n{Listing(net.Identity.Private)}";
         }
 
         string port = net.Port.ToString(CultureInfo.InvariantCulture);
@@ -311,14 +311,14 @@ public static class CoopDoorText
     public static IReadOnlyList<string> HostFallbackLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost || net.JoinCode != null)
+        if (!net.IsHost || net.Internet.JoinCode != null)
         {
             return Array.Empty<string>();
         }
 
         // ⚠ Do not name the address while the master server is answering. A code may still come,
         // and a host shows the address only when none will.
-        if (net.AwaitingCode)
+        if (net.Internet.AwaitingCode)
         {
             return new[] { AwaitingCode };
         }
@@ -335,22 +335,22 @@ public static class CoopDoorText
     public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
-        return net.JoinCode != null ? new[] { HostCodeLine(net, way) } : HostFallbackLines(net, way);
+        return net.Internet.JoinCode != null ? new[] { HostCodeLine(net, way) } : HostFallbackLines(net, way);
     }
 
-    /// <summary>What a host's COPY control copies, the text <see cref="NetPlayFeature.CopyForGuests"/>
+    /// <summary>What a host's COPY control copies, the text <see cref="HostReach.CopyForGuests"/>
     /// puts on the clipboard: the join code, else the address <see cref="HostAddressLine"/> names.
     /// Empty where no line of the host's carries a copy mark, while the master server is answering,
     /// and while not hosting.</summary>
     public static string CopyTarget(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost || net.AwaitingCode)
+        if (!net.IsHost || net.Internet.AwaitingCode)
         {
             return "";
         }
 
-        return net.JoinCode ?? (net.NamesHostAddress ? net.GuestAddress : "");
+        return net.Internet.JoinCode ?? (net.Reach.NamesHostAddress ? net.Reach.GuestAddress : "");
     }
 
     /// <summary>A Dogfight host's standing line about internet guests: its code, whether it is
@@ -364,13 +364,13 @@ public static class CoopDoorText
             return "";
         }
 
-        if (net.JoinCode is not { } code)
+        if (net.Internet.JoinCode is not { } code)
         {
             return InternetLine(net);
         }
 
-        string copy = net.Copied == code ? " It is copied." : way == CopyWay.Keys ? $" {CopyPress} copies it." : "";
-        string listed = net.Private ? "private, not on the games list" : "public, on the games list";
+        string copy = net.Reach.Copied == code ? " It is copied." : way == CopyWay.Keys ? $" {CopyPress} copies it." : "";
+        string listed = net.Identity.Private ? "private, not on the games list" : "public, on the games list";
         return $"Internet code {code}, {listed}.{copy}";
     }
 
@@ -379,12 +379,12 @@ public static class CoopDoorText
     public static string InternetLine(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (net.AwaitingCode)
+        if (net.Internet.AwaitingCode)
         {
             return AwaitingCode;
         }
 
-        if (net.InternetFault is not { Length: > 0 } why)
+        if (net.Internet.InternetFault is not { Length: > 0 } why)
         {
             return "";
         }
@@ -407,18 +407,18 @@ public static class CoopDoorText
     public static string HostAddressLine(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost || !net.NamesHostAddress)
+        if (!net.IsHost || !net.Reach.NamesHostAddress)
         {
             return "";
         }
 
-        string copy = net.GuestAddress.Length == 0 ? "" : CopyMark(net, net.GuestAddress, way);
-        if (net.HostIpv6 is { } v6)
+        string copy = net.Reach.GuestAddress.Length == 0 ? "" : CopyMark(net, net.Reach.GuestAddress, way);
+        if (net.Reach.HostIpv6 is { } v6)
         {
-            return $"IPv6  {net.Dial(v6)}{copy}";
+            return $"IPv6  {net.Reach.Dial(v6)}{copy}";
         }
 
-        string lan = net.HostLanIpv4 is { } v4 ? $"  LAN {net.Dial(v4)}" : "";
+        string lan = net.Reach.HostLanIpv4 is { } v4 ? $"  LAN {net.Reach.Dial(v4)}" : "";
         return $"{NoIpv6}{lan}{copy}";
     }
 
@@ -428,19 +428,19 @@ public static class CoopDoorText
     public static string HostAddressStatus(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost || !net.NamesHostAddress)
+        if (!net.IsHost || !net.Reach.NamesHostAddress)
         {
             return "";
         }
 
-        string lan = net.HostLanIpv4 is { } v4 ? net.Dial(v4) : "";
-        string copy = net.GuestAddress.Length == 0 ? ""
-            : net.Copied == net.GuestAddress ? $" {net.GuestAddress} is copied."
-            : $" {CopyPress} copies {net.GuestAddress}.";
-        if (net.HostIpv6 is { } v6)
+        string lan = net.Reach.HostLanIpv4 is { } v4 ? net.Reach.Dial(v4) : "";
+        string copy = net.Reach.GuestAddress.Length == 0 ? ""
+            : net.Reach.Copied == net.Reach.GuestAddress ? $" {net.Reach.GuestAddress} is copied."
+            : $" {CopyPress} copies {net.Reach.GuestAddress}.";
+        if (net.Reach.HostIpv6 is { } v6)
         {
             string local = lan.Length > 0 ? $", or {lan} on this network" : "";
-            return $"Guests type {net.Dial(v6)}{local}.{copy}";
+            return $"Guests type {net.Reach.Dial(v6)}{local}.{copy}";
         }
 
         string onLan = lan.Length > 0 ? $"; guests on this network type {lan}" : "";
@@ -495,13 +495,13 @@ public static class CoopDoorText
             return "";
         }
 
-        bool named = net.IsHost && net.NamesHostAddress;
-        if (named && pinhole.Outcome == UpnpPinholeOutcome.Opened && pinhole.Address == net.HostIpv6)
+        bool named = net.IsHost && net.Reach.NamesHostAddress;
+        if (named && pinhole.Outcome == UpnpPinholeOutcome.Opened && pinhole.Address == net.Reach.HostIpv6)
         {
             return $"IPv6: router opened UDP port {pinhole.Port.ToString(CultureInfo.InvariantCulture)}.";
         }
 
-        return named && net.HostIpv6 == null && pinhole.Outcome == UpnpPinholeOutcome.NoAddress ? "" : PinholeStatus(pinhole);
+        return named && net.Reach.HostIpv6 == null && pinhole.Outcome == UpnpPinholeOutcome.NoAddress ? "" : PinholeStatus(pinhole);
     }
 
     /// <summary>A co-op guest's band over the host's boards. It says whose campaign it follows and
@@ -554,7 +554,7 @@ public static class CoopDoorText
     // A pad's and a pointer's way is the COPY control the screen draws beside the line, so they
     // name no key.
     private static string CopyMark(NetPlayFeature net, string shown, CopyWay way) =>
-        net.Copied == shown ? "  copied" : way == CopyWay.Keys ? $"  {CopyPress}" : "";
+        net.Reach.Copied == shown ? "  copied" : way == CopyWay.Keys ? $"  {CopyPress}" : "";
 
     private static string Listing(bool isPrivate) =>
         isPrivate ? "PRIVATE  internet guests need the code" : "PUBLIC  on the games list";

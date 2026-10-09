@@ -8,15 +8,13 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>
-/// <see cref="HitchMonitor"/>'s write path: every tripped record gets one human-readable line in
-/// the <c>perf</c> log category and one JSON line in a sidecar sharing the main log's stem, never
-/// inline on the hitching frame, since a string interpolation and a file write are avoidable
-/// allocation-heavy work at the worst possible moment. A record is copied (no allocation; every
-/// queue slot is preallocated at construction) into a small ring, drained a few seconds later.
-/// Line grammar and the JSON shape: docs/org/hitch.md.
-/// ⚠ Crash durability is bounded by the flush interval, not by the trip. A record survives a
-/// crash only once flushed; <c>Launcher</c> flushes before every <see cref="HitchMonitor.Rearm"/>
-/// so an ordinary relaunch never waits out the interval.
+/// The hitch monitor's write path: per tripped record, one human-readable <c>perf</c> line and one
+/// JSON line in a sidecar sharing the main log's stem. Neither is written on the hitching frame,
+/// since both are allocation-heavy work at the worst moment. A record is copied (no allocation;
+/// every queue slot is preallocated at construction) into a small ring, drained a few seconds
+/// later. Line grammar and the JSON shape: docs/org/hitch.md.
+/// ⚠ Crash durability is bounded by the flush interval, not by the trip: a record survives a crash
+/// only once flushed. <c>FrameInstruments</c> flushes before every <see cref="HitchMonitor.Rearm"/>.
 /// </summary>
 public sealed class HitchSidecar
 {
@@ -147,9 +145,9 @@ public sealed class HitchSidecar
     }
 
     /// <summary>Drains every queued record right now: one <c>[perf] hitch …</c> line plus one JSON
-    /// line each, oldest first. Called from <see cref="Tick"/> on the flush interval, and from
-    /// <c>Launcher</c> before a session build or teardown rearms <see cref="HitchMonitor"/>, so nothing
-    /// queued at the moment of a legitimate stall waits out the interval.</summary>
+    /// line each, oldest first. Called from <see cref="Tick"/> on the flush interval. It is also
+    /// called before a session build or teardown rearms the monitor (<c>FrameInstruments.Rearm</c>).
+    /// Nothing queued at a legitimate stall then waits out the interval.</summary>
     public void Flush()
     {
         if (_writer == null || _queueCount == 0)

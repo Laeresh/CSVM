@@ -43,9 +43,14 @@ do may wait on them.
   line `Label: backlog|playtest|capture`, then the body, written for a reader who did not run the
   session and with a `⚠ Traps` section when there is one. The orchestrator files it.
 
-## Verification (foreground only)
+## Verification (in the background, waited on)
 
-Run everything in the FOREGROUND and wait for it; a backgrounded run orphans you. Minimum before
+Start every `RunTests.ps1` and `RunProbe.ps1` with `run_in_background`, then wait on it with
+Monitor (a deferred tool: load it with ToolSearch `select:Monitor` first) until it has exited and
+printed its `result:` line. Gaming mode (`.\GamingMode.ps1 status`) can switch on at any
+time, and a queued, throttled run can then pass the 10-minute foreground cap. Never end your turn
+while a run is live: a run still going when you report is orphaned, and nobody reads its result.
+Short commands (`dotnet build`, a self-test) stay in the foreground. Minimum before
 you report: `dotnet build CSVM/CSVM.sln` clean with zero warnings, `dotnet test` (or
 `.\RunTests.ps1 -UnitFilter ... -SkipEngine -SkipGoldens`), every engine suite you added or
 touched via `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens`, and `.\RunTests.ps1 -Quick`.
@@ -53,8 +58,7 @@ If your change can move a pinned golden (anything under `CSVM/src` that draws, s
 changes pools or seeds), also run `.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only) and
 report which shots moved and why; re-pin with `-RegenGoldens` ONLY when the move is the intended
 effect, prove it by differencing against a render from HEAD's sources, and name the shots and the
-mechanism in your report. `c1-flight-kill` flakes under load: re-run before believing a move and
-never re-pin it for that. Do NOT run the complete `.\RunTests.ps1` battery; the orchestrator runs
+mechanism in your report. Do NOT run the complete `.\RunTests.ps1` battery; the orchestrator runs
 it on the merged tree.
 
 A red result is fixed, or proved not yours (red on your base commit without your change) and
@@ -65,6 +69,14 @@ waiver out of `commit.txt` and give the line in your report with `#NEW` as the o
 orchestrator files the issue and writes the line with its number. Check the form with `.\CheckWaiver.ps1 -MessageFile <commit.txt>
 -Root <your worktree>`. The orchestrator refuses a red result without one, and a waiver never
 covers a failure your change caused.
+
+A run that ends `result: DEFERRED` (exit 3) waited past the memory ledger's cap, met the memory
+floor, had `CSVM.dll` rebuilt under it, ran past `-WaitQuiet`'s cap, or waited past the gaming-mode
+lock's cap. It is neither pass nor
+fail: re-run it, and never report or land on it as a result. To wait for other sessions' scripted
+Godots, pass `-WaitQuiet` to `RunTests.ps1`; never write a wait loop of your own. A red that matches
+`docs/verification.md`'s known environmental reds is rerun alone with the command given there,
+and its waiver names the owner listed there.
 
 ## No foreground game windows
 
@@ -89,8 +101,9 @@ and grep the id (no hits in any live file). Write the closing commit message to
 `.scratch\<RUN>\<id>\commit.txt` INSIDE your worktree (create the folder; the orchestrator copies
 it out before removing your tree): subject `Close BL-NNN: <what is now true>` or
 `Close #N: <what is now true>`, body in prose with what settled it, how it was measured, the honest
-limit of the evidence, what changed in the build and whether goldens moved, ending with the line
-`Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`. Put crops and diffs beside it. For an
+limit of the evidence, what changed in the build and whether goldens moved, ending with a
+`Co-Authored-By:` trailer naming the model you run as (`PROJECT_CONTEXT.md`'s AI-assistance rule),
+e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Put crops and diffs beside it. For an
 issue, also write `close.txt` beside it: the closing comment, the same prose without the trailer;
 the orchestrator posts it once the commit is on main. A `capture` or `playtest` issue the item
 alone owned gets its own `close-<N>.txt`.

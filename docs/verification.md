@@ -446,7 +446,10 @@ member, and it does not go here.
   waits for the previous draw, so its wait reads as `proc_ms` or `phys_tick_ms`, and `draw_ms` is
   only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
   every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
-  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms. Two
+  draw-count getters per spyglass disc, read from the main thread, took a two-pane Enhanced C3
+  `--perf` frame on the author's PC from 8.3 to 17 ms (`proc_ms` 1.6 to 16); queued on the render
+  thread (`SpyglassView.Census`) they leave it at the run without `--perf`.
 - **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
   for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
   beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
@@ -505,6 +508,19 @@ member, and it does not go here.
   With the old fixed ports held by another process,
   `lan-discovery` failed and three `Couldn't create an ENet host` lines failed the run, though
   every walking suite then found a free port.
+- **LOG-27**, **A process that crashes after its report or shot (`0xC0000005`, `0xC000001D`, a
+  `FATAL ... script_bindings` or `!rc_owner` line) died of a .NET finalizer racing Godot's
+  teardown, not of the work it reported.** A garbage collection during the quit, often a background
+  one still running at `_ExitTree`, queues Godot wrappers whose `GodotObject.Finalize` then runs
+  beside `CSharpLanguage::finalize` freeing the bindings (`GC.RunFinalizers` or
+  `DisposablesTracker.OnGodotShuttingDown` on the crash stack). The tell is `Leaked unsafe reference`
+  lines in the `.err` file, which count the queued wrappers; Godot prints them after the disposal
+  tracker, so a crash under the tracker shows none. The natural rate is low and rises with other
+  Godots running and with the unreferenced wrappers a run leaves, so prove a change on the quit path
+  under a forced race: 20000 dropped `RefCounted` wrappers and an allocating thread at `_ExitTree`,
+  with `DOTNET_GCgen0size=0x200000`, crashed a one-suite run after its report 12 times in 16;
+  with `Launcher.SettleFinalizers` it crashed 0 times in 16, and no collection ran after the
+  settle. A new exit path must run it too.
 
 ## WORLD, world data and runtime traps
 
@@ -672,6 +688,12 @@ member, and it does not go here.
   every other worker idle. A killed hang also never saves the pipeline cache, so the same shots hang
   on the next run too. With the drain, the shots that hung showed 0.3 to 6.4 s of backlog at quit
   and exited; every other shot settles in about 1 ms.
+- **SHELL-22**, **A kill-on-close job object must not hold `dotnet build`'s children: the MSBuild
+  nodes and the compiler server it starts are shared with every other build on the machine, so let
+  them break away during a build and make a `dotnet test` run's nodes private
+  (`MSBUILDDISABLENODEREUSE=1`).** The job's close at the end of a run would otherwise kill a node
+  or the server under a sibling worktree's build. Never put the launching shell itself in such a
+  job either: a member cannot leave, so closing the job would kill the shell.
 
 ## INSTR, building instruments
 
@@ -998,15 +1020,23 @@ member, and it does not go here.
   A Resource reached through a node's signal after its wrapper was collected reproduced the release
   check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
   either way.
-- **INSTR-100**, **Read Godot's global `ObjectCount` only after finalizer drains have stopped changing
-  it, never after a fixed number: one drain can leave objects that only the next one frees, and any
-  collection inside the measured span frees earlier suites' objects into it.**
-  `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
-  drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
-  during it.
+- **INSTR-100**, **Prove that an operation frees what it made on those objects' own instance ids,
+  never on Godot's global `ObjectCount` read before and after: any collection inside the span frees
+  earlier suites' objects into it, and settling the finalizers does not stop other threads moving
+  the count.** Late in an engine shard, successive finalizer drains freed 308, then 84, then 0
+  objects, and one drain before a staged build still let 98 fall during it. Drains repeated until
+  the count held still left `scene-build-throw-frees` 2 objects short in about 5 % of shard runs
+  under six concurrent copies. Two objects released on a worker thread inside the span reproduce
+  that reading exactly, and do not move the instance-id check.
 - **INSTR-101**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
   the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
   bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.
+- **INSTR-102**, **A race with Godot's background work reproduces on demand only with its worker pool
+  held busy, and neither `RenderingServer.ForceSync()` nor a drawn frame waits for that pool: judge a
+  drain by a run whose pool sleeps through it, never by a quiet machine.** With 96 probe shaders
+  drawn and rewritten, an idle pool printed no free_rid line, and a pool held by sleeping tasks
+  printed 50 with no drain, 50 after a `ForceSync`, 50 after a drawn frame, and 0 through an
+  empty text in between.
 
 ## SRC, sources and documents
 
@@ -1079,6 +1109,18 @@ flows, and fidelity claims requiring the original. Automated checks must state t
 Scripted probes are pinned by `--det`; `--no-det` restores live input, clocks, spawn, and
 randomness. Expect variation in flight framing, weather, water, particles, random animation,
 damage effects, and liveries. Measure a fresh same-build floor for the exact scenario.
+
+## Known environmental reds
+
+A battery red that matches an entry here comes from the machine, not the change, and has an open
+owner. Rerun it alone with the entry's command: red alone, it is the change's until it reproduces
+on the unchanged build (METHOD-8); green alone, the landing carries a `Waiver:` line naming that
+owner. An entry leaves when its owner closes. A `DEFERRED` result (`memory`, `rebuild`, `quiet`, `gaming mode`) is
+not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs/tooling.md`).
+
+- **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
+  or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
+  `.scratch\goldens-failures\<stamp>\`. Rerun: `.\RunTests.ps1 -SkipUnits -SkipEngine -WaitQuiet`.
 
 ## The standing checklist
 

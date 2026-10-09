@@ -14,9 +14,8 @@ namespace CSVM.UI.Menu.Original;
 /// the whole window. It wakes on <see cref="StuntRace.RaceCompleted"/> and halts the sim, and it
 /// retires once a new window clears <see cref="StuntRace.Ended"/>. It draws
 /// <see cref="OriginalRaceResults"/>' composition through <see cref="ComposedBoardView"/>, frozen at
-/// the race's end. Player 1's reader steps Photo Mode, Restart and the exit with any arrow, and
-/// player 1's pointer shares the cursor on <see cref="BoardMenuPointer"/>'s rule. A network guest's
-/// board withholds Restart.
+/// the race's end. Player 1's reader steps Photo Mode, Restart, the exit and any scroll arrows, the
+/// pointer sharing that cursor on <see cref="BoardMenuPointer"/>'s rule. A network guest's board withholds Restart.
 /// Module entry: docs/architecture/UI.md on src/UI/Menu/Original/OriginalRaceBoard.cs.
 /// </summary>
 public sealed partial class OriginalRaceBoard : Control
@@ -36,6 +35,8 @@ public sealed partial class OriginalRaceBoard : Control
     private RaceResultsSheet? _sheet;
     private BoardMenu? _menu;
     private MenuInput? _input;
+    private int _scoresTop;
+    private int _splitsTop;
 
     /// <summary>A new window in place, chosen from Restart (R and pad Y reach it without the board).
     /// </summary>
@@ -157,17 +158,22 @@ public sealed partial class OriginalRaceBoard : Control
         }
 
         // A fresh menu each end, so the cursor starts on Photo Mode. A stray confirm on a board that
-        // just appeared then neither restarts nor leaves.
-        var menu = RestartWithheld != null
-            ? new BoardMenu(
-                dismissable: false,
-                (BoardMenuItem.Photo, OriginalRaceResults.PhotoLabel),
-                (BoardMenuItem.Exit, _exitLabel))
-            : new BoardMenu(
-                dismissable: false,
-                (BoardMenuItem.Photo, OriginalRaceResults.PhotoLabel),
-                (BoardMenuItem.Restart, OriginalRaceResults.RestartLabel),
-                (BoardMenuItem.Exit, _exitLabel));
+        // just appeared then neither restarts nor leaves. A scrolling list's arrows follow the plaques.
+        var items = new List<(BoardMenuItem, string)>();
+        foreach (int slot in OriginalRaceResults.Slots(_sheet))
+        {
+            items.Add(slot switch
+            {
+                OriginalRaceResults.PhotoRow => (BoardMenuItem.Photo, OriginalRaceResults.PhotoLabel),
+                OriginalRaceResults.RestartRow => (BoardMenuItem.Restart, OriginalRaceResults.RestartLabel),
+                OriginalRaceResults.ExitRow => (BoardMenuItem.Exit, _exitLabel),
+                _ => (BoardMenuItem.Scroll, string.Empty),
+            });
+        }
+
+        _scoresTop = 0;
+        _splitsTop = 0;
+        var menu = new BoardMenu(dismissable: false, items.ToArray());
         menu.Activated += OnActivated;
         _menu = menu;
         _input = _inputFor(0);
@@ -191,6 +197,11 @@ public sealed partial class OriginalRaceBoard : Control
             case BoardMenuItem.Exit:
                 Exit?.Invoke();
                 break;
+            case BoardMenuItem.Scroll when _sheet != null && _menu != null:
+                (_scoresTop, _splitsTop) = OriginalRaceResults.Scrolled(_sheet,
+                    OriginalRaceResults.Slots(_sheet)[_menu.Index], _scoresTop, _splitsTop);
+                Compose();
+                break;
         }
     }
 
@@ -209,7 +220,7 @@ public sealed partial class OriginalRaceBoard : Control
     {
         if (_sheet != null)
         {
-            _view?.Show(OriginalRaceResults.Compose(_sheet, _strings, _menu?.Index ?? 0, _pointer.Held),
+            _view?.Show(OriginalRaceResults.Compose(_sheet, _strings, _menu?.Index ?? 0, _pointer.Held, _scoresTop, _splitsTop),
                 BoardPalette.Paper, string.Empty, string.Empty);
         }
     }

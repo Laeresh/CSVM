@@ -124,6 +124,32 @@ internal static class PauseBoardSuites
         ctx.Note($"pointed at the Built-in pause board's rows over a live pause state");
     }
 
+    // A container sorts its children on a deferred call, which a suite inside one frame never
+    // reaches. So every anchored control is resized and every container sorted, parents first.
+    internal static void Settle(Control node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is not Control control)
+            {
+                continue;
+            }
+
+            if (node is not Container)
+            {
+                control.OffsetTop += 1f;
+                control.OffsetTop -= 1f;
+            }
+
+            if (control is Container container)
+            {
+                container.Notification((int)Container.NotificationSortChildren);
+            }
+
+            Settle(control);
+        }
+    }
+
     // A board over its own pause state whose pauser holds the keyboard seat, read once while it
     // stands. The harness never captures the mouse, so that seat's pointer has a position to report.
     private static bool KeyboardSeatReadsPointer(Node parent)
@@ -174,31 +200,5 @@ internal static class PauseBoardSuites
         ctx.Same(RowCount, stacked, $"the five rows lay out one under another and each answers the hit test for its own middle");
         ctx.Same(-1, rows.RowAt(0f, 0f), $"the window's corner is on no row");
         return stacked == RowCount;
-    }
-
-    // A container sorts its children on a deferred call, which a suite inside one frame never
-    // reaches. So every anchored control is resized and every container sorted, parents first.
-    private static void Settle(Control node)
-    {
-        foreach (var child in node.GetChildren())
-        {
-            if (child is not Control control)
-            {
-                continue;
-            }
-
-            if (node is not Container)
-            {
-                control.OffsetTop += 1f;
-                control.OffsetTop -= 1f;
-            }
-
-            if (control is Container container)
-            {
-                container.Notification((int)Container.NotificationSortChildren);
-            }
-
-            Settle(control);
-        }
     }
 }

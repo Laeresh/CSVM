@@ -299,9 +299,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         // The guest's callsign names it to the host, and a guest that joined without one goes by
         // its own last pilot. Read only, since a guest's saves are never touched.
-        if (net.PlayerName.Length == 0)
+        if (net.Identity.PlayerName.Length == 0)
         {
-            net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+            net.Identity.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
         }
 
         // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
@@ -438,7 +438,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                 var door = _net()!;
                 bool open = door.IsCoopHost;
                 // The wait for a code names nothing to copy, so it carries no control.
-                if (open && !door.AwaitingCode && CoopDoorText.CopyTarget(door).Length > 0)
+                if (open && !door.Internet.AwaitingCode && CoopDoorText.CopyTarget(door).Length > 0)
                 {
                     float height = CoopBandSize + 4f;
                     rows.Add(new OriginalRow(CoopCopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton,
@@ -543,7 +543,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         if (row.Key == CoopCopyKey)
         {
-            _net()?.CopyForGuests();
+            _net()?.Reach.CopyForGuests();
             return null;
         }
 
@@ -854,7 +854,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // The network state's lines over one dark ground, in the painting's empty top-left corner.
     // The band line the COPY row spans: its first with a code, else its second, the address line.
     private static float CopyLineY(NetPlayFeature door) =>
-        CoopBandY + (door.JoinCode != null ? 0f : CoopBandSize + 4f);
+        CoopBandY + (door.Internet.JoinCode != null ? 0f : CoopBandSize + 4f);
 
     private static void ComposeBand(string band, BoardLayers layers)
     {

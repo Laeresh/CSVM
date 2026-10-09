@@ -20,6 +20,15 @@
     .scratch/logs/probe-<stamp>.out/.err; the script prints both paths and exits with
     Godot's exit code.
 
+    The launch is first admitted against the machine-wide memory ledger (MemoryLedger.ps1)
+    and waits while it does not fit; -TimeoutSec starts at admission. Past the ledger's
+    maximum wait it exits 3, DEFERRED, without launching; a launch the engine refused below
+    the memory floor (its exit 75) also exits 3.
+
+    While gaming mode is on (GamingMode.ps1) the probe first takes the machine-wide gaming-mode
+    lock, runs at the marker's priority and CPU threads with -TimeoutSec scaled by its watchdog
+    factor, and exits 3 when the lock wait passes the marker's maxWaitSec.
+
 .PARAMETER Resolution
     Window size as WxH, forwarded as Godot's own `--resolution` BEFORE the `--` separator.
     Without it a probe renders at the project's 1280x720, and a saved option cannot raise it
@@ -83,6 +92,9 @@ if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogD
 # rather than failing (same policy as RunTests.ps1).
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
+# The launch joins this job, so killing this script kills the probe (JobObject.ps1).
+$null = Open-RunJob
+. (Join-Path $PSScriptRoot "MemoryLedger.ps1")
 
 # Engine options belong before the `--`; everything after it is the CSVM argument list.
 $Engine = @("--path", $ProjectDir, "res://scenes/Main.tscn")
@@ -111,14 +123,25 @@ for ($i = 0; $i -lt $Launch.Count - 1; $i++) {
 }
 
 Write-Host ("probe: {0}" -f ($GodotArgs -join " ")) -ForegroundColor Cyan
+# In gaming mode the probe takes the machine-wide lock and runs throttled (GamingMode.ps1); the
+# finally at the end of this script releases it however the probe ends.
+$Gaming = New-GamingRun -Worktree $RepoRoot
+try {
+Sync-GamingStage $Gaming
+if ($Gaming.Deferred) { Close-RunJob; exit $MemDeferredExitCode }
+$TimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $TimeoutSec
+Write-Host "  $(Format-GamingSummary $Gaming)" -ForegroundColor DarkGray
+# Admitted against the machine-wide memory ledger first; the timeout starts once it is.
+$Reservation = Request-MemLaunch -GodotArgs $GodotArgs -Label "probe" -Worktree $RepoRoot -Always
 if ($HiddenDesktop) {
     Write-Host ("desktop: {0}   streams: {1}.out / .err" -f [CSVMHiddenDesktop]::Name, $streamBase) -ForegroundColor DarkGray
     # CreateProcess takes ONE command line and it must carry argv[0] itself.
     $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
-    $code = Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
-                                   -WorkingDirectory $RepoRoot `
-                                   -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
-                                   -TimeoutSec $TimeoutSec
+    $handle = Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                                    -WorkingDirectory $RepoRoot `
+                                    -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+    Set-MemReservationPid -Reservation $Reservation -ProcessId ([CSVMMemLedger]::ProcessId($handle))
+    $code = Wait-OnHiddenDesktop -Process $handle -TimeoutSec $TimeoutSec
 } else {
     # Refused a desktop: run visibly, but STILL with real std handles -- the console
     # scribble is the part that must never degrade back (SHELL-10).
@@ -131,6 +154,9 @@ if ($HiddenDesktop) {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
     $p = [System.Diagnostics.Process]::Start($psi)
+    # Joined after it starts, which is safe because Godot starts no child process of its own.
+    Add-ToRunJob -Process $p.Handle
+    Set-MemReservationPid -Reservation $Reservation -ProcessId $p.Id
     # Both pipes drained asynchronously before the wait, or a chatty launch fills the
     # ~4 KB buffer and deadlocks.
     $outRead = $p.StandardOutput.ReadToEndAsync()
@@ -156,4 +182,14 @@ if ($code -eq 124) {
 } else {
     Write-Host ("exit: {0}" -f $code) -ForegroundColor $(if ($code -eq 0) { "Green" } else { "Red" })
 }
+Close-MemReservation -Reservation $Reservation
+Close-RunJob
+if ($code -eq $MemTripwireExitCode) {
+    Write-Host "DEFERRED: memory, the engine found available memory below the floor (exit $MemDeferredExitCode)" -ForegroundColor Yellow
+    exit $MemDeferredExitCode
+}
 exit $code
+# Closes the try opened before the lock is taken.
+} finally {
+    Exit-GamingRun $Gaming
+}
