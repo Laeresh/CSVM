@@ -83,8 +83,9 @@ Every step in order, for one agent at a time:
    the message with its number. Run
    `.\CheckWaiver.ps1 -MessageFile <message> -Root <agent>` for the form. A waiver is a record,
    not a way past the owner: never waive a failure the item itself caused.
-2. Normalise the trailer in the message to `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
-   (agents write a longer model name). Count em dashes (U+2014) in the message, in
+2. Check the message's trailer names the model the agent ran as, per `PROJECT_CONTEXT.md`'s
+   AI-assistance rule (e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`); never
+   rename it to another model. Count em dashes (U+2014) in the message, in
    `git -C <agent> diff -U0` and in every untracked file; fix any in place before committing.
 3. `git -C <agent> add -A; git -C <agent> commit -q -F <message>`. The format hook builds the
    agent's tree; a ` M` it leaves on a file the agent never touched is a line-ending rewrite, check
@@ -187,8 +188,9 @@ is" merges.
 The merge itself: `git -C Z:\CSVM merge --ff-only <run>`
 after the run branch contains main, then `.\CheckItemIds.ps1` on main. "Not possible to
 fast-forward" means main moved again: merge it in first. Never push. Then post every close in the
-log's `## Closes pending` section, `gh issue close N --comment-file <close.txt>` with the landing
-commit's hash added, and move each to the item's log line.
+log's `## Closes pending` section: `gh issue comment N --body-file <close.txt>` with the landing
+commit's hash added, then `gh issue close N` (it takes no comment file), and move each to the
+item's log line.
 
 ## 6. Batteries
 

@@ -101,8 +101,9 @@ and grep the id (no hits in any live file). Write the closing commit message to
 `.scratch\<RUN>\<id>\commit.txt` INSIDE your worktree (create the folder; the orchestrator copies
 it out before removing your tree): subject `Close BL-NNN: <what is now true>` or
 `Close #N: <what is now true>`, body in prose with what settled it, how it was measured, the honest
-limit of the evidence, what changed in the build and whether goldens moved, ending with the line
-`Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`. Put crops and diffs beside it. For an
+limit of the evidence, what changed in the build and whether goldens moved, ending with a
+`Co-Authored-By:` trailer naming the model you run as (`PROJECT_CONTEXT.md`'s AI-assistance rule),
+e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Put crops and diffs beside it. For an
 issue, also write `close.txt` beside it: the closing comment, the same prose without the trailer;
 the orchestrator posts it once the commit is on main. A `capture` or `playtest` issue the item
 alone owned gets its own `close-<N>.txt`.
