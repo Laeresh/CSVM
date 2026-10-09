@@ -1115,7 +1115,7 @@ damage effects, and liveries. Measure a fresh same-build floor for the exact sce
 A battery red that matches an entry here comes from the machine, not the change, and has an open
 owner. Rerun it alone with the entry's command: red alone, it is the change's until it reproduces
 on the unchanged build (METHOD-8); green alone, the landing carries a `Waiver:` line naming that
-owner. An entry leaves when its owner closes. A `DEFERRED` result (memory, `rebuild`, `quiet`) is
+owner. An entry leaves when its owner closes. A `DEFERRED` result (`memory`, `rebuild`, `quiet`, `gaming mode`) is
 not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs/tooling.md`).
 
 - **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,

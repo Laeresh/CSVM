@@ -4,11 +4,12 @@ using System.IO;
 using System.Linq;
 using CSVM.Testing;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace CSVM.Tests;
 
 [Trait("Tier", "Quick")]
-public sealed class SuiteShardsTests
+public sealed class SuiteShardsTests(ITestOutputHelper output)
 {
     [Fact]
     public void A_shard_term_is_taken_out_of_the_selector_it_rides_in()
@@ -103,7 +104,7 @@ public sealed class SuiteShardsTests
     }
 
     [Fact]
-    public void A_suite_the_weights_run_alone_takes_the_last_shard_to_itself()
+    public void A_suite_the_weights_run_alone_takes_a_shard_on_top_of_the_shared_ones()
     {
         var names = Enumerable.Range(0, 12).Select(i => $"s{i:00}").ToList();
         var weights = new SuiteWeights
@@ -114,13 +115,35 @@ public sealed class SuiteShardsTests
             Alone = new[] { "s05" },
         };
 
-        var three = SuiteShards.Plan(names, n => n, weights, 3);
-        var one = SuiteShards.Plan(names, n => n, weights, 1);
+        // The launcher asks for its shared count plus one per alone suite.
+        var twoShared = SuiteShards.Plan(names, n => n, weights, 2 + 1);
+        var oneShared = SuiteShards.Plan(names, n => n, weights, 1 + 1);
+        var selection = SuiteShards.Plan(names, n => n, weights, 1);
 
-        Assert.Equal(new[] { "s05" }, three[2]);
-        Assert.Equal(names.Count - 1, three[0].Count + three[1].Count);
-        Assert.InRange(three[0].Count - three[1].Count, -1, 1);
-        Assert.Equal(names, one[0]);
+        Assert.Equal(new[] { "s05" }, twoShared[2]);
+        Assert.Equal(names.Count - 1, twoShared[0].Count + twoShared[1].Count);
+        Assert.InRange(twoShared[0].Count - twoShared[1].Count, -1, 1);
+        Assert.Equal(new[] { "s05" }, oneShared[1]);
+        Assert.Equal(names.Where(n => n != "s05"), oneShared[0]);
+        Assert.Equal(names, selection[0]);
+    }
+
+    [Theory]
+    [InlineData(6)]
+    [InlineData(2)]
+    [InlineData(1)]
+    public void The_checked_in_plan_runs_each_alone_suite_beside_the_shared_count(int shared)
+    {
+        var names = TestHarness.All.Select(s => s.Name).ToList();
+        var weights = SuiteShards.Load(Path.Combine(RepoRoot(), "analysis", "engine-suite-weights.json"));
+
+        var shards = SuiteShards.Plan(names, n => n, weights, shared + weights.Alone.Count);
+
+        output.WriteLine($"{shared} shared + {weights.Alone.Count} alone over {names.Count} suites: "
+            + string.Join(", ", shards.Select((s, i) => $"shard {i + 1}: {s.Count} suites {s.Sum(weights.For):0} s")));
+        Assert.Equal(weights.Alone.OrderBy(n => n), shards.Skip(shared).Select(s => Assert.Single(s)).OrderBy(n => n));
+        Assert.All(shards.Take(shared), s => Assert.NotEmpty(s));
+        Assert.Equal(names.Count, shards.Sum(s => s.Count));
     }
 
     [Fact]

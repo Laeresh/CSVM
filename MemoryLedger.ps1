@@ -338,16 +338,17 @@ function Set-MemReservationPid {
 .SYNOPSIS
 Records the launch's peak private bytes and releases the reservation; call it once the process has
 exited or been killed. A launch the engine refused below the floor records nothing, its peak is a
-boot's, and an engine-shard peak is recorded only from a complete-catalog run (-CompleteCatalog),
-since a filtered shard stays small.
+boot's, and an engine-shard peak is recorded only when the caller marks the launch a shared shard
+of a complete-catalog run under the default shard plan (-LearnShardPeak), since any other shard
+holds a different share of the catalog.
 #>
 function Close-MemReservation {
-    param($Reservation, [switch]$CompleteCatalog)
+    param($Reservation, [switch]$LearnShardPeak)
     if (-not $Reservation) { return }
     $handle = [IntPtr]::Zero
     if ($Reservation.PSObject.Properties["Process"]) { $handle = $Reservation.Process.Handle }
     $record = $handle -ne [IntPtr]::Zero -and [CSVMMemLedger]::ExitCode($handle) -ne $MemTripwireExitCode -and
-        ($CompleteCatalog -or $Reservation.Fields.kind -ne "engine-shard")
+        ($LearnShardPeak -or $Reservation.Fields.kind -ne "engine-shard")
     if ($record) {
         $peak = [CSVMMemLedger]::PeakPrivateBytes($handle) / $MemGB
         if ($peak -gt 0) {
@@ -596,16 +597,17 @@ if ($SelfTest) {
         $written = [System.IO.File]::ReadAllText($MemEstimatesFile) | ConvertFrom-Json
         Assert-Mem ([double]$written.perf -eq 7.5 -and [double]$written."engine-shard" -eq $MemSeedGB["engine-shard"]) "estimates.json carries every kind for the engine"
 
-        # An engine-shard peak is learned only from a complete-catalog run.
+        # An engine-shard peak is learned only from a launch marked a full shard (RunTests.ps1's
+        # Get-EngineShardPlan decides which, and its -SelfTest checks that).
         foreach ($complete in @($false, $true)) {
             $res = (Request-MemAdmission -Kind "engine-shard" -Worktree "selftest").Reservation
             $short = [System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{
                 FileName = "cmd.exe"; Arguments = "/c ping -n 2 127.0.0.1 >nul"; UseShellExecute = $false; CreateNoWindow = $true }))
             Set-MemReservationPid -Reservation $res -ProcessId $short.Id
             $short.WaitForExit()
-            Close-MemReservation -Reservation $res -CompleteCatalog:$complete
+            Close-MemReservation -Reservation $res -LearnShardPeak:$complete
         }
-        Assert-Mem (@((Read-MemHistory)["engine-shard"]).Count -eq 1) "a filtered engine-shard peak is not recorded, a complete-catalog one is"
+        Assert-Mem (@((Read-MemHistory)["engine-shard"]).Count -eq 1) "an unmarked engine-shard peak is not recorded, a full shard's is"
 
         Assert-Mem ((Get-MemKind @("--run-tests=quick")) -eq "engine-shard" -and (Get-MemKind @("--det", "--graphics=enhanced", "--frames=9")) -eq "capture-enhanced") "kinds classify from the user arguments"
         Assert-Mem ((Test-MemNonInteractive @("--frames=9")) -and -not (Test-MemNonInteractive @("--plane=player_bhawk"))) "interactive play is not admitted"

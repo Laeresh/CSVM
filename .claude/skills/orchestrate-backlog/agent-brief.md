@@ -71,7 +71,8 @@ orchestrator files the issue and writes the line with its number. Check the form
 covers a failure your change caused.
 
 A run that ends `result: DEFERRED` (exit 3) waited past the memory ledger's cap, met the memory
-floor, had `CSVM.dll` rebuilt under it, or ran past `-WaitQuiet`'s cap. It is neither pass nor
+floor, had `CSVM.dll` rebuilt under it, ran past `-WaitQuiet`'s cap, or waited past the gaming-mode
+lock's cap. It is neither pass nor
 fail: re-run it, and never report or land on it as a result. To wait for other sessions' scripted
 Godots, pass `-WaitQuiet` to `RunTests.ps1`; never write a wait loop of your own. A red that matches
 `docs/verification.md`'s known environmental reds is rerun alone with the command given there,

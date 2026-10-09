@@ -96,7 +96,7 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 |---|---|
 | `build` | `dotnet build CSVM/CSVM.sln`; its exit code; a compile error, which also stops the run |
 | `units` | `dotnet test --no-build`; the TRX log in `.scratch/testresults/`, never the console summary; any failed test |
-| `engine` | Godot `--run-tests` in `-Shards` processes, windowed (LOG-8); each shard's JSON report; a failed suite, a missing report, a watchdog timeout (exit 124) |
+| `engine` | Godot `--run-tests` in `-Shards` processes and one per alone suite, windowed (LOG-8); each shard's JSON report; a failed suite, a missing report, a watchdog timeout (exit 124) |
 | `goldens` | One `--det` Godot per manifest shot; the raw-pixel md5 on its `[core] shot pixmd5=…` line, not the PNG bytes (SHOT-6); a hash, frame or size off the manifest |
 | `perf` | `-Perf` only: `analysis/perf/scenarios.json`; the `[perf]` lines, medianed into `perf-history.jsonl`; nothing, it records only |
 | `hitch` | `-Hitch` only, last: two scripted launches; each launch's `.hitches.jsonl` sidecar; nothing, awareness only |
@@ -207,13 +207,16 @@ stale report, or a crash exit fails the run. It refuses to start on Linux withou
 `libfontconfig.so.1`, for the reason the Linux release check gives.
 
 **The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
-many; the default is 6 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
-and `-Shards 1` is the serial reference path. Membership comes from the harness's
+many shared shards divide it; the default is 6 for a full run and 1 whenever
+`-Suite`/`-Filter`/`-Quick` names a selection. Membership comes from the harness's
 `shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
 the same tree always divides the same way; an unweighted suite is charged the default and printed
-as `not checked:`. A suite the file lists under `alone` takes the last shard to itself, which keeps
-`graphics-retext-compiles`'s first TAA frame out of a shard holding worlds. Regenerate that file
-from a warm `-Shards 1` run's report.
+as `not checked:`. **A suite the file lists under `alone` gets a process on top of the shared
+count**, which keeps `graphics-retext-compiles`'s first TAA frame out of a shard holding worlds:
+a full run's default is six shared shards and the alone shard, seven processes, and `-Shards 1`,
+the reference path an A/B compares against, is one shared shard and the alone shard. A selection
+keeps its count, since it never holds a full shard's worlds. Regenerate that file from the shard
+reports of one warm full run, as its `readme` says.
 
 Each shard gets its own log, streams, report and artifacts under `.scratch/engine/owner-<pid>/`;
 what that does not isolate is a suite whose store sits outside `.scratch/`, so overlapping runs are
@@ -225,8 +228,9 @@ counts, and **a shard exiting 0 with no report FAILS the stage**.
 lock file under `%TEMP%\csvm-net-ports\` held until every shard exits, so a second run from another
 worktree takes another slot. Shard `k` of slot `s` gets base `40000 + (10 * s + k - 1) * 100`: seven
 slots of ten shards, below the shipped 47500/47501 a game played on this machine holds and below
-Windows' ephemeral range. `-Shards` above 10 is refused. Each report's `shard.netPortBase` must equal
-the base its shard was handed and differ from every other shard's, or the stage fails (LOG-24).
+Windows' ephemeral range. A run of more than 10 processes (the shared shards and the alone ones) is
+refused. Each report's `shard.netPortBase` must equal the base its shard was handed and differ from
+every other shard's, or the stage fails (LOG-24).
 
 **`test-report.json`'s schema is versioned** (`"schema"`, bumped when a field changes meaning or
 goes). Besides the per-suite rows and their registry `index`, it holds a `binary` block
@@ -653,7 +657,7 @@ can:
   without its bit fails here too ("Permission denied" starting the process), and a missing runtime
   file in `data_CSVM_linuxbsd_x86_64/` fails the launch.
 - **engine** (skipped by `-NoSuites`): `--run-tests=shard:<i>/<n>` over that same zips-only root,
-  the shape every player's install reads, in `-Shards` processes (default 6), shard `k` with
+  the shape every player's install reads, in `-Shards` processes (default 6, the alone suite taking one of them), shard `k` with
   `--net-port-base=30000 + (k - 1) * 100`, below Linux's ephemeral range. The suite list is the harness registry's and the division is `analysis/engine-suite-weights.json`,
   copied in beside the exe where the harness looks for it; the merge refuses a missing report, a
   suite run twice, a coverage short of the registry, and an unexpected engine error line.
@@ -857,6 +861,22 @@ via `EnumWindows` (SHELL-13). Every `RunTests.ps1` stage launches through its pr
 `Invoke-Godot` helper, which uses the non-console binary and redirects both streams to
 `<its --log-file>.out` / `.err` (SHELL-10).
 
+**`RunProbe.ps1`, the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
+both the window flash and the console scribble a bare `& $GodotExe …` sprays over the calling
+terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run, go through
+`.\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build
+first), runs on its own hidden desktop (`csvm-probe`, falling back to a visible but still
+redirected run if the OS refuses one), parks the streams beside the run's `--log-file` or in
+`.scratch/logs/probe-<stamp>.out/.err`, and exits with Godot's code. **`-TimeoutSec`** (default
+**300**, `0` = wait forever) kills the run and exits **124**, so a probe that never quits cannot
+hang a session. **`-Resolution WxH`** is forwarded as Godot's own `--resolution` ahead of the `--`,
+which is the only way a scripted capture lands at a size a player runs: the project ships
+1280x720, and a saved size cannot raise it because `--screenshot` implies `--det`, which drops
+every saved option (DET-8). A resolution-sensitive artefact is invisible at the default size.
+**`-EngineArgs`** forwards any other Godot option ahead of the `--`, as a string array:
+`-EngineArgs '--render-thread','safe'` A/Bs the project's separate render thread, and
+`-EngineArgs '--log-file','<path>'` keeps every native ERROR line in one file.
+
 ### The run's job object: children die with the runner
 
 `RunTests.ps1` and `RunProbe.ps1` put every process they start into one Windows job object per
@@ -892,29 +912,15 @@ run on beside the next run.
 - `.\JobObject.ps1 -SelfTest` toggles breakaway on and off, starts a child that starts a
   grandchild, closes the job, and checks both are gone.
 
-**`RunProbe.ps1`, the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
-both the window flash and the console scribble a bare `& $GodotExe …` sprays over the calling
-terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run, go through
-`.\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build
-first), runs on its own hidden desktop (`csvm-probe`, falling back to a visible but still
-redirected run if the OS refuses one), parks the streams beside the run's `--log-file` or in
-`.scratch/logs/probe-<stamp>.out/.err`, and exits with Godot's code. **`-TimeoutSec`** (default
-**300**, `0` = wait forever) kills the run and exits **124**, so a probe that never quits cannot
-hang a session. **`-Resolution WxH`** is forwarded as Godot's own `--resolution` ahead of the `--`,
-which is the only way a scripted capture lands at a size a player runs: the project ships
-1280x720, and a saved size cannot raise it because `--screenshot` implies `--det`, which drops
-every saved option (DET-8). A resolution-sensitive artefact is invisible at the default size.
-**`-EngineArgs`** forwards any other Godot option ahead of the `--`, as a string array:
-`-EngineArgs '--render-thread','safe'` A/Bs the project's separate render thread, and
-`-EngineArgs '--log-file','<path>'` keeps every native ERROR line in one file.
-
 ### The memory ledger: scripted launches queue instead of exhausting RAM
 
 Every scripted Godot launch on the machine is admitted against one machine-wide ledger before it
 starts (`MemoryLedger.ps1`, dot-sourced by `RunTests.ps1`, `RunProbe.ps1`, `RunGame.ps1` and
 `RunDev.ps1`), so concurrent sessions queue rather than run the machine out of memory. Always on,
 no flag. A free-memory snapshot cannot be the test: an engine shard starts at a few hundred MB and
-grows to about 4 GB over its catalog, so six shards started together all see enough free.
+grows to about 6 GB over its share of the catalog (5.8 to 6.6 GB measured, hence the 7.0 GB
+`engine-shard` seed; `analysis/shard-memory/FINDINGS.md`), so seven shards started together all see
+enough free.
 
 - **The ledger** is `%TEMP%\csvm-mem\`: one `res-*.json` per live launch, `{pid, kind, estimateGB,
   worktree}`, held open by the launching script (delete-on-close, no delete sharing) for
@@ -942,9 +948,10 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
 - **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
   from a handle the ledger holds on the process, after it exits or is killed) under its kind in
   `history.json`; the estimate is the highest of the kind's last 20 peaks plus 25 percent, and
-  never below the kind's seed. An `engine-shard` peak is recorded only from a complete-catalog
-  `RunTests.ps1` run, since a filtered shard stays small, and a launch the engine refused records
-  nothing. The seed table is `$MemSeedGB` in `MemoryLedger.ps1`; the kinds are `engine-shard`,
+  never below the kind's seed. An `engine-shard` peak is recorded only from a shared shard of a
+  complete-catalog `RunTests.ps1` run under the default shard plan (the default `-Shards`, gaming
+  mode off): a filtered shard stays small, any other count hands a shard a different share of the
+  catalog, and the alone shard holds one suite. A launch the engine refused records nothing. The seed table is `$MemSeedGB` in `MemoryLedger.ps1`; the kinds are `engine-shard`,
   `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
   `capture-xr` (`--xr*`). `estimates.json` beside it, written from the seeds when the ledger is
   first used, is what the engine reads.
@@ -953,9 +960,10 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   FAIL: `RunTests.ps1` marks the stage DEFERRED, skips the later Godot stages and exits **3**
   (`$MemDeferredExitCode`); `RunProbe.ps1` exits 3 without launching. What did run is still
   judged: the shards and shots that ran are merged and scored, and **a FAIL outranks DEFERRED** in
-  both the stage and the run result. Gaming mode's lock wait (its own `maxWaitSec`, also 1800 s by
-  default) shares the outcome, and a
-  rebuild under the run and `-WaitQuiet`'s cap share the outcome (Launch scripts, above).
+  both the stage and the run result. Three other waits and stops end a run the same way, exit 3:
+  gaming mode's lock wait past its own `maxWaitSec` (also 1800 s by default; Gaming mode, below),
+  and a rebuild under the run and a `-WaitQuiet` wait past `-QuietTimeoutSec` (Launch scripts,
+  above).
 - **The engine's side** (`src/Tooling/MemoryAdmission.cs`, called once from `Launcher._Ready`,
   Windows editor builds only). A non-interactive launch (`--det`, `--run-tests`, `--frames=`,
   `--shots=`, `--screenshot=`) reads physical memory available as the ledger does
@@ -978,8 +986,9 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   against the estimate, worktree), the waiters, and the estimate per kind. A waiting launch prints
   the same table once, then one line every 30 s. `.\MemoryLedger.ps1 -SelfTest` checks the
   admission rule, handle-held liveness across a killed holder, the empty-ledger progress rule and
-  its floor, the estimate update and its seed floor, and the complete-catalog rule, against a
-  private ledger directory.
+  its floor, the estimate update and its seed floor, and that an `engine-shard` peak is recorded
+  only when the caller marks the launch a full shard (`-LearnShardPeak`), against a private ledger
+  directory. `.\RunTests.ps1 -SelfTest` checks which shards of which plans are so marked.
 - **Test-only overrides**, for proving admission on a shared machine: `CSVM_MEM_AVAILABLE_GB`
   replaces the machine's available memory with a simulated figure, less the private bytes of
   every live reservation, so the simulated machine fills as launches grow (the engine's floor
@@ -1000,15 +1009,16 @@ slower than budget, leaving the rest of the machine to the game.
   `.\GamingMode.ps1 status` prints the time left, the tunables, the lock holder and the waiters.
   The code is `GamingModeCore.ps1`, which takes no parameters so that dot-sourcing it binds nothing
   in the caller; `GamingMode.ps1` is the command line over it.
-- **The tunables live in the marker** (JSON), with these defaults: `shards` 2 (engine shards),
-  `goldenWorkers` 1, `dotnetCpus` 2 (`dotnet build`/`test -m:2` and the test runner's
+- **The tunables live in the marker** (JSON), with these defaults: `shards` 2 (shared engine
+  shards, with the alone shard beside them), `goldenWorkers` 1, `dotnetCpus` 2
+  (`dotnet build`/`test -m:2` and the test runner's
   `RunConfiguration.MaxCpuCount`), `priority` `BelowNormal` (`Idle` can starve a run under a
   CPU-heavy game), `threads` 4 (the affinity: the last N logical processors, 12-15 on the 16-thread
   development machine), `watchdogFactor` 3 (a shard's 120 s stall time becomes 360 s and its
   ceiling 3600 s, a golden shot's 300 s watchdog 900 s) and `maxWaitSec` 1800. Edit the file to
   change one; a missing or invalid field takes its default, and `on` again keeps the edits. An explicit `-Shards`/`-GoldenWorkers` above the tunable is capped.
-  `-Shards 1` is not the throttled setting: one process with the whole catalog at low priority
-  beside a game can outrun even the scaled ceiling.
+  `-Shards 1` is not the throttled setting: one shared shard with all but the alone suite at low
+  priority beside a game can outrun even the scaled ceiling.
 - **The lock**, only while gaming mode is on. `RunTests.ps1` and `RunProbe.ps1` take it before
   their first heavy stage and hold it to the summary: an exclusive delete-on-close file
   `%TEMP%\csvm-gaming.lock` that records the holder's worktree, pid and start time and is released
@@ -1045,7 +1055,7 @@ slower than budget, leaving the rest of the machine to the game.
   240 s in gaming mode the gate prints one warning on stderr.
 - **Not covered:** `RunGame.ps1` and `RunDev.ps1` (the user plays through them), `ExportRelease.ps1`,
   `Extract.ps1`. `-WaitQuiet` is separate: it waits for scripted Godots whatever the mode.
-- **Goldens that move under the game's GPU load are a determinism defect**, owned elsewhere; gaming
+- **Goldens that move under the game's GPU load are a determinism defect**, owned by #114; gaming
   mode reduces contention between test runs and is not a fix for one.
 - **Off Windows** it is a no-op and says so once.
 - `.\GamingMode.ps1 -SelfTest` checks expiry, tunable parsing and the lock across processes

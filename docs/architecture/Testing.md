@@ -40,8 +40,8 @@ back as the selector; `Plan` divides an already-selected list longest-unit-first
 shard and returns each shard in the input's order, so one tree always divides the same way.
 `SuiteWeights` reads the measured per-suite seconds in `analysis/engine-suite-weights.json`, with a
 default for a suite the file does not name, `Groups` for the sets a shard may not split and `Alone`
-for the suites that take a shard of their own. Read
-`TestHarness.cs` for where a plan is applied.
+for the suites `Plan` puts last, one to a shard, which `RunTests.ps1` adds on top of its shared
+count. Read `TestHarness.cs` for where a plan is applied.
 
 ## src/Testing/SuitePorts.cs
 The one table of where each suite that opens a real socket opens it: an offset into this process's

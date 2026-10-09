@@ -110,15 +110,17 @@
 
 .PARAMETER Shards
     How many Godot processes the engine stage divides the catalog over. 0 (the default) means the
-    measured default for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which is
-    faster started once than started N times. 1 is the serial reference path and stays selectable.
+    measured default (6) for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which
+    is faster started once than started N times. A full run adds one process per suite the weights
+    file runs alone, so 6 is six shared shards and the alone shard, and 1 is one shared shard and the
+    alone shard; a selection keeps its count.
     Membership comes from analysis/engine-suite-weights.json through the harness's own
     shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
     run. Each shard gets its own engine log, report, scratch subdirectory and watchdog, which
     kills it once its log has not grown for $EngineStallSec or at $EngineCeilingSec; the stage's
     verdict is the merge of every shard's report, and a shard exiting 0 without one FAILS the stage.
     Each shard also gets its own --net-port-base, from a slot this run holds for the stage, so no two
-    shards of this or a concurrent run open one port; at most 10 shards (docs/tooling.md).
+    shards of this or a concurrent run open one port; at most 10 processes (docs/tooling.md).
 
 .PARAMETER Quick
     The broad partial confidence gate: build, the quick unit tier (Tier=Quick), the quick engine
@@ -239,7 +241,8 @@
 
 .EXAMPLE
     .\RunTests.ps1 -Shards 1
-    The same run with the engine stage serial -- the reference path an A/B compares against.
+    The same run with the catalog in one shared shard beside the alone shard -- the reference path
+    an A/B compares against.
 
 .EXAMPLE
     .\RunTests.ps1 -Quick
@@ -339,7 +342,8 @@ $EngineCeilingTimeoutSec = $EngineCeilingSec
 # No engine budget written into the budgets file may reach the ceiling: one there would go red
 # without ever printing "over budget" first.
 $EngineBudgetCapSec = [math]::Floor(0.8 * $EngineCeilingSec)
-# Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
+# Shared shards for the FULL catalog when -Shards is not given; each alone suite adds a process on
+# top (Get-EngineShardPlan). Measured on the development machine (8
 # cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
 # every shard within 8 s of the others, and 8 was slower per shard from contention. The shard
 # watchdogs above judge each launch's progress, so they are not a budget the shard count may be
@@ -515,10 +519,9 @@ function Get-RebuildCause {
 # (exit 124) at $TimeoutSec, or once its --log-file has not grown for $StallSec, and its .Overdue
 # says which. Both watchdogs start at admission, so waiting for memory never counts toward either.
 # Order and membership never change; only start times move. An item never started keeps the
-# .ExitCode it came with.
+# .ExitCode it came with. An engine-shard item records its peak only when its .LearnPeak is true.
 function Invoke-GodotPool {
-    param([object[]]$Items, [string]$Kind, [int]$MaxConcurrent, [int]$TimeoutSec, [int]$StallSec = 0,
-          [switch]$CompleteCatalog)
+    param([object[]]$Items, [string]$Kind, [int]$MaxConcurrent, [int]$TimeoutSec, [int]$StallSec = 0)
     $pending = New-Object System.Collections.Queue
     foreach ($item in $Items) { $pending.Enqueue($item) }
     $running = New-Object System.Collections.ArrayList
@@ -534,7 +537,7 @@ function Invoke-GodotPool {
             if (-not $script:Rebuilt -and -not $item.Overdue -and -not [CSVMMemLedger]::HasExited($handle)) { continue }
             # An overdue launch is killed here, and its reservation released only after the kill.
             $item.ExitCode = Wait-Godot -Launch $item.Launch -TimeoutSec 1
-            Close-MemReservation -Reservation $item.Reservation -CompleteCatalog:$CompleteCatalog
+            Close-MemReservation -Reservation $item.Reservation -LearnShardPeak:([bool]$item.LearnPeak)
             $running.Remove($item)
             if ($script:Rebuilt) {
                 # Stopped, not finished: it reads as never started, as a launch the ledger deferred does.
@@ -581,6 +584,26 @@ function Invoke-GodotPool {
             continue
         }
         Start-Sleep -Milliseconds 200
+    }
+}
+
+# The engine stage's processes: the shared count (-Shards, gaming mode's tunable, or the default)
+# plus one per suite the weights file runs alone, which the harness's plan puts last. A selection
+# keeps its count, since it never holds a full shard's worlds. Learns says, per process, whether its
+# peak teaches the ledger's engine-shard estimate: only a shared shard of the complete catalog under
+# the default count does, because any other plan hands a shard a different share of the catalog.
+function Get-EngineShardPlan {
+    param([int]$Requested, [string]$Selector, $GamingSettings, [int]$AloneCount)
+    $shared = $Requested
+    if ($shared -le 0) {
+        $shared = if ($Selector) { 1 } elseif ($GamingSettings) { $GamingSettings.shards } else { $DefaultEngineShards }
+    }
+    if ($GamingSettings) { $shared = [math]::Min($shared, $GamingSettings.shards) }
+    $total = if ($Selector) { $shared } else { $shared + $AloneCount }
+    $default = -not $Selector -and -not $GamingSettings -and $shared -eq $DefaultEngineShards
+    return [pscustomobject]@{
+        Shared = $shared; Total = $total
+        Learns = @(for ($k = 1; $k -le $total; $k++) { $default -and $k -le $shared })
     }
 }
 
@@ -710,6 +733,25 @@ if ($RunSelfTest) {
         Assert-SelfTest ($fakeRuns[0].ExitCode -eq 0 -and -not $fakeRuns[0].Overdue) "a launch whose log keeps growing outlives the stall time"
         Assert-SelfTest ($fakeRuns[1].ExitCode -eq 124 -and $fakeRuns[1].Overdue -eq "its log did not grow for 3s") "a launch whose log never grows is killed at the stall time"
         Assert-SelfTest ($fakeRuns[2].ExitCode -eq 124 -and $fakeRuns[2].Overdue -eq "ran past its 15s wall-time watchdog") "a launch that never stops logging is killed at the ceiling"
+
+        # The shard plan: an alone suite's process comes on top of the shared count, and only the
+        # default plan's shared shards teach the engine-shard estimate.
+        $gamingTwo = [pscustomobject]@{ shards = 2 }
+        $plans = [ordered]@{
+            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 6, 7, "1,1,1,1,1,1,0")
+            "-Shards 6"    = @((Get-EngineShardPlan -Requested 6 -AloneCount 1), 6, 7, "1,1,1,1,1,1,0")
+            "-Shards 1"    = @((Get-EngineShardPlan -Requested 1 -AloneCount 1), 1, 2, "0,0")
+            "-Shards 2"    = @((Get-EngineShardPlan -Requested 2 -AloneCount 1), 2, 3, "0,0,0")
+            "gaming mode"  = @((Get-EngineShardPlan -Requested 0 -GamingSettings $gamingTwo -AloneCount 1), 2, 3, "0,0,0")
+            "gaming, -Shards 6" = @((Get-EngineShardPlan -Requested 6 -GamingSettings $gamingTwo -AloneCount 1), 2, 3, "0,0,0")
+            "a selection"  = @((Get-EngineShardPlan -Requested 0 -Selector "hud" -AloneCount 1), 1, 1, "0")
+            "a selection, -Shards 3" = @((Get-EngineShardPlan -Requested 3 -Selector "hud" -AloneCount 1), 3, 3, "0,0,0")
+        }
+        foreach ($case in $plans.Keys) {
+            $p, $shared, $total, $learns = $plans[$case]
+            $got = ($p.Learns | ForEach-Object { [int]$_ }) -join ","
+            Assert-SelfTest ($p.Shared -eq $shared -and $p.Total -eq $total -and $got -eq $learns) "shard plan, ${case}: $($p.Shared) shared of $($p.Total) process(es), learns $got"
+        }
     } finally {
         $env:CSVM_MEM_AVAILABLE_GB = $savedAvail
         Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
@@ -1208,13 +1250,16 @@ if ($SkipEngine) {
 
     # An explicit selection stays in one process: the shard grammar divides by measured weight, and
     # a handful of named suites is faster started once than started N times.
-    $shardCount = $Shards
-    if ($shardCount -le 0) {
-        $shardCount = if ($EngineSelector) { 1 } elseif ($Gaming.Settings) { $Gaming.Settings.shards } else { $DefaultEngineShards }
-    }
-    if ($Gaming.Settings) { $shardCount = [math]::Min($shardCount, $Gaming.Settings.shards) }
+    # A missing or unreadable weights file runs nothing alone, as the harness's own reading does.
+    $aloneCount = 0
+    try {
+        $weightsJson = [System.IO.File]::ReadAllText((Join-Path $RepoRoot "analysis\engine-suite-weights.json")) | ConvertFrom-Json
+        $aloneCount = @($weightsJson.alone | Where-Object { $_ }).Count
+    } catch { }
+    $shardPlan = Get-EngineShardPlan -Requested $Shards -Selector $EngineSelector -GamingSettings $Gaming.Settings -AloneCount $aloneCount
+    $shardCount = $shardPlan.Total
     if ($shardCount -gt $NetPortSlotShards) {
-        throw "-Shards ${shardCount}: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards shards"
+        throw "-Shards $($shardPlan.Shared) plus $($shardCount - $shardPlan.Shared) alone makes $shardCount processes: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards"
     }
 
     # Held from before the first launch until every shard has exited. With every slot taken, a
@@ -1259,14 +1304,14 @@ if ($SkipEngine) {
         $testArg = if ($terms) { "--run-tests=$terms" } else { "--run-tests" }
         $shardRuns += [pscustomobject]@{
             Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
-            NetPortBase = $netPortBase
+            NetPortBase = $netPortBase; LearnPeak = $shardPlan.Learns[$k - 1]
             Args = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn", "--", $testArg,
                      "--net-port-base=$netPortBase")
             Launch = $null; ExitCode = -1
         }
     }
     if ($shardCount -gt 1) {
-        Write-Host "  $shardCount shards, weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
+        Write-Host "  $($shardPlan.Shared) shared shard(s) and $($shardCount - $shardPlan.Shared) alone, weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
     }
     Write-Host "  net ports: slot $netSlotNumber, bases $(($shardRuns | ForEach-Object { $_.NetPortBase }) -join ', ')" -ForegroundColor DarkGray
 
@@ -1279,8 +1324,7 @@ if ($SkipEngine) {
         # Each shard is admitted by memory on its own and keeps its own watchdog, so one hung shard
         # fails itself and the others still report.
         Invoke-GodotPool -Items $shardRuns -Kind "engine-shard" -MaxConcurrent $shardCount `
-                         -TimeoutSec $EngineCeilingTimeoutSec -StallSec $EngineStallTimeoutSec `
-                         -CompleteCatalog:(-not $EngineSelector)
+                         -TimeoutSec $EngineCeilingTimeoutSec -StallSec $EngineStallTimeoutSec
     } finally {
         if ($netSlot) {
             $netSlot.Stream.Dispose()
@@ -1325,7 +1369,7 @@ if ($SkipEngine) {
             $detail = "$detail; selector '$EngineSelector'"
         }
         if ($shardCount -gt 1) {
-            $detail = "$detail; $shardCount shards, slowest $($merged.SlowestShard)"
+            $detail = "$detail; $($shardPlan.Shared) shared + $($shardCount - $shardPlan.Shared) alone shards, slowest $($merged.SlowestShard)"
         }
         Add-Stage -Name "engine" -Status $status -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
         foreach ($problem in $problems) {

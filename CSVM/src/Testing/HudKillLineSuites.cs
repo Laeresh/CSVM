@@ -344,7 +344,10 @@ internal static class HudKillLineSuites
         // A synthetic tree carries no cockpit art to build a cluster from.
         if (cluster == null)
         {
-            ctx.Check(ctx.SyntheticData, $"a real gauge cluster was built for '{ctx.PlaneName}'");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(false, $"a real gauge cluster was built for '{ctx.PlaneName}'");
+            }
             return;
         }
         var saved = GameClock.Current;
