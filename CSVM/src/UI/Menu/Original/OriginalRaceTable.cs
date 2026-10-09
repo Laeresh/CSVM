@@ -20,7 +20,8 @@ public static class OriginalRaceTable
     /// <summary>The scores page art, drawn at the page corner the caller names.</summary>
     public const string PageArt = "MP_LOBBY_STATSCREEN.PNG";
 
-    /// <summary>The rows the page shows, the script's <c>RDA</c>; a longer field is cut off.</summary>
+    /// <summary>The rows the page shows, the script's <c>RDA</c>; a longer field scrolls under
+    /// <see cref="ScrollBar"/>.</summary>
     public const int VisibleRows = 10;
 
     /// <summary>The row pitch, the script's <c>SDA</c>.</summary>
@@ -79,19 +80,27 @@ public static class OriginalRaceTable
         return rows;
     }
 
+    /// <summary>The page's scroll bar, the script's <c>HEA</c>: at (+419, +66), 195 tall, over
+    /// <see cref="VisibleRows"/>. Its <c>KF</c> is 0x00000000, so no track is painted.</summary>
+    public static OriginalScrollBar ScrollBar(float pageX, float pageY) => new(pageX + 419f, pageY + 66f, 195f, VisibleRows);
+
     /// <summary>The page at (<paramref name="pageX"/>, <paramref name="pageY"/>) in authored pixels.
     /// Its art goes into the backdrop, and <see cref="ComposeRows"/> writes the rest.</summary>
-    public static void Compose(IReadOnlyList<RaceTableRow> rows, float pageX, float pageY, UiStrings strings, BoardLayers layers)
+    public static void Compose(IReadOnlyList<RaceTableRow> rows, float pageX, float pageY, UiStrings strings, BoardLayers layers,
+        int top = 0)
     {
         ArgumentNullException.ThrowIfNull(layers);
         layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, PageArt), pageX, pageY));
-        ComposeRows(rows, pageX, pageY, strings, layers);
+        ComposeRows(rows, pageX, pageY, strings, layers, top);
     }
 
-    /// <summary>The headers and rows into the lines, <see cref="VisibleRows"/> at most. The page stands
-    /// drawn already at (<paramref name="pageX"/>, <paramref name="pageY"/>), as on the lobby's Game
-    /// Scores tab. The string table supplies the faces, else the fallback size holds.</summary>
-    public static void ComposeRows(IReadOnlyList<RaceTableRow> rows, float pageX, float pageY, UiStrings strings, BoardLayers layers)
+    /// <summary>The headers and <see cref="VisibleRows"/> rows from <paramref name="top"/> into the
+    /// lines, and the scroll bar's thumb once the field is longer. The arrows are the caller's rows.
+    /// The page stands drawn already at (<paramref name="pageX"/>,
+    /// <paramref name="pageY"/>), as on the lobby's Game Scores tab. The string table supplies the
+    /// faces, else the fallback size holds.</summary>
+    public static void ComposeRows(IReadOnlyList<RaceTableRow> rows, float pageX, float pageY, UiStrings strings, BoardLayers layers,
+        int top = 0)
     {
         ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(strings);
@@ -108,9 +117,11 @@ public static class OriginalRaceTable
             }
         }
 
-        for (int i = 0; i < rows.Count && i < VisibleRows; i++)
+        var bar = ScrollBar(pageX, pageY);
+        top = bar.Clamp(top, rows.Count);
+        for (int i = 0; top + i < rows.Count && i < VisibleRows; i++)
         {
-            var row = rows[i];
+            var row = rows[top + i];
             float x = pageX + RowX;
             float y = pageY + RowY + (RowPitch * i);
             var ink = row.Left ? FlaggedInk : Ink;
@@ -123,6 +134,8 @@ public static class OriginalRaceTable
                 layers.Lines.Add(Line(strings, NumberFace, figures[column], x + cell.X, y, cell.Width, BoardJustify.Center, ink));
             }
         }
+
+        bar.Compose(pageX + RowX, rows.Count, top, layers);
     }
 
     // One cell in a string's face and an ink, the script's black unless named. The words are the

@@ -54,6 +54,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Game Scores tab, greyed until a match has been flown from this lobby.</summary>
     public const string ScoresTabKey = "MPL_TAB_SCORES";
 
+    /// <summary>The Game Scores scroll bar's up arrow, a row while the scores outgrow the page.</summary>
+    public const string ScoresUpKey = "MPL_B_SCORESUP";
+
+    /// <summary>The Game Scores scroll bar's down arrow.</summary>
+    public const string ScoresDownKey = "MPL_B_SCORESDOWN";
+
     /// <summary>The Mission Environment box.</summary>
     public const string EnvironmentKey = "MPL_D_ENVIRONMENT";
 
@@ -226,8 +232,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const string CheckArt = "MP_B_CHECKBOX8STATES.PNG";
     private const string MarkArt = "MP_B_CHECKBOX.PNG";
     private const string ArrowArt = "MP_B_LISTBOXARROW.PNG";
-    private const string UpArt = "MP_B_SCROLLUP.PNG";
-    private const string DownArt = "MP_B_SCROLLDOWN.PNG";
     private const float MemberIndent = 12f;
 
     // The bot editor's faces: the Mission Options dropdowns' for its boxes and captions, and their
@@ -291,6 +295,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static readonly string[] ScoreHeaders = { "Team Name", "Points", "Kills", "Deaths", "Hits %" };
     private static readonly (float X, float Y)[] ScoreHeaderAt = { (21f, 43f), (179f, 44f), (242f, 44f), (303f, 44f), (362f, 44f) };
 
+    // The scores page's scroll bar over the landed match's lines.
+    private static readonly OriginalScrollBar ScoresBar = OriginalRaceTable.ScrollBar(PageX, PageY);
+
     // The scripts' colours beyond the plaque labels' four: the tab ink, the picked sub-tab's red,
     // the Ready? label, the LAUNCH! blink and the own name.
     private static readonly BoardTint TabDisabled = new(128, 128, 128);
@@ -327,6 +334,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The name the last Create Team took, which the box opens on next, as the script's 2142 keeps it.
     private string _lastTeamName = string.Empty;
     private int _listTop;
+    private int _scoresTop;
     private string _chat = string.Empty;
     private string? _typing;
     private string _draft = string.Empty;
@@ -520,6 +528,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         lobby.Land(scores, race);
         Enter();
         Tab = LobbyTab.Scores;
+        _scoresTop = 0;
         return true;
     }
 
@@ -589,13 +598,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         Widgets(rows);
     }
 
-    /// <summary>Every dropdown shows all its items, so only the outlaw list's long pages scroll.</summary>
+    /// <summary>Every dropdown shows all its items, so only the outlaw list's long pages and a long
+    /// Game Scores page scroll.</summary>
     public void Lists(List<OriginalList> lists)
     {
         ArgumentNullException.ThrowIfNull(lists);
         if (_open == null)
         {
             _outlaw.Lists(lists);
+            if (!_outlaw.IsOpen && Tab == LobbyTab.Scores && Lobby is { } lobby && ScoresBar.Scrolls(ScoreCount(lobby)))
+            {
+                lists.Add(new OriginalList("MPL_L_SCORES", ScoresBar.Window(PageX + OriginalRaceTable.RowX, ScoreCount(lobby), _scoresTop),
+                    top => _scoresTop = top));
+            }
         }
     }
 
@@ -740,6 +755,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             case ScoresTabKey:
                 Tab = (LobbyTab)Array.IndexOf(TabKeys, row.Key);
                 _pickedBot = -1;
+                return null;
+            case ScoresUpKey:
+            case ScoresDownKey:
+                if (lobby != null)
+                {
+                    _scoresTop = ScoresBar.Clamp(_scoresTop + (row.Key == ScoresUpKey ? -1 : 1), ScoreCount(lobby));
+                }
+
                 return null;
             case AddBotKey:
                 lobby?.AddBot();
@@ -1086,6 +1109,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static OriginalRow Arrow(string key, string art, float x, float y, bool enabled) =>
         new(key, string.Empty, OriginalRowKind.Button, x, y, 16f, 11f, enabled, 1, new BoardArt(BoardArtLibrary.Ui, art, 4));
 
+    // The lines Game Scores lists: a landed race's standings, else the match's.
+    private static int ScoreCount(DogfightLobby lobby) => lobby.RaceScores.Count > 0 ? lobby.RaceScores.Count : lobby.Scores.Count;
+
     // The player list as drawn: each team's row followed by its members, then every player on no
     // team. The ready script's rows of kind 1 and kind 0 stand so. Player is the index into Players,
     // -1 for a team row.
@@ -1397,6 +1423,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 case LobbyTab.Ammo:
                     AmmoRows(lobby, rows);
                     break;
+                case LobbyTab.Scores when ScoresBar.Scrolls(ScoreCount(lobby)):
+                    int count = ScoreCount(lobby);
+                    _scoresTop = ScoresBar.Clamp(_scoresTop, count);
+                    rows.Add(ScoresBar.ArrowRow(ScoresUpKey, down: false, count, _scoresTop));
+                    rows.Add(ScoresBar.ArrowRow(ScoresDownKey, down: true, count, _scoresTop));
+                    break;
             }
         }
 
@@ -1457,11 +1489,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
-        rows.Add(Arrow(TeamArrowPrefix + "MIN+", UpArt, PageX + 342f, PageY + 150f, counts && options.MinTeams < options.MaxTeams));
-        rows.Add(Arrow(TeamArrowPrefix + "MIN-", DownArt, PageX + 342f, PageY + 161f, counts && options.MinTeams > 0));
+        rows.Add(Arrow(TeamArrowPrefix + "MIN+", OriginalScrollBar.UpArt, PageX + 342f, PageY + 150f, counts && options.MinTeams < options.MaxTeams));
+        rows.Add(Arrow(TeamArrowPrefix + "MIN-", OriginalScrollBar.DownArt, PageX + 342f, PageY + 161f, counts && options.MinTeams > 0));
         rows.Add(Box(MaxTeamsKey, BoxText(MaxTeamsKey, lobby), PageX + 387f, PageY + 150f, 42f, 22f, counts));
-        rows.Add(Arrow(TeamArrowPrefix + "MAX+", UpArt, PageX + 429f, PageY + 150f, counts && options.MaxTeams < DogfightLobby.MaxTeams));
-        rows.Add(Arrow(TeamArrowPrefix + "MAX-", DownArt, PageX + 429f, PageY + 161f, counts && options.MaxTeams > options.MinTeams));
+        rows.Add(Arrow(TeamArrowPrefix + "MAX+", OriginalScrollBar.UpArt, PageX + 429f, PageY + 150f, counts && options.MaxTeams < DogfightLobby.MaxTeams));
+        rows.Add(Arrow(TeamArrowPrefix + "MAX-", OriginalScrollBar.DownArt, PageX + 429f, PageY + 161f, counts && options.MaxTeams > options.MinTeams));
         rows.Add(Check(LimitedLivesKey, CheckArt, PageX + 241f, PageY + 192f, 110f, 11f, rules));
         rows.Add(Box(LivesKey, BoxText(LivesKey, lobby), PageX + 360f, PageY + 193f, 25f, 22f, rules && options.LimitedLives));
         rows.Add(Check(AutoRespawnKey, CheckArt, PageX + 241f, PageY + 207f, 110f, 11f, rules));
@@ -1477,8 +1509,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(_text.Strip(AddBotKey, SmallArt, PageX + 20f, BotsY + 20f, bots && lobby.BotRoom > 0, 1, 74f, 37f));
         rows.Add(_text.Strip(FillKey, SmallArt, PageX + 98f, BotsY + 20f, bots && lobby.FieldSeats < _fillTo, 1, 74f, 37f));
         rows.Add(Box(FillCountKey, BoxText(FillCountKey, lobby), PageX + 176f, BotsY + 27f, 28f, 22f, bots));
-        rows.Add(Arrow(FillArrowPrefix + "+", UpArt, PageX + 204f, BotsY + 27f, bots && _fillTo < NetSeats.MaxPlayers));
-        rows.Add(Arrow(FillArrowPrefix + "-", DownArt, PageX + 204f, BotsY + 38f, bots && _fillTo > 2));
+        rows.Add(Arrow(FillArrowPrefix + "+", OriginalScrollBar.UpArt, PageX + 204f, BotsY + 27f, bots && _fillTo < NetSeats.MaxPlayers));
+        rows.Add(Arrow(FillArrowPrefix + "-", OriginalScrollBar.DownArt, PageX + 204f, BotsY + 38f, bots && _fillTo > 2));
     }
 
     // Select Plane on a picked bot: its callsign, plane, skill and team in the pilot's own picker's
@@ -2282,14 +2314,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
     }
 
-    // The scores page: the headers over the last match's lines, best first. A team match lists
-    // each team's line with its pilots indented under it. Hits % stays blank, since no end counts a
-    // pilot's hits. A stunt race's table takes the race board's own columns and grey rows.
+    // The scores page: the headers over the last match's lines, best first, ten from the scroll
+    // bar's top. A team match lists each team's line with its pilots indented under it. Hits % stays
+    // blank, since no end counts a pilot's hits. A stunt race's table takes the race board's own
+    // columns and grey rows.
     private void ComposeScores(DogfightLobby lobby, BoardLayers layers)
     {
         if (lobby.RaceScores.Count > 0)
         {
-            OriginalRaceTable.ComposeRows(lobby.RaceScores, PageX, PageY, _text.Strings, layers);
+            OriginalRaceTable.ComposeRows(lobby.RaceScores, PageX, PageY, _text.Strings, layers, _scoresTop);
             return;
         }
 
@@ -2300,10 +2333,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         var scores = lobby.Scores;
         bool teams = System.Linq.Enumerable.Any(scores, line => line.IsTeam);
-        for (int i = 0; i < scores.Count && i < VisiblePlayers; i++)
+        int top = ScoresBar.Clamp(_scoresTop, scores.Count);
+        for (int i = 0; top + i < scores.Count && i < OriginalRaceTable.VisibleRows; i++)
         {
             float y = PageY + 69f + (ListPitch * i);
-            var line = scores[i];
+            var line = scores[top + i];
             float indent = teams && !line.IsTeam ? 12f : 0f;
             layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f + indent, y, 150f - indent, Black, text: line.Name));
             if (line.IsBot)
@@ -2320,6 +2354,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     text: numbers[column].ToString(CultureInfo.InvariantCulture)));
             }
         }
+
+        ScoresBar.Compose(PageX + OriginalRaceTable.RowX, scores.Count, top, layers);
     }
 
     // The open list over the finished page: its items on the box's own fill, the picked one marked.

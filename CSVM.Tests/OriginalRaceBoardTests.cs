@@ -75,6 +75,91 @@ public class OriginalRaceBoardTests
     }
 
     [Fact]
+    public void SixteenRacersScrollTheScoresPageToTheSixteenthRowUnderTheScriptsScrollBar()
+    {
+        var race = FieldOf(16);
+        var rows = OriginalRaceTable.Rows(race.Standings(), race.ZoneCount);
+        var bar = OriginalRaceTable.ScrollBar(PageX, PageY);
+        Assert.Equal((PageX + 419f, PageY + 66f, 195f, 10), (bar.X, bar.Y, bar.Height, bar.Rows));
+
+        var layers = new BoardLayers();
+        int top = bar.Clamp(99, rows.Count);
+        OriginalRaceTable.Compose(rows, PageX, PageY, UiStrings.Empty, layers, top);
+
+        Assert.Equal(6, top);
+        Assert.Equal("7th  P7", layers.Lines[5].Text);
+        Assert.Equal("16th  P16", layers.Lines[^5].Text);
+        Assert.Equal(PageY + 69f + (9 * 20f), layers.Lines[^5].Y);
+
+        // The thumb sits flush at the foot of the track between the arrows; KF is clear, so no fill.
+        var thumb = Assert.Single(layers.Pictures, p => p.Art.Name == "MP_B_SCROLLBAR.PNG");
+        Assert.Equal(PageX + 419f, thumb.X);
+        Assert.Equal(PageY + 66f + 195f - 11f, thumb.Y + thumb.Height, 3);
+        Assert.Empty(layers.Fills);
+    }
+
+    [Fact]
+    public void ATenPilotFieldFillsTheScoresPageWithNoScrollBar()
+    {
+        // ABLE-TO-FAIL CONTROL: ten rows fit the page, so the scripts keep the control deactivated.
+        var race = FieldOf(10);
+        var layers = new BoardLayers();
+        OriginalRaceTable.Compose(OriginalRaceTable.Rows(race.Standings(), race.ZoneCount), PageX, PageY, UiStrings.Empty, layers, 3);
+
+        Assert.DoesNotContain(layers.Pictures, p => p.Art.Name == "MP_B_SCROLLBAR.PNG");
+        Assert.Equal("1st  P1", layers.Lines[5].Text);
+        var sheet = RaceResultsSheet.Of(race, new[] { "a" }, "", "Back");
+        Assert.DoesNotContain(OriginalRaceResults.ScoresUpRow, OriginalRaceResults.Slots(sheet));
+    }
+
+    [Fact]
+    public void TheRaceBoardsArrowsScrollTheStandingsAndTheSplitsToTheSixteenthPilot()
+    {
+        var sheet = RaceResultsSheet.Of(FieldOf(16), new[] { "a" }, "", "Back");
+        var slots = OriginalRaceResults.Slots(sheet);
+        Assert.Equal(new[] { 0, 1, 2, 3, 4, 5, 6 }, slots);
+
+        // Each arrow is a menu row under the pointer at its bar's corner or foot.
+        var (ux, uy, _, _) = OriginalRaceResults.SlotRect(OriginalRaceResults.ScoresUpRow);
+        Assert.Equal((314f + 419f, 26f + 66f), (ux, uy));
+        var (sx, sy, _, _) = OriginalRaceResults.SlotRect(OriginalRaceResults.SplitsDownRow);
+        Assert.Equal((757f, 368f + 175f - 11f), (sx, sy));
+        Assert.Equal(6, OriginalRaceResults.MenuRowAt(sheet, sx + 1f, sy + 1f));
+
+        // Down on each list until it stops: the scores at 6, the splits at 9.
+        (int scores, int splits) = (0, 0);
+        for (int i = 0; i < 20; i++)
+        {
+            (scores, splits) = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.ScoresDownRow, scores, splits);
+            (scores, splits) = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.SplitsDownRow, scores, splits);
+        }
+
+        Assert.Equal((6, 9), (scores, splits));
+        var board = OriginalRaceResults.Compose(sheet, UiStrings.Empty, 0, false, scores, splits);
+        Assert.Contains(board.Lines, l => l.Text == "16th  P16" && l.Y == 26f + 69f + (9 * 20f));
+        Assert.Contains(board.Lines, l => l.Text == "P16" && l.X == 38f && l.Y == 373f + (7 * 20f));
+        Assert.DoesNotContain(board.Lines, l => l.Text == "P9" && l.X == 38f);
+
+        // The splits' track takes the chat control's KF, and both thumbs stand.
+        Assert.Contains(board.Fills, f => f.X == 757f && (f.R, f.G, f.B) == (0x20, 0x24, 0x18));
+        Assert.Equal(2, board.Pictures.Count(p => p.Art.Name == "MP_B_SCROLLBAR.PNG"));
+
+        // At the foot the down arrows draw disabled and the up arrows live.
+        var arrows = board.Pictures.Where(p => p.Art.Name is "MP_B_SCROLLUP.PNG" or "MP_B_SCROLLDOWN.PNG").ToList();
+        Assert.Equal(new[] { 1, 0, 1, 0 }, arrows.Select(p => p.Frame));
+    }
+
+    [Fact]
+    public void SevenPilotsFitTheSplitsAndEightScrollThem()
+    {
+        var seven = RaceResultsSheet.Of(FieldOf(7), new[] { "a" }, "", "Back");
+        Assert.Equal(new[] { 0, 1, 2 }, OriginalRaceResults.Slots(seven));
+
+        var eight = RaceResultsSheet.Of(FieldOf(8), new[] { "a" }, "", "Back");
+        Assert.Equal(new[] { 0, 1, 2, 5, 6 }, OriginalRaceResults.Slots(eight));
+    }
+
+    [Fact]
     public void TheSheetFreezesEachPilotsBestRunSplitsInRaceOrder()
     {
         var race = EndedRace();
@@ -159,7 +244,7 @@ public class OriginalRaceBoardTests
     {
         for (int row = 0; row < 3; row++)
         {
-            var (x, y, w, h) = OriginalRaceResults.PlaqueRect(row);
+            var (x, y, w, h) = OriginalRaceResults.SlotRect(row);
             Assert.Equal(row, OriginalRaceResults.RowAt(x + 1f, y + 1f));
             Assert.Equal(row, OriginalRaceResults.RowAt(x + w - 1f, y + h - 1f));
             Assert.Equal(-1, OriginalRaceResults.RowAt(x + w + 1f, y + 1f));
@@ -204,8 +289,8 @@ public class OriginalRaceBoardTests
         Assert.Contains(board.Lines, l => l.Text == "C1   ·   Waiting for the host" && l.X == 92f);
 
         // The pointer reaches the exit on its own plaque, and the empty Restart slot is no row.
-        var (sx, sy, _, _) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.RestartRow);
-        var (ex, ey, _, _) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.ExitRow);
+        var (sx, sy, _, _) = OriginalRaceResults.SlotRect(OriginalRaceResults.RestartRow);
+        var (ex, ey, _, _) = OriginalRaceResults.SlotRect(OriginalRaceResults.ExitRow);
         Assert.Equal(-1, OriginalRaceResults.MenuRowAt(sheet, sx + 1f, sy + 1f));
         Assert.Equal(1, OriginalRaceResults.MenuRowAt(sheet, ex + 1f, ey + 1f));
 
@@ -232,6 +317,26 @@ public class OriginalRaceBoardTests
         if (leaves >= 0)
         {
             Assert.True(race.MarkLeft(leaves));
+        }
+
+        race.Advance(61f);
+        Assert.True(race.Ended);
+        return race;
+    }
+
+    // A one-zone field of `count` pilots finishing in seat order, P1 fastest.
+    private static StuntRace FieldOf(int count)
+    {
+        var race = new StuntRace(60f, 1);
+        for (int i = 0; i < count; i++)
+        {
+            race.Add(i, "Fury");
+        }
+
+        race.BeginOpening(0f);
+        for (int i = 0; i < count; i++)
+        {
+            FlyRun(race, i, new[] { 1f + i });
         }
 
         race.Advance(61f);

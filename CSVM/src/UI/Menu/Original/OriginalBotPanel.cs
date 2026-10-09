@@ -30,8 +30,6 @@ internal sealed class OriginalBotPanel
     private const int EditorFace = 10114;
 
     private const string ArrowArt = "MP_B_LISTBOXARROW.PNG";
-    private const string UpArt = "MP_B_SCROLLUP.PNG";
-    private const string DownArt = "MP_B_SCROLLDOWN.PNG";
     private const string IconArt = "MP_PLANEICONSTOPFRONT.PNG";
     private const int IconFrames = 11;
     private const float DisabledArrow = 0.45f;
@@ -461,8 +459,8 @@ internal sealed class OriginalBotPanel
         rows.Add(_plaque(OriginalJoinBoard.FillKey) with { X = fillX, Y = ControlsY, Enabled = _setup.FieldPilots < _fillTo });
         rows.Add(new OriginalRow(OriginalJoinBoard.FillCountKey, BoxText(OriginalJoinBoard.FillCountKey), OriginalRowKind.TextField,
             countX, ControlsY + 3f, CountWidth, FieldHeight, true, 0, null));
-        rows.Add(Arrow(OriginalJoinBoard.FillArrowPrefix + "+", UpArt, countX + CountWidth, ControlsY + 3f, _fillTo < NetSeats.MaxPlayers));
-        rows.Add(Arrow(OriginalJoinBoard.FillArrowPrefix + "-", DownArt, countX + CountWidth, ControlsY + 14f, _fillTo > 2));
+        rows.Add(Arrow(OriginalJoinBoard.FillArrowPrefix + "+", OriginalScrollBar.UpArt, countX + CountWidth, ControlsY + 3f, _fillTo < NetSeats.MaxPlayers));
+        rows.Add(Arrow(OriginalJoinBoard.FillArrowPrefix + "-", OriginalScrollBar.DownArt, countX + CountWidth, ControlsY + 14f, _fillTo > 2));
         var bots = _setup.Bots.Rows;
         for (int i = 0; i < bots.Count && i < 2 * RowsPerColumn; i++)
         {

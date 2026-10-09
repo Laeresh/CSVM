@@ -357,7 +357,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 **`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu and the seat input it polls, the list and slider widgets, the splitscreen rig and the canvas-layer order.
 
 - `src/UI/Boards/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
-- `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
+- `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Preferences, Exit, Scroll.
 - `src/UI/Boards/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/Boards/BoardMenuHost.cs`, menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/Boards/BoardMenuPointer.cs`, the menu owner's pointer over a board menu: enter a row to move the cursor, release on the pressed row to fire it.
@@ -550,6 +550,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalWrapupScreen.cs`, the Instant Action wrap-up page as one standalone module: one ended mission's frozen numbers on the notepad, prints that open full size, CONTINUE back to the screen.
 - `src/UI/Menu/Original/OriginalPauseBoard.cs`, the Original presentation's pause screen: the mission's own `escape.zrd` sheet over the held world, on the same seam.
 - `src/UI/Menu/Original/OriginalRaceTable.cs`, a stunt race's standings drawn on the lobby's Game Scores page at any page corner, the piece every Original race board composes.
+- `src/UI/Menu/Original/OriginalScrollBar.cs`, the multiplayer scripts' scroll control, one implementation for Game Scores, the outlaw list and the race board's lists.
 - `src/UI/Menu/Original/OriginalRaceResults.cs`, the Original end-of-race screen, engine-free: the lobby on Game Scores with the standings, zone key, splits and three plaques.
 - `src/UI/Menu/Original/OriginalRaceBoard.cs`, the Original presentation's end-of-race board over the panes: wakes on the race's end, halts, retires on a new window.
 - `src/UI/Menu/Original/OriginalHangarScreen.cs`, the hangar as one standalone module: the name screen, the tabbed hub, the totals page, the inventory.
