@@ -677,10 +677,19 @@ A run's start count, engine-free and one per seat: `Begin` takes the figures (`R
 `Opening` puts READY first for a race window), `Advance` steps it on the sim dt and answers a beat
 per figure and GO, and `Figure` is what the HUD draws, GO lingering for `GoSeconds`. `WalkPose` is
 the kinematic walk the aircraft rides meanwhile, back along the spawn nose by the spawn speed times
-the time left, answering the spawn pose itself at GO. `FlightController.BeginStartCount` drives it,
-holding the controls and the run clock until the step after GO; `StuntRunHud` draws the figure and
-`FlightAudio.OnStartCount` sounds it. `CatchUp` moves a network guest's opening on to its host's.
+the time left, answering the spawn pose itself at GO. `StuntRunControl` owns and steps it, holding
+the run clock until the step after GO; `StuntRunHud` draws the figure and `FlightAudio.OnStartCount`
+sounds it. `CatchUp` moves a network guest's opening on to its host's.
 Coverage: `CSVM.Tests/StartCountTests.cs`, suite `stunt-start-count`.
+
+## src/Flight/Modes/StuntRunControl.cs
+A stunt seat's run control, engine-free and one per seat. The respawn button splits by hold length
+(`TapHoldButton`) into a `StuntRunCall`, a tap's return or a hold's rerun, answered by `StepCrashed`
+(where the crash cam's timer also returns) and `StepLive`. It owns the seat's `StartCount`, begun,
+cancelled and caught up through it: `StepClock` sets `Counting` and ticks the run clock unless the
+count holds it, and `StepCount` answers the cue of a step that is the count's. `ArmReturn` and
+`TakeReturn` hold a tap's pose. `FlightController` performs the answers (the respawn, the walk, the
+cue). Coverage: `CSVM.Tests/StuntRunControlTests.cs`, suite `stunt-start-count`.
 
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
@@ -1274,7 +1283,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant, while `Respawned` runs after every return for what the seat's assembler owes a fresh airframe), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run's `StuntRunControl` splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant, while `Respawned` runs after every return for what the seat's assembler owes a fresh airframe), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`). This node reads the devices, performs what each of those
