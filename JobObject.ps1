@@ -90,6 +90,23 @@ public class CSVMRunJob
         return Write(ref info);
     }
 
+    const uint LIMIT_AFFINITY = 0x10, LIMIT_PRIORITY_CLASS = 0x20;
+
+    /// <summary>Sets the priority class and affinity every member runs at, or clears either
+    /// limit with 0. Keeps every other limit on the job. Returns 0 or the win32 error.</summary>
+    public static int SetThrottle(uint priorityClass, ulong affinity)
+    {
+        EXTENDED_LIMIT info;
+        if (!QueryInformationJobObject(_job, ExtendedLimitInformation, out info, Size, IntPtr.Zero))
+        {
+            return Marshal.GetLastWin32Error();
+        }
+        info.Basic.LimitFlags &= ~(LIMIT_AFFINITY | LIMIT_PRIORITY_CLASS);
+        if (priorityClass != 0) { info.Basic.LimitFlags |= LIMIT_PRIORITY_CLASS; info.Basic.PriorityClass = priorityClass; }
+        if (affinity != 0) { info.Basic.LimitFlags |= LIMIT_AFFINITY; info.Basic.Affinity = new UIntPtr(affinity); }
+        return Write(ref info);
+    }
+
     static int Size { get { return Marshal.SizeOf(typeof(EXTENDED_LIMIT)); } }
 
     static int Write(ref EXTENDED_LIMIT info)
@@ -149,6 +166,25 @@ Turns silent breakaway on or off for children created from now on.
 function Set-RunJobBreakaway {
     param([Parameter(Mandatory=$true)][bool]$On)
     if ([CSVMRunJob]::Handle -ne [IntPtr]::Zero) { $null = [CSVMRunJob]::SetBreakaway($On) }
+}
+
+<#
+.SYNOPSIS
+Runs every member, present and future, at a Win32 priority class and on an affinity mask, or with
+0 and 0 lifts both limits (a process keeps the priority it had). Prints one line when refused.
+#>
+function Set-RunJobThrottle {
+    param([uint32]$PriorityClass, [uint64]$Affinity)
+    if ([CSVMRunJob]::Handle -eq [IntPtr]::Zero) { return }
+    # A session that loaded an older CSVMRunJob cannot load this one; Add-Type types never unload.
+    if (-not [CSVMRunJob].GetMethod("SetThrottle")) {
+        Write-Host "  job object: this shell loaded an older JobObject.ps1, so the run is not throttled; start a new shell" -ForegroundColor Yellow
+        return
+    }
+    $err = [CSVMRunJob]::SetThrottle($PriorityClass, $Affinity)
+    if ($err -ne 0) {
+        Write-Host "  job object: the priority and affinity limits were refused, win32 error $err; the run is not throttled" -ForegroundColor Yellow
+    }
 }
 
 <#

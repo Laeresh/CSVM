@@ -72,9 +72,11 @@ $MemHistoryFile = Join-Path $MemLedgerDir "history.json"
 # Written beside the history for the engine's self-registration (Tooling/MemoryAdmission.cs).
 $MemEstimatesFile = Join-Path $MemLedgerDir "estimates.json"
 $MemMutexName = "Global\csvm-mem-admission"
-# Gaming mode creates this marker; while it exists the floor is the higher one.
-$MemGamingMarker = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-gaming"
-# How long a launch may wait for memory before its run ends DEFERRED. Shared with gaming mode.
+# The held-file claim, and gaming mode, whose floor is the higher one while it is on.
+. (Join-Path $PSScriptRoot "HeldFile.ps1")
+. (Join-Path $PSScriptRoot "GamingModeCore.ps1")
+# How long a launch may wait for memory before its run ends DEFERRED. Gaming mode's lock wait
+# shares the outcome and has its own cap.
 $MemMaxWaitSec = if ($env:CSVM_MEM_MAX_WAIT_SEC) { [int]$env:CSVM_MEM_MAX_WAIT_SEC } else { 1800 }
 # A run that ended DEFERRED exits with this code: neither PASS (0) nor FAIL (1).
 $MemDeferredExitCode = 3
@@ -124,7 +126,7 @@ function Test-MemNonInteractive {
 }
 
 function Get-MemFloorGB {
-    if (Test-Path -LiteralPath $MemGamingMarker) { return 16.0 }
+    if (Get-GamingMode) { return 16.0 }
     return 8.0
 }
 
@@ -221,26 +223,14 @@ function Add-MemHistory {
 
 <#
 .SYNOPSIS
-Opens a held ledger file (reservation or waiter). Delete-on-close and no delete sharing: the file
-lives exactly as long as the handle, and nobody else can remove it while it is held.
+Opens a held ledger file (reservation or waiter) under a fresh name (HeldFile.ps1): it lives
+exactly as long as the handle, and nobody else can remove it while it is held.
 #>
 function Open-MemFile {
     param([string]$Prefix, [hashtable]$Fields)
     $null = New-Item -ItemType Directory -Path $MemLedgerDir -Force
     $path = Join-Path $MemLedgerDir ("{0}-{1}.json" -f $Prefix, [guid]::NewGuid().ToString("N"))
-    $stream = New-Object System.IO.FileStream($path, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite,
-        [System.IO.FileShare]::Read, 4096, [System.IO.FileOptions]::DeleteOnClose)
-    $r = [pscustomobject]@{ Path = $path; Stream = $stream; Fields = $Fields }
-    Write-MemFileFields $r
-    return $r
-}
-
-function Write-MemFileFields {
-    param($Held)
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $Held.Fields -Compress))
-    $Held.Stream.SetLength(0)
-    $Held.Stream.Write($bytes, 0, $bytes.Length)
-    $Held.Stream.Flush()
+    return Open-HeldFile -Path $path -Mode CreateNew -Fields $Fields
 }
 
 # Every live ledger file of one prefix with its fields. A file whose holder is gone is deleted here
@@ -251,12 +241,8 @@ function Get-MemFiles {
     if (-not (Test-Path -LiteralPath $MemLedgerDir)) { return $out }
     foreach ($f in [System.IO.Directory]::GetFiles($MemLedgerDir, "$Prefix-*.json")) {
         try { [System.IO.File]::Delete($f); continue } catch { }
-        try {
-            $s = New-Object System.IO.FileStream($f, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read,
-                ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete))
-            try { $text = (New-Object System.IO.StreamReader($s)).ReadToEnd() } finally { $s.Dispose() }
-            $out += ($text | ConvertFrom-Json)
-        } catch { }
+        $fields = Read-HeldFile $f
+        if ($fields) { $out += $fields }
     }
     return $out
 }
@@ -341,7 +327,7 @@ function Set-MemReservationPid {
     param($Reservation, [int]$ProcessId)
     if (-not $Reservation) { return }
     $Reservation.Fields.pid = $ProcessId
-    Write-MemFileFields $Reservation
+    Write-HeldFields $Reservation
     $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if ($proc) {
         try { $null = $proc.Handle; $Reservation | Add-Member -NotePropertyName Process -NotePropertyValue $proc -Force } catch { }

@@ -25,6 +25,10 @@
     maximum wait it exits 3, DEFERRED, without launching; a launch the engine refused below
     the memory floor (its exit 75) also exits 3.
 
+    While gaming mode is on (GamingMode.ps1) the probe first takes the machine-wide gaming-mode
+    lock, runs at the marker's priority and CPU threads with -TimeoutSec scaled by its watchdog
+    factor, and exits 3 when the lock wait passes the marker's maxWaitSec.
+
 .PARAMETER Resolution
     Window size as WxH, forwarded as Godot's own `--resolution` BEFORE the `--` separator.
     Without it a probe renders at the project's 1280x720, and a saved option cannot raise it
@@ -119,6 +123,14 @@ for ($i = 0; $i -lt $Launch.Count - 1; $i++) {
 }
 
 Write-Host ("probe: {0}" -f ($GodotArgs -join " ")) -ForegroundColor Cyan
+# In gaming mode the probe takes the machine-wide lock and runs throttled (GamingMode.ps1); the
+# finally at the end of this script releases it however the probe ends.
+$Gaming = New-GamingRun -Worktree $RepoRoot
+try {
+Sync-GamingStage $Gaming
+if ($Gaming.Deferred) { Close-RunJob; exit $MemDeferredExitCode }
+$TimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $TimeoutSec
+Write-Host "  $(Format-GamingSummary $Gaming)" -ForegroundColor DarkGray
 # Admitted against the machine-wide memory ledger first; the timeout starts once it is.
 $Reservation = Request-MemLaunch -GodotArgs $GodotArgs -Label "probe" -Worktree $RepoRoot -Always
 if ($HiddenDesktop) {
@@ -177,3 +189,7 @@ if ($code -eq $MemTripwireExitCode) {
     exit $MemDeferredExitCode
 }
 exit $code
+# Closes the try opened before the lock is taken.
+} finally {
+    Exit-GamingRun $Gaming
+}

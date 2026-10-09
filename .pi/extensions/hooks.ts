@@ -175,7 +175,7 @@ async function runPowerShellDotnetFormat(cwd: string, event: any): Promise<HookR
     await pExecFile(
       "powershell",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", gate, "-Command", command],
-      { cwd, timeout: 300000 }
+      { cwd, timeout: 600000 }
     );
   } catch (error: any) {
     if (error.code === 2) {

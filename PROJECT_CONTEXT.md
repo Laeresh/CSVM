@@ -114,6 +114,7 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
 - `HiddenDesktop.ps1`, dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
 - `JobObject.ps1`, dot-sourced through `HiddenDesktop.ps1`: one kill-on-close Windows job object per `RunTests.ps1` / `RunProbe.ps1` run, so a killed runner takes its Godot, dotnet and testhost children with it (`-SelfTest`). Details: `docs/tooling.md`.
 - `MemoryLedger.ps1`, the machine-wide memory ledger every scripted Godot launch is admitted against (`RunTests.ps1`, `RunProbe.ps1`, a scripted `RunGame.ps1`/`RunDev.ps1`), so concurrent sessions queue instead of exhausting RAM; `status` prints it, `-SelfTest` checks it, and `CheckGodotCommand.ps1` blocks a direct Godot launch from an agent shell. Details: `docs/tooling.md`.
+- `GamingMode.ps1 on|off|status`, the command line over `GamingModeCore.ps1` (which the runners dot-source), gaming mode: while the user plays, `RunTests.ps1` and `RunProbe.ps1` runs from every worktree queue behind one machine-wide lock and run throttled (priority, CPU threads, fewer shards), and the format hook throttles without waiting; `-SelfTest` checks it. Details: `docs/tooling.md`.
 - `CleanScratch.ps1`, sweeps `.scratch/` artifacts, finished `.claude/worktrees/` agent worktrees **and the unit suite's `%TEMP%\csvm-tests` scratch** (`-?` lists its switches). Spares backups, dirty worktrees and a temp root a live test run owns; leaves branches alone by default.
 - `CheckCommentCaps.ps1`, the comment-length caps above, over `CSVM/src` and `CSVM.Tests`. Bare for the file:line list, `-Summary` for one line per file worst-first, or with paths for just those files. The line caps cover the whole scope; the 25-word sentence cap and the six-sentence block cap cover only the comment blocks the working tree has changed against HEAD (every block of a file named on the command line), since the tree carries older debt and a block is fixed by whoever next edits it. Scans the worktree the script file itself lives in, not the caller's working directory, so it is correct from any worktree regardless of where it is invoked. A pre-commit hook runs it; run it yourself while editing.
 - `New-ItemId.ps1`, mints the next `BL-`/`CAP-`/`PT-` item ID (`-Kind BL`, optional `-Count n` to reserve a block). The counter sits in `.git/item-id-counters.json`, shared by all worktrees, incremented under an exclusive lock, so concurrent sessions can't mint the same number. **Never assign an item ID any other way, and run it for EVERY id rather than once per session**, deriving the next id by adding 1 (or reusing one it handed you earlier) leaves the counter behind the file, so the invented number is handed out again on the next call. Use `-Count n` when you need several at once. A pre-commit hook fails the commit if `backlog.md`/`playtest.md` define an ID twice.
@@ -163,8 +164,12 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
   passes it; whoever lands the change (the orchestrator, for a run) checks the reported battery
   result and refuses a red one without a waiver.
 - **`result: DEFERRED` (exit 3) is neither pass nor fail**: a launch waited past the memory ledger's cap
-  or met the memory floor, `CSVM.dll` was rebuilt under the run, or `-WaitQuiet` ran past its cap
-  (`docs/tooling.md`); re-run it, and never land on it.
+  or met the memory floor, `CSVM.dll` was rebuilt under the run, `-WaitQuiet` ran past its cap,
+  or the gaming-mode lock wait did (`docs/tooling.md`); re-run it, and never land on it.
+- **Start `RunTests.ps1` with `run_in_background` and wait until it exits**; a subagent waits with
+  Monitor and never ends its turn while a run is live. Gaming mode (`GamingMode.ps1 status`) can
+  switch on at any time, queueing every run behind one machine-wide lock and throttling it, so a
+  run can pass the 10-minute foreground cap.
 - **To start on a quiet machine, pass `-WaitQuiet`**, which waits for every scripted CSVM Godot to
   end (never the user's own play) and names each one; write no wait loop of your own. A red that matches `docs/verification.md`'s
   known environmental reds is rerun alone with the command given there.

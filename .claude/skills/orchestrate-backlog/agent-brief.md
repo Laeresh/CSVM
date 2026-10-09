@@ -43,9 +43,14 @@ do may wait on them.
   line `Label: backlog|playtest|capture`, then the body, written for a reader who did not run the
   session and with a `⚠ Traps` section when there is one. The orchestrator files it.
 
-## Verification (foreground only)
+## Verification (in the background, waited on)
 
-Run everything in the FOREGROUND and wait for it; a backgrounded run orphans you. Minimum before
+Start every `RunTests.ps1` and `RunProbe.ps1` with `run_in_background`, then wait on it with
+Monitor (a deferred tool: load it with ToolSearch `select:Monitor` first) until it has exited and
+printed its `result:` line. Gaming mode (`.\GamingMode.ps1 status`) can switch on at any
+time, and a queued, throttled run can then pass the 10-minute foreground cap. Never end your turn
+while a run is live: a run still going when you report is orphaned, and nobody reads its result.
+Short commands (`dotnet build`, a self-test) stay in the foreground. Minimum before
 you report: `dotnet build CSVM/CSVM.sln` clean with zero warnings, `dotnet test` (or
 `.\RunTests.ps1 -UnitFilter ... -SkipEngine -SkipGoldens`), every engine suite you added or
 touched via `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens`, and `.\RunTests.ps1 -Quick`.

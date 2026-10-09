@@ -116,7 +116,7 @@ tree, that holds a live ledger reservation or carries a scripted flag (`--det`, 
 `--frames=`, `--shots=`, `--screenshot=`, the set the ledger admits). **An interactive session is
 not waited on**: the user's own play (`RunGame.ps1` without a scripted flag, an editor's F5 run)
 and an open editor are left out, since holding test runs while the user plays is gaming mode's job
-(#152); a play session started with `--det` counts as scripted. It prints each one it waits on as
+(below); a play session started with `--det` counts as scripted. It prints each one it waits on as
 `pid <n> <ledger kind or unledgered> <worktree>`, again when the set of worktrees changes and every
 60 s. The memory ledger already
 queues every launch on memory; this waits out the CPU and GPU contention of runs that fit side by
@@ -861,6 +861,7 @@ run on beside the next run.
 - **Shared build servers stay out (SHELL-22).** The job allows silent breakaway while `dotnet
   build` runs, so only the `dotnet` process is a member and every child of the build (MSBuild
   nodes, the compiler server, any `Exec` task) runs outside the job and outlives the run as usual.
+  Gaming mode is the exception: its build uses private nodes and compiler and stays in the job.
   `dotnet test` runs with `MSBUILDDISABLENODEREUSE=1` so its nodes belong to this run alone.
 - **The runner itself is never a member**, or the close at the summary would kill the shell it was
   started from. A second run in the same PowerShell session first closes a job an interrupted run
@@ -868,9 +869,10 @@ run on beside the next run.
 - **Refused, it runs without it.** A session whose own job forbids nesting gets one yellow line
   and an unprotected run, never a failure; `Stop-StrayGodots` (SHELL-2) remains the backstop.
   Nested assignment works under the job Claude Code runs its shell in, on Windows 11.
-- **The seam for other limits** is `[CSVMRunJob]::Handle`: priority, affinity or memory limits set
-  on the job reach every member, testhosts included. A limit is read, modified and written back,
-  as `SetBreakaway` does, because a plain write replaces every flag, the kill on close among them.
+- **The seam for other limits** is `[CSVMRunJob]::Handle`: a limit set on the job reaches every
+  member, testhosts included. A limit is read, modified and written back, as `SetBreakaway` and
+  `SetThrottle` (gaming mode's priority and affinity) do, because a plain write replaces every
+  flag, the kill on close among them.
 - `.\JobObject.ps1 -SelfTest` toggles breakaway on and off, starts a child that starts a
   grandchild, closes the job, and checks both are gone.
 
@@ -903,14 +905,16 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   the launch's lifetime. The open handle is the claim, as with the net-port slots, so a dead
   holder frees its reservation with its process; a named semaphore would leak its count on a
   crash. A file nobody holds is swept by the next reader. `CleanScratch.ps1` never touches it.
+  `HeldFile.ps1` opens, rewrites and reads such files, for the ledger and for gaming mode's lock.
 - **The admission rule**, under the short machine-wide mutex `Global\csvm-mem-admission`, held
   across the check and the reservation write only, never across the launch:
   `available now - sum(max(0, estimate - current private bytes) over live reservations) >= own
   estimate + floor`. "Available now" is physical memory available, which already counts
   everything outside CSVM. Current usage is **private bytes**, never the working set, which drops
   whenever Windows trims it. A reservation not yet given its pid owes its whole estimate; one
-  whose process has exited owes nothing. The floor is 8 GB, or 16 GB while the gaming-mode marker
-  `%TEMP%\csvm-gaming` exists.
+  whose process has exited owes nothing. The floor is 8 GB, or 16 GB while gaming mode is on. The
+  engine checks only that the marker `%TEMP%\csvm-gaming` exists; it agrees with the scripts'
+  expiry because the first script to read an expired marker deletes it.
 - **Guaranteed progress.** With no other live reservation a launch is admitted whatever its
   estimate, so a grown estimate can never block everything. The floor still holds: below it even
   an empty ledger waits, up to the wait cap.
@@ -932,7 +936,8 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   FAIL: `RunTests.ps1` marks the stage DEFERRED, skips the later Godot stages and exits **3**
   (`$MemDeferredExitCode`); `RunProbe.ps1` exits 3 without launching. What did run is still
   judged: the shards and shots that ran are merged and scored, and **a FAIL outranks DEFERRED** in
-  both the stage and the run result. Gaming mode shares the wait cap and the outcome, and a
+  both the stage and the run result. Gaming mode's lock wait (its own `maxWaitSec`, also 1800 s by
+  default) shares the outcome, and a
   rebuild under the run and `-WaitQuiet`'s cap share the outcome (Launch scripts, above).
 - **The engine's side** (`src/Tooling/MemoryAdmission.cs`, called once from `Launcher._Ready`,
   Windows editor builds only). A non-interactive launch (`--det`, `--run-tests`, `--frames=`,
@@ -963,3 +968,71 @@ grows to about 4 GB over its catalog, so six shards started together all see eno
   every live reservation, so the simulated machine fills as launches grow (the engine's floor
   check reads it as is); `CSVM_MEM_MAX_WAIT_SEC` shortens the wait cap. With the `engine-shard`
   seed of 11.5 GB, `CSVM_MEM_AVAILABLE_GB=25` fits one shard at a time.
+
+### Gaming mode: test runs queue and throttle while you play
+
+With several sessions testing at once the machine is unusable for a game. Gaming mode makes test
+runs from every worktree queue behind one machine-wide lock and run throttled on a few CPU threads,
+slower than budget, leaving the rest of the machine to the game.
+
+- **The switch** is the marker file `%TEMP%\csvm-gaming`, outside every worktree, written by
+  `.\GamingMode.ps1 on` (4 hours; `-Hours N`, or `-Forever`) and deleted by `.\GamingMode.ps1 off`.
+  It is a file, not an environment variable, because a running agent session never sees a variable
+  set after it started. An expired marker reads as off everywhere, and the first script to read one
+  deletes it, unless it was rewritten since that read; a marker deleted mid-read reads as off.
+  `.\GamingMode.ps1 status` prints the time left, the tunables, the lock holder and the waiters.
+  The code is `GamingModeCore.ps1`, which takes no parameters so that dot-sourcing it binds nothing
+  in the caller; `GamingMode.ps1` is the command line over it.
+- **The tunables live in the marker** (JSON), with these defaults: `shards` 2 (engine shards),
+  `goldenWorkers` 1, `dotnetCpus` 2 (`dotnet build`/`test -m:2` and the test runner's
+  `RunConfiguration.MaxCpuCount`), `priority` `BelowNormal` (`Idle` can starve a run under a
+  CPU-heavy game), `threads` 4 (the affinity: the last N logical processors, 12-15 on the 16-thread
+  development machine), `watchdogFactor` 3 (the 300 s per-launch watchdog becomes 900 s) and
+  `maxWaitSec` 1800. Edit the file to change one; a missing or invalid field takes its default, and
+  `on` again keeps the edits. An explicit `-Shards`/`-GoldenWorkers` above the tunable is capped.
+  `-Shards 1` is not the throttled setting: one process with the whole catalog at low priority
+  beside a game can outrun even the scaled watchdog.
+- **The lock**, only while gaming mode is on. `RunTests.ps1` and `RunProbe.ps1` take it before
+  their first heavy stage and hold it to the summary: an exclusive delete-on-close file
+  `%TEMP%\csvm-gaming.lock` that records the holder's worktree, pid and start time and is released
+  with its process, as the net-port slots and the memory ledger are; a `finally` in each runner
+  also releases it when the script throws in a shell that lives on. A waiter prints `waiting for
+  gaming-mode lock, held by <worktree> (pid N) since hh:mm`, registers a `csvm-gaming.wait-*` file
+  for `status`, and polls every 1 to 3 s with jitter; there is no strict FIFO.
+- **Stage boundaries.** The marker is read before every stage. Switched on mid-run, the next heavy
+  stage queues for the lock and runs throttled; a stage in flight finishes at full speed. Switched
+  off, the holder releases the lock and runs its remaining stages unthrottled, and a waiter stops
+  waiting at its next poll.
+- **Throttling goes through the run's job object** (`Set-RunJobThrottle`, which sets
+  `JOB_OBJECT_LIMIT_PRIORITY_CLASS` and `JOB_OBJECT_LIMIT_AFFINITY` by read, modify and write), so
+  every Godot, `dotnet` and testhost of the run, and every child they start, runs at the priority on
+  the threads. A child that breaks away from the job keeps the priority but not the affinity, so a
+  throttled build stage turns breakaway off and builds with `-nodeReuse:false
+  -p:UseSharedCompilation=false`: its MSBuild nodes and compiler are its own children, and the job's
+  close kills nothing shared.
+- **DEFERRED.** A lock wait past `maxWaitSec` ends the run `DEFERRED: gaming mode, lock held by
+  ...`, exit 3, the memory ledger's code and path: before the build the run stops there, and later
+  the stage reads DEFERRED and the Godot stages after it are skipped.
+- **Wall time is not judged.** Budgets are not compared (`budgets: not compared (gaming mode)`),
+  and `-Perf` and `-Hitch` report `DEFERRED (gaming mode)` instead of running, so no throttled
+  record reaches `perf-history.jsonl` and no clean hitch run is judged beside a game; the rest of
+  the run still passes or fails on its own stages.
+- **The summary line**: `gaming mode: ON (until hh:mm), waited m:ss, shards 2, workers 1, threads
+  12-15`, or `gaming mode: off`.
+- **The format hook throttles but never waits.** `FormatBeforeTests.ps1` runs `dotnet format` and
+  its Rebuild at once under the same priority, affinity and build arguments, without the lock: a
+  wait would overrun the hook's timeout, and a timed-out hook does not block the command, so the
+  gate would be skipped silently. Taking the lock there too would let a run lose its place between
+  format and test. The hook's timeout is 600 s in all three harnesses (Codex runs its gates in one
+  900 s hook), since a throttled gate measured 170 s on a busy machine against 69 s unthrottled; past
+  240 s in gaming mode the gate prints one warning on stderr.
+- **Not covered:** `RunGame.ps1` and `RunDev.ps1` (the user plays through them), `ExportRelease.ps1`,
+  `Extract.ps1`. `-WaitQuiet` is separate: it waits for scripted Godots whatever the mode.
+- **Goldens that move under the game's GPU load are a determinism defect**, owned elsewhere; gaming
+  mode reduces contention between test runs and is not a fix for one.
+- **Off Windows** it is a no-op and says so once.
+- `.\GamingMode.ps1 -SelfTest` checks expiry, tunable parsing and the lock across processes
+  (waiting, naming the holder, DEFERRED past `maxWaitSec`, switching off mid-wait, a killed
+  holder) against a private marker. `CSVM_GAMING_MARKER` (test-only) moves the marker, the lock and
+  the waiter files, so a test never switches the machine into gaming mode; the engine's floor reads
+  only the fixed path.

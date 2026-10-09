@@ -72,6 +72,13 @@
     a second and the run ends "DEFERRED: rebuild, ...", exit 3: nothing after that point measured
     the built binary. A red summary points at docs/verification.md's known environmental reds.
 
+    Gaming mode (GamingMode.ps1 on|off|status): read at every stage boundary. While it is on, the
+    run takes a machine-wide lock before its next heavy stage (waiting runs print who holds it) and
+    holds it to the summary, and runs on the marker's shards, golden workers, dotnet -m, priority,
+    CPU threads and watchdog factor. Past its maxWaitSec the run ends "DEFERRED: gaming mode, ...",
+    exit 3. Budgets are not compared, -Perf and -Hitch report DEFERRED (gaming mode) without
+    changing the exit code, and the summary prints a "gaming mode:" line. See docs/tooling.md.
+
     Wall-time budgets: each stage row prints the measured budget for the lane the run
     is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
     the numbers and the rule that set them live, so this help names the file rather than figures
@@ -318,10 +325,12 @@ $ScratchDir = Join-Path $RepoRoot ".scratch"
 # nothing else distinguishes two builds of one revision.
 $PerfDll    = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
-$EngineTimeoutSec = 300
+$EngineWatchdogSec = 300
+# The per-launch watchdog in force, scaled by gaming mode's watchdog factor at each stage boundary.
+$EngineTimeoutSec = $EngineWatchdogSec
 # The engine stage's budget is capped below the watchdog, so a growing catalog reads "over budget"
 # before a shard's launch is killed: a budget at the watchdog would go red without ever warning.
-$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineTimeoutSec)
+$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineWatchdogSec)
 # Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
 # cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
 # every shard within 8 s of the others, and 8 was slower per shard from contention. The watchdog
@@ -364,6 +373,31 @@ if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
 $HiddenDesktop = Open-HiddenDesktop
 # Every child below joins this job, held until the summary, so a killed runner takes them with it.
 $null = Open-RunJob
+
+# Gaming mode (GamingMode.ps1): read at every stage boundary. On, the run holds the machine-wide lock
+# from the first heavy stage to the summary and its job runs throttled; off, nothing changes.
+$Gaming = New-GamingRun -Worktree $RepoRoot
+function Enter-GamingStage {
+    param([string]$Name, [switch]$NoWait)
+    Sync-GamingStage $Gaming -NoWait:$NoWait
+    $script:EngineTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineWatchdogSec
+    if ($Gaming.Deferred -and -not $script:Deferred) {
+        $script:Deferred = $Gaming.Deferred
+        $script:DeferredStage = $Name
+    }
+}
+# The lock is released in the finally at the end of this script, however the run ends.
+try {
+if (-not $RunSelfTest) {
+    Enter-GamingStage "build"
+    if ($Gaming.Deferred) {
+        Close-HiddenDesktop
+        Close-RunJob
+        Write-Host "  $(Format-GamingSummary $Gaming)" -ForegroundColor Yellow
+        Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; $($Gaming.Deferred)" -ForegroundColor Yellow
+        exit $MemDeferredExitCode
+    }
+}
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -683,8 +717,12 @@ function Add-Stage {
         [string]$Detail
     )
     # The stage that met a memory deferral is DEFERRED unless what did run failed: FAIL outranks
-    # DEFERRED. Every Godot stage after it is skipped before it starts.
-    if ($script:Deferred -and -not $script:DeferredStage -and $Status -ne "SKIP") {
+    # DEFERRED. Every Godot stage after it is skipped before it starts. A stage whose gaming-mode lock
+    # wait deferred the run is named before it reports its skip, and reads DEFERRED.
+    if ($Status -eq "SKIP" -and $Name -eq $script:DeferredStage) {
+        $Status = "DEFERRED"
+        $Detail = $script:Deferred
+    } elseif ($script:Deferred -and -not $script:DeferredStage -and $Status -ne "SKIP") {
         $script:DeferredStage = $Name
         if ($Status -ne "FAIL") { $Status = "DEFERRED" }
         $Detail = "$Detail; $script:Deferred"
@@ -969,8 +1007,10 @@ $watch = [System.Diagnostics.Stopwatch]::StartNew()
 # Breakaway while it builds, so only dotnet itself is in the job and every child it starts runs
 # outside it: its MSBuild nodes and compiler server are shared with every other build on this
 # machine, and the job's close would kill them under a sibling's build.
-Set-RunJobBreakaway -On $true
-Invoke-Dotnet -Arguments @("build", $Sln)
+# Throttled, the build keeps its children in the job instead (a child that breaks away loses the
+# job's affinity): its nodes and compiler are its own then, so the close kills nothing shared.
+Set-RunJobBreakaway -On (-not $Gaming.Settings)
+Invoke-Dotnet -Arguments (@("build", $Sln) + (Get-GamingDotnetArgs $Gaming.Settings -Build))
 $buildCode = $LASTEXITCODE
 Set-RunJobBreakaway -On $false
 $watch.Stop()
@@ -986,12 +1026,15 @@ if ($buildOk) {
 
 # ---- units -------------------------------------------------------------------------------
 
+if (-not $SkipUnits -and $buildOk) { Enter-GamingStage "units" }
 if ($SkipUnits) {
     Add-Stage -Name "units" -Status "SKIP" -Seconds 0 -Detail "-SkipUnits"
     Add-Unchecked "the unit tests did not run (-SkipUnits)"
 } elseif (-not $buildOk) {
     Add-Stage -Name "units" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the unit tests did not run (the build failed)"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "units" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } else {
     Write-Stage-Banner "units (dotnet test)"
     $trxDir = Join-Path $ScratchDir "testresults"
@@ -1005,6 +1048,9 @@ if ($SkipUnits) {
         $testArgs += @("--filter", $UnitFilter)
     }
     $testArgs += @("--results-directory", $trxDir, "--logger", "trx;LogFileName=units.trx")
+    if ($Gaming.Settings) {
+        $testArgs += @(Get-GamingDotnetArgs $Gaming.Settings) + @("--", "RunConfiguration.MaxCpuCount=$($Gaming.Settings.dotnetCpus)")
+    }
     # The testhosts must stay in the job, so no breakaway here; this run's MSBuild nodes are made
     # private instead, so the job's close cannot kill a node a sibling's build has taken over.
     Invoke-Dotnet -Arguments $testArgs -Environment @{ MSBUILDDISABLENODEREUSE = "1" }
@@ -1070,6 +1116,7 @@ if ($SkipUnits) {
 
 # ---- engine ------------------------------------------------------------------------------
 
+if (-not $SkipEngine -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "engine" }
 if ($SkipEngine) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "-SkipEngine"
     Add-Unchecked "the in-engine suites did not run (-SkipEngine)"
@@ -1097,8 +1144,9 @@ if ($SkipEngine) {
     # a handful of named suites is faster started once than started N times.
     $shardCount = $Shards
     if ($shardCount -le 0) {
-        $shardCount = if ($EngineSelector) { 1 } else { $DefaultEngineShards }
+        $shardCount = if ($EngineSelector) { 1 } elseif ($Gaming.Settings) { $Gaming.Settings.shards } else { $DefaultEngineShards }
     }
+    if ($Gaming.Settings) { $shardCount = [math]::Min($shardCount, $Gaming.Settings.shards) }
     if ($shardCount -gt $NetPortSlotShards) {
         throw "-Shards ${shardCount}: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards shards"
     }
@@ -1329,6 +1377,7 @@ function Save-GoldenFailureEvidence {
     }
 }
 
+if (-not $SkipGoldensNow -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "goldens" }
 if ($SkipGoldensNow) {
     $why = if ($SkipGoldens) { "-SkipGoldens" } else { "-Quick" }
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail $why
@@ -1346,6 +1395,7 @@ if ($SkipGoldensNow) {
     Add-Unchecked "the golden-image shots did not run: no manifest at $GoldenManifest"
 } else {
     $goldenWorkerCount = [Math]::Max(1, $GoldenWorkers)
+    if ($Gaming.Settings) { $goldenWorkerCount = [Math]::Min($goldenWorkerCount, $Gaming.Settings.goldenWorkers) }
     Write-Stage-Banner $(if ($RegenGoldens) { "goldens (regenerating)" } else { "goldens" })
     # Every launch here carries the .scratch\goldens output path, an argument nothing but this
     # stage passes -- so the kill cannot reach a live playtest or a hand-run capture.
@@ -1647,6 +1697,9 @@ function Get-FileMd5 {
     return (Get-FileHash -Path $Path -Algorithm MD5).Hash.ToLowerInvariant()
 }
 
+# Perf and hitch never wait for the gaming-mode lock: in gaming mode they do not run, so no throttled
+# record reaches perf-history.jsonl and no hitch run is judged beside a game.
+if ($Perf) { Enter-GamingStage "perf" -NoWait }
 if (-not $Perf) {
     # Nothing to say: the stage is opt-in, and an absent stage is not an unchecked one.
 } elseif (-not $buildOk) {
@@ -1654,6 +1707,9 @@ if (-not $Perf) {
     Add-Unchecked "the perf scenarios did not run (the build failed)"
 } elseif ($script:Deferred) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
+} elseif ($Gaming.Settings) {
+    Add-Stage -Name "perf" -Status "DEFERRED" -Seconds 0 -Detail "DEFERRED (gaming mode): not measured beside a game"
+    Add-Unchecked "the perf scenarios did not run (gaming mode); re-run -Perf with gaming mode off"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the perf scenarios did not run: no Godot at $GodotExe"
@@ -2045,6 +2101,7 @@ if (-not $Perf) {
 # already completed, keeps workstation contention from a sibling stage out of its wall-time
 # evidence (LOG-13, PERF-12/13/14).
 $RunHitchNow = ($Hitch -and -not $SkipHitch -and -not $Quick)
+if ($RunHitchNow) { Enter-GamingStage "hitch" -NoWait }
 if (-not $RunHitchNow) {
     $why = if ($SkipHitch) { "-SkipHitch" } elseif ($Quick) { "-Quick" } else { "opt-in, pass -Hitch" }
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail $why
@@ -2054,6 +2111,9 @@ if (-not $RunHitchNow) {
     Add-Unchecked "the hitch-detector check did not run (the build failed)"
 } elseif ($script:Deferred) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
+} elseif ($Gaming.Settings) {
+    Add-Stage -Name "hitch" -Status "DEFERRED" -Seconds 0 -Detail "DEFERRED (gaming mode): the clean run is not judged beside a game"
+    Add-Unchecked "the hitch-detector check did not run (gaming mode); re-run -Hitch with gaming mode off"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the hitch-detector check did not run: no Godot at $GodotExe"
@@ -2288,7 +2348,8 @@ $OverBudget = @()
 $stageBudgetText = @{}
 foreach ($stage in $Stages) {
     $budget = Get-StageBudget $stage.Name
-    if ($budget -le 0 -or $stage.Status -eq "SKIP") {
+    # A throttled run is slower than budget by design.
+    if ($budget -le 0 -or $stage.Status -eq "SKIP" -or $Gaming.Used) {
         $stageBudgetText[$stage.Name] = ""
         continue
     }
@@ -2314,6 +2375,11 @@ if ($OverBudget.Count -gt 0) {
         Write-Host "        $over" -ForegroundColor Yellow
     }
 }
+if ($Gaming.Used) {
+    Write-Host "   .  budgets: not compared (gaming mode)" -ForegroundColor Yellow
+}
+Write-Host "  $(Format-GamingSummary $Gaming)"
+Exit-GamingRun $Gaming
 $dataRootLine = "  data root: "
 if ($env:CSVM_DATA_ROOT) {
     $dataRootLine += "$env:CSVM_DATA_ROOT (CSVM_DATA_ROOT)"
@@ -2347,3 +2413,7 @@ if ($script:Deferred) {
     exit $MemDeferredExitCode
 }
 exit 0
+# Closes the try opened before the build stage.
+} finally {
+    Exit-GamingRun $Gaming
+}
