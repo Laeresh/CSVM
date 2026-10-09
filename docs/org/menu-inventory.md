@@ -552,7 +552,9 @@ constants rather than reading a layout.
   [Evidence: script] The chat pane scrolls under its own scroll control, `MULTIPLAYERLOBBY_CHAT.SCRIPT`'s
   `KG` (`@ctl@EO`): at (757, 368), 175 tall (`XB`), the `mp_b_scrollup`, `mp_b_scrolldown` and
   `mp_b_scrollbar` art over a track of `KF` 0xff202418, holding `IO` = 175 over the line face's
-  height in lines, and activated only while the lines (`FO`) outnumber that. The tab strip's four
+  height in lines, and activated only while the lines (`FO`) outnumber that. While the view stands
+  at the bottom (`RAA` = 1) a new line moves its top (`HO`) to keep the newest line in view; once
+  the reader has scrolled up (`HO < FO - IO`) it stays put. The tab strip's four
   tabs (10094, 10114, 10119, 10507) stand at y 24 from x 324, 442, 548 and 656, and the picked tab's
   page (`MP_LOBBY_MISSION.PNG`, `_PLANE`, `_AMMO`, `_STATSCREEN`) at (314, 26). Game Scores
   (`MULTIPLAYERLOBBY_STATS.SCRIPT`) heads its five columns with 10542 to 10546 (TREB13B), the
@@ -595,8 +597,10 @@ constants rather than reading a layout.
   which shows that match's name, points, kills and deaths best first (Hits % stays blank), with
   every Ready cleared for the next round. Past ten lines, a match's or a race's, the page scrolls
   under the script's `HEA`, drawn as its arrows and thumb with no track; the arrows stand in the
-  cursor's walk, and the wheel and the thumb drag move it too. The lobby's own chat draws no
-  scroll bar and shows only its last lines, where the script's `KG` scrolls them.
+  cursor's walk, and the wheel and the thumb drag move it too. The lobby's chat scrolls the same
+  way under the script's `KG` once its lines outnumber the pane, the remake's pinned Network rows
+  staying above the window. The text column ends 4 px clear of `KG`, which stands over the
+  scroll bar the background paints at the pane's right.
   Game Scores is greyed until a match has landed. The own
   name is drawn red in the list and the chat, and the player list shows its first eleven rows with
   no scroll bar. Leave Game always lands on the Connection page. The host's options lock while it

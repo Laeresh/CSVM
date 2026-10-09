@@ -24,7 +24,9 @@ internal static class MenuOriginalScoresSuites
         "The lobby's Game Scores past ten lines: a landed sixteen-pilot race draws ten rows under the "
         + "script's scroll bar at (+419, +66), whose down arrow, the wheel and the pad's walk and Accept "
         + "reach the sixteenth, and a landed sixteen-line Dogfight does the same, where a ten-line one "
-        + "draws all ten with no bar")]
+        + "draws all ten with no bar. The chat pane's KG at (757, 368) scrolls thirty-odd lines by the "
+        + "wheel, the pad and the thumb, following new lines at the bottom and holding once scrolled up, "
+        + "where a three-line chat draws no bar")]
     internal static void TheLobbyScores(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -60,6 +62,12 @@ internal static class MenuOriginalScoresSuites
                 return;
             }
 
+            ctx.Check(door.Dogfight != null, $"the hosted lobby holds a Dogfight lobby for its chat");
+            if (door.Dogfight is { } lobby)
+            {
+                ScrollTheChat(ctx, host, seat, shell, lobby);
+            }
+
             var race = Enumerable.Range(1, 16).Select(i => new RaceTableRow($"R{i}", "Fury", "0:10.0", "", "1/1")).ToList();
             ctx.Check(shell.Lobby.Land(Array.Empty<DogfightScore>(), race) && shell.Lobby.Tab == LobbyTab.Scores,
                 $"a sixteen-pilot race lands the lobby on Game Scores ({shell.Lobby.Tab})");
@@ -73,7 +81,8 @@ internal static class MenuOriginalScoresSuites
             ctx.Check(shell.Lobby.Land(match.Take(10).ToList()), $"a ten-line Dogfight lands");
             var board = shell.Compose();
             ctx.Check(Row(shell, OriginalLobbyScreen.ScoresUpKey) == null && Row(shell, OriginalLobbyScreen.ScoresDownKey) == null
-                      && !board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG") && Draws(board, "D1") && Draws(board, "D10"),
+                      && !board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG" && p.X == OriginalRaceTable.ScrollBar(314f, 26f).X)
+                      && Draws(board, "D1") && Draws(board, "D10"),
                 $"ten lines draw all ten with no scroll bar");
         }
         finally
@@ -125,6 +134,71 @@ internal static class MenuOriginalScoresSuites
             $"{prefix}: and the pad's Accept on it moves the page one line down");
     }
 
+    // The chat pane under its KG. Three lines fit with no bar, and thirty-two follow the newest. The
+    // wheel reaches the oldest, which holds as a line arrives. The pad's Accept on the down arrow
+    // steps one line, and a thumb drag to the foot follows again.
+    private static void ScrollTheChat(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, DogfightLobby lobby)
+    {
+        var bar = OriginalRaceResults.SplitsBar;
+        for (int i = 1; i <= 3; i++)
+        {
+            lobby.Say($"C{i}");
+        }
+
+        // ABLE-TO-FAIL CONTROL: three lines fit the pane, so the script keeps its control deactivated.
+        var board = shell.Compose();
+        ctx.Check(Row(shell, OriginalLobbyScreen.ChatUpKey) == null && Row(shell, OriginalLobbyScreen.ChatDownKey) == null
+                  && !board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG") && Lines(board).Contains("C1") && Lines(board).Contains("C3"),
+            $"a three-line chat draws every line with no scroll bar");
+
+        for (int i = 4; i <= 32; i++)
+        {
+            lobby.Say($"C{i}");
+            Press(host, seat, MenuCommands.None);
+        }
+
+        board = shell.Compose();
+        var down = Row(shell, OriginalLobbyScreen.ChatDownKey);
+        ctx.Check(Lines(board).Contains("C32") && !Lines(board).Contains("C1") && down is { Enabled: false }
+                  && down.X == bar.X && down.Y == bar.DownY && Row(shell, OriginalLobbyScreen.ChatUpKey) is { Enabled: true }
+                  && board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG" && p.X == bar.X),
+            $"thirty-two lines follow the newest under the script's KG at ({down?.X}, {down?.Y}), its down arrow dead");
+
+        Press(host, seat, new MenuCommands { Pointer = Window(ctx, 400f, 450f, -40) });
+        lobby.Say("C33");
+        Press(host, seat, MenuCommands.None);
+        board = shell.Compose();
+        ctx.Check(Lines(board).Contains("C1") && !Lines(board).Contains("C33") && Row(shell, OriginalLobbyScreen.ChatUpKey) is { Enabled: false },
+            $"the wheel reaches the oldest kept line, which holds still as a new line arrives");
+
+        for (int i = 0; i < 80 && shell.FocusedKey != OriginalLobbyScreen.ChatDownKey; i++)
+        {
+            Press(host, seat, new MenuCommands { MoveY = 1, OnPad = true });
+        }
+
+        Press(host, seat, new MenuCommands { Accept = true, KeylessAccept = true, OnPad = true });
+        board = shell.Compose();
+        ctx.Check(shell.FocusedKey == OriginalLobbyScreen.ChatDownKey && Lines(board).Contains("C2") && !Lines(board).Contains("C1"),
+            $"the pad's walk reaches the down arrow and its Accept moves the chat one line down ({shell.FocusedKey})");
+
+        var window = shell.Lists.FirstOrDefault(l => l.Key == "MPL_L_CHAT")?.Window;
+        ctx.Check(window != null, $"the chat offers the pointer its window");
+        if (window is { } w)
+        {
+            float x = w.ThumbX + (w.ThumbWidth / 2f);
+            float y = w.ThumbY + (w.ThumbHeight / 2f);
+            Press(host, seat, new MenuCommands { Pointer = Window(ctx, x, y, 0, pressed: true, clicked: true) });
+            Press(host, seat, new MenuCommands { Pointer = Window(ctx, x, y + 200f, 0, pressed: true) });
+            Press(host, seat, new MenuCommands { Pointer = Window(ctx, x, y + 200f, 0) });
+        }
+
+        lobby.Say("C34");
+        Press(host, seat, MenuCommands.None);
+        board = shell.Compose();
+        ctx.Check(Lines(board).Contains("C34") && !Lines(board).Contains("C2"),
+            $"a thumb drag to the foot follows the newest line again");
+    }
+
     private static MenuHost? Open(TestContext ctx, MenuLayout layout, NetPlayFeature door, ScriptedSeat seat)
     {
         var registry = new PresentationRegistry();
@@ -173,11 +247,11 @@ internal static class MenuOriginalScoresSuites
     }
 
     // A pointer frame at an authored point, carrying a wheel of that many rows.
-    private static MenuPointer Window(TestContext ctx, float x, float y, int wheel)
+    private static MenuPointer Window(TestContext ctx, float x, float y, int wheel, bool pressed = false, bool clicked = false)
     {
         var size = ctx.Host.GetViewport().GetVisibleRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        return new MenuPointer(fit.X(x), fit.Y(y), false, false, wheel);
+        return new MenuPointer(fit.X(x), fit.Y(y), pressed, clicked, wheel);
     }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands commands)

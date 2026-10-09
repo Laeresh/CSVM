@@ -60,6 +60,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Game Scores scroll bar's down arrow.</summary>
     public const string ScoresDownKey = "MPL_B_SCORESDOWN";
 
+    /// <summary>The chat pane's scroll bar's up arrow, a row while the chat outgrows the pane.</summary>
+    public const string ChatUpKey = "MPL_B_CHATUP";
+
+    /// <summary>The chat pane's scroll bar's down arrow.</summary>
+    public const string ChatDownKey = "MPL_B_CHATDOWN";
+
     /// <summary>The Mission Environment box.</summary>
     public const string EnvironmentKey = "MPL_D_ENVIRONMENT";
 
@@ -264,9 +270,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const float DescriptionPitch = 16f;
     private const float BotsY = PageY + 205f;
 
-    // The lines' column in the chat pane, ending clear of the scroll bar the background paints at
-    // its right. That bar's border starts 6 px inside the pane's right edge.
-    private const float ChatTextWidth = ChatWidth - ChatNameColumn - 10f;
+    // The lines' column in the chat pane, ending 4 px clear of the pane's scroll control at x 757.
+    // That control stands over the bar the background paints at the pane's right.
+    private const float ChatTextWidth = ChatWidth - ChatNameColumn - 16f;
     private const float CopyWidth = 48f;
     private const float DisabledArrow = 0.45f;
     private const int IconFrames = 11;
@@ -335,6 +341,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private string _lastTeamName = string.Empty;
     private int _listTop;
     private int _scoresTop;
+
+    // The chat window's first line, and whether the reader scrolled it up off the newest line.
+    private int _chatTop;
+    private bool _chatHeld;
     private string _chat = string.Empty;
     private string? _typing;
     private string _draft = string.Empty;
@@ -448,6 +458,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
 
     private DogfightLobby? Lobby => _net()?.Dogfight;
+
+    // The chat line face's size, and the pane's pitch a line and the COPY row stand on.
+    private float ChatSize => _text.Regular(10575)?.Pixels ?? MultiplayerBoardText.TextFallback;
+
+    private float ChatPitch => ChatSize + 2f;
 
     // The lobby while the outlaw list stands over its tab page, else null.
     private DogfightLobby? Outlawing => _outlaw.IsOpen ? Lobby : null;
@@ -598,8 +613,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         Widgets(rows);
     }
 
-    /// <summary>Every dropdown shows all its items, so only the outlaw list's long pages and a long
-    /// Game Scores page scroll.</summary>
+    /// <summary>Every dropdown shows all its items, so only the outlaw list's long pages, a long
+    /// Game Scores page and a long chat scroll.</summary>
     public void Lists(List<OriginalList> lists)
     {
         ArgumentNullException.ThrowIfNull(lists);
@@ -610,6 +625,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             {
                 lists.Add(new OriginalList("MPL_L_SCORES", ScoresBar.Window(PageX + OriginalRaceTable.RowX, ScoreCount(lobby), _scoresTop),
                     top => _scoresTop = top));
+            }
+
+            if (Lobby is { } talk && ChatWindow(talk.Chat.Count) is var (bar, _, first) && bar.Scrolls(talk.Chat.Count))
+            {
+                lists.Add(new OriginalList("MPL_L_CHAT", bar.Window(ChatX, talk.Chat.Count, first),
+                    top => ScrollChat(bar, talk.Chat.Count, top)));
             }
         }
     }
@@ -761,6 +782,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 if (lobby != null)
                 {
                     _scoresTop = ScoresBar.Clamp(_scoresTop + (row.Key == ScoresUpKey ? -1 : 1), ScoreCount(lobby));
+                }
+
+                return null;
+            case ChatUpKey:
+            case ChatDownKey:
+                if (lobby != null)
+                {
+                    var (chatBar, _, chatTop) = ChatWindow(lobby.Chat.Count);
+                    ScrollChat(chatBar, lobby.Chat.Count, chatTop + (row.Key == ChatUpKey ? -1 : 1));
                 }
 
                 return null;
@@ -1310,6 +1340,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _outlaw.Close();
         _typing = null;
         _chat = string.Empty;
+        _chatHeld = false;
         Tab = LobbyTab.Mission;
         Rockets = false;
         CustomPlanes = false;
@@ -1385,10 +1416,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             return null;
         }
 
-        float size = _text.Regular(10575)?.Pixels ?? MultiplayerBoardText.TextFallback;
-        float height = size + 2f;
         return new OriginalRow(CopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton, ChatX + ChatNameColumn,
-            BoardLine.CapsBoxTop(ChatY, size, height), ChatTextWidth, height, true, 0, null);
+            BoardLine.CapsBoxTop(ChatY, ChatSize, ChatPitch), ChatTextWidth, ChatPitch, true, 0, null);
     }
 
     // Every widget of the showing tab and its frame, in focus order. The tabs and the page come
@@ -1456,6 +1485,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (CopyRow() is { } copy)
         {
             rows.Add(copy);
+        }
+
+        if (lobby != null && ChatWindow(lobby.Chat.Count) is var (chatBar, _, chatTop) && chatBar.Scrolls(lobby.Chat.Count))
+        {
+            rows.Add(chatBar.ArrowRow(ChatUpKey, down: false, lobby.Chat.Count, chatTop));
+            rows.Add(chatBar.ArrowRow(ChatDownKey, down: true, lobby.Chat.Count, chatTop));
         }
 
         rows.Add(Box(ChatKey, _chat, 88f, 552f, 481f, 18f, lobby != null, 0));
@@ -1885,14 +1920,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var chat = lobby?.Chat ?? Array.Empty<DogfightChatLine>();
         string own = lobby != null && lobby.You < lobby.Players.Count ? lobby.Players[lobby.You].Name : string.Empty;
         var face = _text.Regular(10575);
-        float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        float pitch = size + 2f;
-        int fits = Math.Max(1, (int)(ChatHeight / pitch));
+        float size = ChatSize;
+        float pitch = ChatPitch;
 
         // ⚠ Do not post the host's address as a chat note; it would outlive the code that replaces it.
         // The pinned rows follow the door each frame, so the address shows only while there is no code.
         var pinned = NetworkRows;
-        int top = Math.Min(pinned.Count, fits - 1);
+        var (bar, top, first) = ChatWindow(chat.Count);
+        bar.Compose(ChatX, chat.Count, first, layers);
         float copy = CopyRow() != null ? CopyWidth + 6f : 0f;
         for (int i = 0; i < top; i++)
         {
@@ -1907,8 +1942,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 BoardInk.Row, -1, Face: face, Colour: Pinned));
         }
 
-        int first = Math.Max(0, chat.Count - (fits - top));
-        for (int i = first; i < chat.Count; i++)
+        for (int i = first; i < Math.Min(chat.Count, first + bar.Rows); i++)
         {
             float y = ChatY + ((i - first + top) * pitch);
             layers.Lines.Add(new BoardLine(chat[i].Name, ChatX + 4f, y, ChatNameColumn - 8f, size, BoardInk.Row, -1,
@@ -1916,6 +1950,24 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             layers.Lines.Add(new BoardLine(chat[i].Text, ChatX + ChatNameColumn, y, ChatTextWidth, size,
                 BoardInk.Row, -1, Face: face, Colour: Black));
         }
+    }
+
+    // The chat pane's KG over the lines under the pinned Network rows, which stay above its window.
+    // The window's first line is the newest page's unless the reader scrolled up. Nothing is written
+    // here, so a new line moves an unheld window by itself.
+    private (OriginalScrollBar Bar, int Pinned, int First) ChatWindow(int count)
+    {
+        int fits = Math.Max(1, (int)(ChatHeight / ChatPitch));
+        int pinned = Math.Min(NetworkRows.Count, fits - 1);
+        var bar = OriginalRaceResults.SplitsBar with { Rows = fits - pinned };
+        return (bar, pinned, bar.Follow(_chatTop, _chatHeld, count));
+    }
+
+    // The reader's scroll, the one write to the chat window: a top short of the newest line holds it.
+    private void ScrollChat(OriginalScrollBar bar, int count, int top)
+    {
+        _chatTop = bar.Clamp(top, count);
+        _chatHeld = bar.CanDown(_chatTop, count);
     }
 
     // One widget in its state, and the words the script writes beside it.

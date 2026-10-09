@@ -38,6 +38,12 @@ public readonly record struct OriginalScrollBar(float X, float Y, float Height, 
     /// <summary>A first row clamped to the tops a list of <paramref name="count"/> can show.</summary>
     public int Clamp(int top, int count) => Math.Clamp(top, 0, Math.Max(0, count - Rows));
 
+    /// <summary>The first row of a window over a growing list, the chat script's <c>RAA</c>. It
+    /// follows each new row at the bottom. Once the reader scrolls up, <paramref name="held"/> keeps
+    /// it at <paramref name="top"/>. A scroll holds it while <see cref="CanDown"/> is true there.
+    /// </summary>
+    public int Follow(int top, bool held, int count) => Clamp(held ? top : count, count);
+
     /// <summary>Whether the up arrow can move a window at <paramref name="top"/>.</summary>
     public bool CanUp(int top) => top > 0;
 
