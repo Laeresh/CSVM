@@ -638,8 +638,10 @@ internal static class MenuOriginalConnectionSuites
         "An Original guest against a Built-in Dogfight host over the loopback: the host's door opens "
         + "with its lobby unshown, the guest finds it on the games list and lands in the lobby, its "
         + "third stock plane reaches the host, the host's launch waits for the guest's Ready and "
-        + "then writes its map and time into the options, and the guest launches behind the host "
-        + "on that map and time in its own pick")]
+        + "then writes its map and time into the options. With a team the guest created the only one "
+        + "standing, the Built-in board's launch press is refused with langui 10519; once the guest "
+        + "leaves it the same press launches, and the guest launches behind the host on that map and "
+        + "time in its own pick")]
     internal static void TheBuiltInHost(TestContext ctx)
     {
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
@@ -732,7 +734,10 @@ internal static class MenuOriginalConnectionSuites
             var heard = guestDoor.Dogfight!.Options;
             ctx.Check(heard is { Environment: 2, TimeMinutes: 5, Victory: DogfightVictory.Time },
                 $"and the launch's map and time reach the guest as the lobby's options ({heard.Environment}, {heard.TimeMinutes}, {heard.Victory})");
-            HostTheBuiltInLaunch(ctx, hostDoor, guest, guestExits, chapter);
+            if (PressTheBoardsLaunch(ctx, hostDoor, guest, chapter) is { } wire)
+            {
+                HostTheBuiltInLaunch(ctx, wire, guest, guestExits, chapter);
+            }
         }
         finally
         {
@@ -3387,15 +3392,75 @@ internal static class MenuOriginalConnectionSuites
 
     // The Built-in host's wire taken out and its field built off the guest's pick. The session
     // opener then launches the guest on the host's map and time in its own pick.
-    private static void HostTheBuiltInLaunch(TestContext ctx, NetPlayFeature hostDoor, End guest, List<MenuExit> guestExits, string chapter)
+    // The Built-in board's own launch press over the guest's team, the host flying two local seats.
+    // The guest's one team is refused with langui 10519 on the board's error strip; once the guest
+    // leaves it the same press launches. Null when it did not, else the wire the launch carries.
+    private static MenuNetLaunch? PressTheBoardsLaunch(TestContext ctx, NetPlayFeature hostDoor, End guest, string chapter)
     {
-        var wire = hostDoor.BuildLaunch();
-        if (wire == null)
-        {
-            ctx.Check(false, $"the Built-in host's door hands its wire out ({hostDoor.Stage})");
-            return;
-        }
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.TeamKey);
+        TypeInto(guest, new MenuCommands { Typed = "Bandits" });
+        ClickRow(ctx, guest, OriginalTeamBox.OkKey);
+        Frames(hostDoor, guest, 4);
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        Frames(hostDoor, guest, 4);
+        var lobby = hostDoor.Dogfight!;
+        ctx.Check(lobby.Teamed && lobby.Players[1] is { Team: > 0, Ready: true } && lobby.Players[0].Team == 0,
+            $"the guest's Create Team reaches the Built-in host's book, the host itself on none ({string.Join(",", lobby.Players.Select(p => $"{p.Team}:{p.Ready}"))})");
 
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat, netDoor: hostDoor);
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-original-builtin-host");
+        ctx.Host.AddChild(menu);
+        try
+        {
+            var down = new MenuCommands { MoveY = 1 };
+            var accept = new MenuCommands { Accept = true };
+            menu.ShowMenu();
+            menu.Drive(new MenuCommands { MoveY = -1 });
+            menu.Drive(accept); // the board, its cursor on Continue while the door hosts
+
+            // The board seeds the callsign the guest's answer saved, and the roster below checks a host that names nobody.
+            hostDoor.PlayerName = string.Empty;
+            menu.Drive(accept); // the map screen
+            for (int i = Array.IndexOf(LaunchMenu.ChapterCodesFor(MenuMode.Versus), chapter); i > 0; i--)
+            {
+                menu.Drive(down);
+            }
+
+            menu.Drive(accept); // aircraft select
+
+            // A splitscreen seat beside the host's, picked and confirmed: the issue's rig.
+            menu.DebugJoin(1);
+            var setup = host.Features.Get<PlayerSetupFeature>();
+            ctx.Check(setup.Seats.Count == 2 && setup.Confirm(setup.Seats[1]), $"a second local seat joins and confirms ({setup.Seats.Count})");
+            menu.Drive(accept); // the airframe picked
+            menu.Drive(accept); // and confirmed, which fires the launch
+            string refusal = DogfightLobby.RefusalText(TeamLaunchRefusal.TooFewTeams);
+            ctx.Check(menu.ShownScreen == "Plane" && exits.Count == 0 && menu.ShownDetail == refusal,
+                $"with the guest's team the only one standing the board's launch is refused with langui 10519 ({menu.ShownScreen}, {exits.Count}, {menu.ShownDetail})");
+
+            ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+            ClickRow(ctx, guest, OriginalLobbyScreen.TeamKey);
+            Frames(hostDoor, guest, 4);
+            ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+            Frames(hostDoor, guest, 4);
+            ctx.Check(!lobby.Teamed && lobby.Players[1].Ready, $"the guest's Leave Team leaves no team standing ({lobby.Players[1].Team}, {lobby.Players[1].Ready})");
+            menu.Drive(MenuCommands.None);
+            var launch = exits.OfType<LaunchExit>().FirstOrDefault();
+            ctx.Check(launch is { Net.IsHost: true } && launch.Chapter == chapter,
+                $"ABLE-TO-FAIL CONTROL: with no team standing the same press launches a free-for-all ({launch?.Chapter}, {menu.ShownDetail})");
+            return launch?.Net;
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
+    }
+
+    private static void HostTheBuiltInLaunch(TestContext ctx, MenuNetLaunch wire, End guest, List<MenuExit> guestExits, string chapter)
+    {
         var planes = new[] { StockAirframes.Node(0) };
         var fits = new LoadoutChoice?[] { null };
         var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());

@@ -1105,6 +1105,30 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void ABuiltInLaunchRefusesTheOneTeamAnOriginalGuestFormed()
+    {
+        // The Built-in host forms no team itself, so a guest's team is the only one standing.
+        var (host, guests, _) = Lobbies(2);
+        Settle(host, guests);
+        Assert.True(guests[0].CreateTeam("Away"));
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Teamed);
+        var rules = new VersusRules(0, 5);
+        Assert.Equal(DogfightLobby.RefusalText(TeamLaunchRefusal.TooFewTeams), host.CheckBuiltInLaunch("C5", rules));
+
+        // ABLE-TO-FAIL CONTROL: with no team standing the same pair flies a free-for-all.
+        Assert.True(guests[0].SetReady(false));
+        Settle(host, guests);
+        Assert.True(guests[0].LeaveTeam());
+        Settle(host, guests);
+        Assert.True(guests[0].SetReady(true));
+        Settle(host, guests);
+        Assert.False(host.Teamed);
+        Assert.Null(host.CheckBuiltInLaunch("C5", rules));
+    }
+
+    [Fact]
     public void AHostAndItsBotsOnOneTeamAreRefusedAsOneStandingTeam()
     {
         var (host, _, _) = Lobbies(1);

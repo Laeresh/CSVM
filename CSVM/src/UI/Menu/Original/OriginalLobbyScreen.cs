@@ -456,18 +456,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public static string TeamRowText(string name, int members) =>
         $"{name} ({members.ToString(CultureInfo.InvariantCulture)})";
 
-    /// <summary>The line a refused launch raises, the original's langui 10518 to 10520 or the
-    /// remake's own for a teamless player or unbalanced teams. Empty for none.</summary>
-    public static string RefusalFallback(TeamLaunchRefusal refusal) => refusal switch
-    {
-        TeamLaunchRefusal.TooManyTeams => "There are too many teams.",
-        TeamLaunchRefusal.TooFewTeams => "Each player must be on one of two teams to play.",
-        TeamLaunchRefusal.NotEnoughPlayers => "There are not enough players in the game.",
-        TeamLaunchRefusal.Teamless => "Every player must be on a team to play.",
-        TeamLaunchRefusal.Unbalanced => "The teams must not differ by more than one player.",
-        _ => string.Empty,
-    };
-
     /// <summary>A gun box's key by its zero-based slot.</summary>
     public static string GunKey(int slot) => GunKeyPrefix + slot.ToString(CultureInfo.InvariantCulture);
 
@@ -1270,7 +1258,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             _ => 0,
         };
 
-        string text = id != 0 ? _text.Word(id, RefusalFallback(refusal)) : RefusalFallback(refusal);
+        string fallback = DogfightLobby.RefusalText(refusal);
+        string text = id != 0 ? _text.Word(id, fallback) : fallback;
         _host.RaiseDialog(text, DialogIcon.Warning,
             new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), null));
     }

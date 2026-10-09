@@ -439,6 +439,18 @@ public sealed class DogfightLobby
         _ => teamed ? 2 : 1,
     };
 
+    /// <summary>The line a refused launch raises, the original's langui 10518 to 10520 or the
+    /// remake's own for a teamless player or unbalanced teams. Empty for none.</summary>
+    public static string RefusalText(TeamLaunchRefusal refusal) => refusal switch
+    {
+        TeamLaunchRefusal.TooManyTeams => "There are too many teams.",
+        TeamLaunchRefusal.TooFewTeams => "Each player must be on one of two teams to play.",
+        TeamLaunchRefusal.NotEnoughPlayers => "There are not enough players in the game.",
+        TeamLaunchRefusal.Teamless => "Every player must be on a team to play.",
+        TeamLaunchRefusal.Unbalanced => "The teams must not differ by more than one player.",
+        _ => string.Empty,
+    };
+
     /// <summary>The Game Scores lines for a match's standings, best first. Each seat is named from
     /// <paramref name="names"/>, the list as it stood at the launch, or by its player tag past it.
     /// </summary>
@@ -828,8 +840,9 @@ public sealed class DogfightLobby
     }
 
     /// <summary>A Built-in host's launch against the guests that sent a pick, which only a lobby
-    /// screen sends. It waits for their Ready and writes the map and rules into the options. Null
-    /// when the launch may go, otherwise why not.</summary>
+    /// screen sends. It waits for their Ready, refuses the teams LAUNCH! refuses
+    /// (<see cref="LaunchRefusal"/>), and writes the map and rules into the options. Null when the
+    /// launch may go, otherwise why not.</summary>
     public string? CheckBuiltInLaunch(string chapter, VersusRules rules)
     {
         bool picked = false;
@@ -845,6 +858,12 @@ public sealed class DogfightLobby
             {
                 return GuestsNotReady;
             }
+        }
+
+        // The Built-in board forms no teams, but an Original guest's lobby does, and the launch flies them.
+        if (LaunchRefusal is var refusal and not TeamLaunchRefusal.None)
+        {
+            return RefusalText(refusal);
         }
 
         return AdoptLaunch(chapter, rules) || !picked ? null : MapUnlisted;
