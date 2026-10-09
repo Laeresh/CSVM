@@ -45,6 +45,15 @@ current numbers were drawn on. The stage prints a loud line when the running ada
 the recorded one; **that is the case where regenerating is the correct response**, and the commit
 message says so. Every other mass flip is a defect.
 
+A hash also depends on the size of Godot's worker pool, which defaults to the machine's logical
+processor count: `c1-rocket-hit-enhanced` moves five pixels by one level, every run, with
+`threading/worker_pool/max_threads=2`. The likeliest path is the threaded instance cull, which
+splits the instance list by the pool size, so a different size can reorder draws that tie in the
+render list's sort. That is the same kind of difference as the rare Enhanced flips (a pixel or a
+handful, one level each), but a fixed machine never changes its pool size. A process affinity mask
+(gaming mode's) leaves the pool at the processor count and moves no shot, and CPU load, a second
+render on the same GPU, `--frame-delay` and `--time-scale` move no Enhanced shot either.
+
 One shot depends on the machine in a second way: `campaign-4p-grid` names a campaign profile,
 `csvm-golden`, that lives in `user://Profiles/` and that no checkout carries, so it is pinned as a
 campaign launch flying with no director. A machine whose cabin holds a profile of that name renders
