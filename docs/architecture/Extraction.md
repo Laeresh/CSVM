@@ -17,9 +17,10 @@ Finds the install and every file in it without regard to case. `ResolveDirectory
 `ResolveFile` walk a relative path one segment at a time and answer the disk's spelling (an exact
 match wins where a case-sensitive folder holds two), never renaming. `IsInstall` is the silent rule:
 `ZBD` plus `GOSDATA/ASSETS`. `Check` judges a picked folder, and names the install when the pick sits
-inside it or holds it up to two levels down. `Candidates` lists valid installs: the remembered path,
-then Program Files and each fixed drive on Windows, or Wine and every Proton prefix on Linux,
-folded through links. Read `RememberedInstall.cs` next.
+inside it or holds it up to two levels down. A `ZBD` with archives at its root alone is refused
+(`NoChapters`): a disc's contents extract the menus and no chapter world. `Candidates` lists valid
+installs: the remembered path, then Program Files and each fixed drive on Windows, or Wine and every
+Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
 
 ## src/Extraction/RememberedInstall.cs
 The install folder the last extraction read, stored as `OptionsDef.InstallPath` in
