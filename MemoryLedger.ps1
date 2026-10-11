@@ -90,7 +90,7 @@ $MemUpdateSec = 30
 # Every kind's estimate before it has any history, in GB. The one seed table: a kind with history
 # is estimated from it, never below its seed. The seeds are measured peaks with headroom
 # (analysis/shard-memory/FINDINGS.md); engine-shard is the heaviest full shard's, engine-headless the
-# heaviest --headless shard's, which compiles no shader and uploads nothing (GitHub #174).
+# heaviest --headless shard's, which compiles no shader and uploads nothing.
 $MemSeedGB = [ordered]@{
     "engine-shard"     = 7.0
     "engine-headless"  = 3.0
