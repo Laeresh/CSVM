@@ -1695,7 +1695,7 @@ internal static class WorldAndToolSuites
                     continue;
                 }
                 string code = mi.MaterialOverride is ShaderMaterial { Shader: { } shader } ? shader.Code : "";
-                ctx.Check(code.Contains("csky_facade_spherical(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD)", System.StringComparison.Ordinal)
+                ctx.Check(code.Contains("csky_facade_modelview(VIEW_MATRIX, MODEL_MATRIX, CAMERA_POSITION_WORLD)", System.StringComparison.Ordinal)
                           && code.Contains("res://shaders/csky_facade.gdshaderinc", System.StringComparison.Ordinal),
                     $"{flare.Name} poses through the facade look-at");
                 ctx.Check(!code.Contains("INV_VIEW_MATRIX", System.StringComparison.Ordinal),
@@ -1764,6 +1764,134 @@ internal static class WorldAndToolSuites
             ctx.Check(flareFront > 100, $"the flare draws face on pixels={flareFront}");
             ctx.Check(flareSide > 100, $"the flare seen from its quad's edge still faces the eye pixels={flareSide}");
             ctx.Note($"{plane}: control front={controlFront} side={controlSide}; flare front={flareFront} side={flareSide}");
+        }
+        finally
+        {
+            pane.Free();
+        }
+    }
+
+    // The moon is a SphericalY facade, so a rolled eye sees it stand in the world, not in the view.
+    // Its texture is swapped for one whose top half alone is opaque, so the drawn pixels' offset
+    // from the pane's centre is its on-screen up. Godot's billboard mode is the control.
+    [Suite("moon-world-up",
+        "C1's moon as the horizon build makes it keeps the world's up on screen under an eye rolled "
+        + "90 degrees, read off a top-half-opaque stand-in texture's drawn pixels, against Godot's "
+        + "billboard mode as the control, whose up turns with the roll")]
+    internal static void MoonWorldUp(TestContext ctx)
+    {
+        const string chapter = "C1";
+        const int paneEdge = 64;
+        const float range = 3f;
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+
+        using var textures = new TextureArchive(texturesPath);
+        var builder = new WorldBuilder(GameZ.Load(gamezPath), textures);
+        var dome = builder.BuildHorizon();
+        builder.Cycler.Free();
+        var moon = (dome?.FindChild("moon", true, false)?.GetChildren() ?? new Godot.Collections.Array<Node>())
+            .OfType<MeshInstance3D>().FirstOrDefault(m => !m.IsQueuedForDeletion());
+        var quad = moon?.Mesh;
+        var moonMaterial = moon?.GetActiveMaterial(0);
+        dome?.Free();
+        ctx.Check(quad != null && moonMaterial != null, $"{chapter}'s horizon builds a moon quad");
+        if (quad == null || moonMaterial == null)
+        {
+            return;
+        }
+
+        var img = Image.CreateEmpty(16, 16, false, Image.Format.Rgba8);
+        img.FillRect(new Rect2I(0, 0, 16, 8), Colors.White);
+        var topHalf = TextureUpload.Create(img);
+        var real = (Material)moonMaterial.Duplicate();
+        if (real is ShaderMaterial shader)
+        {
+            shader.SetShaderParameter("albedo_tex", topHalf);
+        }
+        else if (real is BaseMaterial3D standard)
+        {
+            standard.AlbedoTexture = topHalf;
+        }
+        var billboard = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+            BillboardKeepScale = true,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            AlbedoTexture = topHalf,
+        };
+
+        float side = Mathf.Max(quad.GetAabb().Size.X, quad.GetAabb().Size.Y);
+        var pane = new SubViewport
+        {
+            Size = new Vector2I(paneEdge, paneEdge),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            RenderTargetClearMode = SubViewport.ClearMode.Always,
+        };
+        var eye = new Camera3D { Fov = Mathf.RadToDeg(2f * Mathf.Atan(0.8f / range)), Current = true, Near = 0.1f, Far = 100f };
+        var subject = new MeshInstance3D
+        {
+            Mesh = quad,
+            Position = new Vector3(0f, 0f, -range),
+            Scale = Vector3.One * (1f / side),
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        pane.AddChild(eye);
+        pane.AddChild(subject);
+        ctx.Host.AddChild(pane);
+        try
+        {
+            // The cosine between the drawn half's offset from the pane centre and the world's
+            // projected up, with the count of pixels drawn.
+            (float Cos, int Drawn) Up(Material material, float roll)
+            {
+                eye.Transform = new Transform3D(new Basis(Vector3.Back, roll), Vector3.Zero);
+                eye.ForceUpdateTransform();
+                var worldUp = (eye.UnprojectPosition(subject.Position + Vector3.Up * 0.1f)
+                    - eye.UnprojectPosition(subject.Position)).Normalized();
+                subject.MaterialOverride = material;
+                subject.Visible = false;
+                byte[] bare = PaneShot(pane);
+                subject.Visible = true;
+                byte[] shot = PaneShot(pane);
+                var sum = Vector2.Zero;
+                int drawn = 0;
+                for (int i = 0; i + 3 <= shot.Length && shot.Length == bare.Length; i += 3)
+                {
+                    if (shot[i] != bare[i] || shot[i + 1] != bare[i + 1] || shot[i + 2] != bare[i + 2])
+                    {
+                        int px = i / 3;
+                        sum += new Vector2((px % paneEdge) + 0.5f, (px / paneEdge) + 0.5f);
+                        drawn++;
+                    }
+                }
+                var offset = drawn == 0 ? Vector2.Zero : (sum / drawn) - (Vector2.One * (paneEdge / 2f));
+                return (offset.Normalized().Dot(worldUp), drawn);
+            }
+
+            float rolled = Mathf.Pi / 2f;
+            var (moonLevel, moonLevelDrawn) = Up(real, 0f);
+            var (moonRolled, moonRolledDrawn) = Up(real, rolled);
+            var (controlLevel, _) = Up(billboard, 0f);
+            var (controlRolled, _) = Up(billboard, rolled);
+            // The unit quad spans 0.5/0.8 of the pane and its top half draws. A pose that dropped the
+            // instance's scale would draw the mesh at its own size, which the next check keeps far from one.
+            float edge = paneEdge * 0.5f / 0.8f;
+            float expected = edge * edge / 2f;
+            ctx.Check(Mathf.Abs(Mathf.Log(side)) > 1f, $"the moon mesh's own size is far from the stand-in's unit size={side:0.##}");
+            ctx.Check(Mathf.Abs(moonLevelDrawn - expected) < expected * 0.25f
+                      && Mathf.Abs(moonRolledDrawn - expected) < expected * 0.25f,
+                $"the moon keeps its instance scale level and rolled pixels={moonLevelDrawn}/{moonRolledDrawn} expected={expected:0}");
+            ctx.Check(controlLevel > 0.9f, $"the control's up is the world's under a level eye cos={controlLevel:0.00}");
+            ctx.Check(controlRolled < 0.5f, $"the control's up turns with a rolled eye cos={controlRolled:0.00}");
+            ctx.Check(moonLevel > 0.9f, $"the moon's up is the world's under a level eye cos={moonLevel:0.00}");
+            ctx.Check(moonRolled > 0.9f, $"the moon's up stays the world's under a rolled eye cos={moonRolled:0.00}");
+            ctx.Note($"{chapter} moon: size={side:0.##} pixels={moonLevelDrawn}/{moonRolledDrawn} level={moonLevel:0.00} rolled={moonRolled:0.00}; control level={controlLevel:0.00} rolled={controlRolled:0.00}");
         }
         finally
         {

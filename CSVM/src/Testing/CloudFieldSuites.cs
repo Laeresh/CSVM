@@ -356,7 +356,7 @@ internal static class CloudFieldSuites
             {
                 if ((mi.MaterialOverride ?? mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s))
                     is not ShaderMaterial { Shader: { } shader } mat
-                    || !shader.Code.Contains("csky_facade_spherical", System.StringComparison.Ordinal))
+                    || !shader.Code.Contains("csky_facade_modelview", System.StringComparison.Ordinal))
                 {
                     continue;
                 }
