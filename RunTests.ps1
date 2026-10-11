@@ -66,7 +66,7 @@
     check held".
 
     Memory: every Godot launch (each shard, each golden shot) is admitted on its own against the
-    machine-wide ledger of MemoryLedger.ps1 and waits while it does not fit; its watchdog starts
+    machine-wide ledger of MemoryLedgerCore.ps1 and waits while it does not fit; its watchdog starts
     at admission. A launch that waits past the ledger's maximum wait, or that the engine refuses
     below the memory floor, ends the run DEFERRED with exit 3, neither PASS nor FAIL. See
     docs/tooling.md.
@@ -379,9 +379,7 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
 # Falls back to the visible desktop rather than failing: the tests must still run where it is
 # refused, just visibly.
 # Every Godot launch below is admitted against the machine-wide memory ledger (Invoke-GodotPool).
-# Dot-sourcing binds the ledger's own -SelfTest parameter here as $false, so this run's is kept first.
-$RunSelfTest = [bool]$SelfTest
-. (Join-Path $PSScriptRoot "MemoryLedger.ps1")
+. (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
 # Before the desktop and the job exist, so a run that gives up leaves nothing open in this session.
 if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
     Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; another CSVM Godot ran past -QuietTimeoutSec ${QuietTimeoutSec}s" -ForegroundColor Yellow
@@ -408,7 +406,7 @@ function Enter-GamingStage {
 }
 # The lock is released in the finally at the end of this script, however the run ends.
 try {
-if (-not $RunSelfTest) {
+if (-not $SelfTest) {
     Enter-GamingStage "build"
     if ($Gaming.Deferred) {
         Close-HiddenDesktop
@@ -520,9 +518,9 @@ function Get-RebuildCause {
 }
 
 # Launches each item's .Args (at most $MaxConcurrent in flight), every launch admitted first by the
-# machine-wide memory ledger (MemoryLedger.ps1), and sets each item's .ExitCode. A launch is killed
-# (exit 124) at $TimeoutSec, or once its --log-file has not grown for $StallSec, and its .Overdue
-# says which. Both watchdogs start at admission, so waiting for memory never counts toward either.
+# machine-wide memory ledger (MemoryLedgerCore.ps1), and sets each item's .ExitCode. A launch is
+# killed (exit 124) at $TimeoutSec, or once its --log-file has not grown for $StallSec, and its
+# .Overdue says which. Both watchdogs start at admission, so waiting for memory never counts toward either.
 # Order and membership never change; only start times move. An item never started keeps the
 # .ExitCode it came with. An engine-shard item records its peak only when its .LearnPeak is true.
 function Invoke-GodotPool {
@@ -699,7 +697,7 @@ function Wait-Godot {
     return $code
 }
 
-if ($RunSelfTest) {
+if ($SelfTest) {
     $failed = 0
     function Assert-SelfTest {
         param([bool]$Ok, [string]$What)

@@ -1,9 +1,9 @@
 #!/usr/bin/env pwsh
 # The Godot guard every harness's pre-tool hook calls, for the Bash and the PowerShell tool alike:
 # an agent shell command must not invoke the Godot binary (Godot_v4*.exe) directly. A direct launch
-# bypasses the memory ledger's admission (MemoryLedger.ps1), the hidden desktop and the run's job
-# object; RunProbe.ps1 is the same launch with all three. The engine still registers a launch that
-# slips past this guard, so the others' admissions count it, but nothing can make it wait.
+# bypasses the memory ledger's admission (MemoryLedgerCore.ps1), the hidden desktop and the run's
+# job object; RunProbe.ps1 is the same launch with all three. The engine still registers a launch
+# that slips past this guard, so the others' admissions count it, but nothing can make it wait.
 #
 # Only an invocation is blocked: the binary's path at the start of a statement (unquoted, or after
 # the call operator), or as what Start-Process, Process::Start or cmd /c runs. A mention (Test-Path,

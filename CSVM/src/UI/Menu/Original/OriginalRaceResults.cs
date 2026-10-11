@@ -159,10 +159,8 @@ public static class OriginalRaceResults
     /// <summary>The scores page's scroll bar, <see cref="OriginalRaceTable.ScrollBar"/> at the page.</summary>
     public static OriginalScrollBar ScoresBar => OriginalRaceTable.ScrollBar(PageX, PageY);
 
-    /// <summary>The chat pane's own scroll bar, which the splits borrow with the pane:
-    /// MULTIPLAYERLOBBY_CHAT.SCRIPT's <c>KG</c> at (757, 368), 175 tall, over its <c>KF</c> 0xff202418.
-    /// </summary>
-    public static OriginalScrollBar SplitsBar => new(757f, 368f, 175f, SplitRows, new BoardTint(0x20, 0x24, 0x18));
+    /// <summary>The splits' scroll bar, the lobby's chat pane bar borrowed with the pane.</summary>
+    public static OriginalScrollBar SplitsBar => OriginalLobbyScreen.ChatBar(SplitRows);
 
     /// <summary>The slot each menu row stands on, in menu order: the plaques, then each scrolling
     /// list's two arrows. A withheld Restart leaves its plaque empty, so the exit keeps its own slot.

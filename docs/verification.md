@@ -1120,7 +1120,10 @@ not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs
 
 - **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
   or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
-  `.scratch\goldens-failures\<stamp>\`. Rerun: `.\RunTests.ps1 -SkipUnits -SkipEngine -WaitQuiet`.
+  `.scratch\goldens-failures\<stamp>\`. Rerun the goldens once before re-pinning or waiving the
+  moved shot: `.\RunTests.ps1 -SkipUnits -SkipEngine`, which renders every shot, since the runner
+  has no single-shot selector. CPU load and other golden workers' GPU contention did not reproduce
+  the flips.
 
 ## The standing checklist
 

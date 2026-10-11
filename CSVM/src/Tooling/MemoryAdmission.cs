@@ -12,22 +12,22 @@ using CSVM.Utils;
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The engine's side of the machine-wide memory ledger that <c>MemoryLedger.ps1</c> keeps in
+/// The engine's side of the machine-wide memory ledger that <c>MemoryLedgerCore.ps1</c> keeps in
 /// <c>%TEMP%\csvm-mem</c> (docs/tooling.md). A launch that drives and ends itself refuses to start
 /// below the memory floor. One that no runner admitted registers itself, so every other admission
 /// counts it. Interactive play stays out of the ledger.
 /// ⚠ Keep <see cref="Kind"/>, <see cref="IsNonInteractive"/> and the floor in step with
-/// <c>MemoryLedger.ps1</c>; the two sides read one ledger.
+/// <c>MemoryLedgerCore.ps1</c>; the two sides read one ledger.
 /// </summary>
 public static class MemoryAdmission
 {
-    /// <summary>The exit code of a refused launch; <c>MemoryLedger.ps1</c>'s
+    /// <summary>The exit code of a refused launch; <c>MemoryLedgerCore.ps1</c>'s
     /// <c>$MemTripwireExitCode</c> must equal it.</summary>
     public const int TripwireExitCode = 75;
 
     private const double Gb = 1024.0 * 1024.0 * 1024.0;
 
-    // The largest seed in MemoryLedger.ps1's table, for a ledger the scripts have not seeded yet.
+    // The largest seed in MemoryLedgerCore.ps1's table, for a ledger the scripts have not seeded yet.
     private const double FallbackEstimateGb = 8.5;
 
     // Read by no one: held open for the process lifetime, so the reservation file lives exactly
@@ -95,7 +95,7 @@ public static class MemoryAdmission
         return false;
     }
 
-    // Physical memory available, as MemoryLedger.ps1 reads it; null when unreadable. Godot's own
+    // Physical memory available, as MemoryLedgerCore.ps1 reads it; null when unreadable. Godot's own
     // "available" is commit headroom including the page file. CSVM_MEM_AVAILABLE_GB is the
     // ledger's test-only stand-in.
     private static double? AvailableGb()

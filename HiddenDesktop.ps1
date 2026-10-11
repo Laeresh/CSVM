@@ -13,10 +13,10 @@
 # desktop in 50 of 52 samples and on ours in 0 -- both halves checked, because "no window appeared"
 # is also what a crash looks like (SHELL-12).
 #
-# Every launch here joins the run's job object (JobObject.ps1) before it runs, so it dies with the
+# Every launch here joins the run's job object (JobObjectCore.ps1) before it runs, so it dies with the
 # runner.
 
-. (Join-Path $PSScriptRoot "JobObject.ps1")
+. (Join-Path $PSScriptRoot "JobObjectCore.ps1")
 
 if (-not ([System.Management.Automation.PSTypeName]'CSVMHiddenDesktop').Type) {
     Add-Type -Language CSharp -TypeDefinition @'

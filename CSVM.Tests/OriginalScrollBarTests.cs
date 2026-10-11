@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 public class OriginalScrollBarTests
 {
     // The chat pane's control, KG, over a ten-line window.
-    private static readonly OriginalScrollBar Chat = OriginalRaceResults.SplitsBar with { Rows = 10 };
+    private static readonly OriginalScrollBar Chat = OriginalLobbyScreen.ChatBar(10);
 
     [Fact]
     public void AWindowAtTheBottomFollowsANewLine()

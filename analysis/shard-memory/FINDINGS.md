@@ -240,7 +240,7 @@ run (a 60,000-frame run without `--screenshot` held 7.15 to 7.35 GB throughout).
 ## Seed estimates for a memory ledger
 
 Measured peak private bytes per launch kind, engine shards with the landed fix. The recommended
-seed is keyed by `MemoryLedger.ps1`'s `$MemSeedGB` names: the largest peak the key can launch,
+seed is keyed by `MemoryLedgerCore.ps1`'s `$MemSeedGB` names: the largest peak the key can launch,
 rounded up to the next half GB, so the first launches of a kind are not under-reserved before the
 learned history (highest of the last 20, plus 25 percent) takes over.
 

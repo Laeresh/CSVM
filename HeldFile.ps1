@@ -2,7 +2,7 @@
 # ledger's reservations and waiters and gaming mode's lock and waiters. Opened delete-on-close and
 # shared for reading only, so a dead holder frees it with its process (a named semaphore would leak
 # its count on a crash) and nobody else can remove it while it is held. Dot-sourced by
-# MemoryLedger.ps1 and GamingModeCore.ps1; it takes no parameters, so dot-sourcing binds nothing.
+# MemoryLedgerCore.ps1 and GamingModeCore.ps1; it takes no parameters, so dot-sourcing binds nothing.
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md).
 

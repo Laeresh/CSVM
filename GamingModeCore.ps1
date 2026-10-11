@@ -1,6 +1,6 @@
 # Gaming mode's code: the marker, its expiry and tunables, the machine-wide lock, and the throttle a
 # runner applies at each stage boundary. GamingMode.ps1 is the command line over it; see
-# docs/tooling.md. Dot-sourced by MemoryLedger.ps1 (so by RunTests.ps1 and RunProbe.ps1), by
+# docs/tooling.md. Dot-sourced by MemoryLedgerCore.ps1 (so by RunTests.ps1 and RunProbe.ps1), by
 # FormatBeforeTests.ps1 and by GamingMode.ps1. It takes no parameters, so dot-sourcing binds nothing
 # in the caller's scope.
 #
@@ -170,7 +170,7 @@ function Sync-GamingStage {
     if (-not $Run.Settings) { Exit-GamingRun $Run }
     if ($Run.Settings) { $Run.Used = $Run.Settings }
     $throttle = $Run.Settings -and -not $Run.Deferred
-    # Set-RunJobThrottle is JobObject.ps1's; a caller without a job has nothing to throttle.
+    # Set-RunJobThrottle is JobObjectCore.ps1's; a caller without a job has nothing to throttle.
     if (($throttle -or $Run.Throttled) -and (Get-Command Set-RunJobThrottle -ErrorAction SilentlyContinue)) {
         if ($throttle) { Set-RunJobThrottle -PriorityClass $Run.Settings.PriorityClass -Affinity $Run.Settings.AffinityMask }
         else { Set-RunJobThrottle -PriorityClass 0 -Affinity 0 }

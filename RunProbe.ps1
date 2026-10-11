@@ -20,7 +20,7 @@
     .scratch/logs/probe-<stamp>.out/.err; the script prints both paths and exits with
     Godot's exit code.
 
-    The launch is first admitted against the machine-wide memory ledger (MemoryLedger.ps1)
+    The launch is first admitted against the machine-wide memory ledger (MemoryLedgerCore.ps1)
     and waits while it does not fit; -TimeoutSec starts at admission. Past the ledger's
     maximum wait it exits 3, DEFERRED, without launching; a launch the engine refused below
     the memory floor (its exit 75) also exits 3.
@@ -92,9 +92,9 @@ if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogD
 # rather than failing (same policy as RunTests.ps1).
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
-# The launch joins this job, so killing this script kills the probe (JobObject.ps1).
+# The launch joins this job, so killing this script kills the probe (JobObjectCore.ps1).
 $null = Open-RunJob
-. (Join-Path $PSScriptRoot "MemoryLedger.ps1")
+. (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
 
 # Engine options belong before the `--`; everything after it is the CSVM argument list.
 $Engine = @("--path", $ProjectDir, "res://scenes/Main.tscn")

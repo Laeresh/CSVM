@@ -106,8 +106,8 @@ function Invoke-FormatAndBuild {
 }
 
 # ---------------------------------------------------------------------------------------------
-# Self-test. Exercises the trigger and the tree resolution against two throwaway repos. It never
-# formats or builds anything.
+# Self-test. Exercises the trigger and the tree resolution against two throwaway repos, and checks
+# that every harness gives the hook the same timeout. It never formats or builds anything.
 # ---------------------------------------------------------------------------------------------
 function Invoke-SelfTest {
     $base = Join-Path ([IO.Path]::GetTempPath()) ('csvm-formatgate-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -259,6 +259,18 @@ function Invoke-SelfTest {
         Assert-Row 'entry    an unresolved -C variable blocks a commit' ($LASTEXITCODE -eq 2)
         & (Join-Path $scriptRoot 'FormatBeforeTests.ps1') -Command 'git -C $nowhere status' | Out-Null
         Assert-Row 'entry    an unresolved variable on a non-invocation passes' ($LASTEXITCODE -eq 0)
+
+        # Each harness states the hook's timeout; .claude/settings.json is the one the others follow.
+        $claude = @((Get-Content -Raw -LiteralPath (Join-Path $scriptRoot '.claude/settings.json') | ConvertFrom-Json).hooks.PreToolUse.hooks)
+        $formatSec = [int]@($claude | Where-Object { $_.command -like '*FormatBeforeTests.ps1*' })[0].timeout
+        $contentSec = [int]@($claude | Where-Object { $_.command -like '*CheckCommitContent.ps1*' })[0].timeout
+        $piText = Get-Content -Raw -LiteralPath (Join-Path $scriptRoot '.pi/extensions/hooks.ts')
+        $pi = [regex]::Match($piText, '/FormatBeforeTests\.ps1`[\s\S]*?timeout:\s*(\d+)')
+        Assert-Row ('timeout  .pi gives the format gate the Claude hook''s ' + $formatSec + ' s') ($formatSec -gt 0 -and $pi.Success -and [int64]$pi.Groups[1].Value -eq $formatSec * 1000)
+        $pi = [regex]::Match($piText, '/CheckCommitContent\.ps1`[\s\S]*?timeout:\s*(\d+)')
+        Assert-Row ('timeout  .pi gives the content gate the Claude hook''s ' + $contentSec + ' s') ($contentSec -gt 0 -and $pi.Success -and [int64]$pi.Groups[1].Value -eq $contentSec * 1000)
+        $codexSec = [int](Get-Content -Raw -LiteralPath (Join-Path $scriptRoot '.codex/hooks.json') | ConvertFrom-Json).hooks.PreToolUse[0].hooks[0].timeout
+        Assert-Row ('timeout  .codex''s one hook (' + $codexSec + ' s) covers the format and content gates') ($contentSec -gt 0 -and $codexSec -ge $formatSec + $contentSec)
     }
     finally {
         if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
@@ -310,9 +322,10 @@ if ($gaming) {
 }
 $gateWatch = [System.Diagnostics.Stopwatch]::StartNew()
 $remaining = @(Invoke-FormatAndBuild -Root $root -BuildArgs @(Get-GamingDotnetArgs $gaming -Build))
-# The hook's timeout is 600 s; a throttled gate measured 170 s on a busy machine, 69 s unthrottled.
+# The hook's timeout is .claude/settings.json's (the self-test holds the other harnesses to it); a
+# throttled gate measured 170 s on a busy machine, 69 s unthrottled.
 if ($gaming -and $gateWatch.Elapsed.TotalSeconds -gt 240) {
-    [Console]::Error.WriteLine(('format gate: took {0:0} s throttled in gaming mode; past the hook timeout (600 s) the gate is skipped silently' -f $gateWatch.Elapsed.TotalSeconds))
+    [Console]::Error.WriteLine(('format gate: took {0:0} s throttled in gaming mode; past the hook timeout (.claude/settings.json) the gate is skipped silently' -f $gateWatch.Elapsed.TotalSeconds))
 }
 if ($remaining.Count -eq 0) { exit 0 }
 foreach ($line in $remaining) { [Console]::Error.WriteLine($line) }

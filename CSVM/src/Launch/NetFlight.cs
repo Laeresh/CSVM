@@ -431,9 +431,9 @@ internal sealed class NetFlight
     }
 
     /// <summary>The end of a network flight: the wire is dropped, and the door gives the router's
-    /// forwarded port back. The door no longer closes a transport it handed over, so that half is
-    /// here. A co-op door takes its wire back instead, since its session outlives a flight, and so
-    /// does a lobby whose match ran to its end.</summary>
+    /// forwarded port back. The door never closes a transport it handed over, so the flight closes
+    /// it here. A co-op door takes its wire back instead, since its session outlives a flight, and
+    /// so does a lobby whose match ran to its end.</summary>
     public void Close()
     {
         if (_wire == null)

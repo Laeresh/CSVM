@@ -121,7 +121,7 @@ and an open editor are left out, since holding test runs while the user plays is
 60 s. The memory ledger already queues every launch on memory; this waits out the CPU and GPU
 contention of runs that fit side by side, which is what slows a shard and runs a golden shot past
 its watchdog. Past `-QuietTimeoutSec` (default 1800 s) the run ends `DEFERRED: quiet`, exit 3,
-without building. `Wait-QuietMachine` in `MemoryLedger.ps1` is the code, and `-SelfTest` checks
+without building. `Wait-QuietMachine` in `MemoryLedgerCore.ps1` is the code, and `MemoryLedger.ps1 -SelfTest` checks
 its census.
 
 **A rebuild under a run stops it.** The build stage records `CSVM.dll`'s write time and size;
@@ -899,7 +899,8 @@ every saved option (DET-8). A resolution-sensitive artefact is invisible at the 
 
 `RunTests.ps1` and `RunProbe.ps1` put every process they start into one Windows job object per
 run, created with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` before the first launch and closed after
-the summary (`JobObject.ps1`, dot-sourced through `HiddenDesktop.ps1`). The only handle to the job
+the summary (`JobObjectCore.ps1`, dot-sourced through `HiddenDesktop.ps1`; `JobObject.ps1` is its
+self-test). The only handle to the job
 is the runner's, so the kernel closes it however the runner's process ends (a tool-call cap,
 `Stop-Process`, a crash), and every Godot shard, golden shot, `dotnet test`
 testhost and MSBuild node of that run dies with it. Killing a runner's PowerShell mid-engine-stage
@@ -933,8 +934,8 @@ run on beside the next run.
 ### The memory ledger: scripted launches queue instead of exhausting RAM
 
 Every scripted Godot launch on the machine is admitted against one machine-wide ledger before it
-starts (`MemoryLedger.ps1`, dot-sourced by `RunTests.ps1`, `RunProbe.ps1`, `RunGame.ps1` and
-`RunDev.ps1`), so concurrent sessions queue rather than run the machine out of memory. Always on,
+starts (`MemoryLedgerCore.ps1`, dot-sourced by `RunTests.ps1`, `RunProbe.ps1`, `RunGame.ps1` and
+`RunDev.ps1`; `MemoryLedger.ps1` is its command line and self-test), so concurrent sessions queue rather than run the machine out of memory. Always on,
 no flag. A free-memory snapshot cannot be the test: an engine shard starts at a few hundred MB and
 grows to about 6 GB over its share of the catalog (5.8 to 6.6 GB measured, hence the 7.0 GB
 `engine-shard` seed; `analysis/shard-memory/FINDINGS.md`), so seven shards started together all see
@@ -971,7 +972,7 @@ enough free.
   shard plan (the default `-Shards`, gaming mode off, no `-RealData`): a filtered shard stays small,
   any other plan hands a shard a different share of the catalog, and the alone shard and the
   synthetic process hold little. A launch the engine refused records nothing. The seed table is
-  `$MemSeedGB` in `MemoryLedger.ps1`; the kinds are `engine-shard`, `engine-headless` (the
+  `$MemSeedGB` in `MemoryLedgerCore.ps1`; the kinds are `engine-shard`, `engine-headless` (the
   `RunTests.ps1` engine stage names it per launch; any other `--run-tests` launch is
   `engine-shard`), `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
   `capture-xr` (`--xr*`). `estimates.json` beside it, written from the seeds when the ledger is
@@ -1071,9 +1072,10 @@ slower than budget, leaving the rest of the machine to the game.
   its Rebuild at once under the same priority, affinity and build arguments, without the lock: a
   wait would overrun the hook's timeout, and a timed-out hook does not block the command, so the
   gate would be skipped silently. Taking the lock there too would let a run lose its place between
-  format and test. The hook's timeout is 600 s in all three harnesses (Codex runs its gates in one
-  900 s hook), since a throttled gate measured 170 s on a busy machine against 69 s unthrottled; past
-  240 s in gaming mode the gate prints one warning on stderr.
+  format and test. The hook's timeout is set in `.claude/settings.json`; `FormatBeforeTests.ps1
+  -SelfTest` holds `.pi` to the same value and Codex's one hook for every gate to at least the
+  format and content timeouts together. A throttled gate measured 170 s on a busy machine against
+  69 s unthrottled; past 240 s in gaming mode the gate prints one warning on stderr.
 - **Not covered:** `RunGame.ps1` and `RunDev.ps1` (the user plays through them), `ExportRelease.ps1`,
   `Extract.ps1`. `-WaitQuiet` is separate: it waits for scripted Godots whatever the mode.
 - **Goldens that move under the game's GPU load are a determinism defect**, owned by #114; gaming

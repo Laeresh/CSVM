@@ -484,6 +484,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>A rocket box's key by its zero-based wing cell.</summary>
     public static string CellKey(int cell) => CellKeyPrefix + cell.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>The chat pane's scroll bar over a window of rows, which the race sheet's splits
+    /// borrow with the pane. It is MULTIPLAYERLOBBY_CHAT.SCRIPT's <c>KG</c> at (757, 368), 175 tall,
+    /// over its <c>KF</c> 0xff202418.</summary>
+    public static OriginalScrollBar ChatBar(int rows) => new(757f, 368f, 175f, rows, new BoardTint(0x20, 0x24, 0x18));
+
     /// <summary>Whether a screen is this module's.</summary>
     public bool Owns(OriginalScreen screen) => screen == OriginalScreen.Lobby;
 
@@ -1958,7 +1963,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     {
         int fits = Math.Max(1, (int)(ChatHeight / ChatPitch));
         int pinned = Math.Min(NetworkRows.Count, fits - 1);
-        var bar = OriginalRaceResults.SplitsBar with { Rows = fits - pinned };
+        var bar = ChatBar(fits - pinned);
         return (bar, pinned, bar.Follow(_chatTop, _chatHeld, count));
     }
 

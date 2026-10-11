@@ -81,7 +81,7 @@ internal static class MenuOriginalScoresSuites
             ctx.Check(shell.Lobby.Land(match.Take(10).ToList()), $"a ten-line Dogfight lands");
             var board = shell.Compose();
             ctx.Check(Row(shell, OriginalLobbyScreen.ScoresUpKey) == null && Row(shell, OriginalLobbyScreen.ScoresDownKey) == null
-                      && !board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG" && p.X == OriginalRaceTable.ScrollBar(314f, 26f).X)
+                      && !board.Pictures.Any(p => p.Art.Name == OriginalScrollBar.ThumbArt && p.X == OriginalRaceTable.ScrollBar(314f, 26f).X)
                       && Draws(board, "D1") && Draws(board, "D10"),
                 $"ten lines draw all ten with no scroll bar");
 
@@ -118,7 +118,7 @@ internal static class MenuOriginalScoresSuites
                   && down.X == bar.X && down.Y == bar.DownY,
             $"{prefix}: the scroll bar's arrows stand at the script's corner, the up one dead ({down?.X}, {down?.Y})");
         ctx.Check(Draws(board, $"{prefix}10") && !Draws(board, $"{prefix}11")
-                  && board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG" && p.X == bar.X),
+                  && board.Pictures.Any(p => p.Art.Name == OriginalScrollBar.ThumbArt && p.X == bar.X),
             $"{prefix}: the page draws its first ten lines and the thumb");
 
         for (int i = 0; i < 8; i++)
@@ -161,7 +161,7 @@ internal static class MenuOriginalScoresSuites
         // ABLE-TO-FAIL CONTROL: three lines fit the pane, so the script keeps its control deactivated.
         var board = shell.Compose();
         ctx.Check(Row(shell, OriginalLobbyScreen.ChatUpKey) == null && Row(shell, OriginalLobbyScreen.ChatDownKey) == null
-                  && !board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG") && Lines(board).Contains("C1") && Lines(board).Contains("C3"),
+                  && !board.Pictures.Any(p => p.Art.Name == OriginalScrollBar.ThumbArt) && Lines(board).Contains("C1") && Lines(board).Contains("C3"),
             $"a three-line chat draws every line with no scroll bar");
 
         for (int i = 4; i <= 32; i++)
@@ -174,7 +174,7 @@ internal static class MenuOriginalScoresSuites
         var down = Row(shell, OriginalLobbyScreen.ChatDownKey);
         ctx.Check(Lines(board).Contains("C32") && !Lines(board).Contains("C1") && down is { Enabled: false }
                   && down.X == bar.X && down.Y == bar.DownY && Row(shell, OriginalLobbyScreen.ChatUpKey) is { Enabled: true }
-                  && board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG" && p.X == bar.X),
+                  && board.Pictures.Any(p => p.Art.Name == OriginalScrollBar.ThumbArt && p.X == bar.X),
             $"thirty-two lines follow the newest under the script's KG at ({down?.X}, {down?.Y}), its down arrow dead");
 
         Press(host, seat, new MenuCommands { Pointer = Window(ctx, 400f, 450f, -40) });
