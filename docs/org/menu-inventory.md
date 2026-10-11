@@ -565,8 +565,7 @@ constants rather than reading a layout.
   [Evidence: script] `MULTIPLAYERLOBBY_STATS.SCRIPT`'s scroll control `HEA` (`@ctl@EO`) stands at
   (+419, +66), 195 tall (`XB`), over `IO` = 10 rows, with the same three arrow and thumb arts and
   `KF` 0x00000000, a clear track; it is activated only while the lines (`FO`) number more than ten,
-  and the rows show from its top (`HO`). The remake's Game Scores draws the figures
-  left-aligned at the header boxes' corners rather than centred in those cells. Mission Options
+  and the rows show from its top (`HO`). Mission Options
   carries the Environment and Type boxes (`MP_B_LISTBOXARROW.PNG`), the victory radios
   (`MP_B_RADIO8STATESSM.PNG`) with their Time and Score boxes, and the teams, lives and planes
   checkboxes (`MP_B_CHECKBOX8STATES.PNG`); Select Plane the Default and Custom sub-tabs

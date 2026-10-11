@@ -24,7 +24,7 @@ internal static class MenuOriginalScoresSuites
         "The lobby's Game Scores past ten lines: a landed sixteen-pilot race draws ten rows under the "
         + "script's scroll bar at (+419, +66), whose down arrow, the wheel and the pad's walk and Accept "
         + "reach the sixteenth, and a landed sixteen-line Dogfight does the same, where a ten-line one "
-        + "draws all ten with no bar. The chat pane's KG at (757, 368) scrolls thirty-odd lines by the "
+        + "draws all ten with no bar, its figures centred in the script's cells. The chat pane's KG at (757, 368) scrolls thirty-odd lines by the "
         + "wheel, the pad and the thumb, following new lines at the bottom and holding once scrolled up, "
         + "where a three-line chat draws no bar")]
     internal static void TheLobbyScores(TestContext ctx)
@@ -84,6 +84,19 @@ internal static class MenuOriginalScoresSuites
                       && !board.Pictures.Any(p => p.Art.Name == "MP_B_SCROLLBAR.PNG" && p.X == OriginalRaceTable.ScrollBar(314f, 26f).X)
                       && Draws(board, "D1") && Draws(board, "D10"),
                 $"ten lines draw all ten with no scroll bar");
+
+            // D1's figures stand centred in the script's cells, offset from the row corner (+24, +69).
+            // The headers above them are centred in their boxes too.
+            float row = 26f + 69f;
+            var figures = board.Lines.Where(l => l.Y == row && l.Text is "19" or "1" or "0").OrderBy(l => l.X).ToList();
+            ctx.Check(figures.Select(l => (l.Text, l.X, l.Width, l.Justify)).SequenceEqual(new[]
+                {
+                    ("19", 314f + 24f + 154f, 62f, BoardJustify.Center), ("1", 314f + 24f + 216f, 61f, BoardJustify.Center),
+                    ("0", 314f + 24f + 277f, 60f, BoardJustify.Center),
+                }),
+                $"a Dogfight row's figures stand centred in the script's cells ({string.Join(", ", figures.Select(l => $"{l.Text}@{l.X}/{l.Width}/{l.Justify}"))})");
+            ctx.Check(board.Lines.Any(l => l.X == 314f + 179f && l.Y == 26f + 44f && l.Width == 60f && l.Justify == BoardJustify.Center),
+                $"the Points header stands centred in its script box");
         }
         finally
         {

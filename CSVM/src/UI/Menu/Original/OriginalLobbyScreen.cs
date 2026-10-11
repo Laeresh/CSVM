@@ -297,9 +297,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The string table's three types; Stunt Race, the fourth, is the remake's and has no id.
     private static readonly string[] TypeNames = { "Capture the Flag", "Deathmatch", "Zeppelin vs Zeppelin" };
     private static readonly int[] TypeDescriptions = { 10124, 10123, 10125 };
-    private static readonly int[] ScoreHeaderIds = { 10542, 10543, 10544, 10545, 10546 };
+    // The fallback words of the scores page's headers, in OriginalRaceTable.HeaderBoxes' order.
     private static readonly string[] ScoreHeaders = { "Team Name", "Points", "Kills", "Deaths", "Hits %" };
-    private static readonly (float X, float Y)[] ScoreHeaderAt = { (21f, 43f), (179f, 44f), (242f, 44f), (303f, 44f), (362f, 44f) };
 
     // The scores page's scroll bar over the landed match's lines.
     private static readonly OriginalScrollBar ScoresBar = OriginalRaceTable.ScrollBar(PageX, PageY);
@@ -2378,9 +2377,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             return;
         }
 
-        for (int i = 0; i < ScoreHeaderIds.Length; i++)
+        for (int i = 0; i < ScoreHeaders.Length; i++)
         {
-            layers.Lines.Add(_text.Line(ScoreHeaderIds[i], ScoreHeaders[i], PageX + ScoreHeaderAt[i].X, PageY + ScoreHeaderAt[i].Y, 0f, Black));
+            var (id, x, headerY, width) = OriginalRaceTable.HeaderBoxes[i];
+            layers.Lines.Add(_text.Line(id, ScoreHeaders[i], PageX + x, PageY + headerY, width, Black,
+                i == 0 ? BoardJustify.Left : BoardJustify.Center));
         }
 
         var scores = lobby.Scores;
@@ -2399,12 +2400,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     text: BotTag));
             }
 
-            int[] numbers = { line.Points, line.Kills, line.Deaths };
-            for (int column = 0; column < numbers.Length; column++)
+            string[] figures =
             {
-                layers.Lines.Add(_text.Line(10575, string.Empty, PageX + ScoreHeaderAt[column + 1].X, y, 0f, Black,
-                    text: numbers[column].ToString(CultureInfo.InvariantCulture)));
-            }
+                line.Points.ToString(CultureInfo.InvariantCulture), line.Kills.ToString(CultureInfo.InvariantCulture),
+                line.Deaths.ToString(CultureInfo.InvariantCulture),
+            };
+            OriginalRaceTable.AddFigures(figures, PageX + OriginalRaceTable.RowX, y, _text.Strings, layers, Black);
         }
 
         ScoresBar.Compose(PageX + OriginalRaceTable.RowX, scores.Count, top, layers);

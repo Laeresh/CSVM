@@ -162,16 +162,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-1052` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The Original lobby's Game Scores tab draws
-  its figures left-aligned at the header corners, where the original's script centres them in the
-  row cells.** *Evidence:* the shipped `MULTIPLAYERLOBBY_STATS.SCRIPT` places the four figure cells
-  at offsets 154/216/277/337 from the row origin, 62/61/60/57 wide, centred, in face 10574
-  (`docs/org/menu-inventory.md`, the Game Scores page); the race table (`OriginalRaceTable`) follows
-  the script, while the Dogfight rows of `OriginalLobbyScreen`'s scores page start each figure at
-  its header's left corner. *Fix shape:* lay the Dogfight figures through the same cell geometry
-  the race table uses.
-
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

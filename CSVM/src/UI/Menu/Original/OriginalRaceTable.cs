@@ -33,6 +33,15 @@ public static class OriginalRaceTable
     /// <summary>The first row's top relative to the page.</summary>
     public const float RowY = 69f;
 
+    /// <summary>The page's own column headers: id, corner relative to the page and box width. The
+    /// first is left-justified, the rest centred, as the script's just_left and just_all say
+    /// (docs/org/menu-inventory.md, the lobby's Game Scores).</summary>
+    internal static readonly (int Id, float X, float Y, float Width)[] HeaderBoxes =
+    {
+        (10542, 21f, 43f, 150f), (10543, 179f, 44f, 60f), (10544, 242f, 44f, 58f),
+        (10545, 303f, 44f, 56f), (10546, 362f, 44f, 54f),
+    };
+
     // The script's row faces: the name column's and the numeric columns'.
     private const int NameFace = 10573;
     private const int NumberFace = 10574;
@@ -43,14 +52,6 @@ public static class OriginalRaceTable
 
     // The aircraft keeps this far clear of the name column's right-hand rule.
     private const float AircraftInset = 4f;
-
-    // The page's own column headers: id, corner relative to the page and box width. The first is
-    // left-justified, the rest centred, as the script's just_left and just_all say.
-    private static readonly (int Id, float X, float Y, float Width)[] HeaderBoxes =
-    {
-        (10542, 21f, 43f, 150f), (10543, 179f, 44f, 60f), (10544, 242f, 44f, 58f),
-        (10545, 303f, 44f, 56f), (10546, 362f, 44f, 54f),
-    };
 
     // The race's header in each page column. The fifth is empty: the race has no fifth figure.
     private static readonly string[] Headers = { "Pilot", "Best", "Gap", "Runs", "" };
@@ -127,15 +128,22 @@ public static class OriginalRaceTable
             var ink = row.Left ? FlaggedInk : Ink;
             layers.Lines.Add(Line(strings, NameFace, row.Pilot, x, y, Cells[0].Width, BoardJustify.Left, ink));
             layers.Lines.Add(Line(strings, NameFace, row.Aircraft, x, y, Cells[0].Width - AircraftInset, BoardJustify.Right, ink));
-            string[] figures = { row.Best, row.Gap, row.Runs };
-            for (int column = 0; column < figures.Length; column++)
-            {
-                var cell = Cells[column + 1];
-                layers.Lines.Add(Line(strings, NumberFace, figures[column], x + cell.X, y, cell.Width, BoardJustify.Center, ink));
-            }
+            AddFigures(new[] { row.Best, row.Gap, row.Runs }, x, y, strings, layers, ink);
         }
 
         bar.Compose(pageX + RowX, rows.Count, top, layers);
+    }
+
+    /// <summary>A row's figures, each centred in its script cell right of the name column in the
+    /// numeric face, from the row corner (<paramref name="x"/>, <paramref name="y"/>).</summary>
+    internal static void AddFigures(IReadOnlyList<string> figures, float x, float y, UiStrings strings, BoardLayers layers,
+        BoardTint? ink = null)
+    {
+        for (int column = 0; column < figures.Count; column++)
+        {
+            var cell = Cells[column + 1];
+            layers.Lines.Add(Line(strings, NumberFace, figures[column], x + cell.X, y, cell.Width, BoardJustify.Center, ink));
+        }
     }
 
     // One cell in a string's face and an ink, the script's black unless named. The words are the
