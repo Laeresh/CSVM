@@ -736,7 +736,8 @@ void fragment() {
     /// the halo, with no quad edge.</summary>
     internal static ImageTexture ColorKeyed(ImageTexture tex)
     {
-        var img = tex.GetImage();
+        // ⚠ A copy: headless hands back the texture's own Image, which TextureUpload may still hold.
+        var img = (Image)tex.GetImage().Duplicate();
         img.ClearMipmaps();
         img.Convert(Image.Format.Rgba8);
         var bg = img.GetPixel(0, 0);

@@ -89,9 +89,11 @@ $MemUpdateSec = 30
 
 # Every kind's estimate before it has any history, in GB. The one seed table: a kind with history
 # is estimated from it, never below its seed. The seeds are measured peaks with headroom
-# (analysis/shard-memory/FINDINGS.md); engine-shard is the heaviest full shard's.
+# (analysis/shard-memory/FINDINGS.md); engine-shard is the heaviest full shard's, engine-headless the
+# heaviest --headless shard's, which compiles no shader and uploads nothing.
 $MemSeedGB = [ordered]@{
     "engine-shard"     = 7.0
+    "engine-headless"  = 3.0
     "golden-shot"      = 5.5
     "perf"             = 5.5
     "hitch"            = 5.5
@@ -338,9 +340,9 @@ function Set-MemReservationPid {
 .SYNOPSIS
 Records the launch's peak private bytes and releases the reservation; call it once the process has
 exited or been killed. A launch the engine refused below the floor records nothing, its peak is a
-boot's, and an engine-shard peak is recorded only when the caller marks the launch a shared shard
-of a complete-catalog run under the default shard plan (-LearnShardPeak), since any other shard
-holds a different share of the catalog.
+boot's, and an engine-shard or engine-headless peak is recorded only when the caller marks the
+launch a shared shard of a complete-catalog run under the default shard plan (-LearnShardPeak),
+since any other shard holds a different share of the catalog.
 #>
 function Close-MemReservation {
     param($Reservation, [switch]$LearnShardPeak)
@@ -348,7 +350,7 @@ function Close-MemReservation {
     $handle = [IntPtr]::Zero
     if ($Reservation.PSObject.Properties["Process"]) { $handle = $Reservation.Process.Handle }
     $record = $handle -ne [IntPtr]::Zero -and [CSVMMemLedger]::ExitCode($handle) -ne $MemTripwireExitCode -and
-        ($LearnShardPeak -or $Reservation.Fields.kind -ne "engine-shard")
+        ($LearnShardPeak -or $Reservation.Fields.kind -notin "engine-shard", "engine-headless")
     if ($record) {
         $peak = [CSVMMemLedger]::PeakPrivateBytes($handle) / $MemGB
         if ($peak -gt 0) {

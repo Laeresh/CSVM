@@ -177,6 +177,7 @@ public sealed partial class Precipitation : Node3D
         var tint = p.Color.SrgbToLinear();
         float peakAlpha = p.AlphaGradient.X * OpacityTune;
 
+        ShaderCensus.Note(ShaderCode);
         var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
         mat.SetShaderParameter("sprite", rain ? MakeStreakTexture() : MakeFlakeTexture());
         mat.SetShaderParameter("tint", new Vector3(tint.R, tint.G, tint.B));

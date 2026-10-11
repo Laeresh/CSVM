@@ -14,12 +14,16 @@
                a failed build does, above): engine, goldens and hitch all still launch, each
                scored from its own report so a red units row can never read as green in the
                summary block (BL-417).
-      engine   Godot with --run-tests, the in-engine assertion suites. Windowed (never
-               --headless: no shaders compile there, so a clean error screen would prove
-               nothing) and with --log-file, which is what lets the harness screen native
-               engine ERROR lines. --run-tests implies --det by itself. The full catalog runs
-               in several concurrent processes (-Shards), each with its own log, report and
-               scratch subdirectory; the stage's verdict is the merge of their reports.
+      engine   Godot with --run-tests, the in-engine assertion suites, with --log-file, which is
+               what lets the harness screen native engine ERROR lines. --run-tests implies --det
+               by itself. The full catalog runs in concurrent processes of three kinds
+               (render: terms, analysis/headless-limits.json): windowed for the suites that need
+               a renderer or compile shaders no other suite does, since --headless compiles no
+               shader; headless shards (-Shards) for the rest, at about a third of the memory;
+               and one headless process for the ci tier on synthetic data (-RealData also runs
+               that tier on the real data). Each has its own log, report and scratch
+               subdirectory; the stage's verdict is the merge of their reports, which also fails
+               a full run on a shader text a headless shard made and no windowed one compiled.
       goldens  The golden-image tripwire: one Godot per shot in analysis/goldens/manifest.json,
                each a pinned --det capture, compared as md5 of the RAW pixel buffer (the engine
                prints it; a PNG's encoded bytes are not the picture). Runs as its own scripted
@@ -287,6 +291,7 @@ param(
     [string]$Graphics = "original",
     [switch]$WaitQuiet,
     [int]$QuietTimeoutSec = 1800,
+    [switch]$RealData,
     [switch]$SelfTest
 )
 
@@ -552,7 +557,9 @@ function Invoke-GodotPool {
         }
         while ($pending.Count -gt 0 -and $running.Count -lt $MaxConcurrent -and -not $script:Deferred) {
             $next = $pending.Peek()
-            if (-not $waiter) { $waiter = New-MemWaiter -Kind $Kind -Label $next.Label -Worktree $RepoRoot }
+            # An item may carry its own ledger kind: an engine stage holds windowed and headless shards.
+            $itemKind = if ($next.PSObject.Properties["Kind"] -and $next.Kind) { $next.Kind } else { $Kind }
+            if (-not $waiter) { $waiter = New-MemWaiter -Kind $itemKind -Label $next.Label -Worktree $RepoRoot }
             $reservation = Step-MemWaiter $waiter
             if ($waiter.Deferred) { $script:Deferred = $waiter.Deferred }
             if (-not $reservation) { break }
@@ -587,23 +594,35 @@ function Invoke-GodotPool {
     }
 }
 
-# The engine stage's processes: the shared count (-Shards, gaming mode's tunable, or the default)
-# plus one per suite the weights file runs alone, which the harness's plan puts last. A selection
-# keeps its count, since it never holds a full shard's worlds. Learns says, per process, whether its
-# peak teaches the ledger's engine-shard estimate: only a shared shard of the complete catalog under
-# the default count does, because any other plan hands a shard a different share of the catalog.
+# The engine stage's processes, in three groups the harness's render: term selects (SuiteRender): one
+# windowed shard plus one per suite the weights file runs alone, which the harness's plan puts last;
+# the shared count of headless shards (-Shards, gaming mode's tunable, or the default); and one
+# headless process for the ci tier on the synthetic data root. -RealData also runs the ci tier on
+# the real data, in the headless shards, so that process is an extra pass. A selection keeps one
+# process per group, since it never holds a full shard's worlds. Learns says, per process, whether
+# its peak teaches the ledger: only a windowed or headless shard of the complete catalog under the
+# default count does, because any other plan hands a shard a different share of the catalog.
 function Get-EngineShardPlan {
-    param([int]$Requested, [string]$Selector, $GamingSettings, [int]$AloneCount)
+    param([int]$Requested, [string]$Selector, $GamingSettings, [int]$AloneCount, [switch]$RealData)
     $shared = $Requested
     if ($shared -le 0) {
         $shared = if ($Selector) { 1 } elseif ($GamingSettings) { $GamingSettings.shards } else { $DefaultEngineShards }
     }
     if ($GamingSettings) { $shared = [math]::Min($shared, $GamingSettings.shards) }
-    $total = if ($Selector) { $shared } else { $shared + $AloneCount }
+    $windowed = if ($Selector) { 1 } else { 1 + $AloneCount }
     $default = -not $Selector -and -not $GamingSettings -and $shared -eq $DefaultEngineShards
+    $groups = @(
+        [pscustomobject]@{ Render = "windowed"; Count = $windowed; Headless = $false; Synthetic = $false
+            Extra = $false; Kind = "engine-shard"; Learns = @(for ($k = 1; $k -le $windowed; $k++) { $default -and $k -eq 1 }) }
+        [pscustomobject]@{ Render = $(if ($RealData) { "headless+synthetic" } else { "headless" }); Count = $shared
+            Headless = $true; Synthetic = $false; Extra = $false; Kind = "engine-headless"
+            Learns = @(for ($k = 1; $k -le $shared; $k++) { $default -and -not $RealData }) }
+        [pscustomobject]@{ Render = "synthetic"; Count = 1; Headless = $true; Synthetic = $true
+            Extra = [bool]$RealData; Kind = "engine-headless"; Learns = @($false) }
+    )
     return [pscustomobject]@{
-        Shared = $shared; Total = $total
-        Learns = @(for ($k = 1; $k -le $total; $k++) { $default -and $k -le $shared })
+        Shared = $shared; Windowed = $windowed; Total = $windowed + $shared + 1; Groups = $groups
+        Learns = @($groups | ForEach-Object { $_.Learns })
     }
 }
 
@@ -734,18 +753,20 @@ if ($RunSelfTest) {
         Assert-SelfTest ($fakeRuns[1].ExitCode -eq 124 -and $fakeRuns[1].Overdue -eq "its log did not grow for 3s") "a launch whose log never grows is killed at the stall time"
         Assert-SelfTest ($fakeRuns[2].ExitCode -eq 124 -and $fakeRuns[2].Overdue -eq "ran past its 15s wall-time watchdog") "a launch that never stops logging is killed at the ceiling"
 
-        # The shard plan: an alone suite's process comes on top of the shared count, and only the
-        # default plan's shared shards teach the engine-shard estimate.
+        # The shard plan: the windowed shard and an alone suite's process come on top of the shared
+        # headless count, then the synthetic process; only the default plan's windowed and headless
+        # shards teach the estimates.
         $gamingTwo = [pscustomobject]@{ shards = 2 }
         $plans = [ordered]@{
-            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 6, 7, "1,1,1,1,1,1,0")
-            "-Shards 6"    = @((Get-EngineShardPlan -Requested 6 -AloneCount 1), 6, 7, "1,1,1,1,1,1,0")
-            "-Shards 1"    = @((Get-EngineShardPlan -Requested 1 -AloneCount 1), 1, 2, "0,0")
-            "-Shards 2"    = @((Get-EngineShardPlan -Requested 2 -AloneCount 1), 2, 3, "0,0,0")
-            "gaming mode"  = @((Get-EngineShardPlan -Requested 0 -GamingSettings $gamingTwo -AloneCount 1), 2, 3, "0,0,0")
-            "gaming, -Shards 6" = @((Get-EngineShardPlan -Requested 6 -GamingSettings $gamingTwo -AloneCount 1), 2, 3, "0,0,0")
-            "a selection"  = @((Get-EngineShardPlan -Requested 0 -Selector "hud" -AloneCount 1), 1, 1, "0")
-            "a selection, -Shards 3" = @((Get-EngineShardPlan -Requested 3 -Selector "hud" -AloneCount 1), 3, 3, "0,0,0")
+            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
+            "-Shards 6"    = @((Get-EngineShardPlan -Requested 6 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
+            "-RealData"    = @((Get-EngineShardPlan -Requested 0 -AloneCount 1 -RealData), 6, 9, "1,0,0,0,0,0,0,0,0")
+            "-Shards 1"    = @((Get-EngineShardPlan -Requested 1 -AloneCount 1), 1, 4, "0,0,0,0")
+            "-Shards 2"    = @((Get-EngineShardPlan -Requested 2 -AloneCount 1), 2, 5, "0,0,0,0,0")
+            "gaming mode"  = @((Get-EngineShardPlan -Requested 0 -GamingSettings $gamingTwo -AloneCount 1), 2, 5, "0,0,0,0,0")
+            "gaming, -Shards 6" = @((Get-EngineShardPlan -Requested 6 -GamingSettings $gamingTwo -AloneCount 1), 2, 5, "0,0,0,0,0")
+            "a selection"  = @((Get-EngineShardPlan -Requested 0 -Selector "hud" -AloneCount 1), 1, 3, "0,0,0")
+            "a selection, -Shards 3" = @((Get-EngineShardPlan -Requested 3 -Selector "hud" -AloneCount 1), 3, 5, "0,0,0,0,0")
         }
         foreach ($case in $plans.Keys) {
             $p, $shared, $total, $learns = $plans[$case]
@@ -959,9 +980,10 @@ function Get-NetPortBase {
 # the selection mean the plan lost or duplicated a suite. Allowlist caps are re-checked against the
 # SUMMED counts, because each process only ever sees its own share of an allowed error.
 function Merge-EngineShards {
-    param([object[]]$Shards)
+    param([object[]]$Shards, [switch]$CheckShaders)
 
-    $passed = 0; $failed = 0; $skipped = 0
+    $passed = 0; $failed = 0; $skipped = 0; $extraCovered = 0
+    $compiled = @{}; $madeBy = @{}
     $problems = @(); $failedRows = @(); $seenNames = @{}
     $unexpected = @(); $overCap = @(); $screenedAll = $true; $anyScreen = $false
     $binaries = @{}; $allowSeen = @{}; $allowMax = @{}; $allowWhy = @{}
@@ -997,6 +1019,26 @@ function Merge-EngineShards {
         $passed  += [int]$json.passed
         $failed  += [int]$json.failed
         $skipped += [int]$json.skipped
+        # An extra pass (-RealData's synthetic process) repeats suites the shards also run, so it is
+        # held to its own share of the selection, not to the shards' one-run-each partition.
+        $extra = [bool]($shard.PSObject.Properties["Extra"] -and $shard.Extra)
+        if ($extra) {
+            $mine = [int]$json.passed + [int]$json.failed + [int]$json.skipped
+            $extraCovered += $mine
+            if ($mine -ne [int]$json.shard.renderTotal) {
+                $problems += "$($shard.Label): covered $mine suite(s) of its render share's $($json.shard.renderTotal)"
+            }
+        }
+        # A headless process compiles no shader, so every text it made must have been compiled by a
+        # windowed one. Synthetic data makes texts the game never does, so its process is not held to it.
+        $render = if ($shard.PSObject.Properties["Render"]) { [string]$shard.Render } else { "" }
+        foreach ($suite in @($json.suites)) {
+            foreach ($text in @($suite.shaderTexts)) {
+                if (-not $text) { continue }
+                if ($render -eq "windowed") { $compiled[$text] = 1 }
+                elseif ($render -like "headless*") { $madeBy[$text] = $suite.name }
+            }
+        }
         if ($shard.ExitCode -ne 0 -and $shard.ExitCode -ne 1) {
             $problems += "$($shard.Label): Godot exited $($shard.ExitCode) though it wrote a report; log at $($shard.Log)"
         }
@@ -1023,10 +1065,10 @@ function Merge-EngineShards {
             if ($name) { $unweighted += $name }
         }
         foreach ($suite in @($json.suites)) {
-            if ($seenNames.ContainsKey($suite.name)) {
+            if (-not $extra -and $seenNames.ContainsKey($suite.name)) {
                 $problems += "suite '$($suite.name)' ran in more than one shard"
             }
-            $seenNames[$suite.name] = 1
+            if (-not $extra) { $seenNames[$suite.name] = 1 }
             if ($suite.status -eq "fail") {
                 $failedRows += [pscustomobject]@{ Index = [int]$suite.index; Name = $suite.name }
             }
@@ -1057,9 +1099,16 @@ function Merge-EngineShards {
         $problems += "shards disagree on the selection size ($($totals.Keys -join ', '))"
     } elseif ($totals.Keys.Count -eq 1) {
         $expected = [int]@($totals.Keys)[0]
-        $covered = $passed + $failed + $skipped
+        $covered = $passed + $failed + $skipped - $extraCovered
         if ($covered -ne $expected) {
             $problems += "the shards covered $covered suite(s) of the selection's $expected"
+        }
+    }
+    if ($CheckShaders) {
+        $uncovered = @($madeBy.Keys | Where-Object { -not $compiled.ContainsKey($_) })
+        foreach ($owner in @($uncovered | ForEach-Object { $madeBy[$_] } | Sort-Object -Unique)) {
+            $n = @($uncovered | Where-Object { $madeBy[$_] -eq $owner }).Count
+            $problems += "suite '$owner' made $n shader text(s) headless that no windowed process compiled: add it to headlessShaders in analysis\headless-limits.json"
         }
     }
     if ($reports -ne $Shards.Count) {
@@ -1248,18 +1297,18 @@ if ($SkipEngine) {
         $env:SDL_JOYSTICK_DIRECTINPUT = "0"
     }
 
-    # An explicit selection stays in one process: the shard grammar divides by measured weight, and
-    # a handful of named suites is faster started once than started N times.
+    # An explicit selection keeps one process per group: the shard grammar divides by measured
+    # weight, and a handful of named suites is faster started once than started N times.
     # A missing or unreadable weights file runs nothing alone, as the harness's own reading does.
     $aloneCount = 0
     try {
         $weightsJson = [System.IO.File]::ReadAllText((Join-Path $RepoRoot "analysis\engine-suite-weights.json")) | ConvertFrom-Json
         $aloneCount = @($weightsJson.alone | Where-Object { $_ }).Count
     } catch { }
-    $shardPlan = Get-EngineShardPlan -Requested $Shards -Selector $EngineSelector -GamingSettings $Gaming.Settings -AloneCount $aloneCount
+    $shardPlan = Get-EngineShardPlan -Requested $Shards -Selector $EngineSelector -GamingSettings $Gaming.Settings -AloneCount $aloneCount -RealData:$RealData
     $shardCount = $shardPlan.Total
     if ($shardCount -gt $NetPortSlotShards) {
-        throw "-Shards $($shardPlan.Shared) plus $($shardCount - $shardPlan.Shared) alone makes $shardCount processes: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards"
+        throw "-Shards $($shardPlan.Shared) plus $($shardCount - $shardPlan.Shared) windowed and synthetic makes $shardCount processes: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards"
     }
 
     # Held from before the first launch until every shard has exited. With every slot taken, a
@@ -1281,38 +1330,39 @@ if ($SkipEngine) {
     # Stale outputs go first: a run that dies before writing its report must not be scored
     # from the previous run's numbers.
     $shardRuns = @()
-    for ($k = 1; $k -le $shardCount; $k++) {
-        if ($shardCount -eq 1) {
-            $terms  = $EngineSelector
-            $report = Join-Path $ScratchDir "test-report.json"
-            $log    = Join-Path $engineRunDir "engine.log"
-            $label  = "engine"
-        } else {
+    $k = 0
+    foreach ($group in $shardPlan.Groups) {
+        for ($i = 1; $i -le $group.Count; $i++) {
+            $k++
             # The harness writes its report and its per-suite artifacts beside this log, in a
-            # directory named for the shard -- so the launch directory decides both.
-            $terms  = (@($EngineSelector, "shard:$k/$shardCount") | Where-Object { $_ }) -join ","
-            $report = Join-Path $engineRunDir "shard${k}of${shardCount}\test-report.json"
-            $log    = Join-Path $engineRunDir "shard${k}of${shardCount}.log"
-            $label  = "s$k"
-        }
-        foreach ($stale in @($report, $log, "$log.out", "$log.err")) {
-            if (Test-Path $stale) {
-                Remove-Item -Path $stale -Force
+            # directory named for the render term and shard -- so the launch directory decides both.
+            $shardTerm = if ($group.Count -gt 1) { "shard:$i/$($group.Count)" } else { $null }
+            $terms  = (@($EngineSelector, "render:$($group.Render)", $shardTerm) | Where-Object { $_ }) -join ","
+            $name   = "$($group.Render)-shard${i}of$($group.Count)"
+            $report = Join-Path $engineRunDir "$name\test-report.json"
+            $log    = Join-Path $engineRunDir "$name.log"
+            $label  = if ($group.Synthetic) { "syn" } elseif ($group.Headless) { "h$i" } else { "w$i" }
+            foreach ($stale in @($report, $log, "$log.out", "$log.err")) {
+                if (Test-Path $stale) {
+                    Remove-Item -Path $stale -Force
+                }
+            }
+            $netPortBase = Get-NetPortBase -Slot $netSlotNumber -ShardIndex $k
+            $godotArgs = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn", "--",
+                           "--run-tests=$terms", "--net-port-base=$netPortBase")
+            # One render thread: the dummy renderer's RID owners race under a separate one (#121949 in
+            # headless-limits.json), and a headless process draws nothing for the thread to overlap.
+            if ($group.Headless) { $godotArgs = @("--headless", "--render-thread", "safe") + $godotArgs }
+            if ($group.Synthetic) { $godotArgs += "--synthetic-data" }
+            $shardRuns += [pscustomobject]@{
+                Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
+                NetPortBase = $netPortBase; LearnPeak = $shardPlan.Learns[$k - 1]; Kind = $group.Kind
+                Render = $group.Render; Synthetic = $group.Synthetic; Extra = $group.Extra
+                Args = $godotArgs; Launch = $null; ExitCode = -1
             }
         }
-        $netPortBase = Get-NetPortBase -Slot $netSlotNumber -ShardIndex $k
-        $testArg = if ($terms) { "--run-tests=$terms" } else { "--run-tests" }
-        $shardRuns += [pscustomobject]@{
-            Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
-            NetPortBase = $netPortBase; LearnPeak = $shardPlan.Learns[$k - 1]
-            Args = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn", "--", $testArg,
-                     "--net-port-base=$netPortBase")
-            Launch = $null; ExitCode = -1
-        }
     }
-    if ($shardCount -gt 1) {
-        Write-Host "  $($shardPlan.Shared) shared shard(s) and $($shardCount - $shardPlan.Shared) alone, weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
-    }
+    Write-Host "  $($shardPlan.Windowed) windowed (alone suites included), $($shardPlan.Shared) headless, 1 synthetic$(if ($RealData) { ' (an extra pass: -RealData runs the ci tier in the headless shards)' }), weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
     Write-Host "  net ports: slot $netSlotNumber, bases $(($shardRuns | ForEach-Object { $_.NetPortBase }) -join ', ')" -ForegroundColor DarkGray
 
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -1341,7 +1391,7 @@ if ($SkipEngine) {
         if (-not (Test-Path $shard.Log)) {
             continue
         }
-        $prefix = if ($shardCount -eq 1) { "  " } else { "  $($shard.Label) " }
+        $prefix = "  $($shard.Label) "
         foreach ($line in (Get-Content -Path $shard.Log)) {
             if ($line -match '^\s*\[test\]|^\s*(PASS|FAIL|SKIP)\s') {
                 Write-Host "$prefix$line"
@@ -1356,7 +1406,8 @@ if ($SkipEngine) {
         Add-Stage -Name "engine" -Status "DEFERRED" -Seconds $watch.Elapsed.TotalSeconds -Detail "no shard ran"
     } else {
         $judged = if ($script:Deferred) { $ranShards } else { $shardRuns }
-        $merged = Merge-EngineShards -Shards $judged
+        # Only a complete run holds every windowed suite, so only it can show a text went uncompiled.
+        $merged = Merge-EngineShards -Shards $judged -CheckShaders:(-not $EngineSelector -and -not $script:Deferred)
         $status = $merged.Status
         $problems = @($merged.Problems)
         $detail = $merged.Detail
@@ -1368,9 +1419,7 @@ if ($SkipEngine) {
         if ($EngineSelector) {
             $detail = "$detail; selector '$EngineSelector'"
         }
-        if ($shardCount -gt 1) {
-            $detail = "$detail; $($shardPlan.Shared) shared + $($shardCount - $shardPlan.Shared) alone shards, slowest $($merged.SlowestShard)"
-        }
+        $detail = "$detail; $($shardPlan.Windowed) windowed + $($shardPlan.Shared) headless + 1 synthetic, slowest $($merged.SlowestShard)"
         Add-Stage -Name "engine" -Status $status -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
         foreach ($problem in $problems) {
             Write-Host "  !! $problem" -ForegroundColor Red

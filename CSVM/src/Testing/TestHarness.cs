@@ -97,10 +97,17 @@ public static class TestHarness
         // Numbers in a committed report must read the same on every machine.
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        var shard = SuiteShards.Parse(filter, out string terms, out string? shardError);
-        if (shardError != null)
+        var shard = SuiteShards.Parse(filter, out string unsharded, out string? shardError);
+        var render = SuiteRender.Parse(unsharded, out string terms, out string? renderError);
+        if ((shardError ?? renderError) is { } termError)
         {
-            Log.Error("test", $"run-tests {shardError}");
+            Log.Error("test", $"run-tests {termError}");
+            return 1;
+        }
+        var limits = SuiteRender.Load(Path.Combine(ctx.RepoRoot, "analysis", "headless-limits.json"));
+        if (render != null && limits == null)
+        {
+            Log.Error("test", $"run-tests cannot place suites for '{filter}': analysis/headless-limits.json is missing or unreadable");
             return 1;
         }
         var selected = Select(All, terms, out var unmatched);
@@ -122,9 +129,14 @@ public static class TestHarness
             return 1;
         }
 
-        // Sharding narrows an already-valid selection, so it runs AFTER the miss checks above: an
-        // empty shard is a legitimate division of a small set, an empty selector is a typo.
-        var plan = PlanShard(ctx, shard, ref selected);
+        // Sharding and the render split narrow an already-valid selection, so they run AFTER the miss
+        // checks above. An empty shard is a legitimate division of a small set, an empty selector a typo.
+        int selectedTotal = selected.Count;
+        if (render != null)
+        {
+            selected = selected.Where(s => render.Contains(SuiteRender.KindOf(s.Name, limits!))).ToList();
+        }
+        var plan = PlanShard(ctx, shard, render, selectedTotal, ref selected);
         var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < All.Count; i++)
         {
@@ -153,6 +165,7 @@ public static class TestHarness
             // thread the run gate holds, and the process hangs.
             var gate = ctx.AuditFinalizers && runGate == null ? FinalizerGate.Hold() : null;
             double staticAtStart = Performance.GetMonitor(Performance.Monitor.MemoryStatic);
+            ShaderCensus.Begin();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -238,6 +251,7 @@ public static class TestHarness
                 RestSeconds = restSeconds,
                 OverrunSeconds = overrunSeconds,
                 OrphansLeft = orphansLeft,
+                ShaderTexts = ShaderCensus.Take(),
             });
             totals += ctx.WorldBuildPhases;
             totalBuildSeconds += buildSeconds;
@@ -288,7 +302,10 @@ public static class TestHarness
         var (decodeHits, decodeMisses) = ctx.DecodeCounts;
         Log.Info("test", $"{totalsLine} decode_hits={decodeHits} decode_misses={decodeMisses}");
 
-        var screen = ScreenEngineLog(out string? logPath);
+        // A headless process also excuses the lines only headless prints; a windowed one never does.
+        var allowances = DisplayServer.GetName() == "headless" && limits != null
+            ? ErrorAllowlist.Concat(limits.EngineErrors).ToList() : ErrorAllowlist;
+        var screen = ScreenEngineLog(allowances, out string? logPath);
         int pass = results.Count(r => r.Status == SuiteStatus.Pass);
         int fail = results.Count(r => r.Status == SuiteStatus.Fail);
         int skip = results.Count(r => r.Status == SuiteStatus.Skip);
@@ -369,27 +386,34 @@ public static class TestHarness
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
     /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure, no
     /// Godot API, no file access, so it is unit-testable outside the engine.</summary>
-    public static StderrScreen Screen(IEnumerable<string> lines)
+    public static StderrScreen Screen(IEnumerable<string> lines) => Screen(lines, ErrorAllowlist);
+
+    /// <summary>The same against <paramref name="allowlist"/>, for a run whose lines differ.</summary>
+    public static StderrScreen Screen(IEnumerable<string> lines, IReadOnlyList<ErrorAllowance> allowlist)
     {
         var counts = new Dictionary<string, int>();
         var unexpected = new List<string>();
         int total = 0, allowed = 0;
-        string? pending = null;   // the previous error line, so its "   at: …" location joins it
-        foreach (string line in lines)
+        var all = lines as IReadOnlyList<string> ?? lines.ToList();
+        for (int i = 0; i < all.Count; i++)
         {
-            if (pending != null && line.StartsWith("   at: ", StringComparison.Ordinal))
-            {
-                unexpected[^1] = $"{pending} {line.Trim()}";
-                pending = null;
-                continue;
-            }
-            pending = null;
-            if (!EngineError.IsMatch(line))
+            if (!EngineError.IsMatch(all[i]))
             {
                 continue;
             }
             total++;
-            var match = ErrorAllowlist.FirstOrDefault(a => Regex.IsMatch(line, a.Pattern));
+            // Its "   at: …" location joins it before matching, since a pattern may name the source.
+            // A render-thread error can land a main-thread line between the two, so look a little on.
+            string line = all[i];
+            for (int j = i + 1; j < Math.Min(all.Count, i + 4) && !EngineError.IsMatch(all[j]); j++)
+            {
+                if (all[j].StartsWith("   at: ", StringComparison.Ordinal))
+                {
+                    line = $"{all[i]} {all[j].Trim()}";
+                    break;
+                }
+            }
+            var match = allowlist.FirstOrDefault(a => Regex.IsMatch(line, a.Pattern));
             if (match != null)
             {
                 counts.TryGetValue(match.Pattern, out int n);
@@ -398,10 +422,9 @@ public static class TestHarness
                 continue;
             }
             unexpected.Add(line);
-            pending = line;
         }
         var overCap = new List<string>();
-        foreach (var allowance in ErrorAllowlist)
+        foreach (var allowance in allowlist)
         {
             counts.TryGetValue(allowance.Pattern, out int n);
             if (n > allowance.Max)
@@ -416,21 +439,25 @@ public static class TestHarness
             Unexpected = unexpected,
             OverCap = overCap,
             AllowedCounts = counts,
+            Allowlist = allowlist,
         };
     }
 
     /// <summary>How many engine error lines this run's log holds so far, or null with no log. For a
     /// suite that brackets its own work.</summary>
-    internal static int? EngineErrorsSoFar() => ScreenEngineLog(out _)?.Total;
+    internal static int? EngineErrorsSoFar() => ScreenEngineLog(ErrorAllowlist, out _)?.Total;
 
     // Narrows an already-valid selection to one shard and tags the context, so every artifact this
     // process writes lands under .scratch/<tag>/ instead of over a sibling shard's.
-    private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, ref IReadOnlyList<Suite> selected)
+    private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, IReadOnlySet<string>? render,
+        int selectedTotal, ref IReadOnlyList<Suite> selected)
     {
-        int total = selected.Count;
-        if (shard is not { } s || s.Count < 2)
+        int renderTotal = selected.Count;
+        string kinds = render == null ? "" : string.Join("+", render.Order(StringComparer.Ordinal));
+        var s = shard is { Count: > 1 } split ? split : new ShardSpec(1, 1);
+        if (s.Count < 2 && render == null)
         {
-            return new ShardPlan(1, 1, total, "", Array.Empty<string>());
+            return new ShardPlan(1, 1, selectedTotal, "", Array.Empty<string>(), "", renderTotal);
         }
         var weights = SuiteShards.Load(Path.Combine(ctx.RepoRoot, "analysis", "engine-suite-weights.json"));
         var unweighted = SuiteShards.Unweighted(selected.Select(x => x.Name), weights);
@@ -440,9 +467,9 @@ public static class TestHarness
         string root = Path.GetDirectoryName(EngineLogPath() ?? "") ?? "";
         ctx.ShardScratch = Path.Combine(
             root.Length > 0 ? root : Path.Combine(ctx.RepoRoot, ".scratch"),
-            $"shard{s.Index}of{s.Count}");
-        Log.Info("test", $"run-tests shard={s.Index}/{s.Count} suites={selected.Count}/{total} unweighted={unweighted.Count} weights='{weights.Source}' scratch={ctx.ScratchDir}");
-        return new ShardPlan(s.Index, s.Count, total, weights.Source, unweighted);
+            $"{(kinds.Length > 0 ? kinds + "-" : "")}shard{s.Index}of{s.Count}");
+        Log.Info("test", $"run-tests render={(kinds.Length > 0 ? kinds : "all")} shard={s.Index}/{s.Count} suites={selected.Count}/{renderTotal}/{selectedTotal} unweighted={unweighted.Count} weights='{weights.Source}' scratch={ctx.ScratchDir}");
+        return new ShardPlan(s.Index, s.Count, selectedTotal, weights.Source, unweighted, kinds, renderTotal);
     }
 
     private static List<Suite> MatchTerm(IReadOnlyList<Suite> suites, string term)
@@ -498,7 +525,7 @@ public static class TestHarness
         return null;
     }
 
-    private static StderrScreen? ScreenEngineLog(out string? logPath)
+    private static StderrScreen? ScreenEngineLog(IReadOnlyList<ErrorAllowance> allowances, out string? logPath)
     {
         logPath = EngineLogPath();
         if (logPath == null)
@@ -516,7 +543,7 @@ public static class TestHarness
             {
                 lines.Add(line);
             }
-            return Screen(lines);
+            return Screen(lines, allowances);
         }
         catch (Exception e)
         {
@@ -569,7 +596,7 @@ public static class TestHarness
         {
             sb.AppendLine($"  {Tag(screen.Ok ? SuiteStatus.Pass : SuiteStatus.Fail)}  engine errors  "
                           + $"{screen.Total} line(s), {screen.Allowed} allowlisted, {screen.Unexpected.Count} unexpected");
-            foreach (var allowance in ErrorAllowlist)
+            foreach (var allowance in screen.Allowlist)
             {
                 screen.AllowedCounts.TryGetValue(allowance.Pattern, out int n);
                 sb.AppendLine($"           . allowed {n}/{allowance.Max}x  {allowance.Why}");
@@ -609,6 +636,7 @@ public static class TestHarness
         json.AppendLine($"  \"shard\": {{\"index\": {plan.Index}, \"count\": {plan.Count}, "
                         + $"\"selectedTotal\": {plan.SelectedTotal}, \"weights\": {Quote(plan.WeightsSource)}, "
                         + $"\"unweighted\": [{string.Join(", ", plan.Unweighted.Select(Quote))}], "
+                        + $"\"render\": {Quote(plan.Render)}, \"renderTotal\": {plan.RenderTotal}, "
                         + $"\"netPortBase\": {CSVM.Net.NetPorts.Base.ToString(CultureInfo.InvariantCulture)}}},");
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
@@ -654,7 +682,8 @@ public static class TestHarness
             json.AppendLine($"      \"detail\": {Quote(r.Detail)},");
             json.AppendLine($"      \"counts\": {{{string.Join(", ", r.Counts.Select(kv => $"{Quote(kv.Key)}: {kv.Value}"))}}},");
             json.AppendLine($"      \"failures\": [{string.Join(", ", r.Failures.Select(Quote))}],");
-            json.AppendLine($"      \"notes\": [{string.Join(", ", r.Notes.Select(Quote))}]");
+            json.AppendLine($"      \"notes\": [{string.Join(", ", r.Notes.Select(Quote))}],");
+            json.AppendLine($"      \"shaderTexts\": [{string.Join(", ", r.ShaderTexts.Select(Quote))}]");
             json.AppendLine(i == results.Count - 1 ? "    }" : "    },");
         }
         json.AppendLine("  ],");
@@ -666,13 +695,14 @@ public static class TestHarness
         json.AppendLine($"    \"unexpected\": [{string.Join(", ", (screen?.Unexpected ?? Array.Empty<string>()).Select(Quote))}],");
         json.AppendLine($"    \"overCap\": [{string.Join(", ", (screen?.OverCap ?? Array.Empty<string>()).Select(Quote))}],");
         json.AppendLine("    \"allowlist\": [");
-        for (int i = 0; i < ErrorAllowlist.Count; i++)
+        var allowlist = screen?.Allowlist ?? ErrorAllowlist;
+        for (int i = 0; i < allowlist.Count; i++)
         {
-            var a = ErrorAllowlist[i];
+            var a = allowlist[i];
             int seen = 0;
             screen?.AllowedCounts.TryGetValue(a.Pattern, out seen);
             json.AppendLine($"      {{\"pattern\": {Quote(a.Pattern)}, \"max\": {a.Max}, \"seen\": {seen}, \"why\": {Quote(a.Why)}}}"
-                            + (i == ErrorAllowlist.Count - 1 ? "" : ","));
+                            + (i == allowlist.Count - 1 ? "" : ","));
         }
         json.AppendLine("    ]");
         json.AppendLine("  }");
@@ -748,7 +778,7 @@ public static class TestHarness
     /// into the report so an aggregator can prove the shards cover the selection exactly once
     /// rather than assuming they did.</summary>
     private readonly record struct ShardPlan(int Index, int Count, int SelectedTotal,
-        string WeightsSource, IReadOnlyList<string> Unweighted);
+        string WeightsSource, IReadOnlyList<string> Unweighted, string Render, int RenderTotal);
 
     private readonly record struct PhaseTotals(
         PhaseAttribution.Categorized Build, double BuildSeconds, double DisposalSeconds,
@@ -1389,6 +1419,9 @@ public sealed class SuiteResult
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
     public IReadOnlyDictionary<string, long> Counts { get; init; } = new Dictionary<string, long>();
 
+    /// <summary>Hashes of the shader texts this suite handed to Godot (<see cref="ShaderCensus"/>).</summary>
+    public IReadOnlyList<string> ShaderTexts { get; init; } = Array.Empty<string>();
+
     /// <summary>How many <see cref="TestContext.WithWorld(string, bool, Action{TestWorld})"/> calls
     /// actually built (rather than reused) a world during this suite.</summary>
     public int WorldsBuilt { get; init; }
@@ -1440,6 +1473,9 @@ public sealed class StderrScreen
     /// passes: an allowlist entry whose count is invisible is exactly how a new error hides inside
     /// an old one's shape.</summary>
     public IReadOnlyDictionary<string, int> AllowedCounts { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>The allowances the lines were screened against.</summary>
+    public IReadOnlyList<ErrorAllowance> Allowlist { get; init; } = TestHarness.ErrorAllowlist;
 
     public bool Ok => Unexpected.Count == 0 && OverCap.Count == 0;
 }

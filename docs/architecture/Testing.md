@@ -22,7 +22,7 @@ chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-repo
 `TestContext.ScratchDir` (its `syntheticData` names a synthetic data root), and the exit code.
 Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
 (a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
-`Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
+`Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs, `SuiteShards` the shard term and `SuiteRender` the render term. The world
 cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. After a suite that grew Godot's static memory it collects and finalizes, so dead wrappers free their sessions before the next suite (`CollectAfterStaticGrowth`). A destroyed `TestWorld` takes the shader cache's tracked materials with it. Under `--debug-mem` the harness logs a `MemoryCensus` line per suite, with the cache's tracked count. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/FinalizerGate.cs
@@ -42,6 +42,15 @@ shard and returns each shard in the input's order, so one tree always divides th
 default for a suite the file does not name, `Groups` for the sets a shard may not split and `Alone`
 for the suites `Plan` puts last, one to a shard, which `RunTests.ps1` adds on top of its shared
 count. Read `TestHarness.cs` for where a plan is applied.
+
+## src/Testing/SuiteRender.cs
+The `render:<kind>[+<kind>]` term and the kind of process each suite runs in, so `RunTests.ps1` can
+run most of the catalog headless. A suite one of `analysis/headless-limits.json`'s three windowed
+maps names is `windowed`, a `SuiteCatalog.CiTier` suite `synthetic`, any other `headless`; a
+windowed map outranks the tier. `Load` also hands back the `headlessEngineErrors` patterns, which a
+headless harness adds to its allowlist uncapped. The harness narrows by the term after its miss
+checks, so a kind holding none of a selection is an empty process, not a typo. Read
+`docs/tooling.md` for the three kinds and the shader coverage check they need.
 
 ## src/Testing/SuitePorts.cs
 The one table of where each suite that opens a real socket opens it: an offset into this process's

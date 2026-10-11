@@ -96,7 +96,7 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 |---|---|
 | `build` | `dotnet build CSVM/CSVM.sln`; its exit code; a compile error, which also stops the run |
 | `units` | `dotnet test --no-build`; the TRX log in `.scratch/testresults/`, never the console summary; any failed test |
-| `engine` | Godot `--run-tests` in `-Shards` processes and one per alone suite, windowed (LOG-8); each shard's JSON report; a failed suite, a missing report, a watchdog timeout (exit 124) |
+| `engine` | Godot `--run-tests` in windowed processes for the suites that need a renderer or compile their shaders (LOG-8), `-Shards` headless ones and a synthetic one; each shard's JSON report; a failed suite, a missing report, a watchdog timeout (exit 124), a shader text no windowed process compiled |
 | `goldens` | One `--det` Godot per manifest shot; the raw-pixel md5 on its `[core] shot pixmd5=…` line, not the PNG bytes (SHOT-6); a hash, frame or size off the manifest |
 | `perf` | `-Perf` only: `analysis/perf/scenarios.json`; the `[perf]` lines, medianed into `perf-history.jsonl`; nothing, it records only |
 | `hitch` | `-Hitch` only, last: two scripted launches; each launch's `.hitches.jsonl` sidecar; nothing, awareness only |
@@ -107,8 +107,8 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 **`-GoldenWorkers <n>`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`,
 `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`), and **`-Graphics
 original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
-`--graphics=enhanced` to the perf and hitch launches only), and **`-WaitQuiet`** (+
-`-QuietTimeoutSec`, below).
+`--graphics=enhanced` to the perf and hitch launches only), **`-RealData`** (the ci tier on the
+real extraction too, below), and **`-WaitQuiet`** (+ `-QuietTimeoutSec`, below).
 
 **`-WaitQuiet` is the one way to wait for a quiet machine.** Before the build it waits until no
 scripted CSVM Godot runs on the machine: any Godot whose `--path` names a `CSVM` folder, from any
@@ -198,25 +198,44 @@ the invented tree written for its process id, and the report must name that root
 `.scratch/ci-suites/`, which it wipes first and which receives `godot.out`, `godot.err` and a copy of
 the screened engine log; the job uploads those, `.scratch/test-report.json` and `.scratch/logs/` on
 every outcome. ⚠ **The verdict comes from the report, not from Godot's exit code.** A headless
-process prints engine error lines a windowed one does not, so a bare headless `--run-tests=tier:ci`
-reports `menu-player-setup-journey`'s text-server lines as unexpected and exits 1. The script
-excuses an unexpected line only when it matches a `headlessEngineErrors` pattern in
-`analysis/headless-limits.json`, the same patterns and the same mechanism `sandbox/LinuxRelease.ps1`
-uses; any other unexpected line, an allowance over its cap, an unscreened log, a FAIL, a missing or
-stale report, or a crash exit fails the run. It refuses to start on Linux without
-`libfontconfig.so.1`, for the reason the Linux release check gives.
+process prints engine error lines a windowed one does not, such as `menu-player-setup-journey`'s
+text-server lines. A headless harness adds the `headlessEngineErrors` patterns of
+`analysis/headless-limits.json` to its allowlist, uncapped, and the script also excuses an
+unexpected line matching one, the mechanism `sandbox/LinuxRelease.ps1` uses; any other unexpected
+line, an allowance over its cap, an unscreened log, a FAIL, a missing or stale report, or a crash
+exit fails the run. It refuses to start on Linux without `libfontconfig.so.1`, for the reason the
+Linux release check gives.
 
-**The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
-many shared shards divide it; the default is 6 for a full run and 1 whenever
-`-Suite`/`-Filter`/`-Quick` names a selection. Membership comes from the harness's
+**The engine stage runs the full catalog in concurrent Godot processes of three kinds**, which the
+harness's `render:<kind>` term selects (`SuiteRender`). **Windowed** runs every suite the
+`headlessOnly`, `headlessDiffers` and `headlessShaders` maps of `analysis/headless-limits.json` name:
+the suites that need a renderer, every suite that switches graphics modes (a switch makes texts for
+every shader key its process holds, so what it makes depends on the shard), and the ones whose
+shader texts no other windowed suite makes, so a windowed process still compiles every text the
+catalog makes. **Synthetic** is one headless
+process for `SuiteCatalog.CiTier` on the `--synthetic-data` tree, as CI runs it. **Headless** shards
+run the rest on the real extraction; they compile no shader and upload nothing, so each holds about
+a third of a windowed shard's memory and has its own ledger kind, `engine-headless`. Both headless
+kinds run `--render-thread safe`: under the project's separate render thread the dummy renderer's
+RID owners race (godot#121949), which prints a spread of engine errors at no fixed count. **`-RealData`**
+also runs the ci tier on the real extraction, inside the headless shards, with the synthetic
+process kept as an extra pass: pass it before a push, at a plan's close and on a merge to main.
+`-Shards <n>` sets how many headless shards divide their share; the default is 6 for a full run and
+1 whenever `-Suite`/`-Filter`/`-Quick` names a selection. Membership comes from the harness's
 `shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
 the same tree always divides the same way; an unweighted suite is charged the default and printed
-as `not checked:`. **A suite the file lists under `alone` gets a process on top of the shared
-count**, which keeps `graphics-retext-compiles`'s first TAA frame out of a shard holding worlds:
-a full run's default is six shared shards and the alone shard, seven processes, and `-Shards 1`,
-the reference path an A/B compares against, is one shared shard and the alone shard. A selection
-keeps its count, since it never holds a full shard's worlds. Regenerate that file from the shard
-reports of one warm full run, as its `readme` says.
+as `not checked:`. **A suite the file lists under `alone` gets a windowed process of its own**,
+which keeps `graphics-retext-compiles`'s first TAA frame out of a shard holding worlds: a full
+run's default is one windowed shard, the alone shard, six headless shards and the synthetic
+process, nine processes. A selection keeps one process per kind, since it never holds a full
+shard's worlds. Regenerate the weights from the shard reports of one warm full run, as its
+`readme` says.
+
+**A full run fails when a headless process made a shader text no windowed process compiled**, and
+names the suite: each report lists every suite's shader texts as hashes (`ShaderCensus`), and the
+merge holds the headless shards' texts against the windowed ones'. The fix is to add that suite to
+`headlessShaders`. The synthetic process is not held to it, since invented data makes texts the
+game never does, so only a `-RealData` run checks the ci tier's texts.
 
 Each shard gets its own log, streams, report and artifacts under `.scratch/engine/owner-<pid>/`;
 what that does not isolate is a suite whose store sits outside `.scratch/`, so overlapping runs are
@@ -228,8 +247,7 @@ counts, and **a shard exiting 0 with no report FAILS the stage**.
 lock file under `%TEMP%\csvm-net-ports\` held until every shard exits, so a second run from another
 worktree takes another slot. Shard `k` of slot `s` gets base `40000 + (10 * s + k - 1) * 100`: seven
 slots of ten shards, below the shipped 47500/47501 a game played on this machine holds and below
-Windows' ephemeral range. A run of more than 10 processes (the shared shards and the alone ones) is
-refused. Each report's `shard.netPortBase` must equal the base its shard was handed and differ from
+Windows' ephemeral range. A run of more than 10 processes (every kind counted) is refused. Each report's `shard.netPortBase` must equal the base its shard was handed and differ from
 every other shard's, or the stage fails (LOG-24).
 
 **`test-report.json`'s schema is versioned** (`"schema"`, bumped when a field changes meaning or
@@ -948,11 +966,14 @@ enough free.
 - **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
   from a handle the ledger holds on the process, after it exits or is killed) under its kind in
   `history.json`; the estimate is the highest of the kind's last 20 peaks plus 25 percent, and
-  never below the kind's seed. An `engine-shard` peak is recorded only from a shared shard of a
-  complete-catalog `RunTests.ps1` run under the default shard plan (the default `-Shards`, gaming
-  mode off): a filtered shard stays small, any other count hands a shard a different share of the
-  catalog, and the alone shard holds one suite. A launch the engine refused records nothing. The seed table is `$MemSeedGB` in `MemoryLedger.ps1`; the kinds are `engine-shard`,
-  `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
+  never below the kind's seed. An `engine-shard` or `engine-headless` peak is recorded only from
+  the windowed shard or a headless shard of a complete-catalog `RunTests.ps1` run under the default
+  shard plan (the default `-Shards`, gaming mode off, no `-RealData`): a filtered shard stays small,
+  any other plan hands a shard a different share of the catalog, and the alone shard and the
+  synthetic process hold little. A launch the engine refused records nothing. The seed table is
+  `$MemSeedGB` in `MemoryLedger.ps1`; the kinds are `engine-shard`, `engine-headless` (the
+  `RunTests.ps1` engine stage names it per launch; any other `--run-tests` launch is
+  `engine-shard`), `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
   `capture-xr` (`--xr*`). `estimates.json` beside it, written from the seeds when the ledger is
   first used, is what the engine reads.
 - **DEFERRED.** A launch still waiting after `$MemMaxWaitSec` (1800 s) ends its run

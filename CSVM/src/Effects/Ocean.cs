@@ -108,7 +108,9 @@ public sealed partial class Ocean : Node3D
         bool zoned = mask.ZoneTexture != null;
         sea = sea.Clamped();
         int level = mask.BaseLevel - 1;
-        var shader = new Shader { Code = OceanShader.Code(sea, level, zoned) };
+        string code = OceanShader.Code(sea, level, zoned);
+        ShaderCensus.Note(code);
+        var shader = new Shader { Code = code };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("mask_tex", mask.Texture);
         material.SetShaderParameter("mask_rect", new Vector4(mask.Origin.X, mask.Origin.Y, 1f / mask.Size.X, 1f / mask.Size.Y));
