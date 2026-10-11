@@ -242,6 +242,7 @@ public sealed partial class HeatShimmer : Node3D
     private void Init()
     {
         Name = "heat_shimmer";
+        ShaderCensus.Note(ShaderCode);
         _mat = new ShaderMaterial
         {
             Shader = new Shader { Code = ShaderCode },

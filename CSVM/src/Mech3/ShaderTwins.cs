@@ -233,6 +233,7 @@ internal static class ShaderTwins
     /// shader whose text no mode moves, which a caller would otherwise make once per instance.</summary>
     internal static Shader Pooled(string text, string family)
     {
+        ShaderCensus.Note(text);
         if (ByText.TryGetValue(text, out var known))
         {
             Reused++;
@@ -252,6 +253,7 @@ internal static class ShaderTwins
     /// data, which waits for those compiles first. The object, its wearers and their parameters stay.</summary>
     internal static void Rewrite(Shader shader, string text)
     {
+        ShaderCensus.Note(text);
         shader.Code = "";
         shader.Code = text;
     }

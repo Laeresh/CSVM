@@ -41,6 +41,22 @@ public class TestHarnessScreenTests
     }
 
     [Fact]
+    public void AnAllowanceMayNameTheLocationOnTheLineBelow()
+    {
+        var headless = new[] { new ErrorAllowance(@"is null\. at: \w+ \(servers/rendering/dummy/", int.MaxValue, "dummy") };
+        string[] lines = { "ERROR: Parameter \"material\" is null.", "   at: material_set_shader (servers/rendering/dummy/storage/material_storage.cpp:250)" };
+
+        Assert.True(TestHarness.Screen(lines, headless).Ok);
+        // The windowed allowlist does not carry it, and the reported line keeps its location.
+        var windowed = TestHarness.Screen(lines);
+        Assert.Equal($"{lines[0]} {lines[1].Trim()}", Assert.Single(windowed.Unexpected));
+
+        // A main-thread line printed between a render-thread error and its location.
+        string[] split = { lines[0], "[test] suite gemini-gasbag-bays PASS in 2.97s", lines[1] };
+        Assert.True(TestHarness.Screen(split, headless).Ok);
+    }
+
+    [Fact]
     public void AnUnknownEngineErrorFails()
     {
         var screen = TestHarness.Screen(new[]

@@ -93,6 +93,12 @@ public sealed class SuiteCatalogTests
         Assert.All(headlessOnly, name => Assert.DoesNotContain(name, SuiteCatalog.CiTier));
         Assert.NotEmpty(patterns);
         Assert.All(patterns, pattern => Assert.NotNull(new Regex(pattern)));
+
+        // Each windowed suite sits in one map, so its reason says which way it needs the renderer.
+        string[] windowed = SuiteRender.WindowedMaps
+            .SelectMany(map => limits.RootElement.GetProperty(map).EnumerateObject().Select(p => p.Name)).ToArray();
+        Assert.All(windowed, name => Assert.Contains(name, registered));
+        Assert.Equal(windowed.Length, windowed.Distinct().Count());
     }
 
     [Fact]

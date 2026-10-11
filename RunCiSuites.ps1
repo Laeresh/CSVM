@@ -26,8 +26,9 @@
 
     The verdict is drawn from that report, not from the exit code, because the harness also exits
     1 on an engine error line its allowlist does not cover, and a headless process prints lines a
-    windowed one does not. analysis/headless-limits.json lists those patterns, and this script
-    applies them exactly as sandbox/LinuxRelease.ps1 does. The run fails on any of:
+    windowed one does not. analysis/headless-limits.json lists those patterns; a headless harness
+    adds them to its own allowlist, and this script also applies them exactly as
+    sandbox/LinuxRelease.ps1 does. The run fails on any of:
       - Godot killed by the watchdog, exiting with anything but 0 or 1, or writing no fresh report
       - a report for another selector, data root or port base than this run's, or whose
         syntheticData flag disagrees with the switch this run passed

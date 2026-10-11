@@ -623,6 +623,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
+- `src/Utils/ShaderCensus.cs`, every shader text a suite hands to Godot, as hashes in its report row, so a headless shard's shaders can be shown compiled by a windowed one.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/SceneCopy.cs`, a node subtree's copy in place of `Duplicate()`, which under the separate render thread corrupts memory on any geometry node.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
@@ -656,6 +657,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
 - `src/Testing/FinalizerGate.cs`, `--debug-finalizers`: parks the finalizer thread for a suite and drains it at the suite's end, so a late wrapper finalizer errors beside the suite that dropped it.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
+- `src/Testing/SuiteRender.cs`, the `render:<kind>` term: which suites run windowed, headless or on synthetic data, from `analysis/headless-limits.json`.
 - `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/ScreenKeyboardRecorder.cs`, a suite's stand-in for the on-screen keyboard: available, its URLs recorded, the detected state put back on dispose.
 - `src/Testing/LoopbackMaster.cs`, the master server's socket side in one process: codes, guest numbers and signal routing, with no ICE servers, for the WebRTC suites.

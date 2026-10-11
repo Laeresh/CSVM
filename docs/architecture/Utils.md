@@ -265,6 +265,14 @@ monitor counts: on the development machine's Vulkan driver, mostly each compiled
 (`analysis/shard-memory/FINDINGS.md`). It opens a process handle, so it runs at a suite boundary
 or once a wall second, never every frame.
 
+## src/Utils/ShaderCensus.cs
+Every shader text a suite hands to Godot, as hashes in that suite's `test-report.json` row. A
+headless process compiles none of them, so `RunTests.ps1` holds the headless shards' texts against
+the windowed ones'. `ShaderTwins.Pooled` and `Rewrite` note theirs, and so does each effect that
+makes its own `Shader` (ocean, wind streaks, heat shimmer, precipitation, fog-volume cards); a new
+`new Shader { Code = ... }` site notes its text too, or a headless suite could make a shader no
+windowed process ever compiles. Collects only between the harness's `Begin` and `Take`.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names
