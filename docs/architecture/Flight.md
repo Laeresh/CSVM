@@ -404,10 +404,10 @@ Decode: [../org/aiPilot.md](../org/aiPilot.md). Read `AiPilot.cs` next.
 The decoded danger-zone run ([../org/aiPilot.md](../org/aiPilot.md) "The danger-zone run"),
 engine-free: `DangerZoneRibbon` is one `dzpathN` route as the original builds it, the polygon's
 vertices joined by cubics parameterised in metres plus the lane table (`NearestTo` finds the cursor
-abeam a point); `DangerZoneRun` is a pilot's cursor on it, entered from the nearer end, walking the segments either way and `Done` past the exit;
-`DangerZoneRail` is the state-5 integrator that writes the pose off the ribbon in place of the flight
-model, closing the aeroplane's residual offset, banking the wings into the bend and settling on the
-cruise speed. Every constant is read out of the image and named at its declaration. Pinned by
+abeam a point, and `WithLeadIn` adds a stunt race bot's straight before an entry); `DangerZoneRun`
+is a pilot's cursor on it, entered from the nearer end, walking the segments either way and `Done`
+past the exit; `DangerZoneRail` is the state-5 integrator that writes the pose off the ribbon in
+place of the flight model, closing the residual offset, banking into the bend and settling on cruise. Every constant is read out of the image and named at its declaration. Pinned by
 `DangerZoneRibbonTests`. Read `DangerZoneRibbons.cs` for the set a mission carries.
 
 ## src/Flight/Modes/DangerZoneRibbons.cs
@@ -609,9 +609,11 @@ fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host.
 ## src/Flight/Ai/StuntBotObjective.cs
 One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
 zones in course order, a free steer for a lead-in point short of the next zone's nearer ribbon end,
-and inside the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers' approach
-and rail. Its tier sets `CruiseThrottle` and the odds of a fluff, a pass over the entry and another
-try. `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
+and inside the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers'
+approach and rail. Where the rail alone misses the zone's gates (`RailClears`) the route gains a
+straight lead-in before its entry (`LeadInFor`), refused where the world blocks it, so the rail has
+closed the lock's offset by the zone. Its tier sets `CruiseThrottle` and the odds of a fluff.
+`Session/World/StuntRaceBots.cs` feeds it. Rule and values:
 [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots"; read `StuntBotObjectiveTests.cs`.
 
 ## src/Flight/Ai/PursuitQuarry.cs

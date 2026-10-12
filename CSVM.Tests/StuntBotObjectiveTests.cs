@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Modes;
@@ -32,6 +33,17 @@ public class StuntBotObjectiveTests
         { "C3", 4 },
         { "C4", 14 },
         { "C5", 17 },
+    };
+
+    /// <summary>Per shipped course, the zone ends whose rail run needs a lead-in, and its metres.</summary>
+    private static Dictionary<string, string> LeadIns => new()
+    {
+        ["C1"] = "",
+        ["C1B"] = "dzpath6 50, dzpath7 50",
+        ["C2"] = "dzpath4 50",
+        ["C3"] = "dzpath4 100, dzpath4 far 50",
+        ["C4"] = "dzpath7 50, dzpath9 50, dzpath11 150, dzpath11 far 100, dzpath12 50",
+        ["C5"] = "dzpath14 200, dzpath14 far 150, dzpath15 200, dzpath15 far 150, dzpath16 50, dzpath16 far 50",
     };
 
     [Fact]
@@ -127,18 +139,84 @@ public class StuntBotObjectiveTests
         Assert.Equal(StuntBotLeg.None, bot.Decide(zones, FirstNear, North, zoneRun: false).Leg);
     }
 
+    [Fact]
+    public void AZoneTheRailMissesTakesTheShortestLeadInThatPasses()
+    {
+        // Narrow gates 30 m in: a lock 105 m out at a bearing has not closed its offset by then.
+        var zone = Zone("dzpath1", 1, FirstNear, FirstFar, gateHalfM: 4f, gateAtM: 30f);
+        var lead = StuntBotObjective.LeadInFor(zone, far: false, blocked: null);
+        Assert.True(lead is > 0f);
+        Assert.True(StuntBotObjective.RailClears(zone, zone.Route!.WithLeadIn(false, lead!.Value), far: false));
+        Assert.False(StuntBotObjective.RailClears(zone, zone.Route.WithLeadIn(false, lead.Value - StuntBotObjective.LeadInStepM), far: false));
+
+        // ABLE-TO-FAIL CONTROL: the same zone without the lead-in fails the check.
+        Assert.False(StuntBotObjective.RailClears(zone, zone.Route, far: false));
+
+        // The wide gates of the default zone need none.
+        Assert.Equal(0f, StuntBotObjective.LeadInFor(Course()[0], far: false, blocked: null));
+    }
+
+    [Fact]
+    public void ABlockedLeadInIsRefusedAndTheBotTakesTheOtherEnd()
+    {
+        var zones = new List<StuntZone> { Zone("dzpath1", 1, FirstNear, FirstFar, gateHalfM: 4f, gateAtM: 30f) };
+        Assert.Null(StuntBotObjective.LeadInFor(zones[0], far: false, blocked: (_, to) => to == FirstNear));
+
+        // Nearer the first vertex, but its straight is blocked: the run enters from the last.
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Blocked = (_, to) => to == FirstNear };
+        Assert.True(bot.Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
+
+        // ABLE-TO-FAIL CONTROL: with nothing blocked it enters from the nearer first vertex.
+        Assert.False(new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)).Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
+    }
+
+    /// <summary>On every shipped course each zone has an end the rail check passes, with the shortest
+    /// lead-in that passes. The zones that need one are pinned; every other zone keeps its own entry.</summary>
+    [ExtractedDataTheory]
+    [MemberData(nameof(StuntCourses))]
+    public void EveryShippedZoneHasAnEntryTheRailCarriesThrough(string chapter, int zones)
+    {
+        var course = Load(chapter);
+        Assert.Equal(zones, course.TotalCount);
+        var led = new List<string>();
+        foreach (var zone in course.Zones)
+        {
+            var leads = new[] { false, true }.Select(far => StuntBotObjective.LeadInFor(zone, far, blocked: null)).ToArray();
+            Assert.True(leads.Any(l => l != null), $"{chapter} {zone.PathName} has no end the rail carries through");
+            for (int end = 0; end < 2; end++)
+            {
+                if (leads[end] is > 0f and var metres)
+                {
+                    led.Add($"{zone.PathName}{(end == 1 ? " far" : "")} {metres:0}");
+                    Assert.True(StuntBotObjective.RailClears(zone, zone.Route!.WithLeadIn(end == 1, metres), end == 1));
+
+                    // ABLE-TO-FAIL CONTROL: without the lead-in the same zone fails the check.
+                    Assert.False(StuntBotObjective.RailClears(zone, zone.Route!, end == 1));
+                }
+            }
+        }
+
+        Assert.Equal(LeadIns[chapter], string.Join(", ", led));
+    }
+
     /// <summary>Every zone of a shipped course builds the route ribbon a bot runs, so no zone lacks
     /// the rail a bot rides through it.</summary>
     [ExtractedDataTheory]
     [MemberData(nameof(StuntCourses))]
     public void EveryShippedCourseZoneBuildsARibbon(string chapter, int zones)
     {
+        var course = Load(chapter);
+        Assert.Equal(zones, course.TotalCount);
+        Assert.All(course.Zones, zone => Assert.NotNull(zone.Route));
+    }
+
+    private static StuntMission Load(string chapter)
+    {
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
         var course = StuntMission.Load(gamez, SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, "IA1"),
             Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
         Assert.NotNull(course);
-        Assert.Equal(zones, course!.TotalCount);
-        Assert.All(course.Zones, zone => Assert.NotNull(zone.Route));
+        return course!;
     }
 
     private static List<StuntZone> Course() => new()
@@ -147,10 +225,31 @@ public class StuntBotObjectiveTests
         Zone("dzpath2", 2, SecondNear, SecondFar),
     };
 
-    private static StuntZone Zone(string name, int index, Vector3 near, Vector3 far) => new()
+    // A zone on a straight ribbon with its two gates either side of a point along it. By default they
+    // are wide enough for the rail to pass them from any lock.
+    private static StuntZone Zone(string name, int index, Vector3 near, Vector3 far, float gateHalfM = 200f, float gateAtM = 100f)
     {
-        PathName = name,
-        Route = DangerZoneRibbon.FromPolyline(name, index, new[] { near, (near + far) * 0.5f, far }),
+        var along = (far - near).Normalized();
+        var middle = near + (along * gateAtM);
+        return new StuntZone
+        {
+            PathName = name,
+            Route = DangerZoneRibbon.FromPolyline(name, index, new[] { near, (near + far) * 0.5f, far }),
+            GreenGate = Gate(middle - (along * 5f), gateHalfM),
+            RedGate = Gate(middle + (along * 5f), gateHalfM),
+        };
+    }
+
+    // A square ring across a north-south ribbon.
+    private static StuntGate Gate(Vector3 center, float half) => new()
+    {
+        Center = center,
+        Normal = Vector3.Back,
+        Vertices = new[]
+        {
+            center + new Vector3(-half, -half, 0), center + new Vector3(half, -half, 0),
+            center + new Vector3(half, half, 0), center + new Vector3(-half, half, 0),
+        },
     };
 
     // A draw that always answers the same, so a fluff roll is chosen rather than rolled.

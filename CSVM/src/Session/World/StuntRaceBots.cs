@@ -45,7 +45,11 @@ internal sealed class StuntRaceBots
         {
             if (seats[seat].Controller is { IsBotSeat: true, Pilot: { } pilot, Stunt: not null })
             {
-                var objective = new StuntBotObjective(roster[seat].Skill, rng);
+                var rig = seats[seat];
+                var objective = new StuntBotObjective(roster[seat].Skill, rng)
+                {
+                    Blocked = (from, to) => rig.Controller is { } bot && GodotObject.IsInstanceValid(bot) && bot.WorldBlocksLine(from, to),
+                };
                 pilot.CruiseThrottle = objective.CruiseThrottle;
                 bots.Add((seat, objective));
             }
@@ -89,7 +93,7 @@ internal sealed class StuntRaceBots
                 : new StuntBotOrder(StuntBotLeg.None, -1, at, false, "has its objective off");
             if (order.StartsRun)
             {
-                pilot.FlyDangerZone(run.Zones[order.Zone].Route!, order.FarEnd, at, "race bot");
+                pilot.FlyDangerZone(order.Ribbon!, order.FarEnd, at, "race bot");
             }
             else if (order.Leg is StuntBotLeg.Steer or StuntBotLeg.Fluff)
             {

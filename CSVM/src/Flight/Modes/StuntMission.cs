@@ -64,6 +64,39 @@ public sealed class StuntGate
     public required Vector3[] Vertices { get; init; }
     public required Vector3 Center { get; init; }
     public required Vector3 Normal { get; init; }
+
+    /// <summary>Whether the segment from <paramref name="from"/> to <paramref name="to"/> passes
+    /// through the ring, the run's own gate test; <paramref name="t"/> is how far along it crosses.</summary>
+    public bool CrossedBy(Vector3 from, Vector3 to, out float t)
+    {
+        t = 0f;
+        float fromDistance = Normal.Dot(from - Center);
+        float toDistance = Normal.Dot(to - Center);
+        if (fromDistance == 0f || toDistance == 0f || Mathf.Sign(fromDistance) == Mathf.Sign(toDistance))
+            return false;
+        t = fromDistance / (fromDistance - toDistance);
+        return PointInGate(from.Lerp(to, t), this);
+    }
+
+    private static bool PointInGate(Vector3 point, StuntGate gate)
+    {
+        int dropAxis = Mathf.Abs(gate.Normal.X) > Mathf.Abs(gate.Normal.Y)
+            ? (Mathf.Abs(gate.Normal.X) > Mathf.Abs(gate.Normal.Z) ? 0 : 2)
+            : (Mathf.Abs(gate.Normal.Y) > Mathf.Abs(gate.Normal.Z) ? 1 : 2);
+        Vector2 Project(Vector3 p) => dropAxis == 0 ? new Vector2(p.Y, p.Z)
+            : dropAxis == 1 ? new Vector2(p.X, p.Z) : new Vector2(p.X, p.Y);
+        var q = Project(point);
+        bool inside = false;
+        for (int i = 0, j = gate.Vertices.Length - 1; i < gate.Vertices.Length; j = i++)
+        {
+            var a = Project(gate.Vertices[i]);
+            var b = Project(gate.Vertices[j]);
+            if ((a.Y > q.Y) != (b.Y > q.Y)
+                && q.X < (b.X - a.X) * (q.Y - a.Y) / (b.Y - a.Y) + a.X)
+                inside = !inside;
+        }
+        return inside;
+    }
 }
 
 /// <summary>
@@ -247,8 +280,8 @@ public sealed class StuntMission
         {
             if (z.Completed)
                 continue;
-            bool green = GateCrossing(_lastPlanePos, planePos, z.GreenGate, out float greenT);
-            bool red = GateCrossing(_lastPlanePos, planePos, z.RedGate, out float redT);
+            bool green = z.GreenGate.CrossedBy(_lastPlanePos, planePos, out float greenT);
+            bool red = z.RedGate.CrossedBy(_lastPlanePos, planePos, out float redT);
             if (green)
                 _crossedGates.Add(z.GreenGate);
             if (red)
@@ -576,37 +609,6 @@ public sealed class StuntMission
             return false;
         gate = new StuntGate { Vertices = vertices, Center = center, Normal = normal.Normalized() };
         return true;
-    }
-
-    private static bool GateCrossing(Vector3 from, Vector3 to, StuntGate gate, out float t)
-    {
-        t = 0f;
-        float fromDistance = gate.Normal.Dot(from - gate.Center);
-        float toDistance = gate.Normal.Dot(to - gate.Center);
-        if (fromDistance == 0f || toDistance == 0f || Mathf.Sign(fromDistance) == Mathf.Sign(toDistance))
-            return false;
-        t = fromDistance / (fromDistance - toDistance);
-        return PointInGate(from.Lerp(to, t), gate);
-    }
-
-    private static bool PointInGate(Vector3 point, StuntGate gate)
-    {
-        int dropAxis = Mathf.Abs(gate.Normal.X) > Mathf.Abs(gate.Normal.Y)
-            ? (Mathf.Abs(gate.Normal.X) > Mathf.Abs(gate.Normal.Z) ? 0 : 2)
-            : (Mathf.Abs(gate.Normal.Y) > Mathf.Abs(gate.Normal.Z) ? 1 : 2);
-        Vector2 Project(Vector3 p) => dropAxis == 0 ? new Vector2(p.Y, p.Z)
-            : dropAxis == 1 ? new Vector2(p.X, p.Z) : new Vector2(p.X, p.Y);
-        var q = Project(point);
-        bool inside = false;
-        for (int i = 0, j = gate.Vertices.Length - 1; i < gate.Vertices.Length; j = i++)
-        {
-            var a = Project(gate.Vertices[i]);
-            var b = Project(gate.Vertices[j]);
-            if ((a.Y > q.Y) != (b.Y > q.Y)
-                && q.X < (b.X - a.X) * (q.Y - a.Y) / (b.Y - a.Y) + a.X)
-                inside = !inside;
-        }
-        return inside;
     }
 
     private void Complete(StuntZone z)

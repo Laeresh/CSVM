@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Extraction;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
@@ -28,7 +29,7 @@ internal static class StuntRaceBotSuites
     private const string Callsign = "Racer";
 
     // A window long enough for the longest course, minutes: the race may not end before the bot does.
-    private const int WindowMinutes = 15;
+    private const int WindowMinutes = 16;
 
     // How long a return or a rerun is given, seconds: the crash camera or the count, with room to spare.
     private const float WaitSeconds = 10f;
@@ -260,6 +261,7 @@ internal static class StuntRaceBotSuites
         const string cell = "objective";
         var run = bot.Stunt!;
         var racer = race.Of(BotSeat)!;
+        LeadInsClear(ctx, run, bot);
         var cleared = new List<string>();
         run.ZoneCompleted += zone => cleared.Add($"{zone.DzName}@{zone.CompletedAt:0.0}");
         int steps = 0;
@@ -290,6 +292,45 @@ internal static class StuntRaceBotSuites
         ctx.Check(racer.RunsStarted == 2,
             $"[{cell}] once done it starts another run while the window is open ({racer.RunsStarted} started, window open {race.MayStartRun}, {rerun} steps)");
         return steps;
+    }
+
+    // Every lead-in the course's zones would take from either end, probed along its straight through
+    // the built world. Each zone must keep an end the bot can fly.
+    private static void LeadInsClear(TestContext ctx, StuntMission run, FlightController bot)
+    {
+        const string cell = "lead-in";
+        var entry = run.Zones[0].Route!.End(false);
+        ctx.Check(bot.WorldBlocksLine(entry, entry + (Vector3.Down * 3000f)),
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the probe sees the built world: a ray 3 km down from {run.Zones[0].PathName}'s entry strikes it");
+        var probed = new List<string>();
+        int stranded = 0;
+        foreach (var zone in run.Zones)
+        {
+            bool flyable = false;
+            foreach (bool far in new[] { false, true })
+            {
+                if (StuntBotObjective.LeadInFor(zone, far, blocked: null) is not { } metres)
+                {
+                    continue;
+                }
+
+                bool blocked = false;
+                if (metres > 0f)
+                {
+                    var from = zone.Route!.WithLeadIn(far, metres).End(far);
+                    var to = zone.Route.End(far);
+                    blocked = bot.WorldBlocksLine(from, to);
+                    probed.Add($"{zone.PathName}{(far ? " far" : "")} {from.DistanceTo(to):0} m {(blocked ? "BLOCKED" : "clear")}");
+                }
+
+                flyable |= !blocked;
+            }
+
+            stranded += flyable ? 0 : 1;
+        }
+
+        ctx.Note($"[{cell}] {bot.Stunt?.TotalCount} zones, straights probed: {(probed.Count == 0 ? "none needed" : string.Join(", ", probed))}");
+        ctx.Check(stranded == 0, $"[{cell}] every zone has an end the rail carries through whose lead-in, if any, the world leaves clear ({stranded} without)");
     }
 
     // An injected crash, the debug key's, then the unattended return. The bot stands at the last

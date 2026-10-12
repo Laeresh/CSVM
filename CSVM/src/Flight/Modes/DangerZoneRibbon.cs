@@ -125,6 +125,32 @@ public sealed class DangerZoneRibbon
         return (s.C * 2f) + (s.D * (6f * t));
     }
 
+    /// <summary>This ribbon with a straight run of at least <paramref name="metres"/> before the end a
+    /// run enters from, the last vertex when <paramref name="far"/>. The run lies on that end's chord.
+    /// The added vertices are spaced at the chord's length, so every original segment keeps its
+    /// shape. A stunt race bot locks onto it so its offset has closed by the zone.</summary>
+    public DangerZoneRibbon WithLeadIn(bool far, float metres)
+    {
+        var vertices = new List<Vector3>(Segments.Count + 1);
+        foreach (var segment in Segments)
+            vertices.Add(segment.A);
+        vertices.Add(End(true));
+        if (far)
+            vertices.Reverse();
+        var chord = vertices[0] - vertices[1];
+        int count = (int)MathF.Ceiling(metres / chord.Length());
+        var lead = new List<Vector3>(count + vertices.Count);
+        for (int k = count; k >= 1; k--)
+            lead.Add(vertices[0] + (chord * k));
+        lead.AddRange(vertices);
+        if (far)
+            lead.Reverse();
+        var lanes = new List<Vector3>();
+        for (int i = 1; i < Lanes.Count; i++)
+            lanes.Add(Lanes[i]);
+        return FromPolyline(Name, Index, lead, lanes, Difficulty);
+    }
+
     /// <summary>The ribbon's first vertex, or its last when <paramref name="far"/>.</summary>
     public Vector3 End(bool far) =>
         far ? PointAt(Segments.Count - 1, Segments[Segments.Count - 1].Length) : PointAt(0, 0f);

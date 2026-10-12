@@ -1639,6 +1639,18 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    within 30 degrees of the ribbon's line, and tracking within 30 degrees of the end
    (`ConeHalfAngleDeg`), the zone goes to `AiPilot.FlyDangerZone`: the decoded approach and rail
    above, as a tagged net node starts them. The run's own gate test, a person's, counts the zone.
+   Where the zone needs it, the ribbon a bot runs is the zone's route with a straight lead-in
+   before the entry, on the line of its first chord (`DangerZoneRibbon.WithLeadIn`), and the end,
+   the lead-in point and the cone are measured from the straight's start. The approach locks
+   there, and the rail closes the lock's offset along the straight, so the bot meets the zone on
+   its route. A zone needs one when the rail alone, locked just inside 105 m of the entry, misses
+   a gate from any of 30 lock states (`StuntBotObjective.RailClears`): five bearings within the
+   cone's 30 degrees of the ribbon's line, each level and 20 degrees down, at 60, 90 and 135 m/s
+   (an ace locks at about 131). The lead-in is then the shortest whole step of 50 m, up to 300 m
+   (`LeadInStepM`, `MaxLeadInM`), that passes; the added vertices are spaced at the first chord's
+   length, so the straight is at least that long. A straight the world blocks along its length,
+   probed by one ray, refuses that end, and the bot takes the zone from the other; with both ends
+   refused it flies the nearer end's own route. A campaign racer and a person fly the route as it is.
 4. Its tier sets its lever between zones and on the approach (`AiPilot.CruiseThrottle`: 1.0 ace,
    0.85 veteran, 0.7 novice) and the odds that a try is fluffed (0.05, 0.2, 0.35). A fluffed try passes 100 m over
    the entry (`FluffAboveM`) and comes round for another, from whichever end is nearer then. The rail
@@ -1659,24 +1671,28 @@ A race seat carries no weapons, so a race bot's pilot has no gunner and no ordna
 quarry. Every value above is the remake's own.
 
 Measured with the ace bot over every shipped course (the `stunt-race-bot` suite, `--chapter=` for
-each, a 15 minute window, one injected crash after the second zone in each run, from which it
+each, a 16 minute window, one injected crash after the second zone in each run, from which it
 returned to that zone's exit every time):
 
-| Course | Zones cleared | Finish |
-|---|---|---|
-| C1 | 5 of 5 | 4:08.0 |
-| C1B | 5 of 5 | 3:06.5 |
-| C2 | 9 of 9 | 6:32.0 |
-| C3 | 4 of 4 | 4:37.2 |
-| C4 | 10 of 14 | none: stops at `dzpath11` |
-| C5 | 13 of 17 | none: stops at `dzpath14` |
+| Course | Zones cleared | Finish | Zone ends with a lead-in |
+|---|---|---|---|
+| C1 | 5 of 5 | 4:08.0 | none |
+| C1B | 5 of 5 | 3:08.6 | `dzpath6`, `dzpath7` |
+| C2 | 9 of 9 | 5:54.2 | `dzpath4` |
+| C3 | 4 of 4 | 4:10.5 | `dzpath4` from either end |
+| C4 | 14 of 14 | 10:21.3 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
+| C5 | 17 of 17 | 15:42.7 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
 
-C4's `dzpath11` (Dance Hall Run) and C5's `dzpath14` (WH Crane 1) are 163 m and 161 m ribbons that
-open with a dive of about 37 and 60 degrees onto gates some 70 m in. The decoded approach is climbed
-out by its own crash check around the enclosed entry, and when it does lock, the 105 m gap the rail
-closes over its first seconds has not closed by the gates, so the bot crosses outside them and
-tries again forever. Lining the lead-in up on the dive with the approach's crash check off, and a
-nearer lock of 20 or 60 m, each did no better.
+Every lead-in in the table probes clear of the world in that suite. A zone end not listed keeps its
+own entry (`StuntBotObjectiveTests` pins the list).
+
+⚠ **Without the lead-in a bot cannot fly a short diving zone.** C4's `dzpath11` (Dance Hall Run)
+and C5's `dzpath14` and `dzpath15` (the WH Crane zones) are ribbons of 145 to 163 m that open with
+a dive of about 37 and 60 degrees onto gates 10 to 13 m tall, some 60 to 70 m in. Locked 105 m
+from the entry itself at an ace's speed, the rail has not closed the offset by the gates, which it
+crosses outside, from either end. The other ends in the table miss a gate from some of the lock
+states and pass from others: without a lead-in a bot flies them at the cost of an occasional
+extra try.
 
 ## The merge rule: what pursue does when two aircraft close nose to nose
 
