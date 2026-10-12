@@ -2708,7 +2708,7 @@ public sealed partial class ProjectilePool : Node3D
         // The typed array is not disposable itself; its untyped core is the finalizable wrapper.
         using var hitsCore = (Godot.Collections.Array)hits;
         if (hits.Count == MaxBlastBodies)
-            GD.PushWarning($"blast query reached {MaxBlastBodies} bodies at radius {radius:0.##} m");
+            Log.Warn("weapons", $"blast query reached {MaxBlastBodies} bodies at radius {radius:0.##} m");
         foreach (var hit in hits)
         {
             var body = hit["collider"].Obj as Node;

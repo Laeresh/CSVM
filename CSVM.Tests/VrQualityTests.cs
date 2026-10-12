@@ -98,19 +98,19 @@ public class VrQualityTests
     {
         var spec = SessionSpec.Parse(new[] { "--fly", "--xr-quality=flat", "--anti-aliasing=fxaa", "--msaa=2x", "--xr-foveation=on" });
         Assert.Equal(VrQuality.Flat, spec.XrQuality);
-        Assert.Equal("fxaa", spec.AntiAliasing);
+        Assert.Equal("fxaa", spec.WordFlags[AntiAliasingSetting.Lookup]);
         Assert.Equal("2x", spec.Msaa);
         Assert.Equal("on", spec.XrFoveation);
 
         var none = SessionSpec.Parse(new[] { "--fly" });
         Assert.Null(none.XrQuality);
-        Assert.Null(none.AntiAliasing);
+        Assert.Null(none.WordFlags[AntiAliasingSetting.Lookup]);
         Assert.Null(none.Msaa);
         Assert.Null(none.XrFoveation);
 
         var bad = SessionSpec.Parse(new[] { "--fly", "--xr-quality=ultra", "--anti-aliasing=msaa", "--msaa=3x", "--xr-foveation=yes" });
         Assert.Null(bad.XrQuality);
-        Assert.Null(bad.AntiAliasing);
+        Assert.Null(bad.WordFlags[AntiAliasingSetting.Lookup]);
         Assert.Null(bad.Msaa);
         Assert.Null(bad.XrFoveation);
     }
@@ -118,17 +118,9 @@ public class VrQualityTests
     [Fact]
     public void TheAntiAliasingFlagWordBeatsTheSavedWord()
     {
-        try
-        {
-            AntiAliasingSetting.FlagWord = DisplayWords.AntiAliasingOff;
-            var plan = AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingTaa, null, enhanced: true);
-            Assert.Equal(AntiAliasingMethod.Off, plan.Method);
-            Assert.Equal(SettingSource.Flag, plan.Source);
-        }
-        finally
-        {
-            AntiAliasingSetting.FlagWord = null;
-            AntiAliasingSetting.Resolve(null, null, enhanced: false);
-        }
+        var resolved = AntiAliasingSetting.Lookup.Resolve(DisplayWords.AntiAliasingOff, DisplayWords.AntiAliasingTaa, null,
+            AntiAliasingSetting.DefaultFor(true));
+        Assert.Equal(DisplayWords.AntiAliasingOff, resolved.Word);
+        Assert.Equal(SettingSource.Flag, resolved.Source);
     }
 }

@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -21,7 +25,12 @@ internal sealed class RearmRuntimeInputs
     /// <summary>Each seat's lobby team, or null for a match with no teams.</summary>
     public IReadOnlyList<int>? SeatTeams { get; init; }
 
-    public required AnimRuntime World { get; init; }
+    /// <summary>The mission world, whose nodes are looked up first. Null on the empty stage.</summary>
+    public AnimRuntime? World { get; init; }
+
+    /// <summary>The empty stage's match arena (<see cref="EmptyStage.Arena"/>), looked up by node
+    /// name after <see cref="World"/>. Null on a chapter.</summary>
+    public Node3D? Arena { get; init; }
 
     public bool CaptureTheFlag { get; init; }
 
@@ -75,7 +84,7 @@ internal sealed class RearmRuntime
         ArgumentNullException.ThrowIfNull(inputs);
         bool zeppelins = inputs.Zeppelins != null;
         var nodes = new List<(Node3D, int, int)>();
-        for (int index = 1; Find(inputs.World, RearmBases.NodeName(index, zeppelins)) is { } node; index++)
+        for (int index = 1; Find(inputs, RearmBases.NodeName(index, zeppelins)) is { } node; index++)
         {
             int team = zeppelins ? inputs.Zeppelins!.Rules.TeamOfHull(index - 1) : index;
             nodes.Add((node, team, zeppelins ? inputs.Zeppelins!.Rules.HullOf(team) : -1));
@@ -100,7 +109,8 @@ internal sealed class RearmRuntime
             : null;
 
     /// <summary>One match step: every living seat flown here is measured against the bases that
-    /// serve it, and rearmed on the step it enters.</summary>
+    /// serve it, and rearmed on the step it enters. A bot's rearm order is then told its supplies,
+    /// the nearest base serving it and whether it was restored.</summary>
     public void Step()
     {
         _bases.Clear();
@@ -120,27 +130,40 @@ internal sealed class RearmRuntime
             }
 
             int team = _in.SeatTeams is { } teams && seat < teams.Count ? teams[seat] : 0;
-            if (!_rules.Enters(seat, pilot.WorldPosition, team, _bases))
+            bool entered = _rules.Enters(seat, pilot.WorldPosition, team, _bases);
+            if (entered)
             {
-                continue;
+                pilot.Rearm();
+                Rearms++;
+                if (pilot.MessageStack is { } stack)
+                {
+                    HudMessages.PostRearmed(stack, _in.Strings);
+                }
+
+                Log.Info("flight", $"rearm: seat {seat} (team {team}) rearmed");
             }
 
-            pilot.Rearm();
-            Rearms++;
-            if (pilot.MessageStack is { } stack)
+            if (pilot.Pilot?.RearmOrder is { } order)
             {
-                HudMessages.PostRearmed(stack, _in.Strings);
+                StepOrder(seat, pilot, order, team, entered);
             }
-
-            Log.Info("flight", $"rearm: seat {seat} (team {team}) rearmed");
         }
     }
 
-    private static Node3D? Find(AnimRuntime world, string name)
+    private static Node3D? Find(RearmRuntimeInputs inputs, string name)
     {
-        foreach (var node in world.FindNodes(name))
+        foreach (var node in inputs.World?.FindNodes(name) ?? Array.Empty<Node3D>())
         {
             if (GodotObject.IsInstanceValid(node) && node.IsInsideTree())
+            {
+                return node;
+            }
+        }
+
+        foreach (var child in inputs.Arena?.GetChildren() ?? new Godot.Collections.Array<Node>())
+        {
+            if (child is Node3D node && node.IsInsideTree() && node.HasMeta(AnimRuntime.NameMeta)
+                && node.GetMeta(AnimRuntime.NameMeta).AsString().Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return node;
             }
@@ -152,4 +175,28 @@ internal sealed class RearmRuntime
     // A hull's base offers nothing once that hull is dead (FUN_0049b920's +6 test). Not a hull's: -1.
     private bool HullLives(int hull) =>
         hull < 0 || (_in.Hulls?.NodeAt(hull) is { } node && !_in.Hulls.IsDead(node));
+
+    // A bot's rearm run reads its supplies after any restore on this step, so a restore ends it.
+    // Its pylons and hull are read; its guns are not, which a bot never empties before its rockets.
+    private void StepOrder(int seat, FlightController pilot, AiRearmOrder order, int team, bool entered)
+    {
+        var was = order.Leg;
+        bool rocketsOut = AiRearmOrder.RocketsOut(pilot.Loadout?.Hardpoints ?? Enumerable.Empty<Hardpoint>(), pilot.InfiniteAmmo);
+        float hull = pilot.Damage?.SummaryHealthFraction ?? 1f;
+        order.Update(pilot.WorldPosition, pilot.WorldVelocity, rocketsOut, hull, _rules.NearestServing(pilot.WorldPosition, team, _bases), entered);
+        if (order.Leg == was)
+        {
+            return;
+        }
+
+        string what = order.Leg switch
+        {
+            AiRearmLeg.Gate or AiRearmLeg.Final when was == AiRearmLeg.None => FormattableString.Invariant(
+                $"breaks off for the base at {order.Base.X:0} {order.Base.Y:0} {order.Base.Z:0} ({order.Reason}), in from bearing {AiPilot.HeadingDegOf(order.Approach):0}, {order.Leg}"),
+            AiRearmLeg.None when was == AiRearmLeg.Clear => "flies clear of the base, back to combat",
+            AiRearmLeg.None => "has no base to fly to",
+            _ => $"{was} to {order.Leg}",
+        };
+        Log.Info("flight", $"rearm: bot seat {seat} {what}");
+    }
 }

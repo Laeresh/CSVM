@@ -886,12 +886,6 @@ public sealed class HangarFeature : IMenuFeature
     /// A wing row prices both wings, since picking on either moves the other.</summary>
     public int CostWithArmour(int zone, int units) => BillWithArmour(zone, units).Total.Cost;
 
-    /// <summary>The build's total cost were slot <paramref name="slot"/> on cycle row <paramref name="cycleRow"/>.</summary>
-    public int CostWithGun(int slot, int cycleRow) => BillWithGun(slot, cycleRow).Total.Cost;
-
-    /// <summary>The build's total cost were wing <paramref name="wing"/> carrying <paramref name="count"/> hardpoints.</summary>
-    public int CostWithHardpoints(int wing, int count) => BillWithHardpoints(wing, count).Total.Cost;
-
     /// <summary>The whole bill the build would carry were <paramref name="airframe"/> picked, every
     /// other pick kept: the cost the wallet mark reads, and the weight and capacity a screen
     /// previewing the row needs. ⚠ Prices a copy of the scratch plane, never the scratch plane

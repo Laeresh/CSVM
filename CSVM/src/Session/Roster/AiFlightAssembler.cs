@@ -14,6 +14,10 @@ namespace CSVM.Session.Roster;
 
 internal sealed class AiFlightAssembler
 {
+    /// <summary>The flat rating a bot seat's spawn carries, the 5 an AI spawn with no rating of its
+    /// own falls back to. It arms the gunner; the seat's nine ratings outrank it slot by slot.</summary>
+    public const int SeatRating = 5;
+
     private readonly FlightRosterPolicy _policy;
     private readonly LiveryResolver _liveries;
     private readonly WorldEffectsFactory? _worldEffects;
@@ -38,8 +42,10 @@ internal sealed class AiFlightAssembler
 
     public AiFlightAssembler(FlightRosterPolicy policy, LiveryResolver liveries,
         WorldEffectsFactory? worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
-        FlightWorldBindings world, int humanCount, CrashRigQueue? crashRigs = null)
+        FlightWorldBindings world, int humanCount,
+        Func<System.Collections.Generic.IReadOnlyList<Vector3>> persons, CrashRigQueue? crashRigs = null)
     {
+        PersonPositions = persons;
         _crashRigs = crashRigs;
         _policy = policy;
         _liveries = liveries;
@@ -52,6 +58,10 @@ internal sealed class AiFlightAssembler
     }
 
     public AiSkills? Skills => _aiSkills;
+
+    /// <summary>Every person in the session, which each AI-flown aircraft's far-field plant is
+    /// selected on (<see cref="HumanFlightAdapter.PersonSeatPositions"/>).</summary>
+    public Func<System.Collections.Generic.IReadOnlyList<Vector3>> PersonPositions { get; }
 
     /// <summary>The aeroplanes built ahead of the launches that need them.</summary>
     public AiAirframePool Airframes => _airframes;
@@ -119,10 +129,7 @@ internal sealed class AiFlightAssembler
         }
         if (spawn.Pilot.Machine is { } machine)
         {
-            machine.AttackRange = stats.AiAttackRange;
-            machine.ReturnRange = stats.AiReturnRange;
-            machine.AttackDwellS = stats.AiAttackDwell;
-            machine.NotPursuitDwellS = stats.AiNotPursuitDwell;
+            ApplyRanges(machine, stats);
         }
 
         FlightController controller;
@@ -174,7 +181,7 @@ internal sealed class AiFlightAssembler
                 GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _world.TouchdownDefs,
                 Projectiles = _world.Projectiles,
-                HumanPositions = _world.HumanPositions,
+                HumanPositions = PersonPositions,
                 PadDevices = Array.Empty<int>(),
                 Inert = spawn.Inert,
                 Team = spawn.Team,
@@ -216,12 +223,7 @@ internal sealed class AiFlightAssembler
                     string armed = stats.AiDefName ?? stats.DefName;
                     Log.Warn("weapons", $"ai: no weapons block on '{armed}' and no stock loadout for '{stats.DefName}', this plane flies unarmed");
                 }
-                if (controller.Loadout != null)
-                {
-                    controller.Destructibles = _world.WorldRuntime?.Destructibles;
-                    controller.SurfaceVehicles = _world.SurfaceVehicles;
-                    controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
-                }
+                HangLoadout(controller, _world);
             }
             catch (Exception e)
             {
@@ -303,6 +305,80 @@ internal sealed class AiFlightAssembler
 
         Log.Info("flight", $"ai: spawned '{spawn.PlaneName}' as {controller.Name} (shooter id {controller.PlayerIndex}) pos=({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) jitter=(fd {stats.FdSpeed:0.0} thrust {stats.EnginePower:0.000}) {(spawn.Inert ? "INERT " : "")}{(spawn.Pilot.Patrol is { } patrol ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)" : Log.Format($"heading={spawn.Pilot.TargetHeadingDeg:0}° alt={spawn.Pilot.TargetAltitude:0} m"))}");
         return controller;
+    }
+
+    /// <summary>Arms a bot seat's pilot with an AI spawn's gunner, ordnance and mode machine, off
+    /// the same skill tables, and the airframe's ranges. Its nine ratings are a personality rolled
+    /// on <see cref="Rng.Bots"/> and shifted by <paramref name="tier"/> (<see cref="BotSeats.Ratings"/>);
+    /// <c>--ai-attack=</c> pins them instead. The human path builds the seat's aeroplane, so no tier
+    /// reaches its hull, fit or spawn. Only a bot launches on the wingman rule with no roll. A race
+    /// seat (<paramref name="arms"/> of none) keeps no gunner and no ordnance, so it takes no quarry.</summary>
+    public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team, Net.NetBotSkill tier,
+        SeatArms arms = SeatArms.Stock)
+    {
+        var ratings = BotSeats.Ratings(BotSeats.Personality(Rng.Stream(Rng.Bots).Randi()), tier);
+        // Already shifted, so the spawn's own difficulty is the unshifting middle tier, whatever the
+        // bot's team reads to the hostility gate.
+        var spawn = new AiSpawn(planeName, Vector3.Zero, Vector3.Zero, pilot, Team: team,
+            AttackRating: _policy.AiAttackSkill ?? SeatRating,
+            RosterSkills: _policy.AiAttackSkillExplicit ? null : ratings, Difficulty: Difficulty.Hard);
+        PreparePilot(spawn, stats, Rng.Bots);
+        if (arms == SeatArms.None)
+        {
+            pilot.Gunner = null;
+            pilot.Rocketeer = null;
+        }
+
+        if (pilot.Gunner is { } gunner)
+        {
+            gunner.PlayersPreferred = false;   // a Dogfight ranks a person and a bot alike
+        }
+
+        if (pilot.Rocketeer is { } rocketeer)
+        {
+            // A hangar fit flown in a networked mode: the original's wingman window and interval,
+            // and its networked override of a failed roll.
+            rocketeer.UseWingmanRule();
+            rocketeer.FiresOnFailedRoll = true;
+            Log.Info("weapons", $"bot: '{planeName}' launches every {rocketeer.RefireSeconds:0} s over {rocketeer.MinRangeM:0}-{rocketeer.MaxRangeM:0} m, a failed roll launching anyway");
+        }
+
+        if (pilot.Machine is { } machine)
+        {
+            ApplyRanges(machine, stats);
+        }
+
+        if (_policy.AiAttackSkillExplicit)
+        {
+            Log.Info("flight", $"bot: '{planeName}' {tier} pinned at --ai-attack={_policy.AiAttackSkill}");
+        }
+        else
+        {
+            Log.Info("flight", $"bot: '{planeName}' {tier} on ratings {ratings.DareDevil} {ratings.NaturalTouch} {ratings.SixthSense} {ratings.DeadEye} {ratings.QuickDraw} {ratings.SteadyHand} {ratings.StunRecovery} {ratings.Talker} {ratings.Constitution}");
+        }
+    }
+
+    /// <summary>What a bound AI loadout needs beside it: the world's structure and vehicle candidates
+    /// and the pylon ordnance, hidden as its ammo depletes. Nothing without a loadout.</summary>
+    internal static void HangLoadout(FlightController controller, FlightWorldBindings world)
+    {
+        if (controller.Loadout == null)
+        {
+            return;
+        }
+
+        controller.Destructibles = world.WorldRuntime?.Destructibles;
+        controller.SurfaceVehicles = world.SurfaceVehicles;
+        controller.Ordnance = PylonOrdnance.Build(controller.Loadout, world.Projectiles, controller.InfiniteAmmo);
+    }
+
+    // The airframe def's engagement volumes and dwell timers onto a mode machine.
+    private static void ApplyRanges(AiModeMachine machine, PlaneStats stats)
+    {
+        machine.AttackRange = stats.AiAttackRange;
+        machine.ReturnRange = stats.AiReturnRange;
+        machine.AttackDwellS = stats.AiAttackDwell;
+        machine.NotPursuitDwellS = stats.AiNotPursuitDwell;
     }
 
     // The spawn-independent half of an AI aeroplane, in the order a launch builds it: the
@@ -387,7 +463,7 @@ internal sealed class AiFlightAssembler
         return true;
     }
 
-    private void PreparePilot(AiSpawn spawn, PlaneStats defStats)
+    private void PreparePilot(AiSpawn spawn, PlaneStats defStats, string stream = Rng.Ai)
     {
         var pilot = spawn.Pilot;
         var defSkills = defStats.AiPilotSkills;
@@ -414,7 +490,7 @@ internal sealed class AiFlightAssembler
             {
                 _aiSkills ??= AiSkills.Load(_aircraft.ZrdrPath);
                 var rng = new RandomNumberGenerator
-                { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                { Seed = (ulong)(uint)Rng.NewIntSeed(stream) };
                 pilot.Gunner = new AiGunner(rng)
                 {
                     DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(
@@ -423,7 +499,7 @@ internal sealed class AiFlightAssembler
                         SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw)),
                 };
                 var ordRng = new RandomNumberGenerator
-                { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                { Seed = (ulong)(uint)Rng.NewIntSeed(stream) };
                 int quickDraw = SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw);
                 pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
                 {
@@ -434,7 +510,7 @@ internal sealed class AiFlightAssembler
             }
             catch (Exception e)
             {
-                GD.PushWarning($"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
+                Log.Warn("flight", $"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
             }
         }
 
@@ -446,7 +522,7 @@ internal sealed class AiFlightAssembler
             _maneuvers ??= Maneuvers.Load(_aircraft.ZrdrPath);
             int rating = spawn.AttackRating ?? _policy.AiAttackSkill ?? 5;
             int sixthSense = SkillFor(defSkills.SixthSense, rating, roster.SixthSense);
-            pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
+            pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(stream))
             {
                 ActivationRange = _aiSkills.MinAiActiveDist,
                 SteadyHandExponent = AiModeMachine.ExponentFor(_aiSkills.At("steady_hand_chance",
@@ -475,7 +551,7 @@ internal sealed class AiFlightAssembler
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ai: no mode machine, cannot load skills/maneuvers: {e.Message}");
+            Log.Warn("flight", $"ai: no mode machine, cannot load skills/maneuvers: {e.Message}");
         }
     }
 

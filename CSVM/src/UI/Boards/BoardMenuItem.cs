@@ -23,4 +23,8 @@ public enum BoardMenuItem
 
     /// <summary>Leave the session, to the launchscreen or out of the game.</summary>
     Exit,
+
+    /// <summary>A scroll bar's arrow on a board whose list outgrows its window. The board reads
+    /// which arrow from the cursor's row.</summary>
+    Scroll,
 }

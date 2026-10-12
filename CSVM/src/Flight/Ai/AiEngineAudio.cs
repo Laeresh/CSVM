@@ -213,7 +213,7 @@ public sealed partial class AiEngineAudio : Node3D
         baseVolume = 1f;
         if (!defs.TryGetValue(sndName, out var def))
         {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            Log.Warn("sound", $"sound def not found in sounds.json: {sndName}");
             return null;
         }
         baseVolume = def.Volume;

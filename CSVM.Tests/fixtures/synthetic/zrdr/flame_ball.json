@@ -1,0 +1,35 @@
+[
+  [
+    "ANIMATION_DEFINITIONS",
+    [
+      "ANIMATION_LIST",
+      [
+        "ANIMATION_DEFINITION",
+        [
+          "NAME", ["probe_flame_root"],
+          "ANIMATION_NAME", ["probe_flame_ball"],
+          "ACTIVATION", ["ON_CALL"],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_flame_burst"],
+            "PUFFER_STATE",
+            [
+              "NAME", ["fierypuffer"],
+              "ACTIVE_STATE", ["ACTIVE"],
+              "AT_NODE", ["probe_flame_root"],
+              "NUMBER", [5],
+              "TIME_INTERVAL", [0.15],
+              "SIZE_RANGE", [1.5, 3.5],
+              "LIFETIME_RANGE", [0.4, 0.75],
+              "GROWTH_FACTOR", [2],
+              "MIN_RANDOM_VELOCITY", [-2, 1, -2],
+              "MAX_RANDOM_VELOCITY", [2, 4, 2],
+              "TEXTURE_SEQUENCE", [[0, "smoke101"], [0.4, "smoke102"], [0.8, "smoke103"]]
+            ],
+            "PUFFER_STATE", ["NAME", ["fierypuffer"], "ACTIVE_STATE", ["INACTIVE"]]
+          ]
+        ]
+      ]
+    ]
+  ]
+]

@@ -427,7 +427,7 @@ public sealed class CampaignProfileStore
                 w.WriteEndObject();
             }
 
-            File.WriteAllText(path, Encoding.UTF8.GetString(stream.ToArray()), new UTF8Encoding(false));
+            AtomicFile.WriteAllText(path, Encoding.UTF8.GetString(stream.ToArray()));
         }
         catch (IOException)
         {
@@ -470,6 +470,21 @@ public sealed class CampaignProfileStore
         catch (ArgumentException)
         {
             return null;
+        }
+    }
+
+    /// <summary>Whether <paramref name="name"/>'s directory holds a profile file, loadable or not.
+    /// One <see cref="Load"/> refuses is still the player's save, which a new profile must not
+    /// replace.</summary>
+    public bool HasFile(string name)
+    {
+        try
+        {
+            return File.Exists(Path.Combine(DirFor(name), FileName));
+        }
+        catch (ArgumentException)
+        {
+            return false;
         }
     }
 
@@ -521,7 +536,7 @@ public sealed class CampaignProfileStore
         var dir = DirOf(def);
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, FileName);
-        File.WriteAllText(path, Serialize(def), new UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, Serialize(def));
         return path;
     }
 

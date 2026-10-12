@@ -19,6 +19,10 @@ internal sealed class FlightControllerBuild
     /// wherever there is no network roster.</summary>
     public int? LocalPlayer;
     public bool IsHumanPiloted;
+
+    /// <summary>A bot seat (<see cref="FlightController.IsBotSeat"/>), whose contacts take a
+    /// person's rule. Only the seat assembler sets it.</summary>
+    public bool IsBotSeat;
     public AiPilot? Pilot;
 
     /// <summary>When set, replaces keyboard input, used by automated screenshot runs. Each
@@ -88,12 +92,12 @@ public partial class FlightController
     /// <summary>This seat's live flight keymap, the object all three of its readers resolve through.
     /// Exposed so a suite can read what the seat is actually flying; change it in place through
     /// <see cref="LoadSavedKeymap"/>, never by replacing the reference.</summary>
-    public Bindings.ActionMap FlightKeymap => _bindings.Map(Bindings.InputContext.Flight);
+    public Bindings.ActionMap FlightKeymap => _controls.Profile.Map(Bindings.InputContext.Flight);
 
     /// <summary>Which side of this seat's hardware produced its last real input, the side its
     /// control prompts name. Read it rather than inferring the device from a composed line.
     /// </summary>
-    public Bindings.DeviceSide ActiveDeviceSide => _bindings.Device.Side;
+    public Bindings.DeviceSide ActiveDeviceSide => _controls.Profile.Device.Side;
 
     /// <summary>Whether this seat flies with the mouse, the third scheme beside the keyboard and the
     /// pad. It is the seat's own profile's flag (<see cref="Bindings.BindingProfile.MouseFlying"/>),
@@ -103,8 +107,8 @@ public partial class FlightController
     /// leaves the mouse to head-look and every other reader byte for byte.</summary>
     public bool MouseFlying
     {
-        get => _bindings.MouseFlying;
-        set => _bindings.MouseFlying = value;
+        get => _controls.Profile.MouseFlying;
+        set => _controls.Profile.MouseFlying = value;
     }
 
     /// <summary>How far this seat's captured mouse moves the stick, the multiplier on
@@ -113,8 +117,8 @@ public partial class FlightController
     /// way, through <see cref="ApplyProfile"/>.</summary>
     public float MouseSensitivity
     {
-        get => _bindings.MouseSensitivity;
-        set => _bindings.MouseSensitivity = value;
+        get => _controls.Profile.MouseSensitivity;
+        set => _controls.Profile.MouseSensitivity = value;
     }
 
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
@@ -167,9 +171,10 @@ public partial class FlightController
         if (build.LocalPlayer is { } localPlayer)
             LocalPlayer = localPlayer;
         IsHumanPiloted = build.IsHumanPiloted;
+        IsBotSeat = build.IsBotSeat;
         Pilot = build.Pilot;
         _holdSegments = build.HoldSegments;
-        _leverSteps = build.LeverSteps;
+        _controls.ScheduleLever(build.LeverSteps);
         _suppliedInputSource = build.InputSource;
         RemotePoses = build.RemotePoses;
         PlaneModel = build.PlaneModel;

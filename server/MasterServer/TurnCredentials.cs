@@ -26,6 +26,10 @@ public sealed class TurnCredentials
         _time = time ?? throw new ArgumentNullException(nameof(time));
     }
 
+    /// <summary>Whether <see cref="For"/> mints a TURN credential: a secret and TURN URLs are set.
+    /// </summary>
+    public bool Mints => _options.TurnSecret.Length > 0 && _options.TurnUrls.Count > 0;
+
     /// <summary>The user name and credential for <paramref name="label"/>, good until
     /// <paramref name="expires"/>, signed with <paramref name="secret"/>.</summary>
     public static (string Username, string Credential) Mint(string secret, string label, DateTimeOffset expires)
@@ -38,7 +42,7 @@ public sealed class TurnCredentials
     }
 
     /// <summary>The servers for one negotiation, the TURN entry labelled <paramref name="label"/>:
-    /// the STUN entry when any is set, then the TURN entry when a secret and URLs are set.</summary>
+    /// the STUN entry when any is set, then the TURN entry when <see cref="Mints"/>.</summary>
     public List<MasterIceServer> For(string label)
     {
         var servers = new List<MasterIceServer>();
@@ -47,7 +51,7 @@ public sealed class TurnCredentials
             servers.Add(new MasterIceServer { Urls = new List<string>(_options.StunUrls) });
         }
 
-        if (_options.TurnSecret.Length > 0 && _options.TurnUrls.Count > 0)
+        if (Mints)
         {
             var expires = _time.GetUtcNow().AddMinutes(Math.Max(1, _options.TurnCredentialMinutes));
             var (username, credential) = Mint(_options.TurnSecret, label, expires);

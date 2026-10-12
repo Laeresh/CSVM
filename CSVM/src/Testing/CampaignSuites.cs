@@ -109,6 +109,8 @@ internal static class CampaignSuites
         + "that could have wrecked them")]
     internal static void CampaignPersistence(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         var second = LastMissionOf(missions, ctx.Chapter);
         if (second is not { } later
@@ -267,6 +269,8 @@ internal static class CampaignSuites
         + "same world built from the bootstrap alone has it whole")]
     internal static void PersistChainKill(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, BridgeChapter, BridgeMission) is not { } dropped
             || MissionAt(missions, BridgeChapter, BridgeLaterMission) is not { } later)
@@ -456,14 +460,17 @@ internal static class CampaignSuites
         + "view")]
     internal static void CampaignMissionEnd(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        var script = ObjectiveScript.Load(
-            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
+        var script = ObjectiveScript.Load(missionZrdr);
         if (script.Objectives.Count == 0)
         {
             throw new SuiteSkippedException($"{mission.ChapterFolder}/{mission.MissionFolder} authors no objectives");
@@ -537,6 +544,7 @@ internal static class CampaignSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
@@ -669,6 +677,8 @@ internal static class CampaignSuites
         + "both read it, and a replay of the same objective banks nothing")]
     internal static void CampaignMissionCash(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, CashChapter, CashMission) is not { } mission)
         {
@@ -758,6 +768,8 @@ internal static class CampaignSuites
         + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would")]
     internal static void CampaignDangerZoneObjectives(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, DangerZoneChapter, DangerZoneMission) is not { } mission)
         {
@@ -765,6 +777,7 @@ internal static class CampaignSuites
         }
 
         string missionZrdrPath = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdrPath, $"{DangerZoneChapter}/{DangerZoneMission} zrdr");
         var script = ObjectiveScript.Load(missionZrdrPath);
         var secondary = script.Objectives.Find(d => d.DangerZones.Contains("dzpath1"));
         var worker = script.Objectives.Find(d => d.DangerZones.Contains("dzpath4"));

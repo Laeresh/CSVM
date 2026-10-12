@@ -169,9 +169,12 @@ public class OriginalConnectionCodeWayTests
         var end = LoopbackTransport.Mesh(1, Clean, new Random(2))[0];
         var door = new NetPlayFeature((_, _, _) => end, (_, _) => end)
         {
-            Master = new MasterDirectory(_ => Task.FromResult("{\"games\":[]}")),
-            OpenCode = _ => end,
-            WebRtcReady = false,
+            Internet =
+            {
+                Master = new MasterDirectory(_ => Task.FromResult("{\"games\":[]}")),
+                OpenCode = _ => end,
+                WebRtcReady = false,
+            },
         };
         var shell = Page(door);
 
@@ -188,11 +191,14 @@ public class OriginalConnectionCodeWayTests
         var mesh = LoopbackTransport.Mesh(2, Clean, new Random(3));
         return new NetPlayFeature((_, _, _) => mesh[0], (_, _) => throw new InvalidOperationException("no direct join"))
         {
-            Master = new MasterDirectory(_ => Task.FromResult("{\"games\":[]}")),
-            OpenCode = code =>
+            Internet =
             {
-                opened.Add(code);
-                return mesh[1];
+                Master = new MasterDirectory(_ => Task.FromResult("{\"games\":[]}")),
+                OpenCode = code =>
+                {
+                    opened.Add(code);
+                    return mesh[1];
+                },
             },
         };
     }

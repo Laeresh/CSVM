@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
@@ -40,6 +41,8 @@ internal sealed class HumanFlightAdapter
     private readonly AircraftAssemblyResources _aircraft;
     private readonly FlightWorldBindings _world;
     private readonly HumanRosterBindings _human;
+    // Arms a bot seat's AI pilot off the AI path's skill tables.
+    private readonly AiFlightAssembler _botPilots;
 
     // What each rig is flying now, by rig index: a swap replaces the entry. The mission-script
     // hand-over gives wingman_4 the aeroplane the player is LEAVING, and nothing else records it.
@@ -48,9 +51,13 @@ internal sealed class HumanFlightAdapter
     // Every player's start, resolved in one call (see Assemble).
     private IReadOnlyList<FlightStart>? _starts;
 
+    // Read on the first bot seat with a militia. Empty when it cannot be read, and such a bot flies
+    // the stock fit in the session livery.
+    private MilitiaFits? _militias;
+
     public HumanFlightAdapter(FlightRosterPolicy policy, LiveryResolver liveries, IFlightStarts spawns,
         WorldEffectsFactory worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
-        FlightWorldBindings world, HumanRosterBindings human)
+        FlightWorldBindings world, HumanRosterBindings human, AiFlightAssembler botPilots)
     {
         _policy = policy;
         _liveries = liveries;
@@ -60,6 +67,7 @@ internal sealed class HumanFlightAdapter
         _aircraft = aircraft;
         _world = world;
         _human = human;
+        _botPilots = botPilots;
     }
 
     /// <summary>Mesh instances the assembled planes added, accumulated across the rigs, the
@@ -91,6 +99,37 @@ internal sealed class HumanFlightAdapter
             cockpitPanels: planeBuilder.CockpitDamagePanels);
     }
 
+    /// <summary>Where every person in the field flies, this machine's panes and seats flown
+    /// elsewhere alike. Every AI-flown aircraft picks its far-field plant on it, bots and roster AI
+    /// alike. A bot is no person, nor is a guest who left. ⚠ Never the pane snapshot in a network
+    /// match: an AI fighting a guest a kilometre from the host would fly the speed-hold plant.
+    /// Outside one the panes are every person.</summary>
+    public static Func<IReadOnlyList<Vector3>> PersonSeatPositions(FlightWorldBindings world, HumanRosterBindings human)
+    {
+        var seats = human.NetSeats;
+        var rigs = human.Rigs;
+        var positions = new List<Vector3>(seats.Count);
+        return () =>
+        {
+            if (seats.Count == 0)
+            {
+                return world.HumanPositions?.Invoke() ?? Array.Empty<Vector3>();
+            }
+
+            positions.Clear();
+            for (int i = 0; i < seats.Count && i < rigs.Count; i++)
+            {
+                if (!seats[i].IsBot && human.SeatLeft?.Invoke(i) != true
+                    && rigs[i].Controller is { } person && GodotObject.IsInstanceValid(person))
+                {
+                    positions.Add(person.WorldPosition);
+                }
+            }
+
+            return positions;
+        };
+    }
+
     /// <summary>What rig <paramref name="rigIndex"/> is flying, or null before its first assembly.
     /// </summary>
     public FlyingAirframe? Flying(int rigIndex) =>
@@ -107,11 +146,17 @@ internal sealed class HumanFlightAdapter
     {
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
         string tag = _human.RigCount > 1 ? $"P{pi + 1} " : "";
-        // A seat flown on another machine. No pane exists for it, so everything hung on a camera,
-        // a pad or this window is skipped. The aeroplane, its paint, its loadout, its damage and
-        // its spawn are built exactly as a local seat's.
+        // A seat with no pane here: one flown on another machine, or a bot this host flies.
+        // Everything hung on a camera, a pad or this window is skipped. The aeroplane, its paint,
+        // its loadout, its damage and its spawn are built exactly as a local seat's.
         var seat = pi < _human.NetSeats.Count ? _human.NetSeats[pi] : null;
-        bool remote = seat is { IsLocal: false };
+        bool paneless = seat is { HasPane: false };
+        bool flownElsewhere = seat is { FlownHere: false };
+        // A bot is AI-piloted on every machine, so each plays its hits, shakes and wreck alike.
+        // Only the host, which flies it, gives it a pilot to steer it. Its contacts take a
+        // person's rule, since its hull is a person's (FlightController.IsBotSeat).
+        bool bot = seat is { IsBot: true };
+        var botPilot = bot && !flownElsewhere ? new AiPilot() : null;
         // Each player flies their own pick; an Instant Action mission overrides it for every human
         // alike (HumanFieldPlanes.InstantActionOverride settles which do). A mission's own swap outranks
         // both. In a network match the roster's pick comes first: every peer builds the same field.
@@ -122,6 +167,10 @@ internal sealed class HumanFlightAdapter
                 ? _policy.PlaneName
                 : _policy.PlaneNames[Math.Min(pi, _policy.PlaneNames.Count - 1)]);
         var stats = _aircraft.StatsFor(planeName);
+        // A bot's militia paints and arms it on every machine; its airframe is still a person's.
+        var militia = bot ? Mech3.InstantAction.MilitiaAt(seat!.Militia) : null;
+        string? militiaPattern = militia is { } painted ? Militias().PatternFor(painted.Name) : null;
+        string? militiaDef = militia is { } armed ? Militias().DefFor(armed.Name, planeName) : null;
 
         // The plane this pilot BUILT, when they picked one: its guns, pylons, paint and armour
         // replace the airframe's stock ones below. Null on a stock pick, empty outside a
@@ -141,23 +190,25 @@ internal sealed class HumanFlightAdapter
         }
 
         // Every player flies the Fortune Hunters livery unless --paint says otherwise, as the
-        // original's stock planes do; a custom plane wears the paint it was built with instead.
-        // A swap's ShippedSkins reading wins over all three, null included (below).
+        // original's stock planes do. A custom plane wears the paint it was built with, and a bot its
+        // militia's. A swap's ShippedSkins reading wins over all of them, null included.
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
         // FlightRoster's AI builder deliberately does not ask for one.
         var scheme = swap is { ShippedSkins: true } capturedSwap
             ? capturedSwap.Scheme
             : swap?.Scheme
-                ?? (custom != null && !_liveries.PaintRequested
+                ?? (militia is { Name: not Mech3.InstantAction.PlayerMilitia } && !_liveries.PaintRequested
+                    ? (militiaPattern == null ? null : _liveries.CatalogScheme(_aircraft.ZrdrPath, militiaPattern))
+                    : custom != null && !_liveries.PaintRequested
                     ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, Flight.Hangar.CustomPlaneBuild.PatternName(custom.PaintPattern))
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         // The stereo interior's per-plane scale goes on the mount before XrCockpit captures it.
-        bool xrInterior = _policy.XrInterior && !remote;
+        bool xrInterior = _policy.XrInterior && !paneless;
         var vrCockpit = xrInterior ? _policy.XrCockpits.For(planeName) : VrCockpit.Default;
-        bool ghostSelf = _policy.DebugRaceGhost && !remote;
+        bool ghostSelf = _policy.DebugRaceGhost && !paneless;
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
             raceGhost: _world.Racing || ghostSelf, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
@@ -168,7 +219,7 @@ internal sealed class HumanFlightAdapter
         if (ghostSelf)
             RaceGhost.Stamp(planeModel, SplitScreen.EveryCameraLayer);
         else if (_world.Racing)
-            RaceGhost.Stamp(planeModel, remote ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
+            RaceGhost.Stamp(planeModel, paneless ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
 
@@ -182,7 +233,7 @@ internal sealed class HumanFlightAdapter
                 AutoHeadTurn = _policy.AutoHeadTurn,
                 PinnedLook = _policy.PinnedLook,
             },
-            HudParent = remote ? null : rig.ChromeParent ?? rig.Viewport,
+            HudParent = paneless ? null : rig.ChromeParent ?? rig.Viewport,
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
@@ -203,13 +254,13 @@ internal sealed class HumanFlightAdapter
         if (controller.Dressing.Stereo != null)
             Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");
         // The recenter action, for the seat the headset flies.
-        controller.RecenterHeadset = remote ? null : _human.RecenterHeadset;
+        controller.RecenterHeadset = paneless ? null : _human.RecenterHeadset;
         // The headset's own views, for the seat the headset flies.
         controller.Headset = xrInterior ? _policy.XrChase : null;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
         // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
-        controller.ToggleGraphicsMode = remote ? null : _human.ToggleGraphicsMode;
+        controller.ToggleGraphicsMode = paneless ? null : _human.ToggleGraphicsMode;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -218,13 +269,16 @@ internal sealed class HumanFlightAdapter
             PlayerIndex = pi,
             // The keymap file and the sticks are this machine's player's, not the roster seat's.
             LocalPlayer = MenuSeatOf(pi),
-            IsHumanPiloted = true,
+            IsHumanPiloted = !bot,
+            IsBotSeat = bot,
+            Pilot = botPilot,
             // A seat flown elsewhere takes its pose out of this history, not a flight model.
             // The buffer's presence IS that ownership, so it is built here and nowhere else.
             // The session fills it from the samples that seat's owner sends.
-            RemotePoses = remote ? new Net.RemotePoseBuffer() : null,
-            // one scripted sequence per player ('|'-separated); the last covers the rest
-            HoldSegments = _policy.HoldSets == null ? null
+            RemotePoses = flownElsewhere ? new Net.RemotePoseBuffer() : null,
+            // One scripted sequence per player ('|'-separated); the last covers the rest. A bot is
+            // flown by its pilot, which a hold would replace.
+            HoldSegments = bot || _policy.HoldSets == null ? null
                 : _policy.HoldSets[Math.Min(pi, _policy.HoldSets.Length - 1)],
             LeverSteps = _policy.LeverSteps,
             PlaneModel = planeModel,
@@ -242,20 +296,20 @@ internal sealed class HumanFlightAdapter
             GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _world.TouchdownDefs,
             Projectiles = _world.Projectiles,
-            HumanPositions = _world.HumanPositions,
+            HumanPositions = botPilot != null ? _botPilots.PersonPositions : _world.HumanPositions,
             // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
             // reads every connected pad (what AssignPads returns for one player), empty reads none.
             // Coalescing flew a single player pad-dead; a remote seat takes empty, it reads none.
-            PadDevices = remote ? Array.Empty<int>() : PadsOf(MenuSeatOf(pi)),
+            PadDevices = paneless ? Array.Empty<int>() : PadsOf(MenuSeatOf(pi)),
             // The keyboard is this machine's first seat's, which on a guest is not seat 0.
-            UseKeyboard = !remote && MenuSeatOf(pi) == 0,
-            MouseCaptureAllowed = !remote && _policy.MouseCaptureAllowed,
+            UseKeyboard = !paneless && MenuSeatOf(pi) == 0,
+            MouseCaptureAllowed = !paneless && _policy.MouseCaptureAllowed,
             // The whole messages.json table, not just the weapon rows: the pilot HUD words its
             // auto-land prompt out of the same file.
             Strings = _aircraft.WeaponMessages,
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is
             // their own machine's business, and must not halt this one's simulation.
-            AllowPause = !remote,
+            AllowPause = !paneless,
             // A team Dogfight's seat flies its lobby team, banded clear of every authored id.
             Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam
                 : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
@@ -267,12 +321,30 @@ internal sealed class HumanFlightAdapter
         // its built model, resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _policy.LoadoutOverride ?? stats.DefName;
-        if (_world.Racing)
+        var militiaStats = militiaDef != null && !_world.Racing && _policy.LoadoutOverride == null
+            ? _aircraft.AiStatsFor(planeName, militiaDef) : null;
+        var arms = BotSeats.ArmsFor(_world.Racing, _policy.LoadoutOverride != null, militiaStats is { AiWeapons.Count: > 0 });
+        if (arms == SeatArms.None)
         {
             // A race pilot carries no weapons. With no loadout there is no fire control, so a held
             // trigger does nothing. No gun gauge, missile gauge, pipper or pylon rocket is built.
             if (verbose)
                 Log.Info("flight", $"weapons: none, a race pilot flies unarmed");
+        }
+        else if (arms == SeatArms.MilitiaDef)
+        {
+            // A bot carries its militia def's own weapons block, as that militia's campaign aircraft do.
+            try
+            {
+                controller.InfiniteAmmo = _policy.InfiniteAmmo;
+                controller.Loadout = Loadout.BindAi(militiaStats!.AiWeapons, militiaDef!, planeModel, _aircraft.WeaponDefs);
+                AiFlightAssembler.HangLoadout(controller, _world);
+                Log.Info("flight", $"{tag}weapons: bot seat {pi} flies {militia!.Value.Name}'s '{militiaDef}' fit");
+            }
+            catch (Exception e)
+            {
+                Log.Warn("weapons", $"weapons: loadout bind failed for '{militiaDef}': {e.Message}");
+            }
         }
         else if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
@@ -326,7 +398,7 @@ internal sealed class HumanFlightAdapter
             }
             catch (Exception e)
             {
-                GD.PushWarning($"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
+                Log.Warn("weapons", $"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
             }
         }
         else if (verbose)
@@ -365,7 +437,7 @@ internal sealed class HumanFlightAdapter
         }
         else
         {
-            GD.PushWarning("no airframe collision boxes, falling back to the center ray");
+            Log.Warn("flight", $"no airframe collision boxes, falling back to the center ray");
         }
         if (verbose && controller.Damage != null)
         {
@@ -384,7 +456,7 @@ internal sealed class HumanFlightAdapter
         // which owns the per-frame feed; nothing here writes one after assembly. None of it is
         // built for a remote seat: there is no pane to draw it in and no camera to aim it by.
         var pilotHud = controller.PilotHud;
-        if (!remote)
+        if (!paneless)
         {
             // The original's heading tape, rebuilt from the chapter's own HUD
             // textures (compassticks2/compasstxt ship in every chapter's archive).
@@ -444,7 +516,7 @@ internal sealed class HumanFlightAdapter
 
         // Never on a remote seat. This stack is the sound of the aeroplane you are sitting in, and
         // that pilot is sitting in theirs, on their own machine.
-        if (!remote && _world.Sounds != null && _world.SoundDefs != null)
+        if (!paneless && _world.Sounds != null && _world.SoundDefs != null)
         {
             var audio = new FlightAudio { MixGain = _human.MixGain, VoiceDuck = _world.VoiceDuck };
             audio.Setup(_world.Sounds, _world.SoundDefs, stats, _aircraft.WeaponDefs, _world.SoundGroups);
@@ -455,7 +527,7 @@ internal sealed class HumanFlightAdapter
         }
         // Each seat's own run, player 1 on the loaded instance. Never on a swap, which would stack a
         // second run HUD (AirframeSwapRequest). Never on a remote seat: its own machine times it.
-        if (swap == null && !remote && _human.StuntZones != null)
+        if (swap == null && !paneless && _human.StuntZones != null)
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt = run;
@@ -494,13 +566,7 @@ internal sealed class HumanFlightAdapter
                 // Racing: no per-player splits board. The race's shared board covers the whole
                 // window when it ends, in Instant Action too, and the run HUD carries the live
                 // leaderboard meanwhile. The race hears this run's own clock, zones and finish.
-                var racer = race.Add(pi, planeDisplay, scoreKey);
-                if (seat is { Callsign.Length: > 0 })
-                    racer.Callsign = seat.Callsign;
-                if (_human.RaceFeed is { } feed)
-                    feed(pi, run);
-                else
-                    race.Follow(pi, run);
+                JoinRace(race, pi, planeDisplay, seat, run, scoreKey);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
                 // The pane's held scores stand across the top, so the two top lines step aside.
@@ -528,33 +594,42 @@ internal sealed class HumanFlightAdapter
                 WhatSuffix += $" [stunt: {controller.Stunt.TotalCount} zones]";
             }
         }
-        else if (swap == null && remote && _human.StuntZones != null && _human.Race is { } remoteRace)
+        else if (swap == null && botPilot != null && _human.StuntZones != null && _human.Race is { } botRace)
+        {
+            // A bot this machine flies runs its own copy of the course, timed here as a local seat's
+            // run is, behind the same count. It records no best of its own.
+            var run = _human.StuntZones.ForAnotherPlayer();
+            run.LogTag = tag;
+            controller.Stunt = run;
+            controller.Race = botRace;
+            controller.RerunCount = _human.RerunCount;
+            // Nobody presses R for it, so a crash returns it to its last zone unattended.
+            controller.AutoRespawnAfter = AircraftLifecycle.AutoRespawnDelay;
+            JoinRace(botRace, pi, planeDisplay, seat, run);
+        }
+        else if (swap == null && paneless && _human.StuntZones != null && _human.Race is { } remoteRace)
         {
             // A seat flown elsewhere still races on every board here. It runs no course on this
             // machine: its own machine times it, and the host's line feeds this record.
-            var racer = remoteRace.Add(pi, planeDisplay);
-            if (seat is { Callsign.Length: > 0 })
-                racer.Callsign = seat.Callsign;
+            JoinRace(remoteRace, pi, planeDisplay, seat, run: null);
         }
 
-        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
-        // match GameSession built before this loop ran; kill facts arrive later via Downed.
-        if (!remote && _human.VersusMatch is { } versus)
+        // Every versus mode (--vs): the per-pane match timer/K-D/leader line, bound to the match
+        // GameSession built before this loop ran.
+        if (!paneless && _human.VersusMatch is { } versus)
         {
-            // Rigs is the SAME list GameSession keeps live for the whole session, every seat
-            // already exists (BuildRigs ran before this loop), only .Controller fills in as each
-            // player assembles, so by the time this pane draws, every opponent's is populated.
-            controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
-            controller.VersusHud.Rigs = _human.Rigs;
-            controller.VersusHud.StatusHiddenWhile = () => controller.ScoresShown;
+            controller.VersusStatusLine = VersusStatusLine.Build(versus, pi);
+            controller.VersusStatusLine.StatusHiddenWhile = () => controller.ScoresShown;
+            var seats = _human.NetSeats;
+            controller.VersusStatusLine.BotName = s => Net.NetSeats.BotCallsign(seats, s);
             if (verbose)
-                Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
+                Log.Info("flight", $"versus HUD: match timer/K-D/leader line");
         }
 
-        // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
-        // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
+        // One per human pane, in EVERY flight session: built unconditionally because generators
+        // spawn hostiles mid-session, and it draws nothing with an empty pool.
         // A remote seat picks its own targets on its own machine, so it takes neither.
-        if (!remote)
+        if (!paneless)
         {
             var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
             pilotHud.TargetHud = targetHud;
@@ -593,20 +668,51 @@ internal sealed class HumanFlightAdapter
         // so the caller can construct the assembler first. A swap brings its own instead.
         var start = swap?.Start ?? (_starts ??= _spawns.ChooseStarts(
             _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
-        // The plant's force path is chosen once, here, off who is flying, a person, so the
-        // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
-        // rather than the original's own pointer-compare-against-the-player test.
+        // The plant's force path is chosen once, here, off who is flying: a person takes the player
+        // path and a bot the AI one. FlightModel.UsesAiForcePath carries why this is a construction
+        // argument rather than the original's own pointer-compare-against-the-player test.
         var camParams = _aircraft.CamParamsFor(planeName);
         // A remote seat passes no camera, the same null an AI rig passes. The chase rig, the head
         // look and every camera write inside Setup are then not built at all.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
-            remote ? null : rig.Camera, camParams, start.Pos, start.LookAt,
+            paneless ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
+        // A bot holds the course it spawned on until its gunner finds a quarry. Armed before the
+        // tree takes it, since its first step reads the gunner and the mode machine.
+        if (botPilot != null)
+        {
+            botPilot.TargetHeadingDeg = AiPilot.HeadingDegOf(start.LookAt - start.Pos);
+            botPilot.TargetAltitude = start.Pos.Y;
+            _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill, arms);
+            // A world AI's roster logs every mode change and a bot's logs none. The lay-off assist
+            // is logged alone, the one change a sortie's log is read for: whether bots ease off people.
+            if (botPilot.Machine is { } modes)
+            {
+                string callsign = seat.Callsign;
+                modes.ModeChanged += (from, to, why) =>
+                {
+                    if (from == AiMode.LayOff || to == AiMode.LayOff)
+                        Log.Info("flight", $"bot lay-off: seat {pi} '{callsign}':{AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why}) t={GameClock.Current?.Time ?? 0.0:0.00}");
+                };
+            }
+            // Out of rockets or low on hull, it breaks off to a base; the match's base runtime runs the order.
+            botPilot.RearmOrder = new AiRearmOrder(controller.WorldBlocksLine);
+            controller.ArmSpawnTimers();
+            // Every later return, whatever placed it, starts the pilot over on the new placement's
+            // course and lever. No quarry, mode or course outlives the aeroplane it lost, and the
+            // airframe takes the collision window its first spawn took.
+            controller.Respawned = () =>
+            {
+                var at = controller.WorldPosition;
+                botPilot.ResetForSpawn(at, at + controller.NoseDirection, controller.Throttle);
+                controller.ArmSpawnTimers();
+            };
+        }
         if (controller.RerunCount != null && _human.FirstStartCount is { } firstCount)
             controller.BeginStartCount(firstCount); // a run's first start is a start like any other
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.
-        if (!remote)
+        if (!paneless)
         {
             var scatter = Rng.Stream(Rng.Photograph);
             controller.Photograph = DangerZonePhotograph.Build(rig.Camera,
@@ -628,7 +734,7 @@ internal sealed class HumanFlightAdapter
         // The ambient speed cue is chapter data, not an aircraft-model effect. One private copy
         // per player, so splitscreen panes do not see another pilot's ahead-of-plane wisps. It is
         // drawn ahead of a camera, so a remote seat, which has none, takes no copy.
-        if (!remote && !_policy.EmptyStage)
+        if (!paneless && !_policy.EmptyStage)
         {
             controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
                 _world.Ambience,
@@ -657,7 +763,7 @@ internal sealed class HumanFlightAdapter
         // ⚠ Hide a remote seat's pilot HUD the frame it enters the tree. A human-piloted rig
         // builds its own canvases in _Ready, and an empty one still carries the telemetry line
         // and the message stack. A seat with no pane would paint those over the local view.
-        if (remote)
+        if (paneless)
         {
             controller.SetPilotHudVisible(false);
         }
@@ -681,7 +787,7 @@ internal sealed class HumanFlightAdapter
         // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above
         // hung on the model travels with it. This pane's spyglass drops that layer; the pane drops
         // the one a first-person view moves the body onto (docs/architecture/Session.md).
-        if (!remote)
+        if (!paneless)
         {
             // Never a remote seat: no camera here looks out of that aeroplane. The band is four
             // layers wide, so a seat past the fourth would wrap onto a pane's own.
@@ -739,6 +845,25 @@ internal sealed class HumanFlightAdapter
         _ => null,
     };
 
+    // Each militia's pattern and the def it flies an airframe as, read on the first need.
+    private MilitiaFits Militias()
+    {
+        if (_militias == null)
+        {
+            try
+            {
+                _militias = MilitiaFits.Load(_aircraft.ZrdrPath, _aircraft.WeaponMessages);
+            }
+            catch (Exception e)
+            {
+                Log.Warn("core", $"bot: cannot read the militias' patterns and defs, so no bot flies its militia's: {e.Message}");
+                _militias = MilitiaFits.Empty;
+            }
+        }
+
+        return _militias;
+    }
+
     // Which of this machine's menu seats flies seat pi. The menu lists only the local seats, and a
     // guest's own seat stands behind its host's in the roster. A seat flown elsewhere has none.
     private int MenuSeatOf(int pi) => Net.NetSeats.LocalOrdinal(_human.NetSeats, pi);
@@ -748,6 +873,22 @@ internal sealed class HumanFlightAdapter
     private int[]? PadsOf(int localPlayer) => _human.PadAssignment is not { } assignment
         ? null
         : localPlayer >= 0 && localPlayer < assignment.Length ? assignment[localPlayer] : Array.Empty<int>();
+
+    // A seat's racer on this machine's race, named by its network callsign where it has one. A run
+    // flown here feeds it, through the race link on a network race; a seat flown elsewhere has none.
+    private void JoinRace(StuntRace race, int pi, string planeDisplay, Net.NetSeat? seat, StuntMission? run,
+        string scoreKey = "")
+    {
+        var racer = race.Add(pi, planeDisplay, scoreKey);
+        if (seat is { Callsign.Length: > 0 })
+            racer.Callsign = seat.Callsign;
+        if (run == null)
+            return;
+        if (_human.RaceFeed is { } feed)
+            feed(pi, run);
+        else
+            race.Follow(pi, run);
+    }
 
     public readonly record struct AssemblyState(int MeshInstances, string WhatSuffix,
         ulong PaintRngState, IReadOnlyList<FlightStart>? Starts);

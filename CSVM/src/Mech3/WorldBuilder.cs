@@ -43,6 +43,28 @@ public sealed class WorldBuilder
     // root sits above its own deck.
     private const float DeckCoverageFraction = 0.5f;
 
+    // The moon is a SphericalY facade in the data (docs/org/cloudCards.md): it turns toward the eye
+    // and keeps the world's up. ⚠ Never Godot's billboard mode, which copies the camera's basis and
+    // so rolls the moon with every bank. The fragment is StandardMaterial3D's unshaded alpha path.
+    private const string MoonShaderCode = """
+        shader_type spatial;
+        render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+
+        uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
+
+        #include "res://shaders/csky_facade.gdshaderinc"
+
+        void vertex() {
+            MODELVIEW_MATRIX = csky_facade_modelview(VIEW_MATRIX, MODEL_MATRIX, CAMERA_POSITION_WORLD);
+        }
+
+        void fragment() {
+            vec4 tex = texture(albedo_tex, UV);
+            ALBEDO = tex.rgb;
+            ALPHA = tex.a;
+        }
+        """;
+
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
@@ -553,7 +575,7 @@ public sealed class WorldBuilder
         if (built == null)
             return null;
         DisableShadows(built);
-        BillboardMoon(built);
+        FaceMoonToEye(built);
         DisableLightRangeFade(built);
         return built;
     }
@@ -854,9 +876,7 @@ public sealed class WorldBuilder
         Log.Info("world", $"draw order: {report.Pairs} conflicting node pair(s) over {nodes.Count} node(s) / {report.Triangles} triangle(s) -> {report.MaxRank + 1} rank(s), {excluded} origin-parked root(s) excluded, {Time.GetTicksMsec() - start} ms");
         if (report.MaxRank > SceneBuilder.ConflictRankCap)
         {
-            GD.PushWarning($"draw order: conflict chain {report.MaxRank + 1} exceeds the "
-                           + $"{SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers "
-                           + "share a bias and can z-fight");
+            Log.Warn("world", $"draw order: conflict chain {report.MaxRank + 1} exceeds the {SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers share a bias and can z-fight");
         }
     }
 
@@ -1194,12 +1214,11 @@ public sealed class WorldBuilder
         return zones[0].Name;
     }
 
-    // The source moon is an axis-aligned quad, which looks tilted from most headings. The original
-    // shows a round upright moon from any direction, so it must billboard. Replaced with a
-    // camera-facing quad of the same position and size. The original also color-keys the uniform
-    // background away, since crater detail rules out additive. SceneBuilder.ColorKeyed reproduces
-    // that as an alpha ramp on distance from that colour.
-    private void BillboardMoon(Node3D built)
+    // The source moon is an axis-aligned quad, which looks tilted from most headings. Replaced
+    // with an eye-facing quad of the same position and size. The original also color-keys the
+    // uniform background away, since crater detail rules out additive. SceneBuilder.ColorKeyed
+    // reproduces that as an alpha ramp on distance from that colour.
+    private void FaceMoonToEye(Node3D built)
     {
         var moonNode = FindChildByName(built, "moon");
         var gzMoon = _gamez.FindByName("moon");
@@ -1225,35 +1244,14 @@ public sealed class WorldBuilder
         var tex = _textures.Find("moon1.tif");
         if (tex == null)
             return;
+        var mat = new ShaderMaterial { Shader = ShaderTwins.Pooled(MoonShaderCode, "sky-moon") };
+        mat.SetShaderParameter("albedo_tex", SceneBuilder.ColorKeyed(tex));
         moonNode.AddChild(new MeshInstance3D
         {
-            Mesh = new QuadMesh { Size = new Vector2(side, side), Material = MoonMaterial(SceneBuilder.ColorKeyed(tex), StereoFacing.Live) },
+            Mesh = new QuadMesh { Size = new Vector2(side, side), Material = mat },
             Position = (min + max) * 0.5f,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Name = "mesh",
         });
-    }
-
-    // The moon is a SphericalY facade in the data, which the original turns toward the eye with no
-    // roll. Flat, it keeps Godot's billboard mode, the camera's basis, which the flat goldens pin.
-    // ⚠ Never that mode under a headset, where the basis is the head's. The disc then lies in the
-    // head's view plane and is seen turning edge-on as the head looks away from it (StereoFacing).
-    private Material MoonMaterial(Texture2D keyed, bool stereo)
-    {
-        if (stereo)
-        {
-            var sprite = new ShaderMaterial { Shader = new Shader { Code = StereoFacing.SpriteShaderCode() } };
-            sprite.SetShaderParameter("albedo_tex", keyed);
-            return sprite;
-        }
-
-        return new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
-            BillboardKeepScale = true, // billboards ignore inherited scale (the 2.5× dome anchor) without this
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            AlbedoTexture = keyed,
-        };
     }
 }

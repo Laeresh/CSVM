@@ -198,7 +198,7 @@ public sealed partial class TargetingOverlay : Node
             {
                 tracking++;
             }
-            rows.Add($"{t.Label}  {GateName(t.Gate)}  {Flight.Airframe.FlightController.TargetLabel(t.TargetSource)}"
+            rows.Add($"{t.Label}  {GateName(t.Gate)}  {Flight.Weapons.TargetPool.TargetLabel(t.TargetSource)}"
                      + $"  {t.WorldPosition.DistanceTo(t.TargetPosition):0} m");
         }
 
@@ -219,7 +219,7 @@ public sealed partial class TargetingOverlay : Node
             // The AI gunner's own standing target, of any class: its line starts at the airframe,
             // not at a muzzle, because the D14 gunner aims the whole aeroplane.
             if (rig.Pilot?.Gunner is { } gunner
-                && FlightController.TryTargetGeometry(gunner.Target,
+                && TargetPool.TryTargetGeometry(gunner.Target,
                     out var preyPos, out _, out _, out bool preyLive)
                 && preyLive)
             {
@@ -234,7 +234,7 @@ public sealed partial class TargetingOverlay : Node
                     tracking++;
                 }
                 pilotRows.Add($"{rig.Name}  {(gunner.WantsFire ? "firing" : "tracking")}  " +
-                              $"{FlightController.TargetLabel(gunner.Target)}  " +
+                              $"{TargetPool.TargetLabel(gunner.Target)}  " +
                               $"{rig.WorldPosition.DistanceTo(preyPos):0} m");
             }
         }

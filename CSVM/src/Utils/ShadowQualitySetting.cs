@@ -11,16 +11,16 @@ namespace CSVM.Utils;
 public readonly record struct SunShadowPlan(
     bool Cast, float AngularDistance, float Blur, RenderingServer.ShadowQuality Filter, int AtlasSize);
 
-/// <summary>One resolved shadow quality: the word, what it writes, and the source that won. A log
-/// line names that source.</summary>
-public readonly record struct ShadowQualityPlan(string Word, SunShadowPlan Sun, SettingSource Source);
+/// <summary>One resolved shadow quality: the word, what it writes, the source that won and the
+/// fallback rule that chose a fallback word. A log line names them.</summary>
+public readonly record struct ShadowQualityPlan(string Word, SunShadowPlan Sun, SettingSource Source, string? Rule = null);
 
 /// <summary>
 /// The sun's shadow quality under Enhanced Graphics, one of <see cref="Words"/>. In
 /// <see cref="Lookup"/>, <c>--shadow-quality=</c> beats the saved <c>shadowQuality</c> option,
 /// which beats the <see cref="Key"/> config key, then the fallback. That follows the GPU and the
-/// pane count (<see cref="FallbackFor"/>). The faithful path casts no sun shadow, and nothing is
-/// written there.
+/// pane count (<see cref="FallbackFor"/>), so a splitscreen session resolves it again
+/// (<see cref="WordSettings.FollowPanes"/>). The faithful path casts no sun shadow.
 /// The writer, <see cref="ApplyTo"/>, can run again at any time, which is how an Options apply
 /// reaches a flight in progress. Why each level stands where it does:
 /// analysis/screen-dither/FINDINGS.md.
@@ -61,11 +61,18 @@ public static class ShadowQualitySetting
     /// <summary>The fewest panes that take <see cref="IntegratedSplitDefault"/>.</summary>
     public const int SplitPanes = 3;
 
+    /// <summary>The log's name for the fallback rule that chose <see cref="IntegratedDefault"/>.</summary>
+    public const string IntegratedRule = "default_integrated_gpu";
+
+    /// <summary>The log's name for the fallback rule that chose <see cref="IntegratedSplitDefault"/>.</summary>
+    public const string IntegratedSplitRule = "default_integrated_gpu_panes";
+
     /// <summary>Every word, lowest first, the order both Options screens offer them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Off, Low, Medium, High, Ultra };
 
-    /// <summary>The source order over <see cref="Words"/>, beaten by <c>--shadow-quality=</c>.</summary>
-    public static readonly WordSetting Lookup = new(Key, Words, "--shadow-quality");
+    /// <summary>The setting's registry entry, beaten by <c>--shadow-quality=</c>. Its fallback follows
+    /// the GPU and the pane count, never the graphics mode.</summary>
+    public static readonly WordSetting Lookup = Register();
 
     // ⚠ Do not lower a filter rung without narrowing the sun with it. The penumbra is sampled
     // through a disc rotated per screen pixel, and too few samples weave that rotation over every
@@ -84,8 +91,7 @@ public static class ShadowQualitySetting
     private static bool? _integrated;
 
     /// <summary>The word the run resolved, <see cref="Default"/> until <see cref="Resolve"/> runs. The
-    /// Options rows show it when nothing is saved.
-    /// ⚠ The rows read this and never <see cref="MachineDefault"/>: a unit test has no renderer to ask.</summary>
+    /// Options rows show it when nothing is saved.</summary>
     public static string Word { get; private set; } = Default;
 
     /// <summary>What the resolved word writes.</summary>
@@ -95,17 +101,14 @@ public static class ShadowQualitySetting
     /// cockpit pass's interior light, re-reads the sun's shadow fields when this moves.</summary>
     public static int Revision { get; private set; }
 
-    /// <summary>The panes the running session draws, which the fallback reads. 1 until
-    /// <see cref="ResolveForPanes"/> names a splitscreen session's count.</summary>
-    public static int Panes { get; private set; } = 1;
+    /// <summary>Gets or sets whether <c>--no-soft-shadows</c> keeps the shadow and drops its penumbra.
+    /// The launcher sets it once from the spec, before the sun is dressed.</summary>
+    public static bool HardShadows { get; set; }
 
-    /// <summary>The fallback word for this machine at the running session's <see cref="Panes"/>.
-    /// The GPU is read once, since the device cannot change under a run.</summary>
-    public static string MachineDefault => FallbackFor(_integrated ??= IsIntegratedGpu(), Panes);
-
-    /// <summary>The fallback a launch resolves against. ⚠ <see cref="Default"/> under
-    /// <paramref name="det"/>, so a scripted capture does not depend on the machine it runs on.</summary>
-    public static string DefaultFor(bool det) => det ? Default : MachineDefault;
+    /// <summary>Whether the renderer runs on an integrated GPU, the Steam Deck's APU among them. Read
+    /// once, since the device cannot change under a run. <see cref="WaterQualitySetting"/>'s fallback
+    /// reads it too.</summary>
+    public static bool IntegratedGpu => _integrated ??= IsIntegratedGpu();
 
     /// <summary>The fallback on a GPU that is or is not <paramref name="integrated"/>, for a session
     /// drawing <paramref name="panes"/>. A discrete GPU runs <see cref="Default"/> at any count. An
@@ -131,23 +134,9 @@ public static class ShadowQualitySetting
     public static ShadowQualityPlan Pick(string? flagWord, string? savedWord, string? configWord,
         string fallback = Default)
     {
-        var resolved = Lookup.Resolve(flagWord, savedWord, configWord, fallback, FallbackSource(fallback));
-        return new ShadowQualityPlan(resolved.Word, PlanFor(resolved.Word), resolved.Source);
+        var resolved = Lookup.Resolve(flagWord, savedWord, configWord, fallback, FallbackRule(fallback));
+        return new ShadowQualityPlan(resolved.Word, PlanFor(resolved.Word), resolved.Source, resolved.Rule);
     }
-
-    /// <summary>The launch's ladder again for a session drawing <paramref name="panes"/>, which
-    /// becomes <see cref="Panes"/>. Only the fallback follows the count. The flag, the saved word
-    /// and the config key win at every count, so a chosen level is never overruled.</summary>
-    public static ShadowQualityPlan ResolveForPanes(int panes, string? flagWord, bool det)
-    {
-        Panes = Math.Max(1, panes);
-        string fallback = DefaultFor(det);
-        return Resolve(flagWord, SavedWord(det), Config.GetString(Key, fallback), fallback);
-    }
-
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.ShadowQuality);
 
     /// <summary>What <paramref name="word"/> writes, or <see cref="Default"/>'s for a word the
     /// vocabulary does not know.</summary>
@@ -195,10 +184,42 @@ public static class ShadowQualitySetting
         RenderingServer.GetVideoAdapterType() == RenderingDevice.DeviceType.IntegratedGpu;
 
     // The fallback word names the rule that chose it, since FallbackFor gives each rule its own word.
-    private static SettingSource FallbackSource(string fallback) => fallback switch
+    private static string? FallbackRule(string fallback) => fallback switch
     {
-        IntegratedDefault => SettingSource.IntegratedGpuDefault,
-        IntegratedSplitDefault => SettingSource.IntegratedGpuPanesDefault,
-        _ => SettingSource.Default,
+        IntegratedDefault => IntegratedRule,
+        IntegratedSplitDefault => IntegratedSplitRule,
+        _ => null,
+    };
+
+    // Built in a method rather than inline. Inside a static field initializer, the nullable analysis
+    // reads the Shown hook's static Word as maybe null and warns (CS8603).
+    private static WordSetting Register() => new(Key, Words, "--shadow-quality")
+    {
+        SavedField = "shadowQuality",
+        LogName = "shadow_quality",
+        Title = "Shadow quality",
+        Labels = new[] { "Off", "Low", "Medium", "High", "Ultra" },
+        EnhancedOnly = true,
+        Detail = static enhanced => enhanced
+            ? "Select how the sun's shadows are drawn. Lower levels run faster. Seen once the choices are applied."
+            : "Enhanced Graphics only. The original world casts no sun shadows.",
+        // ⚠ The rows read the resolved word and never the machine's fallback: a unit test has no
+        // renderer to ask.
+        Shown = static _ => Word,
+        Fallback = static context =>
+        {
+            string fallback = context.Det ? Default : FallbackFor(IntegratedGpu, context.Panes);
+            return new ResolvedWord(fallback, SettingSource.Default, FallbackRule(fallback));
+        },
+        Take = static resolved =>
+        {
+            Word = resolved.Word;
+            return resolved;
+        },
+        Apply = static world =>
+        {
+            if (world.Sun is { } sun)
+                ApplyTo(sun, Sun, GraphicsMode.Enhanced, HardShadows);
+        },
     };
 }

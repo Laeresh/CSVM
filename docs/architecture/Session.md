@@ -19,7 +19,7 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 ## src/Session/Roster/LiveryResolver.cs
 Resolves which livery each player flies: the shipped paint catalog and the per-pattern
 region-mask library (both lazy and cached), `PatternsForPlane`, and the per-player `SchemeFor`
-pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=` overrides.
+pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=` overrides; `CatalogScheme` is a militia pattern's shipped colours.
 Constructed once per session build, so a relaunch resolves against the fresh spec. With no
 override every aircraft wears `DefaultPattern`, the only pattern covering all eleven airframes;
 an AI spawn prefers an explicit scheme, then its own def's `paint_*`, and reaches that default
@@ -34,14 +34,14 @@ every human (a def read off a file) or is only player 1's pick (the launchscreen
 Pure over the spec. The built aircraft's display name is `Flight/Airframe/PlaneRoster.cs`'s.
 
 ## src/Session/Roster/SpawnPicker.cs
-Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks, the mission's
-`ia.json` scenario or a Dogfight launch's `net.zrd` block, the whole table when `SeatTeams` names a team, which `PlanTeams` walks by team block), `ChooseSpawnBase` (the shared
-`--spawn=`-or-random list index), `ChooseSpawn` (a player's position and look-at from that list,
-`objectives.json`'s `PLAYER_INIT`, or the `--spawn-at=` debug override), `StartState` (the field's
-throttle and speed) and `LogSpawn`. Constructed once per session build. Also the plain
-`IFlightStarts`: `ChooseStarts` loops its own `ChooseSpawn`, the placement every session flies
-except a splitscreen race or a co-op campaign mission. `StartGrid` and `SharedSpawnStarts` take
-their anchor from here, so this type owns it. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
+Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks: the mission's
+`ia.json` scenario, a Dogfight's `net.zrd` block, the whole table when `SeatTeams` names a team,
+which `PlanTeams` walks by team block, or on `--stage=empty` the `SpawnRing` or whole `SpawnTable`),
+`ChooseSpawnBase` (the shared `--spawn=`-or-random index), `ChooseSpawn` (a player's position and
+look-at from that list, `PLAYER_INIT`, or the `--pos=` override), `StartState` (the field's throttle
+and speed) and `LogSpawn`. Built once per session. Also the plain `IFlightStarts`: `ChooseStarts`
+loops `ChooseSpawn` for every session but a splitscreen race or a co-op campaign mission, and
+`StartGrid` and `SharedSpawnStarts` take their anchor from here, so this type owns it. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
 
 ## src/Session/Roster/IFlightStarts.cs
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
@@ -127,7 +127,7 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 `objective` half (the Enemy cycle) and then its `other_target` half (the Non-Aircraft cycle), the
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
-take, their table unedited. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
+take, their table unedited, and the empty stage's Capture the Flag arena passes its own node finder. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state and whether its node is switched on; a roster block that flags itself
 rides its own aeroplane. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
@@ -210,37 +210,52 @@ host's ordinals. Pools go out off `DestructibleDamaged` at once and `Destructibl
 seat tick, and apply through `ApplyReplicatedHealth`. `FollowVoice` relays each `AiVoiceRuntime.Raised` by ordinal as world event 7, which a guest hands to `TakeRaise`, and feeds a guest's hull events to `TakeHull`. Layouts: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/World/VersusDirector.cs
-The engine side of one Dogfight (`--vs`), split screen or over the wire, the sibling of `InstantActionDirector` and `CampaignDirector`: `TryCreate` builds the `VersusMatch`, teamed off the lobby's seats, ahead of the roster, and `Wire` feeds it every seat's Downed report (scored here in split screen, reported to the host on the wire), sets each pilot's crash-cam respawn and builds the host's `VersusSpawnRotation`, which relaxes its one-living-seat-per-point rule for a field larger than the table rather than failing.
+The engine side of one Dogfight (`--vs`), split screen or over the wire, the sibling of `InstantActionDirector` and `CampaignDirector`: `TryCreate` builds the `VersusMatch`, teamed off the lobby's seats, ahead of the roster, and `Wire` feeds it every seat's Downed report (reported to the host on the wire; scored here in a local match, which posts the death lines too), sets each pilot's crash-cam respawn (a bot seat's never waits for Fire Guns, whatever Auto Respawn says) and builds the `VersusSpawnRotation` of the host or the local machine, which relaxes its one-living-seat-per-point rule for a field larger than the table rather than failing. Having a wire and having a seat roster are separate questions: a local match with bots holds a roster and no wire, and decides its returns, scores and rematch itself.
 `WireSpawns` puts placement on the wire under one rule: the OPENING spawn is the shared seed's walk over the mission table and crosses no wire, while every later return is GRANTED by the host's single rotation, a table entry every peer applies through the call the owner would have made (`SpawnsTaken`, `SpawnEntries`). `WireMatchState` makes the host the only writer of the match: the clock, both limits and the ending go out as one reliable message, change-driven plus a `MatchStateCadence` tick that carries the host clock into every guest's `NetClockSlew`, and a guest hands its match over, its rematch the host's (`RematchIsTheHosts`). `ScoreDeath` is the host's one scoring site; it sends the scores, then the death notice every machine posts once, and the ending only after the scores that settled the round. The scoreboard itself is never sent.
-`StepMatch` advances the clock, holds a pilot out of lives spectating (`VersusMatch.OutOfLives`) and posts its lives line; the session steps the flags and the rearm bases ahead of it. `WireFlags`, `WireZeppelinVersus` and `WireRearmBases` open `FlagRuntime.cs`, `ZeppelinVersusRuntime.cs` (whose return is a `SpawnAtMessage` and whose Restart leaves for the lobby rather than rerunning on burnt hulls) and `RearmRuntime.cs`. Decode: [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md).
+`StepMatch` advances the clock, holds a pilot out of lives spectating (`VersusMatch.OutOfLives`) and posts its lives line; the session steps the flags and the rearm bases ahead of it. Where the session hands it `LandOnScores` (a lobby match whose host lands on Game Scores, which builds no results board and arms no rematch key), it counts `EndHoldS`, the original's five seconds, of the ended world flying on and then lands once, the count starting again whenever the match runs again; a guest's count starts when the host's end message completes its match. `WireFlags`, `WireZeppelinVersus` and `WireRearmBases` open `FlagRuntime.cs`, `ZeppelinVersusRuntime.cs` (whose return is a `SpawnAtMessage` and whose Restart leaves for the lobby rather than rerunning on burnt hulls) and `RearmRuntime.cs`, whose rearm nodes the world or the empty stage's arena holds. Decode: [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md).
 
 ## src/Session/World/FlagRuntime.cs
 Capture the Flag in a network match, built by `VersusDirector.WireFlags` for a `--ctf` launch: one
-`FlagMatch` flag per lobby team whose `cs_flag_n` the mission world holds. Each machine checks its
+`FlagMatch` flag per lobby team whose `cs_flag_n` the mission world, or the empty stage's arena, holds. Each machine checks its
 own seats and asks the host (`FlagRequestMessage`); the host decides, scores through
 `VersusMatch.AddScore` and sends its `FlagTableMessage`. Every machine moves the props from the
 changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
 the flag rows. A death, a drop or `Eject` (the console's `ejectflag`, relayed by the host) floats a
 flag everywhere, and the host sends it home when the throw runs out. `SideOf` labels the three
-markers, and the carrier carries its tag. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+markers, and the carrier carries its tag. `StepBots` hands the host's bots `Flight/Ai/CtfBotObjective.cs`'s orders (`BotObjective` turns it off). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+
+## src/Session/World/StuntRaceBots.cs
+The stunt race bots a machine flies, built by `GameSession` beside the race: one
+`Flight/Ai/StuntBotObjective.cs` per bot seat with a run of the course, stepped ahead of the seats.
+It steers each bot for its next zone, starts the ribbon run, and starts a completed run again while
+the window is open. The run's own gate test counts every zone, so the race and a network host hear a
+bot as any seat. `BotObjective` turns it off. Rule: [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots".
+
+## src/Session/World/BotOrderLog.cs
+Which bot order changes a team mode's host step logs: `Admit` notes a bot seat's reason each step
+and answers true when it changed and the seat still has one of its `LinesPerSeat` lines left, so a
+long match does not log every run. `FlagRuntime.StepBots`, `ZeppelinVersusRuntime.StepBots` and
+`StuntRaceBots.Step` share it, each writing its own line.
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `VersusDirector.WireZeppelinVersus` for a `--zvz`
 launch over the `MP3` world's `ZeppelinRuntime`: hull 0 goes to the first side's lobby team and
 hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull. Off
-`PartDestroyed` the host scores each gas bag to the seat whose hit killed it, and every machine
-speaks the gas bag line. `ZeppelinKilled` ends the match on the host, a guest taking the winner
-from the `0x17` state; `Rules` names the side a broadside's kill goes to. `RespawnPoint` is
-the host's return, sent as `SpawnAtMessage`, and `SideOf` labels each hull's marker and its rearm
-base's. Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
+`PartDestroyed` the host scores each gas bag to the seat whose hit killed it; every machine speaks
+the gas bag line. `ZeppelinKilled` ends the match on the host. `RespawnPoint` is the host's return
+and `SideOf` labels each hull's marker and rearm base. `StepBots` notes each hull's last attacker
+and hands the host's bots `Flight/Ai/ZvzBotObjective.cs`'s targets (`BotObjective` turns it off).
+Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
 
 ## src/Session/World/RearmRuntime.cs
 The multiplayer rearm bases in any Dogfight, built by `VersusDirector.WireRearmBases`: the world's
-`rearm_node_n` serving lobby team `n`, or in Zeppelin vs Zeppelin each hull's `zep_rearm_node_n`
+`rearm_node_n` (or the empty stage arena's) serving lobby team `n`, or in Zeppelin vs Zeppelin each hull's `zep_rearm_node_n`
 serving its side while the hull lives. Each machine steps only the seats it flies through
 `RearmBases`, and on entry calls `FlightController.Rearm` and posts "Rearmed!" in the seat's own
 pane. The restored ledger reaches every other machine in the next `0x40` damage report, where a
-hurt copy reading full again takes its stages off. Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
+hurt copy reading full again takes its stages off. A bot's `Flight/Ai/AiRearmOrder.cs` is updated
+there after the restore check, with its pylons, its hull, the nearest serving base and the restore.
+Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
 
 ## src/Session/World/NetCutsceneLink.cs
 The cutscene skip over the wire, one per network session with a cutscene host. On the host it
@@ -464,7 +479,7 @@ switched on, placed at its authored pose and flown by `ZeppelinMotion`; an anima
 neither placed nor stepped. `WireDamage` builds the part pools, `PollDamage` owns the kill (and
 `PartDestroyed`, each part's with its killing shooter), the Instant Action engine count and the
 generator disable; `CollectTargetParts` makes a structure selectable under `TargetPool`'s torpedo
-gate. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. Networked, the host sends
+gate, and `CollectHullParts` lists one hull's parts for the Zeppelin vs Zeppelin bots. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. Networked, the host sends
 `TryReadPath` and a guest's `Replicate` gives each hull a `ZeppelinReplica` that `TakePath` feeds in
 place of the follower. Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 
@@ -495,7 +510,7 @@ rig as a damage source whose rounds draw the ally distress out of a teammate the
 because the bearing call-out, the taunt, the killer's gloat and the flight's enemy-down call on a player kill are spoken by an aircraft other than the one the event reached.
 An evade episode's end speaks the successful-shake taunt, and only once the machine's own evade flag has cleared.
 `Step` raises the rest of the pursue path for every AI in play whose gunner holds a hostile human, at the slot cooldown's own interval rather than on a mode edge, so a commit inside the mute window is not lost: the taunt the pursuer's own nose against that human picks, its `WA-Attack`, and the flight's bearing call-out; it also raises the taunt of every hostile player flown elsewhere within range of a local one.
-`RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet. A replicated AI (`RemoteOwned`) raises nothing here: the raises that read the flying end's own state fire `Raised` for the network link to relay, and a guest replays them through `TakeRaise` and derives the DI tiers through `TakeHull`.
+`RegisterBot` takes a bot seat on every machine as a player flown elsewhere, its pilot dealt from its militia's accent by the same registration turn. `RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet. A replicated AI (`RemoteOwned`) raises nothing here: the raises that read the flying end's own state fire `Raised` for the network link to relay, and a guest replays them through `TakeRaise` and derives the DI tiers through `TakeHull`.
 Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. `WatchTurrets` adds the one non-aircraft source, a gunner's acquisition of a human player off the shared `ProjectilePool`, broadcast on that player's team, and `DangerZoneCompleted` the other, the flight's praise for a player's run through the gates, which the campaign's own completion report raises. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/Roster/FlightRoster.cs
@@ -505,7 +520,7 @@ back new nodes and registrations on failure. It owns the live human and AI membe
 `VehicleDowned`, the AI death report the HUD kill line is fed from. `SwapPlayerAirframe` is the third commit path, a mission putting one
 player into a different airframe mid-flight, and `RunSwap` the whole order a cutscene code raises. The loading screen builds the coming
 waves' aeroplanes through `OrderWaveAirframes` and `BuildOrderedAirframe`, and `PumpDeferredCrashRigs` takes one more off the owed list
-per quiet frame, never on a frame a crash rig or a launch already builds on. `HumanFlightAdapter.cs`, `AiFlightAssembler.cs` and
+per quiet frame, never on a frame a crash rig or a launch already builds on. A network bot seat is a member of the human field, not of the AI list. `HumanFlightAdapter.cs`, `AiFlightAssembler.cs` and
 `AiAirframePool.cs` are the private assembly paths; the swap decode is [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/Roster/FlightRosterInputs.cs
@@ -514,7 +529,7 @@ aircraft and archive resources, the live world services, and the human-session b
 contracts keep the roster from taking all of `SessionSpec` or exposing either assembler, while
 leaving its required dependencies explicit at the production seam. `HumanRosterBindings.RigCount`
 counts SEATS, guests on other machines included, and `NetSeats` is that roster indexed by seat,
-empty outside a network match, and `SeatFit` is a co-op seat's loadout. `SoloStuntBoard` is how a
+empty outside a network match, `SeatLeft` says which guest's seat has left it, and `SeatFit` is a co-op seat's loadout. `SoloStuntBoard` is how a
 solo stunt run gets its results board without the roster naming a screen. `FlightWorldBindings.Racing` is the session's race flag, which both assemblers read. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/CrashRigQueue.cs
@@ -538,23 +553,33 @@ the spawn streams. Read `AiFlightAssembler.cs` for the build it calls.
 
 ## src/Session/Roster/AiFlightAssembler.cs
 `FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the airframe, controller, livery,
-loadout (a spawn's fit through `Loadout.BindWingman` ahead of the AI def's `weapons`) and ordnance, damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
+loadout (a spawn's fit through `Loadout.BindWingman` ahead of the AI def's `weapons`) and ordnance (`HangLoadout`, which a bot's militia fit shares), damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
 optional crash runtime, then the node placed. The airframe (painted model, hulls, prop, wing-light and surface animators) is CLAIMED
 from `AiAirframePool.cs` where one is ready and built in place otherwise, over one shared `PlaneCollider` per airframe and one shared
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
 launch frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the durability override ahead of
 the enemy scale and the spawn jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's
-title, stamps the block's objective marker and the session's race flag, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. Read `FlightRoster.cs` next.
+title, stamps the block's objective marker and the session's race flag, and owns the AI skills cache. Every AI it builds picks its far-field plant on `PersonPositions`, the roster's one `HumanFlightAdapter.PersonSeatPositions`, so a host's AI beside a guest flies the full plant. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. `ArmSeatPilot` arms a network bot seat's pilot (gunner, ordnance, mode machine and the airframe's ranges) on a personality rolled off `Rng.Bots` and shifted by the seat's tier (`BotSeats.cs`), its gunner preferring no player so a Dogfight ranks a person and a bot alike and its rocketeer on the wingman rule with a failed roll launching (no world AI passes through it), for the human path that builds the seat's aeroplane, so no tier reaches its hull. Read `FlightRoster.cs` next.
+
+## src/Session/Roster/BotSeats.cs
+What a network bot seat is once its host seats it, engine-free. `Resolve` turns the command line's
+bot field into seats: each bot a militia/airframe pair off the Instant Action militia table
+(`DrawPair`: any pair at equal odds for a Random plane, a militia flying it for a picked one, the
+torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
+unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
+`Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
+of a tier's effect. Only the host calls it; a guest reads the roster. Decodes:
+[../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 
 ## src/Session/Roster/HumanFlightAdapter.cs
-`FlightRoster`'s private human-aircraft path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and
-instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
-the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. A seat the bindings' `NetSeats` marks remote is
-flown elsewhere: it takes the aeroplane, paint, loadout, spawn slot and score row, is built with the `RemotePoseBuffer` that IS its ownership, and
-skips every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. It reads only the roster's
-copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its
-captured scheme and own build over that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run
-followed, its solo score key and its network seat's callsign; a remote seat runs no course here and joins no local race, and every stunt seat outside `--det` carries the rerun count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a remote seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. `--debug-race-ghost` (`FlightRosterPolicy.DebugRaceGhost`) builds every local seat ghost-keyed and stamps it with `EveryCameraLayer`, so its own cameras draw it as a ghost, race or no race. Read `FlightRoster.cs` next.
+`FlightRoster`'s private seat path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
+the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. A seat of the bindings' `NetSeats` without a pane
+(flown elsewhere, or a host's bot) takes the aeroplane, paint, loadout, spawn slot and score row, only one flown elsewhere is built with the `RemotePoseBuffer` that IS its ownership, and
+both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. A bot seat is AI-piloted
+(`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, with `IsBotSeat` set so its contacts take a person's rule (it grazes and bounces where world AI dies outright), and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`
+under its seat index as `PlayerIndex`, its far-field plant measured against `PersonSeatPositions` (every seat's aeroplane but a bot's or a departed guest's, the panes outside a network match, the one rule roster AI reads too), and given an `AiRearmOrder` probing the world's lines. Its seat's militia gives it, on every machine, that militia's livery (the shipped skins for Broadway Bomber, the session's for Fortune Hunter) and the weapons block of the def the militia flies its airframe as (`Mech3/MilitiaFits.cs`), the stock fit where no def exists; `BotSeats.ArmsFor` decides that order, a race seat unarmed first. Every later return of that aeroplane, through `FlightController.Respawned`, starts the pilot over with `AiPilot.ResetForSpawn` on its new placement's course. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
+It reads only the roster's copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its captured scheme and own build over
+that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run followed, its solo score key and its network seat's callsign; a seat with no pane here runs no course and joins no local race, and every stunt seat outside `--det` carries the rerun count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a pane-less seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. `--debug-race-ghost` (`FlightRosterPolicy.DebugRaceGhost`) builds every local seat ghost-keyed and stamps it with `EveryCameraLayer`, so its own cameras draw it as a ghost, race or no race. Read `FlightRoster.cs` next.
 
 ## src/Session/World/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects
@@ -574,7 +599,7 @@ zones too; both arms put the ambient half through `WriteColorAmbient`, colour-so
 contribution, so a night zone's scene fill is darker than a day zone's. `ApplyFogState` is the
 animation runtime's `FOG_STATE` sink, writing only the fields the event carries under the same
 last-writer order. Enhanced mode also caps a night zone, paints the sky the zone's own fog colour and
-pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+pushes a day zone's fog range out, which the sun's shadow distance follows; a night zone keeps its authored range, so a lit city fades into its near-black fog with the ground. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
 
 ## src/Session/World/FogViewTable.cs
 The per-view atmosphere table: every camera drawing the shared world (each splitscreen pane and each

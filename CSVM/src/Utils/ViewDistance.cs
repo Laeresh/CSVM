@@ -23,8 +23,29 @@ public static class ViewDistance
     /// <summary>What a screen shows for each of <see cref="Words"/>, index for index.</summary>
     public static readonly string[] Labels = { "Normal", "Far", "Very Far", "Unlimited" };
 
-    /// <summary>The source order over <see cref="Words"/>, beaten by <c>--view-distance=</c>.</summary>
-    public static readonly WordSetting Lookup = new(Key, Words, "--view-distance");
+    /// <summary>The setting's registry entry, beaten by <c>--view-distance=</c>. Its row stops at
+    /// either end, and only the Built-in Options screen shows it.</summary>
+    public static readonly WordSetting Lookup = new(Key, Words, "--view-distance")
+    {
+        SavedField = "viewDistance",
+        LogName = "view_distance",
+        Title = "View distance (Enhanced only)",
+        Labels = ViewDistance.Labels,
+        EnhancedOnly = true,
+        Clamps = true,
+        UnderGraphicsRow = true,
+        Detail = static enhanced => enhanced
+            ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
+            : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.",
+        Shown = static _ => Default,
+        Fallback = static _ => new ResolvedWord(Default, SettingSource.Default),
+        Take = static resolved =>
+        {
+            Set(resolved.Word);
+            return resolved;
+        },
+        Apply = static world => world.FollowSession(),
+    };
 
     // TUNE. Multiples of the fade distance enhanced mode already draws clutter to. The last is no
     // fade at all, so every piece of clutter draws out to the fog, which still hides it past there.
@@ -56,10 +77,6 @@ public static class ViewDistance
         Set(resolved.Word);
         return resolved;
     }
-
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.ViewDistance);
 
     /// <summary>Sets the reach from one word. The caller writes the clutter fade global again after
     /// a change.</summary>

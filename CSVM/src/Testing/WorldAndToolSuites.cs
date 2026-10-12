@@ -282,8 +282,9 @@ internal static class WorldAndToolSuites
 
     // A build that throws part way must free what it already made. An orphaned mesh instance outlives
     // the renderer, and a release build then crashes in its teardown, after the verdict is written.
-    // Counted on ObjectDB rather than on orphan ids, which a release export does not track. Able to
-    // fail: with BuildSubtree's catch removed, the parent and its mesh instance stay alive.
+    // Checked on the build's own nodes by instance id, which a release export still answers, unlike
+    // orphan ids. Able to fail: with BuildSubtree's catch removed, the parent and its mesh instance
+    // stay alive.
     [Suite("scene-build-throw-frees",
         "a subtree build that throws below a meshed node frees that node and its mesh instance before the exception leaves, so no render instance outlives the renderer and crashes the process at exit")]
     internal static void SceneBuildThrowFrees(TestContext ctx)
@@ -304,7 +305,6 @@ internal static class WorldAndToolSuites
             {
                 continue;
             }
-            // The full build also fills the mesh and material caches, so the count below sees nodes only.
             var warm = scene.BuildSubtree(node);
             bool meshed = warm?.GetNodeOrNull("mesh") is MeshInstance3D;
             warm?.Free();
@@ -321,27 +321,40 @@ internal static class WorldAndToolSuites
             return;
         }
 
-        // A collection during the build lets earlier suites' finalizers free their objects, so both
-        // readings are taken once the count has stopped moving.
-        long? before = FinalizerGate.SettledObjectCount();
+        // Not Godot's global object count: other threads move it inside any span, settled or not
+        // (docs/verification.md INSTR-100). The ids are taken at the throw, the last moment the
+        // half-built nodes are known alive.
+        var made = new List<Node3D>();
+        var ids = new HashSet<ulong>();
+        scene.NodeMade = made.Add;
         bool threw = false;
         try
         {
-            scene.BuildSubtree(parent, skip: n => n.Index == throwAt
-                ? throw new System.InvalidOperationException("staged build failure")
-                : false);
+            scene.BuildSubtree(parent, skip: n =>
+            {
+                if (n.Index != throwAt)
+                {
+                    return false;
+                }
+                foreach (var node in made)
+                {
+                    ids.Add(node.GetInstanceId());
+                    ids.UnionWith(node.FindChildren("*", owned: false).Select(c => c.GetInstanceId()));
+                }
+                throw new System.InvalidOperationException("staged build failure");
+            });
         }
         catch (System.InvalidOperationException)
         {
             threw = true;
         }
-        long? after = FinalizerGate.SettledObjectCount();
-        ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
-        ctx.Check(before != null && after != null, $"the object count settled on both sides of the build");
-        if (before is long b && after is long a)
+        finally
         {
-            ctx.Same(b, a, $"objects alive across the failed build of {parent.Name}");
+            scene.NodeMade = null;
         }
+        ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
+        ctx.Check(ids.Count >= 2, $"the build had made {parent.Name} and its mesh instance when it threw made={ids.Count}");
+        ctx.Same(0, ids.Count(GodotObject.IsInstanceIdValid), $"nodes the failed build of {parent.Name} left alive");
     }
 
     // The distinct Shader resources every ShaderMaterial in the subtree points at, by reference:
@@ -409,8 +422,7 @@ internal static class WorldAndToolSuites
                 $"scaled to the port's interior scale scale={interior.Scale.X:0.###}");
             ctx.Check(builder.MeshInstanceCount > plain.MeshInstanceCount,
                 $"the interior adds meshes plain={plain.MeshInstanceCount} with={builder.MeshInstanceCount}");
-            // The panel the pilot reads and the two torn-skin panels B12 drives, both hidden.
-            ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+            // The two torn-skin panels the pdpanel4/pdpanel6 injure entries drive, both hidden.
             foreach (var panel in new[] { "pcdp4", "pcdp6" })
             {
                 var node = FindNamed(interior, panel);
@@ -420,34 +432,12 @@ internal static class WorldAndToolSuites
             // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true. An
             // unparked build renders white splats across the sky on a pristine plane. The parking
             // follows reset_bulletholes: the bulNx quads dark, the bulletN groups over them drawn.
-            foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
+            ParkedStates(ctx, interior);
+            bool gauged = FindNamed(interior, "gauges") != null;
+            if (!ctx.SyntheticData)
             {
-                var node = FindNamed(interior, lamp);
-                ctx.Check(node != null, $"the interior carries {lamp}");
-                ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+                CockpitNamedSet(ctx, interior);
             }
-            foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
-            {
-                var node = FindNamed(interior, group);
-                ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
-                if (node == null)
-                    continue;
-                int quads = 0, lit = 0;
-                foreach (var child in node.GetChildren())
-                {
-                    if (child is not Node3D quad)
-                        continue;
-                    quads++;
-                    if (quad.Visible)
-                        lit++;
-                }
-                ctx.Check(quads >= 3 && lit == 0,
-                    $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
-            }
-            // …and the panel geometry beside them is NOT parked: the states are a named set, not a
-            // blanket hide, so a wrong predicate that hid the dashboard would fail here.
-            foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
-                ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
 
             // The exterior panels stay DamageVisuals' alone: the interior pair must not join them.
             foreach (var node in builder.DamagePanels)
@@ -491,8 +481,13 @@ internal static class WorldAndToolSuites
             ctx.Check(!interior.Visible && DrawsAll(body, ownPane) && DrawsAll(dontmove, ownPane),
                 $"a held external view restores the aircraft while Cockpit stays selected {DrawnBy(body, ownPane)}");
 
-            DrivenPanel(ctx, interior);
-            DrivenBelts(ctx, interior, builder, planesGamez, textures);
+            // The gauge drive needs an authored panel. A tree without one has nothing to drive;
+            // the install always carries one.
+            if (gauged || !ctx.SyntheticData)
+            {
+                DrivenPanel(ctx, interior);
+                DrivenBelts(ctx, interior, builder, planesGamez, textures);
+            }
         }
         finally
         {
@@ -500,6 +495,78 @@ internal static class WorldAndToolSuites
             withInterior?.Free();
             textures.Dispose();
         }
+    }
+
+    // The parked set as the builder's own predicate names it in whatever interior was loaded. Each
+    // named node is dark, the group over each hole quad is drawn, and meshes outside the set render.
+    // Able to fail: a pass that misses a named node, hides a hole group, or hides everything.
+    internal static void ParkedStates(TestContext ctx, Node3D interior)
+    {
+        var parked = new List<Node3D>();
+        var drawnMeshes = new List<Node3D>();
+        void Walk(Node3D node)
+        {
+            if (PlaneBuilder.IsInteriorDrivenState(AnimRuntime.NameOf(node)))
+                parked.Add(node);
+            else if (node is MeshInstance3D && node.Visible
+                     && !AnimRuntime.NameOf(node).StartsWith("pcdp", System.StringComparison.OrdinalIgnoreCase))
+                drawnMeshes.Add(node);
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d)
+                    Walk(n3d);
+            }
+        }
+        Walk(interior);
+        ctx.Check(parked.Count > 0, $"the interior names {parked.Count} driven-state node(s) for the parking pass");
+        foreach (var node in parked)
+        {
+            string name = AnimRuntime.NameOf(node);
+            ctx.Check(!node.Visible, $"{name} is parked hidden on a pristine plane");
+            if (!name.EndsWith("_on", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Check(node.GetParent() is Node3D { Visible: true },
+                    $"…and the hole group over {name} is drawn ({(node.GetParent() as Node3D)?.Name.ToString() ?? "-"})");
+            }
+        }
+        ctx.Check(drawnMeshes.Count > 0,
+            $"the panel geometry outside the set still renders, so the parking is not a blanket hide ({drawnMeshes.Count} meshes)");
+    }
+
+    // The shipped interior's own named set, which only the install carries. It holds the gauges
+    // panel and the two warning lamps. It also holds five bullet-hole groups of three or more quads
+    // each, and the panel parts that must keep rendering.
+    internal static void CockpitNamedSet(TestContext ctx, Node3D interior)
+    {
+        ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+        foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
+        {
+            var node = FindNamed(interior, lamp);
+            ctx.Check(node != null, $"the interior carries {lamp}");
+            ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+        }
+        foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
+        {
+            var node = FindNamed(interior, group);
+            ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
+            if (node == null)
+                continue;
+            int quads = 0, lit = 0;
+            foreach (var child in node.GetChildren())
+            {
+                if (child is not Node3D quad)
+                    continue;
+                quads++;
+                if (quad.Visible)
+                    lit++;
+            }
+            ctx.Check(quads >= 3 && lit == 0,
+                $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
+        }
+        // …and the panel geometry beside them is NOT parked. The states are a named set, not a
+        // blanket hide, so a wrong predicate that hid the dashboard would fail here.
+        foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
+            ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
     }
 
     // The photograph's fill light, proved in the three things the pixels follow from, since a
@@ -515,9 +582,12 @@ internal static class WorldAndToolSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireZrdrEntry(missionZrdr, "weather.json");
 
-        var weather = WeatherState.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
-        ctx.Check(weather != null, $"C1 IA1's weather loads");
+        var weather = WeatherState.Load(missionZrdr);
+        ctx.Check(weather != null, $"{chapter} {mission}'s weather loads");
         if (weather != null)
         {
             var zone = weather.Zone("zone1");
@@ -1244,8 +1314,13 @@ internal static class WorldAndToolSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         using var textures = new TextureArchive(texturesPath);
+        // The synthetic archive carries none of the shipped samples, so it flattens every texture
+        // its own manifest lists, all of them without alpha.
+        IReadOnlyList<string> samples = ctx.SyntheticData ? ManifestTextureNames(texturesPath) : DropInSamples;
+        ctx.Check(samples.Count > 0, $"the archive has sample textures count={samples.Count}");
+
         var colors = new Dictionary<string, Color>();
-        foreach (string name in DropInSamples)
+        foreach (string name in samples)
         {
             var img = textures.FindImage(name);
             ctx.Check(img != null, $"sample texture resolves texture={name}");
@@ -1301,6 +1376,17 @@ internal static class WorldAndToolSuites
                 $"census colour is full brightness texture={name} colour={key}");
         }
         ctx.Note($"{colors.Count} sample textures flattened, {seen.Count} distinct colours");
+    }
+
+    // Every texture an unpacked archive's extraction manifest lists, empty when it lists none.
+    internal static List<string> ManifestTextureNames(string archive)
+    {
+        string manifest = Path.Combine(archive, "manifest.json");
+        if (!File.Exists(manifest))
+            return new List<string>();
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest));
+        return doc.RootElement.GetProperty("texture_infos").EnumerateArray()
+            .Select(info => info.GetProperty("name").GetString() ?? "").ToList();
     }
 
     // templates.zrd's substitute and scale_range, asserted as an A/B against the build that does not
@@ -1592,6 +1678,7 @@ internal static class WorldAndToolSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(plane);
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         using var textures = new TextureArchive(texturesPath);
@@ -1608,7 +1695,7 @@ internal static class WorldAndToolSuites
                     continue;
                 }
                 string code = mi.MaterialOverride is ShaderMaterial { Shader: { } shader } ? shader.Code : "";
-                ctx.Check(code.Contains("csky_facade_spherical(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD)", System.StringComparison.Ordinal)
+                ctx.Check(code.Contains("csky_facade_modelview(VIEW_MATRIX, MODEL_MATRIX, CAMERA_POSITION_WORLD)", System.StringComparison.Ordinal)
                           && code.Contains("res://shaders/csky_facade.gdshaderinc", System.StringComparison.Ordinal),
                     $"{flare.Name} poses through the facade look-at");
                 ctx.Check(!code.Contains("INV_VIEW_MATRIX", System.StringComparison.Ordinal),
@@ -1684,6 +1771,275 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The moon is a SphericalY facade, so a rolled eye sees it stand in the world, not in the view.
+    // Its texture is swapped for one whose top half alone is opaque, so the drawn pixels' offset
+    // from the pane's centre is its on-screen up. Godot's billboard mode is the control.
+    [Suite("moon-world-up",
+        "C1's moon as the horizon build makes it keeps the world's up on screen under an eye rolled "
+        + "90 degrees, read off a top-half-opaque stand-in texture's drawn pixels, against Godot's "
+        + "billboard mode as the control, whose up turns with the roll")]
+    internal static void MoonWorldUp(TestContext ctx)
+    {
+        const string chapter = "C1";
+        const int paneEdge = 64;
+        const float range = 3f;
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+
+        using var textures = new TextureArchive(texturesPath);
+        var builder = new WorldBuilder(GameZ.Load(gamezPath), textures);
+        var dome = builder.BuildHorizon();
+        builder.Cycler.Free();
+        var moon = (dome?.FindChild("moon", true, false)?.GetChildren() ?? new Godot.Collections.Array<Node>())
+            .OfType<MeshInstance3D>().FirstOrDefault(m => !m.IsQueuedForDeletion());
+        var quad = moon?.Mesh;
+        var moonMaterial = moon?.GetActiveMaterial(0);
+        dome?.Free();
+        ctx.Check(quad != null && moonMaterial != null, $"{chapter}'s horizon builds a moon quad");
+        if (quad == null || moonMaterial == null)
+        {
+            return;
+        }
+
+        var img = Image.CreateEmpty(16, 16, false, Image.Format.Rgba8);
+        img.FillRect(new Rect2I(0, 0, 16, 8), Colors.White);
+        var topHalf = TextureUpload.Create(img);
+        var real = (Material)moonMaterial.Duplicate();
+        if (real is ShaderMaterial shader)
+        {
+            shader.SetShaderParameter("albedo_tex", topHalf);
+        }
+        else if (real is BaseMaterial3D standard)
+        {
+            standard.AlbedoTexture = topHalf;
+        }
+        var billboard = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+            BillboardKeepScale = true,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            AlbedoTexture = topHalf,
+        };
+
+        float side = Mathf.Max(quad.GetAabb().Size.X, quad.GetAabb().Size.Y);
+        var pane = new SubViewport
+        {
+            Size = new Vector2I(paneEdge, paneEdge),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            RenderTargetClearMode = SubViewport.ClearMode.Always,
+        };
+        var eye = new Camera3D { Fov = Mathf.RadToDeg(2f * Mathf.Atan(0.8f / range)), Current = true, Near = 0.1f, Far = 100f };
+        var subject = new MeshInstance3D
+        {
+            Mesh = quad,
+            Position = new Vector3(0f, 0f, -range),
+            Scale = Vector3.One * (1f / side),
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        pane.AddChild(eye);
+        pane.AddChild(subject);
+        ctx.Host.AddChild(pane);
+        try
+        {
+            // The cosine between the drawn half's offset from the pane centre and the world's
+            // projected up, with the count of pixels drawn.
+            (float Cos, int Drawn) Up(Material material, float roll)
+            {
+                eye.Transform = new Transform3D(new Basis(Vector3.Back, roll), Vector3.Zero);
+                eye.ForceUpdateTransform();
+                var worldUp = (eye.UnprojectPosition(subject.Position + Vector3.Up * 0.1f)
+                    - eye.UnprojectPosition(subject.Position)).Normalized();
+                subject.MaterialOverride = material;
+                subject.Visible = false;
+                byte[] bare = PaneShot(pane);
+                subject.Visible = true;
+                byte[] shot = PaneShot(pane);
+                var sum = Vector2.Zero;
+                int drawn = 0;
+                for (int i = 0; i + 3 <= shot.Length && shot.Length == bare.Length; i += 3)
+                {
+                    if (shot[i] != bare[i] || shot[i + 1] != bare[i + 1] || shot[i + 2] != bare[i + 2])
+                    {
+                        int px = i / 3;
+                        sum += new Vector2((px % paneEdge) + 0.5f, (px / paneEdge) + 0.5f);
+                        drawn++;
+                    }
+                }
+                var offset = drawn == 0 ? Vector2.Zero : (sum / drawn) - (Vector2.One * (paneEdge / 2f));
+                return (offset.Normalized().Dot(worldUp), drawn);
+            }
+
+            float rolled = Mathf.Pi / 2f;
+            var (moonLevel, moonLevelDrawn) = Up(real, 0f);
+            var (moonRolled, moonRolledDrawn) = Up(real, rolled);
+            var (controlLevel, _) = Up(billboard, 0f);
+            var (controlRolled, _) = Up(billboard, rolled);
+            // The unit quad spans 0.5/0.8 of the pane and its top half draws. A pose that dropped the
+            // instance's scale would draw the mesh at its own size, which the next check keeps far from one.
+            float edge = paneEdge * 0.5f / 0.8f;
+            float expected = edge * edge / 2f;
+            ctx.Check(Mathf.Abs(Mathf.Log(side)) > 1f, $"the moon mesh's own size is far from the stand-in's unit size={side:0.##}");
+            ctx.Check(Mathf.Abs(moonLevelDrawn - expected) < expected * 0.25f
+                      && Mathf.Abs(moonRolledDrawn - expected) < expected * 0.25f,
+                $"the moon keeps its instance scale level and rolled pixels={moonLevelDrawn}/{moonRolledDrawn} expected={expected:0}");
+            ctx.Check(controlLevel > 0.9f, $"the control's up is the world's under a level eye cos={controlLevel:0.00}");
+            ctx.Check(controlRolled < 0.5f, $"the control's up turns with a rolled eye cos={controlRolled:0.00}");
+            ctx.Check(moonLevel > 0.9f, $"the moon's up is the world's under a level eye cos={moonLevel:0.00}");
+            ctx.Check(moonRolled > 0.9f, $"the moon's up stays the world's under a rolled eye cos={moonRolled:0.00}");
+            ctx.Note($"{chapter} moon: size={side:0.##} pixels={moonLevelDrawn}/{moonRolledDrawn} level={moonLevel:0.00} rolled={moonRolled:0.00}; control level={controlLevel:0.00} rolled={controlRolled:0.00}");
+        }
+        finally
+        {
+            pane.Free();
+        }
+    }
+
+    // Read off the built tree in airframe space against the model's own fixed geometry. A hinge or
+    // flare pushed off its mount (a transform applied twice, a pivot off the wrong node) reads as a
+    // gap in metres. The same hinge moved half a metre aft must read that gap.
+    [Suite("rudder-hinge-mount",
+        "the Warhawk's rudder hinge lines lie on the fin's trailing edge, a full-rudder deflection leaves "
+        + "each rudder's leading edge in place, and each wing-light flare sits within 10 cm of an airframe vertex, "
+        + "with the Devastator as the control and a hinge moved half a metre aft reading the gap; every "
+        + "stock airframe's gaps are noted")]
+    internal static void RudderHingeMount(TestContext ctx)
+    {
+        // A fifth of the half metre reported; the Devastator's wingtip flares float 3-5 cm off the tip.
+        const float onMount = 0.1f;
+        const float aftShift = 0.5f;
+        string[] judged = { "player_warhawk", "player_pfighter" };
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(judged);
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
+        {
+            if (gamez.FindByName(plane) == null)
+            {
+                continue;
+            }
+
+            bool strict = judged.Contains(plane);
+            var built = new PlaneBuilder(gamez, textures).Build(plane);
+            var fixedPoints = new List<Vector3>();
+            var rudders = new List<(Node3D Node, Transform3D ParentAcc, List<Vector3> Local)>();
+            var flares = new List<(string Name, Vector3 At)>();
+
+            static IEnumerable<Vector3> Vertices(MeshInstance3D mi)
+            {
+                if (mi.Mesh is not ArrayMesh mesh)
+                {
+                    yield break;
+                }
+                for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                {
+                    foreach (var v in mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Vertex].AsVector3Array())
+                    {
+                        yield return mi.Transform * v;
+                    }
+                }
+            }
+
+            void Walk(Node node, Transform3D parentAcc, bool moving)
+            {
+                if (node is not Node3D n3d || !n3d.Visible && !WingLights.IsFlare(n3d.Name))
+                {
+                    return;
+                }
+                var acc = parentAcc * n3d.Transform;
+                string name = n3d.Name.ToString();
+                if (WingLights.IsFlare(name))
+                {
+                    flares.Add((name, acc.Origin));
+                    return;
+                }
+                var kind = ControlSurfaces.Classify(name);
+                if (kind == ControlSurfaces.Kind.Rudder)
+                {
+                    rudders.Add((n3d, parentAcc, n3d.GetChildren().OfType<MeshInstance3D>().SelectMany(Vertices).ToList()));
+                }
+                moving |= kind != ControlSurfaces.Kind.None;
+                foreach (var child in n3d.GetChildren())
+                {
+                    if (child is MeshInstance3D mi && !moving)
+                    {
+                        fixedPoints.AddRange(Vertices(mi).Select(v => parentAcc * n3d.Transform * v));
+                    }
+                    Walk(child, acc, moving);
+                }
+            }
+
+            foreach (var child in built.GetChildren())
+            {
+                Walk(child, Transform3D.Identity, false);
+            }
+
+            // The fixed vertex nearest the hinge line, within the rudder's own span along it.
+            float FinGap(Vector3 origin, Vector3 axis, float lo, float hi) =>
+                fixedPoints.Select(p => (Along: (p - origin).Dot(axis), Off: p - origin))
+                    .Where(q => q.Along > lo - onMount && q.Along < hi + onMount)
+                    .Select(q => (q.Off - q.Along * axis).Length())
+                    .DefaultIfEmpty(float.MaxValue).Min();
+
+            var rest = rudders.Select(r => r.ParentAcc * r.Node.Transform).ToList();
+            var animator = ControlSurfaceAnimator.Build(built);
+            animator?.Advance(5.0, new FlightInput { Yaw = 1f }, animate: true);
+            for (int i = 0; i < rudders.Count; i++)
+            {
+                var (node, parentAcc, local) = rudders[i];
+                if (local.Count == 0)
+                {
+                    continue;
+                }
+                var axis = (rest[i].Basis * Vector3.Up).Normalized();
+                var origin = rest[i].Origin;
+                float edgeGap = local.Min(v => new Vector2(v.X, v.Z).Length());
+                var edge = local.MinBy(v => new Vector2(v.X, v.Z).Length());
+                float lo = local.Min(v => v.Y), hi = local.Max(v => v.Y);
+                float finGap = FinGap(origin, axis, lo, hi);
+                float shiftedGap = FinGap(origin + aftShift * Vector3.Back, axis, lo, hi);
+                var deflected = parentAcc * node.Transform;
+                float edgeSwing = (deflected * edge - rest[i] * edge).Length();
+                float tailSwing = local.Max(v => (deflected * v - rest[i] * v).Length());
+                ctx.Note($"{plane}/{node.Name}: hinge at {origin:F3}, leading edge {edgeGap:F3} m off the hinge, fin edge {finGap:F3} m off it ({shiftedGap:F3} m with the hinge {aftShift} m aft); full rudder moves the leading edge {edgeSwing:F3} m, the trailing edge {tailSwing:F3} m");
+                if (!strict)
+                {
+                    continue;
+                }
+                ctx.Check(edgeGap < onMount && finGap < onMount,
+                    $"{plane}/{node.Name} hinges on the fin's trailing edge edge={edgeGap:F3} fin={finGap:F3}");
+                ctx.Check(shiftedGap > 0.8f * aftShift,
+                    $"{plane}/{node.Name} reads a hinge moved {aftShift} m aft as a gap gap={shiftedGap:F3}");
+                ctx.Check(edgeSwing < onMount && tailSwing > 0.2f,
+                    $"{plane}/{node.Name} pivots about its leading edge edge={edgeSwing:F3} tail={tailSwing:F3}");
+            }
+            foreach (var (name, at) in flares)
+            {
+                float gap = fixedPoints.Min(p => p.DistanceTo(at));
+                float shifted = fixedPoints.Min(p => p.DistanceTo(at + aftShift * Vector3.Back));
+                ctx.Note($"{plane}/{name}: flare at {at:F3}, {gap:F3} m from the nearest airframe vertex ({shifted:F3} m moved {aftShift} m aft)");
+                if (strict)
+                {
+                    ctx.Check(gap < onMount && shifted > onMount,
+                        $"{plane}/{name} sits on an airframe vertex gap={gap:F3} shifted={shifted:F3}");
+                }
+            }
+            if (strict)
+            {
+                ctx.Check(rudders.Count == 2 && flares.Count == 2,
+                    $"{plane} carries two rudders and two flares rudders={rudders.Count} flares={flares.Count}");
+            }
+            built.Free();
+        }
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or
@@ -1694,8 +2050,16 @@ internal static class WorldAndToolSuites
         "the world's light wears the flown zone's authored SUNLIGHT_ORIENTATION, and follows it across a zone change (BL-324)")]
     internal static void SunOrientation(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
-        ctx.RequireData(zrdr, $"C2/MP2 mission zrdr");
+        var (chapter, mission) = WeatherMission(ctx, "C2", "MP2");
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
+        var zone1 = AuthoredBearing(ctx, zrdr, "zone1", -65f, 90f);
+        var zone2 = AuthoredBearing(ctx, zrdr, "zone2", -25f, 90f);
+        if (ctx.SyntheticData)
+        {
+            ctx.Check(!Mathf.IsEqualApprox(zone1.Pitch, zone2.Pitch) || !Mathf.IsEqualApprox(zone1.Yaw, zone2.Yaw),
+                $"{chapter}/{mission}'s two zones author different bearings, so a zone change can show ({zone1} against {zone2})");
+        }
 
         var sun = new DirectionalLight3D { Name = "sun-orientation-probe" };
         ctx.Host.AddChild(sun);
@@ -1706,29 +2070,29 @@ internal static class WorldAndToolSuites
             // No --sky-zone: an explicit one disarms the state machine outright, which
             // would make the zone change below unobservable. The default request is zone2, and with
             // no horizon geometry to correct it that is what the flight builds with.
-            var spec = SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" });
+            var spec = SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}" });
             var rig = new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host };
             var rigs = new List<PlayerRig> { rig };
 
             var weatherRig = new WeatherRig(spec, ctx.Host, sun);
             weatherRig.Build(zrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
-            ctx.Check(NearDegrees(sun.RotationDegrees, -25f, 90f),
-                $"C2/MP2 builds at ZONE2's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
+            ctx.Check(NearDegrees(sun.RotationDegrees, zone2.Pitch, zone2.Yaw),
+                $"{chapter}/{mission} builds at ZONE2's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
-            // Below the cloud band (19024–20124 m) the camera is in weather state 1, so the edge
-            // trigger swaps to ZONE1, and the light must ride along. Ticked twice: the first Tick
+            // Below the cloud band (19024–20124 m in C2/MP2) the camera is in weather state 1. The
+            // edge trigger swaps to ZONE1, and the light must ride along. Ticked twice: the first Tick
             // publishes the rig's new state, and the swap is asserted after it has settled.
             camera.Position = new Vector3(0f, 0f, 0f);
             weatherRig.Tick(rigs);
             ctx.Same(1, rig.CameraWeatherState, $"camera below the band is in weather state 1");
-            ctx.Check(NearDegrees(sun.RotationDegrees, -65f, 90f),
+            ctx.Check(NearDegrees(sun.RotationDegrees, zone1.Pitch, zone1.Yaw),
                 $"a zone change carries the sun to ZONE1's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
             // ...and back. A one-way test would pass on a light that moved once and stuck.
             camera.Position = new Vector3(0f, 25000f, 0f);
             weatherRig.Tick(rigs);
             ctx.Same(2, rig.CameraWeatherState, $"camera above the band is in weather state 2");
-            ctx.Check(NearDegrees(sun.RotationDegrees, -25f, 90f),
+            ctx.Check(NearDegrees(sun.RotationDegrees, zone2.Pitch, zone2.Yaw),
                 $"and back to ZONE2's on the return crossing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
 
             // The other half, asserted where it would regress: shadow mapping stays off, so this
@@ -1747,6 +2111,22 @@ internal static class WorldAndToolSuites
     // not "this is bit-identical to a round trip through Basis".
     internal static bool NearDegrees(Vector3 rotationDegrees, float pitch, float yaw)
         => Mathf.Abs(rotationDegrees.X - pitch) < 0.1f && Mathf.Abs(rotationDegrees.Y - yaw) < 0.1f;
+
+    // The mission a weather suite flies: the shipped one on an install, the invented PROBE1
+    // scope on the synthetic tree, which carries no shipped mission.
+    internal static (string Chapter, string Mission) WeatherMission(TestContext ctx, string chapter, string mission)
+        => ctx.SyntheticData ? (SyntheticMission.Chapter, SyntheticMission.Mission) : (chapter, mission);
+
+    // A zone's sun bearing in degrees: the shipped literal on an install, the record's own on the
+    // synthetic tree. The CSVM.Tests units pin the reader, so the suite's question stays the wiring.
+    internal static (float Pitch, float Yaw) AuthoredBearing(TestContext ctx, string zrdr, string zone,
+        float pitch, float yaw)
+    {
+        if (!ctx.SyntheticData)
+            return (pitch, yaw);
+        var authored = WeatherState.Load(zrdr)?.Zone(zone).SunOrientation ?? Vector3.Zero;
+        return (Mathf.RadToDeg(authored.X), Mathf.RadToDeg(authored.Y));
+    }
 
     // The world's light takes the flown zone's authored SUNLIGHT as its ENERGY, not only its
     // bearing. The CSVM.Tests units pin both mappings; neither can see the write missing from the
@@ -1824,10 +2204,15 @@ internal static class WorldAndToolSuites
         "the cockpit pass's own sun is aimed where the mission's SUNLIGHT_ORIENTATION points, in the pass's world basis, and follows the session sun across a zone change (BL-684)")]
     internal static void CockpitSunBearing(TestContext ctx)
     {
-        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
-        ctx.RequireData(litZrdr, $"C1/IA1 mission zrdr");
-        ctx.RequireData(crossZrdr, $"C2/MP2 mission zrdr");
+        var lit = WeatherMission(ctx, "C1", "IA1");
+        var cross = WeatherMission(ctx, "C2", "MP2");
+        string litZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, lit.Chapter, lit.Mission);
+        string crossZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, cross.Chapter, cross.Mission);
+        ctx.RequireData(litZrdr, $"{lit.Chapter}/{lit.Mission} mission zrdr");
+        ctx.RequireData(crossZrdr, $"{cross.Chapter}/{cross.Mission} mission zrdr");
+        var litBearing = AuthoredBearing(ctx, litZrdr, "zone1", -25f, 90f);
+        var below1 = AuthoredBearing(ctx, crossZrdr, "zone1", -65f, 90f);
+        var inside2 = AuthoredBearing(ctx, crossZrdr, "zone2", -25f, 90f);
 
         var sun = new DirectionalLight3D { Name = "cockpit-bearing-sun" };
         var camera = new Camera3D { Name = "cockpit-bearing-camera" };
@@ -1840,7 +2225,7 @@ internal static class WorldAndToolSuites
         {
             var env = new Godot.Environment();
             var litSpec = SessionSpec.Parse(
-                new[] { "--chapter=C1", "--mission=IA1", "--sky-zone=zone1" });
+                new[] { $"--chapter={lit.Chapter}", $"--mission={lit.Mission}", "--sky-zone=zone1" });
             var litRig = new WeatherRig(litSpec, ctx.Host, sun, env: env);
             litRig.Build(litZrdr, System.Array.Empty<PlayerRig>(),
                 System.Array.Empty<HorizonZone>(), _ => { });
@@ -1859,10 +2244,10 @@ internal static class WorldAndToolSuites
             var beam = -clone.GlobalBasis.Z;
             // C1's ZONE1 authors -25° pitch / 90° yaw, and the expected beam is the binary's own
             // euler→direction law rather than the reader's, so a wrong reader cannot agree with it.
-            var authored = SunBeam(Mathf.DegToRad(-25f), Mathf.DegToRad(90f));
-            ctx.Note($"C1/IA1 zone1: session sun {world}, interior sun {beam}");
+            var authored = SunBeam(Mathf.DegToRad(litBearing.Pitch), Mathf.DegToRad(litBearing.Yaw));
+            ctx.Note($"{lit.Chapter}/{lit.Mission} zone1: session sun {world}, interior sun {beam}");
             ctx.Check(world.AngleTo(authored) < 0.001f,
-                $"the session sun takes C1's authored -25°/90° bearing off={world.AngleTo(authored):0.0000} rad");
+                $"the session sun takes {lit.Chapter}'s authored {litBearing.Pitch:0.#}°/{litBearing.Yaw:0.#}° bearing off={world.AngleTo(authored):0.0000} rad");
             ctx.Check(beam.AngleTo(world) < 0.001f,
                 $"the interior's own sun is aimed the same way off={beam.AngleTo(world):0.0000} rad");
             ctx.Check(beam.AngleTo(Vector3.Forward) > 0.5f,
@@ -1878,20 +2263,20 @@ internal static class WorldAndToolSuites
             // bearing, -65°/90° below the band against -25°/90° inside it.
             var rigs = new List<PlayerRig>
                 { new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host } };
-            var crossSpec = SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" });
+            var crossSpec = SessionSpec.Parse(new[] { $"--chapter={cross.Chapter}", $"--mission={cross.Mission}" });
             var crossRig = new WeatherRig(crossSpec, ctx.Host, sun, env: env);
             crossRig.Build(crossZrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
             crossRig.RegisterExtraLighting(clone, pass.Env);
             var below = CrossedBeam(crossRig, pass, cam, rigs, Vector3.Zero, clone, sun);
             var inside = CrossedBeam(crossRig, pass, cam, rigs, new Vector3(0f, 25000f, 0f),
                 clone, sun);
-            ctx.Same(1, below.State, $"a camera under C2/MP2's 19,024-20,124 m band is in weather state 1");
+            ctx.Same(1, below.State, $"a camera under {cross.Chapter}/{cross.Mission}'s cloud band is in weather state 1");
             ctx.Same(2, inside.State, $"and one at 25,000 m is in state 2");
-            ctx.Note($"C2/MP2 below band {below.Beam}, inside band {inside.Beam}");
-            ctx.Check(below.Beam.AngleTo(SunBeam(Mathf.DegToRad(-65f), Mathf.DegToRad(90f))) < 0.001f,
-                $"below the band the interior wears ZONE1's -65°/90°");
-            ctx.Check(inside.Beam.AngleTo(SunBeam(Mathf.DegToRad(-25f), Mathf.DegToRad(90f))) < 0.001f,
-                $"inside it the interior wears ZONE2's -25°/90°");
+            ctx.Note($"{cross.Chapter}/{cross.Mission} below band {below.Beam}, inside band {inside.Beam}");
+            ctx.Check(below.Beam.AngleTo(SunBeam(Mathf.DegToRad(below1.Pitch), Mathf.DegToRad(below1.Yaw))) < 0.001f,
+                $"below the band the interior wears ZONE1's {below1.Pitch:0.#}°/{below1.Yaw:0.#}°");
+            ctx.Check(inside.Beam.AngleTo(SunBeam(Mathf.DegToRad(inside2.Pitch), Mathf.DegToRad(inside2.Yaw))) < 0.001f,
+                $"inside it the interior wears ZONE2's {inside2.Pitch:0.#}°/{inside2.Yaw:0.#}°");
             ctx.Check(below.Beam.AngleTo(inside.Beam) > 0.6f,
                 $"the crossing moved the bearing by {Mathf.RadToDeg(below.Beam.AngleTo(inside.Beam)):0.#}°");
             ctx.Check(below.Off < 0.001f && inside.Off < 0.001f,
@@ -1917,8 +2302,11 @@ internal static class WorldAndToolSuites
         "the cloud-band whiteout draws under each pane's own cockpit pass, so a full-opacity band whites the window out and leaves the canopy, panel and gauges clear, in cockpit view and in chase view alike, while --no-fog clears it")]
     internal static void WeatherCockpitWhiteout(TestContext ctx)
     {
-        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
-        ctx.RequireData(zrdr, $"C1/IA1 mission zrdr");
+        var (chapter, mission) = WeatherMission(ctx, "C1", "IA1");
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
+        // C1/IA1's band is 970-1124 m, so its centre is 1047 m.
+        float core = ctx.SyntheticData ? WeatherState.Load(zrdr)?.CloudBandCentre ?? 0f : 1047f;
 
         // The order the picture is composed in, asserted on the constants themselves: the flare
         // and the whiteout are the sky, the pass is the cockpit in front of it, and the HUD is the
@@ -1943,7 +2331,7 @@ internal static class WorldAndToolSuites
         CockpitOverlay? pass = null;
         try
         {
-            var spec = SessionSpec.Parse(new[] { "--chapter=C1", "--mission=IA1" });
+            var spec = SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}" });
             var rigs = new List<PlayerRig>
             {
                 new PlayerRig { Index = 0, Camera = camera0, HudParent = pane0 },
@@ -1966,7 +2354,7 @@ internal static class WorldAndToolSuites
 
             // C1/IA1's band is 970-1124 m with a 1032-1062 m opaque core, so the centre is a
             // total whiteout and the flicker's own guard leaves it there untouched.
-            camera0.Position = new Vector3(0f, 1047f, 0f);
+            camera0.Position = new Vector3(0f, core, 0f);
             camera1.Position = Vector3.Zero;
             weather.Tick(rigs);
             float inside = rigs[0].Whiteout?.Color.A ?? -1f;
@@ -2002,7 +2390,7 @@ internal static class WorldAndToolSuites
 
             // --no-fog covers the whiteout as it covers the fog, at the same altitude.
             var clearSpec = SessionSpec.Parse(
-                new[] { "--chapter=C1", "--mission=IA1", "--no-fog" });
+                new[] { $"--chapter={chapter}", $"--mission={mission}", "--no-fog" });
             var clearRigs = new List<PlayerRig>
                 { new PlayerRig { Index = 0, Camera = camera0, HudParent = pane1 } };
             var clearWeather = new WeatherRig(clearSpec, ctx.Host, sun);
@@ -2079,7 +2467,7 @@ internal static class WorldAndToolSuites
     [Suite("nodelab-visibility", "the node lab's tree row follows live Visible, not the hide button's last action")]
     internal static void NodeLabVisibility(TestContext ctx)
     {
-        ctx.WithWorld("C2", collision: false, world =>
+        EffectStageSuiteHelper.WithAnimWorld(ctx, "C2", world =>
         {
             DestructibleRegistry.Instance? chosen = null;
             Node3D? healthy = null;
@@ -2103,9 +2491,9 @@ internal static class WorldAndToolSuites
                 return;
             }
 
-            var selection = new SelectionService(world.Session.Root, ctx.Camera);
-            var lab = new NodeLab(world.Session.Root, selection, world.Runtime, world.Session.Program,
-                world.Session.Builder.Scene, collisionBuilt: false);
+            var selection = new SelectionService(world.Root, ctx.Camera);
+            var lab = new NodeLab(world.Root, selection, world.Runtime, world.Program,
+                world.Scene, collisionBuilt: false);
             ctx.Host.AddChild(selection);
             ctx.Host.AddChild(lab);
             try
@@ -2137,6 +2525,117 @@ internal static class WorldAndToolSuites
                 selection.Free();
             }
         });
+    }
+
+    // Clicks a lazily loaded branch's fold arrow through the viewport, the path where Godot refuses
+    // Tree.CreateItem. The first click also fills the branch from inside the click, which must
+    // leave it collapsed on its placeholder. The second must expand it with no engine error and
+    // leave the fill to the deferred call. ExpandForTest stands in for that call.
+    [Suite("nodelab-click-expand", "a click on a node lab fold arrow expands a lazy branch with no engine error, and a fill Godot refuses inside the click leaves the branch collapsed on its placeholder for the next expand")]
+    internal static void NodeLabClickExpand(TestContext ctx)
+    {
+        EffectStageSuiteHelper.WithAnimWorld(ctx, "C2", world =>
+        {
+            var selection = new SelectionService(world.Root, ctx.Camera);
+            var lab = new NodeLab(world.Root, selection, world.Runtime, world.Program,
+                world.Scene, collisionBuilt: false);
+            ctx.Host.AddChild(selection);
+            ctx.Host.AddChild(lab);
+            try
+            {
+                lab.Toggle();
+                var tree = lab.TreeForTest()!;
+                var target = tree.GetRoot()?.GetChildren().FirstOrDefault(OnPlaceholder);
+                ctx.Check(target != null, $"the world root has a collapsed branch on its placeholder");
+                if (target == null)
+                {
+                    return;
+                }
+                Control top = tree;
+                while (top.GetParent() is Control parent)
+                {
+                    top = parent;
+                }
+                PauseBoardSuites.Settle(top);
+
+                // Godot's fold check for a depth-1 row is x below two item margins past the panel's
+                // content edge. The row's y comes from asking the tree, not from its layout.
+                var panel = tree.GetThemeStylebox("panel").GetOffset();
+                float x = panel.X + 1.5f * tree.GetThemeConstant("item_margin");
+                float? y = null;
+                for (float probe = 0f; probe < tree.Size.Y && y == null; probe += 2f)
+                {
+                    if (tree.GetItemAtPosition(new Vector2(tree.Size.X / 2f, probe)) == target)
+                    {
+                        y = probe + 4f;
+                    }
+                }
+                ctx.Check(y != null, $"the target row is on screen in a tree of size {tree.Size}");
+                if (y == null)
+                {
+                    return;
+                }
+                var at = tree.GetGlobalTransform() * new Vector2(x, y.Value);
+                void Click()
+                {
+                    var viewport = tree.GetViewport();
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
+                }
+
+                // The refused fill: Godot prints its refusal by design, so printing is off for it.
+                bool ranInside = false;
+                System.Exception? thrown = null;
+                void FillInside(TreeItem item)
+                {
+                    if (item != target || item.Collapsed)
+                    {
+                        return;
+                    }
+                    ranInside = true;
+                    Engine.PrintErrorMessages = false;
+                    try
+                    {
+                        lab.ExpandForTest(item);
+                    }
+                    catch (System.Exception e)
+                    {
+                        thrown = e;
+                    }
+                    finally
+                    {
+                        Engine.PrintErrorMessages = true;
+                    }
+                }
+                tree.ItemCollapsed += FillInside;
+                Click();
+                tree.ItemCollapsed -= FillInside;
+                ctx.Check(ranInside, $"the click at {at} reached the fold arrow and expanded the branch");
+                ctx.Check(thrown == null, $"a fill inside the click does not throw ({thrown?.GetType().Name}: {thrown?.Message})");
+                ctx.Check(OnPlaceholder(target),
+                    $"and leaves the branch collapsed on its placeholder collapsed={target.Collapsed} rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+
+                int? errorsBefore = TestHarness.EngineErrorsSoFar();
+                Click();
+                int? errorsAfter = TestHarness.EngineErrorsSoFar();
+                ctx.Check(!target.Collapsed && target.GetChildCount() == 1 && target.GetFirstChild().GetText(0) == "…",
+                    $"a plain click expands the branch and leaves the fill for later collapsed={target.Collapsed} rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+                ctx.Check((errorsAfter ?? 0) == (errorsBefore ?? 0),
+                    $"with no engine error ({(errorsAfter ?? 0) - (errorsBefore ?? 0)} new line(s), log {(errorsBefore != null ? "read" : "missing")})");
+
+                lab.ExpandForTest(target);
+                ctx.Check(target.GetChildCount() >= 1 && target.GetFirstChild().GetText(0) != "…",
+                    $"the fill after the click turns the placeholder into real rows rows={target.GetChildCount()} first='{target.GetFirstChild()?.GetText(0)}'");
+            }
+            finally
+            {
+                lab.Free();
+                selection.Free();
+            }
+        });
+
+        static bool OnPlaceholder(TreeItem item) =>
+            item.Collapsed && item.GetChildCount() == 1 && item.GetFirstChild().GetText(0) == "…";
     }
 
     // Aims straight down at a sample of C4's 1024 m terrain tiles with the cloud deck hidden. The

@@ -53,8 +53,8 @@ public static class VrVignetteSetting
         Lookup.Resolve(flagWord, savedWord, null, Default);
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.VrVignette);
+    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps).</summary>
+    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().VrVignette;
 
     /// <summary>How a row shows <paramref name="word"/>: a never-set one as Off.</summary>
     public static string Label(string? word) => LabelWords[(int)LevelOf(word)];

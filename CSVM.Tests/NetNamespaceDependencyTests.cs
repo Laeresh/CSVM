@@ -11,8 +11,8 @@ namespace CSVM.Tests;
 /// reference <c>System.Net</c>, nor anything under <c>Godot</c> except its plain math structs, in
 /// a signature or in a method body. That is what keeps a session ignorant of what carries it, and
 /// lets the loopback drive a match in a plain unit test. The carriers that must name an engine type
-/// to exist are listed by full name below. The other facts hold Godot's networking, WebRTC and Steam
-/// names to their carriers. The scanner throws when the subject filter matches no type, so this
+/// to exist are listed by full name below. The other facts hold Godot's networking and WebRTC names
+/// to their carriers. The scanner throws when the subject filter matches no type, so this
 /// cannot pass by scanning nothing.
 /// </summary>
 [Trait("Tier", "Quick")]
@@ -20,7 +20,6 @@ public sealed class NetNamespaceDependencyTests
 {
     private const string Transport = "CSVM.Net.EnetTransport";
     private const string PortMap = "CSVM.Net.UpnpPortMap";
-    private const string Steam = "CSVM.Net.SteamTransport";
     private const string LanSocket = "CSVM.Net.LanDiscoverySocket";
     private const string WebRtc = "CSVM.Net.WebRtcTransport";
 
@@ -95,24 +94,6 @@ public sealed class NetNamespaceDependencyTests
         Assert.Empty(webRtc.Where(v => Subject(v) != WebRtc));
     }
 
-    [Fact]
-    public void OnlyTheSteamTransportMayNameASteamType()
-    {
-        // Over every namespace, not just the seam: an SDK reference anywhere in the engine is what
-        // this is looking for. It cannot assert the Steam carrier itself names one, since no build
-        // here links an SDK. The type's own name is pinned instead, so a rename fails this.
-        Assert.Equal(Steam, typeof(SteamTransport).FullName);
-
-        var steam = AssemblyDependencyScan.Violations(
-            AssemblyPath(),
-            ns => true,
-            name => name.StartsWith("Steamworks.", StringComparison.Ordinal)
-                || name.StartsWith("Godot.Steam", StringComparison.Ordinal)
-                || name.Contains("GodotSteam", StringComparison.Ordinal));
-
-        Assert.Empty(steam.Where(v => Subject(v) != Steam));
-    }
-
     private static string AssemblyPath() => Path.Combine(AppContext.BaseDirectory, "CSVM.dll");
 
     // A violation reads "<subject type> -> <referenced type>". A compiler-generated nested type
@@ -126,5 +107,5 @@ public sealed class NetNamespaceDependencyTests
 
     private static bool Exempt(string violation) =>
         !violation.Contains("System.Net.", StringComparison.Ordinal)
-        && Subject(violation) is Transport or PortMap or Steam or LanSocket or WebRtc;
+        && Subject(violation) is Transport or PortMap or LanSocket or WebRtc;
 }

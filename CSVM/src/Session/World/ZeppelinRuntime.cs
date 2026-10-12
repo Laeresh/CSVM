@@ -406,6 +406,50 @@ public sealed partial class ZeppelinRuntime : Node
         }
     }
 
+    /// <summary>Appends what a Zeppelin vs Zeppelin bot attacks on the hull placed at
+    /// <paramref name="index"/>. That is its pooled gas bags, broadside cannons and engines, and the
+    /// turrets under it. A cannon stands only while it is out of the hull. Nothing for a dormant
+    /// hull.</summary>
+    public void CollectHullParts(int index, List<HullPart> into)
+    {
+        if (index < 0 || index >= _live.Count || _live[index] is not { Dormant: false } zep)
+        {
+            return;
+        }
+
+        foreach (var inst in zep.GasbagInstances)
+        {
+            Add(inst, HullPartKind.Gasbag, true);
+        }
+
+        foreach (var cannon in zep.CannonZones)
+        {
+            Add(cannon.Instance, HullPartKind.Cannon, CannonOut(zep, cannon.Record.Cannon));
+        }
+
+        foreach (var inst in zep.EngineZones.Values)
+        {
+            if (inst != null)
+            {
+                Add(inst, HullPartKind.Engine, true);
+            }
+        }
+
+        foreach (var turret in Turrets()?.Emplacements ?? Array.Empty<TurretController>())
+        {
+            if (turret.Site is { } site && GodotObject.IsInstanceValid(site) && (site == zep.Host || zep.Host.IsAncestorOf(site)))
+            {
+                into.Add(new HullPart(turret, HullPartKind.Turret, turret.Alive ? turret.WorldPosition : default, turret.Alive));
+            }
+        }
+
+        void Add(DestructibleRegistry.Instance inst, HullPartKind kind, bool active)
+        {
+            bool stands = active && ZoneIsAlive(inst);
+            into.Add(new HullPart(inst, kind, stands ? inst.Centre : default, stands));
+        }
+    }
+
     /// <summary>Builds every zeppelin's damage zones over the world's destructible registry
     /// (the class summary's seeding rules) and starts the per-step damage poll. Idempotent.</summary>
     public void WireDamage(AnimRuntime runtime)
@@ -676,6 +720,25 @@ public sealed partial class ZeppelinRuntime : Node
         });
     }
 
+    // Whether the broadside cannon on that node is out of the hull: engaged and not stowed.
+    private static bool CannonOut(LiveZeppelin zep, string node)
+    {
+        if (zep.Broadside is not { CannonsEngaged: true } broadside)
+        {
+            return false;
+        }
+
+        foreach (var cannon in broadside.Cannons)
+        {
+            if (string.Equals(cannon.Record.Node, node, StringComparison.OrdinalIgnoreCase))
+            {
+                return cannon.State != ZeppelinCannonState.Stowed;
+            }
+        }
+
+        return false;
+    }
+
     private static bool ZoneIsAlive(DestructibleRegistry.Instance? inst) =>
         inst == null || inst.Status != DestructibleRegistry.State.Destroyed;
 
@@ -798,9 +861,7 @@ public sealed partial class ZeppelinRuntime : Node
             // Instant Action's zeppelin_run is won by emptying this list, so an engine that can
             // never die makes that mode unwinnable on its own objective. Say it outright rather
             // than leaving it to be read out of the census line below.
-            GD.PushWarning($"zep: '{def.Node}' has {def.Engines.Count - pooled} engine(s) with no " +
-                           $"destructible pool, they can never die, so an Instant Action " +
-                           $"zeppelin run on this hull cannot be won on engines");
+            Log.Warn("flight", $"zep: '{def.Node}' has {def.Engines.Count - pooled} engine(s) with no destructible pool, they can never die, so an Instant Action zeppelin run on this hull cannot be won on engines");
         }
 
         // cannon_health cannons: record hp beats the def pool (Reseed); the record's stages

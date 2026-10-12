@@ -71,9 +71,9 @@ public enum DogfightMissionType : byte
     StuntRace = 3,
 }
 
-/// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
-/// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
-/// rendering one pose per closed door until the pattern goes. Reaches
+/// <summary>The enhanced presentation's screen-space passes and world layers, as doors a run can
+/// close one at a time. Each can lay a pattern of its own over the frame. Bisecting a full-screen
+/// artefact means rendering one pose per closed door until the pattern goes. Reaches
 /// <c>--graphics=enhanced</c> alone, the faithful path running none of them.</summary>
 [Flags]
 public enum EnhancedPasses
@@ -92,6 +92,10 @@ public enum EnhancedPasses
     /// <summary><c>--no-soft-shadows</c>: the sun's penumbra, angular distance and blur both 0,
     /// leaving a hard shadow edge rather than no shadow.</summary>
     SoftShadows = 8,
+
+    /// <summary><c>--no-ocean</c>: the wave ocean (<c>Effects.Ocean</c>), so the flat sea-level
+    /// sheet draws as it does without one.</summary>
+    Ocean = 16,
 }
 
 /// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
@@ -102,6 +106,12 @@ public enum EnhancedPasses
 /// <c>Pos</c> overrides the squadron's placement outright, in world metres.</summary>
 public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int? Accent = null,
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
+
+/// <summary>One bot seat a scripted network host adds (<c>--vs-bot=</c>, <c>--vs-bots=</c>).
+/// <c>Plane</c> is a stock airframe node, or null for Random, which the host resolves at launch.
+/// <c>Team</c> is a lobby team number, 0 for none. An empty <c>Callsign</c> is drawn by the host
+/// from the pilot names.</summary>
+public readonly record struct VsBotEntry(string? Plane, Net.NetBotSkill Skill, int Team, string Callsign);
 
 /// <summary>One <c>--zep=</c> request: the zeppelin record to graft onto the empty stage, and the
 /// two overrides the stage needs. <c>Team</c> reaches the hull as the borrowed def's own team id,
@@ -141,6 +151,9 @@ public sealed record SessionSpec
     /// <summary>The mission a lobby Stunt Race flies: the chapter's Instant Action world, whose
     /// <c>ia.json</c> carries the Danger Zone course. No multiplayer folder ships one.</summary>
     public const string StuntRaceMission = "IA1";
+
+    /// <summary>The <c>--vs-bot=</c> plane word that asks for Random, as an empty plane does.</summary>
+    public const string RandomBotPlane = "random";
 
     // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
@@ -227,6 +240,11 @@ public sealed record SessionSpec
     public bool VsAutoRespawn { get; private set; } = true;
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
+    /// <summary>Resolved. The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
+    /// bot seats a <c>--net-host</c> Dogfight or stunt race adds after its guests, a local one after
+    /// its panes. Empty without <see cref="Versus"/> or <see cref="Stunt"/>, on a guest, and in
+    /// a Capture the Flag or a Zeppelin vs Zeppelin with no <c>--net-host</c>. Cut to the seats <see cref="Players"/> leaves.</summary>
+    public IReadOnlyList<VsBotEntry> VsBots { get; private set; } = Array.Empty<VsBotEntry>();
     /// <summary>Resolved: the lobby type this session flies. Capture the Flag (<c>--ctf</c>) flies the
     /// flags for the lobby teams. Zeppelin vs Zeppelin (<c>--zvz</c>) flies the two hulls. Each needs
     /// <see cref="Versus"/>, and Capture the Flag beats Zeppelin vs Zeppelin. Stunt Race comes only
@@ -446,6 +464,10 @@ public sealed record SessionSpec
     /// See <c>docs/cli.md</c>.</summary>
     public EnhancedPasses SkippedPasses { get; private set; }
 
+    /// <summary><c>--dump-ocean-mask=&lt;path&gt;</c>: where the wave ocean writes its baked shore
+    /// mask as a PNG when it builds; empty for none. See <c>docs/cli.md</c>.</summary>
+    public string OceanMaskPath { get; private set; } = "";
+
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
     ///, flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
@@ -501,7 +523,12 @@ public sealed record SessionSpec
 
     // ---- The aircraft -------------------------------------------------------------------------
 
-    public string PlaneName { get; private set; } = "player_bhawk";
+    /// <summary>The aircraft a spec flies when <c>--plane=</c> names none, set once at startup.
+    /// <c>--synthetic-data</c> points it at the stand-in, the one aircraft its tree carries. A spec
+    /// a suite builds without naming a plane then flies what the data holds.</summary>
+    public static string DefaultPlane { get; set; } = "player_bhawk";
+
+    public string PlaneName { get; private set; } = DefaultPlane;
     /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named.</summary>
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
     /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
@@ -970,6 +997,14 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
     /// <see cref="ParseDamageScript"/>.</summary>
     public string? DebugDamage { get; private set; }
+    /// <summary>Resolved. <c>--debug-ocean=&lt;field&gt;:&lt;value&gt;,...[,open]</c>: the ocean
+    /// lab's overrides for this launch, filtered through <see cref="Effects.SeaState.FilterOverrides"/>
+    /// and null outside <c>--freecam</c>, the only mode the lab exists in.</summary>
+    public string? DebugOcean { get; private set; }
+
+    /// <summary><c>--debug-wake=speed[,turn]</c>: the wave ocean sails its first wake ship on an arc,
+    /// at the speed in m/s and turning the degrees a second. A capture then shows a chosen speed and turn.</summary>
+    public Godot.Vector2? DebugWake { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
     /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
@@ -1058,6 +1093,12 @@ public sealed record SessionSpec
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
 
+    /// <summary><c>--synthetic-data</c>: write an invented extraction tree into the scratch folder
+    /// and read it in place of the data root. Off unless given, and dropped with a note beside
+    /// <c>--extract</c>, which would otherwise write an extraction into that tree. See
+    /// <see cref="Tooling.SyntheticData"/>.</summary>
+    public bool SyntheticData { get; private set; }
+
     /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
     /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
     /// the install check refuses; null when the flag was absent.</summary>
@@ -1093,20 +1134,11 @@ public sealed record SessionSpec
     /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
     public string? GraphicsMode { get; private set; }
 
-    /// <summary><c>--shadow-quality=off|low|medium|high|ultra</c>, the enhanced sun's shadow level.
-    /// Null when not given, and for an unrecognised word with a warning. Beats the saved option and
-    /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
-    public string? ShadowQuality { get; private set; }
-
-    /// <summary><c>--view-distance=normal|far|veryfar|unlimited</c>, how far Enhanced draws the
-    /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
-    /// the saved option and the config key, including under <c>--det</c>.</summary>
-    public string? ViewDistance { get; private set; }
-
-    /// <summary><c>--anti-aliasing=off|fxaa|smaa|taa|fsr2</c>, the 3D viewports' method. Null when
-    /// not given, and for an unknown word with a note. Beats the saved option, the config key and the
-    /// VR profile, including under <c>--det</c>.</summary>
-    public string? AntiAliasing { get; private set; }
+    /// <summary>The word each registered setting's flag names (<see cref="Utils.WordSettings.All"/>),
+    /// such as <c>--shadow-quality=</c>. Null where not given, and for an unknown word with a warning.
+    /// A flag beats the saved option and the config key, including under <c>--det</c>, the same rule
+    /// <see cref="GraphicsMode"/> keeps.</summary>
+    public Utils.WordValues WordFlags { get; } = new();
 
     /// <summary><c>--msaa=off|2x|4x|8x</c>, the root viewport's 3D MSAA in place of the project's 4x.
     /// Null when not given, and for an unknown word with a note. Beats the VR profile.</summary>
@@ -1156,6 +1188,10 @@ public sealed record SessionSpec
     /// next.</summary>
     public bool DebugFinalizersAcrossRun { get; private set; }
 
+    /// <summary><c>--debug-mem</c>: a <c>Utils.MemoryCensus</c> line after every <c>--run-tests</c>
+    /// suite, and once a wall second in any other run.</summary>
+    public bool DebugMem { get; private set; }
+
     public bool NoFocus { get; private set; }
 
     /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
@@ -1193,6 +1229,9 @@ public sealed record SessionSpec
 
         // Split after the loop, so a bare port falls back to --net-port-base in either order.
         string? netHost = null;
+        // The two bot flags, joined after the loop so their order on the line does not matter.
+        var botEntries = new List<VsBotEntry>();
+        int botCount = 0;
 
         void Deprecate(string old, string replacement)
         {
@@ -1238,6 +1277,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
             else if (arg.StartsWith("--vs-lives=")) { s.VsLives = Math.Max(0, int.Parse(arg["--vs-lives=".Length..])); s.VsLivesExplicit = true; }
             else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
+            else if (arg.StartsWith("--vs-bots=")) { botCount = ParseBotCount(arg["--vs-bots=".Length..], notes); }
+            else if (arg.StartsWith("--vs-bot=")) { botEntries = ParseBots(arg["--vs-bot=".Length..], notes); }
             else if (arg == "--ctf") { s._ctfArg = true; }
             else if (arg == "--ctf=home") { s._ctfArg = true; s.FlagHomeToCapture = true; }
             else if (arg == "--zvz") { s._zvzArg = true; }
@@ -1294,6 +1335,7 @@ public sealed record SessionSpec
             else if (arg == "--gc-types") { s.Perf = true; s.GcTypes = true; }
             else if (arg == "--debug-finalizers") { s.DebugFinalizers = true; }
             else if (arg == "--debug-finalizers=run") { s.DebugFinalizersAcrossRun = true; }
+            else if (arg == "--debug-mem") { s.DebugMem = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }
@@ -1428,6 +1470,9 @@ public sealed record SessionSpec
             }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
             else if (arg.StartsWith("--debug-damage=")) { s.DebugDamage = arg["--debug-damage=".Length..]; }
+            else if (arg == "--debug-ocean") { s.DebugOcean ??= ""; }
+            else if (arg.StartsWith("--debug-ocean=")) { s.DebugOcean = arg["--debug-ocean=".Length..]; }
+            else if (arg.StartsWith("--debug-wake=")) { s.DebugWake = ParseDebugWake(arg["--debug-wake=".Length..]); }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }
             else if (arg == "--dump-markers") { s.DumpMarkers = true; }
             else if (arg.StartsWith("--dump-markers=")) { s.DumpMarkers = true; s.DumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -1666,6 +1711,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
+            else if (arg == "--synthetic-data") { s.SyntheticData = true; }
             else if (arg == "--extract") { s.ExtractInstall = ""; }
             else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
             else if (arg == "--extract-force") { s.ExtractForce = true; }
@@ -1687,6 +1733,8 @@ public sealed record SessionSpec
             else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
             else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
+            else if (arg == "--no-ocean") { s.SkippedPasses |= EnhancedPasses.Ocean; }
+            else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {
@@ -1700,17 +1748,9 @@ public sealed record SessionSpec
                     notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
                 }
             }
-            else if (TryWordFlag(arg, Utils.ShadowQualitySetting.Lookup, notes, out string? shadowWord))
+            else if (TryWordFlag(arg, notes, out var wordSetting, out string? flagWord))
             {
-                s.ShadowQuality = shadowWord ?? s.ShadowQuality;
-            }
-            else if (TryWordFlag(arg, Utils.ViewDistance.Lookup, notes, out string? viewWord))
-            {
-                s.ViewDistance = viewWord ?? s.ViewDistance;
-            }
-            else if (TryWordFlag(arg, Utils.AntiAliasingSetting.Lookup, notes, out string? aaWord))
-            {
-                s.AntiAliasing = aaWord ?? s.AntiAliasing;
+                s.WordFlags[wordSetting] = flagWord ?? s.WordFlags[wordSetting];
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
@@ -1913,6 +1953,16 @@ public sealed record SessionSpec
                 }
             }
         }
+        else if (s.SyntheticData)
+        {
+            notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
+            s.SyntheticData = false;
+        }
+
+        if (s.SyntheticData && s.PlaneNames.Count == 0)
+        {
+            s.PlaneName = Tooling.SyntheticPlane.Plane;
+        }
 
         if (netHost != null)
         {
@@ -1926,6 +1976,7 @@ public sealed record SessionSpec
             notes.Add(new Note("core", "--net-shape does nothing without --net-join or --net-host, ignoring it"));
         }
 
+        s.VsBots = BotField(botEntries, botCount);
         s._notes = notes;
         s.Deprecated = deprecated;
         s.LogSpecs = logSpecs;
@@ -1933,6 +1984,11 @@ public sealed record SessionSpec
         s.Resolve();
         return s;
     }
+
+    /// <summary>The callsign the <paramref name="ordinal"/>th bot of a command line takes, counted
+    /// from 1, when it names none and the pilot-name pool is empty or spent.</summary>
+    public static string BotCallsign(int ordinal) =>
+        "Bot " + ordinal.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Splits a <see cref="NetJoin"/> value into the address and the port to join. A
     /// value naming no port takes <paramref name="defaultPort"/>, the launcher's
@@ -1957,24 +2013,28 @@ public sealed record SessionSpec
         return (address.Length == 0 ? "*" : address, port);
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line
-    /// <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must
-    /// be written here, or the pristine base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and
-    /// <see cref="Stunt"/> instead. The vs arguments are a screen's match rules, a Stunt Race's window among them.
-    /// ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever
-    /// <c>--mission</c> says. The type is all a guest hears of the host's mission.</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line <paramref name="cli"/>,
+    /// never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
+    /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
+    /// are a screen's rules, a Stunt Race's window among them, and <paramref name="bots"/> the
+    /// join board's rows a local Dogfight or stunt run seats. ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever <c>--mission</c> says.
+    /// The type is all a guest hears of the host's mission.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
         int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
-        DogfightMissionType missionType = DogfightMissionType.Deathmatch, bool flagHomeToCapture = false)
+        DogfightMissionType missionType = DogfightMissionType.Deathmatch, bool flagHomeToCapture = false,
+        IReadOnlyList<VsBotEntry>? bots = null)
     {
         var names = planeNodes.ToArray();
         var type = MenuType(missionType, mode, iaDef);
         bool ctf = type == DogfightMissionType.CaptureTheFlag;
         bool race = type == DogfightMissionType.StuntRace;
+        bool deathmatch = mode == MenuMode.Versus && type == DogfightMissionType.Deathmatch;
+        bool stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt;
         return cli with
         {
+            VsBots = (deathmatch || stunt) && bots != null ? bots.ToArray() : Array.Empty<VsBotEntry>(),
             MissionType = type,
             FlagHomeToCapture = ctf && flagHomeToCapture,
             Mission = type switch
@@ -1996,7 +2056,7 @@ public sealed record SessionSpec
             // plane rather than to whatever the last session flew.
             PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
             Players = Mathf.Clamp(names.Length, 1, UI.Boards.SplitScreen.MaxPlayers),
-            Stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt,
+            Stunt = stunt,
             Versus = mode == MenuMode.Versus,
             VsKills = cli.VsKillsExplicit ? cli.VsKills : vsKills ?? cli.VsKills,
             VsTimeMinutes = cli.VsTimeExplicit ? cli.VsTimeMinutes : vsTimeMinutes ?? cli.VsTimeMinutes,
@@ -2320,6 +2380,20 @@ public sealed record SessionSpec
         return string.Join(",", kept);
     }
 
+    /// <summary>Parse <c>--debug-wake=speed[,turn]</c>: a speed in m/s and a turn in degrees a second,
+    /// zero when left out. Null, with a warning, for anything else.</summary>
+    public static Vector2? ParseDebugWake(string spec)
+    {
+        var parts = spec.Split(',');
+        float turn = 0f;
+        if (parts.Length is 1 or 2
+            && float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float speed)
+            && (parts.Length == 1 || float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out turn)))
+            return new Vector2(speed, turn);
+        Log.Warn("ui", $"--debug-wake={spec} is not <speed>[,<turn>]; ignoring it");
+        return null;
+    }
+
     /// <summary>Parse <c>--debug-damage[=script]</c>, the world damage lab's ordered script:
     /// <c>node=&lt;cs_name&gt;</c>, <c>pool=&lt;n&gt;</c>, <c>hp=&lt;value&gt;</c>, <c>kill</c>,
     /// <c>reset</c>, <c>tick=&lt;seconds&gt;</c> and <c>open</c>, comma-separated. Any other step is
@@ -2401,8 +2475,37 @@ public sealed record SessionSpec
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
-    // Whether arg is the setting's own flag. A word the setting does not know comes back null with a
-    // note, so the earlier value stands and the saved option still decides.
+    // Whether arg is a registered setting's flag. A word the setting does not know comes back null
+    // with a note, so the earlier value stands and the saved option still decides.
+    private static bool TryWordFlag(string arg, List<Note> notes,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Utils.WordSetting? setting, out string? word)
+    {
+        foreach (var candidate in Utils.WordSettings.All)
+        {
+            string prefix = candidate.Flag + "=";
+            if (candidate.Flag == null || !arg.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            setting = candidate;
+            word = arg[prefix.Length..];
+            if (!candidate.IsWord(word))
+            {
+                notes.Add(new Note("world", $"{prefix}{word} is not one of {string.Join("/", candidate.Words)}, keeping the saved option's value"));
+                word = null;
+            }
+
+            return true;
+        }
+
+        setting = null;
+        word = null;
+        return false;
+    }
+
+    // Whether arg is the flag of a setting outside the registry, such as the VR profile's. The same
+    // rule for an unknown word: null with a note.
     private static bool TryWordFlag(string arg, Utils.WordSetting setting, List<Note> notes, out string? word)
     {
         word = null;
@@ -2620,6 +2723,11 @@ public sealed record SessionSpec
             Warn("ui", "--debug-damage is a --freecam/--anim-lab tool; ignoring it here (--damage-test is the headless twin)");
             DebugDamage = null;
         }
+        if (DebugOcean != null && Mode != SessionMode.Freecam)
+        {
+            Warn("ui", "--debug-ocean is the --freecam ocean lab's twin; ignoring it here");
+            DebugOcean = null;
+        }
         // A preset with nothing to apply to would otherwise be a silent no-op, and a run that shows
         // no damage would read as the staging being broken rather than as the flag being unused.
         if (AiHullDamage != null && AiPlanes == null)
@@ -2640,6 +2748,8 @@ public sealed record SessionSpec
             "is not deps/dest/open/all/node=<cs_name>");
         DebugDamage = FilterSpec(DebugDamage, ParseDamageScript, "--debug-damage step",
             "is not node=/pool=/hp=/kill/reset/tick=/open");
+        DebugOcean = FilterSpec(DebugOcean, Effects.SeaState.FilterOverrides, "--debug-ocean token",
+            "is not open or <field>:<number> over a SeaState field");
 
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
@@ -2690,9 +2800,10 @@ public sealed record SessionSpec
             Print($"--players={Players} needs flight (nothing to fly in --viewer); using 1");
             Players = 1;
         }
+        ResolveBots();
         // The menu refuses to start a Dogfight below 2 joined pilots; the CLI has no join flow to
         // gate on, so it only warns and runs with whatever --players= asked for.
-        if (Versus && Players < 2)
+        if (Versus && Players + VsBots.Count < 2)
         {
             Warn("core", $"--vs with --players={Players} needs at least 2 pilots to fight (the menu enforces this; the CLI only warns)");
         }
@@ -2722,6 +2833,36 @@ public sealed record SessionSpec
         }
 
         ResolvePlacement();
+    }
+
+    // The bot flags' scope, each refusal named and the flags dropped, as --ctf's is. A bot is a seat
+    // the host's roster carries, so a guest never seats one; a local match seats them in its own.
+    // The field is cut to the seats this machine's own pilots leave; guests can cut it again.
+    private void ResolveBots()
+    {
+        if (VsBots.Count == 0)
+        {
+            return;
+        }
+
+        string? refusal = !Versus && !Stunt ? "a Dogfight or a stunt race seats bots; ignoring them without --vs or --stunt"
+            : NetJoin != null ? "a guest flies the host's roster, whose bots the host seats; ignoring them"
+            : MissionType == DogfightMissionType.CaptureTheFlag && NetHostPort == null ? "Capture the Flag runs its flags over the wire alone, so it seats bots only beside --net-host; ignoring them"
+            : MissionType == DogfightMissionType.ZeppelinVsZeppelin && NetHostPort == null ? "Zeppelin vs Zeppelin runs over the wire alone, so it seats bots only beside --net-host; ignoring them"
+            : null;
+        if (refusal != null)
+        {
+            Warn("core", $"--vs-bot/--vs-bots: {refusal}");
+            VsBots = Array.Empty<VsBotEntry>();
+            return;
+        }
+
+        int room = Net.NetSeats.MaxPlayers - Players;
+        if (VsBots.Count > room)
+        {
+            Warn("core", $"--vs-bot/--vs-bots: {VsBots.Count} bots and {Players} pilot(s) here pass the {Net.NetSeats.MaxPlayers}-seat field; seating the first {room}");
+            VsBots = VsBots.Take(room).ToArray();
+        }
     }
 
     // Routes `--pos`/`--direction` onto the per-mode plumbing (docs/cli.md "the placement pair"):
@@ -2765,13 +2906,17 @@ public sealed record SessionSpec
         {
             Warn("core", "--direction ignored: flight steers the nose from the spawn override, which needs --pos");
         }
-        // The empty stage has no mission spawn list to draw from, so the subject starts over the
-        // grid origin, through the same fields --pos resolves into, so an explicit placement wins.
+        // The empty stage has no mission spawn list, so the subject starts over the grid origin. It
+        // goes through the fields --pos resolves into, so an explicit placement wins. A Dogfight
+        // walks the stage's own spawn ring instead, which a default here would beat.
         if (EmptyStage)
         {
             if (Fly)
             {
-                SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                if (!Versus)
+                {
+                    SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                }
             }
             else
             {
@@ -2811,6 +2956,85 @@ public sealed record SessionSpec
             Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated', "
                           + $"keeping {Mips.ToString().ToLowerInvariant()}");
         }
+    }
+
+    // --vs-bots=N's count. A word that is no count, or a negative one, adds none and says so.
+    private static int ParseBotCount(string value, List<Note> notes)
+    {
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int count) && count >= 0)
+        {
+            return count;
+        }
+
+        notes.Add(new Note("core", $"--vs-bots: '{value}' is not a count of bots, adding none"));
+        return 0;
+    }
+
+    // --vs-bot='s comma list, each entry <plane>[:skill=<tier>][:team=<n>][:name=<callsign>]. A part
+    // this cannot read keeps its default and is named, the rule --difficulty= follows: a typo must
+    // not quietly change who the bot is. An empty plane or `random` is Random, the host's to draw.
+    private static List<VsBotEntry> ParseBots(string value, List<Note> notes)
+    {
+        var bots = new List<VsBotEntry>();
+        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var segments = token.Split(':');
+            string? plane = segments[0].Trim() is { Length: > 0 } named
+                && !named.Equals(RandomBotPlane, StringComparison.OrdinalIgnoreCase) ? named : null;
+            if (plane != null && Flight.Hangar.StockAirframes.IdOf(plane) == null)
+            {
+                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no stock airframe node, the bot flies a Random one"));
+                plane = null;
+            }
+
+            var skill = Net.NetBotSkill.Veteran;
+            int team = 0;
+            string callsign = "";
+            for (int si = 1; si < segments.Length; si++)
+            {
+                string part = segments[si];
+                if (part.StartsWith("skill=", StringComparison.Ordinal))
+                {
+                    if (Flight.Hangar.Difficulty.Parse(part["skill=".Length..]) is { } tier)
+                        skill = (Net.NetBotSkill)tier;
+                    else
+                        notes.Add(new Note("core", $"--vs-bot: '{part}' is not novice, veteran or ace, the bot flies veteran"));
+                }
+                else if (part.StartsWith("team=", StringComparison.Ordinal))
+                {
+                    if (int.TryParse(part["team=".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
+                        && n >= 0 && n <= Net.NetTeamBook.MaxTeams)
+                        team = n;
+                    else
+                        notes.Add(new Note("core", $"--vs-bot: '{part}' is no lobby team from 0 to {Net.NetTeamBook.MaxTeams}, the bot flies on none"));
+                }
+                else if (part.StartsWith("name=", StringComparison.Ordinal))
+                {
+                    callsign = part["name=".Length..].Trim();
+                }
+                else if (part.Length > 0)
+                {
+                    notes.Add(new Note("core", $"--vs-bot: '{part}' is not skill=, team= or name=, ignoring it"));
+                }
+            }
+
+            bots.Add(new VsBotEntry(plane, skill, team, callsign));
+        }
+
+        return bots;
+    }
+
+    // The named entries, then the count's defaults: a Random plane, veteran, no team, and a callsign
+    // the host draws once it knows the people's names.
+    private static VsBotEntry[] BotField(List<VsBotEntry> entries, int count)
+    {
+        var field = new VsBotEntry[entries.Count + count];
+        for (int i = 0; i < field.Length; i++)
+        {
+            field[i] = i < entries.Count ? entries[i] : new VsBotEntry(null, Net.NetBotSkill.Veteran, 0, "");
+        }
+
+        return field;
     }
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));

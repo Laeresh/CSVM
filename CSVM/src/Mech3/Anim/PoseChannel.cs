@@ -335,15 +335,8 @@ internal sealed class PoseChannel
     {
         duration = 0f;
         int applied = 0;
-        foreach (var motion in ev.Data.Objects("motions"))
+        foreach (var one in ev.AllNamesMotions())
         {
-            var one = new AnimEvent
-            {
-                Kind = "ObjectMotionSiScript",
-                Data = motion,
-                StartOffset = ev.StartOffset,
-                StartTime = ev.StartTime,
-            };
             applied += HandleMotionSiScript(one, def, anchor, instant, out float oneDuration);
             duration = Mathf.Max(duration, oneDuration);
         }
@@ -358,7 +351,7 @@ internal sealed class PoseChannel
 
     /// <summary>Marks a node as having just landed by contact, see
     /// <see cref="_resumeFromLanding"/>. Called on the dispatch path, and by the
-    /// <c>ground-contact</c> suite, which drives a motion set directly.</summary>
+    /// <c>ground-contact-core</c> suite, which drives a motion set directly.</summary>
     internal void MarkLandingResume(Node3D target) => _resumeFromLanding.Add(target);
 
     // OBJECT_OPACITY_STATE applies to the whole subtree per instance, never as a material edit.

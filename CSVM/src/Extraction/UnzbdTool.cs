@@ -22,6 +22,10 @@ public sealed record UnzbdIdentity(string VersionLine, string Sha256, string? Co
 /// process boundary is what keeps the two separate (<c>packaging/README.md</c>).</summary>
 public static class UnzbdTool
 {
+    // A killed process that has not exited by then is left to the OS; the caller's cleanup is
+    // best effort.
+    private const int KillWaitMs = 5000;
+
     /// <summary>The tool's file name on a platform: <c>unzbd.exe</c> on Windows, <c>unzbd</c>
     /// elsewhere.</summary>
     public static string FileName(bool windows) => windows ? "unzbd.exe" : "unzbd";
@@ -59,7 +63,9 @@ public static class UnzbdTool
         }
         catch (OperationCanceledException)
         {
+            // Kill only signals; the wait lets the caller delete the output the tool held open.
             process.Kill(entireProcessTree: true);
+            process.WaitForExit(KillWaitMs);
             throw;
         }
 

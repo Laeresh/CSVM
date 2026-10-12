@@ -838,6 +838,20 @@ public class SessionSpecTests
         Assert.Equal(rejected, string.Join(",", rejects));
     }
 
+    /// <summary>The ocean lab lives in <c>--freecam</c> alone, so its twin is dropped everywhere else,
+    /// and its value keeps only what the lab can apply.</summary>
+    [Fact]
+    public void TheOceanLabTwinIsAFreecamFlag()
+    {
+        var s = S("--freecam", "--debug-ocean=height:1.4,bogus,open");
+        Assert.Equal("height:1.4,open", s.DebugOcean);
+        Assert.Contains(s.Warnings, w => w.Category == "ui" && w.Message.Contains("'bogus'"));
+        Assert.Equal("", S("--freecam", "--debug-ocean").DebugOcean);
+        Assert.Null(S("--fly", "--debug-ocean=height:1.4").DebugOcean);
+        Assert.Null(S("--anim-lab", "--debug-ocean=height:1.4").DebugOcean);
+        Assert.Null(S("--viewer", "--debug-ocean=height:1.4").DebugOcean);
+    }
+
     // ---- Placement -----------------------------------------------------------------------------
 
     [Fact]
@@ -1077,6 +1091,19 @@ public class SessionSpecTests
         Assert.Equal("g.zip", s.Gamez);
         Assert.Equal("t.zip", s.Textures);
         Assert.Equal("/somewhere", s.DataRoot);
+    }
+
+    /// <summary>The synthetic tree is opt-in only, and an extraction never lands in it. Beside
+    /// `--extract` the switch is dropped with a note.</summary>
+    [Fact]
+    public void SyntheticDataIsOptInAndNeverAppliesToAnExtraction()
+    {
+        Assert.False(S("--run-tests").SyntheticData);
+        Assert.True(S("--run-tests", "--synthetic-data").SyntheticData);
+
+        var extract = S("--extract=/install", "--synthetic-data");
+        Assert.False(extract.SyntheticData);
+        Assert.Contains(extract.Warnings, n => n.Message.Contains("--synthetic-data"));
     }
 
     /// <summary>`--ia=` is a path VALUE only, loading the file into an `InstantActionDef` is the

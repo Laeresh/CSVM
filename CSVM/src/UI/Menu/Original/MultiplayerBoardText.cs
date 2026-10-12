@@ -1,4 +1,5 @@
 using CSVM.Mech3;
+using CSVM.Net;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 
@@ -13,6 +14,10 @@ internal sealed class MultiplayerBoardText
 {
     /// <summary>The text height a line takes when its string names no face.</summary>
     internal const float TextFallback = 12f;
+
+    /// <summary>The word a bot row shows for a Random plane. No langui row words one, so it is the
+    /// remake's own.</summary>
+    internal const string RandomPlaneWord = "Random";
 
     // The scripts' label colours on the plaques and radios: greyed, normal, rollover and pressed.
     internal static readonly BoardTint LabelDisabled = new(142, 142, 142);
@@ -58,6 +63,19 @@ internal sealed class MultiplayerBoardText
 
     /// <summary><see cref="Regular(UiStrings, int)"/> over this page's table.</summary>
     internal LanguiFace? Regular(int id) => Regular(Strings, id);
+
+    /// <summary>IDS_IA_DIFFICULTY's word for a bot tier, its first letter raised as the lobby's are.</summary>
+    internal string SkillWord(NetBotSkill skill)
+    {
+        string word = skill switch
+        {
+            NetBotSkill.Novice => Word(3695, "novice"),
+            NetBotSkill.Ace => Word(3697, "ace"),
+            _ => Word(3696, "veteran"),
+        };
+
+        return word.Length > 0 ? char.ToUpperInvariant(word[0]) + word[1..] : word;
+    }
 
     /// <summary>One string of the table in the face its row names, or the face of
     /// <paramref name="faceId"/> when that is set, in an authored colour.</summary>

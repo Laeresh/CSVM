@@ -45,6 +45,18 @@ public sealed class MasterOptions
     /// <summary>The most guests negotiating with one game at once.</summary>
     public int MaxPendingGuests { get; set; } = 16;
 
+    /// <summary>The most guests from one address negotiating with one game at once, never below 1.
+    /// Without it one address fills <see cref="MaxPendingGuests"/> and turns every other guest away.
+    /// A guest stops counting once its link stands, since it then closes its socket, so players
+    /// behind one NAT joining one after another are not held by it.</summary>
+    public int MaxPendingGuestsPerAddress { get; set; } = 2;
+
+    /// <summary>The TURN credentials one address may cause to be minted in an hour, never below the
+    /// two one join takes: its own and the host's for it. Each holds up to coturn's
+    /// <c>user-quota</c> relay ports until it expires, and the relay range is small, so an
+    /// unbounded address could take them all.</summary>
+    public int TurnMintsPerHour { get; set; } = 10;
+
     /// <summary>The messages a socket may send in a burst, its bucket's size.</summary>
     public int MessageBurst { get; set; } = 60;
 

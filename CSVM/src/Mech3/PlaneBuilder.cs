@@ -52,12 +52,7 @@ public sealed class PlaneBuilder
         #include "res://shaders/csky_facade.gdshaderinc"
 
         void vertex() {
-            mat3 face = csky_facade_spherical(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD);
-            MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
-                vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
-            MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
-            MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
-            MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+            MODELVIEW_MATRIX = csky_facade_modelview(VIEW_MATRIX, MODEL_MATRIX, CAMERA_POSITION_WORLD);
         }
 
         void fragment() {

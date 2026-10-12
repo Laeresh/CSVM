@@ -12,7 +12,7 @@ namespace CSVM.Flight.Hud;
 
 /// <summary>
 /// The flight HUD's world markers in a stereo session: the gun pipper, the selection's box and label,
-/// and every flight tag (hostile, race, debug, dogfight). A stereo
+/// and every flight tag (hostile, race, debug). A stereo
 /// viewport draws no canvas layer, so the flat HUD's own code draws each listed
 /// <see cref="WorldMark"/> into a small surface. A card shows it at its world point, facing the head
 /// with the seat's up, at the angle the flat pane gives it. A marker far off the view axis hangs on
@@ -156,16 +156,6 @@ public sealed partial class XrMarkers : Node3D
             }
 
             spyglass = AnswerSpyglass(targets, shows, _marks, head);
-        }
-
-        if (pilot.VersusHud is { } versus && IsInstanceValid(versus))
-        {
-            versus.MarksInWorld = true;
-            font ??= ChromeType.Face(versus);
-            if (Shows(versus))
-            {
-                versus.WorldMarks(_marks);
-            }
         }
 
         Place(head, _rig.Origin.GlobalTransform.Basis.Y, pane.Camera.Fov,
@@ -418,23 +408,19 @@ public sealed partial class XrMarkers : Node3D
     }
 
     // An off-view marker's arrow, pointing along +x from the surface's centre; the ring turns it onto
-    // the bearing. It is the targeting HUD's shaft and head, or the dogfight HUD's head alone.
+    // the bearing. It is the targeting HUD's shaft and head.
     private void PaintArrow(Card card, WorldMark mark)
     {
-        bool versus = mark.Style == WorldMarkStyle.Versus;
         var color = mark.Color;
-        _key.Clear().Append("a|").Append(versus).Append('|').Append(Html(color));
-        var sizeRef = versus ? new Vector2(18f + PadRef, 8f + PadRef) * 2f : new Vector2(RingShaftRef + PadRef, 5f + PadRef) * 2f;
-        if (Resize(card, _key.ToString(), sizeRef) is not { } size)
+        _key.Clear().Append("a|").Append(Html(color));
+        if (Resize(card, _key.ToString(), new Vector2(RingShaftRef + PadRef, 5f + PadRef) * 2f) is not { } size)
         {
             return;
         }
 
         var centre = size * 0.5f;
-        Paint(card, versus
-            ? into => VersusHud.DrawArrow(into, centre, Vector2.Right, CardScale, color)
-            : into => TargetHud.DrawArrow(into, centre + new Vector2(RingShaftRef * CardScale, 0f), centre,
-                Vector2.Right, CardScale, color));
+        Paint(card, into => TargetHud.DrawArrow(into, centre + new Vector2(RingShaftRef * CardScale, 0f), centre,
+            Vector2.Right, CardScale, color));
     }
 
     // An off-view marker's label, the flat edge label's lines centred on the surface.

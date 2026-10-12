@@ -76,7 +76,7 @@ public sealed class SessionArchives
         StartupProfile.Record("zrdr", mark);
 
         if (!mute && !haveSounds)
-            GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
+            Log.Warn("sound", $"sound archive not found, flying silent: {soundsPath}");
 
         return new SessionArchives
         {

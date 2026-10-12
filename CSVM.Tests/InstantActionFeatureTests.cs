@@ -3,16 +3,15 @@ using System.Linq;
 using CSVM.Mech3;
 using CSVM.Spec;
 using CSVM.UI.Menu;
-using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>
-/// The shared Instant Action feature: its decoded option sets, the setup's opening state, the
-/// rules between the fields (the ace duel, the militia reset, the clouds barring stunt flying), a
-/// preset applied over the fields, the launch gate and the built def and exit, and what a discard
-/// drops. The launchscreen's public rosters are checked against it so the two cannot drift.
+/// The shared Instant Action feature: its decoded option sets, the setup's opening state and the
+/// rules between the fields. Those are the ace duel, the militia reset and the clouds barring
+/// stunt flying. Also a preset applied over the fields, the launch gate, the built def and exit,
+/// and what a discard drops.
 /// </summary>
 public class InstantActionFeatureTests
 {
@@ -32,18 +31,6 @@ public class InstantActionFeatureTests
         Assert.Equal(new[] { "novice", "veteran", "ace" }, InstantActionFeature.Skills);
         Assert.Equal(19, InstantActionFeature.Presets.Count);
         Assert.Throws<ArgumentException>(() => InstantActionFeature.AircraftFor("Not A Militia"));
-    }
-
-    [Fact]
-    public void TheLaunchscreensRostersReadOffTheFeature()
-    {
-        Assert.Equal(InstantActionFeature.Environments.Select(e => e.Code), LaunchMenu.EnvironmentCodes());
-        Assert.Equal(InstantActionFeature.Environments.Select(e => e.Name), LaunchMenu.EnvironmentNames());
-        Assert.Equal(InstantActionFeature.Airframes.Select(a => a.Name), LaunchMenu.PlaneNames());
-        Assert.Equal(InstantActionFeature.Militias.Select(m => m.Name), LaunchMenu.MilitiaNames());
-        Assert.Equal(InstantActionFeature.Skills, LaunchMenu.SkillKeys());
-        Assert.Equal(InstantActionFeature.MissionTypesFor("C2B").Select(m => m.Key), LaunchMenu.MissionTypeKeysFor("C2B"));
-        Assert.Equal(InstantActionFeature.WaveFor(3, 1, 0, 2), LaunchMenu.WaveFor(3, 1, 0, 2));
     }
 
     [Fact]
@@ -85,7 +72,7 @@ public class InstantActionFeatureTests
         Assert.Equal(new[] { 3, 5, 10, 15 }, InstantActionFeature.RaceWindows);
         Assert.Equal(1, ia.RaceWindowIndex);
         Assert.Equal("10 minutes", InstantActionFeature.RaceWindowLabel(10));
-        Assert.Equal(5, ia.BuildDef().RaceWindowMinutes);
+        Assert.Equal(5, ia.BuildDef(1).RaceWindowMinutes);
 
         Assert.False(ia.OffersRaceWindow(2));
         ia.SelectMissionType(2);
@@ -96,7 +83,7 @@ public class InstantActionFeatureTests
         ia.SelectRaceWindow(3);
         Assert.Equal(15, ia.RaceWindowMinutes);
         Assert.Throws<ArgumentOutOfRangeException>(() => ia.SelectRaceWindow(4));
-        Assert.Equal(15, ia.BuildDef().RaceWindowMinutes);
+        Assert.Equal(15, ia.BuildDef(1).RaceWindowMinutes);
 
         // No preset carries a window, so a contents row leaves the pick; Discard restores five.
         ia.ApplyPreset(1);
@@ -243,6 +230,33 @@ public class InstantActionFeatureTests
     }
 
     [Fact]
+    public void AStuntRunCarriesTheJoinBoardsBotsWhichMakeItARace()
+    {
+        var ia = Feature();
+        ia.ApplyPreset(0);
+        ia.ConfirmEnvironment();
+        var seats = new[] { new MenuSeatChoice("player_fury", Array.Empty<int>()) };
+        var bots = new[] { new VsBotEntry("player_bhawk", Net.NetBotSkill.Ace, 0, "Racer") };
+        var squadron = ia.BuildExit(seats, bots: bots);
+        ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
+
+        // One seat and a bot make a race: the bots ride the exit, and the def flies no wingmen.
+        var stunt = ia.BuildExit(seats, bots: bots);
+        Assert.Same(bots, stunt.Bots);
+        Assert.Equal(0, stunt.InstantAction!.NumWingmen);
+        Assert.True(ia.NumWingmen > 0);
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), stunt.Chapter, new[] { "player_fury" },
+            stunt.Mode, stunt.InstantAction, bots: stunt.Bots);
+        Assert.True(spec.Stunt);
+        Assert.Equal(bots, spec.VsBots);
+
+        // ABLE-TO-FAIL CONTROL: a squadron mission carries no bots, and its spec seats none.
+        Assert.Null(squadron.Bots);
+        Assert.Empty(SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), squadron.Chapter, new[] { "player_fury" },
+            squadron.Mode, squadron.InstantAction, bots: bots).VsBots);
+    }
+
+    [Fact]
     public void TheExitCarriesTheEnvironmentsChapterTheModeAndTheBuiltDef()
     {
         var ia = Feature();
@@ -282,12 +296,44 @@ public class InstantActionFeatureTests
         ia.SetWave(1, new InstantActionWaveSetup(4, 0, 0, 0));
         ia.ConfirmEnvironment();
 
-        var def = ia.BuildDef();
+        var def = ia.BuildDef(1);
 
         Assert.Equal("dogfight_ace", def.MissionType);
         Assert.Equal(0, def.NumWingmen);
         Assert.All(def.Waves, w => Assert.Equal(InstantAction.EmptyWave, w));
-        Assert.Equal(InstantAction.Defaults().AceName, new InstantActionFeature(_ => InstantAction.Defaults()).BuildDef().AceName);
+        Assert.Equal(InstantAction.Defaults().AceName, new InstantActionFeature(_ => InstantAction.Defaults()).BuildDef(1).AceName);
+    }
+
+    /// <summary>The split screen race takes no waves and no wingmen, whose AI would fly armed
+    /// through a weapons-off race. One seat keeps them, and the cursors survive the round trip.</summary>
+    [Fact]
+    public void AMultiSeatStuntRunTakesNoWavesOrWingmenAndKeepsTheirCursors()
+    {
+        var ia = Feature();
+        ia.ConfirmEnvironment();
+        ia.SelectMissionType(2);
+        Assert.Equal(InstantActionFeature.StuntKey, ia.MissionType.Key);
+        ia.SetWingmen(3);
+        ia.WingmanFit.SetPylon(1, "wep_14");
+        var wave = new InstantActionWaveSetup(4, 7, 1, 2);
+        ia.SetWave(1, wave);
+        var one = new[] { new MenuSeatChoice("player_fury", Array.Empty<int>()) };
+        var two = new[] { one[0], new MenuSeatChoice("player_kestrel", Array.Empty<int>()) };
+
+        Assert.False(ia.TakesNoWaves(1));
+        Assert.True(ia.TakesNoWaves(2));
+        var raced = ia.BuildExit(two);
+        Assert.Equal(0, raced.InstantAction!.NumWingmen);
+        Assert.All(raced.InstantAction.Waves, w => Assert.Equal(InstantAction.EmptyWave, w));
+        Assert.Null(raced.WingmanLoadout);
+
+        // Back to one seat: what was configured flies.
+        Assert.Equal(3, ia.NumWingmen);
+        Assert.Equal(wave, ia.Waves[1]);
+        var solo = ia.BuildExit(one);
+        Assert.Equal(3, solo.InstantAction!.NumWingmen);
+        Assert.Equal(4, solo.InstantAction.Waves[1].NumEnemies);
+        Assert.Equal("wep_14", solo.WingmanLoadout!.PylonFor(1));
     }
 
     /// <summary>The wingman fit is dropped wherever no wingmen carry it (the ace duel, a count of
@@ -302,13 +348,13 @@ public class InstantActionFeatureTests
 
         ia.SelectMissionType(1);
         ia.SetWingmen(2);
-        Assert.Equal("wep_14", ia.LaunchWingmanFit!.PylonFor(1));
+        Assert.Equal("wep_14", ia.LaunchWingmanFit(1)!.PylonFor(1));
         ia.SetWingmen(0);
-        Assert.Null(ia.LaunchWingmanFit);
+        Assert.Null(ia.LaunchWingmanFit(1));
         ia.SetWingmen(3);
         ia.SelectMissionType(0);
         Assert.True(ia.IsAceDuel);
-        Assert.Null(ia.LaunchWingmanFit);
+        Assert.Null(ia.LaunchWingmanFit(1));
     }
 
     [Fact]

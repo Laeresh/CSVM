@@ -50,6 +50,7 @@ internal static class NetCoopGuestPlaneSuites
     internal static void EverySeatPicksItsOwnPlane(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath).ToArray();
         var solo = missions.Cast<CampaignMission?>().FirstOrDefault(m => !m!.Value.Wingman)
             ?? throw new SuiteSkippedException($"cm_sequence carries no mission without a wingman");
@@ -249,8 +250,8 @@ internal static class NetCoopGuestPlaneSuites
         }
 
         var own = new[] { StockAirframes.Node(rig.Host.Profile!.Planes[SeatedAt].Airframe) };
-        var (roster, fits) = Launcher.CoopLaunchField(rig.HostDoor, launch.Transport, own, new LoadoutChoice?[] { null }, StockLoadouts.Load());
-        var builds = Launcher.CoopSeatBuilds(roster, new CustomPlaneDef?[] { null }, rig.HostDoor, launch.Transport);
+        var (roster, fits) = SeatFields.CoopLaunchField(rig.HostDoor, launch.Transport, own, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+        var builds = SeatFields.CoopSeatBuilds(roster, new CustomPlaneDef?[] { null }, rig.HostDoor, launch.Transport);
         var seats = new List<string>();
         bool agrees = roster.Length == 4;
         for (int g = 0; g < rig.Guests.Length && agrees; g++)

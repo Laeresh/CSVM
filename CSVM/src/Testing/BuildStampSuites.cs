@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
+using CSVM.UI.Menu;
+using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -22,7 +26,9 @@ internal static class BuildStampSuites
     [Suite("build-stamp-icons",
         "the stamp holds the logs and user-folder icons left of its text, each unfocusable, clickable over "
         + "a mouse-ignoring parent chain on a layer above the boards, with its PromptFont glyph and tooltip; "
-        + "the stamp shows and hides on its tick, and the icons open the log file's directory and the user data folder")]
+        + "the stamp shows and hides on its tick, and the icons open the log file's directory and the user data folder; "
+        + "in Game Mode the real opener refuses without the shell and logs the refusal, which stands in the Original menu's "
+        + "warning box where a messagebox is wired and in the stamp's own pad-focusable dialog where none is")]
     internal static void BuildStampIcons(TestContext ctx)
     {
         var stamp = new BuildStamp(ctx.RepoRoot, exported: false);
@@ -30,7 +36,7 @@ internal static class BuildStampSuites
         stamp.Opener = (path, what) =>
         {
             opened.Add((path, what));
-            return path;
+            return new FolderOpenResult(FolderOpenOutcome.Opened, path);
         };
         ctx.Host.AddChild(stamp);
         try
@@ -47,6 +53,7 @@ internal static class BuildStampSuites
             Parts(ctx, logs, user);
             Visibility(ctx, stamp, logs);
             Folders(ctx, stamp, logs, user, opened);
+            GameMode(ctx, stamp, user);
         }
         finally
         {
@@ -64,7 +71,7 @@ internal static class BuildStampSuites
         string root = Directory.CreateDirectory(Path.Combine(ctx.ScratchDir, "build-stamp-" + Guid.NewGuid().ToString("N"))).FullName;
         var flow = new ExtractionFlow(DataProblem.Missing, root, "unzbd", root, (r, _, _) => new ExtractionResult { Install = InstallLocator.Check(r.InstallFolder) }, _ => { }, work => work());
         var screen = NoGameDataScreen.Build(flow, () => { }, () => { });
-        var stamp = new BuildStamp(ctx.RepoRoot, exported: false) { Opener = (path, _) => path };
+        var stamp = new BuildStamp(ctx.RepoRoot, exported: false) { Opener = (path, _) => new FolderOpenResult(FolderOpenOutcome.Opened, path) };
         ctx.Host.AddChild(screen);
         ctx.Host.AddChild(stamp);
         try
@@ -82,7 +89,11 @@ internal static class BuildStampSuites
             ctx.Check(viewport.GuiGetFocusOwner() == screen.ExtractButton, $"Extract holds the focus before the click");
             var at = Settle(stamp.LogsButton).GetCenter();
             string? opened = null;
-            stamp.Opener = (path, _) => opened = path;
+            stamp.Opener = (path, _) =>
+            {
+                opened = path;
+                return new FolderOpenResult(FolderOpenOutcome.Opened, path);
+            };
             viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
             viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
             ctx.Check(opened == stamp.LogsFolder, $"a click at {at} reaches the logs icon above the screen ({opened ?? "nothing opened"})");
@@ -188,6 +199,85 @@ internal static class BuildStampSuites
         user.EmitSignal(BaseButton.SignalName.Pressed);
         ctx.Check(opened.Count == 2 && opened[0].Path == stamp.LogsFolder && opened[1].Path == OS.GetUserDataDir(),
             $"a click hands the opener exactly its own folder ({string.Join("; ", opened)})");
+    }
+
+    // Both branches through the real opener, with the shell recorded so no window opens. The
+    // messagebox is wired to a bare Original shell the way the launcher wires the live one.
+    private static void GameMode(TestContext ctx, BuildStamp stamp, Button user)
+    {
+        var shell = FolderOpener.Shell;
+        bool was = SteamOs.InGameMode;
+        var handed = new List<string>();
+        var lines = new List<string>();
+        FolderOpener.Shell = path =>
+        {
+            handed.Add(path);
+            return Error.Ok;
+        };
+        stamp.Opener = FolderOpener.Open;
+        stamp.Tick(true);
+        var notice = stamp.DesktopModeNotice;
+        try
+        {
+            SteamOs.InGameMode = true;
+            using (Log.PushConsoleSink(lines.Add))
+            {
+                user.EmitSignal(BaseButton.SignalName.Pressed);
+            }
+
+            ctx.Check(handed.Count == 0, $"in Game Mode a press never reaches the shell ({string.Join("; ", handed)})");
+            ctx.Check(lines.Exists(l => l.Contains("refused in Game Mode", StringComparison.Ordinal)),
+                $"the log says the open was refused ({string.Join(" | ", lines)})");
+            ctx.Check(notice.Visible && notice.DialogText == FolderButtonText.DesktopModeOnly,
+                $"with no messagebox wired the stamp raises its own dialog (visible {notice.Visible}, \"{notice.DialogText}\")");
+            ctx.Check(notice.GetOkButton().FocusMode != Control.FocusModeEnum.None,
+                $"whose OK takes the focus, so a pad's A, B or Escape closes it ({notice.GetOkButton().FocusMode})");
+            notice.Hide();
+
+            OriginalMessagebox(ctx, stamp, user, notice, handed);
+
+            stamp.Messagebox = null;
+            SteamOs.InGameMode = false;
+            user.EmitSignal(BaseButton.SignalName.Pressed);
+            ctx.Check(handed.Count == 1 && handed[0] == Path.GetFullPath(BuildStamp.UserFolder) && !notice.Visible,
+                $"out of Game Mode the press hands the shell the folder and raises nothing ({string.Join("; ", handed)})");
+        }
+        finally
+        {
+            stamp.Messagebox = null;
+            notice.Hide();
+            FolderOpener.Shell = shell;
+            SteamOs.InGameMode = was;
+        }
+    }
+
+    // The Original menu's own warning box carries the refusal. While it stands its OK is the only
+    // row, so the pad answers the box and nothing under it.
+    private static void OriginalMessagebox(TestContext ctx, BuildStamp stamp, Button user, AcceptDialog notice, List<string> handed)
+    {
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out string? why);
+        ctx.Check(layout != null, $"the data root's menu layout loads for the Original shell ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var menu = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(), _ => null);
+        var screen = menu.Screen;
+        stamp.Messagebox = words =>
+        {
+            menu.RaiseWarning(words);
+            return true;
+        };
+        user.EmitSignal(BaseButton.SignalName.Pressed);
+        ctx.Check(handed.Count == 0 && !notice.Visible, $"with the Original menu's messagebox wired, the stamp raises no dialog of its own");
+        ctx.Check(menu.Dialog is { Icon: DialogIcon.Warning } box && box.Message == FolderButtonText.DesktopModeOnly,
+            $"the menu's warning box stands with the sentence ({menu.Dialog?.Icon}, \"{menu.Dialog?.Message}\")");
+        ctx.Check(menu.Rows.Count == 1 && menu.Rows[0].Key == OriginalShell.DialogOkKey,
+            $"and its OK is the only row ({string.Join(" ", menu.Rows.Select(r => r.Key))})");
+        menu.Step(new MenuCommands { Accept = true });
+        ctx.Check(menu.Dialog == null && menu.Screen == screen,
+            $"A answers the box and leaves the screen under it where it was ({menu.Screen})");
     }
 
     // A container sorts its children on a deferred call, which a suite inside one frame never

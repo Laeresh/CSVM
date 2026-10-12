@@ -22,7 +22,7 @@ public class NetPlayFeatureBootTests
         // The loopback links every end to every other, and a real guest links only to its host.
         var mesh = LoopbackTransport.Mesh(3, Clean, new Random(101));
         mesh[1].Disconnect(mesh[2].LocalPeer);
-        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { PlayerName = "Zachary" };
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Identity = { PlayerName = "Zachary" } };
         var booted = Guest(mesh[1], "Nathan");
         var stays = Guest(mesh[2], "Sheila");
         host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
@@ -47,7 +47,7 @@ public class NetPlayFeatureBootTests
         Assert.Equal(new[] { "Zachary", "Sheila" }, stays.Dogfight.Players.Select(p => p.Name));
 
         // The host hangs up once the grace has passed, and cannot boot itself or a stranger.
-        host.Step(NetPlayFeature.RefuseGraceSeconds + 0.1);
+        host.Step(NetAdmission.RefuseGraceSeconds + 0.1);
         host.Step(0.016);
         Assert.DoesNotContain(peer, mesh[0].Peers);
         Assert.False(host.Boot(peer));
@@ -124,7 +124,7 @@ public class NetPlayFeatureBootTests
         var mesh = LoopbackTransport.Mesh(3, Clean, new Random(109));
         mesh[1].Disconnect(mesh[2].LocalPeer);
         var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
-        host.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish" }, game: true);
+        host.Identity.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish" }, game: true);
         host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         Assert.True(host.Advertising!.Value.Password);
 
@@ -148,7 +148,7 @@ public class NetPlayFeatureBootTests
     {
         var mesh = LoopbackTransport.Mesh(2, Clean, new Random(113));
         var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
-        host.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish" }, game: true);
+        host.Identity.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish" }, game: true);
         host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         var guest = Guest(mesh[1], "Nathan", password: "swordfish");
         guest.OpenJoin();
@@ -173,42 +173,42 @@ public class NetPlayFeatureBootTests
         // Every open takes a fresh end, since a carrier binds one lobby in its life.
         var door = new NetPlayFeature(
             (_, _, _) => LoopbackTransport.Mesh(1, Clean, new Random(127))[0], (_, _) => LoopbackTransport.Mesh(1, Clean, new Random(127))[0]);
-        door.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish", Private = true }, game: true);
+        door.Identity.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish", Private = true }, game: true);
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         Assert.True(door.Advertising!.Value.Password);
-        Assert.True(door.Private);
+        Assert.True(door.Identity.Private);
         door.Close();
 
         // A co-op host opened with no box asks nothing and takes its own kind's listing.
-        Assert.Equal("", door.Password);
+        Assert.Equal("", door.Identity.Password);
         door.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
         Assert.False(door.Advertising!.Value.Password);
-        Assert.True(door.Private);
+        Assert.True(door.Identity.Private);
         door.Close();
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
-        Assert.False(door.Private);
+        Assert.False(door.Identity.Private);
         door.Close();
 
         // A join's answer ends with the join, here one nobody answers.
         var nobody = LoopbackTransport.Mesh(1, Clean, new Random(131))[0];
         var silent = new NetPlayFeature((_, _, _) => nobody, (_, _) => nobody);
-        silent.Take(new NetPlayerInfo { Callsign = "Zachary", Password = "kestrel" }, game: false);
+        silent.Identity.Take(new NetPlayerInfo { Callsign = "Zachary", Password = "kestrel" }, game: false);
         silent.OpenJoin();
         silent.Step(NetPlayFeature.JoinTimeoutSeconds + 1.0);
         Assert.Equal(NetDoorStage.Failed, silent.Stage);
-        Assert.Equal("", silent.Password);
+        Assert.Equal("", silent.Identity.Password);
 
         // ABLE-TO-FAIL CONTROL: answers given to a failed door survive its Close. The boards close a
         // failed door between the box's OK and the open.
-        silent.Take(new NetPlayerInfo { Callsign = "Zachary", Password = "kestrel" }, game: false);
+        silent.Identity.Take(new NetPlayerInfo { Callsign = "Zachary", Password = "kestrel" }, game: false);
         silent.Close();
-        Assert.Equal("kestrel", silent.Password);
+        Assert.Equal("kestrel", silent.Identity.Password);
     }
 
     private static NetPlayFeature Guest(LoopbackTransport end, string callsign, string password = "")
     {
         var door = new NetPlayFeature((_, _, _) => end, (_, _) => end);
-        door.Take(new NetPlayerInfo { Callsign = callsign, Password = password }, game: false);
+        door.Identity.Take(new NetPlayerInfo { Callsign = callsign, Password = password }, game: false);
         return door;
     }
 
@@ -219,7 +219,7 @@ public class NetPlayFeatureBootTests
             gate.Arrive(end.LocalPeer);
             return end;
         });
-        door.Take(new NetPlayerInfo { Callsign = callsign }, game: false);
+        door.Identity.Take(new NetPlayerInfo { Callsign = callsign }, game: false);
         return door;
     }
 

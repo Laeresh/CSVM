@@ -249,7 +249,7 @@ public sealed class FlightChatTests
             PeerId = peers[seat],
             SeatIndex = seat,
             TeamId = team[seat],
-            IsLocal = seat == 0,
+            FlownHere = seat == 0,
             Callsign = names[seat],
         }).ToArray();
         var sessions = new[]

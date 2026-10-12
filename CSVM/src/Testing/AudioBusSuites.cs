@@ -334,7 +334,7 @@ internal static class AudioBusSuites
         }
 
         OptionsApplyExit? applied = null;
-        // The audio half of Launcher.PersistOptions, which is what the launcher hands the leaf. The
+        // The audio half of LiveSettings.Persist, which is what the launcher hands the leaf. The
         // options file it also writes is the pause-preferences suite's subject, not this one's.
         var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, exit =>
         {

@@ -5,12 +5,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The off-screen edge marker's placement rules (<see cref="EdgeMarker"/>), shared by
-/// VersusHud and TargetHud: the whole-pane on-screen test, the behind-the-camera mirror, the
-/// degenerate-direction fallback, the anchor's clamp to the 5 percent inset boundary, the tip's
-/// clamp to the pane, and the clock-hour bearing. These pin the semantics the HUD goldens witness
-/// end-to-end, including <c>Rect2.HasPoint</c>'s inclusive-at-position / exclusive-at-end
-/// asymmetry, which is today's behaviour and not a bug to fix here.
+/// The off-screen edge marker's placement rules (<see cref="EdgeMarker"/>), which TargetHud
+/// draws by. They cover the whole-pane on-screen test, the behind-the-camera mirror and the
+/// degenerate-direction fallback. They also cover the anchor's 5 percent inset clamp, the tip's
+/// clamp to the pane, and the clock-hour bearing. The HUD goldens witness the same end-to-end.
+/// <c>Rect2.HasPoint</c>'s inclusive-at-position, exclusive-at-end asymmetry is the behaviour
+/// pinned here, not a bug to fix.
 /// </summary>
 public class EdgeMarkerTests
 {

@@ -59,6 +59,27 @@ public class CampaignFeatureTests
         Assert.Equal(Pilot, store.LastPlayed);
     }
 
+    [Theory]
+    [InlineData("{ \"version\": 3, \"na")]
+    [InlineData("{ \"version\": 99, \"name\": \"Zachary\" }")]
+    public void ContinueOnAProfileThatDoesNotLoadRefusesAndLeavesItsFile(string text)
+    {
+        var (feature, store, _) = Open();
+        string folder = Directory.CreateDirectory(store.DirFor(Pilot)).FullName;
+        string path = Path.Combine(folder, "profile.json");
+        File.WriteAllText(path, text);
+        byte[] before = File.ReadAllBytes(path);
+
+        string? refusal = feature.ContinuePlayer(Pilot);
+
+        Assert.Equal(store.LoadProblem(Pilot), refusal);
+        Assert.Contains(path, refusal!);
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(new[] { "profile.json" }, Names(Directory.GetFiles(folder)));
+        Assert.Null(feature.Profile);
+        Assert.Equal(string.Empty, store.LastPlayed);
+    }
+
     [Fact]
     public void RefusedNamesWriteNothing()
     {

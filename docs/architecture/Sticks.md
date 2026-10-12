@@ -80,7 +80,7 @@ read from and saved to one directory, and a save is atomic and always a user fil
 profile saved becomes a user copy under `FileNameFor` (`231D-0200+231D-0201.json`). Rows reuse
 `Bindings/BindingStore.cs`'s tokens, written bare and by number; a full keymap token naming the
 file's model in any case also reads. An unusable model or companion refuses the whole file, with
-one log line.
+one log line, and moves a user file to `.bad` so a save under its name cannot replace it.
 
 ## src/Sticks/StickProfileResolver.cs
 Pure selection: connected models plus files give the active file per model. A file applies when its

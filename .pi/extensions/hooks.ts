@@ -30,7 +30,18 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // 3. dotnet format before tests hook (PreToolUse for Bash|PowerShell)
+  // 3. Godot guard (PreToolUse for Bash|PowerShell): no direct launch of the Godot binary.
+  pi.on("tool_call", async (event, ctx) => {
+    if (isToolCallEventType("bash", event) || isToolCallEventType("powershell", event)) {
+      const result = await runGodotGuard(ctx.cwd, event);
+      if (result.blocked) {
+        ctx.ui.notify(result.message, "error");
+        return { block: true, reason: result.reason };
+      }
+    }
+  });
+
+  // 4. dotnet format before tests hook (PreToolUse for Bash|PowerShell)
   pi.on("tool_call", async (event, ctx) => {
     if (isToolCallEventType("bash", event) || isToolCallEventType("powershell", event)) {
       const result = await runPowerShellDotnetFormat(ctx.cwd, event);
@@ -41,7 +52,7 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // 4. Content checks before a commit: encoding, item IDs, golden prose, comment caps, doc
+  // 5. Content checks before a commit: encoding, item IDs, golden prose, comment caps, doc
   //    entries. All of them live in CheckCommitContent.ps1 at the repo root rather than being
   //    reimplemented here. Three hand-maintained copies drifted - this file never received the
   //    comment-cap check at all - so the checks are now written once and called by every harness.
@@ -94,16 +105,52 @@ async function runPowerShellBashGuard(cwd: string, event: any): Promise<HookResu
   const command = event.input.command;
   if (!command) return NOT_BLOCKED;
 
-  const psScript = `\$c = ${psLiteral(command)}; if (-not \$c) { exit 0 }; \$segments = \$c -split '&&|\\|\\||;|\\|' | ForEach-Object { \$_.Trim() } | Where-Object { \$_ }; \$other = \$segments | Where-Object { \$_ -notmatch '^(git|gh)\\b' }; if (-not \$other) { exit 0 }; [Console]::Error.WriteLine('Use Powershell instead of bash'); exit 2`;
+  // Which commands Bash may run is the guard's decision, made once in CheckBashCommand.ps1.
+  const here = await getGitRoot(cwd);
+  if (!here) return NOT_BLOCKED;
+  const guard = `${here}/CheckBashCommand.ps1`;
 
   try {
-    await pExecFile("powershell", ["-NoProfile", "-Command", psScript], { cwd, timeout: 15000 });
+    await pExecFile(
+      "powershell",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", guard, "-Command", command],
+      { cwd, timeout: 15000 }
+    );
   } catch (error: any) {
     if (error.code === 2) {
       return {
         blocked: true,
         message: error.stderr || error.message || "Use PowerShell instead of bash",
         reason: "non-git bash command"
+      };
+    }
+  }
+
+  return NOT_BLOCKED;
+}
+
+async function runGodotGuard(cwd: string, event: any): Promise<HookResult> {
+  const command = event.input.command;
+  if (!command) return NOT_BLOCKED;
+
+  // Whether a command invokes the Godot binary is the guard's decision, made once in
+  // CheckGodotCommand.ps1.
+  const here = await getGitRoot(cwd);
+  if (!here) return NOT_BLOCKED;
+  const guard = `${here}/CheckGodotCommand.ps1`;
+
+  try {
+    await pExecFile(
+      "powershell",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", guard, "-Command", command],
+      { cwd, timeout: 15000 }
+    );
+  } catch (error: any) {
+    if (error.code === 2) {
+      return {
+        blocked: true,
+        message: error.stderr || error.message || "Launch Godot through RunProbe.ps1",
+        reason: "direct Godot launch"
       };
     }
   }
@@ -128,7 +175,7 @@ async function runPowerShellDotnetFormat(cwd: string, event: any): Promise<HookR
     await pExecFile(
       "powershell",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", gate, "-Command", command],
-      { cwd, timeout: 300000 }
+      { cwd, timeout: 600000 }
     );
   } catch (error: any) {
     if (error.code === 2) {

@@ -148,15 +148,14 @@ internal static class AnimationAndEffectsSuites
 
     // ---- contact: the flight ends where the world says ------------------------------------------
 
-    // A gravity-bearing OBJECT_MOTION must be cut short by real geometry instead of running its
-    // authored RUN_TIME out below the terrain, through whichever of the two tiers its flags select, and
-    // must pick its BOUNCE_SEQUENCE branch from the surface it struck. Driven as a synthetic body
-    // thrown downward from a known height, so flight time, resting height and branch are predictable.
-    // ⚠ Keep the last case, the same bodies with no mask handed over, running their full clock far
-    // below the surface: without it a suite that fired no query at all would pass its landing checks.
-    [Suite("ground-contact",
-        "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask")]
-    internal static void GroundContact(TestContext ctx)
+    // A gravity-bearing OBJECT_MOTION is cut short by real geometry through the tier its flags select,
+    // and takes its BOUNCE_SEQUENCE branch from the surface it struck. Each body is built by hand and
+    // thrown down from a known height over the empty stage, so flight, rest and branch are predictable.
+    // ⚠ Keep the last case, whose unmasked bodies run their full clock far below the surface.
+    // Without it, a suite that fired no query would pass every landing check.
+    [Suite("ground-contact-core",
+        "a hand-built gravity-bearing OBJECT_MOTION over the empty stage's collider is cut short through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface, picks its BOUNCE_SEQUENCE branch from what it struck, resumes a bounce from the landing without the dive's momentum, and does none of it without a mask")]
+    internal static void GroundContactCore(TestContext ctx)
     {
         const float Tick = 1f / 60f;
         const float Authored = 20f;      // the run time these bodies carry; contact must beat it
@@ -164,16 +163,17 @@ internal static class AnimationAndEffectsSuites
         const string Land = "testhit_ground";
         const string Wet = "testhit_water";
 
-        ctx.WithWorld(ctx.Chapter, collision: true, world =>
-        {
-            var runtime = world.Runtime;
-            var root = world.Session.Root;
+        // The motions' owner only keys them in the set and rides a landing to the dispatch this
+        // suite makes by hand, so any definition serves.
+        var owner = new AnimDefinition { Name = "ground-contact-owner", AnimName = "ground-contact-owner" };
 
+        WithMotionHost(ctx, "ground-contact-stage", ground: true, body: (root, runtime) =>
+        {
             // A suite that builds no colliders would pass every contact check by taking the
             // fallback and proving nothing, so the collision world is asserted before anything
             // else is asked of it.
             var space = root.GetWorld3D()?.DirectSpaceState;
-            ctx.Check(space != null, $"the world built a collision space to sweep against chapter={ctx.Chapter}");
+            ctx.Check(space != null, $"the stage built a collision space to sweep against");
             if (space == null)
             {
                 return;
@@ -184,7 +184,7 @@ internal static class AnimationAndEffectsSuites
             var from = new Vector3(0f, 400f, 0f);
             var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
                 from, new Vector3(0f, -400f, 0f), CollisionLayers.World));
-            ctx.Check(probe.Count > 0, $"a downward probe finds chapter geometry chapter={ctx.Chapter}");
+            ctx.Check(probe.Count > 0, $"a downward probe finds the stage's ground");
             if (probe.Count == 0)
             {
                 return;
@@ -262,7 +262,7 @@ internal static class AnimationAndEffectsSuites
                     }
 
                     var set = new MotionSet();
-                    set.Add(motion, world.Runtime.Destructibles.All.First().Def, null);
+                    set.Add(motion, owner, null);
                     float flown = 0f;
                     string? bounce = null;
                     float cap = limit > 0f ? limit : Authored;
@@ -376,51 +376,6 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(watchdog.Bounce == Land,
                 $"a watchdog end owes the default branch, from its null surface bounce={watchdog.Bounce ?? "(none)"}");
 
-            // The veto on REAL extracted data. Every case above builds its gravity block by hand, which pins
-            // the branch but not that no_altitude survives extraction and reaches Create at all. gunshell is
-            // its only author install-wide, and it is reachable because muzzleburst_effects CallAnimations it.
-            {
-                var shellDefs = world.Session.Program.ByAnimName("gunshell");
-                AnimData? shell = null;
-                foreach (var def in shellDefs)
-                {
-                    foreach (var seq in def.Sequences)
-                    {
-                        foreach (var ev in seq.Events)
-                        {
-                            if (ev.Kind == "ObjectMotion" && ev.Data.Obj("translation_range") != null)
-                            {
-                                shell ??= ev.Data;
-                            }
-                        }
-                    }
-                }
-
-                ctx.Check(shell != null,
-                    $"the chapter program carries gunshell's launch defs={shellDefs.Count} chapter={ctx.Chapter}");
-                if (shell != null)
-                {
-                    ctx.Check(shell.Obj("gravity")?.Bool("no_altitude") == true,
-                        $"and the extracted event still authors no_altitude value={shell.Obj("gravity")?.Bool("no_altitude")}");
-                    var node = new Node3D { Name = "ground-contact-gunshell" };
-                    root.AddChild(node);
-                    node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
-                    uint maskWas = runtime.ContactMask;
-                    runtime.ContactMask = CollisionLayers.World;
-                    try
-                    {
-                        var casing = MotionRuntime.Create(runtime, node, shell, shell.Num("run_time") ?? 2f);
-                        ctx.Check(casing is { ContactTier: MotionContactTier.None },
-                            $"so the one def that opts out selects no tier even with a mask wired tier={casing?.ContactTier}");
-                    }
-                    finally
-                    {
-                        runtime.ContactMask = maskWas;
-                        node.QueueFree();
-                    }
-                }
-            }
-
             // The bounce is a CONTINUATION: the sequence a landing dispatches re-launches the very node that
             // landed, and MotionRuntime.Create ordinarily re-homes a ballistic launch to the node's authored
             // rest pose, which shows as the crash jumping back to the crash point once per piece.
@@ -437,7 +392,7 @@ internal static class AnimationAndEffectsSuites
                 {
                     var first = MotionRuntime.Create(runtime, node, Body(), Authored);
                     var set = new MotionSet();
-                    set.Add(first!, world.Runtime.Destructibles.All.First().Def, null);
+                    set.Add(first!, owner, null);
                     bool landed = false;
                     for (int i = 0; i < (int)(Authored / Tick) + 2 && !first!.Finished; i++)
                     {
@@ -545,6 +500,82 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
+    // The no_altitude veto on the shipped data. Every case in ground-contact-core builds its gravity
+    // block by hand, which pins the branch. It does not show that the flag survives extraction and
+    // reaches Create. The only author install-wide is gunshell, reachable because
+    // muzzleburst_effects CallAnimations it, so this suite reads the chapter's own program.
+    [Suite("ground-contact",
+        "the chapter program's own gunshell launch, the install's one no_altitude author, still carries the flag after extraction and selects no contact tier with the mask wired over a collidable chapter")]
+    internal static void GroundContact(TestContext ctx)
+    {
+        const float DropHeight = 60f;    // the height ground-contact-core drops its bodies from
+
+        ctx.WithWorld(ctx.Chapter, collision: true, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            // The veto is asked over live colliders, so a world that built none is caught first.
+            var space = root.GetWorld3D()?.DirectSpaceState;
+            ctx.Check(space != null, $"the world built a collision space to sweep against chapter={ctx.Chapter}");
+            if (space == null)
+            {
+                return;
+            }
+
+            var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                new Vector3(0f, 400f, 0f), new Vector3(0f, -400f, 0f), CollisionLayers.World));
+            ctx.Check(probe.Count > 0, $"a downward probe finds chapter geometry chapter={ctx.Chapter}");
+            if (probe.Count == 0)
+            {
+                return;
+            }
+
+            float surfaceY = probe["position"].AsVector3().Y;
+
+            // The casing's launch is gunshell's first ranged OBJECT_MOTION.
+            var shellDefs = world.Session.Program.ByAnimName("gunshell");
+            AnimData? shell = null;
+            foreach (var def in shellDefs)
+            {
+                foreach (var seq in def.Sequences)
+                {
+                    foreach (var ev in seq.Events)
+                    {
+                        if (ev.Kind == "ObjectMotion" && ev.Data.Obj("translation_range") != null)
+                        {
+                            shell ??= ev.Data;
+                        }
+                    }
+                }
+            }
+
+            ctx.Check(shell != null,
+                $"the chapter program carries gunshell's launch defs={shellDefs.Count} chapter={ctx.Chapter}");
+            if (shell != null)
+            {
+                ctx.Check(shell.Obj("gravity")?.Bool("no_altitude") == true,
+                    $"and the extracted event still authors no_altitude value={shell.Obj("gravity")?.Bool("no_altitude")}");
+                var node = new Node3D { Name = "ground-contact-gunshell" };
+                root.AddChild(node);
+                node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+                uint maskWas = runtime.ContactMask;
+                runtime.ContactMask = CollisionLayers.World;
+                try
+                {
+                    var casing = MotionRuntime.Create(runtime, node, shell, shell.Num("run_time") ?? 2f);
+                    ctx.Check(casing is { ContactTier: MotionContactTier.None },
+                        $"so the one def that opts out selects no tier even with a mask wired tier={casing?.ContactTier}");
+                }
+                finally
+                {
+                    runtime.ContactMask = maskWas;
+                    node.QueueFree();
+                }
+            }
+        });
+    }
+
     // ---- the tumble: a rate about the launch's own perpendicular ---------------------------------
 
     // FORWARD_ROTATION turns a launched body about the horizontal PERPENDICULAR of its own launch
@@ -557,11 +588,8 @@ internal static class AnimationAndEffectsSuites
         "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length, a vector-translation launch about its compiled direction, and not at all when that is zero")]
     internal static void ForwardRotation(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        WithMotionHost(ctx, "forward-rotation-host", (root, runtime) =>
         {
-            var runtime = world.Runtime;
-            var root = world.Session.Root;
-
             static Dictionary<string, object?> Vec(float x, float y, float z) =>
                 new() { ["x"] = x, ["y"] = y, ["z"] = z };
             static Dictionary<string, object?> Range(float v) =>
@@ -691,11 +719,8 @@ internal static class AnimationAndEffectsSuites
         "a vector-form OBJECT_MOTION's third triple is the compiled launch DIRECTION the tumble reads back, not a random spread: two bodies fly the identical path and end exactly where initial × run_time puts them")]
     internal static void LaunchDirectionCache(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        WithMotionHost(ctx, "launch-direction-host", (root, runtime) =>
         {
-            var runtime = world.Runtime;
-            var root = world.Session.Root;
-
             static Dictionary<string, object?> Vec(Vector3 v) =>
                 new() { ["x"] = v.X, ["y"] = v.Y, ["z"] = v.Z };
 
@@ -746,6 +771,31 @@ internal static class AnimationAndEffectsSuites
                 $"a longer third triple moves the body not one metre further end={scaled}");
             ctx.Note($"cruise end {first} against the authored placement 1600 m along +Z");
         });
+    }
+
+    // The whole host a hand-built OBJECT_MOTION with no gravity reads: a parent node, and a bare
+    // runtime for its rest pose, RNG and contact mask. A chapter world adds nothing such a body
+    // touches, so a suite on this host runs without an install. With ground, the parent is the
+    // empty stage's collidable grid, whose top face is y = 0.
+    // ⚠ Do not run a contact case here without setting the mask: it stays 0, so every gravity body selects no tier.
+    internal static void WithMotionHost(TestContext ctx, string name, System.Action<Node3D, AnimRuntime> body,
+        bool ground = false)
+    {
+        var root = ground ? EmptyStage.Build(collision: true).Root : new Node3D();
+        root.Name = name;
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true };
+        ctx.Host.AddChild(root);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(root, new AnimProgram());
+            body(root, runtime);
+        }
+        finally
+        {
+            runtime.Free();
+            root.Free();
+        }
     }
 
     // ---- a chain of OBJECT_MOTION events on one placed node: the Barracuda's drive -------------
@@ -1372,12 +1422,12 @@ internal static class AnimationAndEffectsSuites
         "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)")]
     internal static void WaitForCompletion(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             const string animName = "player_crash_water";
             const string flagged = "plane_big_splash";
             const string held = "large_steam_spray";
-            var program = world.Session.Program.Subset(animName);
+            var program = source.Program.Subset(animName);
             var defs = program.ByAnimName(animName);
             ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
             if (defs.Count == 0)
@@ -1465,18 +1515,18 @@ internal static class AnimationAndEffectsSuites
         "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)")]
     internal static void EmitterHostDeactivation(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            SplashSurvivesItsOwnInstant(ctx, world);
-            DebrisTrailStillEndsWithItsHost(ctx, world);
+            SplashSurvivesItsOwnInstant(ctx, source);
+            DebrisTrailStillEndsWithItsHost(ctx, source);
         });
     }
 
-    internal static void SplashSurvivesItsOwnInstant(TestContext ctx, TestWorld world)
+    internal static void SplashSurvivesItsOwnInstant(TestContext ctx, AnimSource source)
     {
         const string animName = "plane_big_splash";
         const string pufferName = "splasher";
-        var program = world.Session.Program.Subset(animName);
+        var program = source.Program.Subset(animName);
         var defs = program.ByAnimName(animName);
         ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
         if (defs.Count == 0)
@@ -1515,13 +1565,13 @@ internal static class AnimationAndEffectsSuites
             asCrashRig: true);
     }
 
-    internal static void DebrisTrailStillEndsWithItsHost(TestContext ctx, TestWorld world)
+    internal static void DebrisTrailStillEndsWithItsHost(TestContext ctx, AnimSource source)
     {
         const string animName = "m_build01";
         const string pufferName = "trailpuffer3";
         const string host = "part3";
         const string offSequence = "sparkout3";   // where part3's own deactivation is authored
-        var program = world.Session.Program.Subset(animName);
+        var program = source.Program.Subset(animName);
         var defs = program.ByAnimName(animName);
         ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
         if (defs.Count == 0)
@@ -1648,16 +1698,16 @@ internal static class AnimationAndEffectsSuites
         "an effect's template meshes show at the call site (including a CALLED template's) and go dark when it ends (BL-061)")]
     internal static void EffectTemplateMesh(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
-            CalledTemplateShowsItsMesh(ctx, world);
-            EndedEffectLeavesNoMeshLit(ctx, world);
+            CalledTemplateShowsItsMesh(ctx, source);
+            EndedEffectLeavesNoMeshLit(ctx, source);
         });
     }
 
-    internal static void CalledTemplateShowsItsMesh(TestContext ctx, TestWorld world)
+    internal static void CalledTemplateShowsItsMesh(TestContext ctx, AnimSource source)
     {
-        EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+        EffectStageSuiteHelper.WithEffectStage(ctx, source, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
             (stage, runtime, point) =>
         {
             ctx.Check(Probes.MeshCensus.VisibleMeshes(stage) == 0,
@@ -1678,9 +1728,9 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
-    internal static void EndedEffectLeavesNoMeshLit(TestContext ctx, TestWorld world)
+    internal static void EndedEffectLeavesNoMeshLit(TestContext ctx, AnimSource source)
     {
-        EffectStageSuiteHelper.WithEffectStage(ctx, world, "3040ap_gunhit", new[] { "dum_gunhit" }, (stage, runtime, point) =>
+        EffectStageSuiteHelper.WithEffectStage(ctx, source, "3040ap_gunhit", new[] { "dum_gunhit" }, (stage, runtime, point) =>
         {
             runtime.PlayEffectAt("3040ap_gunhit", point, null, 0.3f);
             runtime.Advance(1f / 60f);

@@ -17,16 +17,9 @@ internal sealed class FinalizerGate : IDisposable
     // touch of the object. The floor of the wait between collections, see Pump.
     private const int PumpMilliseconds = 20;
 
-    // A count still moving after this many drains is no measurement, so SettledObjectCount gives
-    // none. Far above what a late engine shard needs (docs/verification.md INSTR-100).
-    private const int MaxSettleDrains = 16;
-
     // The finalizer thread is let go after this even if the suite never returns, so a hung suite
     // cannot also wedge the process's exit.
     private static readonly TimeSpan HoldLimit = TimeSpan.FromMinutes(60);
-
-    // Gates opened and not yet released. A drain while one is open would wait on the held thread.
-    private static int _open;
 
     private readonly ManualResetEventSlim _entered = new(false);
     private readonly ManualResetEventSlim _release = new(false);
@@ -38,7 +31,6 @@ internal sealed class FinalizerGate : IDisposable
     {
         Drain();
         AppDomain.CurrentDomain.FirstChanceException += CountHandleError;
-        Interlocked.Increment(ref _open);
         Plant(_entered, _release);
         GC.Collect();
         Held = _entered.Wait(TimeSpan.FromSeconds(10));
@@ -56,29 +48,6 @@ internal sealed class FinalizerGate : IDisposable
     /// <summary>Parks the finalizer thread for one suite. Dispose it when the suite ends.</summary>
     public static FinalizerGate Hold() => new();
 
-    /// <summary>Godot's global object count once a drain leaves it unchanged, or null if it is still
-    /// moving after <see cref="MaxSettleDrains"/> drains (docs/verification.md INSTR-100). Under an
-    /// open gate it is the plain reading: the held finalizer thread frees nothing.</summary>
-    public static long? SettledObjectCount()
-    {
-        long count = ObjectCount();
-        if (Volatile.Read(ref _open) > 0)
-        {
-            return count;
-        }
-        for (int drain = 0; drain < MaxSettleDrains; drain++)
-        {
-            Drain();
-            long next = ObjectCount();
-            if (next == count)
-            {
-                return count;
-            }
-            count = next;
-        }
-        return null;
-    }
-
     /// <summary>Stops the pump, releases the finalizer thread and waits for every queued finalizer.
     /// Returns how many "Handle is not initialized" throws the drain produced.</summary>
     public int ReleaseAndDrain()
@@ -86,7 +55,6 @@ internal sealed class FinalizerGate : IDisposable
         _stop = true;
         _pump.Join();
         _release.Set();
-        Interlocked.Decrement(ref _open);
         Drain();
         AppDomain.CurrentDomain.FirstChanceException -= CountHandleError;
         return Volatile.Read(ref _handleErrors);
@@ -111,9 +79,6 @@ internal sealed class FinalizerGate : IDisposable
         GC.Collect();
         GC.WaitForPendingFinalizers();
     }
-
-    private static long ObjectCount() =>
-        (long)Godot.Performance.GetMonitor(Godot.Performance.Monitor.ObjectCount);
 
     // A separate frame, so no local on the caller's stack keeps the sentinel reachable.
     [MethodImpl(MethodImplOptions.NoInlining)]

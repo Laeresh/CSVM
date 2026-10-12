@@ -106,8 +106,8 @@ public sealed partial class GaugeCluster : Control
     internal const float LowAltAglM = 60f;              // 0x006076fc
     internal const float LowAltBlinkBaseS = 0.14f;      // 0x006076f4
     internal const float LowAltBlinkPerMetreS = 0.006f; // 0x006076f8
+    internal const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
-    private const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
     // full cockpit.gw cycle) over the data's three *_damage_* injure thresholds, each
     // threshold steps to the NEXT color: green above the "green" anim's 0.72, yellow
@@ -207,6 +207,9 @@ public sealed partial class GaugeCluster : Control
 
     /// <inheritdoc cref="GunArrowAngleDeg"/>
     public float MissileArrowAngleDeg => _missileArrow.Angle;
+
+    // Read-only views of the damage blink's two timers (this and BlinkLeftAt), for the clock suite.
+    internal double BlinkPhase => _time;
 
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
 
@@ -462,10 +465,11 @@ public sealed partial class GaugeCluster : Control
 
     public override void _Process(double delta)
     {
-        _time += delta;
-        // ⚠ Both animated cues advance on SIM dt, never the raw frame delta: their rates are
-        // video-decoded in sim seconds, and the wall figures would run them 39% fast.
+        // ⚠ Every animated cue advances on SIM dt, never the raw frame delta. The arrow rates are
+        // video-decoded in sim seconds, and wall figures would run them 39% fast. A wall-timed blink
+        // would also run on through a halt and shift with a slow --det frame.
         float simDt = GameClock.Current?.FrameDt ?? (float)delta;
+        _time += simDt;
         if (GunGauge is { } gg)
             _gunArrow.Advance(TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
         if (MissileGauge is { } mg)
@@ -475,7 +479,7 @@ public sealed partial class GaugeCluster : Control
         _nitroBoostNeedle.Advance(NitroBoosting ? -NitroNeedleSweepDeg : 0f, simDt);
         _nitroChargeNeedle.Advance((1f - Mathf.Clamp(NitroChargeFrac, 0f, 1f)) * NitroNeedleSweepDeg, simDt);
         foreach (var z in _zones)
-            z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
+            z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - simDt);
         QueueRedraw();
     }
 
@@ -560,6 +564,9 @@ public sealed partial class GaugeCluster : Control
                 DrawGaugePoly(_nitroBoostPoly, c, r, -_nitroBoostNeedle.Angle);
         }
     }
+
+    internal float BlinkLeftAt(string part) =>
+        _zones.Find(z => z.Part.Equals(part, StringComparison.OrdinalIgnoreCase))?.BlinkLeft ?? 0f;
 
     // ---- extraction ----
 

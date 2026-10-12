@@ -35,7 +35,6 @@ internal static class MenuOriginalCoopFilmSuites
         + "rather than missing it")]
     internal static void TheCoopFilms(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -203,7 +202,7 @@ internal static class MenuOriginalCoopFilmSuites
         }
 
         var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
-        var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
+        var (roster, _) = CSVM.Launch.SeatFields.CoopLaunchField(
             host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         int before = guestExits.Count;

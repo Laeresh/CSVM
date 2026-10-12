@@ -71,6 +71,36 @@ public class DangerZoneRibbonTests
     }
 
     [Fact]
+    public void ALeadInAddsAStraightBeforeTheEntryAndKeepsEverySegment()
+    {
+        var ribbon = DangerZoneRibbon.FromPolyline("dzpath1", 1, Bend);
+        var near = ribbon.WithLeadIn(far: false, 1200f);
+        Assert.Equal(ribbon.Segments.Count + 3, near.Segments.Count);
+        Assert.True(near.End(false).DistanceTo(Bend[0] - new Vector3(1500f, 0f, 0f)) < 1e-2f);
+        Assert.Equal(near.End(true), ribbon.End(true));
+        for (int i = 0; i < ribbon.Segments.Count; i++)
+        {
+            float half = ribbon.Segments[i].Length * 0.5f;
+            Assert.True(near.PointAt(i + 3, half).DistanceTo(ribbon.PointAt(i, half)) < 1e-2f);
+        }
+
+        // The straight is straight: its midpoint lies on the first chord's line.
+        Assert.True(Mathf.Abs(near.PointAt(1, 250f).Z) < 1e-3f);
+
+        // From the far end the straight goes past the last vertex instead.
+        var far = ribbon.WithLeadIn(far: true, 100f);
+        Assert.Equal(ribbon.Segments.Count + 1, far.Segments.Count);
+        Assert.Equal(ribbon.End(false), far.End(false));
+        Assert.True(far.End(true).DistanceTo(Bend[3] + new Vector3(500f, 0f, 0f)) < 1e-2f);
+        Assert.True(far.PointAt(2, 250f).DistanceTo(ribbon.PointAt(2, 250f)) < 1e-2f);
+
+        // ABLE-TO-FAIL CONTROL: one vertex 1500 m back, not spaced at the chord, reshapes the first
+        // segment, so the spacing is what keeps it.
+        var reshaped = DangerZoneRibbon.FromPolyline("dzpath1", 1, new[] { Bend[0] - new Vector3(1500f, 0f, 0f), Bend[0], Bend[1], Bend[2], Bend[3] });
+        Assert.True(reshaped.PointAt(1, 250f).DistanceTo(ribbon.PointAt(0, 250f)) > 1f);
+    }
+
+    [Fact]
     public void ARunEntersFromTheChosenEndAndWalksTheSegmentsThatWay()
     {
         var ribbon = DangerZoneRibbon.FromPolyline("dzpath1", 1, Bend);
@@ -325,6 +355,25 @@ public class DangerZoneRibbonTests
         Assert.Equal(expectedRibbons, ribbons?.All.Count ?? 0);
         foreach (var ribbon in ribbons?.All ?? (IReadOnlyCollection<DangerZoneRibbon>)Array.Empty<DangerZoneRibbon>())
             Assert.Equal(gamez.FindByName(ribbon.Name)!.DangerZoneDifficulty, ribbon.Difficulty);
+    }
+
+    [Fact]
+    public void ARejoinLocksOntoTheRibbonWhereItPassesTheWayTheNosePoints()
+    {
+        var ribbon = DangerZoneRibbon.FromPolyline("dzpath1", 1,
+            new[] { new Vector3(0f, 50f, 0f), new Vector3(0f, 50f, -100f), new Vector3(0f, 50f, -200f) });
+        var at = new Vector3(2f, 50f, -150f);
+        var pilot = new AiPilot { Machine = new AiModeMachine(new Random(1)) };
+        Assert.True(pilot.RejoinDangerZone(ribbon, at, Basis.Identity, new Vector3(0f, 0f, -70f), "test"));
+        Assert.Equal(AiMode.NavigatingDangerZone, pilot.Machine.Mode);
+        Assert.False(pilot.ZoneRun!.Reversed);
+        Assert.True(pilot.ZoneRun.Point.DistanceTo(new Vector3(0f, 50f, -150f)) < 1.5f);
+
+        // ABLE-TO-FAIL CONTROL: the nose the other way rides it backwards, and no machine takes none.
+        var back = new AiPilot { Machine = new AiModeMachine(new Random(1)) };
+        Assert.True(back.RejoinDangerZone(ribbon, at, new Basis(Vector3.Up, Mathf.Pi), new Vector3(0f, 0f, 70f), "test"));
+        Assert.True(back.ZoneRun!.Reversed);
+        Assert.False(new AiPilot().RejoinDangerZone(ribbon, at, Basis.Identity, Vector3.Zero, "test"));
     }
 
     [Fact]

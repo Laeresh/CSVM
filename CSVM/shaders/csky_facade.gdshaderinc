@@ -27,4 +27,16 @@ mat3 csky_facade_spherical(vec3 origin, vec3 eye) {
     return mat3(right, cross(f, right), f);
 }
 
+// The model-view matrix of a quad centred on its instance origin, turned by the facade basis above
+// and keeping the instance's own scale on each axis (Godot's billboard_keep_scale). A vertex()
+// assigns it to MODELVIEW_MATRIX; the instance's rotation never reaches the quad.
+mat4 csky_facade_modelview(mat4 view, mat4 model, vec3 eye) {
+    mat3 face = csky_facade_spherical(model[3].xyz, eye);
+    mat4 mv = view * mat4(vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), model[3]);
+    mv[0] *= length(model[0].xyz);
+    mv[1] *= length(model[1].xyz);
+    mv[2] *= length(model[2].xyz);
+    return mv;
+}
+
 #endif

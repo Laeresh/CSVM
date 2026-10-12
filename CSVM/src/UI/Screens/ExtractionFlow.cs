@@ -131,8 +131,11 @@ public sealed class ExtractionFlow
     public bool Cancelling => View == ExtractionView.Running && _cancel is { IsCancellationRequested: true };
 
     /// <summary>Gets whether a run redoes every output. The incremental rule compares file times, which
-    /// call a stale tree's outputs current, and an unfinished run's half-written archive too.</summary>
-    public bool Force => Problem is DataProblem.Older or DataProblem.Newer or DataProblem.Incomplete;
+    /// call a stale tree's outputs current, and an unfinished run's half-written archive too. The
+    /// marker is read live, so a retry on this screen after a failed or cancelled run is forced as
+    /// well.</summary>
+    public bool Force => Problem is DataProblem.Older or DataProblem.Newer or DataProblem.Incomplete
+        || File.Exists(Path.Combine(DataRoot, ExtractionRun.ExtractedFolder, UnfinishedMarker));
 
     /// <summary>Whether <paramref name="dataRoot"/> stops the launch at this screen, and why. Only a
     /// stamp naming another schema counts as stale; an unstamped tree reaches the menu, with the
@@ -212,8 +215,10 @@ public sealed class ExtractionFlow
             return false;
         }
 
+        // ⚠ Do not read Force after MarkUnfinished below: every run would then be forced.
         string extracted = Path.Combine(DataRoot, ExtractionRun.ExtractedFolder);
-        var request = new ExtractionRequest(check.Folder, DataRoot, Unzbd, Force, Force && HasUnpackedSiblings(extracted));
+        bool force = Force;
+        var request = new ExtractionRequest(check.Folder, DataRoot, Unzbd, force, force && HasUnpackedSiblings(extracted));
         Notice = null;
         Failures = Array.Empty<string>();
         Warnings = Array.Empty<string>();

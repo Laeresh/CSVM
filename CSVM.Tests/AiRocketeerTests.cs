@@ -334,6 +334,132 @@ public class AiRocketeerTests
         Assert.Equal(0, r.SelectedPylon);
     }
 
+    // A respawned seat pilot's launcher is a fresh airframe's. The lockout its last launch stamped
+    // does not follow it, or a bot downed after a launch would come back unable to fire.
+    [Fact]
+    public void AResetLauncherCarriesNoLockoutOrSelection()
+    {
+        var r = Rocketeer(rollsPass: true);
+        Solve(r, 500f);
+        Assert.True(r.WantsFire);
+        Assert.True(r.LockoutRemaining > 0f && !r.SlotReady(0));
+
+        r.Reset();
+
+        Assert.False(r.WantsFire);
+        Assert.Equal(-1, r.SelectedPylon);
+        Assert.Equal(0f, r.LockoutRemaining);
+        Assert.True(r.SlotReady(0));
+        Solve(r, 500f);
+        Assert.True(r.WantsFire);
+    }
+
+    // The Network override: a failed roll launches anyway, on the same stamped lockout. The same
+    // failed dice without it are the control, so the launch is the override's and not the geometry's.
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void AFailedRollLaunchesOnlyUnderTheNetworkOverride(bool overridden, bool fires)
+    {
+        var r = Rocketeer(rollsPass: false);
+        r.FiresOnFailedRoll = overridden;
+        Solve(r, 500f);
+        Assert.Equal(fires, r.WantsFire);
+        Assert.Equal(0, r.SelectedPylon);
+        Assert.Equal(r.RefireSeconds, r.LockoutRemaining, 3);
+    }
+
+    // The override still draws the dice, so a bot's ordnance stream advances one draw per attempt
+    // exactly as a rolled AI's does.
+    [Fact]
+    public void TheOverrideStillDrawsTheDice()
+    {
+        int draws = 0;
+        var r = new AiRocketeer(() => { draws++; return 1f; }) { QuickDrawChance = 0.05f, FiresOnFailedRoll = true };
+        Solve(r, 500f);
+        Assert.True(r.WantsFire);
+        Assert.Equal(1, draws);
+    }
+
+    // The hangar-fit rule a bot seat flies opens the wingman builder's 1 to 900 m band. A merge at
+    // 50 m and a shot at 850 m launch, which the 200 to 800 m fallback refuses.
+    [Theory]
+    [InlineData(50f, true)]
+    [InlineData(150f, true)]
+    [InlineData(850f, true)]
+    [InlineData(950f, false)]
+    public void TheWingmanRuleOpensTheOneToNineHundredMetreBand(float separation, bool fires)
+    {
+        var r = Rocketeer(rollsPass: true);
+        r.UseWingmanRule();
+        Solve(r, separation);
+        Assert.Equal(fires, r.WantsFire);
+        Assert.Equal(Loadout.WingmanOrdnanceRefireS, r.RefireSeconds);
+        if (fires)
+        {
+            Assert.Equal(Loadout.WingmanOrdnanceRefireS, r.LockoutRemaining, 3);
+        }
+    }
+
+    // A pylon carrying an authored window and interval does not beat the rule. The original's
+    // builder writes its literals over every slot, so only the rocketeer's numbers count.
+    [Fact]
+    public void TheWingmanRuleStandsOverAPylonsOwnWindowAndInterval()
+    {
+        var r = Rocketeer(rollsPass: true);
+        r.UseWingmanRule();
+        var ownPos = new Vector3(0f, 0f, 300f);   // inside 1 to 900 m, outside the pylon's 350 to 800 m
+        var pylon = new RocketPylonView
+        {
+            Index = 0,
+            Armed = true,
+            MountPos = ownPos,
+            RoundSpeed = Speed,
+            MinRangeM = 350f,
+            MaxRangeM = 800f,
+            RefireSeconds = 5f,
+        };
+        r.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
+            TargetPos, Vector3.Zero, TargetForward, targetIsGasbag: false,
+            new List<RocketPylonView> { pylon });
+        Assert.True(r.WantsFire);
+        Assert.Equal(Loadout.WingmanOrdnanceRefireS, r.LockoutRemaining, 3);
+    }
+
+    // A world AI's launcher as built, which only a bot seat's arming changes. It keeps the 30 s
+    // and 200 to 800 m fallback, the roll as the gate, and no wingman rule.
+    [Fact]
+    public void AFreshLauncherKeepsTheFallbackAndTheRoll()
+    {
+        var r = new AiRocketeer(() => 1f);
+        Assert.Equal(30f, r.RefireSeconds);
+        Assert.Equal(200f, r.MinRangeM);
+        Assert.Equal(800f, r.MaxRangeM);
+        Assert.False(r.FiresOnFailedRoll);
+        Assert.False(r.WingmanRule);
+    }
+
+    // The bot's rate. Under the rule and the override every attempt launches, one per 20 s. A
+    // 60 Hz run in constant reach makes 15 over 299 s, three a minute.
+    [Fact]
+    public void UnderTheWingmanRuleAndTheOverrideEveryTwentySecondsLaunches()
+    {
+        var r = new AiRocketeer(() => 1f) { QuickDrawChance = 0.05f, FiresOnFailedRoll = true };
+        r.UseWingmanRule();
+        int launches = 0;
+        for (int i = 0; i < 299 * 60; i++)
+        {
+            r.Tick(1f / 60f);
+            Solve(r, 500f);
+            if (r.WantsFire)
+            {
+                launches++;
+            }
+        }
+
+        Assert.Equal(15, launches);
+    }
+
     private static void Solve(AiRocketeer r, float separation)
     {
         var ownPos = new Vector3(0f, 0f, separation);

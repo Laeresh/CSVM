@@ -52,15 +52,18 @@ path: [../org/logging.md](../org/logging.md). `HitchSidecar.cs` shares this sink
 ## src/Utils/FolderOpener.cs
 Shows a folder in the system file browser: `Open` creates it if missing, hands it to
 `OS.ShellOpen` (a directory path opens the file browser on Windows and Linux alike) and logs the
-open or the failure under `core`. The two folder icons in `UI/Screens/BuildStamp.cs` and
-`Sticks/StickScreens.cs`'s profiles folder button go through it.
+open or the failure under `core`. In Game Mode (`SteamOs.cs`) it refuses before the shell and logs
+the refusal, since gamescope shows no file browser and the shell still answers `Ok`. It returns a
+`FolderOpenResult` (opened, failed or refused, and the path), so a caller's screen tells a refusal
+from a failure; `Shell` is the seam a suite records. The two folder icons in
+`UI/Screens/BuildStamp.cs` and `Sticks/StickScreens.cs`'s profiles folder button go through it.
 
 ## src/Utils/LocalNetworks.cs
 The IPv4 networks this machine sits on, for the LAN search: `Ipv4()` lists the address and mask of
 every adapter that is up and not the loopback, and an empty list when the system will not say, so a
 search still asks at the limited broadcast. It lives here because `CSVM.Net` may not name
-`System.Net`, and Godot's interface list carries no masks. `Launcher.cs` hands it to the door as
-`NetPlayFeature.LanNetworks`; `Net/LanBroadcast.cs` turns it into addresses.
+`System.Net`, and Godot's interface list carries no masks. `Launch/NetFlight.cs` hands it to the door as
+`UI/Menu/LanDoor.cs`'s `Networks`; `Net/LanBroadcast.cs` turns it into addresses.
 
 ## src/Utils/HostAddress.cs
 The addresses a host names to its guests. `StableGlobalIPv6()` is the first global unicast IPv6
@@ -118,7 +121,7 @@ shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Launc
 one is raised.
 
 ## src/Utils/HitchMonitor.cs
-The always-on frame-hitch detector, ticked from `Launcher._Process` in every mode: a frame costing
+The always-on frame-hitch detector, ticked by `Launch/FrameInstruments.cs` every frame in every mode: a frame costing
 far more than its recent neighbours gets a `HitchRecord` assembled for it, describing the frame's
 cost split, its engine counts as absolutes and as deltas, its GC activity, the ring of frames
 leading up to it, and the named work `PerfSample` attributed. It only detects, and nothing is
@@ -141,7 +144,7 @@ Ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.DebrisSpawn))` adds
 that site's total for the frame in progress, and any code path can do it without knowing the
 monitor, the readout, or whether anything is listening. Statics over a preallocated per-site array,
 the same ambient shape `StartupProfile` uses and for the same reason, since a scope several call
-layers down cannot be handed an accumulator. `Launcher._Process` calls `EndFrame()` where it stamps
+layers down cannot be handed an accumulator. `Launch/FrameInstruments.cs` calls `EndFrame()` where it stamps
 the frame's wall cost, so the scopes and the `frame_ms` they ran inside describe the same span. The
 site vocabulary, the seeded call sites and the attribution terms a record carries:
 [../org/hitch.md](../org/hitch.md).
@@ -252,11 +255,30 @@ uptime rather than by guesswork. What the two numbers mean and why the per-colle
 wrong one to read is `docs/verification.md` PERF-19 and PERF-20. Under `--gc-types` the listener
 runs Verbose and adds a `[perf] gc-types` line naming the allocation sampler's most-seen types.
 
+## src/Utils/MemoryCensus.cs
+The `--debug-mem` readout: one line of `key=value` terms splitting the process's memory by holder.
+Private bytes and their peak come from the process; the managed heap from the GC; Godot's own
+allocations, texture, buffer and video memory and the object, node and pipeline counts from its
+`Performance` monitors. The caller hands in the shader cache's count, which this layer cannot read,
+so every line has one shape. Private bytes well above the named holders is native memory no Godot
+monitor counts: on the development machine's Vulkan driver, mostly each compiled shader's variants
+(`analysis/shard-memory/FINDINGS.md`). It opens a process handle, so it runs at a suite boundary
+or once a wall second, never every frame.
+
+## src/Utils/ShaderCensus.cs
+Every shader text a suite hands to Godot, as hashes in that suite's `test-report.json` row. A
+headless process compiles none of them, so `RunTests.ps1` holds the headless shards' texts against
+the windowed ones'. `ShaderTwins.Pooled` and `Rewrite` note theirs, and so does each effect that
+makes its own `Shader` (ocean, wind streaks, heat shimmer, precipitation, fog-volume cards); a new
+`new Shader { Code = ... }` site notes its text too, or a headless suite could make a shader no
+windowed process ever compiles. Collects only between the harness's `Begin` and `Take`.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names
 are the `public const string` fields on `Rng` itself, each carrying the reason it is its own
-stream. `Reset(master, pinned)` runs once per session build, before anything draws; `Stream(name)`
+stream; `Bots` and `BotField` exist because only the host builds a network bot's pilot and seats
+its field, so those draws must stay off any stream both ends share. `Reset(master, pinned)` runs once per session build, before anything draws; `Stream(name)`
 is the shared generator, `SeedFor` / `IntSeedFor` the pure seed, and `NewIntSeed` /
 `NewSystemRandom` a per-instance stream off the subsystem's own. Unpinned, the master comes from
 `TimeSeed()` so the shipped game keeps its variety; a scripted flag implies `--det` and pins it.
@@ -292,7 +314,7 @@ fog instead of ending at the authored metres. Enhanced mode scales it by
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
-resolved by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every scene builder
+resolved at launch by `Launch/LiveSettings.cs` into the single boolean `GraphicsMode.Enhanced` every scene builder
 reads. `Set` is the live switch (`EnhancedLook.Switch`), and `SwitchLocked`, true in a network
 session, refuses one. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
 beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
@@ -301,32 +323,49 @@ which is how a golden or a deterministic capture pins the mode on purpose. The m
 written up as a divergence in `docs/architecture/Spec.md`.
 
 ## src/Utils/WordSetting.cs
-The source order the four word-valued graphics settings share (`AntiAliasingSetting`, `RenderScaleSetting`,
-`ShadowQualitySetting`, `ViewDistance`), each holding one instance as its `Lookup` over its words, key and flag. `Resolve`
-takes the flag where the setting has one, then the saved word, then the config key, then the fallback the setting hands
-it; a word outside the list falls through, a key spelling the fallback reads as it, and an unknown config word the lookup
-reaches warns. The result is a `ResolvedWord` carrying a `SettingSource`, and `SourceName` spells that source for a log
-line (`options.json`, the key, the flag, `default` or shadow quality's GPU rules). `ReadSaved` is the `--det` guard each
-setting's `SavedWord` goes through. `Spec/SessionSpec.cs` parses a setting's flag through its `Lookup`.
+One word setting's descriptor, each setting's `Lookup`: its words, config key, flag, options-file field (`SavedField`), labels, Built-in
+row title, detail and place (`UnderGraphicsRow`), `Fallback` over a `SettingContext` (`--det`, the mode, the panes) naming its own rule,
+`Take` (where the word is stored) and live-apply hook over `ILiveWorld`, one surface for every setting (the sun, the session's follow).
+`Resolve` takes the flag, then the saved word, then the config key, then the fallback; a word outside the list falls through, a key spelling
+the fallback reads as it, and an unknown config word the lookup reaches warns. `ResolveFrom` keeps its inputs, so `Refresh` resolves again
+only when a moved mode or pane count moves the fallback of a setting already resolved, and `Retake` lets the render scale follow the
+anti-aliasing method. `SourceName` spells a source, or the fallback's rule, for a log line. The registry is `WordSettings.cs`.
+
+## src/Utils/WordSettings.cs
+The registry of word settings, in Built-in row order, and `WordValues`, one word per registered setting with value equality: the options
+file's, a screen's staged ones, an apply's and a command line's. `OptionsStore`, `Spec/SessionSpec.cs`, `UI/Menu/OptionsChoices.cs`, the
+VIDEO page's word rows, `Launch/LiveSettings.cs` (`ResolveLaunch` at startup, `ResolveAll` on an apply, then `ApplyAll`), `Launch/EnhancedLook.cs`
+(`FollowMode` on a live switch) and `Launch/GameSession.cs` (`FollowPanes`) walk it. `ReadSaved` is the words' `--det` guard. A new setting
+is its own file, one line in `All` and an authored VIDEO row where it shows there; one that changes a session build adds it to
+`EnhancedLook.FollowWordSettings`.
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
-`taa` or `fsr2`. `Resolve` runs `WordSetting` over `FlagWord` (`--anti-aliasing=`, else the VR profile's word under a headset), the saved `antiAliasing` word, then the `graphics.antiAliasing` config
+`taa` or `fsr2`. `Resolve` runs `WordSetting` over its flag (`--anti-aliasing=`, else the VR profile's word under a headset, `LiveSettings.Flags`), the saved `antiAliasing` word, then the `graphics.antiAliasing` config
 key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
-written whichever mode won, since only the default follows the mode. `SavedWord` holds the
-`--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
-reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
-refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
+written whichever mode won, since only the default follows the mode. The resolve runs at launch after `GraphicsMode.Resolve`, and again
+on a live mode switch or an Options apply, landing in the static `Method` and `Word`, whose one reader is `ViewportQuality.Apply`;
+`LiveSettings`' `[world] graphics mode:` line announces the word and its source. FSR 2.2 refuses a render scale above native, which
+`RenderScaleSetting.ClampFor` applies; its registry `Take` has the stored scale taken again under the new method.
 
 ## src/Utils/ShadowQualitySetting.cs
 The Enhanced sun's shadow quality, a VIDEO page row over `Words` (`off` to `ultra`). `Resolve` runs `WordSetting` over `--shadow-quality=`,
-the saved `shadowQuality` word, the `graphics.shadowQuality` key, then `DefaultFor(det)`: `ultra` under `--det`, otherwise
+the saved `shadowQuality` word, the `graphics.shadowQuality` key, then the fallback: `ultra` under `--det`, otherwise
 `FallbackFor(integrated, panes)`, which is `ultra` on a discrete GPU, `high` on an integrated one (the Steam Deck) and `off`
-there at three or four panes (source `default_integrated_gpu_panes`). `Pick` is the same lookup without the store; `SavedWord`
-holds the `--det` guard. `Launch/GameSession.cs` calls `ResolveForPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
+there at three or four panes (rule `default_integrated_gpu_panes`). `Pick` is the same lookup without the store. `Launch/GameSession.cs`
+re-resolves it through `WordSettings.FollowPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
 casts, its angular distance and blur, and the renderer's soft filter and atlas edge. `ApplyTo` is the one writer, called by
-`Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing on the faithful path and bumps
+`EnhancedLook.ApplyShadowQuality` at the sun's build and by the live-apply hook on an Options apply, under `HardShadows` (`--no-soft-shadows`); it writes nothing on the faithful path and bumps
 `Revision`, which the cockpit pass re-copies the sun on. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
+
+## src/Utils/WaterQualitySetting.cs
+The Enhanced sea's water quality: `flat`, the sea-level sheet the faithful path draws, or `waves`, the wave ocean
+(`Effects/Ocean.cs`) in its place. `Resolve` runs `WordSetting` over `--water-quality=`, the saved `waterQuality` word,
+the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, otherwise `FallbackFor(linux, integrated)`,
+which is `flat` on Linux or on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`), so the Steam Deck runs flat, under
+the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store.
+`Launch/LiveSettings.cs` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
+`Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. Only Built-in's Options screen shows a row.
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
@@ -359,9 +398,9 @@ runs to without it, since a cap only means anything with V-Sync off. `Resolve` l
 the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
 config key (true turns it on), then off and uncapped; a word outside `DisplayWords.VSyncChoices`
 reads as never set, and `Default` is the word a never-set VIDEO row shows. `Headset` replaces all of
-them while `Launch/XrSession.cs` drives a headset. `SavedWord` holds the `--det` guard. `Apply` is the
-one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, and logs the source
-that won. The cap is a render rate and reaches no simulation. Read `Launch/Launcher.cs` next.
+them while `Launch/XrSession.cs` drives a headset. `SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
+called, by `Launch/LiveSettings.cs` at startup and on an Options apply, and logs the source that won. The cap is a
+render rate and reaches no simulation. Read `Launch/LiveSettings.cs` next for both call sites.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
@@ -391,7 +430,7 @@ over that: this is the one display setting whose saved value can name something 
 screen answers to is dropped like an unknown word, and the standing screen (the primary on a launch that has
 moved nothing) leaves a window where the player is looking. `SavedWord` holds the `--det` guard. `Apply` is
 the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a window already there; both of
-`Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
+`LiveSettings`' call sites make it before the mode and the size, a mode applied first filling the old screen.
 
 ## src/Utils/RenderScaleSetting.cs
 The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at. Above native the
@@ -399,8 +438,8 @@ image is resampled down, spending GPU headroom on edges; below native it is upsc
 without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` runs
 `WordSetting` over the saved `renderScale` word, then the `graphics.renderScale` config key, then native. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
-to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
-reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
+to 100. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
+reader is `ViewportQuality.Apply`; `LiveSettings`' `[world] graphics mode:` line announces it and any clamp.
 
 ## src/Utils/VrRenderScaleSetting.cs
 The VR render scale, a headset setting: the multiple of the runtime's recommended eye size the session
@@ -419,7 +458,7 @@ The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `Vr
 apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
 
 ## src/Utils/VrQuality.cs
-The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launcher`
+The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launch/LiveSettings.cs`
 before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no
 temporal history to smear on a head turn), the project's 4x MSAA, shadow quality `low` (no penumbra) and foveation off. On
 Godot 4.7.0 and 4.7.1 a sun with an angular distance costs more the farther the camera is from the world origin (the PCSS
@@ -433,14 +472,24 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
-display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
-independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
+display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
-distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
-directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` and those boxes' OK are its writers.
+distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes through `AtomicFile`. Under `--run-tests`, `UserOptions()` uses an emptied scratch
+directory (`DirectoryOverride`), so no suite touches the player's file; `Launch/LiveSettings.cs`'s `Persist` (the menu's Options apply and the pause leaf's) and those boxes' OK are its writers.
+
+## src/Utils/AtomicFile.cs
+Whole-file replacement for player data: `WriteAllText` writes BOM-less UTF-8 to `<path>.tmp`, then
+one `File.Move` with overwrite puts it over the target. A kill or a full disk mid-write therefore
+leaves the previous file, or none on a first save, never a truncated one, which `File.WriteAllText`
+on the target would. A temp file a killed write left is overwritten by the next. IO failures reach
+the caller, since each store keeps its own policy for a failed save. The writers are the player-data
+stores and the two UPnP memories. The options, keymap and stick-profile stores also read through
+`ReadAllText`: a failed read leaves the path unwritable until a reread succeeds, and `SetAside` moves
+a file their parser refuses to `.bad`, so defaults saved in its place never replace a hand edit.
 
 ## src/Utils/AudioBuses.cs
 The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`
@@ -491,8 +540,7 @@ hidden. Read `Launch/Launcher.cs` next for the three sites.
 ## src/Utils/ScreenKeyboard.cs
 Steam's on-screen keyboard, raised through `OS.ShellOpen("steam://open/keyboard")` and lowered
 through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam shortcut gets it.
-`Available` is read once from the environment: `SteamDeck` or `SteamOS` set to 1, under
-`XDG_CURRENT_DESKTOP=gamescope`, which is Game Mode; Desktop Mode would open it behind the window.
+`Available` starts as `SteamOs.InGameMode`; Desktop Mode would open it behind the window.
 One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
 tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
 `Original/OriginalShell.cs`, `Screens/LaunchMenu.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
@@ -501,3 +549,9 @@ tap, never on focus, and calls `Follow` each frame so leaving its field lowers i
 One field the on-screen keyboard can be raised for: its owner and id, the label and the live text
 the echo strip repeats (masked where the field masks it), and whether the strip repeats it at all.
 The in-flight chat opts out, its line being drawn at the top left already. `ScreenKeyboard.cs` holds it.
+
+## src/Utils/SteamOs.cs
+Whether the run is in SteamOS Game Mode: `InGameMode` is read once from the environment
+(`SteamDeck` or `SteamOS` set to 1, under `XDG_CURRENT_DESKTOP=gamescope`) and is settable, so a
+suite takes either branch. `ScreenKeyboard.cs` raises its keyboard only there, and
+`FolderOpener.cs` refuses to open a folder there.

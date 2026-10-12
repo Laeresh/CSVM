@@ -14,12 +14,16 @@
                a failed build does, above): engine, goldens and hitch all still launch, each
                scored from its own report so a red units row can never read as green in the
                summary block (BL-417).
-      engine   Godot with --run-tests, the in-engine assertion suites. Windowed (never
-               --headless: no shaders compile there, so a clean error screen would prove
-               nothing) and with --log-file, which is what lets the harness screen native
-               engine ERROR lines. --run-tests implies --det by itself. The full catalog runs
-               in several concurrent processes (-Shards), each with its own log, report and
-               scratch subdirectory; the stage's verdict is the merge of their reports.
+      engine   Godot with --run-tests, the in-engine assertion suites, with --log-file, which is
+               what lets the harness screen native engine ERROR lines. --run-tests implies --det
+               by itself. The full catalog runs in concurrent processes of three kinds
+               (render: terms, analysis/headless-limits.json): windowed for the suites that need
+               a renderer or compile shaders no other suite does, since --headless compiles no
+               shader; headless shards (-Shards) for the rest, at about a third of the memory;
+               and one headless process for the ci tier on synthetic data (-RealData also runs
+               that tier on the real data). Each has its own log, report and scratch
+               subdirectory; the stage's verdict is the merge of their reports, which also fails
+               a full run on a shader text a headless shard made and no windowed one compiled.
       goldens  The golden-image tripwire: one Godot per shot in analysis/goldens/manifest.json,
                each a pinned --det capture, compared as md5 of the RAW pixel buffer (the engine
                prints it; a PNG's encoded bytes are not the picture). Runs as its own scripted
@@ -29,7 +33,7 @@
                serial), each still with its own process, log, .out/.err and PNG; the silent-death
                retry runs after the whole batch, serially. A mismatch names the shot and leaves the
                actual PNG and that shot's engine log in .scratch/goldens/. Each shot is launched
-               under a per-shot timeout ($EngineTimeoutSec); a shot that exceeds it is killed,
+               under a per-shot timeout ($GoldenTimeoutSec); a shot that exceeds it is killed,
                reported as FAIL, and has its evidence preserved -- it never silently hangs the
                suite (BL-320).
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
@@ -61,13 +65,32 @@
     summary names what went unchecked: "the data was not there" must never read as "the
     check held".
 
-    Wall-time budgets: each stage row and the total print the measured budget for the lane the run
+    Memory: every Godot launch (each shard, each golden shot) is admitted on its own against the
+    machine-wide ledger of MemoryLedgerCore.ps1 and waits while it does not fit; its watchdog starts
+    at admission. A launch that waits past the ledger's maximum wait, or that the engine refuses
+    below the memory floor, ends the run DEFERRED with exit 3, neither PASS nor FAIL. See
+    docs/tooling.md.
+
+    Rebuild: when CSVM.dll changes after the build stage (another build on this tree), or a
+    running launch logs "Cannot instantiate C# script", the run's launches are killed within about
+    a second and the run ends "DEFERRED: rebuild, ...", exit 3: nothing after that point measured
+    the built binary. A red summary points at docs/verification.md's known environmental reds.
+
+    Gaming mode (GamingMode.ps1 on|off|status): read at every stage boundary. While it is on, the
+    run takes a machine-wide lock before its next heavy stage (waiting runs print who holds it) and
+    holds it to the summary, and runs on the marker's shards, golden workers, dotnet -m, priority,
+    CPU threads and watchdog factor. Past its maxWaitSec the run ends "DEFERRED: gaming mode, ...",
+    exit 3. Budgets are not compared, -Perf and -Hitch report DEFERRED (gaming mode) without
+    changing the exit code, and the summary prints a "gaming mode:" line. See docs/tooling.md.
+
+    Wall-time budgets: each stage row prints the measured budget for the lane the run
     is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
     the numbers and the rule that set them live, so this help names the file rather than figures
     that would drift out of it. A stage over its budget prints "over budget" and is listed after
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
-    is compared against nothing, and the total is compared only when the lane's own stages all ran.
+    is compared against nothing. Build carries no budget, and there is no total budget. The
+    engine budget is capped at 80 percent of a shard's ceiling, so no budget sits at the kill line.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
@@ -91,14 +114,17 @@
 
 .PARAMETER Shards
     How many Godot processes the engine stage divides the catalog over. 0 (the default) means the
-    measured default for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which is
-    faster started once than started N times. 1 is the serial reference path and stays selectable.
+    measured default (6) for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which
+    is faster started once than started N times. A full run adds one process per suite the weights
+    file runs alone, so 6 is six shared shards and the alone shard, and 1 is one shared shard and the
+    alone shard; a selection keeps its count.
     Membership comes from analysis/engine-suite-weights.json through the harness's own
     shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
-    run. Each shard gets its own engine log, report, scratch subdirectory and watchdog; the stage's
+    run. Each shard gets its own engine log, report, scratch subdirectory and watchdog, which
+    kills it once its log has not grown for $EngineStallSec or at $EngineCeilingSec; the stage's
     verdict is the merge of every shard's report, and a shard exiting 0 without one FAILS the stage.
     Each shard also gets its own --net-port-base, from a slot this run holds for the stage, so no two
-    shards of this or a concurrent run open one port; at most 10 shards (docs/tooling.md).
+    shards of this or a concurrent run open one port; at most 10 processes (docs/tooling.md).
 
 .PARAMETER Quick
     The broad partial confidence gate: build, the quick unit tier (Tier=Quick), the quick engine
@@ -140,7 +166,7 @@
     Off by default, even in a full run: the check is awareness-only, never changes the exit code,
     and its own subject changes rarely, so it is not part of the retained landing gate (build,
     units, engine, goldens). Run it explicitly when landing a change that touches
-    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launcher.cs, or periodically otherwise;
+    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launch/FrameInstruments.cs, or periodically otherwise;
     a run without -Hitch names it in the summary's "not checked:" lines with that same cadence.
     Ignored under -Quick, which never runs it. Always the last stage to launch Godot, so its
     wall-time evidence is never taken beside engine, golden, or perf load (LOG-13, PERF-12/13/14).
@@ -184,6 +210,21 @@
     in the perf/hitch stage headers. "original" appends nothing, so the
     default launch argument lists are byte-identical to a run that omits this parameter.
 
+.PARAMETER WaitQuiet
+    Before the build, wait until no scripted CSVM Godot runs on this machine (any tree; one with a
+    ledger reservation or a scripted flag such as --det or --run-tests), printing the pid, ledger
+    kind and worktree of each one waited on. The user's own play (without a scripted flag such as --det) and an editor are never waited on. The memory ledger
+    already queues each launch on memory; this waits out the CPU and GPU contention that runs a
+    golden shot past its watchdog or flips an enhanced golden. Past -QuietTimeoutSec the run ends
+    DEFERRED, exit 3, without building.
+
+.PARAMETER QuietTimeoutSec
+    The longest -WaitQuiet waits, in seconds (default 1800, the memory ledger's own cap).
+
+.PARAMETER SelfTest
+    Check the rebuild stop's trigger (Get-RebuildCause) against a scratch DLL and log, then exit
+    without building or launching anything.
+
 .EXAMPLE
     .\RunTests.ps1
     Build, the unit tests, the in-engine suites, one summary block, one exit code.
@@ -200,11 +241,12 @@
 .EXAMPLE
     .\RunTests.ps1 -Hitch -SkipUnits -SkipEngine -SkipGoldens
     Build, then only the hitch-detector check -- the isolated loop for a change to
-    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launcher.cs.
+    HitchMonitor.cs, HitchSidecar.cs, or the hitch tick in Launch/FrameInstruments.cs.
 
 .EXAMPLE
     .\RunTests.ps1 -Shards 1
-    The same run with the engine stage serial -- the reference path an A/B compares against.
+    The same run with the catalog in one shared shard beside the alone shard -- the reference path
+    an A/B compares against.
 
 .EXAMPLE
     .\RunTests.ps1 -Quick
@@ -246,7 +288,11 @@ param(
     [int]$PerfIterations = 0,
     [int]$PerfFrames = 0,
     [ValidateSet("original", "enhanced")]
-    [string]$Graphics = "original"
+    [string]$Graphics = "original",
+    [switch]$WaitQuiet,
+    [int]$QuietTimeoutSec = 1800,
+    [switch]$RealData,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -283,12 +329,30 @@ $RepoRoot   = $PSScriptRoot
 $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 $ScratchDir = Join-Path $RepoRoot ".scratch"
+# The assembly Godot actually loads. Hashing it is the only honest answer to "did the new build
+# run" (METHOD-6): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
+# nothing else distinguishes two builds of one revision.
+$PerfDll    = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
-$EngineTimeoutSec = 300
-# Shards for the FULL catalog when -Shards is not given. Measured on the development machine (8
+# A golden shot's watchdog is wall time from admission: a shot logs nothing while it renders.
+$GoldenWatchdogSec = 300
+# An engine shard is killed when its log has not grown for the stall time, or at the ceiling: under
+# another run's load a shard slows down but keeps logging, and a hung one stops (docs/tooling.md).
+$EngineStallSec = 120
+$EngineCeilingSec = 1200
+# The watchdogs in force, each scaled by gaming mode's watchdog factor at every stage boundary.
+$GoldenTimeoutSec = $GoldenWatchdogSec
+$EngineStallTimeoutSec = $EngineStallSec
+$EngineCeilingTimeoutSec = $EngineCeilingSec
+# No engine budget written into the budgets file may reach the ceiling: one there would go red
+# without ever printing "over budget" first.
+$EngineBudgetCapSec = [math]::Floor(0.8 * $EngineCeilingSec)
+# Shared shards for the FULL catalog when -Shards is not given; each alone suite adds a process on
+# top (Get-EngineShardPlan). Measured on the development machine (8
 # cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
-# every shard within 8 s of the others, and 8 was slower per shard from contention. The watchdog
-# above is per launch, so it is not a budget the shard count may be tuned against.
+# every shard within 8 s of the others, and 8 was slower per shard from contention. The shard
+# watchdogs above judge each launch's progress, so they are not a budget the shard count may be
+# tuned against.
 $DefaultEngineShards = 6
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
@@ -314,8 +378,44 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
 # belongs to the desktop its process was started on, and that is fixed before the process runs.
 # Falls back to the visible desktop rather than failing: the tests must still run where it is
 # refused, just visibly.
+# Every Godot launch below is admitted against the machine-wide memory ledger (Invoke-GodotPool).
+. (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
+# Before the desktop and the job exist, so a run that gives up leaves nothing open in this session.
+if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
+    Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; another CSVM Godot ran past -QuietTimeoutSec ${QuietTimeoutSec}s" -ForegroundColor Yellow
+    exit $MemDeferredExitCode
+}
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop
+# Every child below joins this job, held until the summary, so a killed runner takes them with it.
+$null = Open-RunJob
+
+# Gaming mode (GamingMode.ps1): read at every stage boundary. On, the run holds the machine-wide lock
+# from the first heavy stage to the summary and its job runs throttled; off, nothing changes.
+$Gaming = New-GamingRun -Worktree $RepoRoot
+function Enter-GamingStage {
+    param([string]$Name, [switch]$NoWait)
+    Sync-GamingStage $Gaming -NoWait:$NoWait
+    $script:GoldenTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $GoldenWatchdogSec
+    $script:EngineStallTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineStallSec
+    $script:EngineCeilingTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineCeilingSec
+    if ($Gaming.Deferred -and -not $script:Deferred) {
+        $script:Deferred = $Gaming.Deferred
+        $script:DeferredStage = $Name
+    }
+}
+# The lock is released in the finally at the end of this script, however the run ends.
+try {
+if (-not $SelfTest) {
+    Enter-GamingStage "build"
+    if ($Gaming.Deferred) {
+        Close-HiddenDesktop
+        Close-RunJob
+        Write-Host "  $(Format-GamingSummary $Gaming)" -ForegroundColor Yellow
+        Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; $($Gaming.Deferred)" -ForegroundColor Yellow
+        exit $MemDeferredExitCode
+    }
+}
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -350,9 +450,178 @@ if (-not (Test-Path $ScratchDir)) {
 function Invoke-Godot {
     param(
         [Parameter(Mandatory=$true)][string[]]$Arguments,
-        [int]$TimeoutSec = 0
+        [int]$TimeoutSec = 0,
+        [Parameter(Mandatory=$true)][string]$Kind
     )
-    return Wait-Godot -Launch (Start-Godot -Arguments $Arguments) -TimeoutSec $TimeoutSec
+    $item = [pscustomobject]@{ Label = $Kind; Args = $Arguments; Launch = $null; ExitCode = $MemDeferredExitCode }
+    Invoke-GodotPool -Items @($item) -Kind $Kind -MaxConcurrent 1 -TimeoutSec $TimeoutSec
+    return $item.ExitCode
+}
+
+# Set to the DEFERRED line once a launch waited past $MemMaxWaitSec, the engine refused to start
+# below the memory floor, or the binary changed under the run (Get-RebuildCause). From then on no
+# launch is admitted, and the run ends DEFERRED with the ledger's $MemDeferredExitCode.
+$script:Deferred = $null
+$script:DeferredStage = $null
+# The CSVM.dll the build stage produced (its FileInfo), and whether a rebuild has stopped the run.
+$script:BuiltDll = $null
+$script:Rebuilt = $false
+$script:RebuildCheck = $null
+
+# A pool launch's --log-file, or "". Every pool launch names it in its own arguments, Invoke-Godot's
+# included.
+function Get-LaunchLog {
+    param($Item)
+    $at = [array]::IndexOf([string[]]@($Item.Args), "--log-file")
+    if ($at -ge 0 -and $at + 1 -lt @($Item.Args).Count) { return [string]@($Item.Args)[$at + 1] }
+    return ""
+}
+
+# Seconds since a running launch's log last grew, counted from its admission until it first does.
+function Get-LaunchQuietSec {
+    param($Item)
+    $log = Get-LaunchLog $Item
+    $length = if ($log -and (Test-Path -LiteralPath $log)) { (Get-Item -LiteralPath $log).Length } else { -1 }
+    if ($length -ne $Item.LogLength) {
+        $Item.LogLength = $length
+        $Item.Quiet.Restart()
+    }
+    return $Item.Quiet.Elapsed.TotalSeconds
+}
+
+# The rebuild line, or $null. Checked at most once a second: the DLL's write time and size against
+# the build stage's, and each running launch's log for the line a launch that met a half-written
+# or swapped assembly prints before it sits until its watchdog.
+function Get-RebuildCause {
+    param([object[]]$Running)
+    if (-not $script:BuiltDll) { return $null }
+    if ($script:RebuildCheck -and $script:RebuildCheck.Elapsed.TotalSeconds -lt 1) { return $null }
+    $script:RebuildCheck = [System.Diagnostics.Stopwatch]::StartNew()
+    $now = Get-Item -LiteralPath $PerfDll -ErrorAction SilentlyContinue
+    $cause = $null
+    if (-not $now) {
+        $cause = "CSVM.dll was deleted"
+    } elseif ($now.LastWriteTimeUtc -ne $script:BuiltDll.LastWriteTimeUtc -or $now.Length -ne $script:BuiltDll.Length) {
+        $cause = "CSVM.dll was rewritten at $($now.LastWriteTime.ToString('HH:mm:ss'))"
+    }
+    foreach ($item in $Running) {
+        if ($cause) { break }
+        $log = Get-LaunchLog $item
+        # Only a log under 64 KB is read: one whose Launcher loaded passes that within seconds.
+        $small = $log -and (Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -lt 64KB
+        if ($small -and (Select-String -LiteralPath $log -Pattern 'Cannot instantiate C# script' -SimpleMatch -Quiet)) {
+            $cause = "$($item.Label) logged 'Cannot instantiate C# script'"
+        }
+    }
+    if (-not $cause) { return $null }
+    return "DEFERRED: rebuild, $cause after this run's build, so its launches were stopped; re-run once that build is done"
+}
+
+# Launches each item's .Args (at most $MaxConcurrent in flight), every launch admitted first by the
+# machine-wide memory ledger (MemoryLedgerCore.ps1), and sets each item's .ExitCode. A launch is
+# killed (exit 124) at $TimeoutSec, or once its --log-file has not grown for $StallSec, and its
+# .Overdue says which. Both watchdogs start at admission, so waiting for memory never counts toward either.
+# Order and membership never change; only start times move. An item never started keeps the
+# .ExitCode it came with. An engine-shard item records its peak only when its .LearnPeak is true.
+function Invoke-GodotPool {
+    param([object[]]$Items, [string]$Kind, [int]$MaxConcurrent, [int]$TimeoutSec, [int]$StallSec = 0)
+    $pending = New-Object System.Collections.Queue
+    foreach ($item in $Items) { $pending.Enqueue($item) }
+    $running = New-Object System.Collections.ArrayList
+    $waiter = $null
+    while ($running.Count -gt 0 -or ($pending.Count -gt 0 -and -not $script:Deferred)) {
+        foreach ($item in @($running)) {
+            $handle = if ($item.Launch.Kind -eq "desktop") { $item.Launch.Handle } else { $item.Launch.Process.Handle }
+            if ($TimeoutSec -gt 0 -and $item.Watch.Elapsed.TotalSeconds -ge $TimeoutSec) {
+                $item.Overdue = "ran past its ${TimeoutSec}s wall-time watchdog"
+            } elseif ($StallSec -gt 0 -and (Get-LaunchQuietSec $item) -ge $StallSec) {
+                $item.Overdue = "its log did not grow for ${StallSec}s"
+            }
+            if (-not $script:Rebuilt -and -not $item.Overdue -and -not [CSVMMemLedger]::HasExited($handle)) { continue }
+            # An overdue launch is killed here, and its reservation released only after the kill.
+            $item.ExitCode = Wait-Godot -Launch $item.Launch -TimeoutSec 1
+            Close-MemReservation -Reservation $item.Reservation -LearnShardPeak:([bool]$item.LearnPeak)
+            $running.Remove($item)
+            if ($script:Rebuilt) {
+                # Stopped, not finished: it reads as never started, as a launch the ledger deferred does.
+                $item.Launch = $null
+                $item.ExitCode = $MemDeferredExitCode
+                continue
+            }
+            if ($item.ExitCode -eq $MemTripwireExitCode -and -not $script:Deferred) {
+                $script:Deferred = "DEFERRED: memory, $($item.Label) exited $MemTripwireExitCode, the engine found available memory below the floor"
+                Write-Host "  $script:Deferred" -ForegroundColor Yellow
+            }
+        }
+        while ($pending.Count -gt 0 -and $running.Count -lt $MaxConcurrent -and -not $script:Deferred) {
+            $next = $pending.Peek()
+            # An item may carry its own ledger kind: an engine stage holds windowed and headless shards.
+            $itemKind = if ($next.PSObject.Properties["Kind"] -and $next.Kind) { $next.Kind } else { $Kind }
+            if (-not $waiter) { $waiter = New-MemWaiter -Kind $itemKind -Label $next.Label -Worktree $RepoRoot }
+            $reservation = Step-MemWaiter $waiter
+            if ($waiter.Deferred) { $script:Deferred = $waiter.Deferred }
+            if (-not $reservation) { break }
+            $waiter = $null
+            $null = $pending.Dequeue()
+            $env:CSVM_MEM_RESERVATION = $reservation.Path
+            try {
+                $next.Launch = Start-Godot -Arguments $next.Args
+            } finally {
+                Remove-Item Env:\CSVM_MEM_RESERVATION -ErrorAction SilentlyContinue
+            }
+            $handle = if ($next.Launch.Kind -eq "desktop") { $next.Launch.Handle } else { $next.Launch.Process.Handle }
+            Set-MemReservationPid -Reservation $reservation -ProcessId ([CSVMMemLedger]::ProcessId($handle))
+            $next | Add-Member -NotePropertyName Reservation -NotePropertyValue $reservation -Force
+            $next | Add-Member -NotePropertyName Watch -NotePropertyValue ([System.Diagnostics.Stopwatch]::StartNew()) -Force
+            $next | Add-Member -NotePropertyName Quiet -NotePropertyValue ([System.Diagnostics.Stopwatch]::StartNew()) -Force
+            $next | Add-Member -NotePropertyName LogLength -NotePropertyValue ([long]-1) -Force
+            $next | Add-Member -NotePropertyName Overdue -NotePropertyValue $null -Force
+            $null = $running.Add($next)
+        }
+        if (-not $script:Deferred -and ($cause = Get-RebuildCause -Running $running)) {
+            $script:Deferred = $cause
+            $script:Rebuilt = $true
+            Write-Host "  $cause" -ForegroundColor Yellow
+            if ($waiter -and $waiter.Held) { $waiter.Held.Stream.Dispose() }
+            # The job kills every launch of this run at once, so the reaping above returns at once;
+            # without a job each is killed there after a second.
+            Close-RunJob
+            continue
+        }
+        Start-Sleep -Milliseconds 200
+    }
+}
+
+# The engine stage's processes, in three groups the harness's render: term selects (SuiteRender): one
+# windowed shard plus one per suite the weights file runs alone, which the harness's plan puts last;
+# the shared count of headless shards (-Shards, gaming mode's tunable, or the default); and one
+# headless process for the ci tier on the synthetic data root. -RealData also runs the ci tier on
+# the real data, in the headless shards, so that process is an extra pass. A selection keeps one
+# process per group, since it never holds a full shard's worlds. Learns says, per process, whether
+# its peak teaches the ledger: only a windowed or headless shard of the complete catalog under the
+# default count does, because any other plan hands a shard a different share of the catalog.
+function Get-EngineShardPlan {
+    param([int]$Requested, [string]$Selector, $GamingSettings, [int]$AloneCount, [switch]$RealData)
+    $shared = $Requested
+    if ($shared -le 0) {
+        $shared = if ($Selector) { 1 } elseif ($GamingSettings) { $GamingSettings.shards } else { $DefaultEngineShards }
+    }
+    if ($GamingSettings) { $shared = [math]::Min($shared, $GamingSettings.shards) }
+    $windowed = if ($Selector) { 1 } else { 1 + $AloneCount }
+    $default = -not $Selector -and -not $GamingSettings -and $shared -eq $DefaultEngineShards
+    $groups = @(
+        [pscustomobject]@{ Render = "windowed"; Count = $windowed; Headless = $false; Synthetic = $false
+            Extra = $false; Kind = "engine-shard"; Learns = @(for ($k = 1; $k -le $windowed; $k++) { $default -and $k -eq 1 }) }
+        [pscustomobject]@{ Render = $(if ($RealData) { "headless+synthetic" } else { "headless" }); Count = $shared
+            Headless = $true; Synthetic = $false; Extra = $false; Kind = "engine-headless"
+            Learns = @(for ($k = 1; $k -le $shared; $k++) { $default -and -not $RealData }) }
+        [pscustomobject]@{ Render = "synthetic"; Count = 1; Headless = $true; Synthetic = $true
+            Extra = [bool]$RealData; Kind = "engine-headless"; Learns = @($false) }
+    )
+    return [pscustomobject]@{
+        Shared = $shared; Windowed = $windowed; Total = $windowed + $shared + 1; Groups = $groups
+        Learns = @($groups | ForEach-Object { $_.Learns })
+    }
 }
 
 # The non-blocking half of Invoke-Godot, so the engine stage can have several shards in flight.
@@ -399,6 +668,8 @@ function Start-Godot {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
     $p = Invoke-WithXrSimFeature -Arguments $Arguments -Launch { [System.Diagnostics.Process]::Start($psi) }
+    # Joined after it starts, which is safe because Godot starts no child process of its own.
+    Add-ToRunJob -Process $p.Handle
     return [pscustomobject]@{
         Kind = "process"; Process = $p; StreamBase = $streamBase
         OutRead = $p.StandardOutput.ReadToEndAsync()
@@ -428,6 +699,142 @@ function Wait-Godot {
     return $code
 }
 
+if ($SelfTest) {
+    $failed = 0
+    function Assert-SelfTest {
+        param([bool]$Ok, [string]$What)
+        $script:RebuildCheck = $null
+        if ($Ok) { Write-Host "  PASS  $What" } else { Write-Host "  FAIL  $What" -ForegroundColor Red; $script:failed++ }
+    }
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-rebuild-selftest-$PID"
+    $null = New-Item -ItemType Directory -Path $dir -Force
+    $savedAvail = $env:CSVM_MEM_AVAILABLE_GB
+    try {
+        $PerfDll = Join-Path $dir "CSVM.dll"
+        [System.IO.File]::WriteAllText($PerfDll, "built")
+        $log = Join-Path $dir "s1.log"
+        [System.IO.File]::WriteAllText($log, "Godot Engine v4.7`n")
+        $shard = [pscustomobject]@{ Label = "s1"; Args = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn") }
+        $built = Get-Item -LiteralPath $PerfDll
+        $script:BuiltDll = $built
+        Assert-SelfTest (-not (Get-RebuildCause -Running @($shard))) "the build's own stamp and a clean log do not trigger"
+        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc; Length = $built.Length + 1 }
+        Assert-SelfTest ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different size triggers"
+        $script:BuiltDll = [pscustomobject]@{ LastWriteTimeUtc = $built.LastWriteTimeUtc.AddSeconds(-5); Length = $built.Length }
+        Assert-SelfTest ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was rewritten at *") "a different write time triggers"
+        $script:BuiltDll = $built
+        [System.IO.File]::AppendAllText($log, "ERROR: Cannot instantiate C# script because the associated class could not be found.`n")
+        Assert-SelfTest ((Get-RebuildCause -Running @($shard)) -like "DEFERRED: rebuild, s1 logged 'Cannot instantiate C# script'*") "a running launch's log line triggers"
+        Assert-SelfTest (-not (Get-RebuildCause -Running @())) "the log line of a launch no longer running does not"
+        Remove-Item -LiteralPath $PerfDll
+        Assert-SelfTest ((Get-RebuildCause -Running @()) -like "DEFERRED: rebuild, CSVM.dll was deleted*") "a deleted DLL triggers"
+
+        # The stall rule through the pool, the running host's PowerShell standing in for Godot on the
+        # hidden desktop, admitted by a private memory ledger.
+        $script:BuiltDll = $null
+        $script:MemLedgerDir = Join-Path $dir "mem"
+        $script:MemHistoryFile = Join-Path $MemLedgerDir "history.json"
+        $script:MemEstimatesFile = Join-Path $MemLedgerDir "estimates.json"
+        $env:CSVM_MEM_AVAILABLE_GB = "64"
+        $GodotExe = (Get-Process -Id $PID).Path
+        $fakes = [ordered]@{
+            steady = '1..10 | ForEach-Object { Add-Content -LiteralPath ''LOG'' x; Start-Sleep -Milliseconds 500 }'
+            hung   = 'Start-Sleep 60'
+            spam   = 'while ($true) { Add-Content -LiteralPath ''LOG'' x; Start-Sleep -Milliseconds 300 }'
+        }
+        $fakeRuns = @(foreach ($name in $fakes.Keys) {
+            $fakeLog = Join-Path $dir "$name.log"
+            # The trailing # makes the host read the --log-file pair as a comment.
+            [pscustomobject]@{ Label = $name; Launch = $null; ExitCode = -1
+                Args = @("-NoProfile", "-Command", ($fakes[$name].Replace("LOG", $fakeLog) + " #"), "--log-file", $fakeLog) }
+        })
+        Invoke-GodotPool -Items $fakeRuns -Kind "probe" -MaxConcurrent 3 -TimeoutSec 15 -StallSec 3
+        Assert-SelfTest ($fakeRuns[0].ExitCode -eq 0 -and -not $fakeRuns[0].Overdue) "a launch whose log keeps growing outlives the stall time"
+        Assert-SelfTest ($fakeRuns[1].ExitCode -eq 124 -and $fakeRuns[1].Overdue -eq "its log did not grow for 3s") "a launch whose log never grows is killed at the stall time"
+        Assert-SelfTest ($fakeRuns[2].ExitCode -eq 124 -and $fakeRuns[2].Overdue -eq "ran past its 15s wall-time watchdog") "a launch that never stops logging is killed at the ceiling"
+
+        # The shard plan: the windowed shard and an alone suite's process come on top of the shared
+        # headless count, then the synthetic process; only the default plan's windowed and headless
+        # shards teach the estimates.
+        $gamingTwo = [pscustomobject]@{ shards = 2 }
+        $plans = [ordered]@{
+            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
+            "-Shards 6"    = @((Get-EngineShardPlan -Requested 6 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
+            "-RealData"    = @((Get-EngineShardPlan -Requested 0 -AloneCount 1 -RealData), 6, 9, "1,0,0,0,0,0,0,0,0")
+            "-Shards 1"    = @((Get-EngineShardPlan -Requested 1 -AloneCount 1), 1, 4, "0,0,0,0")
+            "-Shards 2"    = @((Get-EngineShardPlan -Requested 2 -AloneCount 1), 2, 5, "0,0,0,0,0")
+            "gaming mode"  = @((Get-EngineShardPlan -Requested 0 -GamingSettings $gamingTwo -AloneCount 1), 2, 5, "0,0,0,0,0")
+            "gaming, -Shards 6" = @((Get-EngineShardPlan -Requested 6 -GamingSettings $gamingTwo -AloneCount 1), 2, 5, "0,0,0,0,0")
+            "a selection"  = @((Get-EngineShardPlan -Requested 0 -Selector "hud" -AloneCount 1), 1, 3, "0,0,0")
+            "a selection, -Shards 3" = @((Get-EngineShardPlan -Requested 3 -Selector "hud" -AloneCount 1), 3, 5, "0,0,0,0,0")
+        }
+        foreach ($case in $plans.Keys) {
+            $p, $shared, $total, $learns = $plans[$case]
+            $got = ($p.Learns | ForEach-Object { [int]$_ }) -join ","
+            Assert-SelfTest ($p.Shared -eq $shared -and $p.Total -eq $total -and $got -eq $learns) "shard plan, ${case}: $($p.Shared) shared of $($p.Total) process(es), learns $got"
+        }
+    } finally {
+        $env:CSVM_MEM_AVAILABLE_GB = $savedAvail
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        Close-HiddenDesktop
+        Close-RunJob
+    }
+    Write-Host ""
+    if ($failed -gt 0) { Write-Host "SELFTEST FAIL: $failed check(s)" -ForegroundColor Red; exit 1 }
+    Write-Host "SELFTEST PASS" -ForegroundColor Green
+    exit 0
+}
+
+# Runs dotnet to completion in the run's job, writing its stdout and stderr lines to this script's
+# output as they arrive and setting $LASTEXITCODE, as the call operator would. The call operator
+# gives no handle to join to the job; this start does. Stderr lines arrive as plain strings, never
+# as the ErrorRecords that under "Stop" would end the run mid-stage.
+function Invoke-Dotnet {
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [hashtable]$Environment = @{}
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName        = "dotnet"
+    $psi.Arguments       = (($Arguments | ForEach-Object {
+        if ($_ -match '[\s"]') { '"{0}"' -f ($_ -replace '"', '\"') } else { $_ }
+    }) -join " ")
+    $psi.UseShellExecute        = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $psi.StandardOutputEncoding = [Console]::OutputEncoding
+    $psi.StandardErrorEncoding  = [Console]::OutputEncoding
+    foreach ($name in $Environment.Keys) {
+        $psi.EnvironmentVariables[$name] = $Environment[$name]
+    }
+    $p = [System.Diagnostics.Process]::Start($psi)
+    # Joined after it starts, since ProcessStartInfo cannot start suspended: a child dotnet started
+    # before this line would run outside the job, and its host has the SDK to load before it starts any.
+    Add-ToRunJob -Process $p.Handle
+    # Both streams are read at once, or a full stderr pipe blocks dotnet while stdout is drained.
+    $readers = @($p.StandardOutput, $p.StandardError)
+    $pending = @($readers[0].ReadLineAsync(), $readers[1].ReadLineAsync())
+    while ($pending[0] -or $pending[1]) {
+        for ($i = 0; $i -lt 2; $i++) {
+            if ($pending[$i] -and $pending[$i].IsCompleted) {
+                $line = $pending[$i].Result
+                if ($null -eq $line) {
+                    $pending[$i] = $null
+                } else {
+                    $line
+                    $pending[$i] = $readers[$i].ReadLineAsync()
+                }
+            }
+        }
+        $open = @($pending | Where-Object { $_ })
+        if ($open.Count -gt 0) {
+            $null = [System.Threading.Tasks.Task]::WaitAny([System.Threading.Tasks.Task[]]$open, 250)
+        }
+    }
+    $p.WaitForExit()
+    $global:LASTEXITCODE = $p.ExitCode
+}
+
 $Stages   = New-Object System.Collections.ArrayList
 $Unchecked = New-Object System.Collections.ArrayList
 
@@ -438,6 +845,17 @@ function Add-Stage {
         [double]$Seconds,
         [string]$Detail
     )
+    # The stage that met a memory deferral is DEFERRED unless what did run failed: FAIL outranks
+    # DEFERRED. Every Godot stage after it is skipped before it starts. A stage whose gaming-mode lock
+    # wait deferred the run is named before it reports its skip, and reads DEFERRED.
+    if ($Status -eq "SKIP" -and $Name -eq $script:DeferredStage) {
+        $Status = "DEFERRED"
+        $Detail = $script:Deferred
+    } elseif ($script:Deferred -and -not $script:DeferredStage -and $Status -ne "SKIP") {
+        $script:DeferredStage = $Name
+        if ($Status -ne "FAIL") { $Status = "DEFERRED" }
+        $Detail = "$Detail; $script:Deferred"
+    }
     $null = $Stages.Add([pscustomobject]@{
         Name    = $Name
         Status  = $Status
@@ -562,9 +980,10 @@ function Get-NetPortBase {
 # the selection mean the plan lost or duplicated a suite. Allowlist caps are re-checked against the
 # SUMMED counts, because each process only ever sees its own share of an allowed error.
 function Merge-EngineShards {
-    param([object[]]$Shards, [int]$TimeoutSec)
+    param([object[]]$Shards, [switch]$CheckShaders)
 
-    $passed = 0; $failed = 0; $skipped = 0
+    $passed = 0; $failed = 0; $skipped = 0; $extraCovered = 0
+    $compiled = @{}; $madeBy = @{}
     $problems = @(); $failedRows = @(); $seenNames = @{}
     $unexpected = @(); $overCap = @(); $screenedAll = $true; $anyScreen = $false
     $binaries = @{}; $allowSeen = @{}; $allowMax = @{}; $allowWhy = @{}
@@ -572,7 +991,7 @@ function Merge-EngineShards {
 
     foreach ($shard in $Shards) {
         if ($shard.ExitCode -eq 124) {
-            $problems += "$($shard.Label): timed out after ${TimeoutSec}s (exit 124); partial log at $($shard.Log)"
+            $problems += "$($shard.Label): killed, $($shard.Overdue) (exit 124); partial log at $($shard.Log)"
         }
         if (-not (Test-Path $shard.Report)) {
             # A selector term that matched nothing ends the harness before any suite runs, so there
@@ -600,6 +1019,26 @@ function Merge-EngineShards {
         $passed  += [int]$json.passed
         $failed  += [int]$json.failed
         $skipped += [int]$json.skipped
+        # An extra pass (-RealData's synthetic process) repeats suites the shards also run, so it is
+        # held to its own share of the selection, not to the shards' one-run-each partition.
+        $extra = [bool]($shard.PSObject.Properties["Extra"] -and $shard.Extra)
+        if ($extra) {
+            $mine = [int]$json.passed + [int]$json.failed + [int]$json.skipped
+            $extraCovered += $mine
+            if ($mine -ne [int]$json.shard.renderTotal) {
+                $problems += "$($shard.Label): covered $mine suite(s) of its render share's $($json.shard.renderTotal)"
+            }
+        }
+        # A headless process compiles no shader, so every text it made must have been compiled by a
+        # windowed one. Synthetic data makes texts the game never does, so its process is not held to it.
+        $render = if ($shard.PSObject.Properties["Render"]) { [string]$shard.Render } else { "" }
+        foreach ($suite in @($json.suites)) {
+            foreach ($text in @($suite.shaderTexts)) {
+                if (-not $text) { continue }
+                if ($render -eq "windowed") { $compiled[$text] = 1 }
+                elseif ($render -like "headless*") { $madeBy[$text] = $suite.name }
+            }
+        }
         if ($shard.ExitCode -ne 0 -and $shard.ExitCode -ne 1) {
             $problems += "$($shard.Label): Godot exited $($shard.ExitCode) though it wrote a report; log at $($shard.Log)"
         }
@@ -626,10 +1065,10 @@ function Merge-EngineShards {
             if ($name) { $unweighted += $name }
         }
         foreach ($suite in @($json.suites)) {
-            if ($seenNames.ContainsKey($suite.name)) {
+            if (-not $extra -and $seenNames.ContainsKey($suite.name)) {
                 $problems += "suite '$($suite.name)' ran in more than one shard"
             }
-            $seenNames[$suite.name] = 1
+            if (-not $extra) { $seenNames[$suite.name] = 1 }
             if ($suite.status -eq "fail") {
                 $failedRows += [pscustomobject]@{ Index = [int]$suite.index; Name = $suite.name }
             }
@@ -660,9 +1099,16 @@ function Merge-EngineShards {
         $problems += "shards disagree on the selection size ($($totals.Keys -join ', '))"
     } elseif ($totals.Keys.Count -eq 1) {
         $expected = [int]@($totals.Keys)[0]
-        $covered = $passed + $failed + $skipped
+        $covered = $passed + $failed + $skipped - $extraCovered
         if ($covered -ne $expected) {
             $problems += "the shards covered $covered suite(s) of the selection's $expected"
+        }
+    }
+    if ($CheckShaders) {
+        $uncovered = @($madeBy.Keys | Where-Object { -not $compiled.ContainsKey($_) })
+        foreach ($owner in @($uncovered | ForEach-Object { $madeBy[$_] } | Sort-Object -Unique)) {
+            $n = @($uncovered | Where-Object { $madeBy[$_] -eq $owner }).Count
+            $problems += "suite '$owner' made $n shader text(s) headless that no windowed process compiled: add it to headlessShaders in analysis\headless-limits.json"
         }
     }
     if ($reports -ne $Shards.Count) {
@@ -715,15 +1161,15 @@ if ($Quick) {
 
 Write-Stage-Banner "build"
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
-# PowerShell 5.1 wraps a native command's stderr in ErrorRecords as soon as this script's own
-# output is redirected -- a caller piping it into Select-String or a file is enough -- and under
-# $ErrorActionPreference = "Stop" the first such line kills the run mid-stage, orphaning whatever
-# it had launched. Every native call here is judged by its exit code, so they run non-terminating;
-# cmdlets keep Stop, because a silently failed Remove-Item would score a stage from a stale file.
-$ErrorActionPreference = "Continue"
-dotnet build $Sln
+# Breakaway while it builds, so only dotnet itself is in the job and every child it starts runs
+# outside it: its MSBuild nodes and compiler server are shared with every other build on this
+# machine, and the job's close would kill them under a sibling's build.
+# Throttled, the build keeps its children in the job instead (a child that breaks away loses the
+# job's affinity): its nodes and compiler are its own then, so the close kills nothing shared.
+Set-RunJobBreakaway -On (-not $Gaming.Settings)
+Invoke-Dotnet -Arguments (@("build", $Sln) + (Get-GamingDotnetArgs $Gaming.Settings -Build))
 $buildCode = $LASTEXITCODE
-$ErrorActionPreference = "Stop"
+Set-RunJobBreakaway -On $false
 $watch.Stop()
 if ($buildCode -eq 0) {
     Add-Stage -Name "build" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail "dotnet build CSVM.sln"
@@ -731,15 +1177,21 @@ if ($buildCode -eq 0) {
     Add-Stage -Name "build" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "dotnet build exited $buildCode"
 }
 $buildOk = ($buildCode -eq 0)
+if ($buildOk) {
+    $script:BuiltDll = Get-Item -LiteralPath $PerfDll -ErrorAction SilentlyContinue
+}
 
 # ---- units -------------------------------------------------------------------------------
 
+if (-not $SkipUnits -and $buildOk) { Enter-GamingStage "units" }
 if ($SkipUnits) {
     Add-Stage -Name "units" -Status "SKIP" -Seconds 0 -Detail "-SkipUnits"
     Add-Unchecked "the unit tests did not run (-SkipUnits)"
 } elseif (-not $buildOk) {
     Add-Stage -Name "units" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the unit tests did not run (the build failed)"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "units" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } else {
     Write-Stage-Banner "units (dotnet test)"
     $trxDir = Join-Path $ScratchDir "testresults"
@@ -748,15 +1200,18 @@ if ($SkipUnits) {
         Remove-Item -Path $trx -Force
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
-    $ErrorActionPreference = "Continue"
+    $testArgs = @("test", $Sln, "--no-build", "--nologo")
     if ($UnitFilter) {
-        dotnet test $Sln --no-build --nologo --filter $UnitFilter `
-            --results-directory $trxDir --logger "trx;LogFileName=units.trx"
-    } else {
-        dotnet test $Sln --no-build --nologo --results-directory $trxDir --logger "trx;LogFileName=units.trx"
+        $testArgs += @("--filter", $UnitFilter)
     }
+    $testArgs += @("--results-directory", $trxDir, "--logger", "trx;LogFileName=units.trx")
+    if ($Gaming.Settings) {
+        $testArgs += @(Get-GamingDotnetArgs $Gaming.Settings) + @("--", "RunConfiguration.MaxCpuCount=$($Gaming.Settings.dotnetCpus)")
+    }
+    # The testhosts must stay in the job, so no breakaway here; this run's MSBuild nodes are made
+    # private instead, so the job's close cannot kill a node a sibling's build has taken over.
+    Invoke-Dotnet -Arguments $testArgs -Environment @{ MSBUILDDISABLENODEREUSE = "1" }
     $unitCode = $LASTEXITCODE
-    $ErrorActionPreference = "Stop"
     $watch.Stop()
 
     # The test host is gone now, so its temp roots (%TEMP%\csvm-tests\run-<pid>-*) delete in
@@ -818,12 +1273,15 @@ if ($SkipUnits) {
 
 # ---- engine ------------------------------------------------------------------------------
 
+if (-not $SkipEngine -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "engine" }
 if ($SkipEngine) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "-SkipEngine"
     Add-Unchecked "the in-engine suites did not run (-SkipEngine)"
 } elseif (-not $buildOk) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the in-engine suites did not run (the build failed)"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the in-engine suites did not run: no Godot at $GodotExe (in a worktree, set `$env:CSVM_DATA_ROOT to the primary tree)"
@@ -839,14 +1297,18 @@ if ($SkipEngine) {
         $env:SDL_JOYSTICK_DIRECTINPUT = "0"
     }
 
-    # An explicit selection stays in one process: the shard grammar divides by measured weight, and
-    # a handful of named suites is faster started once than started N times.
-    $shardCount = $Shards
-    if ($shardCount -le 0) {
-        $shardCount = if ($EngineSelector) { 1 } else { $DefaultEngineShards }
-    }
+    # An explicit selection keeps one process per group: the shard grammar divides by measured
+    # weight, and a handful of named suites is faster started once than started N times.
+    # A missing or unreadable weights file runs nothing alone, as the harness's own reading does.
+    $aloneCount = 0
+    try {
+        $weightsJson = [System.IO.File]::ReadAllText((Join-Path $RepoRoot "analysis\engine-suite-weights.json")) | ConvertFrom-Json
+        $aloneCount = @($weightsJson.alone | Where-Object { $_ }).Count
+    } catch { }
+    $shardPlan = Get-EngineShardPlan -Requested $Shards -Selector $EngineSelector -GamingSettings $Gaming.Settings -AloneCount $aloneCount -RealData:$RealData
+    $shardCount = $shardPlan.Total
     if ($shardCount -gt $NetPortSlotShards) {
-        throw "-Shards ${shardCount}: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards shards"
+        throw "-Shards $($shardPlan.Shared) plus $($shardCount - $shardPlan.Shared) windowed and synthetic makes $shardCount processes: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards"
     }
 
     # Held from before the first launch until every shard has exited. With every slot taken, a
@@ -868,49 +1330,51 @@ if ($SkipEngine) {
     # Stale outputs go first: a run that dies before writing its report must not be scored
     # from the previous run's numbers.
     $shardRuns = @()
-    for ($k = 1; $k -le $shardCount; $k++) {
-        if ($shardCount -eq 1) {
-            $terms  = $EngineSelector
-            $report = Join-Path $ScratchDir "test-report.json"
-            $log    = Join-Path $engineRunDir "engine.log"
-            $label  = "engine"
-        } else {
+    $k = 0
+    foreach ($group in $shardPlan.Groups) {
+        for ($i = 1; $i -le $group.Count; $i++) {
+            $k++
             # The harness writes its report and its per-suite artifacts beside this log, in a
-            # directory named for the shard -- so the launch directory decides both.
-            $terms  = (@($EngineSelector, "shard:$k/$shardCount") | Where-Object { $_ }) -join ","
-            $report = Join-Path $engineRunDir "shard${k}of${shardCount}\test-report.json"
-            $log    = Join-Path $engineRunDir "shard${k}of${shardCount}.log"
-            $label  = "s$k"
-        }
-        foreach ($stale in @($report, $log, "$log.out", "$log.err")) {
-            if (Test-Path $stale) {
-                Remove-Item -Path $stale -Force
+            # directory named for the render term and shard -- so the launch directory decides both.
+            $shardTerm = if ($group.Count -gt 1) { "shard:$i/$($group.Count)" } else { $null }
+            $terms  = (@($EngineSelector, "render:$($group.Render)", $shardTerm) | Where-Object { $_ }) -join ","
+            $name   = "$($group.Render)-shard${i}of$($group.Count)"
+            $report = Join-Path $engineRunDir "$name\test-report.json"
+            $log    = Join-Path $engineRunDir "$name.log"
+            $label  = if ($group.Synthetic) { "syn" } elseif ($group.Headless) { "h$i" } else { "w$i" }
+            foreach ($stale in @($report, $log, "$log.out", "$log.err")) {
+                if (Test-Path $stale) {
+                    Remove-Item -Path $stale -Force
+                }
+            }
+            $netPortBase = Get-NetPortBase -Slot $netSlotNumber -ShardIndex $k
+            $godotArgs = @("--path", $ProjectDir, "--log-file", $log, "res://scenes/Main.tscn", "--",
+                           "--run-tests=$terms", "--net-port-base=$netPortBase")
+            # One render thread: the dummy renderer's RID owners race under a separate one (#121949 in
+            # headless-limits.json), and a headless process draws nothing for the thread to overlap.
+            if ($group.Headless) { $godotArgs = @("--headless", "--render-thread", "safe") + $godotArgs }
+            if ($group.Synthetic) { $godotArgs += "--synthetic-data" }
+            $shardRuns += [pscustomobject]@{
+                Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
+                NetPortBase = $netPortBase; LearnPeak = $shardPlan.Learns[$k - 1]; Kind = $group.Kind
+                Render = $group.Render; Synthetic = $group.Synthetic; Extra = $group.Extra
+                Args = $godotArgs; Launch = $null; ExitCode = -1
             }
         }
-        $shardRuns += [pscustomobject]@{
-            Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
-            NetPortBase = (Get-NetPortBase -Slot $netSlotNumber -ShardIndex $k)
-            Launch = $null; ExitCode = -1
-        }
     }
-    if ($shardCount -gt 1) {
-        Write-Host "  $shardCount shards, weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
-    }
+    Write-Host "  $($shardPlan.Windowed) windowed (alone suites included), $($shardPlan.Shared) headless, 1 synthetic$(if ($RealData) { ' (an extra pass: -RealData runs the ci tier in the headless shards)' }), weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
     Write-Host "  net ports: slot $netSlotNumber, bases $(($shardRuns | ForEach-Object { $_.NetPortBase }) -join ', ')" -ForegroundColor DarkGray
 
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    # Native calls run non-terminating, here and in the stages below: PowerShell 5.1 wraps their
+    # stderr in ErrorRecords once this script's output is redirected, and under "Stop" the first one
+    # ends the run mid-stage. They are judged by exit code; cmdlets keep "Stop" elsewhere.
     $ErrorActionPreference = "Continue"
     try {
-        foreach ($shard in $shardRuns) {
-            $testArg = if ($shard.Terms) { "--run-tests=$($shard.Terms)" } else { "--run-tests" }
-            $shard.Launch = Start-Godot -Arguments @("--path", $ProjectDir, "--log-file", $shard.Log,
-                                                     "res://scenes/Main.tscn", "--", $testArg,
-                                                     "--net-port-base=$($shard.NetPortBase)")
-        }
-        # Each shard's own watchdog, so one hung shard fails itself and the others still report.
-        foreach ($shard in $shardRuns) {
-            $shard.ExitCode = Wait-Godot -Launch $shard.Launch -TimeoutSec $EngineTimeoutSec
-        }
+        # Each shard is admitted by memory on its own and keeps its own watchdog, so one hung shard
+        # fails itself and the others still report.
+        Invoke-GodotPool -Items $shardRuns -Kind "engine-shard" -MaxConcurrent $shardCount `
+                         -TimeoutSec $EngineCeilingTimeoutSec -StallSec $EngineStallTimeoutSec
     } finally {
         if ($netSlot) {
             $netSlot.Stream.Dispose()
@@ -927,7 +1391,7 @@ if ($SkipEngine) {
         if (-not (Test-Path $shard.Log)) {
             continue
         }
-        $prefix = if ($shardCount -eq 1) { "  " } else { "  $($shard.Label) " }
+        $prefix = "  $($shard.Label) "
         foreach ($line in (Get-Content -Path $shard.Log)) {
             if ($line -match '^\s*\[test\]|^\s*(PASS|FAIL|SKIP)\s') {
                 Write-Host "$prefix$line"
@@ -935,29 +1399,43 @@ if ($SkipEngine) {
         }
     }
 
-    $merged = Merge-EngineShards -Shards $shardRuns -TimeoutSec $EngineTimeoutSec
-    $detail = $merged.Detail
-    if ($EngineSelector) {
-        $detail = "$detail; selector '$EngineSelector'"
-    }
-    if ($shardCount -gt 1) {
-        $detail = "$detail; $shardCount shards, slowest $($merged.SlowestShard)"
-    }
-    Add-Stage -Name "engine" -Status $merged.Status -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
-    foreach ($problem in $merged.Problems) {
-        Write-Host "  !! $problem" -ForegroundColor Red
-    }
-    if ($merged.Skipped -gt 0) {
-        Add-Unchecked "$($merged.Skipped) in-engine suite(s) SKIPPED, normally for missing extracted game data"
-    }
-    if ($EngineSelector) {
-        Add-Unchecked "the in-engine suites outside the selector '$EngineSelector' did not run"
-    }
-    if ($merged.ErrorNote -eq "engine errors UNSCREENED") {
-        Add-Unchecked "native engine ERROR lines were not screened (no readable engine log)"
-    }
-    if ($merged.Unweighted.Count -gt 0) {
-        Add-Unchecked "$($merged.Unweighted.Count) suite(s) carry no measured weight and were balanced at the file's default: $($merged.Unweighted -join ', ') -- regenerate analysis\engine-suite-weights.json"
+    # After a deferral the shards that ran are still merged and judged, so a deferral never hides
+    # a failure; only their partial coverage of the selection is not one.
+    $ranShards = @($shardRuns | Where-Object { $_.Launch -and $_.ExitCode -ne $MemTripwireExitCode })
+    if ($script:Deferred -and $ranShards.Count -eq 0) {
+        Add-Stage -Name "engine" -Status "DEFERRED" -Seconds $watch.Elapsed.TotalSeconds -Detail "no shard ran"
+    } else {
+        $judged = if ($script:Deferred) { $ranShards } else { $shardRuns }
+        # Only a complete run holds every windowed suite, so only it can show a text went uncompiled.
+        $merged = Merge-EngineShards -Shards $judged -CheckShaders:(-not $EngineSelector -and -not $script:Deferred)
+        $status = $merged.Status
+        $problems = @($merged.Problems)
+        $detail = $merged.Detail
+        if ($script:Deferred) {
+            $problems = @($problems | Where-Object { $_ -notmatch '^the shards covered ' })
+            $status = if ($merged.Failed -gt 0 -or $problems.Count -gt 0) { "FAIL" } else { "DEFERRED" }
+            $detail = "$detail; $($ranShards.Count) of $shardCount shard(s) ran"
+        }
+        if ($EngineSelector) {
+            $detail = "$detail; selector '$EngineSelector'"
+        }
+        $detail = "$detail; $($shardPlan.Windowed) windowed + $($shardPlan.Shared) headless + 1 synthetic, slowest $($merged.SlowestShard)"
+        Add-Stage -Name "engine" -Status $status -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+        foreach ($problem in $problems) {
+            Write-Host "  !! $problem" -ForegroundColor Red
+        }
+        if ($merged.Skipped -gt 0) {
+            Add-Unchecked "$($merged.Skipped) in-engine suite(s) SKIPPED, normally for missing extracted game data"
+        }
+        if ($EngineSelector) {
+            Add-Unchecked "the in-engine suites outside the selector '$EngineSelector' did not run"
+        }
+        if ($merged.ErrorNote -eq "engine errors UNSCREENED") {
+            Add-Unchecked "native engine ERROR lines were not screened (no readable engine log)"
+        }
+        if ($merged.Unweighted.Count -gt 0) {
+            Add-Unchecked "$($merged.Unweighted.Count) suite(s) carry no measured weight and were balanced at the file's default: $($merged.Unweighted -join ', ') -- regenerate analysis\engine-suite-weights.json"
+        }
     }
 }
 
@@ -1059,6 +1537,7 @@ function Save-GoldenFailureEvidence {
     }
 }
 
+if (-not $SkipGoldensNow -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "goldens" }
 if ($SkipGoldensNow) {
     $why = if ($SkipGoldens) { "-SkipGoldens" } else { "-Quick" }
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail $why
@@ -1066,6 +1545,8 @@ if ($SkipGoldensNow) {
 } elseif (-not $buildOk) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the golden-image shots did not run (the build failed)"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the golden-image shots did not run: no Godot at $GodotExe"
@@ -1074,6 +1555,7 @@ if ($SkipGoldensNow) {
     Add-Unchecked "the golden-image shots did not run: no manifest at $GoldenManifest"
 } else {
     $goldenWorkerCount = [Math]::Max(1, $GoldenWorkers)
+    if ($Gaming.Settings) { $goldenWorkerCount = [Math]::Min($goldenWorkerCount, $Gaming.Settings.goldenWorkers) }
     Write-Stage-Banner $(if ($RegenGoldens) { "goldens (regenerating)" } else { "goldens" })
     # Every launch here carries the .scratch\goldens output path, an argument nothing but this
     # stage passes -- so the kill cannot reach a live playtest or a hand-run capture.
@@ -1184,47 +1666,56 @@ if ($SkipGoldensNow) {
         $states += [pscustomobject]@{
             Shot = $shot; Png = $png; Log = $shotLog
             Attempt = 1; ShotCode = -1; Launch = $null; NeedsRetry = $false; TimedOut = $false
+            Label = $shot.name; Args = $null; ExitCode = -1
             Hash = ""; Size = ""; Gpu = ""; Frame = -1; Clock = ""
         }
     }
 
-    # First pass: every shot's attempt 1, in registry-order batches of $goldenWorkerCount. At the
-    # default of 1 this is exactly the old serial loop, one launch, one wait, repeat.
-    for ($i = 0; $i -lt $states.Count; $i += $goldenWorkerCount) {
-        $batch = $states[$i..([Math]::Min($i + $goldenWorkerCount - 1, $states.Count - 1))]
-        $ErrorActionPreference = "Continue"
-        foreach ($state in $batch) {
-            $state.Launch = Start-Godot -Arguments (Get-GoldenShotArguments -State $state -Verbose $false)
-        }
-        # Each shot keeps its own per-launch watchdog even inside a batch, so one hung shot fails
-        # only itself and its batch-mates still report.
-        foreach ($state in $batch) {
-            $state.ShotCode = Wait-Godot -Launch $state.Launch -TimeoutSec $EngineTimeoutSec
-        }
-        $ErrorActionPreference = "Stop"
-        foreach ($state in $batch) {
+    # First pass: every shot's attempt 1 in registry order, at most $goldenWorkerCount in flight,
+    # each admitted by memory on its own. At 1 this is the serial loop, one launch, one wait, repeat.
+    # Each shot keeps its own per-launch watchdog, so one hung shot fails only itself.
+    foreach ($state in $states) {
+        $state.Args = Get-GoldenShotArguments -State $state -Verbose $false
+
+    }
+    $ErrorActionPreference = "Continue"
+    Invoke-GodotPool -Items $states -Kind "golden-shot" -MaxConcurrent $goldenWorkerCount -TimeoutSec $GoldenTimeoutSec
+    $ErrorActionPreference = "Stop"
+    # A shot the ledger never started, or the engine refused below the floor, took no picture and
+    # is neither a pass nor a break; the deferral itself is reported once by the stage row.
+    $unrun = @($states | Where-Object { -not $_.Launch -or $_.ExitCode -eq $MemTripwireExitCode })
+    foreach ($state in $states) {
+        $state.ShotCode = $state.ExitCode
+        if ($unrun -notcontains $state) {
             Resolve-GoldenAttempt -State $state
         }
     }
 
     # Second pass: the silent-death retry, serially and with --verbose, exactly as the plan
     # requires -- a batch's worth of concurrent launches is not where a flaky retry should run.
-    foreach ($state in ($states | Where-Object { $_.NeedsRetry })) {
+    foreach ($state in ($states | Where-Object { $_.NeedsRetry -and -not $script:Deferred })) {
         $retried += $state.Shot.name
         Write-Host "  RETRY $($state.Shot.name): exited $($state.ShotCode) with no PNG -- re-running with --verbose" -ForegroundColor DarkYellow
         $state.Attempt = 2
         $ErrorActionPreference = "Continue"
-        $state.ShotCode = Invoke-Godot (Get-GoldenShotArguments -State $state -Verbose $true) -TimeoutSec $EngineTimeoutSec
+        $state.ShotCode = Invoke-Godot (Get-GoldenShotArguments -State $state -Verbose $true) -TimeoutSec $GoldenTimeoutSec -Kind "golden-shot"
         $ErrorActionPreference = "Stop"
         Resolve-GoldenAttempt -State $state
+    }
+    # A deferral skips the retry, so a shot still owed one is unrun, not broken.
+    if ($script:Deferred) {
+        $unrun += @($states | Where-Object { $_.NeedsRetry -and $_.Attempt -lt 2 })
     }
 
     # Final classification, identical to the serial path's own per-shot checks.
     foreach ($state in $states) {
         $shot = $state.Shot
+        if ($unrun -contains $state) {
+            continue
+        }
         if (-not (Test-Path $state.Png)) {
             if ($state.TimedOut) {
-                $detail = "$($shot.name): timed out after ${EngineTimeoutSec}s (Godot exited 124) -- see $($state.Log)"
+                $detail = "$($shot.name): timed out after ${GoldenTimeoutSec}s (Godot exited 124) -- see $($state.Log)"
             } else {
                 $detail = "$($shot.name): no PNG written (Godot exited $($state.ShotCode)) -- see $($state.Log)"
             }
@@ -1304,6 +1795,7 @@ if ($SkipGoldensNow) {
         Add-Unchecked "goldens were REGENERATED, not checked -- review the manifest diff and name the moved shots in the commit"
     } elseif ($moved.Count -eq 0 -and $broken.Count -eq 0) {
         $passDetail = "$shotCount shot(s) hash-identical; gpu $liveGpu"
+        if ($unrun.Count -gt 0) { $passDetail = "$($shotCount - $unrun.Count) of $shotCount shot(s) hash-identical, $($unrun.Count) not run; gpu $liveGpu" }
         if ($goldenWorkerCount -gt 1) { $passDetail = "$passDetail; $goldenWorkerCount workers" }
         Add-Stage -Name "goldens" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $passDetail
     } else {
@@ -1324,10 +1816,6 @@ if ($SkipGoldensNow) {
 $PerfManifest = Join-Path $RepoRoot "analysis\perf\scenarios.json"
 $PerfDir      = Join-Path $ScratchDir "perf"
 $PerfHistory  = Join-Path $RepoRoot "perf-history.jsonl"
-# The assembly Godot actually loads. Hashing it is the only honest answer to "did the new build
-# run" (METHOD-6): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
-# nothing else distinguishes two builds of one revision.
-$PerfDll      = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 
 function Get-Median {
     param([double[]]$Values)
@@ -1369,11 +1857,19 @@ function Get-FileMd5 {
     return (Get-FileHash -Path $Path -Algorithm MD5).Hash.ToLowerInvariant()
 }
 
+# Perf and hitch never wait for the gaming-mode lock: in gaming mode they do not run, so no throttled
+# record reaches perf-history.jsonl and no hitch run is judged beside a game.
+if ($Perf) { Enter-GamingStage "perf" -NoWait }
 if (-not $Perf) {
     # Nothing to say: the stage is opt-in, and an absent stage is not an unchecked one.
 } elseif (-not $buildOk) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the perf scenarios did not run (the build failed)"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
+} elseif ($Gaming.Settings) {
+    Add-Stage -Name "perf" -Status "DEFERRED" -Seconds 0 -Detail "DEFERRED (gaming mode): not measured beside a game"
+    Add-Unchecked "the perf scenarios did not run (gaming mode); re-run -Perf with gaming mode off"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the perf scenarios did not run: no Godot at $GodotExe"
@@ -1457,8 +1953,12 @@ if (-not $Perf) {
                                              "--frames=$perfFrameCount", "--screenshot=$png")
             $ErrorActionPreference = "Continue"
             $runCode = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $log,
-                                       "res://scenes/Main.tscn", "--") + $runArgs)
+                                       "res://scenes/Main.tscn", "--") + $runArgs) -Kind "perf"
             $ErrorActionPreference = "Stop"
+            # A launch the ledger deferred, or the engine refused, measured nothing and broke nothing.
+            if ($script:Deferred -and ($runCode -eq $MemDeferredExitCode -or $runCode -eq $MemTripwireExitCode)) {
+                break
+            }
 
             if (-not (Test-Path $log)) {
                 $perfBroken += "$tag : no engine log at $log (Godot exited $runCode)"
@@ -1526,6 +2026,9 @@ if (-not $Perf) {
                 }
                 $null = $startupSamples[$key].Add([double]$startup[$key])
             }
+        }
+        if ($script:Deferred) {
+            break
         }
 
         if ($windowSamples.Count -eq 0) {
@@ -1758,13 +2261,19 @@ if (-not $Perf) {
 # already completed, keeps workstation contention from a sibling stage out of its wall-time
 # evidence (LOG-13, PERF-12/13/14).
 $RunHitchNow = ($Hitch -and -not $SkipHitch -and -not $Quick)
+if ($RunHitchNow) { Enter-GamingStage "hitch" -NoWait }
 if (-not $RunHitchNow) {
     $why = if ($SkipHitch) { "-SkipHitch" } elseif ($Quick) { "-Quick" } else { "opt-in, pass -Hitch" }
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail $why
-    Add-Unchecked "the hitch-detector check did not run ($why): its cadence is explicit, not automatic -- run it with -Hitch when landing a change to HitchMonitor.cs, HitchSidecar.cs or the hitch tick in Launcher.cs, or periodically otherwise"
+    Add-Unchecked "the hitch-detector check did not run ($why): its cadence is explicit, not automatic -- run it with -Hitch when landing a change to HitchMonitor.cs, HitchSidecar.cs or the hitch tick in Launch/FrameInstruments.cs, or periodically otherwise"
 } elseif (-not $buildOk) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the hitch-detector check did not run (the build failed)"
+} elseif ($script:Deferred) {
+    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "not run: the run was deferred in $script:DeferredStage"
+} elseif ($Gaming.Settings) {
+    Add-Stage -Name "hitch" -Status "DEFERRED" -Seconds 0 -Detail "DEFERRED (gaming mode): the clean run is not judged beside a game"
+    Add-Unchecked "the hitch-detector check did not run (gaming mode); re-run -Hitch with gaming mode off"
 } elseif (-not (Test-Path $GodotExe)) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the hitch-detector check did not run: no Godot at $GodotExe"
@@ -1802,7 +2311,7 @@ if (-not $RunHitchNow) {
         $fullArgs = $RunArgs + @("--frames=$ExpectFrame", "--screenshot=$png")
         $ErrorActionPreference = "Continue"
         $code = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $log,
-                                "res://scenes/Main.tscn", "--") + $fullArgs)
+                                "res://scenes/Main.tscn", "--") + $fullArgs) -Kind "hitch"
         $ErrorActionPreference = "Stop"
         $sinkPath = $null
         $hitchLines = @()
@@ -1975,6 +2484,9 @@ function Get-StageBudget {
     if ($prop -eq $null) {
         return 0.0
     }
+    if ($Name -eq "engine") {
+        return [math]::Min([double]$prop.Value, $EngineBudgetCapSec)
+    }
     return [double]$prop.Value
 }
 
@@ -1990,13 +2502,14 @@ foreach ($stage in $Stages) {
     $totalSeconds += $stage.Seconds
 }
 
-# A skipped stage is compared against nothing, and the total only against the lane whose work it
-# actually did: a run that skipped goldens is not a slow full run, it is a different run.
+# A skipped stage is compared against nothing. There is no total budget: one set by the same rule
+# is never below the stage budgets' sum, so it could only ever trip after a stage already had.
 $OverBudget = @()
 $stageBudgetText = @{}
 foreach ($stage in $Stages) {
     $budget = Get-StageBudget $stage.Name
-    if ($budget -le 0 -or $stage.Status -eq "SKIP") {
+    # A throttled run is slower than budget by design.
+    if ($budget -le 0 -or $stage.Status -eq "SKIP" -or $Gaming.Used) {
         $stageBudgetText[$stage.Name] = ""
         continue
     }
@@ -2007,31 +2520,6 @@ foreach ($stage in $Stages) {
         $stageBudgetText[$stage.Name] = "[budget $(Format-Seconds $budget)s]"
     }
 }
-$ranStages = @{}
-foreach ($stage in $Stages) {
-    if ($stage.Status -ne "SKIP") {
-        $ranStages[$stage.Name] = 1
-    }
-}
-$laneComplete = ($LaneBudget -ne $null)
-if ($laneComplete) {
-    foreach ($needed in @($LaneBudget.requires)) {
-        if (-not $ranStages.ContainsKey($needed)) {
-            $laneComplete = $false
-        }
-    }
-}
-$totalBudgetText = ""
-if ($laneComplete -and [double]$LaneBudget.total -gt 0) {
-    $totalBudget = [double]$LaneBudget.total
-    if ($totalSeconds -gt $totalBudget) {
-        $totalBudgetText = " [over budget $(Format-Seconds $totalBudget)s]"
-        $OverBudget += "the whole $BudgetLane run took $(Format-Seconds $totalSeconds)s against a $(Format-Seconds $totalBudget)s budget"
-    } else {
-        $totalBudgetText = " [budget $(Format-Seconds $totalBudget)s]"
-    }
-}
-
 Write-Host ""
 Write-Host "--- RunTests ------------------------------------------------------------"
 foreach ($stage in $Stages) {
@@ -2047,6 +2535,11 @@ if ($OverBudget.Count -gt 0) {
         Write-Host "        $over" -ForegroundColor Yellow
     }
 }
+if ($Gaming.Used) {
+    Write-Host "   .  budgets: not compared (gaming mode)" -ForegroundColor Yellow
+}
+Write-Host "  $(Format-GamingSummary $Gaming)"
+Exit-GamingRun $Gaming
 $dataRootLine = "  data root: "
 if ($env:CSVM_DATA_ROOT) {
     $dataRootLine += "$env:CSVM_DATA_ROOT (CSVM_DATA_ROOT)"
@@ -2062,14 +2555,25 @@ if ($HiddenDesktop) {
     Write-Host "  windows: THIS desktop -- the hidden one was refused, so launches were visible" -ForegroundColor Yellow
 }
 Close-HiddenDesktop
+Close-RunJob
 if ($failedStages.Count -gt 0) {
-    Write-Host ("  result: FAIL in {0} -- {1}s total{2}, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Red
+    Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
+    Write-Host "  a red that matches an entry in docs\verification.md 'Known environmental reds' has an owner and a one-line rerun there" -ForegroundColor Red
+} elseif ($script:Deferred) {
+    Write-Host ("  result: DEFERRED in {0} -- {1}s total, exit {2}; {3}" -f $script:DeferredStage, (Format-Seconds $totalSeconds), $MemDeferredExitCode, $script:Deferred) -ForegroundColor Yellow
 } else {
-    Write-Host ("  result: PASS -- {0}s total{1}, exit 0" -f (Format-Seconds $totalSeconds), $totalBudgetText) -ForegroundColor Green
+    Write-Host ("  result: PASS -- {0}s total, exit 0" -f (Format-Seconds $totalSeconds)) -ForegroundColor Green
 }
 Write-Host "-------------------------------------------------------------------------"
 
 if ($failedStages.Count -gt 0) {
     exit 1
 }
+if ($script:Deferred) {
+    exit $MemDeferredExitCode
+}
 exit 0
+# Closes the try opened before the build stage.
+} finally {
+    Exit-GamingRun $Gaming
+}

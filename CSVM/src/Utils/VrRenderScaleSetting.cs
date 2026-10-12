@@ -39,8 +39,8 @@ public static class VrRenderScaleSetting
         Lookup.Resolve(flagWord, savedWord, null, Default);
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.VrRenderScale);
+    /// (the <c>--det</c> rule <see cref="WordSettings.ReadSaved"/> keeps).</summary>
+    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().VrRenderScale;
 
     /// <summary>How a row shows <paramref name="word"/>: a never-set one as the default.</summary>
     public static string Label(string? word) => (Lookup.IsWord(word) ? word : Default) + "%";

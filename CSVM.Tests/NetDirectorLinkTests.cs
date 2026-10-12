@@ -213,7 +213,7 @@ public sealed class NetDirectorLinkTests
             var mesh = LoopbackTransport.Mesh(2, link ?? Link, new Random(2111));
             var roster = new NetSeat[]
             {
-                new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+                new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
                 new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
             };
             _hostNet = NetSession.Host(mesh[0], roster, Seed, null, Airframes);

@@ -86,7 +86,7 @@ public class StuntReturnTests
         Assert.Null(mission.ReturnPose());
     }
 
-    private static StuntMission Load()
+    internal static StuntMission Load()
     {
         var mission = StuntMission.Load(
             GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1")),
@@ -98,7 +98,7 @@ public class StuntReturnTests
 
     // Both gates of one zone, green first unless reversed, each crossed along its own axis in the one
     // direction of travel. Each crossing starts a fresh segment so the jump between gates crosses nothing.
-    private static void Fly(StuntMission mission, StuntZone zone, bool reverse)
+    internal static void Fly(StuntMission mission, StuntZone zone, bool reverse)
     {
         var travel = (zone.RedGate.Center - zone.GreenGate.Center).Normalized() * (reverse ? -1f : 1f);
         Cross(mission, reverse ? zone.RedGate : zone.GreenGate, travel);

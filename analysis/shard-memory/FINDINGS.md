@@ -1,0 +1,399 @@
+# What an engine-test shard and a capture hold in memory
+
+**Question** (GitHub #159): an engine-test shard was seen at about 4 GB and an XR capture at about
+8 GB private. Does a shard grow with the suites it runs or plateau early, how much of a capture is
+render targets, the Enhanced path and the world, and which holder (managed, Godot static, texture,
+buffer, other native) is the bulk?
+
+**Answer.** A shard grows with the suites it runs, in steps, and never returns: the first world
+build, every new shader the process compiles, a graphics-mode switch, and the network suites that
+run two to four sessions in one process each add to it. Measured on the current catalog the six
+shards peaked at 6.7 to 13.4 GB, far above the 4 GB in the issue. The dominant holder in every
+shard and every Enhanced capture is **native memory no Godot monitor counts**: private bytes minus
+the managed heap, Godot's static allocations, textures and buffers. It tracks the number of
+shaders the process has compiled (about 10 MB each, an upper bound) and jumps by about 25 MB per
+live shader the first time a TAA frame draws, when Godot builds every shader's advanced variants.
+Managed memory never exceeds 1.1 GB, and Godot's static allocations reach 2.9 GB only transiently
+inside the network suites.
+
+Two holders were localized. Dead C# wrappers kept their Godot objects' native memory across
+suites until the GC happened to finalize them; the harness now collects and finalizes after a suite
+that grew Godot's heap, which cuts the six shards' summed peak from 48 to 50 GB down to 42 GB. The
+shader cache also keeps every material any suite's world made, which accounts for about 3 GB more,
+but releasing those materials is unsafe while a cached world crosses suites, which it does in
+every shard; that release and the rest of the shader cache's memory are filed as a new issue. A
+freed shader does return its variants' memory, and the harness now drops the cache's unworn shaders
+between suites ("A freed shader returns its variants' memory" below).
+
+## Instrument
+
+`--debug-mem` (`CSVM/src/Utils/MemoryCensus.cs`, `docs/cli.md`). One line per suite under
+`--run-tests`, one per wall second otherwise, and one at exit:
+
+- `priv_mb`, `peak_priv_mb`: `Process.PrivateMemorySize64` and `PeakPagedMemorySize64` (the
+  process's peak commit charge, the figure a memory ledger reserves against).
+- `gc_mb`, `gc_committed_mb`: `GC.GetTotalMemory(false)` and the GC's committed bytes.
+- `static_mb`: Godot `MEMORY_STATIC`. `tex_mb`, `buf_mb`, `vid_mb`: `RENDER_TEXTURE_MEM_USED`,
+  `RENDER_BUFFER_MEM_USED`, `RENDER_VIDEO_MEM_USED`.
+- `pipelines`: the sum of Godot's five `PIPELINE_COMPILATIONS_*` monitors. `shaders` (harness
+  only): `ShaderTwins.Made`, the shader cache's count of compiled texts.
+- "Other native" in the tables is `priv - gc_committed - static - tex - buf`.
+
+Every launch went through `RunProbe.ps1` on the hidden desktop, one Godot at a time, with the
+shard's own `--run-tests=shard:k/6` term and a net port slot held for the run. Machine: RTX 5080,
+Vulkan 1.4.351, Forward+, separate render thread, 63 GB RAM. MB is 2^20 bytes and GB is 2^30.
+
+⚠ Under `--run-tests` the renderer's texture and buffer monitors stay at 0 until some suite forces
+a drawn frame, because the whole run happens inside one `_Ready`. A world's GPU textures and meshes
+are therefore inside "other native" in the shard tables until the first suite that draws.
+
+⚠ On this driver, GPU memory the renderer allocates is charged to the process's private bytes
+roughly one to one: the Enhanced capture at 5120x1440 held 1.76 GB more `tex_mb` than at 1280x720
+and 2.05 GB more private bytes. A ledger reading private bytes therefore sees render targets.
+
+## A shard against the suites it has run
+
+Shard 1 of 6 before the fix (the shard holding `graphics-retext-compiles`):
+
+| after suite | suite | private MB | peak MB | managed MB | static MB | tex MB | buf MB | shaders |
+|---|---|---|---|---|---|---|---|---|
+| 0 | (harness start) | 812 | 812 | 39 | 65 | 0 | 0 | |
+| 1 | ai-wave-launch-hitch | 2279 | 2279 | 473 | 453 | 0 | 0 | 72 |
+| 7 | campaign-balmoral-hidden | 2729 | 2729 | 431 | 521 | 0 | 0 | 108 |
+| 15 | campaign-coop-episode-owner | 3550 | 3643 | 500 | 606 | 0 | 0 | 121 |
+| 22 | campaign-surface-vehicles | 3590 | 3921 | 537 | 661 | 0 | 0 | 131 |
+| 36 | generator-roster-params | 3666 | 3921 | 652 | 706 | 0 | 0 | 131 |
+| 37 | graphics-retext-compiles | 9183 | 9183 | 655 | 834 | 388 | 133 | 220 |
+| 38 | graphics-shader-twins | 9353 | 9491 | 469 | 847 | 388 | 133 | 227 |
+| 50 | menu-original-screen-keyboard | 9468 | 9762 | 573 | 760 | 388 | 133 | 229 |
+| 56 | net-crash-respawn | 10975 | 10975 | 891 | 1796 | 388 | 133 | 240 |
+| 59 | net-lobby-stunt-race | 11504 | 11764 | 471 | 1115 | 388 | 133 | 278 |
+| 64 | net-swap-rewire | 10778 | 11764 | 490 | 1173 | 388 | 133 | 278 |
+| 80 | stunt-respawn-tap-hold | 11129 | 11764 | 841 | 1077 | 388 | 133 | 281 |
+| 92 | zeppelin-motion | 10840 | 11764 | 507 | 1164 | 388 | 133 | 281 |
+
+Shard 5 of 6, the tree before the fix (run twice: 6.75 and 6.81 GB peaks), then with the material
+release alone:
+
+| after suite | suite | before: private MB | before: static MB | release: private MB | release: static MB | shaders |
+|---|---|---|---|---|---|---|
+| 0 | (harness start) | 826 | 65 | 808 | 65 | |
+| 1 | ai-crash-rig-deferral | 1749 | 224 | 1658 | 222 | 76 |
+| 10 | called-death-chain | 2343 | 304 | 2031 | 329 | 86 |
+| 20 | campaign-persistence | 3386 | 567 | 2887 | 395 | 138 |
+| 30 | dogfight-display-scores | 3699 | 509 | 3109 | 344 | 150 |
+| 50 | menu-original-controls | 4266 | 574 | 3237 | 352 | 152 |
+| 60 | net-flight-chat | 5794 | 1674 | 4760 | 1439 | 157 |
+| 61 | net-player-voice | 6210 | 1951 | 5419 | 1705 | 157 |
+| 63 | ocean-lab | 6273 | 651 | 5605 | 568 | 256 |
+| 80 | stunt-target-cycle | 5671 | 539 | 5245 | 441 | 258 |
+| 92 | zeppelin-pandora-dead-end | 6286 | 688 | 5453 | 605 | 260 |
+
+The release is not kept (see below). With the landed fix, the collection alone, shard 5 peaks at
+5.90 GB; with the release and the collection together it peaked at 5.11 GB.
+
+Shard 2 of 6 shows the same shape: 1.8 GB after its first world, 3.9 GB by suite 38, +1.45 GB at
+`graphics-live-switch` (the shader count 154 to 245), and 6.6 to 7.4 GB through the network block.
+
+The steps, each reproduced across shards:
+
+- **First world build**: 0.8 GB at harness start to 1.7 to 2.3 GB after the first suite that
+  builds a world (the decode store, the world, its first 60 to 76 shaders).
+- **Every new shader**: plateaus hold while the shader count holds and rise when it rises. At shard
+  end "other native" is 2.9 to 4.6 GB for 258 to 286 shaders, about 10 to 16 MB a shader, an upper
+  bound since it also carries the cached chapter world's GPU data the monitors cannot see.
+- **A graphics-mode switch**: a suite that makes the other mode's twin of every cache key roughly
+  doubles the shader count (`graphics-live-switch` +1.45 GB, `ocean-lab` +0.1 to 0.7 GB,
+  `graphics-retext-compiles` below).
+- **The first TAA frame**: `graphics-retext-compiles` draws one TAA frame to have Godot build its
+  advanced shader variants, which Godot does for every live shader. Split by step on a five-suite
+  run: the rewrite took private bytes from 2.40 to 2.45 GB, the TAA frame from 2.45 to 5.89 GB with
+  136 shaders alive (0.24 GB of it textures and buffers), and restoring Original made 73 more
+  shaders, each now with its advanced variants, to 7.52 GB. With the cached world released first
+  the TAA frame still cost 3.4 GB and compiled no pipeline, so the cost is per shader, about 25 MB
+  each. Alone in its process the suite costs 0.3 GB.
+- **Network suites**: two to four `GameSession`s in one process raise static to 1.4 to 2.9 GB.
+  Before the fix the next suite started while the last one's wrappers were unfinalized, so static
+  carried between suites and the peak varied from run to run (shard 1: 11.5 and 13.4 GB; shard 2
+  with the material release alone peaked at 7.9 GB inside its network block, above its 7.2 GB baseline).
+
+## The harness fix, the release that was withdrawn, and what each bought
+
+1. **Collect and finalize after a suite that grew Godot's heap** (landed). A Godot object a dead C#
+   wrapper references is freed only when the wrapper is finalized, so a network suite's sessions
+   rode into the next suites and set each shard's peak. The harness now runs `GC.Collect()` and
+   `GC.WaitForPendingFinalizers()` at a suite's end when Godot's `MEMORY_STATIC` grew by more than
+   32 MB over that suite (`TestHarness.CollectAfterStaticGrowth`), skipped under
+   `--debug-finalizers`, whose parked finalizer thread would never finish the wait.
+2. **`ShaderTwins.ReleaseUnused()` between suites** (withdrawn). The shader cache's `Tracked` table
+   holds every material a cache shader goes on until a `GameSession` build calls `ReleaseUnused`,
+   and a suite's `WithWorld` builds a `WorldSession`, so every material any world in the shard made
+   stays tracked with its textures. Releasing them between suites is unsafe: `ReleaseUnused` drops
+   every tracked material with a reference count of 1, which includes a cached world's unworn fade
+   twins held only from C#, so a later graphics-switch suite would leave them on the old mode's
+   shader. Its contract is "when the last world is gone", and a cached chapter world crosses every
+   suite boundary in every shard once the first suite has built it: guarded by "no cached world",
+   the release fired 0 times in shard 5. It bought about 3 GB across the six shards; a safe form is
+   in the new issue.
+
+| shard | peak before (GB) | release + collect every suite (withdrawn) | landed: collect after heap growth | final before | final landed |
+|---|---|---|---|---|---|
+| 1/6 | 11.49 and 13.43 (two runs) | 10.60 | 11.14 | 10.59 | 10.81 |
+| 2/6 | 7.19 | 6.15 | 6.34 | 6.21 | 5.84 |
+| 3/6 | 8.36 | 6.27 | 6.54 | 6.97 | 5.68 |
+| 4/6 | 7.54 | 5.38 | 5.98 | 5.72 | 5.07 |
+| 5/6 | 6.75 and 6.81 (two runs) | 5.11 | 5.90 | 6.14 | 5.41 |
+| 6/6 | 6.73 | 5.30 | 5.97 | 5.82 | 5.55 |
+| sum of peaks | 48.1 to 50.1 | 38.8 | 41.9 | | |
+
+All six shards pass with the landed fix (553 suites, the two skips the baseline also had, engine
+errors clean), and so do the graphics and fade suites (`-Filter graphics`, `-Filter fade`).
+
+**What the collection costs**, shard 5, back to back, one Godot at a time (machine quiet for the
+first pair; another session's Godot started during the second pair):
+
+| collection | peak private GB | shard wall (s) | collections | time inside them (s) |
+|---|---|---|---|---|
+| none | 6.88 / 6.99 | 189.3 / 182.4 | 0 | 0 |
+| after every suite | 5.82 / 5.91 | 216.4 / 219.0 | 92 | 13.9 (mean 0.15, max 0.62) |
+| after a suite that grew Godot's heap by 32 MB (landed) | 6.07 / 5.90 | 201.3 / 185.7 | 30 | 4.8 |
+
+Each collection lands in its suite's rest time and so in that suite's weight; the landed gate puts
+it on the 30 suites that build sessions or worlds, not on the 62 that do not. Collecting after every
+suite bought another 0.2 GB of peak for three times the time.
+
+Per-holder figures across a shard, before and with the landed fix (MB):
+
+| shard | max managed heap | max GC committed | max static | tex at end | buf at end | other native at end |
+|---|---|---|---|---|---|---|
+| 1/6 before | 891 | 1179 | 1796 | 388 | 133 | 8412 |
+| 1/6 landed | 903 | 1075 | 1148 | 388 | 126 | 8523 |
+| 3/6 before | 1132 | 1606 | 2869 | 510 | 140 | 4097 |
+| 3/6 landed | 944 | 1209 | 1288 | 332 | 138 | 3612 |
+| 5/6 before | 1105 | 1273 | 1953 | 0 | 0 | 4633 |
+| 5/6 landed | 896 | 1074 | 879 | 0 | 0 | 4199 |
+
+What remains is the shader cache: its process-lifetime compiled variants, the materials it keeps
+tracked under a cached world, and in shard 1 the TAA frame's advanced variants on top (shard 1 sits
+about 5 GB above the others for that alone). The variants are process-lifetime by design in the
+game, where the cache saves a compile hitch on a switch or a chapter revisit; a test process now
+drops the unworn ones between suites ("A freed shader returns its variants' memory" below).
+
+## Three TAA frames, one of them leaked, and the tracked materials
+
+Measured again on a later catalog (559 suites), the six shards peaked at 12.07, 10.64, 6.64, 5.99,
+5.66 and 12.05 GB. Three shards held a step of 5.0 to 6.1 GB at one suite that made no shader:
+`graphics-retext-compiles` (its own TAA frame), `sun-per-view` and `load-progress`. The last two
+draw the window's viewport, and an earlier graphics suite had left that viewport on TAA: a live
+switch to Enhanced resolves the anti-aliasing again (`EnhancedLook.ReapplyWordSettings`), and the
+suites' restore put the mode back without resolving it. The log shows each such suite's last
+`[world] word settings:` line at `anti_aliasing=taa`. A step in private bytes with no new shader is a
+renderer feature turned on, not a cache that grew.
+
+Three changes bound it. The graphics suites' restore resolves the display quality again. The
+weights file runs `graphics-retext-compiles` alone (`alone`), so the one TAA frame a suite must draw
+lands in a process holding one shader. A destroyed `TestWorld` leaves the shader cache's tracked
+materials with it (`ShaderTwins.Untrack`), its fade copies included, while the cached world's stay
+tracked through a session build's `ReleaseUnused`.
+
+| shard | before (GB) | after (GB) |
+|---|---|---|
+| 1/6 | 12.07 | 5.89 |
+| 2/6 | 10.64 | 6.38 |
+| 3/6 | 6.64 | 5.92 |
+| 4/6 | 5.99 | 5.77 |
+| 5/6 | 5.66 | 6.42 |
+| 6/6 | 12.05 | 1.09 (`graphics-retext-compiles` alone) |
+
+Shard membership differs before and after, since five shards now share the catalog; every shard
+passed with engine errors clean, and no suite after the change raised private bytes by more than
+1.4 GB. The material release was measured on one plan with and without it: shards 1 and 2 peaked at
+5.85 and 6.60 (6.64 on a second run) GB with it, 6.95 and 7.38 GB without. Part of that is shaders:
+a switch makes no other-mode shader for a destroyed world's materials (298 against 307 in shard 1).
+Materials a session or a suite makes outside a `TestWorld` build stay tracked until the next session
+build.
+
+## A freed shader returns its variants' memory
+
+**Question** (GitHub #175): does freeing a `Shader` that no material wears give its compiled
+variants' native memory back on this driver, and if so, does dropping the cache's unworn shaders
+between suites bound a shard?
+
+Every figure in this section is in the instrument's units (MB is 2^20 bytes, GB is 2^30): a shard's
+peak is its run's largest `peak_priv_mb` over 1024.
+
+**Answer.** Yes. A drawn shader costs about 5 MB of private bytes with its base variants and about
+20 MB with the TAA pass's advanced ones, and freeing it returns that memory for reuse. Godot keeps
+none of it per shader: across rounds of fresh shaders a process that frees them holds a flat
+plateau, while one that keeps them unworn grows by the full cost every round. The harness now
+drops the shader cache's unworn shaders between suites, which lowers each windowed shard's mean peak by
+0.23 to 0.80 GB (2.8 GB summed over five shards, 9 %) for about 7 % more summed shard wall time,
+a cost the runs support in sign and rough size only.
+
+### The probe
+
+`analysis/shard-memory/ShaderFreeProbeSuites.cs`, a throwaway suite (not compiled in the tree; the
+file says how to run it). Each round makes N shaders whose text is the world builder's bias shader
+with a uniform of its own, so each compiles its own code, puts each on its own quad in a 64x64 pane,
+draws until Godot's pipeline count holds for five frames, frees the quads and materials, then either
+disposes the shaders (free) or keeps them unworn in a list (keep, the shell control), draws four
+frames, syncs the render thread and collects. Private bytes are read after each step. No world is
+built, so nothing but the shaders, their materials and the pane moves; the texture and buffer
+monitors stay at 103 and 29 MB throughout. Hidden desktop via `RunProbe.ps1`, the machine above.
+
+Private MB after each step, 128 shaders a round:
+
+| round | free: drawn | free: freed | keep: drawn | keep: unworn |
+|---|---|---|---|---|
+| start | 946 | | 960 | |
+| 0 | 1798 | 1358 | 1686 | 1686 |
+| 1 | 1811 | 1389 | 2318 | 2305 |
+| 2 | 1794 | 1344 | 2958 | 2956 |
+
+256 a round: free drew 2405, 2452, 2438, 2443 and freed to 1526, 1487, 1403, 1514 over four rounds;
+keep grew 952, 2331, 3622 (5.4 and 5.0 MB a shader). With a TAA pane, 64 a round: free drew 2487,
+2498, 2483 and freed to 1505, 1549, 1584; keep grew 1014, 2355, 3591, 4842 (21, 19 and 20 MB a
+shader). An unworn shader holds all of its memory: the keep run's "unworn" readings sit within 15 MB
+of "drawn". The first freed round returns only about half of what it drew, and every later round
+returns all of its own, so the remainder is allocator and driver memory kept for reuse, not memory
+held per shader.
+
+### The release between suites
+
+`ShaderTwins.ReleaseUnworn` drops every shader in the cache whose reference count shows no wearer
+from the text table, the family table and every key's slots; a key whose shader went makes it again
+on next use. It refuses while a test world builds, since a build holds shaders no material wears
+yet. The harness calls it at a suite's end after its collection, which now also runs after a suite
+that made a shader in a drawing process, syncs the render thread first, and collects again when
+anything was dropped, so the dropped wrappers are finalized at once. A headless process skips it,
+since it builds no variant. The game never calls it. The other mode's twins a warm-up made go too
+once nothing wears them; the one suite that asserts a switch compiles nothing,
+`graphics-shader-twins`, warms them itself first.
+
+Five shards, `--run-tests=shard:k/6 --debug-mem`, one Godot at a time. Two paired batches ran base
+and release back to back per shard: batch a, and batch c, whose build also logged each collection's
+time and carried the rejected forms below behind a switch. Batch b added a base run of shards 1 to
+4 (paired with the rejected forms), and batch d a release run of every shard (paired with the
+drop-once form, no base). Shard 5's batch c pair ran an earlier build of the new
+`graphics-twins-world-release` check, which failed in both and released the cache once inside the
+base run (241 shaders live of 343 made), so the whole pair is left out of the means and of the
+ranges below: its base run peaked at 6.18 GB and its release run at 5.40 GB.
+
+| shard | base peak GB (a / b / c) | release peak GB (a / c / d) | base wall s | release wall s | shaders made, base / release | live at end, release |
+|---|---|---|---|---|---|---|
+| 1/6 | 5.79 / 5.89 / 5.80 | 5.21 / 5.20 / 5.25 | 177 / 183 / 196 | 182 / 197 / 181 | 298 / 638 | 176 |
+| 2/6 | 6.19 / 6.23 / 6.14 | 5.81 / 6.02 / 6.05 | 161 / 172 / 183 | 179 / 217 / 179 | 302 / 1148 | 194 |
+| 3/6 | 6.25 / 6.24 / 6.25 | 5.74 / 5.67 / 5.74 | 175 / 192 / 189 | 193 / 215 / 205 | 299 / 1163 | 186 |
+| 4/6 | 6.51 / 6.47 / 6.50 | 5.90 / 5.76 / 5.89 | 165 / 169 / 184 | 176 / 177 / 182 | 306 / 741 | 190 |
+| 5/6 | 6.50 / - / (6.18, left out) | 5.69 / (5.40, left out) / 5.70 | 176 / - / (177, left out) | 185 / (195, left out) / 203 | 264 / 641 to 649 | 164 |
+
+The peaks move clearly: every release run of a shard sits below every base run of it, by 0.23 to
+0.80 GB in the means, and the summed mean peak falls from 31.3 to 28.4 GB (2.8 GB, 9 %). In the two
+paired batches alone the summed peak falls by 2.9 GB (batch a, five shards) and 2.0 GB (batch c,
+shards 1 to 4). "Other native" at a shard's end falls from 3.3 to 4.6 GB to 2.7 to 3.6 GB, with
+164 to 194 shaders live against 264 to 306 made before. The release cannot touch the cached world's GPU data,
+since that world's materials wear their shaders and keep them, so the saving is shader variants
+alone.
+
+The wall time is supported in sign and rough size only. Summed mean shard wall rises from 891 to
+955 s (+64 s; +60 s in batch a, +54 s over shards 1 to 4 in batch c), but one shard's identical
+runs spread by up to 39 s (shard 2's release runs, 179 to 217 s), so the slowest shard's rise from
+186 to 204 s is within that spread. The cost has two parts. The collections were timed directly in
+batch c: 11.7 to 14.9 s a shard with the release against 5.9 to 7.6 s without, the difference being
+both the added collections after shader-making suites and the second collection after a drop; no
+run collects after those suites without releasing, so the two are not separated. The rest is 340 to
+860 shaders compiled again because a later suite asked for a text an earlier one had dropped.
+
+Apart from shard 5's batch c pair above, every suite passed in every run that reported, engine
+errors clean. One run did not report: batch b's run of the one-collection form below on shard 4
+(`shard4-d2-b`) aborted with no output past its launch lines, and batch b's driver ran nothing after
+it, so that form has no shard 4 or shard 5 reading. The abort also cost batch b's third variant on
+shard 4 (`shard4-d3-b`) and all of shard 5's batch b, its base run included. That third variant
+reached shards 1 to 3 only; its build is gone, so which form it was is not recorded.
+
+Two cheaper forms were measured and rejected. One collection only, after the release (the dropped
+wrappers then wait for the next collecting suite), left shards 2 and 3 at their base peaks (6.29
+and 6.32 GB). Dropping each text at most once, which keeps a text once it has come back, cut
+recompiles to 124 to 196 a shard but left shards 3 and 4 at 6.23 GB, near base.
+
+### The release under a busy worker pool
+
+The release relies on Godot's free of a drawn shader waiting for the pipeline compiles that shader
+still has queued, as the empty text in `ShaderTwins.Rewrite` does. A race with those compiles shows
+only while the worker pool is busy (`docs/verification.md` INSTR-102), so clean engine logs from the
+shard runs do not settle it. `probe-shader-free-retext` in `ShaderFreeProbeSuites.cs` runs
+`graphics-retext-compiles` step for step: it draws its keys while two sleeping tasks a core hold the
+pool, takes the drawn shaders off, then acts at once. Arm code rewrites each with a plain `Code`
+assignment (the suite with `Rewrite` cut back, the control), arm empty rewrites through `Rewrite`,
+and arm release runs the harness's sequence (collect, sync, `ReleaseUnworn`, collect, sync) instead
+of the rewrite. Every arm then draws one TAA frame and a fresh material on each key. One Godot at a
+time through `RunProbe.ps1`, the machine above, 16 logical processors, 32 sleeping tasks.
+
+| arm | keys | sleep ms | runs | free_rid lines a run | release sync ms | act ms |
+|---|---|---|---|---|---|---|
+| code (control) | 1 | 150 | 3 | 50, 50, 50 | | 1417 to 1420 |
+| empty | 1 | 150 | 3 | 0, 0, 0 | | 1217 to 1219 |
+| release | 1 | 150 | 3 | 0, 0, 0 | 1166 to 1168 | 1211 to 1213 |
+| code (control) | 1 | 300 | 2 | 50, 50 | | 2618 to 2621 |
+| release | 1 | 300 | 2 | 0, 0 | 2366, 2367 | 2412, 2413 |
+| code (control) | 16 | 150 | 2 | 50, 50 | | 1419 to 1424 |
+| release | 16 | 150 | 2 | 0, 0 | 1162, 1169 | 1221, 1223 |
+
+The free waits. The render-thread sync after the release blocks for as long as the pool stays
+asleep, and doubles with the sleep, while the control prints its 50 lines in every run of the same
+sequence, so the compiles were queued when the release ran. The release therefore needs no drain of
+its own, in the harness or in `graphics-twins-world-release`'s mid-suite call. The limit is that the
+busy pool is synthetic: a first draft that drew 96 world-bias shaders with no mode switch before
+the act left the control silent and the release sync at 2 ms, so not every draw leaves compiles
+queued, and the shard runs were never caught with any queued at a release.
+
+## Captures: render targets, Enhanced, the world
+
+C1, `player_bhawk`, cockpit view, `--det --perf --frames=420 --no-soft-shadows`, one sample a
+second plus one at exit. Every capture is flat after its first drawn frame; nothing grows over the
+run (a 60,000-frame run without `--screenshot` held 7.15 to 7.35 GB throughout).
+
+| launch | pixels drawn | peak private GB | managed MB | static MB | tex MB | buf MB | pipelines | other native MB |
+|---|---|---|---|---|---|---|---|---|
+| any, before the first frame | | 2.1 to 2.2 | 220 | 340 to 380 | 0 | 0 | 0 | about 1500 |
+| Original, 1280x720 | 0.9 M | 2.77 | 209 | 386 | 224 | 78 | 327 | 1750 |
+| Original, 4224x2304 | 9.7 M | 3.49 | 225 | 356 | 1094 | 188 | 328 | 1630 |
+| Enhanced, 1280x720 | 0.9 M | 5.18 | 232 | 437 | 475 | 95 | 568 | 4080 |
+| Enhanced, 4224x2304 | 9.7 M | 7.39 | 234 | 450 | 1882 | 205 | 575 | 4300 |
+| Enhanced, 5120x1440 window (no `--screenshot`) | 7.4 M | 7.51 | 249 | 504 | 2236 | 237 | 611 | 4180 |
+
+- **The world and runtime**: about 2.1 GB before anything draws, of which 0.2 GB is managed and
+  0.4 GB Godot static; the rest is the engine, the .NET runtime, the driver and the world's GPU data.
+- **The Enhanced path**: 2.4 GB over Original at the same size, almost none of it textures. It is
+  the Enhanced shader set with its advanced variants (568 pipelines against 327), in "other native".
+- **Render targets**: Enhanced costs about 0.25 GB private per million pixels drawn, Original about
+  0.08. Two 2112x2304 eyes are 9.7 M pixels, the 4224x2304 rows.
+- **The issue's 8.06 GB XR capture** decomposes as about 2.1 GB world and runtime, 2.4 GB of
+  Enhanced shaders, and 2.3 to 3 GB of render targets for the two eyes and the desktop window. The
+  `--xr-sim` flag exists only on the `vr` branch, so the 4224x2304 Enhanced row (7.39 GB) is the
+  measured stand-in: the same pixel count, one viewport instead of two.
+
+## Seed estimates for a memory ledger
+
+Measured peak private bytes per launch kind, engine shards with the landed fix. The recommended
+seed is keyed by `MemoryLedgerCore.ps1`'s `$MemSeedGB` names: the largest peak the key can launch,
+rounded up to the next half GB, so the first launches of a kind are not under-reserved before the
+learned history (highest of the last 20, plus 25 percent) takes over.
+
+| kind | launch measured | peak private GB | recommended seed (GB) |
+|---|---|---|---|
+| engine shard | `--run-tests=shard:k/6`, five shards | 5.8 to 6.6 | `engine-shard` 7.0 |
+| engine shard, `graphics-retext-compiles` alone | `--run-tests=shard:6/6` | 1.1 | (covered by `engine-shard`) |
+| engine shard, before the alone shard and the restore | | 5.7 to 12.1 | |
+| golden shot, Original | `viewer-bhawk`, `c2-city`, `c5-city-night`, `c1-flight-kill` | 1.5 / 1.7 / 2.1 / 2.4 | `golden-shot` 5.5 |
+| golden shot, Enhanced | `c5-city-night-enhanced`, `c1-cockpit-enhanced` | 4.6 / 5.2 | (covered by `golden-shot`) |
+| perf scenario, Original | `c2m02-hollywood`, `c5-city`, 300 frames | 2.3 / 2.1 | `perf` 5.5 |
+| perf scenario, Enhanced (`-Graphics enhanced`) | `c2m02-hollywood` | 5.3 | (covered by `perf`) |
+| hitch | the clean run, 180 frames; `-Graphics enhanced` not measured, the Enhanced perf run stands in | 2.3 | `hitch` 5.5 |
+| probe/capture, Original | cockpit capture, 420 frames, 720p / 4224x2304 | 2.8 / 3.5 | `probe` 3.5 |
+| enhanced capture | the same at 720p / 5120x1440 | 5.2 / 7.5 | `capture-enhanced` 8.0 |
+| XR capture | Enhanced at the two eyes' pixel count (stand-in) / the issue's own measurement | 7.4 / 8.1 | `capture-xr` 8.5 |
+
+Not measured: the four-player golden shots (`campaign-4p-grid`, `campaign-intro-fill`), which need
+a profile store, and an engine run of the whole catalog in one process (`-Shards 1`), which would
+carry every shard's shaders at once.

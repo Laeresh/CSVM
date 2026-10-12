@@ -143,6 +143,40 @@ public class ZrdrTests
     }
 
     [Fact]
+    public void HasFileAnswersForAFolderUnderEitherStoredName()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "plain.json"), "[]");
+        File.WriteAllText(Path.Combine(dir, "forked.zrd.json"), "[]");
+        Assert.True(Zrdr.HasFile(dir, "plain.json"));
+        Assert.True(Zrdr.HasFile(dir, "forked.json"));
+        Assert.False(Zrdr.HasFile(dir, "absent.json"));
+    }
+
+    [Fact]
+    public void HasFileAnswersForAZipUnderEitherStoredName()
+    {
+        var dir = TestData.TempDir();
+        var source = Path.Combine(dir, "source");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, "plain.json"), "[]");
+        File.WriteAllText(Path.Combine(source, "forked.zrd.json"), "[]");
+        var zipPath = Path.Combine(dir, "zrdr.zip");
+        ZipFile.CreateFromDirectory(source, zipPath);
+        Assert.True(Zrdr.HasFile(zipPath, "plain.json"));
+        Assert.True(Zrdr.HasFile(zipPath, "forked.json"));
+        Assert.False(Zrdr.HasFile(zipPath, "absent.json"));
+    }
+
+    [Fact]
+    public void HasFileIsFalseWhenTheArchiveItselfIsAbsent()
+    {
+        var dir = TestData.TempDir();
+        Assert.False(Zrdr.HasFile(Path.Combine(dir, "zrdr"), "plain.json"));
+        Assert.False(Zrdr.HasFile(Path.Combine(dir, "zrdr.zip"), "plain.json"));
+    }
+
+    [Fact]
     public void LoadMatchingFilesSniffsContentBeforeParsing()
     {
         var anim = new List<string>();

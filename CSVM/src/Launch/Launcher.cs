@@ -39,31 +39,6 @@ namespace CSVM.Launch;
 /// </summary>
 public partial class Launcher : Node3D
 {
-    // Rendered frames per `--perf` report. A frame count rather than a wall second
-    // because under the fixed clock one rendered frame is exactly one sim step, so a window is a
-    // fixed amount of simulation and two runs of the same scenario yield the same number
-    // of samples, which is what makes a paired A/B comparable. At the vsync cap it is also
-    // still one report a second, so an interactive run reads as it always did.
-    private const int PerfWindowFrames = 60;
-
-    // Nearest-rank p95 index into the sorted window (0-based): `ceil(0.95 x
-    // PerfWindowFrames) - 1`. At 60 samples this is index 56, leaving 3 samples above it. p99
-    // is deliberately not reported, nearest-rank p99 over 60 samples resolves to index 59, the
-    // same slot as max, so it would just be max under another name (see ReportPerf).
-    private const int Perf95Index = (PerfWindowFrames * 95 + 99) / 100 - 1;
-
-    // Wall seconds per always-on `[perf] rate` line. Wall time and NOT a frame count, unlike
-    // PerfWindowFrames above: a frame-count window stretches exactly as the rate falls, so at
-    // 1 fps a 60-frame window would report once a minute and describe the collapse least where
-    // it matters most. Ten seconds is quiet enough to leave always on beside the rest of the
-    // log and short enough that a drop is placed within the sortie. TUNE.
-    private const double RateWindowSeconds = 10;
-
-    // How long a --net-host/--net-join launch waits at the socket for the other end before it
-    // gives up and flies alone. Wall seconds, because ENet is on the wall clock. Long enough for
-    // a second process to reach its own launch, short enough to bound a scripted run. TUNE.
-    private const double NetLinkWaitSeconds = 30.0;
-
     // Master-bus index. default_bus_layout.tres sends Music, Effects and Voice into Master, so a
     // gain or a mute written here still reaches every sound while leaving a player's own mix on the
     // three child buses alone.
@@ -73,11 +48,8 @@ public partial class Launcher : Node3D
     // exists, the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
 
-    // This window's unaveraged per-frame wall cost, for the max/p95 that ReportPerf reports
-    // alongside its means, fully overwritten every window, so it needs no reset. _perfFrameMsSorted
-    // is scratch for the sort at window close, kept off the frame path so no window allocates.
-    private readonly double[] _perfFrameMs = new double[PerfWindowFrames];
-    private readonly double[] _perfFrameMsSorted = new double[PerfWindowFrames];
+    // The multiplayer door and the wire a flight carries, across every session this process builds.
+    private readonly NetFlight _net;
 
     // Everything the command line settled, parsed and resolved once (see SessionSpec). _cli is what
     // the user typed; _spec is what the LIVE session was built from, the launchscreen's pick
@@ -151,43 +123,15 @@ public partial class Launcher : Node3D
     // Wheel steps turned since the menu seat last read them, positive toward a list's foot.
     private int _menuWheel;
     private MenuAudioService? _menuAudio;
-    // The multiplayer door, held here as well as on the host because the socket it opens outlives
-    // the board. The launch takes the wire, and the end of the match is where the router's port
-    // goes back.
-    private NetPlayFeature? _netDoor;
-    // The open wire the last menu launch carried, which end of it this machine is, and, on a
-    // host, the field the door saw. Null on every local launch.
-    private Net.INetTransport? _netWire;
-    private Net.NetSeat[]? _netRoster;
-    private bool _netIsHost;
-
-    // Whether the flight under way is a co-op campaign's, whose door keeps stepping in flight.
-    private bool _coopFlight;
-
-    // Whether the flight under way came out of the Dogfight lobby, whose seats carry picked fits.
-    private bool _lobbyFlight;
-
-    // Set by a finished lobby match on its way out, so the door keeps the wire for the lobby.
-    private bool _keepLobby;
-
-    // A co-op host's fit for each seat, by seat, as its launch told the guests. A guest reads its
-    // host's word off the door instead.
-    private Net.CoopFit[] _coopSeatFits = System.Array.Empty<Net.CoopFit>();
-    private Net.NetPlaneBuild?[] _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
-    private StockLoadouts? _coopStock;
     // The decoded menu layout the Original presentation composes from, loaded once by the
     // availability check and handed to every Original instance the registry creates.
     private MenuLayout? _originalLayout;
     // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
     // presentation's own tick, which is no place to free it.
     private OptionsApplyExit? _pendingApply;
-    // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
-    private bool _pendingGraphicsToggle;
-
-    // The cover over a live graphics switch in flight, null when none is up.
-    private SwitchCover? _switchCover;
-    // How many of --debug-graphics-switch's frames have fired, process-scoped like the capture.
-    private int _debugSwitchesDone;
+    // The Options settings on the window and the world, and the live graphics switch. Built beside
+    // the sun it dresses.
+    private LiveSettings _settings = null!;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -223,6 +167,10 @@ public partial class Launcher : Node3D
     // The reason is the debrief's: the ending arrives inside the session's own step.
     private IaWrapupSnapshot? _pendingWrapup;
 
+    // A finished lobby match's landing on Game Scores, acted on at the top of the next frame for
+    // the debrief's reason.
+    private bool _pendingLobbyLanding;
+
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
     // synchronous block, so the screen has to be DRAWN before it starts: _launchFramesWaited counts
     // the frames since the request and the build runs on the first one that proves a frame rendered.
@@ -241,48 +189,15 @@ public partial class Launcher : Node3D
     // frame is ready, then fades up from dark. Null under --det and once it has finished.
     private UI.Screens.SessionStartFade? _startFade;
 
-    private double _perfClock;
-    private int _perfFrames;
-    private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics, _perfSetup;
-    private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
-    // The spyglass discs' own counts over the window (SpyglassView.Census), split out of draws.
-    private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws;
-
-    // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
-    // without the flag subscribes to no runtime events at all.
-    private Utils.GcTrace? _gcTrace;
-
-    // Whether --perf has hooked the rendering server's draw signals into EngineGapCost.
-    private bool _drawMarksHooked;
-
-    // The always-on rate window (ReportRate). Separate accumulators from the --perf ones above
-    // rather than shared: those are opt-in and reset on a frame count, these run every session.
-    private double _rateWallMs;
-    private double _rateWorstMs;
-    private int _rateFrames;
-
-    // The always-on frame-hitch instrument and the viewport whose render times feed it. Both are
-    // settled in _Ready: the monitor's constructor is what registers its hitchMonitor.* config keys,
-    // and measured render time is opt-in per viewport, so both have to happen before the first
-    // frame rather than lazily on one.
-    private HitchMonitor _hitchMonitor = null!;
-    // The F14 / --debug-fps frame-cost readout, ticked every frame like
-    // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
-    private UI.Overlays.PerfHud _perfHud = null!;
     // The version stamp and its folder icons in the menu's corner. They show while the main menu or
     // the extraction screen is up. No presentation carries them, and no flight capture sees them.
     private UI.Screens.BuildStamp _buildStamp = null!;
     // The --debug-net readout, null without the flag, and the wall time since it last refreshed.
     private UI.Overlays.NetReadout? _netReadout;
     private double _sinceNetReadout;
-    private MeasuredRenderTime _renderTime = null!;
-    // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
-    // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
-    private long _lastFrameStamp;
-    // B6's write path for the monitor above: queues a tripped record and drains it a few seconds
-    // later, never inline on the hitching frame. Built after Log.Open (its path derives from
-    // Log.SinkPath), so it lives a step later in _Ready than _hitchMonitor does.
-    private HitchSidecar _hitchSidecar = null!;
+    // The frame instruments: the hitch monitor and sidecar, the rate line, the F14 readout and the
+    // opt-in --perf, --debug-mem and --hitch-inject. Built in three steps across _Ready.
+    private FrameInstruments _instruments = null!;
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; each session node
     // receives them via LauncherContext and recomputes the chapter-dependent gamez/texture/mission
@@ -297,6 +212,9 @@ public partial class Launcher : Node3D
     // so a git worktree can run the game, /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
     private string _dataRoot = "";
+    // Why --synthetic-data could not write its tree, or null. The run quits on it once the log is
+    // open. Until then the data root names the unwritten tree, so nothing real is read.
+    private string? _syntheticError;
     private string _planesGamezPath = "";  // extracted/planes.zip, the aircraft models (always this)
     private string _zrdrPath = "";
     private string _soundsPath = "";
@@ -315,6 +233,9 @@ public partial class Launcher : Node3D
     // ⚠ `--mute` cannot be reused for this: it is load-time and never constructs the audio
     // players, so there is nothing here to toggle.
     private bool _focusMuted;
+
+    // The flight's two exits are this node's, so the network state is built over them here.
+    public Launcher() => _net = new NetFlight(ReturnToMenu, ExitSession);
 
     // The screen ExitSession takes a flight back to, as the last launch settled it. The setter is
     // the launch-return suite's way of putting the live node's own destination back afterwards.
@@ -340,6 +261,10 @@ public partial class Launcher : Node3D
         _menuHost is { } host ? host.Selected
         : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
         : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride));
+
+    // The boards stood with no flight in front of them, over the live spec and the current paths.
+    // Built per use, since an extraction's hand-back re-resolves the paths.
+    private LaunchBoards Boards => new(_spec, _dataRoot, _zrdrPath, _messagesPath);
 
     public override void _Ready()
     {
@@ -404,6 +329,7 @@ public partial class Launcher : Node3D
         if (_spec.DataRoot is { } dataRootArg) _dataRoot = Path.GetFullPath(dataRootArg);
         if (_dataRoot != _repoRoot)
             Log.Info("core", $"data root: {_dataRoot} (repo root {_repoRoot})");
+        ResolveSyntheticData();
 
         // An override is used verbatim; everything else derives from the data root.
         var planesGamezPath = Path.Combine(_dataRoot, "extracted", "planes.zip");
@@ -453,15 +379,8 @@ public partial class Launcher : Node3D
         _pendingWingmen = _spec.DebugWingmen;
         _pendingPreset = _spec.DebugPreset;
         // Built alongside the other process-scoped services, ahead of every probe's early quit
-        // and of --dump-config: its constructor is what registers the five hitchMonitor.* keys.
-        // See this file's docs/architecture.md entry.
-        _hitchMonitor = new HitchMonitor();
-        // Measured render time is opt-in per viewport and reads 0 until it is, so it is enabled once
-        // here rather than per frame from ReportPerf (which used to own the call): the hitch record
-        // needs the CPU/GPU split on every frame, not only on a --perf run.
-        var viewportRid = GetViewport().GetViewportRid();
-        RenderingServer.ViewportSetMeasureRenderTime(viewportRid, true);
-        _renderTime = new MeasuredRenderTime(viewportRid);
+        // and of --dump-config: its hitch monitor is what registers the five hitchMonitor.* keys.
+        _instruments = new FrameInstruments(_spec, GetViewport().GetViewportRid());
 
 
         // An editor run's window is created without focus (no_focus in project.godot). An
@@ -499,24 +418,8 @@ public partial class Launcher : Node3D
             CSVM.Bindings.BindingStore.DirectoryOverride = scratchOptions;
         }
 
-        // The pacing's three sources and both engine calls are VSyncSetting's; --no-vsync uncaps
-        // the loop so frame/fps/script report work done rather than a refresh cap. The config read
-        // stays unconditional so it self-registers, see Utils/Config.cs's entry.
-        bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault);
-        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
-
-        // The saved screen, then the mode, then the size, for a session someone is at only: a
-        // scripted run's window is hidden off screen and its capture compared against the viewport
-        // project.godot pins, so none may reach one. None asks for focus; docs/architecture/Utils.md.
-        if (!_spec.IsScripted)
-        {
-            MonitorSetting.Apply(MonitorSetting.Resolve(MonitorSetting.SavedWord(_spec.Det), MonitorSetting.Screens()));
-            var displayMode = DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det));
-            DisplayModeSetting.Apply(displayMode);
-            ResolutionSetting.Apply(
-                ResolutionSetting.Resolve(ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes(), displayMode.Word),
-                GetWindow());
-        }
+        // After the options directory is settled, since both read the saved options.
+        LiveSettings.ApplyWindowAtLaunch(_spec, GetWindow());
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
         // legacy spelling of their console filter; an explicit --log= is applied after it and can
@@ -550,11 +453,26 @@ public partial class Launcher : Node3D
             Net.NetPorts.Use(netPortBase);
             Log.Info("core", $"net ports: game {Net.NetPorts.Game} lan {Net.NetPorts.Lan} (--net-port-base)");
         }
-        // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
-        // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
-        string hitchLogPath = Log.SinkPath
-            ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
-        _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
+        // Ahead of --dump-config, same reason as the instruments: registers the two
+        // hitchSidecar.* keys. After Log.Open, since its path derives from the log's.
+        _instruments.OpenSidecar(_repoRoot, _exported);
+
+        // Before anything heavy loads: a scripted launch below the memory floor ends here. A
+        // release build has no ledger to join.
+        if (!_exported && Tooling.MemoryAdmission.Refuses(OS.GetCmdlineUserArgs(), _repoRoot))
+        {
+            GetTree().Quit(Tooling.MemoryAdmission.TripwireExitCode);
+            return;
+        }
+
+        // A failed --synthetic-data tree ends the run. Reading the install instead would pass it on
+        // data nobody asked for, and an empty tree would only skip every suite.
+        if (_syntheticError != null)
+        {
+            Log.Error("core", $"--synthetic-data could not write its tree: {_syntheticError}");
+            GetTree().Quit(1);
+            return;
+        }
 
         // VR mode at boot, before anything heavy runs: a restart into the headset leaves from here
         // in the state the --extract branch below runs in.
@@ -701,59 +619,8 @@ public partial class Launcher : Node3D
         CSVM.UI.Boards.BoardMarquee.PinnedSeconds = _spec.DebugMarquee ?? (_spec.Det || _spec.RunTests ? 0d : null);
 
         // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
-        // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
-        // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
-        var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
-        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
-        // A headset session's profile stands in for the flat words' flags. It resolves before any of
-        // them, and a flat launch gets nothing from it.
-        Utils.VrQuality.Current = Utils.VrQuality.Resolve(XrSession.WillBoot(_spec.XrSim), _spec.XrQuality,
-            _spec.AntiAliasing, _spec.Msaa, _spec.ShadowQuality, _spec.XrFoveation);
-        Utils.AntiAliasingSetting.FlagWord = Utils.VrQuality.Current.AntiAliasing;
-        // The view distance under the same --det rule, a machine's own state a capture must not read.
-        var viewDistance = Utils.ViewDistance.Resolve(_spec.ViewDistance, savedOptions?.ViewDistance,
-            Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default));
-        // Display settings rather than the mode's, so each is written whichever presentation won;
-        // only the method's default follows the mode. They share the mode's line because all three
-        // reach the same viewports, so a softer or slower run than expected is read off one line.
-        string antiAliasingDefault = Utils.AntiAliasingSetting.DefaultFor(graphicsEnhanced);
-        var antiAliasing = Utils.AntiAliasingSetting.Resolve(
-            Utils.AntiAliasingSetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.AntiAliasingSetting.Key, antiAliasingDefault),
-            graphicsEnhanced);
-        // After the method, which clamps the scale: FSR 2.2 runs at native or below.
-        var renderScale = Utils.RenderScaleSetting.Resolve(
-            Utils.RenderScaleSetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default),
-            antiAliasing.Word);
-        // Resolved under either mode so the line says what a flip to Enhanced would fly; only
-        // SetupLighting's enhanced sun reads it.
-        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
-        var shadowQuality = Utils.ShadowQualitySetting.Resolve(Utils.VrQuality.Current.ShadowQuality,
-            Utils.ShadowQualitySetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
-        string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)}");
-        // The window's own viewport takes the render flags here, before any scene builds. The
-        // three SubViewports take them at construction.
-        Utils.ViewportQuality.Apply(GetViewport());
-        // The stereo root's own MSAA and foveation, written only when the plan names them.
-        var vrQuality = Utils.VrQuality.Current;
-        if (Utils.VrQuality.MsaaOf(vrQuality.Msaa) is { } msaa)
-        {
-            GetViewport().Msaa3D = msaa;
-        }
-
-        if (vrQuality.Foveation)
-        {
-            GetViewport().VrsMode = Viewport.VrsModeEnum.XR;
-        }
-
-        if (Utils.VrQuality.Describe(vrQuality) is { } vrLine)
-        {
-            Log.Info("world", $"{vrLine}");
-        }
+        // clutter fade, which needs the mode to follow the pushed fog.
+        LiveSettings.ResolveGraphicsAtLaunch(_spec, GetViewport());
         // The clutter fade's squared distance scale, 0 when the fade is off. Enhanced mode pushes
         // the fade out with the fog and further by the View Distance (ClutterFadeScaleSq).
         float clutterFadeScaleSq = EnhancedLook.ClutterFadeScaleSq();
@@ -768,6 +635,7 @@ public partial class Launcher : Node3D
         // Registered before the --dump-* branches below, which build materials of their own:
         // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
+        Effects.Ocean.RegisterGlobal();
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
@@ -869,6 +737,7 @@ public partial class Launcher : Node3D
         }
 
         SetupLighting();
+        _settings = new LiveSettings(this, _sun, _env, subject => Boards.SwitchScreen(subject));
         // GameSession re-applies these same two framings per launch. The decoded world base serves
         // every camera that draws the world, and the viewer's own 50 a model on a stage.
         _camera = new Camera3D
@@ -893,7 +762,7 @@ public partial class Launcher : Node3D
 
         // OpenXR starts with the engine or not at all, and the --xr-sim stand-in only with its feature
         // tag. Without either Boot builds nothing, so a flat launch draws and paces exactly as it did.
-        _xr = XrSession.Boot(GetViewport(), _camera, _renderTime, _spec.XrSim);
+        _xr = XrSession.Boot(GetViewport(), _camera, _instruments.RenderTime, _spec.XrSim);
         if (_xr != null)
         {
             AddChild(_xr);
@@ -936,17 +805,14 @@ public partial class Launcher : Node3D
         // The F14 / --debug-fps readout, process-wide like the camera so it works at the
         // launchscreen too. Built after the --run-tests/--dump-* early exits, which render no
         // frame it would have anything to show.
-        _perfHud = new UI.Overlays.PerfHud
-        {
-            InitialMode = _spec.DebugFps == null ? UI.Overlays.PerfHud.Mode.Off : UI.Overlays.PerfHud.ParseMode(_spec.DebugFps),
-            Monitor = _hitchMonitor,
-        };
-        AddChild(_perfHud);
+        AddChild(_instruments.BuildHud());
 
         // The version stamp on the menu, process-wide for the same reason and built beside it: the
         // build a capture came from is a fact about the binary, not about a presentation.
         _buildStamp = new UI.Screens.BuildStamp(_repoRoot, _exported);
         AddChild(_buildStamp);
+        // A Game Mode refusal stands in the Original menu's own warning box, the stamp's dialog elsewhere.
+        _buildStamp.Messagebox = words => _menuHost?.Active is UI.Menu.Original.OriginalPresentation original && original.RaiseWarning(words);
 
         // The strip over Steam's on-screen keyboard, process-wide because the menus, the extraction
         // screen and the flight chat all raise it. It draws nothing on any other machine.
@@ -1004,7 +870,8 @@ public partial class Launcher : Node3D
         }
 
         // Before the build, because the session reads its wire in its own constructor.
-        OpenCliNet();
+        _net.OpenCli(_spec, _messagesPath);
+        _net.SeatLocalField(_spec, _messagesPath);
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -1033,8 +900,23 @@ public partial class Launcher : Node3D
     public override void _ExitTree()
     {
         SweepXrShaderCache();
+        // ⚠ Do not move this below the teardown calls, nor out of here. The engine disposes the
+        // peers a service thread may still poll, and a probe's quit closes no transport itself.
+        try
+        {
+            int closed = Net.EnetTransport.CloseAll();
+            if (closed > 0)
+            {
+                Log.Info("core", $"net: closed {closed} transport(s) still open at quit");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Log.Error("core", $"net: closing the open transports at quit failed: {e}");
+        }
+
         DrainLowPriorityTasks();
-        _hitchSidecar.Flush();
+        _instruments.Exit();
         _musicArchive?.Dispose();
         _musicArchive = null;
         SettleFinalizers();
@@ -1058,7 +940,7 @@ public partial class Launcher : Node3D
                 // else its address.
                 if (_menuHost is { Shown: true })
                 {
-                    _netDoor?.CopyForGuests();
+                    _net.CopyForGuests();
                 }
             }
             else
@@ -1132,61 +1014,16 @@ public partial class Launcher : Node3D
         // never disagree. Written unconditionally: with no session clock it runs on wall time,
         // so nothing stalls behind the menu.
         ShaderTime.Advance(ClockNow, delta);
-        // Both instruments stay on wall time: an instrument that freezes with the thing it measures
-        // reports nothing. One counter read per frame feeds both: the hitch monitor wants them
-        // unaveraged and the --perf window wants them summed, but they are the same eight numbers.
-        var counters = ReadFrameCounters();
-        // Fires one QPC read before the stamp below, so the stall inflates THIS frame's wall
-        // cost. Matched against HitchMonitor's own frame counter, never the sim frame: the
-        // injector has to work with no session built at all.
-        if (_spec.HitchInjectMs is float injectMs
-            && _hitchMonitor.FrameCount + 1 == _spec.HitchInjectFrame)
-        {
-            InjectHitch(injectMs, _spec.HitchInjectAlloc);
-        }
-        // Detection is unconditional; logging is not, a hitch nobody watched for is what this
-        // catches. Fed our own QPC pair, never Godot's post-processed `delta`, which measures
-        // as a quantised constant.
-        long stamp = System.Diagnostics.Stopwatch.GetTimestamp();
-        double frameMs = _lastFrameStamp == 0
-            ? 0
-            : (stamp - _lastFrameStamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        _lastFrameStamp = stamp;
-        // Closes the attribution window at the same instant the wall cost is stamped, so the
-        // scopes that ran and the frame_ms they ran inside describe the same span. The session
-        // node processes one notch ahead (-1000), so its declared work is already in.
-        PerfSample.EndFrame();
-        // B6: a trip queues its record (a cheap, preallocated copy) rather than writing anything
-        // here, the sidecar's own Tick below drains the queue a few quiet frames later.
-        if (_hitchMonitor.Tick(frameMs, counters))
-        {
-            _hitchSidecar.Enqueue(_hitchMonitor.Last);
-        }
-        _hitchSidecar.Tick(frameMs);
-        // Fed the same wall cost the monitor above gets, and unconditional where --perf is opt-in:
-        // the rate a player actually saw is the one thing a report from someone else's machine
-        // cannot be reconstructed without.
-        ReportRate(frameMs);
-        // Early-quit probes do not construct the readout, but Godot may process one shutdown frame.
-        _perfHud?.Tick(frameMs, counters);
+        // The instruments stay on wall time: an instrument that freezes with the thing it measures
+        // reports nothing. The session node processes one notch ahead (-1000), so its declared work
+        // is already in the frame they close.
+        double frameMs = _instruments.BeginFrame();
         // The main menu only: deeper screens have plaques along the bottom edge that the stamp
         // overlaps at a Steam Deck's aspect. The
         // extraction screen too, since a player whose extraction failed needs the logs icon most.
         _buildStamp?.Tick(_menuHost is { OnMainMenu: true } || _extractionScreen != null);
         TickNetReadout(delta);
-        if (_spec.Perf)
-        {
-            if (!_drawMarksHooked)
-            {
-                // Only under --perf: an ordinary run pays for no signal into managed code.
-                RenderingServer.FramePreDraw += EngineGapCost.MarkPreDraw;
-                RenderingServer.FramePostDraw += EngineGapCost.MarkPostDraw;
-                _drawMarksHooked = true;
-            }
-            (_gcTrace ??= Utils.GcTrace.Create(_spec.GcTypes)).Tick();
-            ReportPerf(delta, counters);
-        }
-
+        _instruments.EndFrame(delta, ClockNow);
         // Wall time, like the instruments above: the score is not part of the simulation, and a
         // paused or stepped session must not stall a fade halfway.
         _music?.Tick((float)delta, _musicRng);
@@ -1211,8 +1048,19 @@ public partial class Launcher : Node3D
             ReturnToMenu(new InstantActionWrapupReturn(wrapup));
         }
 
-        TickCoopFlight(delta);
-        TickVersusGuestFlight(delta);
+        // ⚠ Only while the session still flies: a pause-sheet exit in the same frame already left,
+        // and ExitSession with no session quits the game.
+        if (_pendingLobbyLanding)
+        {
+            _pendingLobbyLanding = false;
+            if (_session is { InSession: true })
+            {
+                ExitSession();
+            }
+        }
+
+        _net.TickCoop(delta, _session);
+        _net.TickVersus(delta, _session);
 
         // An Options apply, one frame after the exit that asked for it.
         if (_pendingApply is { } applied)
@@ -1221,27 +1069,8 @@ public partial class Launcher : Node3D
             ApplyOptions(applied);
         }
 
-        // The graphics-mode action, a frame after the seat that fired it, so no switch runs inside a
-        // controller's own _Process. Saved like the Options row.
-        if (_pendingGraphicsToggle)
-        {
-            _pendingGraphicsToggle = false;
-            if (_session is { InSession: true })
-                RequestGraphicsSwitch(!GraphicsMode.Enhanced, "the graphics-mode action", save: true);
-        }
-
-        // --debug-graphics-switch: the same flip at each named sim frame, unsaved.
-        if (_session is { InSession: true } && GameClock.Current is { } simClock && _switchCover == null
-            && _debugSwitchesDone < _spec.DebugGraphicsSwitch.Count
-            && simClock.Frame >= _spec.DebugGraphicsSwitch[_debugSwitchesDone])
-        {
-            _debugSwitchesDone++;
-            RequestGraphicsSwitch(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}", save: false);
-        }
-
-        if (_switchCover?.Tick(frameMs) == true)
-            _switchCover = null;
-        GraphicsMode.SwitchLocked = _session is { InSession: true, Wire.Link: not null };
+        // Null only on the frame an early quit leaves, which built no sun.
+        _settings?.Tick(frameMs, _spec, _session);
 
         if (_session is { InSession: true } && GameClock.Current is { } diagClock)
         {
@@ -1320,313 +1149,44 @@ public partial class Launcher : Node3D
         _cinemaShown = null;
     }
 
-    /// <summary>Whether a co-op guest's flight is over. Its host named another board or restarted
-    /// the mission, or the link to the host is gone and the door has failed.</summary>
-    internal static bool CoopGuestFlightOver(UI.Menu.NetPlayFeature door) => door.CoopFlightOver;
-
-    /// <summary>A co-op host's restart, the door's half. The door takes the wire back from the
-    /// flight that ends, then launches again under a new round. That round ends every guest's
-    /// flight and holds the next opener for it. Null when the door will not launch.</summary>
-    internal static UI.Menu.MenuNetLaunch? CoopRelaunch(UI.Menu.NetPlayFeature door)
-    {
-        door.Reclaim();
-        return door.IsCoopHost ? door.BuildLaunch() : null;
-    }
-
-    /// <summary>The fit a co-op seat flown elsewhere carries: from <paramref name="launched"/> on
-    /// the host that launched it, or the host's word through <paramref name="door"/> on a guest.
-    /// Stock where neither names one.</summary>
-    internal static LoadoutChoice? CoopSeatFitFor(int seat, IReadOnlyList<Net.CoopFit>? launched,
-        UI.Menu.NetPlayFeature? door, StockLoadouts stock)
-    {
-        var fit = launched != null
-            ? seat >= 0 && seat < launched.Count ? launched[seat] : default
-            : door?.CoopSeatFits.TryGetValue(seat, out var told) == true ? told : default;
-        return CampaignLoadout.For(fit, stock);
-    }
-
-    /// <summary>The campaign wingman a co-op host's launch names to its guests, read off
-    /// <paramref name="profile"/> as the host's own director reads it. A launch with no profile
-    /// flies the fresh profile a director without one binds.</summary>
-    internal static Net.CoopWingmanMessage CoopWingmanFor(string profile, string? profilesDir)
-    {
-        var def = profile.Length == 0
-            ? CampaignProfileDef.NewProfile(CampaignDirector.CoopGuestPilot)
-            : CampaignProfileStore.ForSession(profilesDir).Load(profile);
-        if (def == null)
-        {
-            Log.Warn("core", $"net: co-op profile '{profile}' cannot be read, so no wingman aeroplane is named to the guests");
-            return new Net.CoopWingmanMessage(Net.CoopWingmanMessage.NoAirframe, default);
-        }
-
-        return CampaignDirector.CoopWingmanOf(def);
-    }
-
-    /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried, the first named by the door's callsign. Then comes every seat a
-    /// guest still on the wire was given, in the plane, fit and name its pick carried. A machine's
-    /// seats sit side by side.</summary>
-    internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
-        UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
-        IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
-    {
-        var guests = new List<(int Peer, string Plane, string Name)>();
-        var voices = new List<byte>();
-        var seatFits = new List<Net.CoopFit>();
-        for (int i = 0; i < planes.Count; i++)
-        {
-            seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
-        }
-
-        foreach (var guest in door.CoopGuests)
-        {
-            if (System.Linq.Enumerable.Contains(wire.Peers, guest.Peer))
-            {
-                guests.Add((guest.Peer, Flight.Hangar.StockAirframes.Node(guest.Airframe), guest.Name));
-                voices.Add(UI.Menu.PilotVoices.Wire(guest.Voice));
-                seatFits.Add(guest.Fit);
-            }
-        }
-
-        string hostName = Net.SeatRosterMessage.Carried(door.PlayerName.Trim()).Trim();
-        var roster = Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName);
-        // The host's first seat is the scripted player and speaks as Nathan Zachary. Its splitscreen
-        // seats have no voice, and each guest speaks in the voice its pick carried.
-        for (int seat = 0; seat < roster.Length; seat++)
-        {
-            int guest = seat - planes.Count;
-            byte voice = seat == 0 ? UI.Menu.PilotVoices.Wire(UI.Menu.PilotVoices.CoopHost)
-                : guest >= 0 && guest < voices.Count ? voices[guest] : (byte)0;
-            roster[seat] = roster[seat] with { Voice = voice };
-        }
-
-        return (roster, seatFits.ToArray());
-    }
-
-    /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first, the first named by the wire's local callsign and any other by player tag. Each guest
-    /// follows in the stock airframe, fit and name its lobby pick carried.
-    /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
-    /// the Built-in Dogfight door's only rule. Each seat takes its machine's lobby team from
-    /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
-    internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
-        Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
-        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null)
-    {
-        teamOf ??= _ => 0;
-        var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
-        var seatFits = new List<Net.CoopFit>(seats.Capacity);
-        var lobby = wire as Net.NetLobby;
-        // Cut to the roster's width, so the host's kill lines read what each guest's copy reads.
-        string hostName = Net.SeatRosterMessage.Carried((lobby?.LocalCallsign ?? "").Trim()).Trim();
-        for (int i = 0; i < planes.Count; i++)
-        {
-            seats.Add(new Net.NetSeat
-            {
-                PeerId = wire.LocalPeer,
-                SeatIndex = seats.Count,
-                TeamId = teamOf(wire.LocalPeer),
-                IsLocal = true,
-                Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
-                Unnamed = i == 0 && hostName.Length == 0,
-                PlaneNode = planes[i],
-                // Only the first seat has a Player Information answer; a splitscreen seat has none.
-                Voice = i == 0 && lobby != null ? lobby.LocalVoice : (byte)0,
-            });
-            seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
-        }
-
-        var picks = lobby?.Picks;
-        foreach (int peer in wire.Peers)
-        {
-            if (seats.Count >= Net.NetSeats.MaxPlayers)
-            {
-                break;
-            }
-
-            Net.CoopPickMessage chosen = default;
-            bool picked = picks != null && picks.TryGetValue(peer, out chosen);
-            string name = picked ? chosen.Name.Trim() : "";
-            seats.Add(new Net.NetSeat
-            {
-                PeerId = peer,
-                SeatIndex = seats.Count,
-                TeamId = teamOf(peer),
-                Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
-                Unnamed = name.Length == 0,
-                PlaneNode = picked ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
-                Voice = picked ? chosen.Voice : (byte)0,
-            });
-            // The guest's own lobby flies its pick through the same rules, so both ends agree.
-            seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
-        }
-
-        Net.NetSeats.Validate(seats, wire.LocalPeer);
-        return (seats.ToArray(), seatFits.ToArray());
-    }
-
-    /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
-    /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
-    /// when <paramref name="rules"/> admit it. Without rules a guest's pick seats no build; a co-op
-    /// guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
-    /// </summary>
-    internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
-        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
-    {
-        var builds = new Net.NetPlaneBuild?[roster.Count];
-        var picks = (wire as Net.NetLobby)?.PickBuilds;
-        for (int seat = 0; seat < roster.Count; seat++)
-        {
-            if (roster[seat].IsLocal)
-            {
-                int menu = Net.NetSeats.LocalOrdinal(roster, seat);
-                builds[seat] = menu >= 0 && menu < customs.Count ? CustomPlaneWire.Build(customs[menu]) : null;
-                continue;
-            }
-
-            if (rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
-            {
-                continue;
-            }
-
-            // Unreachable from a lobby, which launches only on admitted planes; the log names the case.
-            var refusal = admitting.Refuses(build.Airframe, build);
-            if (refusal != Net.PlaneRefusal.None)
-            {
-                Log.Warn("core", $"net: seat {seat.ToString(System.Globalization.CultureInfo.InvariantCulture)}'s custom plane '{build.Name}' is refused ({refusal}), so it flies stock");
-                continue;
-            }
-
-            builds[seat] = build;
-        }
-
-        return builds;
-    }
-
-    /// <summary>A co-op host's custom planes, by seat, null for a stock one. Its own seats take
-    /// <paramref name="customs"/> in menu order. Each guest's seat takes the build of the hangar
-    /// plane it flies, never one the guest brought. A guest's seats are matched in order, so each
-    /// of a machine's players flies its own plane.</summary>
-    internal static Net.NetPlaneBuild?[] CoopSeatBuilds(IReadOnlyList<Net.NetSeat> roster,
-        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, UI.Menu.NetPlayFeature door, Net.INetTransport wire)
-    {
-        var builds = SeatBuildsFor(roster, customs, wire, null);
-        var guests = door.CoopGuests;
-        for (int seat = 0; seat < roster.Count; seat++)
-        {
-            if (roster[seat].IsLocal)
-            {
-                continue;
-            }
-
-            int local = 0;
-            for (int earlier = seat - 1; earlier >= 0 && roster[earlier].PeerId == roster[seat].PeerId; earlier--)
-            {
-                local++;
-            }
-
-            foreach (var guest in guests)
-            {
-                if (guest.Peer == roster[seat].PeerId && guest.Local == local)
-                {
-                    builds[seat] = guest.Build;
-                }
-            }
-        }
-
-        return builds;
-    }
-
-    /// <summary>The custom plane a seat flown elsewhere carries: from <paramref name="launched"/> on
-    /// the host that launched it, or the host's word through <paramref name="door"/> on a guest.
-    /// Null for a stock seat.</summary>
-    internal static Flight.Hangar.CustomPlaneDef? SeatBuildFor(int seat, IReadOnlyList<Net.NetPlaneBuild?>? launched,
-        UI.Menu.NetPlayFeature? door)
-    {
-        var build = launched != null
-            ? seat >= 0 && seat < launched.Count ? launched[seat] : null
-            : door?.SeatBuilds.TryGetValue(seat, out var told) == true ? told : null;
-        return CustomPlaneWire.Def(build);
-    }
-
-    /// <summary>Where a finished lobby Dogfight or stunt race lands: its lobby's Game Scores. A match
-    /// is named off the list at the launch, a race by its board's own table. Null for any other
-    /// flight, one left before its end, or a Built-in board.</summary>
-    internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match,
-        Flight.Modes.StuntRace? race = null)
-    {
-        if (!lobbyFlight || lobby is not { Shown: true })
-        {
-            return null;
-        }
-
-        if (match is { Completed: true })
-        {
-            return new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames));
-        }
-
-        return RaceLanding(race) is { } table ? new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>(), table) : null;
-    }
-
-    /// <summary>An ended stunt race's table as the lobby's Game Scores draws it, a pilot who left
-    /// marked; null for no race or one still running.</summary>
-    internal static IReadOnlyList<UI.Menu.RaceTableRow>? RaceLanding(Flight.Modes.StuntRace? race) =>
-        race is { Ended: true } ? UI.Menu.Original.OriginalRaceTable.Rows(race.Standings(), race.ZoneCount) : null;
-
-    /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
-    internal static Dictionary<int, string> TeamNames(IReadOnlyList<Net.LobbyTeamName> teams)
-    {
-        var names = new Dictionary<int, string>();
-        foreach (var team in teams)
-        {
-            names[team.Number] = team.Name;
-        }
-
-        return names;
-    }
-
-    /// <summary>Whether a lobby Dogfight guest's host left its flight. The door, stepped in
-    /// flight, has failed on a close notice or a lost link.</summary>
-    internal static bool VersusGuestFlightOver(UI.Menu.NetPlayFeature door) =>
-        door.Stage == UI.Menu.NetDoorStage.Failed;
-
-    /// <summary>The door's half of a network flight's end. A co-op door, or a lobby whose match
-    /// ran to its end, takes <paramref name="wire"/> back. A host otherwise closes through its
-    /// door, which tells every guest first. Anything else disposes the wire and shuts the door.
-    /// </summary>
-    internal static void EndNetWire(UI.Menu.NetPlayFeature? door, Net.INetTransport wire, bool keepLobby)
-    {
-        if (door != null && (door.IsCoopHost || door.IsCoopGuest || keepLobby) && door.Reclaim())
-        {
-            return;
-        }
-
-        // ⚠ Do not dispose a host's wire here. The door's close sends every guest the close notice
-        // first; a bare dispose leaves a guest flying on until its link drops.
-        if (door is { IsHost: true } && door.Reclaim())
-        {
-            Log.Info("core", $"net: left the flight as host, telling {door.Peers} guest(s) the session closed");
-            door.Close();
-            return;
-        }
-
-        if (wire is System.IDisposable open)
-        {
-            open.Dispose();
-        }
-
-        // A door that failed keeps its fault, which the Connection page then names.
-        if (door is { Stage: not UI.Menu.NetDoorStage.Failed } shut)
-        {
-            shut.Close();
-        }
-    }
-
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
     // writes it here, ExitSession reads it back, and the rule stands in one place.
     // ⚠ Keep it internal rather than private. Nothing instantiates a Launcher headlessly, so the
     // launch-return suite pins this round trip on the live node or not at all.
     internal void LaunchedFrom(MenuExit exit) => ExitDestination = MenuReturnDestination.ForLaunch(exit);
+
+    // --synthetic-data replaces the data root, whatever it held, with a tree written into scratch.
+    // The switch alone opts in, and a synthetic tree is named in the log on every run that reads one.
+    // ⚠ Do not fall back to the resolved root when the tree fails; see _syntheticError.
+    private void ResolveSyntheticData()
+    {
+        if (!_spec.SyntheticData)
+        {
+            if (Tooling.SyntheticData.Marks(_dataRoot))
+            {
+                Log.Warn("core", $"SYNTHETIC DATA: the data root {_dataRoot} holds an invented test tree, not an extraction; every asset this run reads is invented");
+            }
+            return;
+        }
+        string replaced = _dataRoot;
+        bool installThere = !UI.Screens.NoGameDataScreen.Missing(replaced);
+        _dataRoot = Tooling.SyntheticData.ScratchRoot(_repoRoot);
+        try
+        {
+            Tooling.SyntheticData.Build(Tooling.SyntheticData.FixturesUnder(_repoRoot), _dataRoot, UI.Menu.Original.SyntheticShell.TreeFamilies);
+        }
+        catch (System.Exception e)
+        {
+            // Every failure alike, a malformed record included: each one leaves the tree unusable.
+            _syntheticError = $"{e.GetType().Name}: {e.Message}";
+            return;
+        }
+        Flight.Weapons.StockLoadouts.Supplement =
+            Tooling.SyntheticPlane.LoadoutsUnder(Tooling.SyntheticData.FixturesUnder(_repoRoot));
+        SessionSpec.DefaultPlane = Tooling.SyntheticPlane.Plane;
+        string families = string.Join(",", System.Linq.Enumerable.Select(UI.Menu.Original.SyntheticShell.TreeFamilies, f => f.Name));
+        Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {_dataRoot} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
+    }
 
     // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame
     // callbacks are switched off until the quit, because _Ready returned before building what they read.
@@ -1672,10 +1232,11 @@ public partial class Launcher : Node3D
         Log.Info("core", $"exit drain: low-priority tasks settled in {watch.Elapsed.TotalMilliseconds:0.0} ms");
     }
 
-    // Runs every pending finalizer while the engine is whole, then forbids any further collection.
-    // A collection during teardown queues Godot wrappers whose finalizers race
-    // CSharpLanguage::finalize and crash the process after its work (docs/verification.md LOG-27).
-    // ⚠ Keep it last before the log mirror, and never end the region: the quit must not collect.
+    /// <summary>Runs every pending finalizer while the engine is whole, then forbids any further
+    /// collection. A collection during teardown, often a background one already running here, queues
+    /// Godot wrappers for finalizing. Those finalizers race CSharpLanguage::finalize and crash the
+    /// process after its work is done. docs/verification.md LOG-27 holds the mechanism and the rates.
+    /// ⚠ Keep it last before the log mirror, and never end the region: the quit must not collect.</summary>
     private void SettleFinalizers()
     {
         // Room for the teardown's own allocations, the disposal tracker's wrapper snapshot among them.
@@ -1834,11 +1395,22 @@ public partial class Launcher : Node3D
             return; // a CLI launch leaves the log to tell the story, as it always did
         }
         ReturnToMenu(MenuReturnDestination.TopLevel);
-        // Built-in's error line is its own; Original has no note and its top level shows bare, so
-        // the log carries the fact for both presentations.
+        // Each presentation says so in its own chrome, Built-in on its error line and Original in
+        // its warning box. Without the box Original's top level shows bare, which reads as a misclick.
         Log.Warn("ui", $"menu: the build failed, back at the top level of {_menuHost?.Selected}");
         BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)}, see the log.");
+        if (_menuHost?.Active is UI.Menu.Original.OriginalPresentation original)
+        {
+            original.RaiseWarning(FailedBuildWarning());
+        }
     }
+
+    // The words of Original's failed-build box. An extraction with no chapter world fails every
+    // flight the same way, so it names the fix; anything else is the log's to explain.
+    private string FailedBuildWarning() => SessionPaths.HasAnyChapterWorld(_dataRoot)
+        ? $"The mission could not be loaded. The log says why: open it with the \"{UI.Screens.BuildStamp.LogsTooltip}\" icon beside the version number."
+        : "The extracted game data holds no chapter worlds, so no mission can be flown. "
+            + $"Extract again from a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}.";
 
     // A build that throws counts as one that failed. The caller's own failure path then takes the
     // load screen down and returns a menu launch to the menu. An escaped exception would leave the
@@ -1897,234 +1469,13 @@ public partial class Launcher : Node3D
         _startFade = null;
     }
 
-    // The load screen over the whole window, on the board layer. A campaign launch takes the
-    // original's chart sheet for the mission being built and everything else its blackboard
-    // (docs/org/loading-screen.md).
+    // The load screen over the whole window, on the board layer; what it draws is LaunchBoards'.
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
     {
-        // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
-        // describes the flight. The chart sheet writes no words of ours at all.
-        string subject = campaign ? string.Empty : LaunchSubject().ToUpperInvariant();
-        var sheet = campaign
-            ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
-            : null;
+        var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight);
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
-        string? briefing = campaign || missionType != null ? null : LaunchBriefing();
-        var board = UI.Screens.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet, briefing);
-        if (briefing != null)
-        {
-            Log.Info("ui", $"load screen: {_spec.Chapter} Dogfight reads {briefing}");
-        }
-        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
-    }
-
-    // A Dogfight's multiplayer dialog, from its chapter, its type and whether a lobby pilot joined a
-    // team. The session's pause board resolves the same key off its seats. Null for anything else.
-    private string? LaunchBriefing() =>
-        _spec.Versus
-            ? UI.Screens.LoadScreens.MultiplayerKey(
-                _spec.Chapter, _spec.MissionType,
-                _lobbyFlight && _netDoor?.Dogfight is { Teamed: true })
-            : null;
-
-    // The chart sheet a story position resolves: the loading dialog the mission's own storage
-    // address names, that mission's objectives for the parchment, and the profile's memento.
-    private UI.Screens.LoadSheet? CampaignLoadSheet(int seq)
-    {
-        if (CampaignMissionAt(seq) is not { } named)
-        {
-            Log.Warn("ui", $"load screen: cm_sequence names no mission at seq {seq}");
-            return null;
-        }
-
-        string key = UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission);
-        var sheet = UI.Screens.LoadSheet.Load(
-            _zrdrPath, _messagesPath,
-            SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder),
-            key, SeatedMemento());
-        if (sheet == null)
-        {
-            Log.Warn("ui",
-                $"load screen: Loading.zrd has no sheet for {named.ChapterFolder}/{named.MissionFolder}");
-            return null;
-        }
-
-        // The screen is torn down before the world appears, so this line is the only record of
-        // which mission's chart a launch actually drew.
-        string map = sheet.State.Map?.Bitmap ?? "-";
-        Log.Info("ui",
-            $"load screen: {named.ChapterFolder}/{named.MissionFolder} {key} map={map} objectives={sheet.Objectives.Count}");
-        return sheet;
-    }
-
-    // The mission a sequence position names, or null where cm_sequence carries none.
-    private CampaignMission? CampaignMissionAt(int seq)
-    {
-        CampaignMission? found = null;
-        foreach (var mission in Mech3.CampaignSequence.Load(_zrdrPath))
-        {
-            if (mission.Seq == seq)
-            {
-                found = mission;
-            }
-        }
-
-        return found;
-    }
-
-    // The Original presentation's pause sheet over the whole window, standing on its own with no
-    // mission behind it. The objectives are the named mission's own and the ownship icon sits on
-    // its authored PLAYER_INIT spawn, so nothing on the screen is invented; there is no world, so
-    // the zeppelin icon is absent. docs/org/pause-screen.md.
-    private void ShowPauseSheet(int ordinal, int completed)
-    {
-        int last = System.Math.Max(0, Mech3.CampaignSequence.Load(_zrdrPath).Count - 1);
-        int seq = System.Math.Clamp(ordinal - 1, 0, last);
-        if (CampaignMissionAt(seq) is not { } named)
-        {
-            Log.Warn("ui", $"pause aid: cm_sequence names no mission at seq {seq}");
-            return;
-        }
-
-        string missionZrdr = SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder);
-        var sheet = UI.Screens.PauseSheet.Load(
-            _zrdrPath, _messagesPath,
-            UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
-        if (sheet == null)
-        {
-            Log.Warn("ui", $"pause aid: no escape.zrd sheet for {named.ChapterFolder}/{named.MissionFolder}");
-            return;
-        }
-
-        var readout = PauseAidReadout(sheet, missionZrdr, completed);
-        var pause = new Flight.Modes.PauseState();
-        var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
-        layer.AddChild(board);
-        AddChild(layer);
-        pause.TryToggle(0);
-        Log.Info("ui",
-            $"pause aid: {named.ChapterFolder}/{named.MissionFolder} sheet with {completed} objective(s) marked");
-    }
-
-    // The Instant Action sortie's own pause sheet with no sortie behind it: the blackboard its
-    // chapter and mission type resolve, which carries no map, memento or parchment and so needs no
-    // readout at all. docs/org/pause-screen.md.
-    private void ShowInstantActionPauseSheet(string chapter, string missionType)
-    {
-        if (UI.Screens.LoadScreens.LetterFor(missionType) is not { } letter)
-        {
-            Log.Warn("ui", $"pause aid: '{missionType}' is no Instant Action mission type");
-            return;
-        }
-
-        string key = UI.Menu.EscapeDialog.InstantActionKey(
-            Mech3.CampaignSequence.ChapterNumber(chapter), letter);
-        var sheet = UI.Screens.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
-        if (sheet == null)
-        {
-            Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
-            return;
-        }
-
-        var pause = new Flight.Modes.PauseState();
-        var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet,
-            () => UI.Screens.PauseReadout.Empty);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
-        layer.AddChild(board);
-        AddChild(layer);
-        pause.TryToggle(0);
-        Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
-    }
-
-    // A Dogfight's pause sheet with no match behind it: a Deathmatch on that chapter's environment
-    // with nobody on a team. docs/org/pause-screen.md.
-    private void ShowMultiplayerPauseSheet(string chapter)
-    {
-        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, DogfightMissionType.Deathmatch, false) is not { } key)
-        {
-            Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
-            return;
-        }
-
-        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
-        if (sheet == null)
-        {
-            Log.Warn("ui", $"pause aid: no escape.zrd or Loading.zrd sheet for {chapter} ({key})");
-            return;
-        }
-
-        var pause = new Flight.Modes.PauseState();
-        var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet,
-            () => UI.Screens.PauseReadout.Empty);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
-        layer.AddChild(board);
-        AddChild(layer);
-        pause.TryToggle(0);
-        Log.Info("ui", $"pause aid: {chapter} Dogfight draws {sheet.State.Key}");
-    }
-
-    private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, string missionZrdr, int completed)
-    {
-        var objectives = UI.Menu.BriefingObjectives.Load(
-            Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(_messagesPath));
-        var rows = new List<UI.Screens.PauseObjective>(objectives.Count);
-        for (int i = 0; i < objectives.Count; i++)
-        {
-            rows.Add(new UI.Screens.PauseObjective(objectives[i].Text, i < completed));
-        }
-
-        var icons = new List<UI.Screens.PauseWorldIcon>();
-        if (sheet.Shared.OwnShip.Length > 0
-            && Flight.Modes.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
-        {
-            // Through the readout's own conversion off a nose vector, never off the spawn's heading
-            // degrees. Those are the mission data's yaw, which runs opposite the compass.
-            var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
-            if (UI.Screens.PauseReadout.Icon(
-                sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
-                nose.X, nose.Z) is { } ship)
-            {
-                icons.Add(ship);
-            }
-
-            if (sheet.State.Map is { } map
-                && !map.TryProject(init.Spawn.Position.X, init.Spawn.Position.Z, out _))
-            {
-                Log.Info("ui",
-                    $"pause aid: the mission's spawn sits off the chart's window, so no ownship icon draws");
-            }
-        }
-
-        return new UI.Screens.PauseReadout(rows, SeatedMemento(), icons);
-    }
-
-    // The picture the seated profile hangs, read back off the store the cabin's chooser writes.
-    // This screen, a real pause and the cabin wall all draw the one name. A launch or a door with
-    // no profile behind it draws the seeded keepsake (docs/org/pause-screen.md).
-    private string SeatedMemento() =>
-        CampaignMementos.BitmapFor(
-            _spec.CampaignProfile is { } name
-                ? CampaignProfileStore.ForSession(_spec.ProfilesDir).Load(name)
-                : null);
-
-    // What the load screen calls this flight: an Instant Action mission by the wizard's own name
-    // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName, that is the log
-    // file's and the startup line's internal tag ("fly", "stunt"), which is not a player's word.
-    private string LaunchSubject()
-    {
-        if (_spec.IaDef is { } def)
-        {
-            return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
-        }
-        return _spec.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
-            : _spec.Versus ? "Dogfight" : "Free Flight";
     }
 
     private void HideLoadScreen()
@@ -2160,7 +1511,7 @@ public partial class Launcher : Node3D
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         LoadProgress.Report(LoadStep.ChapterPaths);
-        _session = new GameSession(_spec, new LauncherContext
+        _session = new GameSession(_spec, _net.WithNet(new LauncherContext
         {
             RepoRoot = _repoRoot,
             DataRoot = _dataRoot,
@@ -2183,24 +1534,15 @@ public partial class Launcher : Node3D
             Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
-            ToggleGraphicsMode = () => _pendingGraphicsToggle = true,
+            ToggleGraphicsMode = _settings.RequestToggle,
             PauseOptions = BuildPauseOptions,
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
                 : null,
             InstantActionWrapup = _menuDriven ? snapshot => _pendingWrapup = snapshot : null,
+
             Music = _music,
-            NetTransport = _netWire,
-            NetHost = _netIsHost,
-            NetSeats = _netRoster,
-            NetAirframes = _netWire == null ? null : Flight.Hangar.StockAirframes.Nodes,
-            NetSeatFit = _coopFlight || _lobbyFlight ? CoopSeatFit : null,
-            NetSeatBuild = _coopFlight || _lobbyFlight ? NetSeatBuild : null,
-            NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
-                ? () => coopDoor.CoopWingman
-                : null,
-            NetTeamNames = _lobbyFlight && _netDoor?.Dogfight is { } teamLobby ? TeamNames(teamLobby.Teams) : null,
-        });
+        }, _menuDriven ? () => _pendingLobbyLanding = true : null));
         AddChild(_session);
         bool built = _session.StartSession();
         // A CLI launch has no load screen to yield behind. What the build ordered for the load runs
@@ -2219,26 +1561,9 @@ public partial class Launcher : Node3D
                 Log.Info("world", $"load: {steps} owed build step(s) run inside the build (no load screen on this launch)");
             }
         }
-        // A build stalls the frame loop, and the frames either side of it are not neighbours, so
-        // the hitch monitor drops its baseline here rather than reporting the build as a hitch.
-        // Flushed first so nothing queued from before the build is held through it.
-        _hitchSidecar.Flush();
-        _hitchMonitor.Rearm();
-        RearmRate();
-        // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
-        // that closes over the build would otherwise report them all at once.
-        PerfSample.Reset();
-        // Every bracket takes the same boundary. A build that spans the tail leaves a half-open
-        // tick, pass, AI walk or phase. Its next close would charge the whole build to one step.
-        PhysicsTickCost.Reset();
-        ProcessPassCost.Reset();
-        EngineGapCost.Reset();
-        AiStepCost.Reset();
-        SimPhaseCost.Reset();
-        ProcessSiteCost.Reset();
-        // D10: same reasoning as HitchMonitor.Rearm above, the build's own stall must never read
-        // as the readout's worst recent frame.
-        _perfHud.Rearm();
+        // A build stalls the frame loop, and the frames either side of it are not neighbours.
+        // Every instrument drops its baseline here rather than reporting the build as a hitch.
+        _instruments.Rearm();
         return built;
     }
 
@@ -2258,7 +1583,7 @@ public partial class Launcher : Node3D
         };
         // Enhanced mode alone: a lit world has surfaces a shadow pass can land on.
         if (GraphicsMode.Enhanced)
-            EnhancedLook.ApplySun(_sun, true, _spec.SkippedPasses);
+            EnhancedLook.ApplySun(_sun, true);
         AddChild(_sun);
         // The modal day pair under this bearing, after the AddChild so the bearing is the one the
         // light wears in the tree. A session with no weather.json never reaches ApplyZone, and
@@ -2452,28 +1777,7 @@ public partial class Launcher : Node3D
                 false, missionType.Length > 0 ? missionType : _spec.IaDef?.MissionType);
         }
 
-        // The pause sheet stands only while a mission is halted, so a shot of it needs the same
-        // kind of door. Its arguments name the campaign mission and how many of its objectives
-        // have been marked, since that is the whole of what the reference stills differ by.
-        if (aid.StartsWith("pauseboard-ia", System.StringComparison.Ordinal))
-        {
-            var parts = aid.Split(':');
-            ShowInstantActionPauseSheet(
-                parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1",
-                parts.Length > 2 && parts[2].Length > 0 ? parts[2] : "stunt_flying");
-        }
-        else if (aid.StartsWith("pauseboard-mp", System.StringComparison.Ordinal))
-        {
-            var parts = aid.Split(':');
-            ShowMultiplayerPauseSheet(parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1");
-        }
-        else if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
-        {
-            var parts = aid.Split(':');
-            ShowPauseSheet(
-                parts.Length > 1 && int.TryParse(parts[1], out int cm) ? cm : 1,
-                parts.Length > 2 && int.TryParse(parts[2], out int done) ? done : 0);
-        }
+        Boards.ShowPauseAid(aid, this);
 
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
         // what the original's own mail(11004) does (docs/org/music.md).
@@ -2527,6 +1831,7 @@ public partial class Launcher : Node3D
             });
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
         host.Availability = OriginalAvailable;
+        host.Held = () => _buildStamp?.DesktopModeNotice?.Visible == true;
         host.Features.Add(new FreeFlightFeature());
         host.Features.Add(InstantActionFeature.ForDataRoot(_dataRoot));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
@@ -2555,33 +1860,8 @@ public partial class Launcher : Node3D
                 (who, keymap) => CSVM.Bindings.BindingStore.UserBindings().Save(who, keymap)),
             CSVM.Sticks.StickScreens.OpenUserFolder,
             () => CSVM.Sticks.StickProfiles.Live));
-        // The multiplayer door. The carrier and the router arrive as delegates. That is what
-        // keeps the feature, and every board over it, clear of the socket and the engine.
-        // Which carrier they open is `Net/NetCarrier.cs`'s, never this registration's.
-        var version = Net.NetBuildVersion.Parse(BuildVersion.Current);
-        var master = MasterServer();
-        _netDoor = new NetPlayFeature(
-            (port, guests, bind) => Net.NetCarrier.HostListed(port, guests, bind, master == null ? null : () => MasterServerLink.Open(master)),
-            (address, port) => Net.NetCarrier.Join(address, port),
-            new Net.RouterAccess(
-                Net.NetCarrier.PortMap,
-                Net.NetCarrier.PortUnmap,
-                // The pinhole opens for the stable address, the one the IPv6 socket binds and the
-                // board shows. A temporary address would rotate away from under the router's rule.
-                Net.NetCarrier.Pinhole(HostAddress.StableGlobalIPv6),
-                Net.NetCarrier.PinholeClose),
-            Net.NetCarrier.Lan)
-        {
-            Version = version,
-            LanNetworks = LocalNetworks.Ipv4,
-            StableIpv6 = Net.NetCarrier.StableIpv6,
-            LanIpv4 = Net.NetCarrier.LanIpv4,
-            CopyText = DisplayServer.ClipboardSet,
-            Master = master == null ? null : new Net.MasterDirectory(cancel => MasterServerLink.FetchGames(master, cancel)),
-            OpenCode = master == null ? null : code => Net.NetCarrier.JoinCode(() => MasterServerLink.Open(master), code, version),
-            WebRtcReady = Net.WebRtcTransport.Available,
-        };
-        host.Features.Add(_netDoor);
+        // The multiplayer door, built over the carrier and the master server the spec settles.
+        host.Features.Add(_net.OpenDoor(_spec));
         host.AddSeat(seat);
         string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride);
         string why = reason == null ? "" : $" reason={reason}";
@@ -2612,23 +1892,6 @@ public partial class Launcher : Node3D
         }
 
         return reason;
-    }
-
-    // The master server the door lists on. --master-server= beats the saved option, which beats the
-    // project's default. A pinned run takes neither of the last two, so no suite or golden ever asks
-    // a server anything.
-    private System.Uri? MasterServer()
-    {
-        var master = _spec.Det
-            ? MasterAddress.Parse(_spec.MasterServer)
-            : MasterAddress.Choose(_spec.MasterServer, OptionsStore.UserOptions().Load().NetMasterServer);
-        if (master != null)
-        {
-            string webRtc = Net.WebRtcTransport.Available ? "loaded" : "not installed, so no internet host or join";
-            Log.Info("core", $"net: master server {master} (WebRTC library {webRtc})");
-        }
-
-        return master;
     }
 
     // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,
@@ -2777,148 +2040,17 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // The display settings, the mix, the view distance, the graphics mode and a live headset's
-    // comfort settings apply now.
-    // ⚠ Do not rebuild or restart for the opening view, the difficulty or VR mode here; they are
-    // saved and no more. The menu's ApplyOptions restarts. The pause leaf puts the head turn and
-    // targeting switch on the seats flying now (PausePreferences.FeedGameOptions).
+    // The options file's one writer for the menu's apply above and the pause leaf's: the settings
+    // (LiveSettings.Persist), then a live headset's comfort settings. VR mode is saved and no more;
+    // the menu's ApplyOptions restarts for it.
     private void PersistOptions(OptionsApplyExit applied)
     {
-        var store = OptionsStore.UserOptions();
-        var options = store.Load();
-        options.GraphicsMode = applied.Graphics;
-        options.ViewDistance = applied.ViewDistance;
-        options.Difficulty = applied.Difficulty;
-        options.NearestAfterKill = applied.NearestAfterKill;
-        options.Rumble = applied.Rumble;
-        options.DefaultView = applied.DefaultView;
-        options.AutoHeadTurn = applied.AutoHeadTurn;
-        options.MonitorIndex = applied.MonitorIndex;
-        options.Resolution = applied.Resolution;
-        options.DisplayMode = applied.DisplayMode;
-        options.VSync = applied.VSync;
-        options.RenderScale = applied.RenderScale;
-        options.AntiAliasing = applied.AntiAliasing;
-        options.ShadowQuality = applied.ShadowQuality;
-        options.AudioMaster = applied.AudioMaster;
-        options.AudioMusic = applied.AudioMusic;
-        options.AudioEffects = applied.AudioEffects;
-        options.AudioVoice = applied.AudioVoice;
-        options.VrMode = applied.VrMode;
-        options.VrRenderScale = applied.VrRenderScale;
-        options.VrVignette = applied.VrVignette;
-        store.Save(options);
+        _settings.Persist(applied, _spec, _session, headsetPaces: _xr is { PacesFrames: true });
         if (_xr != null)
         {
             ApplyVrComfort(applied.VrRenderScale, applied.VrVignette);
         }
-
-        // The display settings take effect now instead of at the next start, through the same calls
-        // the startup path makes and in the order the window needs them: the screen it sits on, the
-        // mode, the size, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).
-        MonitorSetting.Apply(MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens()));
-        DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
-        ResolutionSetting.Apply(
-            ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
-            GetWindow());
-        VSyncSetting.Apply(_xr is { PacesFrames: true }
-            ? VSyncSetting.Headset
-            : VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
-        // The mix takes effect now too, through the same call the startup path makes. Apply is
-        // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
-        AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
-        // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
-        // pause sheet flies the rest of the sortie with a quiet pad.
-        PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
-        ApplyViewDistance(applied.ViewDistance);
-        // The shadow level reaches the flying world now; its flag and a headset's profile beat the saved word.
-        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
-        var shadowQuality = Utils.ShadowQualitySetting.Resolve(Utils.VrQuality.Current.ShadowQuality, applied.ShadowQuality,
-            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
-        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
-        if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
-        {
-            RequestGraphicsSwitch(enhanced, "options", save: false);
-        }
-        else if (IsInstanceValid(_sun))
-        {
-            ApplyShadowQuality(_sun);
-        }
-
-        // The render scale and the anti-aliasing method reach every 3D viewport now as well.
-        EnhancedLook.ReapplyDisplayQuality(_spec.Det, "options");
-        // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
-        // apply and the gate keeps what boot gave it (see the arming above).
-        Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
-
-    // The live graphics-mode switch on this process's sun, Environment and session
-    // (EnhancedLook.Switch). It stalls a few frames, so a flying world takes it under RequestGraphicsSwitch.
-    private void SwitchGraphicsMode(bool enhanced, string why) =>
-        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _spec.Det, _session, why);
-
-    // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
-    // With no world up it runs at once. ⚠ Refuse it in a network session. Its shared world has no
-    // pause to hold it in, and the stall would halt one seat in a live match.
-    private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
-    {
-        if (_session is { InSession: true, Wire.Link: not null })
-        {
-            Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
-            return;
-        }
-        if (_switchCover != null)
-        {
-            Log.Info("world", $"graphics mode: {why} ignored, a switch is already under way");
-            return;
-        }
-        void Run()
-        {
-            SwitchGraphicsMode(enhanced, why);
-            if (save)
-                SaveGraphicsMode();
-        }
-        if (_session is not { InSession: true } session)
-        {
-            Run();
-            return;
-        }
-        string subject = enhanced ? "SWITCHING TO ENHANCED GRAPHICS" : "SWITCHING TO ORIGINAL GRAPHICS";
-        var board = UI.Screens.LoadBoard.Build(_dataRoot, _zrdrPath, _messagesPath, false, subject, null);
-        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
-        _switchCover = SwitchCover.Begin(this, board, session.Pause, GameClock.Current, Run, why);
-    }
-
-    // A cover over a session being torn down: off at once, its hold released.
-    private void DropSwitchCover()
-    {
-        _switchCover?.Drop();
-        _switchCover = null;
-    }
-
-    // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
-    // level changes mid-flight; the cockpit pass follows on its next Sync.
-    private void ApplyShadowQuality(DirectionalLight3D sun) =>
-        EnhancedLook.ApplyShadowQuality(sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
-
-    // G's save, the one field it changes. Never under --det, whose runs must not write the player's
-    // options (the same rule the startup read keeps).
-    private void SaveGraphicsMode()
-    {
-        if (_spec.Det)
-            return;
-        var store = OptionsStore.UserOptions();
-        var options = store.Load();
-        options.GraphicsMode = GraphicsMode.Enhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default;
-        store.Save(options);
-    }
-
-    // The view distance on the running world (EnhancedLook.ApplyViewDistance), resolved again with the
-    // applied word in the saved slot, so --view-distance still beats it.
-    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(Utils.ViewDistance.Resolve(
-        _spec.ViewDistance, word, Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default)).Word, _session);
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
@@ -2932,7 +2064,8 @@ public partial class Launcher : Node3D
         var controls = _menuHost != null && _menuHost.Features.TryGet<ControlsFeature>(out var feature)
             ? feature
             : null;
-        return UI.Screens.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
+        return UI.Screens.PausePreferences.Build(_dataRoot, _originalLayout, controls,
+            PersistOptions, _menuAudio);
     }
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
@@ -2993,200 +2126,21 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        TakeNetLaunch(launch, planes, fits, customs);
+        _net.TakeLaunch(launch.Net, planes, fits, customs, _messagesPath);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
-            launch.Match?.FlagHomeToCapture == true);
+            launch.Match?.FlagHomeToCapture == true, launch.Bots);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
         StepSortieSeed();
+        // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
+        // one does. It follows the seed step, since its draws read the master.
+        _net.SeatLocalField(_spec, _messagesPath);
         BindMenuPads(pads);
         BeginLaunch();
     }
-
-    // The command line's own way onto a wire, for a scripted or headless run. It opens the
-    // socket, waits for the other end on the WALL clock, and leaves the session the fields a
-    // menu launch leaves it. A socket that will not open leaves the launch local, with the
-    // reason logged. A smoke that flies alone reads better than one that never starts.
-    private void OpenCliNet()
-    {
-        if (_spec.NetHostPort == null && _spec.NetJoin == null)
-        {
-            return;
-        }
-
-        try
-        {
-            if (_spec.NetHostPort is { } port)
-            {
-                _netWire = Net.NetCarrier.Host(port, Net.NetSeats.MaxPlayers - 1, _spec.NetHostBind);
-                _netIsHost = true;
-            }
-            else
-            {
-                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!, Net.NetPorts.Game);
-                _netWire = Net.NetCarrier.Join(address, joinPort);
-                _netIsHost = false;
-            }
-        }
-        catch (System.Exception e) when (e is System.InvalidOperationException or System.ArgumentException)
-        {
-            Log.Error("core", $"net: the command line's socket would not open: {e.Message}");
-            _netWire = null;
-            return;
-        }
-
-        if (_spec.NetShape is { } shape)
-        {
-            _netWire = Net.ShapedTransport.OnWallClock(_netWire, shape);
-            Log.Info("core", $"net: shaping this end's link both ways, {Net.ShapedTransport.Describe(shape)}, on top of the real link's own delay and loss");
-        }
-
-        AwaitCliNetLink();
-    }
-
-    // The wall-clock wait a command-line join needs. ENet times itself off real seconds, so the
-    // session's own tight step loop cannot carry a handshake. The link is waited for here, once,
-    // before anything builds. A host waits for its first guest, a guest for its host.
-    private void AwaitCliNetLink()
-    {
-        if (_netWire is not { } wire)
-        {
-            return;
-        }
-
-        // The link readout is the socket's. A carrier without one counts as linked once a peer is
-        // on the roster, which is the door's own fallback rule.
-        var link = wire as Net.INetLink;
-        var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (waited.Elapsed.TotalSeconds < NetLinkWaitSeconds)
-        {
-            wire.Step(0.001);
-            if (wire.Peers.Count > 0 && (link == null || link.LinkState == Net.NetLinkState.Up))
-            {
-                Log.Info("core", $"net: linked as {(_netIsHost ? "host" : "guest")} after {waited.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s, {wire.Peers.Count} peer(s)");
-                BuildCliNetRoster();
-                return;
-            }
-
-            OS.DelayMsec(1);
-        }
-
-        Log.Error("core", $"net: nobody on the wire after {NetLinkWaitSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} s, flying this session alone");
-        (wire as System.IDisposable)?.Dispose();
-        _netWire = null;
-        _netIsHost = false;
-    }
-
-    // A command-line host's roster: this machine's own seats, then one per peer that got in. The
-    // remote seats fly the local pilot's airframe, the same limit a menu host has.
-    private void BuildCliNetRoster()
-    {
-        if (!_netIsHost || _netWire == null)
-        {
-            return;
-        }
-
-        var seats = new List<Net.NetSeat>();
-        for (int i = 0; i < _spec.Players && seats.Count < Net.NetSeats.MaxPlayers; i++)
-        {
-            seats.Add(new Net.NetSeat
-            {
-                PeerId = _netWire.LocalPeer,
-                SeatIndex = seats.Count,
-                IsLocal = true,
-                Callsign = UI.Boards.SplitScreen.PlayerTag(i),
-                Unnamed = i == 0,
-                PlaneNode = i < _spec.PlaneNames.Count ? _spec.PlaneNames[i] : _spec.PlaneName,
-            });
-        }
-
-        foreach (int peer in _netWire.Peers)
-        {
-            if (seats.Count >= Net.NetSeats.MaxPlayers)
-            {
-                break;
-            }
-
-            seats.Add(new Net.NetSeat
-            {
-                PeerId = peer,
-                SeatIndex = seats.Count,
-                Callsign = $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
-                Unnamed = true,
-                PlaneNode = _spec.PlaneName,
-            });
-        }
-
-        Net.NetSeats.Validate(seats, _netWire.LocalPeer);
-        _netRoster = seats.ToArray();
-    }
-
-    // The wire a menu launch carried, kept for the session build. A host also builds the match's
-    // roster here. The transport's peer list is the field, and the door is the only thing that
-    // has seen it. A guest builds none, since the host's roster replaces whatever it had. Every
-    // seat's fit and custom plane go to every guest before the session's opener, as a co-op launch
-    // sends them.
-    private void TakeNetLaunch(LaunchExit launch, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits,
-        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs)
-    {
-        _netWire = launch.Net?.Transport;
-        _netIsHost = launch.Net?.IsHost ?? false;
-        _netRoster = null;
-        _coopSeatFits = System.Array.Empty<Net.CoopFit>();
-        _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
-        _lobbyFlight = _netWire != null && _netDoor is { Dogfight: not null };
-        if (_netWire == null || !_netIsHost)
-        {
-            return;
-        }
-
-        var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
-        System.Func<int, byte>? teamOf = _lobbyFlight ? _netDoor!.Dogfight!.TeamOfPeer : null;
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf);
-        _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
-        if (_lobbyFlight)
-        {
-            _netDoor!.TellSeatFits(_coopSeatFits);
-            _netDoor.TellSeatBuilds(_seatBuilds);
-        }
-    }
-
-    // A co-op campaign launch's wire. The host's roster is its own seats and then each guest the
-    // door seated, under its name. A guest flies the hangar plane the host settled for its seat.
-    // Every seat's fit and build goes to every guest before the session's opener, on the same
-    // ordered channel. A guest builds none. The campaign wingman's aeroplane goes out beside the fits,
-    // since every guest builds it too: `wingman` when the cabin kept it off its saved plane.
-    private void TakeCoopLaunch(UI.Menu.MenuNetLaunch? net, IReadOnlyList<string> planes,
-        IReadOnlyList<LoadoutChoice?> fits, IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string profile,
-        string? profilesDir, Net.CoopWingmanMessage? wingman)
-    {
-        _netWire = net?.Transport;
-        _netIsHost = net?.IsHost ?? false;
-        _netRoster = null;
-        _coopSeatFits = System.Array.Empty<Net.CoopFit>();
-        _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
-        _coopFlight = _netWire != null && _netDoor is { IsCoopHost: true } or { IsCoopGuest: true };
-        if (_netWire == null || !_netIsHost || _netDoor == null)
-        {
-            return;
-        }
-
-        (_netRoster, _coopSeatFits) = CoopLaunchField(_netDoor, _netWire, planes, fits,
-            _coopStock ??= StockLoadouts.Load());
-        _seatBuilds = CoopSeatBuilds(_netRoster, customs, _netDoor, _netWire);
-        _netDoor.TellSeatFits(_coopSeatFits);
-        _netDoor.TellSeatBuilds(_seatBuilds);
-        _netDoor.TellCoopWingman(wingman ?? CoopWingmanFor(profile, profilesDir));
-        Log.Info("core", $"net: co-op launch with {_netRoster.Length - planes.Count} guest(s)");
-    }
-
-    private LoadoutChoice? CoopSeatFit(int seat) =>
-        CoopSeatFitFor(seat, _netIsHost ? _coopSeatFits : null, _netDoor, _coopStock ??= StockLoadouts.Load());
-
-    private Flight.Hangar.CustomPlaneDef? NetSeatBuild(int seat) => SeatBuildFor(seat, _netIsHost ? _seatBuilds : null, _netDoor);
 
     // The seat choices as the four parallel lists the spec factories take. The fits ride
     // alongside the planes rather than inside them: FromMenu writes each menu-settable field
@@ -3256,7 +2210,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
         LaunchedFrom(mission);
-        TakeCoopLaunch(mission.Net, planes, fits, customs, mission.Profile, _cli.ProfilesDir, mission.Wingman);
+        _net.TakeCoopLaunch(mission.Net, planes, fits, customs, mission.Profile, _cli.ProfilesDir, mission.Wingman);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
             pads.Count, fits, customs, mission.Wingman);
         StepSortieSeed();
@@ -3285,23 +2239,22 @@ public partial class Launcher : Node3D
     // mission and a pinned one (--seed=/--det) still repeats.
     private void RestartSession()
     {
-        // ⚠ Never rebuild a network flight past its door. A second session on a carrier the first
-        // still holds throws, and the load screen never comes down.
-        if (_netWire != null && (!_coopFlight || !_netIsHost || _netDoor is not { IsCoopHost: true }))
+        // ⚠ Never rebuild a network flight past its door; NetFlight says which ones it may.
+        if (_net.RefusesRestart())
         {
-            Log.Warn("core", $"restart: this network flight has no co-op door to relaunch through, it flies on");
             return;
         }
 
         if (_session != null)
         {
             // Freed at the end of THIS frame, so the build owed for the next one finds it gone.
-            DropSwitchCover();
+            _settings.DropCover();
             _session.QueueFree();
             _session = null;
         }
 
-        if (_netWire != null && !RelaunchCoop(_netDoor!))
+        // A co-op host relaunches through its door here, or lands at the menu when it will not.
+        if (!_net.Restart(_spec))
         {
             return;
         }
@@ -3309,24 +2262,6 @@ public partial class Launcher : Node3D
         StepSortieSeed();
         Log.Info("core", $"restart: rebuilding {_spec.Chapter} / {_spec.ModeName} from the same settings");
         BeginLaunch();
-    }
-
-    // A co-op host's restart on the co-op retry's own launch path. The door takes the wire back
-    // and launches again, and the new field and fits go out before the opener. Every guest's
-    // flight ends on the new round, and each follows into the new one.
-    private bool RelaunchCoop(NetPlayFeature door)
-    {
-        _netWire = null;
-        if (CoopRelaunch(door) is not { } launch)
-        {
-            Log.Warn("core", $"restart: the co-op door would not launch again, back at the menu");
-            ReturnToMenu(MenuReturnDestination.TopLevel);
-            return false;
-        }
-
-        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts, _spec.MenuCustomPlanes, _spec.CampaignProfile ?? "",
-            _spec.ProfilesDir, _spec.CampaignWingman);
-        return true;
     }
 
     // Prints the master the next session will draw from. Per session rather than per process
@@ -3346,9 +2281,7 @@ public partial class Launcher : Node3D
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match, _session.Race);
-            _keepLobby = landing != null;
-            ReturnToMenu(landing ?? _exitDestination);
+            ReturnToMenu(_net.Landing(_session) ?? _exitDestination);
             return;
         }
         BlankAndQuit();
@@ -3390,87 +2323,6 @@ public partial class Launcher : Node3D
         readout.Show(line);
     }
 
-    // The end of a network flight: the wire the match ran on is dropped, and the door gives the
-    // router's forwarded port back. The door handed the transport over at the launch and no
-    // longer closes it, so that half is the session layer's. A door that mapped nothing pays
-    // nothing here. A co-op door takes its wire back instead, since the session outlives a flight,
-    // and so does a lobby whose match ran to its end.
-    private void CloseNetLaunch()
-    {
-        if (_netWire == null)
-        {
-            return;
-        }
-
-        var wire = _netWire;
-        bool keepLobby = _keepLobby;
-        _netWire = null;
-        _netRoster = null;
-        _netIsHost = false;
-        _coopFlight = false;
-        _lobbyFlight = false;
-        _keepLobby = false;
-        EndNetWire(_netDoor, wire, keepLobby);
-    }
-
-    // A co-op flight's upkeep. The door still seats, advertises and follows the host while the
-    // session carries its wire. A guest's flight ends when its host names any other board, or
-    // when the link to the host is gone.
-    private void TickCoopFlight(double delta)
-    {
-        if (!_coopFlight || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
-        {
-            return;
-        }
-
-        door.Step(delta);
-        if (_netIsHost)
-        {
-            // A guest that walked out through its pause sheet keeps its link, so its word is the
-            // only sign. Its seat leaves at once rather than flying on frozen.
-            foreach (var guest in door.CoopGuests)
-            {
-                if (guest.Left)
-                {
-                    _session.Wire.TakeGuestLeft(guest.Peer);
-                }
-            }
-
-            return;
-        }
-
-        if (CoopGuestFlightOver(door))
-        {
-            Log.Info("core", $"net: co-op flight over, {(door.IsCoopGuest ? "the host left the mission" : $"the link ended ({door.Fault})")}");
-            // The host's ending reaches the guest's director inside the host's own hold. A result
-            // is therefore banked here whenever the host went on to its debrief.
-            ReturnToMenu(new CoopGuestReturn(_session.Campaign?.Result?.Attempt));
-        }
-    }
-
-    // A lobby Dogfight or stunt race guest's upkeep. The session steps the wire, and the door only
-    // watches the host. A host that leaves ends the flight here, and the Connection page names why.
-    // A host that takes an ended race to the lobby takes this guest there, the race's table with it.
-    private void TickVersusGuestFlight(double delta)
-    {
-        if (!_lobbyFlight || _netIsHost || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
-        {
-            return;
-        }
-
-        door.Step(delta);
-        if (VersusGuestFlightOver(door))
-        {
-            Log.Info("core", $"net: versus flight over, the host left ({door.Fault})");
-            ReturnToMenu(new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>()));
-        }
-        else if (_session.Wire.Race is { LobbyCalled: true })
-        {
-            Log.Info("core", $"net: the host took the race back to the lobby");
-            ExitSession();
-        }
-    }
-
     /// <summary>The three quits reached from a frame that is still drawing: blacks the persistent
     /// <c>WorldEnvironment</c>'s background, then ends the frame. <c>Quit()</c> ends the frame
     /// rather than the process, so one more frame is drawn and that image is held on screen for
@@ -3479,7 +2331,7 @@ public partial class Launcher : Node3D
     /// ⚠ Every probe exit keeps the bare <c>Quit()</c>: no headless run may pay for this.</summary>
     private void BlankAndQuit()
     {
-        CloseNetLaunch();
+        _net.Close();
         WorldBackdrop.Black(_env);
         GetTree().Quit();
     }
@@ -3493,35 +2345,21 @@ public partial class Launcher : Node3D
     private void ReturnToMenu(MenuReturnDestination destination)
     {
         // A co-op guest leaving a flight its host still flies says so before the wire goes back.
-        // The door ignores this once the host has named any other board.
-        if (_coopFlight && !_netIsHost && _session is { Campaign.Result: null })
-        {
-            _netDoor?.LeaveCoopMission();
-        }
+        _net.LeaveCoopMission(_session);
 
         if (_session != null)
         {
-            DropSwitchCover();
+            _settings.DropCover();
             _session.QueueFree();
             _session = null;
         }
 
-        CloseNetLaunch();
+        _net.Close();
         // The menu is not a session start. A cover left over from one (a mission exited inside its
         // own fade) has nothing left to uncover.
         DropStartCover();
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
-        _hitchSidecar.Flush();
-        _hitchMonitor.Rearm();
-        RearmRate();
-        PerfSample.Reset();
-        PhysicsTickCost.Reset();
-        ProcessPassCost.Reset();
-        EngineGapCost.Reset();
-        AiStepCost.Reset();
-        SimPhaseCost.Reset();
-        ProcessSiteCost.Reset();
-        _perfHud.Rearm();
+        _instruments.Rearm();
         ShowMenu(destination);
     }
 
@@ -3568,185 +2406,14 @@ public partial class Launcher : Node3D
         else
             Log.Info("sound", $"focus: regained, audio restored, pad reads live");
     }
-
-    // Samples the engine's eight per-frame counters once, for both instruments. The two
-    // `TIME_*` monitors are seconds and are converted here, so everything downstream of this
-    // is in milliseconds. Read at priority -999, like `delta` they describe the frame that just
-    // ended, which is what a hitch record needs. The render pair is one draw older under the
-    // separate render thread.
-    private FrameCounters ReadFrameCounters()
-    {
-        var (renderCpuMs, gpuMs) = _renderTime.Read();
-        return new(
-            ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
-            RenderCpuMs: renderCpuMs,
-            GpuMs: gpuMs,
-            PhysicsMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess),
-            Draws: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
-            Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
-            Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
-            MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
-    }
-
-    // --hitch-inject=: burns wall time synchronously for about `ms`, so a stall of known
-    // magnitude exists to verify against. The busy-wait form proves the timing path; `alloc`
-    // burns the same time allocating 4 KB buffers instead, the only way to move the GC columns
-    // on demand.
-    // ⚠ Never wrap this in a PerfSample scope. An injected fault must show as unattributed
-    // time, not a breadcrumb mistaken for the thing under test.
-    private void InjectHitch(float ms, bool alloc)
-    {
-        long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        double freq = System.Diagnostics.Stopwatch.Frequency;
-        long sink = 0;
-        while ((System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / freq < ms)
-        {
-            if (alloc)
-            {
-                sink += new byte[4096].Length;
-            }
-        }
-        Log.Info("perf", $"hitch-inject fired ms={ms:0.0} alloc={alloc} bytes={sink}");
-    }
-
-    /// <summary>The always-on frame-rate trace: one <c>[perf] rate</c> line per
-    /// <see cref="RateWindowSeconds"/> carrying the rate the window ACHIEVED. This is the question
-    /// <see cref="HitchMonitor"/> cannot answer and never could: its trigger is a multiple of a
-    /// rolling median, so a sustained collapse drags the median up with it and trips nothing, and a
-    /// whole sortie spent at a fraction of the refresh rate leaves a clean log. Mean and worst frame
-    /// sit side by side so a rate drop and a single stall read differently.</summary>
-    private void ReportRate(double frameMs)
-    {
-        _rateFrames++;
-        _rateWallMs += frameMs;
-        _rateWorstMs = System.Math.Max(_rateWorstMs, frameMs);
-        if (_rateWallMs < RateWindowSeconds * 1000)
-        {
-            return;
-        }
-        double seconds = _rateWallMs / 1000;
-        double fps = _rateFrames / seconds;
-        double meanMs = _rateWallMs / _rateFrames;
-        double worstMs = _rateWorstMs;
-        Log.Info("perf", $"rate fps={fps:0.0} frames={_rateFrames} wall_s={seconds:0.0} frame_ms={meanMs:0.00} worst_ms={worstMs:0.00}");
-        RearmRate();
-    }
-
-    // Drops the open rate window. Called wherever the frames on either side are not each other's
-    // neighbours, for the same reason HitchMonitor.Rearm is: a window spanning a session build
-    // would report a rate no part of the run ever ran at.
-    private void RearmRate()
-    {
-        _rateWallMs = 0;
-        _rateWorstMs = 0;
-        _rateFrames = 0;
-    }
-
-    // --perf: the headless stand-in for the editor's profiler, meaned over the window so a
-    // single hitch doesn't read as a regression, A/B two builds by comparing the same line.
-    // `script_ms`/`physics_ms` are Godot's two worst-of-the-last-second monitors, kept only
-    // because older records hold them. The measured terms are `proc_ms`, `phys_tick_ms` and
-    // `ai_ms` (verification PERF-1). `max_ms`/`p95_ms` answer "how bad did it get"; no
-    // `p99_ms` since a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
-    private void ReportPerf(double delta, in FrameCounters counters)
-    {
-        _perfFrames++;
-        _perfFrameMs[_perfFrames - 1] = delta * 1000;
-        _perfClock += delta;
-        _perfProcess += counters.ScriptMs;
-        _perfPhysics += counters.PhysicsMs;
-        _perfCpuRender += counters.RenderCpuMs;
-        // The rendering server's instance update, run before any viewport draws and left out of
-        // render_cpu_ms. It is the part of draw_ms that grows with what moved this frame.
-        _perfSetup += RenderingServer.GetFrameSetupTimeCpu();
-        _perfGpu += counters.GpuMs;
-        // Counts, averaged like every ms term, but with no timing noise in them: a scene that
-        // starts drawing more says so exactly, where an ms term has to clear a noise band first.
-        _perfDraws += counters.Draws;
-        _perfPrims += counters.Prims;
-        _perfNodes += counters.Nodes;
-        _perfMem += counters.MemBytes;
-        var (discs, discDraws, discShadowDraws) = Flight.Camera.SpyglassView.Census();
-        _perfDiscs += discs;
-        _perfDiscDraws += discDraws;
-        _perfDiscShadowDraws += discShadowDraws;
-        if (_perfFrames < PerfWindowFrames)
-        {
-            return;
-        }
-        // Locals, not one very long expression: Log takes a single interpolated string (two
-        // concatenated ones are a plain string, which would already have formatted its floats in
-        // the current culture and so does not compile against it).
-        double n = _perfFrames;
-        long simFrame = ClockNow?.Frame ?? 0;
-        double wallMs = 1000 * _perfClock;
-        double fps = n / _perfClock;
-        double frameMs = wallMs / n;
-        // Every ms term is already in milliseconds here: ReadFrameCounters does the seconds-to-ms
-        // conversion on Godot's two TIME_* monitors once, at the read.
-        double scriptMs = _perfProcess / n;
-        double renderCpuMs = _perfCpuRender / n;
-        double setupMs = _perfSetup / n;
-        double gpuMs = _perfGpu / n;
-        double physicsMs = _perfPhysics / n;
-        // ⚠ These are the physics terms to read, not physics_ms above (verification PERF-1). One
-        // tick is one 1/60 sim step on a realtime clock, so phys_hz is sim seconds per wall second
-        // and a step over its 16.7 ms budget shows here as a rate under 60.
-        var (physTickMs, physTickMaxMs, physTicks) = PhysicsTickCost.Take();
-        // ⚠ The script term to read, not script_ms above (verification PERF-1). Meaned over the
-        // passes that CLOSED, one fewer than the window's frames: this runs inside the pass, whose
-        // tail lands in the next window.
-        var (procTotalMs, procMaxMs, procPasses) = ProcessPassCost.Take();
-        double procMs = procPasses > 0 ? procTotalMs / procPasses : 0;
-        // ⚠ The only term that attributes frame cost to the AI. Meaned over the window's FRAMES,
-        // not its walks, because a parent-driven clock runs several walks per rendered frame and
-        // the question is what the AI cost that frame. Zero with no AI spawned.
-        var (aiTotalMs, aiSteps, aiPlaneSum) = AiStepCost.Take();
-        double aiMs = aiTotalMs / n;
-        double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
-        double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
-        double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
-        // Per FRAME, like proc_ms: the engine's step after each tick, then the flush, draw and idle
-        // after the pass. With the two pass terms they sum to frame_ms (verification PERF-40).
-        var (physEngineTotalMs, deferTotalMs, drawTotalMs, idleTotalMs) = EngineGapCost.Take();
-        double physEngineMs = physEngineTotalMs / n;
-        double deferMs = deferTotalMs / n;
-        double drawMs = drawTotalMs / n;
-        double idleMs = idleTotalMs / n;
-        // These split the two whole-pass terms above by what ran. The sim step goes per TICK beside
-        // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
-        string simRow = SimPhaseCost.TakeRow(physTicks);
-        string simAllocRow = SimPhaseCost.AllocRow();
-        string procSites = ProcessSiteCost.TakeRow(n);
-        double draws = _perfDraws / n;
-        double prims = _perfPrims / n;
-        double nodes = _perfNodes / n;
-        double memMb = _perfMem / n / (1024 * 1024);
-        System.Array.Copy(_perfFrameMs, _perfFrameMsSorted, PerfWindowFrames);
-        System.Array.Sort(_perfFrameMsSorted);
-        double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
-        double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} setup_ms={setupMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} phys_engine_ms={physEngineMs:0.000} defer_ms={deferMs:0.000} draw_ms={drawMs:0.000} idle_ms={idleMs:0.000} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
-        // Its own line, not another term on the window above. The BYTE figure answers a different
-        // question from the millisecond one: which phase feeds the collector, rather than which
-        // phase the pause landed in (PERF-34). The two are read side by side.
-        Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
-        // The discs' own line, said only while one rendered in the window. Each is a viewport of its
-        // own, which gpu_ms leaves out and draws folds into the frame's total (verification PERF-47).
-        if (_perfDiscs > 0)
-            Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0}");
-        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
-        _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
-        _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = 0;
-    }
 }
 
 /// <summary>What a session node needs from the launcher: the settled base paths, the persistent
-/// rendering nodes it configures but does not own, the process-scoped services, and the join
-/// flow's session state. A snapshot per launch, <see cref="MenuPads"/> is the field that varies.
+/// rendering nodes, the process-scoped services, and the join flow's state. A snapshot per launch, <see cref="MenuPads"/> is the field that varies.
+/// A record, so <c>NetFlight.WithNet</c> writes the network slice into a copy.
 /// ⚠ Not a second home for args: a new flag is a <see cref="SessionSpec"/> change, never a
 /// context field.</summary>
-public sealed class LauncherContext
+public sealed record LauncherContext
 {
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
@@ -3776,8 +2443,8 @@ public sealed class LauncherContext
     public required int[][]? MenuPads { get; init; }
 
     /// <summary>The whole network match's seat roster, local panes and remote guests alike, or
-    /// null outside a network match. A seat here that is not <see cref="Net.NetSeat.IsLocal"/>
-    /// gets an aircraft, a spawn slot, a score row and a marker colour, and no pane.</summary>
+    /// null outside a network match. A seat here without <see cref="Net.NetSeat.HasPane"/> gets an
+    /// aircraft, a spawn slot, a score row and a marker colour, and no pane.</summary>
     public IReadOnlyList<Net.NetSeat>? NetSeats { get; init; }
 
     /// <summary>What the host handed this guest at join, or null on a host and outside a match.
@@ -3857,8 +2524,18 @@ public sealed class LauncherContext
     /// unused by a presentation whose own board takes the ending inside the flight.</summary>
     public System.Action<IaWrapupSnapshot>? InstantActionWrapup { get; init; }
 
+    /// <summary>A finished match's way to its lobby's Game Scores: the Launcher leaves the session a
+    /// frame later, as <see cref="ExitSession"/> does. Null outside a lobby flight whose host lands
+    /// there (<c>NetFlight.LandsOnScores</c>), where a results board takes the ending.</summary>
+    public System.Action? VersusLobbyLanding { get; init; }
+
     /// <summary>The process's music channel, so a mission's own cues reach the one player that
     /// outlives every session. Null when the sound archive or the sound definitions would not
     /// load, which leaves the game silent rather than refusing to launch.</summary>
     public MusicPlayer? Music { get; init; }
+
+    /// <summary>A decode store shared with other builds in this process, or null to decode afresh.
+    /// The test harness hands its own in, so a suite's sessions decode a chapter once. A launch
+    /// leaves it null, so a session retains nothing of a chapter it has left.</summary>
+    public Mech3.DecodeCache? Decode { get; init; }
 }

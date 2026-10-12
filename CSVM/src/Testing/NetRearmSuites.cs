@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
@@ -249,7 +250,7 @@ internal static class NetRearmSuites
         SessionSpec? guestSpec = null, Action<GameSession[]>? opened = null)
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(meshSeed));
-        var roster = NetCombatSuites.Roster(2).Select((seat, i) => seat with { TeamId = teams[i] }).ToArray();
+        var roster = NetCombatSuites.Roster(2, spec).Select((seat, i) => seat with { TeamId = teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try
@@ -335,8 +336,15 @@ internal static class NetRearmSuites
             $"and keeps its selected pylon rather than the first ({guest.SelectedPylon}, selected {pylon})");
         string? own = guest.MessageStack?.LineAt(0);
         string? hosts = peers[0].SeatRigs[0].Controller!.MessageStack?.LineAt(0);
-        ctx.Check(own == Rearmed && hosts != Rearmed,
-            $"its own pane posts \"{Rearmed}\" and the host's pane does not ('{own}' / '{hosts}')");
+        // Read off the run's own table; a missing row reads as its key, which the pane would match.
+        string rearmed = Messages.Load(ctx.MessagesPath).Get(HudMessages.RearmedKey);
+        ctx.Check(rearmed != HudMessages.RearmedKey && own == rearmed && hosts != rearmed,
+            $"its own pane posts the message table's \"{rearmed}\" and the host's pane does not ('{own}' / '{hosts}')");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(own == Rearmed && hosts != Rearmed,
+                $"its own pane posts \"{Rearmed}\" and the host's pane does not ('{own}' / '{hosts}')");
+        }
     }
 
     // Damaged again while still inside the radius, the latch holds and nothing is restored.

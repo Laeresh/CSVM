@@ -148,15 +148,15 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "205619d975c85f44ebbccfd6b4a74d15",
-      "exercises": "Enhanced graphics over C1's waterfall lake: the blurred screen-space reflection on the water, conifers casting sun shadows onto shadowless terrain, SSAO, and TAA at its settled jitter phase; frame-sensitive 23.53 %.",
+      "hash": "b7e66c00633d4872c3e6427c3e9c3c25",
+      "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean in the open lake, calmed to the flat sheet's shading at the coast tiles, blurred SSR, conifers casting sun shadows, SSAO, settled TAA; frame-sensitive 24.09 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "7fe15f15527dc356857add7c0d5876c2",
-      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
+      "hash": "14bb1ca0ec4ab880ac61d069120b6d18",
+      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, the far skyline fading into the authored black fog, TAA, well outside the whiteout; frame-sensitive 23.30 %.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {
@@ -169,8 +169,8 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "7534fd874ad6bfa91de257dd7fece809",
-      "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light on the ground, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools live, wind streaks, TAA; frame-sensitive 94.08 %.",
+      "hash": "e2646781df55d23311e7131e7a56151f",
+      "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
@@ -225,7 +225,7 @@
     {
       "name": "c1-moon-xr-sim",
       "frame": 120,
-      "hash": "d3553de2a255e4f2dc45725a0d55d11e",
+      "hash": "497fb2049b5a34ae071e4daea41bf316",
       "exercises": "A camera-facing sky sprite with the stand-in head turned 35 degrees off the C1 moon: the moon a disc facing the eye in both eyes, not lying in the head's view plane, the HUD panel's dials fixed to the seat; frame-sensitive 11.50 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,1500,-6144", "--direction=-0.6,0,-0.8", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim=yaw=35,pitch=28", "--det", "--mute"]
     },
@@ -270,6 +270,13 @@
       "hash": "e439ac87510fac5b420a722a57bc7088",
       "exercises": "The spyglass on the stand-in headset, the head turned 70 degrees off a Fury ahead: one mono picture of it on a disc on the head ring, inside its arrow and label, in both eyes over C1; frame-sensitive 39.14 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,600,-6144", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury", "--target=ai1_player_fury", "--hold=0,0,0,0.6", "--xr-sim=yaw=-70,eye=640x720,fov=70", "--det", "--mute"]
+    },
+    {
+      "name": "c1b-ocean-enhanced",
+      "frame": 120,
+      "hash": "3edfd2002537126556f3d53833c0e678",
+      "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming toward each shore, the surf ring, SSR, TAA, in the shipped C1B sea.",
+      "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }
   ]
 }

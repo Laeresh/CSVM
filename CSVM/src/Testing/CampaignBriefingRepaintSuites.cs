@@ -38,6 +38,7 @@ internal static class CampaignBriefingRepaintSuites
     internal static void CampaignBriefingRepaint(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, Mech3.CampaignSequence.FileName);
         var menu = MenuSuiteHost.Menu(ctx, "campaign-briefing-repaint");
         ctx.Host.AddChild(menu);
         try

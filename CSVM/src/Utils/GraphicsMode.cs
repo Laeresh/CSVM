@@ -68,7 +68,8 @@ public static class GraphicsMode
     }
 
     /// <summary>A live switch after launch, from the graphics-mode action or an Options apply.
-    /// ⚠ Only <c>Launcher.SwitchGraphicsMode</c> calls this. The flag alone moves nothing already
+    /// ⚠ Only the live switch, <c>EnhancedLook.Switch</c>, changes the mode through this; <c>ModeShader.TextFor</c>
+    /// sets it only around a text and puts it back. The flag alone moves nothing already
     /// built, and that switch brings the shaders, the lights and the session into line.</summary>
     internal static void Set(bool enhanced) => Enhanced = enhanced;
 }

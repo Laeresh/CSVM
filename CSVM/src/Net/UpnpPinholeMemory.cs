@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Text;
+using CSVM.Utils;
 
 namespace CSVM.Net;
 
@@ -72,7 +72,7 @@ public sealed class UpnpPinholeMemory
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, text, new UTF8Encoding(false));
+            AtomicFile.WriteAllText(_path, text);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

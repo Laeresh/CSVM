@@ -23,12 +23,15 @@ public enum DogfightVictory : byte
 /// are the environment, the mission type, the victory condition, Restrict Number of Teams with its
 /// minimum and maximum, and the lives rule. Capture the Flag adds its own-flag-home rule. The host
 /// sends one to each guest whenever an option moves. Kept in the lobby and never passed to a session.
+/// <c>HostLandsOnScores</c> (a spare flag bit) says the host's match ends on Game Scores, not a
+/// results board, and every guest's match follows it.
 /// </summary>
 public readonly record struct DogfightOptionsMessage(
     byte Epoch, byte Environment, byte MissionType, DogfightVictory Victory, byte TimeMinutes,
     ushort Score, bool LimitedLives, byte Lives, bool AutoRespawn,
     bool RestrictTeams = false, byte MinTeams = DogfightOptionsMessage.DefaultMinTeams,
-    byte MaxTeams = DogfightOptionsMessage.DefaultMaxTeams, bool FlagHomeToCapture = false)
+    byte MaxTeams = DogfightOptionsMessage.DefaultMaxTeams, bool FlagHomeToCapture = false,
+    bool HostLandsOnScores = false)
     : INetMessage<DogfightOptionsMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -65,7 +68,8 @@ public readonly record struct DogfightOptionsMessage(
         byte maxTeams = reader.ReadByte();
         var victory = (flags & 8) != 0 ? DogfightVictory.Both : (flags & 1) != 0 ? DogfightVictory.Score : DogfightVictory.Time;
         message = new DogfightOptionsMessage(epoch, environment, type, victory, minutes, score,
-            (flags & 2) != 0, lives, (flags & 4) != 0, (flags & 16) != 0, minTeams, maxTeams, (flags & 32) != 0);
+            (flags & 2) != 0, lives, (flags & 4) != 0, (flags & 16) != 0, minTeams, maxTeams, (flags & 32) != 0,
+            (flags & 64) != 0);
         return true;
     }
 
@@ -77,7 +81,8 @@ public readonly record struct DogfightOptionsMessage(
         writer.WriteByte(Environment);
         writer.WriteByte(MissionType);
         int flags = (Victory == DogfightVictory.Score ? 1 : 0) | (LimitedLives ? 2 : 0) | (AutoRespawn ? 4 : 0)
-            | (Victory == DogfightVictory.Both ? 8 : 0) | (RestrictTeams ? 16 : 0) | (FlagHomeToCapture ? 32 : 0);
+            | (Victory == DogfightVictory.Both ? 8 : 0) | (RestrictTeams ? 16 : 0) | (FlagHomeToCapture ? 32 : 0)
+            | (HostLandsOnScores ? 64 : 0);
         writer.WriteByte((byte)flags);
         writer.WriteByte(TimeMinutes);
         writer.WriteByte(Lives);
@@ -91,13 +96,24 @@ public readonly record struct DogfightOptionsMessage(
 
 /// <summary>One row of a Dogfight lobby's player list: the pilot's name, its stock airframe, its
 /// Ready and whether it is the host. It also names the team the pilot is on (0 for none) and whether
-/// it captains that team.</summary>
-public readonly record struct DogfightLobbySeat(string Name, byte Airframe, bool Ready, bool IsHost, byte Team = 0, bool Captain = false);
+/// it captains that team. A bot row is the host's computer pilot, with its skill tier, and its
+/// airframe may be <see cref="RandomAirframe"/>, which the host resolves at launch.</summary>
+public readonly record struct DogfightLobbySeat(
+    string Name, byte Airframe, bool Ready, bool IsHost, byte Team = 0, bool Captain = false,
+    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = default)
+{
+    /// <summary>The airframe byte of a bot row whose plane is Random.</summary>
+    public const byte RandomAirframe = byte.MaxValue;
+
+    /// <summary>Whether a computer pilot flies this row.</summary>
+    public bool IsBot => Pilot == NetPilot.Bot;
+}
 
 /// <summary>
 /// A Dogfight host's player list as one guest reads it, under the round it belongs to. The host
 /// sends the whole list to each guest whenever it changes, with that guest's own row marked. Fixed
-/// width, since a lobby list is short and sent rarely. Kept in the lobby.
+/// width, since a lobby list is short and sent rarely. Kept in the lobby. A bot row rides spare bits
+/// of the flags byte, so an older build reads it as a person's (docs/org/multiplayer-messages.md).
 /// </summary>
 public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage>, IEquatable<DogfightRosterMessage>
 {
@@ -112,6 +128,9 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
 
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 4 + (RowSize * MaxRows);
+
+    private const int BotBit = 8;
+    private const int TierShift = 4;
 
     private readonly DogfightLobbySeat[] _rows;
 
@@ -176,8 +195,16 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
             byte airframe = reader.ReadByte();
             byte team = reader.ReadByte();
             _ = reader.ReadByte();
+            bool bot = (flags & BotBit) != 0;
+            int tier = (flags >> TierShift) & 3;
+
+            // A tier past ace, a tier on a person, and a bot hosting or captaining are no list
+            // the host builds.
+            if (tier > (int)NetBotSkill.Ace || (!bot && tier != 0) || (bot && (flags & 6) != 0))
+                return false;
+
             rows[i] = new DogfightLobbySeat(reader.ReadText(NameBytes), airframe, (flags & 1) != 0, (flags & 2) != 0,
-                team, (flags & 4) != 0);
+                team, (flags & 4) != 0, bot ? NetPilot.Bot : NetPilot.Human, (NetBotSkill)tier);
         }
 
         message = new DogfightRosterMessage(rows, epoch, you);
@@ -196,7 +223,9 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
         for (int i = 0; i < MaxRows; i++)
         {
             var row = i < rows.Count ? rows[i] : default;
-            writer.WriteByte((byte)((row.Ready ? 1 : 0) | (row.IsHost ? 2 : 0) | (row.Captain ? 4 : 0)));
+            int tier = row.IsBot ? ((int)row.Skill & 3) << TierShift : 0;
+            writer.WriteByte((byte)((row.Ready ? 1 : 0) | (row.IsHost ? 2 : 0) | (row.Captain ? 4 : 0)
+                | (row.IsBot ? BotBit : 0) | tier));
             writer.WriteByte(row.Airframe);
             writer.WriteByte(row.Team);
             writer.WriteByte(0);

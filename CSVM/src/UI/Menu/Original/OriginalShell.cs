@@ -457,7 +457,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net, (hosting, then) => AskNetInfo(hosting, then));
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         Wrapup = new OriginalWrapupScreen(_campaignLayout, measure, this, InstantAction.OpenInstantAction);
-        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster);
+        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster, _setup, dataRoot, _stock);
         Lobby = new OriginalLobbyScreen(
             () => _net, this, dataRoot, _stock,
             () => _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
@@ -571,7 +571,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public bool CapturingText =>
         _box.Standing == null
         && (NetInfo.CapturingText || TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
-            || Connection.CapturingText || Lobby.CapturingText);
+            || Connection.CapturingText || Lobby.CapturingText || JoinBoard.CapturingText);
 
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
     /// on a shell built without a hangar feature.</summary>
@@ -713,6 +713,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// text. The presentation calls it after every frame.</summary>
     public void FollowKeyboard() => ScreenKeyboard.Follow(KeyboardOwner, CapturingText ? FocusedKey : null);
 
+    /// <summary>Stands a one-answer warning box over whatever screen shows. It carries a refusal from
+    /// outside the screen modules, such as the version stamp's folder icons in Game Mode.</summary>
+    public void RaiseWarning(string message) => RaiseDialog(message, DialogIcon.Warning, Ok());
+
     /// <summary>One menu frame of the network door, whatever screen shows: the door is stepped, the
     /// cabin's co-op offer renewed and the Connection pages kept current. Returns whether the
     /// picture changed. It has whenever the door's <see cref="NetPlayFeature.Revision"/> moved,
@@ -761,9 +765,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         start ??= RememberedNetInfo(net);
         NetInfo.Open(hosting, start, info =>
         {
-            net.Take(info, hosting != null);
+            net.Identity.Take(info, hosting != null);
             then();
-        }, asksPassword, listable: net.Master != null);
+        }, asksPassword, listable: net.Internet.Master != null);
     }
 
     /// <summary>Stands <paramref name="door"/> in for the network door, the screenshot aids' and
@@ -864,9 +868,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         var info = NetPlayerInfo.Remembered(saved, _profiles?.Invoke().LastPlayedPilotName);
         if (_netOptions == null)
         {
-            info.Callsign = net.PlayerName.Length > 0 ? net.PlayerName : info.Callsign;
-            info.GameName = net.GameName.Length > 0 ? net.GameName : info.GameName;
-            info.Voice = net.Voice >= 0 ? net.Voice : info.Voice;
+            info.Callsign = net.Identity.PlayerName.Length > 0 ? net.Identity.PlayerName : info.Callsign;
+            info.GameName = net.Identity.GameName.Length > 0 ? net.Identity.GameName : info.GameName;
+            info.Voice = net.Identity.Voice >= 0 ? net.Identity.Voice : info.Voice;
         }
 
         return info;
@@ -893,6 +897,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             OriginalScreen.CampaignRoster => Campaign.TypeName(commands, cues),
             OriginalScreen.Connection => Connection.TypeText(commands, cues),
             OriginalScreen.Lobby => Lobby.TypeText(commands, cues),
+            OriginalScreen.JoinBoard => JoinBoard.TypeText(commands),
             _ => Hangar?.TypeName(commands, cues) ?? false,
         };
 

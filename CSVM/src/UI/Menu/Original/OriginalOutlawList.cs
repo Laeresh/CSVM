@@ -135,18 +135,11 @@ internal sealed class OriginalOutlawList
     private const string PaneArt = "MP_LOBBY_OUTLAWED.PNG";
     private const string BoxArt = "MP_B_READYCHECKBOX8STATES.PNG";
     private const string MediumArt = "MP_B_MEDIUM.PNG";
-    private const string UpArt = "MP_B_SCROLLUP.PNG";
-    private const string DownArt = "MP_B_SCROLLDOWN.PNG";
-    private const string ThumbArt = "MP_B_SCROLLBAR.PNG";
 
-    // The pane's corner, which is the tab page's, and the scroll bar the long pages carry.
+    // The pane's corner, which is the tab page's, and its rows' left edge.
     private const float PaneX = 314f;
     private const float PaneY = 26f;
-    private const float ScrollX = PaneX + 393f;
-    private const float ScrollY = PaneY + 104f;
-    private const float ScrollHeight = 167f;
-    private const float ArrowWidth = 16f;
-    private const float ArrowHeight = 11f;
+    private const float RowsX = PaneX + 85f;
 
     private static readonly string[] TabArt =
         { "MP_LOBBY_TABMEDIUM.PNG", "MP_LOBBY_TABSMALL.PNG", "MP_LOBBY_TABSMALL.PNG", "MP_LOBBY_TABSMALL.PNG", "MP_LOBBY_TABSMALL.PNG" };
@@ -159,6 +152,9 @@ internal sealed class OriginalOutlawList
     private static readonly BoardTint Black = new(0, 0, 0);
     private static readonly BoardTint Picked = new(142, 0, 0);
     private static readonly BoardTint Rollover = new(102, 207, 255);
+
+    // The long pages' scroll control at (+393, +104), 167 high, over its KF colour 0xff282418.
+    private static readonly OriginalScrollBar Bar = new(PaneX + 393f, PaneY + 104f, 167f, OutlawRows.Window, new BoardTint(0x28, 0x24, 0x18));
 
     private readonly MultiplayerBoardText _text;
     private ulong _kept;
@@ -237,10 +233,8 @@ internal sealed class OriginalOutlawList
 
         if (OutlawRows.Scrolls(Page))
         {
-            rows.Add(new OriginalRow(UpKey, string.Empty, OriginalRowKind.Button, ScrollX, ScrollY, ArrowWidth, ArrowHeight,
-                _top > 0, 1, new BoardArt(BoardArtLibrary.Ui, UpArt, 4)));
-            rows.Add(new OriginalRow(DownKey, string.Empty, OriginalRowKind.Button, ScrollX, ScrollY + ScrollHeight - ArrowHeight,
-                ArrowWidth, ArrowHeight, _top + OutlawRows.Window < count, 1, new BoardArt(BoardArtLibrary.Ui, DownArt, 4)));
+            rows.Add(Bar.ArrowRow(UpKey, down: false, count, _top));
+            rows.Add(Bar.ArrowRow(DownKey, down: true, count, _top));
         }
 
         // A guest's pane has no Accept at all, and a Ready host's draws it greyed.
@@ -274,10 +268,10 @@ internal sealed class OriginalOutlawList
         switch (key)
         {
             case UpKey:
-                _top = Math.Max(0, _top - 1);
+                _top = Bar.Clamp(_top - 1, OutlawRows.Count(Page));
                 return;
             case DownKey:
-                _top = Math.Min(Math.Max(0, OutlawRows.Count(Page) - OutlawRows.Window), _top + 1);
+                _top = Bar.Clamp(_top + 1, OutlawRows.Count(Page));
                 return;
             case AcceptKey:
                 Close();
@@ -309,15 +303,10 @@ internal sealed class OriginalOutlawList
     internal void ComposePage(BoardLayers layers)
     {
         layers.Lines.Add(_text.Line(10136, "Outlawed Components", PaneX + 15f, PaneY + 45f, 0f, Black));
-        if (Window() is not { } window)
+        if (OutlawRows.Scrolls(Page))
         {
-            return;
+            Bar.Compose(RowsX, OutlawRows.Count(Page), _top, layers);
         }
-
-        // The scroll control's KF colour, 0xff282418, under the thumb.
-        layers.Fills.Add(new BoardFill(ScrollX, window.TrackTop, ArrowWidth, window.TrackHeight, 0x28, 0x24, 0x18));
-        layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, ThumbArt), window.ThumbX, window.ThumbY,
-            Height: window.ThumbHeight));
     }
 
     /// <summary>One of the pane's widgets in its state, with the words the scripts write beside it.</summary>
@@ -372,21 +361,8 @@ internal sealed class OriginalOutlawList
         Close();
     }
 
-    private ListWindow? Window()
-    {
-        if (!OutlawRows.Scrolls(Page))
-        {
-            return null;
-        }
-
-        int count = OutlawRows.Count(Page);
-        float track = ScrollHeight - (2f * ArrowHeight);
-        float thumb = ListWindow.ThumbHeightFor(track, OutlawRows.Window, count, ArrowHeight);
-        return new ListWindow(
-            PaneX + 85f, ScrollY, ScrollX + ArrowWidth - (PaneX + 85f), ScrollHeight,
-            ScrollX, ListWindow.ThumbYFor(ScrollY + ArrowHeight, track, thumb, _top, count - OutlawRows.Window), ArrowWidth, thumb,
-            ScrollY + ArrowHeight, track, count, OutlawRows.Window, _top);
-    }
+    private ListWindow? Window() =>
+        OutlawRows.Scrolls(Page) ? Bar.Window(RowsX, OutlawRows.Count(Page), _top) : null;
 
     private void ComposeBox(NetPlaneRules rules, OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {

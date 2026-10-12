@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM;
 using CSVM.Bindings;
 using CSVM.Mech3;
@@ -302,7 +303,7 @@ public class SessionSpecMenuTests
     {
         Assert.Equal(
             new[] { "C1", "C2B", "C3", "C5", "C1B", "C4", "C2" },
-            UI.Screens.LaunchMenu.EnvironmentCodes());
+            UI.Menu.InstantActionFeature.Environments.Select(e => e.Code));
     }
 
     /// <summary>The MissionType screen's roster for one environment: all four mission types except
@@ -314,10 +315,10 @@ public class SessionSpecMenuTests
     {
         Assert.Equal(
             new[] { "dogfight_ace", "dogfight_squadron", "stunt_flying", "zeppelin_run" },
-            UI.Screens.LaunchMenu.MissionTypeKeysFor("C1"));
+            UI.Menu.InstantActionFeature.MissionTypesFor("C1").Select(m => m.Key));
         Assert.Equal(
             new[] { "dogfight_ace", "dogfight_squadron", "zeppelin_run" },
-            UI.Screens.LaunchMenu.MissionTypeKeysFor("C2B"));
+            UI.Menu.InstantActionFeature.MissionTypesFor("C2B").Select(m => m.Key));
     }
 
     /// <summary>Every one of the seven Instant Action environments offers at least the three
@@ -326,9 +327,9 @@ public class SessionSpecMenuTests
     [Fact]
     public void EveryEnvironmentOffersAceSquadronAndZeppelin()
     {
-        foreach (string code in UI.Screens.LaunchMenu.EnvironmentCodes())
+        foreach (string code in UI.Menu.InstantActionFeature.Environments.Select(e => e.Code))
         {
-            var keys = UI.Screens.LaunchMenu.MissionTypeKeysFor(code);
+            var keys = UI.Menu.InstantActionFeature.MissionTypesFor(code).Select(m => m.Key);
             Assert.Contains("dogfight_ace", keys);
             Assert.Contains("dogfight_squadron", keys);
             Assert.Contains("zeppelin_run", keys);

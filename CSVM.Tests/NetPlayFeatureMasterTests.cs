@@ -29,7 +29,7 @@ public class NetPlayFeatureMasterTests
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(1));
         var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0])
         {
-            Master = new MasterDirectory(_ => Task.FromResult(Listed)),
+            Internet = { Master = new MasterDirectory(_ => Task.FromResult(Listed)) },
         };
 
         Assert.True(door.CanSearch);
@@ -56,11 +56,14 @@ public class NetPlayFeatureMasterTests
         string? opened = null;
         var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => throw new InvalidOperationException("no direct join"))
         {
-            Master = new MasterDirectory(_ => Task.FromResult(Listed)),
-            OpenCode = code =>
+            Internet =
             {
-                opened = code;
-                return mesh[1];
+                Master = new MasterDirectory(_ => Task.FromResult(Listed)),
+                OpenCode = code =>
+                {
+                    opened = code;
+                    return mesh[1];
+                },
             },
         };
         door.Search();
@@ -85,10 +88,13 @@ public class NetPlayFeatureMasterTests
             return mesh[1];
         })
         {
-            OpenCode = code =>
+            Internet =
             {
-                asked.Add($"code {code}");
-                return mesh[1];
+                OpenCode = code =>
+                {
+                    asked.Add($"code {code}");
+                    return mesh[1];
+                },
             },
         };
 
@@ -118,7 +124,7 @@ public class NetPlayFeatureMasterTests
 
         Assert.Equal("K7Q-X3M", direct);
         Assert.False(door.CanSearch);
-        Assert.Null(door.JoinCode);
+        Assert.Null(door.Internet.JoinCode);
     }
 
     [Fact]
@@ -127,7 +133,7 @@ public class NetPlayFeatureMasterTests
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(5));
         var listed = new ListedCarrier(mesh[0]);
         var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0]) { Version = new NetBuildVersion(0, 2) };
-        door.Take(new NetPlayerInfo { GameName = "Pirates", Callsign = "Laeresh", MaxPlayers = 6 }, game: true);
+        door.Identity.Take(new NetPlayerInfo { GameName = "Pirates", Callsign = "Laeresh", MaxPlayers = 6 }, game: true);
 
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         door.Step(0.016);
@@ -135,17 +141,17 @@ public class NetPlayFeatureMasterTests
         Assert.Equal(MasterWire.DogfightKind, listed.Listing.Kind);
         Assert.Equal(6, listed.Listing.Cap);
         Assert.Equal("0.2", listed.Listing.Version);
-        Assert.Null(door.JoinCode);
+        Assert.Null(door.Internet.JoinCode);
 
-        Assert.True(door.AwaitingCode);
+        Assert.True(door.Internet.AwaitingCode);
         Assert.Equal(CoopDoorText.AwaitingCode, CoopDoorText.HostCodeLine(door));
 
         listed.JoinCode = "K7Q-X3M";
         door.Step(0.016);
         door.Step(0.016);
 
-        Assert.Equal("K7Q-X3M", door.JoinCode);
-        Assert.False(door.AwaitingCode);
+        Assert.Equal("K7Q-X3M", door.Internet.JoinCode);
+        Assert.False(door.Internet.AwaitingCode);
         Assert.Equal($"Internet code K7Q-X3M, public, on the games list. {CoopDoorText.CopyPress} copies it.", CoopDoorText.HostCodeLine(door));
         Assert.False(listed.Listing!.Unlisted);
     }
@@ -159,11 +165,11 @@ public class NetPlayFeatureMasterTests
 
         door.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
         door.Step(0.016);
-        Assert.True(door.Private);
+        Assert.True(door.Identity.Private);
         Assert.True(listed.Listing!.Unlisted);
         door.Close();
 
-        door.Take(new NetPlayerInfo { GameName = "Friends", Callsign = "Zachary", Private = false }, game: true);
+        door.Identity.Take(new NetPlayerInfo { GameName = "Friends", Callsign = "Zachary", Private = false }, game: true);
         door.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
         door.Step(0.016);
         Assert.False(listed.Listing!.Unlisted);
@@ -174,7 +180,7 @@ public class NetPlayFeatureMasterTests
         Assert.False(listed.Listing!.Unlisted);
         door.Close();
 
-        door.Take(new NetPlayerInfo { GameName = "Friends", Callsign = "Zachary", Private = true }, game: true);
+        door.Identity.Take(new NetPlayerInfo { GameName = "Friends", Callsign = "Zachary", Private = true }, game: true);
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         door.Step(0.016);
         Assert.True(listed.Listing!.Unlisted);
@@ -190,33 +196,32 @@ public class NetPlayFeatureMasterTests
         var copied = new List<string>();
         var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0])
         {
-            StableIpv6 = () => "2001:db8::7",
-            CopyText = copied.Add,
+            Reach = { StableIpv6 = () => "2001:db8::7", CopyText = copied.Add },
         };
         door.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
 
         // While the master server answers no line names the address, so the key copies nothing.
-        Assert.True(door.AwaitingCode);
-        Assert.False(door.CopyForGuests());
+        Assert.True(door.Internet.AwaitingCode);
+        Assert.False(door.Reach.CopyForGuests());
         Assert.Equal("", CoopDoorText.CopyTarget(door));
         Assert.Empty(copied);
 
         listed.JoinCode = "K7Q-X3M";
         Assert.Contains("Ctrl+C", CoopDoorText.HostBand(door), StringComparison.Ordinal);
-        Assert.True(door.CopyForGuests());
+        Assert.True(door.Reach.CopyForGuests());
         Assert.Equal(new[] { "K7Q-X3M" }, copied);
         Assert.StartsWith("NETWORK OPEN  0 guests  CODE K7Q-X3M  copied", CoopDoorText.HostBand(door), StringComparison.Ordinal);
 
         // ABLE-TO-FAIL CONTROL: after a fault the address is named again, and the key copies it.
         listed.JoinCode = null;
         listed.Fault = "the master server refused the listing";
-        Assert.False(door.AwaitingCode);
-        Assert.True(door.CopyForGuests());
+        Assert.False(door.Internet.AwaitingCode);
+        Assert.True(door.Reach.CopyForGuests());
         Assert.Equal(new[] { "K7Q-X3M", "2001:db8::7" }, copied);
 
         // A shut door copies nothing.
         door.Close();
-        Assert.False(door.CopyForGuests());
+        Assert.False(door.Reach.CopyForGuests());
         Assert.Equal(2, copied.Count);
     }
 
@@ -228,8 +233,7 @@ public class NetPlayFeatureMasterTests
         var listed = new ListedCarrier(mesh[0]);
         var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0])
         {
-            StableIpv6 = () => stable,
-            CopyText = _ => { },
+            Reach = { StableIpv6 = () => stable, CopyText = _ => { } },
         };
         Assert.Equal("", CoopDoorText.CopyTarget(door));
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
@@ -253,7 +257,7 @@ public class NetPlayFeatureMasterTests
         Assert.Equal(new[] { line }, CoopDoorText.HostLobbyLines(door, CopyWay.Pointer));
 
         // ABLE-TO-FAIL CONTROL: once copied, every device reads the copied state.
-        Assert.True(door.CopyForGuests());
+        Assert.True(door.Reach.CopyForGuests());
         Assert.Equal($"{line} It is copied.", CoopDoorText.HostCodeLine(door, CopyWay.Pad));
         Assert.Equal($"{line} It is copied.", CoopDoorText.HostCodeLine(door, CopyWay.Keys));
     }
@@ -267,8 +271,7 @@ public class NetPlayFeatureMasterTests
         var mapped = new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, NetPlayFeature.DefaultPort, "203.0.113.9", "mapped");
         var coded = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0], new RouterAccess(port => mapped with { Port = port }, _ => { }))
         {
-            StableIpv6 = () => stable,
-            CopyText = _ => { },
+            Reach = { StableIpv6 = () => stable, CopyText = _ => { } },
         };
         coded.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
@@ -285,9 +288,9 @@ public class NetPlayFeatureMasterTests
 
         // The address waits for the master server's outcome: while it is answering, the wait alone.
         var awaited = new ListedCarrier(End(16));
-        var asking = new NetPlayFeature((_, _, _) => awaited, (_, _) => End(16)) { StableIpv6 = () => stable };
+        var asking = new NetPlayFeature((_, _, _) => awaited, (_, _) => End(16)) { Reach = { StableIpv6 = () => stable } };
         asking.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
-        Assert.True(asking.AwaitingCode);
+        Assert.True(asking.Internet.AwaitingCode);
         string[] waiting = CoopDoorText.HostBand(asking).Split('\n');
         Assert.Equal(2, waiting.Length);
         Assert.StartsWith("NETWORK OPEN  port", waiting[0], StringComparison.Ordinal);
@@ -307,8 +310,8 @@ public class NetPlayFeatureMasterTests
 
         var offline = new NetPlayFeature((_, _, _) => End(11), (_, _) => End(11))
         {
-            StableIpv6 = () => stable,
-            Master = new MasterDirectory(_ => Task.FromResult(Listed)),
+            Reach = { StableIpv6 = () => stable },
+            Internet = { Master = new MasterDirectory(_ => Task.FromResult(Listed)) },
         };
         offline.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
         string[] lines = CoopDoorText.HostBand(offline).Split('\n');
@@ -326,12 +329,12 @@ public class NetPlayFeatureMasterTests
         string address = $"IPv6  {stable}  {CoopDoorText.CopyPress}";
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(14));
         var listed = new ListedCarrier(mesh[0]);
-        var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0]) { StableIpv6 = () => stable };
+        var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0]) { Reach = { StableIpv6 = () => stable } };
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         door.Step(0.016);
 
         // The address waits for the master server's outcome: none while it is still answering.
-        Assert.True(door.AwaitingCode);
+        Assert.True(door.Internet.AwaitingCode);
         Assert.Equal(new[] { CoopDoorText.AwaitingCode }, CoopDoorText.HostLobbyLines(door));
         Assert.DoesNotContain(CoopDoorText.HostLobbyLines(door), line => line.Contains(stable, StringComparison.Ordinal));
 
@@ -345,8 +348,8 @@ public class NetPlayFeatureMasterTests
 
         var offline = new NetPlayFeature((_, _, _) => End(15), (_, _) => End(15))
         {
-            StableIpv6 = () => stable,
-            Master = new MasterDirectory(_ => Task.FromResult(Listed)),
+            Reach = { StableIpv6 = () => stable },
+            Internet = { Master = new MasterDirectory(_ => Task.FromResult(Listed)) },
         };
         offline.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         Assert.Equal(new[] { address, $"No internet code: {CoopDoorText.NoWebRtc}" }, CoopDoorText.HostLobbyLines(offline));
@@ -362,16 +365,16 @@ public class NetPlayFeatureMasterTests
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(9));
         var offline = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0])
         {
-            Master = new MasterDirectory(_ => Task.FromResult(Listed)),
+            Internet = { Master = new MasterDirectory(_ => Task.FromResult(Listed)) },
         };
         offline.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
-        Assert.Equal(CoopDoorText.NoWebRtc, offline.InternetFault);
+        Assert.Equal(CoopDoorText.NoWebRtc, offline.Internet.InternetFault);
         Assert.Equal($"No internet code: {CoopDoorText.NoWebRtc}", CoopDoorText.InternetLine(offline));
 
         var refused = new ListedCarrier(End(12)) { Fault = "the server lists as many games as it can; try again later" };
         var full = new NetPlayFeature((_, _, _) => refused, (_, _) => mesh[0]);
         full.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
-        Assert.False(full.AwaitingCode);
+        Assert.False(full.Internet.AwaitingCode);
         Assert.Equal("No internet code: the server lists as many games as it can; try again later", CoopDoorText.InternetLine(full));
 
         refused.Fault = new string('x', 200);
@@ -381,7 +384,7 @@ public class NetPlayFeatureMasterTests
         // ABLE-TO-FAIL CONTROL: no master server set, so nothing is wrong and nothing is said.
         var lan = new NetPlayFeature((_, _, _) => End(13), (_, _) => End(13));
         lan.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
-        Assert.Equal("", lan.InternetFault);
+        Assert.Equal("", lan.Internet.InternetFault);
         Assert.Equal("", CoopDoorText.InternetLine(lan));
         Assert.Equal("", CoopDoorText.HostCodeLine(lan));
     }
@@ -391,7 +394,7 @@ public class NetPlayFeatureMasterTests
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(6));
         var down = new ListedCarrier(mesh[0]) { State = NetLinkState.Down, Why = "no game is listed under that code" };
-        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { OpenCode = _ => down };
+        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { Internet = { OpenCode = _ => down } };
 
         Retype(door, "ABC-DEF");
         door.OpenJoin();

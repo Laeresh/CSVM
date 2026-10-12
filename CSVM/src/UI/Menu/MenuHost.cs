@@ -17,6 +17,7 @@ public sealed class MenuHost : IMenuHost
     private readonly PresentationRegistry _registry;
     private readonly Action<MenuExit> _exitSink;
     private readonly List<IMenuInputSource> _seats = new();
+    private bool _held;
 
     /// <summary>A host over <paramref name="registry"/>, cueing through <paramref name="audio"/>
     /// and handing every exit to <paramref name="exitSink"/>. Features are added by the owner.</summary>
@@ -58,6 +59,11 @@ public sealed class MenuHost : IMenuHost
     /// run this time (its assets are missing), or null when it can. Built-in is never asked. The
     /// default says every registered presentation is available.</summary>
     public Func<PresentationId, string?> Availability { get; set; } = _ => null;
+
+    /// <summary>Whether a dialog outside the presentation stands over it and owns the pad, null for
+    /// never. The presentation does not tick meanwhile. The frame after, every seat is primed, so the
+    /// press that closed the dialog is not read as the menu's.</summary>
+    public Func<bool>? Held { get; set; }
 
     /// <summary>Adds a seat's input source, joining it through the player-setup feature when one
     /// is registered. Seat 0 first; the list is live for presentations. A refused join (every seat
@@ -141,9 +147,24 @@ public sealed class MenuHost : IMenuHost
         Shown = true;
     }
 
-    /// <summary>One frame of the shown presentation; nothing while hidden.</summary>
+    /// <summary>One frame of the shown presentation; nothing while hidden or <see cref="Held"/>.</summary>
     public void Tick(float dt)
     {
+        if (Held?.Invoke() == true)
+        {
+            _held = true;
+            return;
+        }
+
+        if (_held)
+        {
+            _held = false;
+            foreach (var seat in Seats)
+            {
+                seat.Prime();
+            }
+        }
+
         if (Shown)
         {
             Active?.Tick(dt);

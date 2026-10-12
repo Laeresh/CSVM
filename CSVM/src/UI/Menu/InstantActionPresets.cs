@@ -23,7 +23,7 @@ public static class InstantActionPresets
     // the aircraft always resolves. It never reaches a flown mission, the mission builder
     // FUN_004175f0 skips any wave at 0 enemies, but it IS what a pilot inherits on raising the
     // count of an empty wave, so dropping it would be right in one state and wrong in the other.
-    private const string UnsetMilitia = "Fortune Hunter";
+    private const string UnsetMilitia = Mech3.InstantAction.PlayerMilitia;
     private const string UnsetAircraft = "Devastator";
     private const string UnsetSkill = "veteran";
 

@@ -29,7 +29,8 @@ internal static class SpawnPropsSuites
         "a session-built player and AI aircraft start with their engines already running, as in the original's Instant Action and CM01: the assemblers play the silent, instant spinprops, no definition that sounds snd_propstart (startprops) ever starts, and the player's own-ship audio carries no snd_propstart player while its engine loop sounds")]
     internal static void SpawnPropsSilent(TestContext ctx)
     {
-        const string plane = "player_warhawk";
+        // The stand-in on the synthetic tree; the install's subject is the shipped Warhawk.
+        string plane = ctx.SyntheticData ? ctx.PlaneName : "player_warhawk";
         WithSessionRoster(ctx, plane, (roster, player, sounds, soundDefs) =>
         {
             var ai = SpawnAi(roster, plane, null, new Vector3(1000f, 3000f, 0f));
@@ -60,6 +61,7 @@ internal static class SpawnPropsSuites
     {
         const string autogyro = "player_autogyro", warhawk = "player_warhawk";
         const string cabbieDef = "autogyro", rotorAnim = "agyro_rotors";
+        ctx.RequirePlane(autogyro, warhawk);
         const float Dt = 1f / 60f;
         WithSessionRoster(ctx, autogyro, (roster, player, _, _) =>
         {
@@ -206,10 +208,10 @@ internal static class SpawnPropsSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        EffectStageSuiteHelper.WithAnimSource(ctx, source =>
         {
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter));
             using var sounds = new SoundArchive(ctx.SoundsPath);
             var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
             var pool = new ProjectilePool(textures, null, null);
@@ -241,9 +243,9 @@ internal static class SpawnPropsSuites
                     new FlightWorldBindings
                     {
                         Projectiles = pool,
-                        Gamez = world.Gamez,
-                        WorldScene = world.Session.Builder.Scene,
-                        CrashProgram = world.Session.Program,
+                        Gamez = source.Gamez,
+                        WorldScene = source.Scene,
+                        CrashProgram = source.Program,
                         Sounds = sounds,
                         SoundDefs = soundDefs,
                         SoundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath),

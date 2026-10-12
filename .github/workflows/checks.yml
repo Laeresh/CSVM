@@ -1,7 +1,9 @@
-# The checks a contributor can pass without the original game: the repo's content gate, dotnet
-# format, StyleCop, and the unit tests (tests needing extracted game data skip themselves). The
-# engine suites and goldens need Godot and an install, so they stay with RunTests.ps1 locally.
-# Three OSes, because the scripts must work wherever a contributor runs them.
+# The checks a contributor can pass without the original game. The checks job runs the repo's
+# content gate, dotnet format, StyleCop, and the unit tests (tests needing extracted game data skip
+# themselves) on three OSes, because the scripts must work wherever a contributor runs them. The
+# engine job runs the in-engine suites on the ci tier headless on Linux with no extraction, through
+# RunCiSuites.ps1; a listed suite that fails or skips turns it red. The rest of the engine catalog,
+# the goldens and the hitch check need an install or a renderer, so they stay with RunTests.ps1.
 name: Checks
 
 on:
@@ -75,3 +77,95 @@ jobs:
 
       - name: Unit tests
         run: dotnet test CSVM/CSVM.sln --nologo
+
+  engine:
+    name: engine suites (tier:ci, headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GODOT_RELEASE: 4.7-stable
+      GODOT_BUILD: Godot_v4.7-stable_mono_linux_x86_64
+      GODOT_EXE: Godot_v4.7-stable_mono_linux.x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Keyed on the release, so a version bump downloads and verifies afresh. A cached copy was
+      # verified against the release's SHA512-SUMS.txt before it was stored.
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_BUILD }}
+
+      - name: Download and verify Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          $base = "https://github.com/godotengine/godot/releases/download/$env:GODOT_RELEASE"
+          $zip = "$env:GODOT_BUILD.zip"
+          $dir = Join-Path $HOME 'godot'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Set-Location $dir
+          curl -fsSL --retry 3 -o $zip "$base/$zip"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          curl -fsSL --retry 3 -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $rows = @(Get-Content SHA512-SUMS.txt | Where-Object { ($_ -split '\s+')[-1].TrimStart('*') -eq $zip })
+          if ($rows.Count -ne 1) { throw "SHA512-SUMS.txt lists $zip $($rows.Count) times, not once" }
+          $want = ($rows[0] -split '\s+')[0].ToLowerInvariant()
+          $got = (Get-FileHash -Algorithm SHA512 $zip).Hash.ToLowerInvariant()
+          if ($got -ne $want) { throw "$zip has SHA-512 $got; the release publishes $want" }
+          Write-Host "$zip matches the SHA-512 the release publishes"
+          # unzip, not Expand-Archive, which drops the executable bit.
+          unzip -q $zip
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          chmod +x "$env:GODOT_BUILD/$env:GODOT_EXE"
+          Remove-Item $zip, SHA512-SUMS.txt
+
+      - name: Locate Godot
+        run: |
+          $godot = Join-Path $HOME "godot/$env:GODOT_BUILD/$env:GODOT_EXE"
+          if (-not (Test-Path $godot)) { throw "No Godot executable at $godot" }
+          "GODOT=$godot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Without fontconfig Godot's Linux build logs an engine error on every font lookup, and
+      # RunCiSuites.ps1 refuses to start. Installed only when the runner image lacks it.
+      - name: fontconfig
+        run: |
+          if (-not (@(/sbin/ldconfig -p) | Where-Object { $_ -match 'libfontconfig\.so\.1' })) {
+            sudo apt-get update
+            sudo apt-get install -y libfontconfig1
+          }
+
+      - name: Build
+        run: dotnet build CSVM/CSVM.sln --nologo
+
+      - name: Import
+        run: |
+          & $env:GODOT --headless --path CSVM --import
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Engine suites
+        run: ./RunCiSuites.ps1 -Godot $env:GODOT
+
+      - name: Upload report and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-suites
+          # .scratch is a hidden folder, which upload-artifact skips unless told otherwise.
+          include-hidden-files: true
+          if-no-files-found: warn
+          path: |
+            .scratch/test-report.json
+            .scratch/ci-suites/godot.out
+            .scratch/ci-suites/godot.err
+            .scratch/ci-suites/godot.log
+            .scratch/logs/

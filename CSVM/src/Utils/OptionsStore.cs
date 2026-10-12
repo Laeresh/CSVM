@@ -8,8 +8,8 @@ using System.Text.Json;
 namespace CSVM.Utils;
 
 /// <summary>The display settings' vocabularies: the words <see cref="OptionsDef.DisplayMode"/>,
-/// <see cref="OptionsDef.VSync"/>, <see cref="OptionsDef.RenderScale"/> and
-/// <see cref="OptionsDef.AntiAliasing"/> accept, in the order a picker offers them. They are kept
+/// <see cref="OptionsDef.VSync"/>, the render scale and the anti-aliasing method accept, in the
+/// order a picker offers them. They are kept
 /// as strings, as the presentation and graphics words are. The resolved value is an argument to an
 /// engine call, owned by whichever module makes the call, not a type this store carries. The other
 /// two display settings have no word list, so <see cref="OptionsStore"/> validates their shape
@@ -108,14 +108,14 @@ public static class ViewWords
 }
 
 /// <summary>Every process-wide option the game saves, one property each, and each said in its own
-/// summary below. A missing field means "never set"; the caller, not this def, decides what that
-/// falls back to.
+/// summary below, beside <see cref="Words"/>, one word per registered setting. A missing field means
+/// "never set"; the caller, not this def, decides what that falls back to.
 /// ⚠ A display field added here is read through a <c>SavedWord(bool det)</c> reader and nowhere
 /// else, and that reader returns null under <c>--det</c>. Otherwise a saved size or mode would
 /// move every golden, a golden shot being a deterministic run against the player's own options
 /// directory. The <c>display-det-guard</c> suite compares this def against the readers by
-/// reflection and fails on a field that has none. The four volume levels take the same drop through
-/// <see cref="AudioMix.SavedLevels"/>, which is their one reader.</summary>
+/// reflection and fails on a field that has none. The volume levels' one reader is
+/// <see cref="AudioMix.SavedLevels"/>.</summary>
 public sealed class OptionsDef
 {
     /// <summary>A menu presentation word an older build saved. Loaded and saved back so such a
@@ -124,10 +124,6 @@ public sealed class OptionsDef
     public string? MenuPresentation { get; set; }
 
     public string? GraphicsMode { get; set; }
-
-    /// <summary>How far enhanced mode draws the clutter before its fade, a
-    /// <see cref="Utils.ViewDistance"/> word.</summary>
-    public string? ViewDistance { get; set; }
 
     /// <summary>Whether a rocket warhead's ground burst carves the terrain
     /// (<c>CraterGate</c>). ⚠ No screen offers this. The carve is remake-only chrome
@@ -198,19 +194,10 @@ public sealed class OptionsDef
     /// or off with the frame cap the word names.</summary>
     public string? VSync { get; set; }
 
-    /// <summary>The scale the 3D viewports render at, one of
-    /// <see cref="DisplayWords.RenderScaleChoices"/>, a percentage of their own size.</summary>
-    public string? RenderScale { get; set; }
-
-    /// <summary>The anti-aliasing method the 3D viewports run, one of
-    /// <see cref="DisplayWords.AntiAliasingChoices"/>. Null is "never set", which reads as the
-    /// graphics mode's own default rather than as a word of its own.</summary>
-    public string? AntiAliasing { get; set; }
-
-    /// <summary>The sun's shadow quality under Enhanced Graphics, one of
-    /// <see cref="ShadowQualitySetting.Words"/>. Null is "never set", which reads as the
-    /// enhanced mode's own look.</summary>
-    public string? ShadowQuality { get; set; }
+    /// <summary>The word saved for each of <see cref="WordSettings.All"/>, under its
+    /// <see cref="WordSetting.SavedField"/>. Each is a display setting, read through its own
+    /// <see cref="WordSetting.SavedWord"/>.</summary>
+    public WordValues Words { get; } = new();
 
     /// <summary>The Master level, the multiplier over the three category levels
     /// (<see cref="AudioMix"/>). No vocabulary and no spelling to parse, so the store proves the
@@ -307,8 +294,6 @@ public sealed class OptionsStore
     /// source.</summary>
     public const string FileName = "options.json";
 
-    private const string TempFileName = "options.json.tmp";
-
     // The only presentation names this option currently accepts. Kept as strings, not an enum: the
     // presentation identity type belongs to whichever module owns the presentation contract.
     private static readonly HashSet<string> ValidPresentations = new(StringComparer.Ordinal)
@@ -326,8 +311,6 @@ public sealed class OptionsStore
         GraphicsMode.EnhancedWord,
     };
 
-    private static readonly HashSet<string> ValidViewDistances = new(ViewDistance.Words, StringComparer.Ordinal);
-
     // The three campaign words alone. The command line's wider vocabulary (Instant Action's names,
     // bare digits) is a convenience this file never carries. A file reads back only what the
     // options screens write.
@@ -336,18 +319,12 @@ public sealed class OptionsStore
     // The three selectable views, spelt as --view= takes them.
     private static readonly HashSet<string> ValidDefaultViews = new(ViewWords.All, StringComparer.Ordinal);
 
-    // The four display vocabularies, DisplayWords' own lists as sets, held here like the sets above.
+    // The two display vocabularies, DisplayWords' own lists as sets, held here like the sets above.
     // The words a file may carry are this reader's business. A file reads back only what an
     // options screen writes.
     private static readonly HashSet<string> ValidDisplayModes = new(DisplayWords.DisplayModes, StringComparer.Ordinal);
 
     private static readonly HashSet<string> ValidVSyncChoices = new(DisplayWords.VSyncChoices, StringComparer.Ordinal);
-
-    private static readonly HashSet<string> ValidRenderScales = new(DisplayWords.RenderScaleChoices, StringComparer.Ordinal);
-
-    private static readonly HashSet<string> ValidAntiAliasing = new(DisplayWords.AntiAliasingChoices, StringComparer.Ordinal);
-
-    private static readonly HashSet<string> ValidShadowQualities = new(ShadowQualitySetting.Words, StringComparer.Ordinal);
 
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
@@ -386,7 +363,7 @@ public sealed class OptionsStore
             w.WriteNumber("version", Version);
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
-            Write(w, "viewDistance", def.ViewDistance);
+
             WriteFlag(w, "rocketCraters", def.RocketCraters);
             WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
             WriteFlag(w, "flightTextBlock", def.FlightTextBlock);
@@ -399,9 +376,11 @@ public sealed class OptionsStore
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
             Write(w, "vsync", def.VSync);
-            Write(w, "renderScale", def.RenderScale);
-            Write(w, "antiAliasing", def.AntiAliasing);
-            Write(w, "shadowQuality", def.ShadowQuality);
+            foreach (var setting in WordSettings.All)
+            {
+                Write(w, setting.SavedField, def.Words[setting]);
+            }
+
             WriteLevel(w, "audioMaster", def.AudioMaster);
             WriteLevel(w, "audioMusic", def.AudioMusic);
             WriteLevel(w, "audioEffects", def.AudioEffects);
@@ -433,27 +412,39 @@ public sealed class OptionsStore
     /// missing one rather than invalidating the whole file, and a field the file does not carry
     /// at all reads as never set, so a file written before a field existed still loads. Only the
     /// version gate rejects a whole file.</summary>
-    public static OptionsDef? Deserialize(string json)
+    public static OptionsDef? Deserialize(string json) => Deserialize(json, out _);
+
+    /// <summary>The same read, with the reason a null came back in <paramref name="error"/>, which is
+    /// what <see cref="Load"/> logs.</summary>
+    public static OptionsDef? Deserialize(string json, out string error)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                error = "not a JSON object";
+                return null;
+            }
+
             int version = root.TryGetProperty("version", out var v)
                 && v.ValueKind == JsonValueKind.Number
                 && v.TryGetInt32(out int value)
                     ? value
                     : -1;
-            if (root.ValueKind != JsonValueKind.Object || version != Version)
+            if (version != Version)
             {
+                error = "version " + version.ToString(CultureInfo.InvariantCulture) + ", this build reads "
+                    + Version.ToString(CultureInfo.InvariantCulture);
                 return null;
             }
 
-            return new OptionsDef
+            error = string.Empty;
+            var def = new OptionsDef
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
-                ViewDistance = Read(root, "viewDistance", ValidViewDistances),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
                 CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
                 FlightTextBlock = ReadFlag(root, "flightTextBlock"),
@@ -466,9 +457,6 @@ public sealed class OptionsStore
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
                 VSync = Read(root, "vsync", ValidVSyncChoices),
-                RenderScale = Read(root, "renderScale", ValidRenderScales),
-                AntiAliasing = Read(root, "antiAliasing", ValidAntiAliasing),
-                ShadowQuality = Read(root, "shadowQuality", ValidShadowQualities),
                 AudioMaster = ReadLevel(root, "audioMaster"),
                 AudioMusic = ReadLevel(root, "audioMusic"),
                 AudioEffects = ReadLevel(root, "audioEffects"),
@@ -485,9 +473,16 @@ public sealed class OptionsStore
                 VrRenderScale = ReadShaped(root, "vrRenderScale", VrRenderScaleSetting.Lookup.IsWord),
                 VrVignette = ReadShaped(root, "vrVignette", VrVignetteSetting.Lookup.IsWord),
             };
+            foreach (var setting in WordSettings.All)
+            {
+                def.Words[setting] = ReadShaped(root, setting.SavedField, setting.IsWord);
+            }
+
+            return def;
         }
-        catch (JsonException)
+        catch (JsonException e)
         {
+            error = e.Message;
             return null;
         }
     }
@@ -528,22 +523,24 @@ public sealed class OptionsStore
     }
 
     /// <summary>The stored options, or an empty <see cref="OptionsDef"/> when the file is absent,
-    /// unreadable or malformed. A read failure is never the caller's problem to handle.</summary>
+    /// unreadable or malformed. A read failure is never the caller's problem to handle. A malformed
+    /// file is moved aside to <c>options.json.bad</c>. An unreadable one is not saved over this
+    /// session, as <see cref="AtomicFile"/> rules.</summary>
     public OptionsDef Load()
     {
-        try
-        {
-            var path = Path.Combine(_dir, FileName);
-            return File.Exists(path) ? Deserialize(File.ReadAllText(path)) ?? new OptionsDef() : new OptionsDef();
-        }
-        catch (IOException)
+        var path = Path.Combine(_dir, FileName);
+        if (AtomicFile.ReadAllText(path) is not { } text)
         {
             return new OptionsDef();
         }
-        catch (UnauthorizedAccessException)
+
+        if (Deserialize(text, out string error) is { } def)
         {
-            return new OptionsDef();
+            return def;
         }
+
+        AtomicFile.SetAside(path, error);
+        return new OptionsDef();
     }
 
     /// <summary>Writes <paramref name="def"/> atomically: the JSON lands in a sibling temp file
@@ -553,10 +550,7 @@ public sealed class OptionsStore
     public void Save(OptionsDef def)
     {
         Directory.CreateDirectory(_dir);
-        var path = Path.Combine(_dir, FileName);
-        var temp = Path.Combine(_dir, TempFileName);
-        File.WriteAllText(temp, Serialize(def), new UTF8Encoding(false));
-        File.Move(temp, path, overwrite: true);
+        AtomicFile.WriteAllText(Path.Combine(_dir, FileName), Serialize(def));
     }
 
     // A never-set field is written as an explicit null rather than left out, so the file names
@@ -645,9 +639,9 @@ public sealed class OptionsStore
             ? field.GetBoolean()
             : null;
 
-    // The shape-validated read, the same drop-an-unknown-value contract as the vocabulary read
-    // above with a predicate in place of the set: a resolution and a monitor index have no word
-    // list to belong to, so what stands in for membership is the canonical form parsing back.
+    // The predicate read, the same drop-an-unknown-value contract as the vocabulary read above with
+    // a predicate in place of the set. A resolution and a monitor index have no word list, so the
+    // canonical form parsing back stands in for membership. A registered word asks its own setting.
     private static string? ReadShaped(JsonElement root, string name, Func<string, bool> valid) =>
         root.TryGetProperty(name, out var field)
         && field.ValueKind == JsonValueKind.String

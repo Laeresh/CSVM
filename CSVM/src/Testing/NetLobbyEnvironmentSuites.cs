@@ -69,7 +69,7 @@ internal static class NetLobbyEnvironmentSuites
         var starts = Zeppelins.Load(missionZrdr).ToDictionary(z => z.Node, z => z.Position, StringComparer.OrdinalIgnoreCase);
 
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(9101));
-        var roster = NetCombatSuites.Roster(2).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
+        var roster = NetCombatSuites.Roster(2, spec).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try
@@ -181,7 +181,7 @@ internal static class NetLobbyEnvironmentSuites
         ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
 
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(9102));
-        var roster = NetCombatSuites.Roster(2);
+        var roster = NetCombatSuites.Roster(2, specs[0]);
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try

@@ -1,5 +1,6 @@
 using System.Globalization;
 using CSVM.Bindings;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Boards;
@@ -245,7 +246,7 @@ public sealed class PromptFontGlyphs : ControlGlyphSet
             }
             else
             {
-                GD.PushWarning($"control glyphs: {FontPath} not found, pad controls draw as lettered plaques");
+                Log.Warn("ui", $"control glyphs: {FontPath} not found, pad controls draw as lettered plaques");
             }
         }
 

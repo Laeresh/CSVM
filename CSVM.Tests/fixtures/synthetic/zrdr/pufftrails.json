@@ -1,0 +1,44 @@
+[
+  [
+    "ANIMATION_DEFINITIONS",
+    [
+      "ANIMATION_LIST",
+      [
+        "ANIMATION_DEFINITION",
+        [
+          "NAME", ["probe_trail_root"],
+          "ANIMATION_NAME", ["probe_dense_trail"],
+          "ACTIVATION", ["ON_CALL"],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_trail_on"],
+            "PUFFER_STATE",
+            [
+              "NAME", ["smokepuffer"],
+              "ACTIVE_STATE", ["ACTIVE"],
+              "AT_NODE", ["probe_trail_root"],
+              "DISTANCE_INTERVAL", [3],
+              "SIZE_RANGE", [1, 2.5],
+              "LIFETIME_RANGE", [2, 3.5],
+              "GROWTH_FACTOR", [3],
+              "DEVIATION_DISTANCE", [0.6],
+              "TEXTURES", ["smoke101", "smoke102", "smoke103"],
+              "COLORS", [[0, 200, 150, 110, 0.8], [0.5, 90, 84, 80, 0.6], [1, 40, 40, 40, 0]]
+            ],
+            "PUFFER_STATE",
+            [
+              "NAME", ["firepuffer"],
+              "ACTIVE_STATE", ["ACTIVE"],
+              "AT_NODE", ["probe_trail_root"],
+              "DISTANCE_INTERVAL", [0.8],
+              "SIZE_RANGE", [0.6, 1.4],
+              "LIFETIME_RANGE", [0.3, 0.6],
+              "DEVIATION_DISTANCE", [0.3],
+              "TEXTURES", ["smoke103"]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ]
+]

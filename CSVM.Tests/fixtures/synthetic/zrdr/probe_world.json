@@ -1,0 +1,52 @@
+[
+  [
+    "ANIMATION_DEFINITIONS",
+    [
+      "ANIMATION_LIST",
+      [
+        "ANIMATION_DEFINITION",
+        [
+          "NAME", ["probe_shed"],
+          "ACTIVATION", ["WEAPON_HIT"],
+          "HEALTH", [60],
+          "PERSIST_LOG", ["ON"],
+          "RESET_STATE",
+          [
+            "OBJECT_ACTIVE_STATE", ["NAME", ["healthy"], "STATE", ["ACTIVE"]],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["destroyed"], "STATE", ["INACTIVE"]]
+          ],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_shed_down"],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["healthy"], "STATE", ["INACTIVE"]],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["destroyed"], "STATE", ["ACTIVE"]]
+          ]
+        ],
+        "ANIMATION_DEFINITION",
+        [
+          "NAME", ["probe_tank"],
+          "ACTIVATION", ["WEAPON_OR_COLLIDE_HIT"],
+          "HEALTH", [90],
+          "PERSIST_LOG", ["ON"],
+          "RESET_STATE",
+          [
+            "OBJECT_ACTIVE_STATE", ["NAME", ["healthy"], "STATE", ["ACTIVE"]],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["destroyed"], "STATE", ["INACTIVE"]]
+          ],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_tank_down"],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["healthy"], "STATE", ["INACTIVE"]],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["destroyed"], "STATE", ["ACTIVE"]]
+          ],
+          "DAMAGE_SEQUENCE",
+          [
+            "IF", ["ANIM_HEALTH", [60]],
+            "OBJECT_ROTATE_STATE", ["NAME", ["healthy"], "STATE", [0, 0, 4]],
+            "ENDIF"
+          ]
+        ]
+      ]
+    ]
+  ]
+]

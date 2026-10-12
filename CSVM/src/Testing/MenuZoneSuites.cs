@@ -26,7 +26,6 @@ internal static class MenuZoneSuites
         + "under it is resized and the layout must follow with no press to prompt it")]
     internal static void MenuZoneLayout(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var view = new SubViewport
         {
             Size = SmallWindow,

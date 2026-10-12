@@ -479,7 +479,10 @@ member, and it does not go here.
   waits for the previous draw, so its wait reads as `proc_ms` or `phys_tick_ms`, and `draw_ms` is
   only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
   every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
-  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms. Two
+  draw-count getters per spyglass disc, read from the main thread, took a two-pane Enhanced C3
+  `--perf` frame on the author's PC from 8.3 to 17 ms (`proc_ms` 1.6 to 16); queued on the render
+  thread (`SpyglassView.Census`) they leave it at the run without `--perf`.
 - **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
   for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
   beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
@@ -574,16 +577,17 @@ member, and it does not go here.
   from run to run, so the same ordered suites failed 1 to 3 of 6 concurrent processes.
 - **LOG-27**, **A process that crashes after its report or shot (`0xC0000005`, `0xC000001D`, a
   `FATAL ... script_bindings` or `!rc_owner` line) died of a .NET finalizer racing Godot's
-  teardown, not of the work it reported.** A garbage collection still running at the quit, usually a
-  background one, finishes inside `CSharpLanguage::finalize` and queues Godot wrappers whose
-  `GodotObject.Finalize` then runs beside the engine freeing them (`GC.RunFinalizers` or
+  teardown, not of the work it reported.** A garbage collection during the quit, often a background
+  one still running at `_ExitTree`, queues Godot wrappers whose `GodotObject.Finalize` then runs
+  beside `CSharpLanguage::finalize` freeing the bindings (`GC.RunFinalizers` or
   `DisposablesTracker.OnGodotShuttingDown` on the crash stack). The tell is `Leaked unsafe reference`
-  lines in the `.err` file: they count the queued wrappers, and every crash had them. Neither the
-  render thread nor the XR code is the cause: shard 2 of the VR branch crashed 11 of 36 times on the
-  separate thread and 7 of 12 on `--render-thread safe`, and branches without XR code crashed the
-  same way. The rate rises with other Godots running and with the unreferenced wrappers a run
-  leaves; that shard without its five stereo suites crashed 0 of 12. `Launcher.SettleFinalizers` drains the queue and forbids collection for the rest of the
-  quit; a new exit path must run it too.
+  lines in the `.err` file, which count the queued wrappers; Godot prints them after the disposal
+  tracker, so a crash under the tracker shows none. The natural rate is low and rises with other
+  Godots running and with the unreferenced wrappers a run leaves, so prove a change on the quit path
+  under a forced race: 20000 dropped `RefCounted` wrappers and an allocating thread at `_ExitTree`,
+  with `DOTNET_GCgen0size=0x200000`, crashed a one-suite run after its report 12 times in 16;
+  with `Launcher.SettleFinalizers` it crashed 0 times in 16, and no collection ran after the
+  settle. A new exit path must run it too.
 
 ## WORLD, world data and runtime traps
 
@@ -707,6 +711,10 @@ member, and it does not go here.
   world: an empty list is a library root, which the world build never creates and no lookup finds.**
   C1's `cs_flg_light1`, the carried flag, answered neither `AnimRuntime.FindNodes` nor a name walk
   of the world root while `nodes.json` held it, and `SceneBuilder.BuildSubtree` built it.
+- **WORLD-51**, **A layering census over `nodes.json` counts geometry the session hides; before
+  reading "X lies under Y" as what draws, check it against a flat render with the suspect texture
+  overridden.** C3's survey put 9,500 cells of `p-1` cliff and sand tiles under a `p0` sea sheet
+  the flat render draws them over, and its `swtr01`-`05` sheets above the crater floor build hidden.
 
 ## SHELL, Windows, PowerShell, and processes
 
@@ -747,6 +755,12 @@ member, and it does not go here.
   every other worker idle. A killed hang also never saves the pipeline cache, so the same shots hang
   on the next run too. With the drain, the shots that hung showed 0.3 to 6.4 s of backlog at quit
   and exited; every other shot settles in about 1 ms.
+- **SHELL-22**, **A kill-on-close job object must not hold `dotnet build`'s children: the MSBuild
+  nodes and the compiler server it starts are shared with every other build on the machine, so let
+  them break away during a build and make a `dotnet test` run's nodes private
+  (`MSBUILDDISABLENODEREUSE=1`).** The job's close at the end of a run would otherwise kill a node
+  or the server under a sibling worktree's build. Never put the launching shell itself in such a
+  job either: a member cannot leave, so closing the job would kill the shell.
 
 ## INSTR, building instruments
 
@@ -1073,17 +1087,27 @@ member, and it does not go here.
   A Resource reached through a node's signal after its wrapper was collected reproduced the release
   check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
   either way.
-- **INSTR-100**, **Read Godot's global `ObjectCount` only after finalizer drains have stopped changing
-  it, never after a fixed number: one drain can leave objects that only the next one frees, and any
-  collection inside the measured span frees earlier suites' objects into it.**
-  `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
-  drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
-  during it.
-- **INSTR-101**, **A suite that can go red only in a process no earlier suite has touched (the first
-  TAA draw, a cold cache) passes its regression anywhere else in a shard: mark it
-  `FirstInProcess` so the harness runs it ahead of its shard's other suites.** With the rewrite's
-  keeper removed, `shader-twins-retext-owner` passed as suite 67 of its shard and failed once it
-  ran first there.
+- **INSTR-100**, **Prove that an operation frees what it made on those objects' own instance ids,
+  never on Godot's global `ObjectCount` read before and after: any collection inside the span frees
+  earlier suites' objects into it, and settling the finalizers does not stop other threads moving
+  the count.** Late in an engine shard, successive finalizer drains freed 308, then 84, then 0
+  objects, and one drain before a staged build still let 98 fall during it. Drains repeated until
+  the count held still left `scene-build-throw-frees` 2 objects short in about 5 % of shard runs
+  under six concurrent copies. Two objects released on a worker thread inside the span reproduce
+  that reading exactly, and do not move the instance-id check.
+- **INSTR-101**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
+  the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
+  bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.
+- **INSTR-102**, **A race with Godot's background work reproduces on demand only with its worker pool
+  held busy, and neither `RenderingServer.ForceSync()` nor a drawn frame waits for that pool: judge a
+  drain by a run whose pool sleeps through it, never by a quiet machine.** With 96 probe shaders
+  drawn and rewritten, an idle pool printed no free_rid line, and a pool held by sleeping tasks
+  printed 50 with no drain, 50 after a `ForceSync`, 50 after a drawn frame, and 0 through an
+  empty text in between.
+- **INSTR-103**, **Judge a free's saving over several rounds against a control that keeps the same
+  objects, never on the first drop, which returns only part.** 128 drawn shaders a round: the first
+  free returned 0.43 of 0.83 GB, later rounds held a 1.31 to 1.36 GB plateau, and the keeping control
+  grew 0.62 to 0.71 GB a round.
 
 ## SRC, sources and documents
 
@@ -1158,6 +1182,21 @@ randomness. Expect variation in flight framing, weather, water, particles, rando
 damage effects, and liveries. Measure a fresh same-build floor for the exact scenario.
 A stereo run is pinned only through `--xr-sim`, whose head pose comes from the flag; a headset's
 head pose is live input, so a capture from a real session is a sample, never a baseline.
+
+## Known environmental reds
+
+A battery red that matches an entry here comes from the machine, not the change, and has an open
+owner. Rerun it alone with the entry's command: red alone, it is the change's until it reproduces
+on the unchanged build (METHOD-8); green alone, the landing carries a `Waiver:` line naming that
+owner. An entry leaves when its owner closes. A `DEFERRED` result (`memory`, `rebuild`, `quiet`, `gaming mode`) is
+not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs/tooling.md`).
+
+- **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
+  or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
+  `.scratch\goldens-failures\<stamp>\`. Rerun the goldens once before re-pinning or waiving the
+  moved shot: `.\RunTests.ps1 -SkipUnits -SkipEngine`, which renders every shot, since the runner
+  has no single-shot selector. CPU load and other golden workers' GPU contention did not reproduce
+  the flips.
 
 ## The standing checklist
 

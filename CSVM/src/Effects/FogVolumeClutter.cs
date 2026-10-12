@@ -839,6 +839,7 @@ public sealed partial class FogVolumeClutter : Node3D
 
     private Shader CardShader(string code)
     {
+        ShaderCensus.Note(code);
         if (!_cardShaders.TryGetValue(code, out var shader))
         {
             _cardShaders[code] = shader = new Shader { Code = code };

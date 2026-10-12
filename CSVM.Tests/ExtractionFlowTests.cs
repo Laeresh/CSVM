@@ -167,13 +167,16 @@ public class ExtractionFlowTests
         var flow = Flow(root, runner, install, remembered.Add);
 
         flow.Extract();
+        Assert.False(runner.LastRequest!.Force);
         flow.Tick();
         Assert.Equal(ExtractionView.Failed, flow.View);
         Assert.Equal(new[] { "unzbd failed on c1/gamez.zbd" }, flow.Failures);
         Assert.Empty(remembered);
 
+        // The failed run's outputs are newer than their archives, so only a forced retry redoes them.
         runner.Fail = null;
         Assert.True(flow.Extract());
+        Assert.True(runner.LastRequest.Force);
         Assert.Empty(flow.Failures);
         flow.Tick();
         Assert.Equal(ExtractionView.Done, flow.View);
@@ -200,8 +203,14 @@ public class ExtractionFlowTests
         string root = TestData.TempDir();
         string install = Install(root);
         var remembered = new List<string>();
+        var forced = new List<bool>();
         var flow = new ExtractionFlow(DataProblem.Missing, root, "unzbd", install, (request, _, cancel) =>
         {
+            lock (forced)
+            {
+                forced.Add(request.Force);
+            }
+
             cancel.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
             cancel.ThrowIfCancellationRequested();
             return Succeeded(request);
@@ -215,6 +224,15 @@ public class ExtractionFlowTests
         Assert.Equal(ExtractionView.Asking, flow.View);
         Assert.Contains("cancelled", flow.Notice);
         Assert.Empty(remembered);
+
+        // The killed archive's output may be cut short, so extracting again from here is forced.
+        flow.Extract();
+        flow.Cancel();
+        WaitFor(flow, v => v != ExtractionView.Running);
+        lock (forced)
+        {
+            Assert.Equal(new[] { false, true }, forced);
+        }
     }
 
     [Fact]
@@ -240,8 +258,10 @@ public class ExtractionFlowTests
         flow.Extract();
         Assert.True(runner.LastRequest.Force);
         Assert.True(runner.LastRequest.Unzip);
+        flow.Tick();
 
-        // A missing tree is extracted with the player defaults whatever lies next to it.
+        // A missing tree is extracted with the player defaults whatever lies next to it, once no
+        // unfinished run is marked.
         var fresh = new FakeRunner();
         Flow(root, fresh, install).Extract();
         Assert.False(fresh.LastRequest!.Force);
@@ -285,13 +305,14 @@ public class ExtractionFlowTests
     private static ExtractionFlow Flow(string root, FakeRunner runner, string preFill, Action<string>? remember = null, DataProblem problem = DataProblem.Missing) =>
         new(problem, root, "unzbd", preFill, runner.Run, remember ?? (_ => { }), work => work());
 
-    // Enough of an install for InstallLocator.Check: ZBD with one archive, and GOSDATA/ASSETS.
+    // Enough of an install for InstallLocator.Check: ZBD with a root and a chapter archive, and GOSDATA/ASSETS.
     private static string Install(string root)
     {
         string install = Path.Combine(root, "Crimson Skies");
-        Directory.CreateDirectory(Path.Combine(install, "ZBD"));
+        Directory.CreateDirectory(Path.Combine(install, "ZBD", "C1"));
         Directory.CreateDirectory(Path.Combine(install, "GOSDATA", "ASSETS"));
         File.WriteAllText(Path.Combine(install, "ZBD", "planes.zbd"), "x");
+        File.WriteAllText(Path.Combine(install, "ZBD", "C1", "gamez.zbd"), "x");
         return install;
     }
 

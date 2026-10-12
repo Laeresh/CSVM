@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// them. Godot compiles each <see cref="Shader"/> object on its own, so two cache keys whose texts
 /// agree share one. A material keeps the key it was made for. A live switch moves it onto that key's
 /// shader for the other mode, and no text changes (<see cref="Regenerate"/>).
-/// Main thread only, process-lifetime, like the caches.
+/// Main thread only, process-lifetime in the game, like the caches.
 /// </summary>
 internal static class ShaderTwins
 {
@@ -23,27 +23,44 @@ internal static class ShaderTwins
     private static readonly Dictionary<Shader, string> FamilyByShader = new(ReferenceEqualityComparer.Instance);
     private static readonly List<ModeShader> All = new();
 
-    // Every material a cache shader was handed to, with the key it wears and whether it wears the
-    // fade copy. Held until a later session finds nothing else holds it (ReleaseUnused).
+    // Every material a cache shader was handed to, with its key, whether it wears the fade copy,
+    // and its test world (BuildingWorld). Held until a later session finds nothing else holds it
+    // (ReleaseUnused), or until the harness destroys its world (Untrack).
     // ⚠ Hold the wrapper; never a WeakReference or an instance id. Godot remakes a material's C#
     // wrapper while the material lives. A weak one loses materials still drawing, and a wrapper
     // remade from an id can release its material twice at exit.
-    private static readonly Dictionary<ShaderMaterial, (ModeShader Twins, bool Fade)> Tracked =
+    private static readonly Dictionary<ShaderMaterial, (ModeShader Twins, bool Fade, object? World)> Tracked =
         new(ReferenceEqualityComparer.Instance);
 
-    // One material on each shader rewritten in place, held for the process. A rewrite recompiles
-    // only when a material on that shader next updates (Keep). docs/verification.md LOG-26.
-    private static readonly List<ShaderMaterial> Keepers = new();
+    // Each shader RetextInPlace rewrote, worn by a material of its own until two frames have drawn.
+    // ⚠ Keep a rewritten shader pinned until then. Godot recompiles new text only on a wearer's
+    // material update, and the first TAA frame's advanced-variant build (ShaderRD::enable_group)
+    // clears that pending recompile. An unworn shader would keep its old code for good.
+    private static readonly List<ShaderMaterial> Pins = new();
 
     // The mode the tracked materials last followed, null before the first.
     private static bool? _textEnhanced;
+
+    // Engine.GetFramesDrawn when the last pin went on.
+    private static int _pinnedAt;
 
     /// <summary>Gets or sets a value indicating whether an Enhanced frame has drawn in this process.
     /// That is when Godot builds the advanced shader variants its passes need.</summary>
     public static bool EnhancedDrawn { get; set; }
 
+    /// <summary>Gets or sets the test world being built, which each material first tracked meanwhile
+    /// belongs to, with every copy and fade copy of it. Null outside a test harness's world build.</summary>
+    public static object? BuildingWorld { get; set; }
+
     /// <summary>Gets how many shaders have been made in this process, one per text.</summary>
     public static int Made { get; private set; }
+
+    /// <summary>Gets how many shaders the cache holds now, which <see cref="ReleaseUnworn"/> lowers.
+    /// For an instrument.</summary>
+    public static int Live => ByText.Count;
+
+    /// <summary>Gets how many materials follow a key. For an instrument.</summary>
+    public static int TrackedCount => Tracked.Count;
 
     /// <summary>Gets how many times a text was asked for again and found made, each a compile saved.</summary>
     public static int Reused { get; private set; }
@@ -68,12 +85,8 @@ internal static class ShaderTwins
     /// <summary>Puts <paramref name="twins"/>' standing shader, or its fade copy, on
     /// <paramref name="material"/> and keeps the material on that key across a switch. Every
     /// material a cache shader goes on passes here, and so does one moved to another key.</summary>
-    public static ShaderMaterial Follow(ShaderMaterial material, ModeShader twins, bool fade = false)
-    {
-        material.Shader = fade ? twins.FadeFor(GraphicsMode.Enhanced) : twins.Current;
-        Tracked[material] = (twins, fade);
-        return material;
-    }
+    public static ShaderMaterial Follow(ShaderMaterial material, ModeShader twins, bool fade = false) =>
+        Follow(material, twins, fade, Tracked.TryGetValue(material, out var known) ? known.World : BuildingWorld);
 
     /// <summary>A copy of <paramref name="source"/> that follows the same key, for a caller that
     /// needs its own material (the cockpit gauges' cells).</summary>
@@ -96,7 +109,7 @@ internal static class ShaderTwins
             return null;
         var copy = (ShaderMaterial)source.Duplicate();
         if (Tracked.TryGetValue(source, out var follow) && !follow.Fade)
-            return Follow(copy, follow.Twins, fade: true);
+            return Follow(copy, follow.Twins, fade: true, follow.World);
         copy.Shader = Pooled(code, FadeFamily);
         return copy;
     }
@@ -104,10 +117,12 @@ internal static class ShaderTwins
     /// <summary>Moves every tracked material onto its key's shader for the current
     /// <see cref="GraphicsMode.Enhanced"/>, making a shader not made yet. No shader's text changes,
     /// so nothing Godot compiled is thrown away. The exception is a first switch to Enhanced before
-    /// an Enhanced frame has drawn, which rewrites in place (<see cref="EnhancedDrawn"/>).</summary>
+    /// an Enhanced frame has drawn, which rewrites in place (<see cref="EnhancedDrawn"/>). It pins
+    /// each rewritten shader until Godot has recompiled it.</summary>
     public static RegenerateStats Regenerate()
     {
         _textEnhanced = GraphicsMode.Enhanced;
+        ReleasePins();
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
         int made = Made;
         int retexted = 0;
@@ -162,17 +177,56 @@ internal static class ShaderTwins
     }
 
     /// <summary>Drops every tracked material nothing but this table holds any more. A new session
-    /// calls it before it builds, when the last one's world is gone. ⚠ Never during a build or a
+    /// calls it before it builds, when the last one's world is gone. A standing test world's materials
+    /// stay, since its unworn fade copies are held only from C#. ⚠ Never during a build or a
     /// switch: a builder makes its materials before it puts them on meshes.</summary>
     public static void ReleaseUnused()
     {
-        var unused = Tracked.Keys.Where(m => !GodotObject.IsInstanceValid(m) || m.GetReferenceCount() <= 1).ToList();
+        var unused = Tracked.Where(kv => !GodotObject.IsInstanceValid(kv.Key)
+            || (kv.Value.World == null && kv.Key.GetReferenceCount() <= 1)).Select(kv => kv.Key).ToList();
         foreach (var material in unused)
+            Tracked.Remove(material);
+        ReleasePins();
+    }
+
+    /// <summary>Drops every shader no material wears, and the collector then frees its variants. A key
+    /// whose shader went makes it again on next use. Returns how many went. ⚠ Test harness only,
+    /// between suites: the game keeps every shader to spare a compile. The other mode's warmed twins
+    /// go too, so a suite that needs them warm warms them itself. Safe with compiles still queued,
+    /// since Godot's free of a drawn shader waits for them (analysis/shard-memory/FINDINGS.md).</summary>
+    public static int ReleaseUnworn()
+    {
+        // A build holds a shader before any material wears it, so it would read as unworn.
+        if (BuildingWorld != null)
+            return 0;
+        var unworn = ByText.Where(kv => Unworn(kv.Value)).ToList();
+        if (unworn.Count == 0)
+            return 0;
+        var gone = new HashSet<Shader>(unworn.Select(kv => kv.Value), ReferenceEqualityComparer.Instance);
+        foreach (var twins in All)
+            twins.Drop(gone);
+        foreach (var (text, shader) in unworn)
+        {
+            ByText.Remove(text);
+            FamilyByShader.Remove(shader);
+        }
+        return unworn.Count;
+    }
+
+    /// <summary>Stops tracking every material of <paramref name="world"/>, for a test harness that
+    /// has destroyed it. ⚠ Only once the world is gone: an untracked material no switch moves.</summary>
+    public static void Untrack(object world)
+    {
+        var gone = Tracked.Where(kv => ReferenceEquals(kv.Value.World, world)).Select(kv => kv.Key).ToList();
+        foreach (var material in gone)
             Tracked.Remove(material);
     }
 
     /// <summary>Whether some key holds <paramref name="shader"/>. For a suite.</summary>
     public static bool IsKeyShader(Shader? shader) => shader != null && All.Any(t => t.Slots().Contains(shader));
+
+    /// <summary>Whether a rewritten <paramref name="shader"/> is still worn by its pin. For a suite.</summary>
+    public static bool IsPinned(Shader shader) => Pins.Any(p => ReferenceEquals(p.Shader, shader));
 
     /// <summary>Whether <paramref name="material"/> follows a key. For a suite.</summary>
     public static bool IsTracked(ShaderMaterial material) => Tracked.ContainsKey(material);
@@ -207,6 +261,7 @@ internal static class ShaderTwins
     /// shader whose text no mode moves, which a caller would otherwise make once per instance.</summary>
     internal static Shader Pooled(string text, string family)
     {
+        ShaderCensus.Note(text);
         if (ByText.TryGetValue(text, out var known))
         {
             Reused++;
@@ -217,6 +272,18 @@ internal static class ShaderTwins
         FamilyByShader[shader] = family;
         Made++;
         return shader;
+    }
+
+    /// <summary>Gives a live <paramref name="shader"/> new <paramref name="text"/>. ⚠ Never assign
+    /// <c>Code</c> of a shader that has drawn. Godot marks its version dirty before it waits for the
+    /// pipeline compiles still queued. Each such compile then rebuilds the version on a worker thread,
+    /// whose free_rid calls fail. An empty text in between, of no shader type, deletes the shader's
+    /// data, which waits for those compiles first. The object, its wearers and their parameters stay.</summary>
+    internal static void Rewrite(Shader shader, string text)
+    {
+        ShaderCensus.Note(text);
+        shader.Code = "";
+        shader.Code = text;
     }
 
     // A fade copy's text off its source's: the source with an ALPHA line before its closing brace.
@@ -260,9 +327,9 @@ internal static class ShaderTwins
                 if (free && !rewritten && !ByText.ContainsKey(text))
                 {
                     ByText.Remove(from.Code);
-                    Keep(from);
-                    from.Code = text;
+                    Rewrite(from, text);
                     ByText[text] = from;
+                    Pin(from);
                     TextRewrites++;
                     rewrote++;
                     rewritten = true;
@@ -283,15 +350,35 @@ internal static class ShaderTwins
         return rewrote;
     }
 
-    // Puts a material on a shader about to be rewritten, so the rewrite has an owner to recompile
-    // it. ⚠ Do not drop it. With no owner, the first advanced-variant draw marks the shader built
-    // from its old text, and later materials then fail to bind their uniforms.
-    private static void Keep(Shader shader)
+    // No material wears it: the cache's own wrapper holds its one reference.
+    private static bool Unworn(Shader shader) => shader.GetReferenceCount() <= 1;
+
+    private static ShaderMaterial Follow(ShaderMaterial material, ModeShader twins, bool fade, object? world)
     {
-        var keeper = new ShaderMaterial { Shader = shader };
-        // The RID is made on first ask; asking now makes the owner before the new text lands.
-        keeper.GetRid();
-        Keepers.Add(keeper);
+        material.Shader = fade ? twins.FadeFor(GraphicsMode.Enhanced) : twins.Current;
+        Tracked[material] = (twins, fade, world);
+        return material;
+    }
+
+    // Puts a rewritten shader on a material of its own. Asking for the RID makes the server material,
+    // whose queued update recompiles the shader before the next frame draws a viewport.
+    private static void Pin(Shader shader)
+    {
+        var pin = new ShaderMaterial { Shader = shader };
+        pin.GetRid();
+        Pins.Add(pin);
+        _pinnedAt = Engine.GetFramesDrawn();
+    }
+
+    // Drops the pins once two frames have drawn since the last went on. The first draw carries the
+    // update that recompiles them, and the second is margin, so no free reaches the render thread first.
+    private static void ReleasePins()
+    {
+        if (Pins.Count == 0 || Engine.GetFramesDrawn() < _pinnedAt + 2)
+            return;
+        foreach (var pin in Pins)
+            pin.Dispose();
+        Pins.Clear();
     }
 
     /// <summary>What one <see cref="Regenerate"/> did. It names the keys, the tracked materials and
@@ -367,6 +454,16 @@ internal sealed class ModeShader
             _enhanced = null;
         else
             _original = null;
+    }
+
+    // Forgets each slot holding one of gone, which its next use makes again.
+    internal void Drop(HashSet<Shader> gone)
+    {
+        Shader? Keep(Shader? slot) => slot != null && gone.Contains(slot) ? null : slot;
+        _original = Keep(_original);
+        _enhanced = Keep(_enhanced);
+        _fadeOriginal = Keep(_fadeOriginal);
+        _fadeEnhanced = Keep(_fadeEnhanced);
     }
 
     // Every shader it holds: each mode's, then each mode's fade copy.

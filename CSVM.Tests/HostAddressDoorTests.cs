@@ -24,16 +24,16 @@ public class HostAddressDoorTests
         var door = Door(() => Stable, () => Lan, copied.Add);
         door.OpenHost(7);
 
-        Assert.Equal(Stable, door.HostIpv6);
-        Assert.Equal(Lan, door.HostLanIpv4);
-        Assert.Equal(Stable, door.GuestAddress);
+        Assert.Equal(Stable, door.Reach.HostIpv6);
+        Assert.Equal(Lan, door.Reach.HostLanIpv4);
+        Assert.Equal(Stable, door.Reach.GuestAddress);
         Assert.Equal($"IPv6  {Stable}  {CoopDoorText.CopyPress}", CoopDoorText.HostAddressLine(door));
         Assert.Equal($"Guests type {Stable}, or {Lan} on this network. {CoopDoorText.CopyPress} copies {Stable}.",
             CoopDoorText.HostAddressStatus(door));
 
-        Assert.True(door.CopyGuestAddress());
+        Assert.True(door.Reach.CopyGuestAddress());
         Assert.Equal(new[] { Stable }, copied);
-        Assert.Equal(1, door.Copies);
+        Assert.Equal(1, door.Reach.Copies);
         Assert.Equal($"IPv6  {Stable}  copied", CoopDoorText.HostAddressLine(door));
         Assert.EndsWith($"{Stable} is copied.", CoopDoorText.HostAddressStatus(door), StringComparison.Ordinal);
     }
@@ -47,10 +47,10 @@ public class HostAddressDoorTests
         door.OpenHost(7);
         int port = NetPlayFeature.DefaultPort + 3;
 
-        Assert.Equal($"[{Stable}]:{port}", door.GuestAddress);
+        Assert.Equal($"[{Stable}]:{port}", door.Reach.GuestAddress);
         Assert.Contains($"[{Stable}]:{port}", CoopDoorText.HostAddressLine(door), StringComparison.Ordinal);
         Assert.Contains($"or {Lan}:{port} on this network", CoopDoorText.HostAddressStatus(door), StringComparison.Ordinal);
-        Assert.True(door.CopyGuestAddress());
+        Assert.True(door.Reach.CopyGuestAddress());
         Assert.Equal(new[] { $"[{Stable}]:{port}" }, copied);
     }
 
@@ -61,8 +61,8 @@ public class HostAddressDoorTests
         var door = Door(() => null, () => Lan, copied.Add);
         door.OpenHost(7);
 
-        Assert.Null(door.HostIpv6);
-        Assert.Equal(Lan, door.GuestAddress);
+        Assert.Null(door.Reach.HostIpv6);
+        Assert.Equal(Lan, door.Reach.GuestAddress);
         Assert.Equal($"{CoopDoorText.NoIpv6}  LAN {Lan}  {CoopDoorText.CopyPress}", CoopDoorText.HostAddressLine(door));
         Assert.StartsWith($"This machine has no global IPv6 address; guests on this network type {Lan}.",
             CoopDoorText.HostAddressStatus(door), StringComparison.Ordinal);
@@ -70,12 +70,12 @@ public class HostAddressDoorTests
         // ABLE-TO-FAIL CONTROL: with neither address there is nothing to copy, and the line says so.
         var bare = Door(() => null, () => null, copied.Add);
         bare.OpenHost(7);
-        Assert.Equal("", bare.GuestAddress);
-        Assert.False(bare.CopyGuestAddress());
+        Assert.Equal("", bare.Reach.GuestAddress);
+        Assert.False(bare.Reach.CopyGuestAddress());
         Assert.Equal(CoopDoorText.NoIpv6, CoopDoorText.HostAddressLine(bare));
         Assert.Empty(copied);
 
-        Assert.True(door.CopyGuestAddress());
+        Assert.True(door.Reach.CopyGuestAddress());
         Assert.Equal(new[] { Lan }, copied);
     }
 
@@ -87,12 +87,12 @@ public class HostAddressDoorTests
         door.OpenHost(7);
         WaitForMapping(door);
         // A mapping's external port can differ from the local one, so it is always written out.
-        Assert.Equal($"203.0.113.9:{NetPlayFeature.DefaultPort}", door.GuestAddress);
+        Assert.Equal($"203.0.113.9:{NetPlayFeature.DefaultPort}", door.Reach.GuestAddress);
 
         var both = Door(() => Stable, () => Lan, _ => { }, mapped);
         both.OpenHost(7);
         WaitForMapping(both);
-        Assert.Equal(Stable, both.GuestAddress);
+        Assert.Equal(Stable, both.Reach.GuestAddress);
     }
 
     [Fact]
@@ -120,18 +120,18 @@ public class HostAddressDoorTests
         var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
         door.OpenHost(7);
 
-        Assert.False(door.NamesHostAddress);
+        Assert.False(door.Reach.NamesHostAddress);
         Assert.Equal("", CoopDoorText.HostAddressLine(door));
         Assert.Equal("", CoopDoorText.HostAddressStatus(door));
         Assert.Empty(CoopDoorText.HostLobbyLines(door));
-        Assert.False(door.CopyGuestAddress());
+        Assert.False(door.Reach.CopyGuestAddress());
 
         // ABLE-TO-FAIL CONTROL: an address seam with no clipboard names the address but copies nothing.
         var named = Door(() => Stable, () => Lan, null);
         named.OpenHost(7);
         Assert.NotEqual("", CoopDoorText.HostAddressLine(named));
-        Assert.False(named.CopyGuestAddress());
-        Assert.Equal(0, named.Copies);
+        Assert.False(named.Reach.CopyGuestAddress());
+        Assert.Equal(0, named.Reach.Copies);
     }
 
     [Fact]
@@ -140,17 +140,17 @@ public class HostAddressDoorTests
         string? now = Stable;
         var door = Door(() => now, () => Lan, _ => { });
         door.OpenHost(7);
-        Assert.True(door.CopyGuestAddress());
+        Assert.True(door.Reach.CopyGuestAddress());
         door.Close();
 
-        Assert.Null(door.HostIpv6);
-        Assert.Equal("", door.GuestAddress);
+        Assert.Null(door.Reach.HostIpv6);
+        Assert.Equal("", door.Reach.GuestAddress);
         Assert.Equal("", CoopDoorText.HostAddressLine(door));
 
         now = null;
         door.OpenHost(7);
-        Assert.Null(door.HostIpv6);
-        Assert.Equal(0, door.Copies);
+        Assert.Null(door.Reach.HostIpv6);
+        Assert.Equal(0, door.Reach.Copies);
     }
 
     [Fact]
@@ -195,9 +195,7 @@ public class HostAddressDoorTests
             (_, _) => mesh[0],
             new RouterAccess(mapper, map is null ? null : _ => { }))
         {
-            StableIpv6 = ipv6,
-            LanIpv4 = lan,
-            CopyText = copy,
+            Reach = { StableIpv6 = ipv6, LanIpv4 = lan, CopyText = copy },
         };
     }
 
@@ -208,8 +206,7 @@ public class HostAddressDoorTests
         var router = new RouterAccess(openPinhole: port => pinhole with { Port = port }, closePinhole: _ => { });
         var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0], router)
         {
-            StableIpv6 = ipv6,
-            LanIpv4 = () => Lan,
+            Reach = { StableIpv6 = ipv6, LanIpv4 = () => Lan },
         };
         door.OpenHost(7);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);

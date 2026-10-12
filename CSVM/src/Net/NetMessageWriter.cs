@@ -140,7 +140,8 @@ public ref struct NetMessageReader
     /// <summary>The total length the header declares, the header included.</summary>
     public int Length { get; }
 
-    /// <summary>Whether the buffer holds a header and at least as many bytes as it declares.</summary>
+    /// <summary>Whether the buffer holds a header and at least as many bytes as it declares, and
+    /// every float read so far was finite. A deserialiser that reads a float returns this.</summary>
     public bool Valid { get; private set; }
 
     /// <summary>How many bytes stand read, the header included.</summary>
@@ -196,11 +197,13 @@ public ref struct NetMessageReader
         return value;
     }
 
-    /// <summary>Reads one 32-bit float.</summary>
+    /// <summary>Reads one 32-bit float. A NaN or an infinity clears <see cref="Valid"/>, since no
+    /// field carries one. The clock slew, the pose reset and the damage path all fail on it.</summary>
     public float ReadSingle()
     {
         float value = BinaryPrimitives.ReadSingleLittleEndian(_buffer[_at..]);
         _at += 4;
+        Valid = Valid && float.IsFinite(value);
         return value;
     }
 

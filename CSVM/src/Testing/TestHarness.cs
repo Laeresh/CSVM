@@ -46,6 +46,11 @@ public static class TestHarness
     /// verdict names the root. Measurement: docs/verification.md INSTR-96.</summary>
     public const int OrphanLeakTolerance = 0;
 
+    /// <summary>How far Godot's static allocations may grow over one suite, in bytes, before the
+    /// harness collects and finalizes at its end. A session build moves it by hundreds of MB, a
+    /// world-free suite by none. Measurement: analysis/shard-memory/FINDINGS.md.</summary>
+    public const double CollectAfterStaticGrowth = 32 * 1024 * 1024;
+
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
     /// the cap does the rest.</summary>
@@ -85,22 +90,34 @@ public static class TestHarness
 
     /// <summary>Runs the suites <paramref name="filter"/> selects (empty = all), prints the table,
     /// writes <c>.scratch/test-report.json</c>, and returns the process exit code: 0 when nothing
-    /// failed, 1 otherwise. A skipped suite is not a failure; a selector term that matched nothing
-    /// is, and nothing runs in that case.</summary>
+    /// failed, 1 otherwise. A skipped suite is a failure only when <see cref="SkipFailures"/> names
+    /// it. A selector term that matched nothing is a failure, and nothing runs in that case.</summary>
     public static int Run(TestContext ctx, string filter)
     {
         // Numbers in a committed report must read the same on every machine.
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        var shard = SuiteShards.Parse(filter, out string terms, out string? shardError);
-        if (shardError != null)
+        var shard = SuiteShards.Parse(filter, out string unsharded, out string? shardError);
+        var render = SuiteRender.Parse(unsharded, out string terms, out string? renderError);
+        if ((shardError ?? renderError) is { } termError)
         {
-            Log.Error("test", $"run-tests {shardError}");
+            Log.Error("test", $"run-tests {termError}");
+            return 1;
+        }
+        var limits = SuiteRender.Load(Path.Combine(ctx.RepoRoot, "analysis", "headless-limits.json"));
+        if (render != null && limits == null)
+        {
+            Log.Error("test", $"run-tests cannot place suites for '{filter}': analysis/headless-limits.json is missing or unreadable");
             return 1;
         }
         var selected = Select(All, terms, out var unmatched);
+        var skipFails = SkipFailures(terms);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
+        if (ctx.SyntheticData)
+        {
+            Log.Warn("test", $"run-tests reads SYNTHETIC data dataRoot={ctx.DataRoot}: a PASS here proves a code path on invented records, never the game's data");
+        }
         if (unmatched.Count > 0)
         {
             Log.Error("test", $"run-tests selector matched nothing: {string.Join(", ", unmatched)}; registered: {string.Join(", ", All.Select(s => s.Name))}");
@@ -112,10 +129,14 @@ public static class TestHarness
             return 1;
         }
 
-        // Sharding narrows an already-valid selection, so it runs AFTER the miss checks above: an
-        // empty shard is a legitimate division of a small set, an empty selector is a typo.
-        var plan = PlanShard(ctx, shard, ref selected);
-        selected = FirstInProcessFirst(selected);
+        // Sharding and the render split narrow an already-valid selection, so they run AFTER the miss
+        // checks above. An empty shard is a legitimate division of a small set, an empty selector a typo.
+        int selectedTotal = selected.Count;
+        if (render != null)
+        {
+            selected = selected.Where(s => render.Contains(SuiteRender.KindOf(s.Name, limits!))).ToList();
+        }
+        var plan = PlanShard(ctx, shard, render, selectedTotal, ref selected);
         var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < All.Count; i++)
         {
@@ -126,6 +147,10 @@ public static class TestHarness
         double totalBuildSeconds = 0, totalDisposalSeconds = 0, totalRestSeconds = 0, totalOverrunSeconds = 0;
         int totalWorldsBuilt = 0;
         var runGate = ctx.AuditFinalizersAcrossRun ? FinalizerGate.Hold() : null;
+        if (ctx.DebugMem)
+        {
+            Log.Info("test", $"mem after=0/{selected.Count} suite=- {MemoryCensus.Line(ShaderTwins.Made)} live={ShaderTwins.Live} tracked={ShaderTwins.TrackedCount}");
+        }
         foreach (var suite in selected)
         {
             ctx.Failures.Clear();
@@ -139,6 +164,9 @@ public static class TestHarness
             // ⚠ Never nest a suite gate inside the run gate. Its opening drain waits on the finalizer
             // thread the run gate holds, and the process hangs.
             var gate = ctx.AuditFinalizers && runGate == null ? FinalizerGate.Hold() : null;
+            double staticAtStart = Performance.GetMonitor(Performance.Monitor.MemoryStatic);
+            int madeAtStart = ShaderTwins.Made;
+            ShaderCensus.Begin();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -166,6 +194,28 @@ public static class TestHarness
                 // watch, so the disposal is charged to the suite that built the world.
                 ctx.EvictCollidableWorlds();
                 ctx.FreeQueuedNodes();
+                // A dead wrapper holds its Godot object until finalized, so sessions ride into the
+                // next suite. A collection costs 0.1 to 0.6 s, so only after Godot's heap grew or a
+                // drawing process made a shader.
+                bool draws = RenderingServer.GetRenderingDevice() != null;
+                // ⚠ Never under a finalizer gate: its parked thread never finishes the wait.
+                if (gate == null && runGate == null
+                    && (Performance.GetMonitor(Performance.Monitor.MemoryStatic) - staticAtStart > CollectAfterStaticGrowth
+                        || (draws && ShaderTwins.Made > madeAtStart)))
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    // An unworn shader holds its compiled variants until finalized; a headless process builds
+                    // none. No worker-pool drain: freeing a drawn shader waits for its queued pipeline
+                    // compiles (analysis/shard-memory/FINDINGS.md). The sync lands the suite's last draws first.
+                    if (draws)
+                        RenderingServer.ForceSync();
+                    if (draws && ShaderTwins.ReleaseUnworn() > 0)
+                    {
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                    }
+                }
                 // A suite ticking two weather rigs in different zones leaves the fog table
                 // published, and the next suite's render would search those freed cameras.
                 Session.World.FogViewTable.Clear();
@@ -179,6 +229,15 @@ public static class TestHarness
                 string leak = $"left {orphansLeft} orphan node(s) past its teardown, over the tolerance of {OrphanLeakTolerance}: {orphanRoots}";
                 ctx.Failures.Add(leak);
                 Log.Error("test", $"FAIL {leak}");
+                status = SuiteStatus.Fail;
+            }
+            // After the orphan check, which a skipped body is exempt from. The row keeps the skip
+            // reason as its detail, so the report names the input that went missing.
+            if (status == SuiteStatus.Skip && skipFails.TryGetValue(suite.Name, out string? refusing))
+            {
+                string refused = $"skipped, and {refusing} counts a skip as a failure: {detail}";
+                ctx.Failures.Add(refused);
+                Log.Error("test", $"FAIL {suite.Name} {refused}");
                 status = SuiteStatus.Fail;
             }
             double wallSeconds = watch.Elapsed.TotalSeconds;
@@ -206,6 +265,7 @@ public static class TestHarness
                 RestSeconds = restSeconds,
                 OverrunSeconds = overrunSeconds,
                 OrphansLeft = orphansLeft,
+                ShaderTexts = ShaderCensus.Take(),
             });
             totals += ctx.WorldBuildPhases;
             totalBuildSeconds += buildSeconds;
@@ -228,6 +288,10 @@ public static class TestHarness
             // in the run that brings it in.
             string orphanSuffix = orphansLeft != 0 ? $" orphans_left={orphansLeft} [{orphanRoots}]" : "";
             Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
+            if (ctx.DebugMem)
+            {
+                Log.Info("test", $"mem after={results.Count}/{selected.Count} suite={suite.Name} {MemoryCensus.Line(ShaderTwins.Made)} live={ShaderTwins.Live} tracked={ShaderTwins.TrackedCount}");
+            }
             if (gate != null)
             {
                 int handleErrors = gate.ReleaseAndDrain();
@@ -252,7 +316,10 @@ public static class TestHarness
         var (decodeHits, decodeMisses) = ctx.DecodeCounts;
         Log.Info("test", $"{totalsLine} decode_hits={decodeHits} decode_misses={decodeMisses}");
 
-        var screen = ScreenEngineLog(out string? logPath);
+        // A headless process also excuses the lines only headless prints; a windowed one never does.
+        var allowances = DisplayServer.GetName() == "headless" && limits != null
+            ? ErrorAllowlist.Concat(limits.EngineErrors).ToList() : ErrorAllowlist;
+        var screen = ScreenEngineLog(allowances, out string? logPath);
         int pass = results.Count(r => r.Status == SuiteStatus.Pass);
         int fail = results.Count(r => r.Status == SuiteStatus.Fail);
         int skip = results.Count(r => r.Status == SuiteStatus.Skip);
@@ -265,7 +332,7 @@ public static class TestHarness
         Log.Raw(FormatTable(results, screen, logPath));
         WriteReport(ctx, results, screen, logPath, phaseTotals, filter, plan);
         string errors = screen == null ? "unscreened" : screen.Ok ? "clean" : "UNEXPECTED";
-        Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}");
+        Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}{(ctx.SyntheticData ? " data=SYNTHETIC" : "")}");
         return fail > 0 || screenFailed ? 1 : 0;
     }
 
@@ -306,36 +373,61 @@ public static class TestHarness
         return suites.Where(s => wanted.Contains(s.Name)).ToList();
     }
 
-    /// <summary><paramref name="suites"/> in the order one process runs them: every suite marked
-    /// <see cref="SuiteAttribute.FirstInProcess"/> first, then the rest, each keeping its order. A
-    /// shard runs its share this way too, so such a suite is red in the battery as it is alone. Pure.</summary>
-    public static IReadOnlyList<Suite> FirstInProcessFirst(IReadOnlyList<Suite> suites) =>
-        suites.Where(s => s.FirstInProcess).Concat(suites.Where(s => !s.FirstInProcess)).ToList();
+    /// <summary>The suites whose SKIP fails a run of <paramref name="spec"/>, each mapped to the
+    /// <c>tier:</c> term that refuses it. They are the members of every named tier carrying
+    /// <see cref="SuiteTier.SkipFails"/>. A suite reached only by another term keeps SKIP as a
+    /// non-failure. Pure, like <see cref="Select"/>.</summary>
+    public static IReadOnlyDictionary<string, string> SkipFailures(string spec)
+    {
+        const string tier = "tier:";
+        var refused = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string raw in spec.Split(','))
+        {
+            string term = raw.Trim();
+            if (!term.StartsWith(tier, StringComparison.OrdinalIgnoreCase)
+                || SuiteCatalog.Tier(term[tier.Length..]) is not { SkipFails: true } named)
+            {
+                continue;
+            }
+            foreach (string name in named.Suites)
+            {
+                refused.TryAdd(name, term);
+            }
+        }
+        return refused;
+    }
 
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
     /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure, no
     /// Godot API, no file access, so it is unit-testable outside the engine.</summary>
-    public static StderrScreen Screen(IEnumerable<string> lines)
+    public static StderrScreen Screen(IEnumerable<string> lines) => Screen(lines, ErrorAllowlist);
+
+    /// <summary>The same against <paramref name="allowlist"/>, for a run whose lines differ.</summary>
+    public static StderrScreen Screen(IEnumerable<string> lines, IReadOnlyList<ErrorAllowance> allowlist)
     {
         var counts = new Dictionary<string, int>();
         var unexpected = new List<string>();
         int total = 0, allowed = 0;
-        string? pending = null;   // the previous error line, so its "   at: …" location joins it
-        foreach (string line in lines)
+        var all = lines as IReadOnlyList<string> ?? lines.ToList();
+        for (int i = 0; i < all.Count; i++)
         {
-            if (pending != null && line.StartsWith("   at: ", StringComparison.Ordinal))
-            {
-                unexpected[^1] = $"{pending} {line.Trim()}";
-                pending = null;
-                continue;
-            }
-            pending = null;
-            if (!EngineError.IsMatch(line))
+            if (!EngineError.IsMatch(all[i]))
             {
                 continue;
             }
             total++;
-            var match = ErrorAllowlist.FirstOrDefault(a => Regex.IsMatch(line, a.Pattern));
+            // Its "   at: …" location joins it before matching, since a pattern may name the source.
+            // A render-thread error can land a main-thread line between the two, so look a little on.
+            string line = all[i];
+            for (int j = i + 1; j < Math.Min(all.Count, i + 4) && !EngineError.IsMatch(all[j]); j++)
+            {
+                if (all[j].StartsWith("   at: ", StringComparison.Ordinal))
+                {
+                    line = $"{all[i]} {all[j].Trim()}";
+                    break;
+                }
+            }
+            var match = allowlist.FirstOrDefault(a => Regex.IsMatch(line, a.Pattern));
             if (match != null)
             {
                 counts.TryGetValue(match.Pattern, out int n);
@@ -344,10 +436,9 @@ public static class TestHarness
                 continue;
             }
             unexpected.Add(line);
-            pending = line;
         }
         var overCap = new List<string>();
-        foreach (var allowance in ErrorAllowlist)
+        foreach (var allowance in allowlist)
         {
             counts.TryGetValue(allowance.Pattern, out int n);
             if (n > allowance.Max)
@@ -362,17 +453,25 @@ public static class TestHarness
             Unexpected = unexpected,
             OverCap = overCap,
             AllowedCounts = counts,
+            Allowlist = allowlist,
         };
     }
 
+    /// <summary>How many engine error lines this run's log holds so far, or null with no log. For a
+    /// suite that brackets its own work.</summary>
+    internal static int? EngineErrorsSoFar() => ScreenEngineLog(ErrorAllowlist, out _)?.Total;
+
     // Narrows an already-valid selection to one shard and tags the context, so every artifact this
     // process writes lands under .scratch/<tag>/ instead of over a sibling shard's.
-    private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, ref IReadOnlyList<Suite> selected)
+    private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, IReadOnlySet<string>? render,
+        int selectedTotal, ref IReadOnlyList<Suite> selected)
     {
-        int total = selected.Count;
-        if (shard is not { } s || s.Count < 2)
+        int renderTotal = selected.Count;
+        string kinds = render == null ? "" : string.Join("+", render.Order(StringComparer.Ordinal));
+        var s = shard is { Count: > 1 } split ? split : new ShardSpec(1, 1);
+        if (s.Count < 2 && render == null)
         {
-            return new ShardPlan(1, 1, total, "", Array.Empty<string>());
+            return new ShardPlan(1, 1, selectedTotal, "", Array.Empty<string>(), "", renderTotal);
         }
         var weights = SuiteShards.Load(Path.Combine(ctx.RepoRoot, "analysis", "engine-suite-weights.json"));
         var unweighted = SuiteShards.Unweighted(selected.Select(x => x.Name), weights);
@@ -382,9 +481,9 @@ public static class TestHarness
         string root = Path.GetDirectoryName(EngineLogPath() ?? "") ?? "";
         ctx.ShardScratch = Path.Combine(
             root.Length > 0 ? root : Path.Combine(ctx.RepoRoot, ".scratch"),
-            $"shard{s.Index}of{s.Count}");
-        Log.Info("test", $"run-tests shard={s.Index}/{s.Count} suites={selected.Count}/{total} unweighted={unweighted.Count} weights='{weights.Source}' scratch={ctx.ScratchDir}");
-        return new ShardPlan(s.Index, s.Count, total, weights.Source, unweighted);
+            $"{(kinds.Length > 0 ? kinds + "-" : "")}shard{s.Index}of{s.Count}");
+        Log.Info("test", $"run-tests render={(kinds.Length > 0 ? kinds : "all")} shard={s.Index}/{s.Count} suites={selected.Count}/{renderTotal}/{selectedTotal} unweighted={unweighted.Count} weights='{weights.Source}' scratch={ctx.ScratchDir}");
+        return new ShardPlan(s.Index, s.Count, selectedTotal, weights.Source, unweighted, kinds, renderTotal);
     }
 
     private static List<Suite> MatchTerm(IReadOnlyList<Suite> suites, string term)
@@ -398,12 +497,12 @@ public static class TestHarness
         }
         if (term.StartsWith(tier, StringComparison.OrdinalIgnoreCase))
         {
-            var names = SuiteCatalog.Tier(term[tier.Length..]);
-            if (names == null)
+            var named = SuiteCatalog.Tier(term[tier.Length..]);
+            if (named == null)
             {
                 return new List<Suite>();
             }
-            var set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var set = new HashSet<string>(named.Suites, StringComparer.OrdinalIgnoreCase);
             return suites.Where(s => set.Contains(s.Name)).ToList();
         }
         return suites.Where(s => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -440,7 +539,7 @@ public static class TestHarness
         return null;
     }
 
-    private static StderrScreen? ScreenEngineLog(out string? logPath)
+    private static StderrScreen? ScreenEngineLog(IReadOnlyList<ErrorAllowance> allowances, out string? logPath)
     {
         logPath = EngineLogPath();
         if (logPath == null)
@@ -458,7 +557,7 @@ public static class TestHarness
             {
                 lines.Add(line);
             }
-            return Screen(lines);
+            return Screen(lines, allowances);
         }
         catch (Exception e)
         {
@@ -511,7 +610,7 @@ public static class TestHarness
         {
             sb.AppendLine($"  {Tag(screen.Ok ? SuiteStatus.Pass : SuiteStatus.Fail)}  engine errors  "
                           + $"{screen.Total} line(s), {screen.Allowed} allowlisted, {screen.Unexpected.Count} unexpected");
-            foreach (var allowance in ErrorAllowlist)
+            foreach (var allowance in screen.Allowlist)
             {
                 screen.AllowedCounts.TryGetValue(allowance.Pattern, out int n);
                 sb.AppendLine($"           . allowed {n}/{allowance.Max}x  {allowance.Why}");
@@ -551,10 +650,12 @@ public static class TestHarness
         json.AppendLine($"  \"shard\": {{\"index\": {plan.Index}, \"count\": {plan.Count}, "
                         + $"\"selectedTotal\": {plan.SelectedTotal}, \"weights\": {Quote(plan.WeightsSource)}, "
                         + $"\"unweighted\": [{string.Join(", ", plan.Unweighted.Select(Quote))}], "
+                        + $"\"render\": {Quote(plan.Render)}, \"renderTotal\": {plan.RenderTotal}, "
                         + $"\"netPortBase\": {CSVM.Net.NetPorts.Base.ToString(CultureInfo.InvariantCulture)}}},");
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
         json.AppendLine($"  \"dataRoot\": {Quote(ctx.DataRoot)},");
+        json.AppendLine($"  \"syntheticData\": {(ctx.SyntheticData ? "true" : "false")},");
         json.AppendLine($"  \"passed\": {results.Count(r => r.Status == SuiteStatus.Pass)},");
         json.AppendLine($"  \"failed\": {results.Count(r => r.Status == SuiteStatus.Fail)},");
         json.AppendLine($"  \"skipped\": {results.Count(r => r.Status == SuiteStatus.Skip)},");
@@ -595,7 +696,8 @@ public static class TestHarness
             json.AppendLine($"      \"detail\": {Quote(r.Detail)},");
             json.AppendLine($"      \"counts\": {{{string.Join(", ", r.Counts.Select(kv => $"{Quote(kv.Key)}: {kv.Value}"))}}},");
             json.AppendLine($"      \"failures\": [{string.Join(", ", r.Failures.Select(Quote))}],");
-            json.AppendLine($"      \"notes\": [{string.Join(", ", r.Notes.Select(Quote))}]");
+            json.AppendLine($"      \"notes\": [{string.Join(", ", r.Notes.Select(Quote))}],");
+            json.AppendLine($"      \"shaderTexts\": [{string.Join(", ", r.ShaderTexts.Select(Quote))}]");
             json.AppendLine(i == results.Count - 1 ? "    }" : "    },");
         }
         json.AppendLine("  ],");
@@ -607,13 +709,14 @@ public static class TestHarness
         json.AppendLine($"    \"unexpected\": [{string.Join(", ", (screen?.Unexpected ?? Array.Empty<string>()).Select(Quote))}],");
         json.AppendLine($"    \"overCap\": [{string.Join(", ", (screen?.OverCap ?? Array.Empty<string>()).Select(Quote))}],");
         json.AppendLine("    \"allowlist\": [");
-        for (int i = 0; i < ErrorAllowlist.Count; i++)
+        var allowlist = screen?.Allowlist ?? ErrorAllowlist;
+        for (int i = 0; i < allowlist.Count; i++)
         {
-            var a = ErrorAllowlist[i];
+            var a = allowlist[i];
             int seen = 0;
             screen?.AllowedCounts.TryGetValue(a.Pattern, out seen);
             json.AppendLine($"      {{\"pattern\": {Quote(a.Pattern)}, \"max\": {a.Max}, \"seen\": {seen}, \"why\": {Quote(a.Why)}}}"
-                            + (i == ErrorAllowlist.Count - 1 ? "" : ","));
+                            + (i == allowlist.Count - 1 ? "" : ","));
         }
         json.AppendLine("    ]");
         json.AppendLine("  }");
@@ -689,14 +792,14 @@ public static class TestHarness
     /// into the report so an aggregator can prove the shards cover the selection exactly once
     /// rather than assuming they did.</summary>
     private readonly record struct ShardPlan(int Index, int Count, int SelectedTotal,
-        string WeightsSource, IReadOnlyList<string> Unweighted);
+        string WeightsSource, IReadOnlyList<string> Unweighted, string Render, int RenderTotal);
 
     private readonly record struct PhaseTotals(
         PhaseAttribution.Categorized Build, double BuildSeconds, double DisposalSeconds,
         double FinalDisposalSeconds, double RestSeconds, double OverrunSeconds, int WorldsBuilt,
         double WallSeconds);
 
-    public sealed record Suite(string Name, string What, Action<TestContext> Body, bool FirstInProcess = false);
+    public sealed record Suite(string Name, string What, Action<TestContext> Body);
 }
 
 /// <summary>Marks a body as a registered in-engine suite and carries its two facts: the name every
@@ -716,10 +819,6 @@ public sealed class SuiteAttribute : Attribute
     public string Name { get; }
 
     public string What { get; }
-
-    /// <summary>Whether the suite runs ahead of every other suite in its process. It is for a defect
-    /// that shows only in a process no earlier suite has touched (<see cref="TestHarness.FirstInProcessFirst"/>).</summary>
-    public bool FirstInProcess { get; set; }
 }
 
 /// <summary>Thrown by <see cref="TestContext.RequireData"/> to end a suite as SKIP.</summary>
@@ -757,6 +856,8 @@ public sealed class TestWorld
         // free would only happen after every suite had already built its own world.
         Stage.Free();
         Textures.Dispose();
+        // A destroyed world draws nothing a switch must move, and a tracked material keeps its textures.
+        ShaderTwins.Untrack(Stage);
     }
 }
 
@@ -790,8 +891,16 @@ public sealed class TestContext
     // see DecodeCache for what it holds and the read-only contract that binds every user.
     private readonly DecodeCache _decode = new();
 
+    // The synthetic planes archive's node names, read once by RequirePlane and only under the switch.
+    private HashSet<string>? _syntheticPlaneNodes;
+
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
+
+    /// <summary>Whether <see cref="DataRoot"/> is the invented tree <c>--synthetic-data</c> writes,
+    /// read off the tree's own stamp. The run's log and report say so.</summary>
+    public bool SyntheticData { get; init; }
+
     public required string Chapter { get; init; }
     public required string Mission { get; init; }
     public required string ZrdrPath { get; init; }
@@ -816,6 +925,10 @@ public sealed class TestContext
     /// <summary><c>--debug-finalizers=run</c>: one <see cref="FinalizerGate"/> over the whole run,
     /// which also catches an object a later suite reaches after an earlier one dropped it.</summary>
     public bool AuditFinalizersAcrossRun { get; init; }
+
+    /// <summary><c>--debug-mem</c>: a <see cref="MemoryCensus"/> line after every suite's
+    /// teardown, so a shard's memory reads against the suites it has run.</summary>
+    public bool DebugMem { get; init; }
 
     /// <summary>Installs a fake in place of the real <c>PufferEmitterFactory</c> for the next world
     /// this builds, null (the default) leaves <see cref="WorldSession.Options.EmitterFactory"/> null
@@ -861,6 +974,9 @@ public sealed class TestContext
     /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
+    /// <summary>The run's decode store. A suite that builds a whole <c>GameSession</c> hands it to
+    /// the launcher context, so its sessions share the decodes this run's worlds made.</summary>
+    internal DecodeCache Decode => _decode;
 
     /// <summary>Reads every positional sound level and cull at the data's own <c>RANGE</c> radii
     /// until the returned handle is disposed, whatever factor the session carries. A suite that
@@ -913,6 +1029,52 @@ public sealed class TestContext
         if (!File.Exists(path) && !Directory.Exists(path))
         {
             throw new SuiteSkippedException($"{Log.Format(what)} not found: {path}");
+        }
+    }
+
+    /// <summary>On the synthetic tree, skips a suite whose body reads a shipped texture by
+    /// <paramref name="name"/> that the invented archive does not carry. ⚠ Never skip on a real
+    /// extraction: a shipped name missing there is a broken tree, which the body reports.</summary>
+    public void RequireTexture(TextureArchive textures, string name)
+    {
+        if (SyntheticData && textures.FindImage(name) == null)
+        {
+            throw new SuiteSkippedException($"the synthetic texture archive carries no {name}");
+        }
+    }
+
+    /// <summary>Skips a suite whose body reads the reader file <paramref name="fileName"/> when the
+    /// zrdr archive at <paramref name="zrdrPath"/> lacks it. The archive may be a ZIP or its unpacked
+    /// folder. Checked on every tree, like <see cref="RequireData"/>. A suite names only entries every
+    /// install ships, so on a real extraction the gate passes wherever the body would have run.</summary>
+    public void RequireZrdrEntry(string zrdrPath, string fileName)
+    {
+        RequireData(zrdrPath, $"zrdr archive for {fileName}");
+        if (!Zrdr.HasFile(zrdrPath, fileName))
+        {
+            throw new SuiteSkippedException($"{fileName} not found in {zrdrPath}");
+        }
+    }
+
+    /// <summary>On the synthetic tree, skips a suite whose body needs a shipped airframe, by node
+    /// name, that the invented planes archive lacks. ⚠ Never skip on a real extraction: every
+    /// install carries every shipped airframe, so a miss there is a broken tree the body reports.</summary>
+    public void RequirePlane(params string[] nodeNames)
+    {
+        if (!SyntheticData)
+        {
+            return;
+        }
+
+        RequireData(PlanesGamezPath, $"planes gamez");
+        _syntheticPlaneNodes ??= new HashSet<string>(
+            GameZ.Load(PlanesGamezPath).Nodes.Select(n => n.Name), StringComparer.Ordinal);
+        foreach (string name in nodeNames)
+        {
+            if (!_syntheticPlaneNodes.Contains(name))
+            {
+                throw new SuiteSkippedException($"the synthetic planes gamez carries no {name}");
+            }
         }
     }
 
@@ -1172,6 +1334,8 @@ public sealed class TestContext
             using var sounds = archives.Sounds;
             var ambience = Ambience;
 
+            // The world's materials leave the shader cache's table with it (TestWorld.Destroy).
+            ShaderTwins.BuildingWorld = stage;
             var session = WorldSession.Build(
                 new WorldSession.Options
                 {
@@ -1222,6 +1386,7 @@ public sealed class TestContext
             // later suite's phases (or a real session's, if one ever ran after in the same
             // process) to this build's profile instead of its own.
             StartupProfile.Current = previousProfile;
+            ShaderTwins.BuildingWorld = null;
             buildWatch.Stop();
             // The outer stopwatch, not profile's own clock, is what "other" closes against: it is
             // the one wall time TestHarness.Run also attributes to this suite.
@@ -1267,6 +1432,9 @@ public sealed class SuiteResult
     public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
     public IReadOnlyDictionary<string, long> Counts { get; init; } = new Dictionary<string, long>();
+
+    /// <summary>Hashes of the shader texts this suite handed to Godot (<see cref="ShaderCensus"/>).</summary>
+    public IReadOnlyList<string> ShaderTexts { get; init; } = Array.Empty<string>();
 
     /// <summary>How many <see cref="TestContext.WithWorld(string, bool, Action{TestWorld})"/> calls
     /// actually built (rather than reused) a world during this suite.</summary>
@@ -1319,6 +1487,9 @@ public sealed class StderrScreen
     /// passes: an allowlist entry whose count is invisible is exactly how a new error hides inside
     /// an old one's shape.</summary>
     public IReadOnlyDictionary<string, int> AllowedCounts { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>The allowances the lines were screened against.</summary>
+    public IReadOnlyList<ErrorAllowance> Allowlist { get; init; } = TestHarness.ErrorAllowlist;
 
     public bool Ok => Unexpected.Count == 0 && OverCap.Count == 0;
 }

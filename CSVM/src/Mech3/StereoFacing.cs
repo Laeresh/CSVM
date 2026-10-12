@@ -2,8 +2,8 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// How a camera-facing sprite takes its basis when the process draws through the stereo path.
-/// Flat, a sprite may copy the camera's basis, as the original's screen-rectangle puffer sprites and
-/// the flat moon's billboard mode do. Under a headset that basis is the head's, so the quad lies in
+/// Flat, a sprite may copy the camera's basis, as the original's screen-rectangle puffer sprites do.
+/// Under a headset that basis is the head's, so the quad lies in
 /// the head's view plane. It pivots and is seen edge-on as the head turns away, and it rolls with
 /// every tilt. A stereo sprite takes the world-up facade look-at toward the eye instead
 /// (<c>shaders/csky_facade.gdshaderinc</c>), the original's rule for a SphericalY facade. Entry:
@@ -33,25 +33,4 @@ public static class StereoFacing
 
     /// <summary>Marks the process as drawing through the stereo path.</summary>
     public static void Declare() => Live = true;
-
-    /// <summary>An unshaded textured sprite in the stereo pose. It stands in for an unshaded alpha
-    /// <c>StandardMaterial3D</c> in Godot's billboard mode with keep-scale. It takes
-    /// <c>albedo_tex</c> times the vertex colour.</summary>
-    public static string SpriteShaderCode() => $$"""
-        shader_type spatial;
-        render_mode unshaded, blend_mix, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
-        {{Include}}
-
-        uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
-
-        void vertex() {
-        {{PoseLines("    ")}}
-        }
-
-        void fragment() {
-            vec4 tex = texture(albedo_tex, UV) * COLOR;
-            ALBEDO = tex.rgb;
-            ALPHA = tex.a;
-        }
-        """;
 }

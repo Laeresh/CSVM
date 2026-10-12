@@ -85,11 +85,11 @@ internal static class MenuOriginalSuites
         + "its six display rows over the machine's own screens and sizes, the four vocabularies "
         + "and a wrap onto the last frame cap and, past the three scales below native, onto the last render scale, an anti-aliasing row "
         + "on the stepped mode's default whose step onto FSR 2.2 pulls that scale back to native "
-        + "and narrows the scale row, a shadow-quality row that steps only under Enhanced, a VR mode row "
+        + "and narrows the scale row, a shadow-quality row and a water-quality row that step only under Enhanced, a VR mode row "
         + "that Right turns on, the headset's render scale and comfort vignette rows stepped over their words, its four volume rows "
         + "stepped by the AUDIO page's own step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all nineteen with no presentation row among them, "
+        + "carrying all twenty-two with no presentation row among them, "
         + "Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
@@ -190,7 +190,6 @@ internal static class MenuOriginalSuites
         + "longer inviting a pad's START")]
     internal static void MenuJoinBoard(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -657,9 +656,9 @@ internal static class MenuOriginalSuites
     // Built-in's Options route: the last Mode row opens Options, and Right steps the difficulty to
     // Hard. The two rows under it step the opening view and the automatic head turn, the two under
     // those the targeting setting and the rumble. The graphics mode and view distance rows come next;
-    // the command line alone chooses a presentation, so no row does. The six display rows step over the
-    // machine's own screens and sizes. The four volume rows step the levels the AUDIO page writes.
-    // The apply row's Accept is the one exit the launcher persists every choice from.
+    // the command line alone chooses a presentation, so no row does. The display, shadow, water and
+    // volume rows step their own words, levels, screens and sizes. The apply row's Accept is the one
+    // exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -673,8 +672,8 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow,
             $"Up from Free Flight wraps onto the multiplayer door, and again onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 23 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its twenty-three rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 24 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its twenty-four rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -723,12 +722,13 @@ internal static class MenuOriginalSuites
             $"a step moves it under Enhanced and not under Original, whose detail says why ({graphics}: {viewDistance} -> {menu.ShownRowText}, {menu.ShownDetail})");
         var display = BuiltInDisplayRows(ctx, host, seat, menu, graphics);
         string? shadowQuality = BuiltInShadowQualityRow(ctx, host, seat, menu, graphics);
+        string? waterQuality = BuiltInWaterQualityRow(ctx, host, seat, menu, graphics);
         bool? vrMode = BuiltInVrModeRow(ctx, host, seat, menu);
         var comfort = BuiltInVrComfortRows(ctx, host, seat, menu);
         BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (22/23)",
-            $"the twenty-second row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (23/24)",
+            $"the twenty-third row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -748,10 +748,12 @@ internal static class MenuOriginalSuites
                 $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync
-                && applied.RenderScale == display.RenderScale && applied.AntiAliasing == display.AntiAliasing,
-                $"and all six display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.RenderScale}, {applied.AntiAliasing})");
-            ctx.Check(applied.ShadowQuality == shadowQuality,
-                $"and the shadow quality the row left, never set where the row stood dead ({applied.ShadowQuality ?? "unset"})");
+                && applied.Words[RenderScaleSetting.Lookup] == display.RenderScale && applied.Words[AntiAliasingSetting.Lookup] == display.AntiAliasing,
+                $"and all six display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.Words[RenderScaleSetting.Lookup]}, {applied.Words[AntiAliasingSetting.Lookup]})");
+            ctx.Check(applied.Words[ShadowQualitySetting.Lookup] == shadowQuality,
+                $"and the shadow quality the row left, never set where the row stood dead ({applied.Words[ShadowQualitySetting.Lookup] ?? "unset"})");
+            ctx.Check(applied.Words[WaterQualitySetting.Lookup] == waterQuality,
+                $"and the water quality the row left, never set where the row stood dead ({applied.Words[WaterQualitySetting.Lookup] ?? "unset"})");
             ctx.Check(applied.VrMode == vrMode,
                 $"and VR mode as the row left it, the launcher's to restart for ({applied.VrMode?.ToString() ?? "unset"})");
             ctx.Check(applied.VrRenderScale == comfort.RenderScale && applied.VrVignette == comfort.Vignette,
@@ -879,13 +881,36 @@ internal static class MenuOriginalSuites
         return ShadowQualitySetting.Low;
     }
 
-    // The VR mode row under the shadow quality, on a store nothing has saved: Off, and Right turns it
+    // The water-quality row under the shadow-quality row, on a store nothing has saved. It shows the
+    // word the run resolved and steps only under Enhanced, since the faithful sea is always flat.
+    // Returns the word the apply carries, null where the row stood dead.
+    private static string? BuiltInWaterQualityRow(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu, string graphics)
+    {
+        string standing = WaterQualitySetting.Label(null);
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Water quality: {standing}" && menu.ShownHeading == "OPTIONS  (15/24)",
+            $"the fifteenth row is the water quality, unsaved showing the run's own word ({menu.ShownRowText}, {menu.ShownHeading})");
+        Press(host, seat, Right);
+        if (graphics != GraphicsMode.EnhancedWord)
+        {
+            ctx.Check(menu.ShownRowText == $"Water quality: {standing}" && menu.ShownDetail.StartsWith("Enhanced Graphics only", System.StringComparison.Ordinal),
+                $"under Original Right steps it nowhere, and the row says why ({menu.ShownRowText}, {menu.ShownDetail})");
+            return null;
+        }
+
+        string other = WaterQualitySetting.Word == WaterQualitySetting.Waves ? WaterQualitySetting.Flat : WaterQualitySetting.Waves;
+        ctx.Check(menu.ShownRowText == $"Water quality: {WaterQualitySetting.Label(other)}",
+            $"under Enhanced Right steps it onto the other word ({menu.ShownRowText})");
+        return other;
+    }
+
+    // The VR mode row under the water quality, on a store nothing has saved: Off, and Right turns it
     // on. Off Windows it stays Off and says why. Returns what the apply carries.
     private static bool? BuiltInVrModeRow(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "VR mode (experimental): Off" && menu.ShownDetail == DisplaySettingRows.VrModeDetail(System.OperatingSystem.IsWindows()),
-            $"the fifteenth row is VR mode, unsaved showing Off with its own detail ({menu.ShownRowText}, {menu.ShownDetail})");
+            $"the sixteenth row is VR mode, unsaved showing Off with its own detail ({menu.ShownRowText}, {menu.ShownDetail})");
         Press(host, seat, Right);
         if (!System.OperatingSystem.IsWindows())
         {
@@ -903,27 +928,27 @@ internal static class MenuOriginalSuites
     {
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "VR render scale: 100%" && menu.ShownDetail == DisplaySettingRows.VrRenderScaleDetail,
-            $"the sixteenth row is the VR render scale, unsaved showing 100% with its own detail ({menu.ShownRowText}, {menu.ShownDetail})");
+            $"the seventeenth row is the VR render scale, unsaved showing 100% with its own detail ({menu.ShownRowText}, {menu.ShownDetail})");
         Press(host, seat, Left);
         Press(host, seat, Left);
         Press(host, seat, Left);
         ctx.Check(menu.ShownRowText == "VR render scale: 70%", $"three Lefts step it to 70% ({menu.ShownRowText})");
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "VR comfort vignette: Off" && menu.ShownDetail == DisplaySettingRows.VrVignetteDetail,
-            $"the seventeenth row is the comfort vignette, unsaved showing Off ({menu.ShownRowText}, {menu.ShownDetail})");
+            $"the eighteenth row is the comfort vignette, unsaved showing Off ({menu.ShownRowText}, {menu.ShownDetail})");
         Press(host, seat, Left);
         ctx.Check(menu.ShownRowText == "VR comfort vignette: Strong", $"Left wraps it onto Strong ({menu.ShownRowText})");
         return ("70", "strong");
     }
 
-    // The four volume rows, walked from the comfort vignette row on a mix nothing has saved. Each
-    // shows the shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A
-    // step that moves nothing writes nothing, so Master stepped up off full stays never set.
+    // The four volume rows, walked from the comfort vignette row on a mix nothing has saved. Each shows
+    // the shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A step
+    // that moves nothing writes nothing, so Master stepped up off full stays never set.
     private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (18/23)",
-            $"the eighteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (19/24)",
+            $"the nineteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
             $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");
@@ -1242,21 +1267,21 @@ internal static class MenuOriginalSuites
         // The shadow row under Original, whose world casts no sun shadow: dead and out of the walk.
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         ctx.Check(Row(shell, OriginalVideoPage.ShadowQualityKey) is { Enabled: false }
-            && shell.FocusedKey != OriginalVideoPage.ShadowQualityKey && shell.Options.Video.ShadowQualityChoice == null,
-            $"the Shadow Quality row stands dead under Original, out of the walk's reach ({shell.FocusedKey}, {shell.Options.Video.ShadowQualityChoice ?? "unset"})");
+            && shell.FocusedKey != OriginalVideoPage.ShadowQualityKey && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == null,
+            $"the Shadow Quality row stands dead under Original, out of the walk's reach ({shell.FocusedKey}, {shell.Options.Video.Choice(ShadowQualitySetting.Lookup) ?? "unset"})");
         WalkTo(host, seat, shell, OriginalVideoPage.GraphicsKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.Video.GraphicsChoice == GraphicsMode.EnhancedWord,
             $"Accept on the checkbox under it flips the graphics word ({shell.Options.Video.GraphicsChoice})");
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Left);
-        ctx.Check(shell.FocusedKey == OriginalVideoPage.ShadowQualityKey && shell.Options.Video.ShadowQualityChoice == ShadowQualitySetting.High,
-            $"which brings the Shadow Quality row to life, a step left of the Ultra default taking High ({shell.FocusedKey}, {shell.Options.Video.ShadowQualityChoice ?? "unset"})");
+        ctx.Check(shell.FocusedKey == OriginalVideoPage.ShadowQualityKey && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == ShadowQualitySetting.High,
+            $"which brings the Shadow Quality row to life, a step left of the Ultra default taking High ({shell.FocusedKey}, {shell.Options.Video.Choice(ShadowQualitySetting.Lookup) ?? "unset"})");
         WalkTo(host, seat, shell, OriginalVideoPage.CancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.Video.GraphicsChoice == GraphicsMode.Default
             && shell.Options.Video.VSyncChoice == null && shell.Options.Video.DisplayModeChoice == null && shell.Options.Video.ResolutionChoice == null
-            && shell.Options.Video.MonitorChoice == null && shell.Options.Video.ShadowQualityChoice == null && exits.Count == before,
+            && shell.Options.Video.MonitorChoice == null && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == null && exits.Count == before,
             $"CANCEL CHANGES lands back on Preferences with all six edits dropped and no exit ({shell.Screen}, {shell.Options.Video.GraphicsChoice}, {shell.Options.Video.VSyncChoice ?? "unset"}, {shell.Options.Video.DisplayModeChoice ?? "unset"}, {shell.Options.Video.ResolutionChoice ?? "unset"}, {shell.Options.Video.MonitorChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
@@ -1273,9 +1298,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
         {
-            Graphics: GraphicsMode.EnhancedWord, VSync: "60",
-            DisplayMode: DisplayWords.Fullscreen, ShadowQuality: ShadowQualitySetting.Off,
-        },
+            Graphics: GraphicsMode.EnhancedWord, VSync: "60", DisplayMode: DisplayWords.Fullscreen,
+        } applied && applied.Words[ShadowQualitySetting.Lookup] == ShadowQualitySetting.Off,
             $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all four words ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }

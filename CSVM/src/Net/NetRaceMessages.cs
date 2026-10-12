@@ -92,7 +92,7 @@ public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zo
         ushort run = reader.ReadUInt16();
         _ = reader.ReadUInt16();
         message = new RaceRunMessage(seat, kind, zone, window, run, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -143,7 +143,7 @@ public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Window, 
         float elapsed = reader.ReadSingle();
         float windowSeconds = reader.ReadSingle();
         message = new RaceStateMessage(phase, window, elapsed, windowSeconds, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -315,7 +315,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
 
         message = new RaceStandingMessage(seat, window, (flags & InRunFlag) != 0, (flags & CompletedFlag) != 0,
             started, finished, best, toMost, most, current, splits, (flags & LeftFlag) != 0);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>

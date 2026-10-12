@@ -277,7 +277,8 @@ internal static class StuntRaceSuites
         + "the install's art and strings, which wakes on the race's end with the sim halted, ranks "
         + "the field on the scores page with each pilot's splits, rests on Photo Mode and offers "
         + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
-        + "Photo Mode; Built-in keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
+        + "Photo Mode, and a sixteen-pilot field scrolls the scores page and the splits to the sixteenth "
+        + "pilot by their arrows under the pointer and the pad; Built-in keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
@@ -287,12 +288,17 @@ internal static class StuntRaceSuites
         var built = new List<Node>();
 
         // One race board built the way a session builds it, under a presentation and launch kind.
-        (Control Board, StuntRace Race, PauseState Pause) Build(PresentationId presentation, bool menuDriven, Action exit)
+        (Control Board, StuntRace Race, PauseState Pause) Build(PresentationId presentation, bool menuDriven, Action exit, int pilots = 3)
         {
             var race = new StuntRace(60f, zoneNames.Length);
             race.Add(0, "Bloodhawk");
             race.Add(1, "Kestrel");
             race.Add(2, "Hoplite");
+            for (int seat = 3; seat < pilots; seat++)
+            {
+                race.Add(seat, "Fury");
+            }
+
             race.BeginOpening(0f);
             var pause = new PauseState();
             var boards = new Launch.SessionBoards(new Launch.SessionBoards.Inputs
@@ -391,8 +397,8 @@ internal static class StuntRaceSuites
 
             // The next end raises a fresh menu on Photo Mode; player 1's pointer fires Back, then Photo Mode.
             End(race);
-            var (bx, by, bw, bh) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.ExitRow);
-            var (px, py, pw, ph) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.PhotoRow);
+            var (bx, by, bw, bh) = OriginalRaceResults.SlotRect(OriginalRaceResults.ExitRow);
+            var (px, py, pw, ph) = OriginalRaceResults.SlotRect(OriginalRaceResults.PhotoRow);
             void Point(float x, float y, bool pressed)
             {
                 board.PointerSource = () => (x, y, pressed);
@@ -408,6 +414,7 @@ internal static class StuntRaceSuites
             Point(px + (pw / 2f), py + (ph / 2f), false);
             ctx.Check(board.Visible && indexAfterEnd == 0 && exits == 1 && photos == 1,
                 $"the pointer fires Back and Photo Mode on their plaques: rested on {indexAfterEnd}, {exits} exit(s), {photos} photo(s)");
+            ScrollTheWideField(ctx, Build(PresentationId.Original, menuDriven: true, () => { }, pilots: 16), Fly);
 
             // Built-in keeps the chrome board; the exit row reads Back from the menu, Quit Game otherwise.
             string chromeHeaders = "";
@@ -646,6 +653,54 @@ internal static class StuntRaceSuites
         }
 
         run.Relocated();
+    }
+
+    // Sixteen pilots finishing in seat order, P1 fastest. The scroll arrows join the menu after the
+    // plaques. The pointer on the scores page's down arrow reaches the sixteenth pilot, and so does
+    // the pad's Accept on the splits' one.
+    private static void ScrollTheWideField(TestContext ctx, (Control Board, StuntRace Race, PauseState Pause) built,
+        Action<StuntRace, int, float[]> fly)
+    {
+        if (built.Board is not OriginalRaceBoard board)
+        {
+            ctx.Check(false, $"the wide field builds the Original board, not {built.Board.GetType().Name}");
+            return;
+        }
+
+        for (int seat = 0; seat < 16; seat++)
+        {
+            fly(built.Race, seat, new[] { 1f + seat, 2f + seat, 3f + seat });
+        }
+
+        built.Race.Advance(61f);
+        var menu = board.Menu;
+        ctx.Check(menu?.Items.Count == 7 && menu.Items.Skip(3).All(i => i.Item == BoardMenuItem.Scroll)
+                  && board.Shown?.Lines.Any(l => l.Text == "16th  P16") == false,
+            $"sixteen pilots add both lists' arrows after the plaques and cut the page at ten ({menu?.Items.Count} rows)");
+        if (menu == null)
+        {
+            return;
+        }
+
+        var (x, y, w, h) = OriginalRaceResults.SlotRect(OriginalRaceResults.ScoresDownRow);
+        foreach (bool pressed in new[] { false }.Concat(Enumerable.Repeat(new[] { true, false }, 8).SelectMany(p => p)))
+        {
+            board.PointerSource = () => (x + (w / 2f), y + (h / 2f), pressed);
+            board._Process(Dt);
+        }
+
+        ctx.Check(board.Shown?.Lines.Any(l => l.Text == "16th  P16" && l.Y == 26f + 69f + (9 * 20f)) == true,
+            $"eight clicks on the scores page's down arrow bring the sixteenth pilot onto its last row");
+
+        board.PointerSource = () => null;
+        menu.MoveTo(OriginalRaceResults.Slots(board.Sheet!).ToList().IndexOf(OriginalRaceResults.SplitsDownRow));
+        for (int press = 0; press < 12; press++)
+        {
+            menu.Handle(0, accept: true, back: false);
+        }
+
+        ctx.Check(board.Shown?.Lines.Any(l => l.Text == "P16" && l.X == 38f && l.Y == 373f + (7 * 20f)) == true,
+            $"and Accept on the chat pane's down arrow brings P16's splits onto its last line");
     }
 
     // Two starts well above C1's terrain, clear of every zone and of each other.

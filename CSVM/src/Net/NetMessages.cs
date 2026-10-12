@@ -456,9 +456,13 @@ public interface INetMessage<TSelf>
 /// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field. A
 /// roster's size therefore depends only on how many seats there are. <see cref="Voice"/> is the
 /// seat's pilot voice in the pick's form, 0 for none. The nameless flag carries
-/// <see cref="NetSeat.Unnamed"/> to every machine.</summary>
+/// <see cref="NetSeat.Unnamed"/> to every machine, and <see cref="Pilot"/> and <see cref="Skill"/>
+/// say which seats the host's bots fly. A human entry carries the default skill, and no militia
+/// or accent (<see cref="NetSeat.Unset"/>).</summary>
 public readonly record struct NetSeatEntry(
-    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0, bool Unnamed = false);
+    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0, bool Unnamed = false,
+    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = NetBotSkill.Veteran,
+    byte Militia = NetSeat.Unset, byte Accent = NetSeat.Unset);
 
 /// <summary>
 /// One aircraft's state as its owner has it: pose, motion, the lever and the surfaces. It is the
@@ -510,7 +514,7 @@ public readonly record struct AircraftStateMessage(
         message = new AircraftStateMessage(
             seat, sequence, position, attitude, velocity,
             throttle, aileron, elevator, rudder, (flags & 1) != 0);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -578,7 +582,7 @@ public readonly record struct FireMessage(
         var direction = new Vector3(reader.ReadUnit(), reader.ReadUnit(), reader.ReadUnit());
         byte target = reader.ReadByte();
         message = new FireMessage(seat, weapon, sequence, origin, direction, target);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -640,7 +644,7 @@ public readonly record struct HitMessage(
         float damage = reader.ReadSingle();
         var impact = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
         message = new HitMessage(victim, shooter, weapon, damage, part, impact, hull);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -974,7 +978,7 @@ public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float 
         float y = reader.ReadSingle();
         float z = reader.ReadSingle();
         message = new SpawnAtMessage(seat, new Vector3(x, y, z), reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1109,7 +1113,7 @@ public readonly record struct MatchStateMessage(
         var end = (NetMatchEnd)reader.ReadByte();
         byte winner = reader.ReadByte();
         message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle(), winner);
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1155,7 +1159,7 @@ public readonly record struct DirectorTransitionMessage(ushort Code, int Id, flo
         _ = reader.ReadUInt16();
         int id = reader.ReadInt32();
         message = new DirectorTransitionMessage(code, id, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>
@@ -1201,8 +1205,9 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
         ulong clock = reader.ReadUInt32() | ((ulong)reader.ReadUInt32() << 32);
         byte seat = reader.ReadByte();
         byte extra = reader.ReadByte();
-        message = new HandshakeMessage(seed, BitConverter.UInt64BitsToDouble(clock), seat, extra);
-        return true;
+        double hostClock = BitConverter.UInt64BitsToDouble(clock);
+        message = new HandshakeMessage(seed, hostClock, seat, extra);
+        return double.IsFinite(hostClock);
     }
 
     /// <inheritdoc/>
@@ -1423,8 +1428,9 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// <summary>The bytes before the first seat entry: the seed and the count.</summary>
     public const int PrefixSize = 12;
 
-    /// <summary>The bytes one seat entry takes.</summary>
-    public const int EntrySize = 20;
+    /// <summary>The bytes one seat entry takes. ⚠ Do not change it in a patch release, only in a
+    /// minor one: a reader refuses a roster of another width (docs/org/multiplayer-messages.md).</summary>
+    public const int EntrySize = 22;
 
     /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded.</summary>
     public const int CallsignBytes = 16;
@@ -1433,10 +1439,12 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>
     public const int MaxSeats = 16;
 
-    // An entry's flags byte: bit 0 the host, bits 1 to 3 the seat's voice, bit 4 a nameless player.
-    // An older reader reads the host bit alone and ignores the rest.
+    // An entry's flags byte: bit 0 the host, bits 1 to 3 the voice, bit 4 a nameless player. Bit 5
+    // marks a bot and bits 6 and 7 its skill tier. An older reader reads the host bit alone.
     private const int VoiceShift = 1;
     private const int UnnamedBit = 1 << 4;
+    private const int BotBit = 1 << 5;
+    private const int SkillShift = 6;
 
     private readonly NetSeatEntry[] _seats;
 
@@ -1507,9 +1515,25 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             byte team = reader.ReadByte();
             byte flags = reader.ReadByte();
             byte plane = reader.ReadByte();
+            byte militia = reader.ReadByte();
+            byte accent = reader.ReadByte();
+            bool bot = (flags & BotBit) != 0;
+            int skill = flags >> SkillShift;
+            // A tier past Ace, or skill bits on a human, is no roster this vocabulary writes.
+            if (bot ? skill > (int)NetBotSkill.Ace : skill != 0)
+                return false;
+
+            // Nor is a militia or an accent on a human, or one past the table a bot draws from.
+            if (bot ? (militia != NetSeat.Unset && militia >= NetSeat.MilitiaRows)
+                    || (accent != NetSeat.Unset && accent > NetSeat.MaxAccent)
+                : militia != NetSeat.Unset || accent != NetSeat.Unset)
+                return false;
+
             seats[i] = new NetSeatEntry(
                 seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes),
-                (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice), (flags & UnnamedBit) != 0);
+                (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice), (flags & UnnamedBit) != 0,
+                bot ? NetPilot.Bot : NetPilot.Human, bot ? (NetBotSkill)skill : NetBotSkill.Veteran,
+                militia, accent);
         }
 
         message = new SeatRosterMessage(seats, seed);
@@ -1530,8 +1554,13 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             writer.WriteByte(seat.Seat);
             writer.WriteByte(seat.Team);
             int voice = seat.Voice <= CoopPickMessage.MaxVoice ? seat.Voice : CoopPickMessage.NoVoice;
-            writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift) | (seat.Unnamed ? UnnamedBit : 0)));
+            bool bot = seat.Pilot == NetPilot.Bot;
+            int skill = bot && seat.Skill <= NetBotSkill.Ace ? (int)seat.Skill : bot ? (int)NetBotSkill.Veteran : 0;
+            writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift) | (seat.Unnamed ? UnnamedBit : 0)
+                | (bot ? BotBit : 0) | (skill << SkillShift)));
             writer.WriteByte(seat.Plane);
+            writer.WriteByte(seat.Militia);
+            writer.WriteByte(seat.Accent);
             writer.WriteText(seat.Callsign, CallsignBytes);
         }
 
@@ -1568,7 +1597,7 @@ public readonly record struct ClockPingMessage(float AskedClock, float HostClock
 
         float asked = reader.ReadSingle();
         message = new ClockPingMessage(asked, reader.ReadSingle());
-        return true;
+        return reader.Valid;
     }
 
     /// <inheritdoc/>

@@ -56,6 +56,13 @@ public sealed class SceneBuilder
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
 
+    // Depth-bias fraction per priority level. A polygon is pulled toward the eye by priority × this
+    // fraction of its view distance: same projected position, nearer depth. That replicates the
+    // original's coplanar layering (terrain patches, decals, plane logos) without z-fighting.
+    // TUNE: big enough to beat coplanar interpolation noise at 10 km. Small enough that the ±49
+    // extremes (cockpit gauges, skydome) stay well under 1% of view distance.
+    public const float DepthBiasPerLevel = 2e-4f;
+
     /// <summary>How near the drawing camera must stand to the eye <see cref="PhotoEyeParam"/>
     /// carries, in metres, to draw the photograph's fill. It separates the photograph's camera
     /// from every pane's, which never stands two and a half chase distances ahead of the nose.</summary>
@@ -184,6 +191,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_mip_bias.gdshaderinc\"";
     internal const string FacadeInclude =
         "#include \"res://shaders/csky_facade.gdshaderinc\"";
+    internal const string OceanInclude =
+        "#include \"res://shaders/csky_ocean.gdshaderinc\"";
 
     /// <summary>The animation runtime's <c>OBJECT_OPACITY_STATE</c> translucency, a per-instance
     /// multiplier on ALPHA, because materials are cached and this changes at runtime. Declared in
@@ -252,6 +261,15 @@ public sealed class SceneBuilder
         + "global uniform vec3 " + XrEyeRightGlobal + ";\n"
         + "global uniform vec3 " + XrOriginGlobal + ";";
 
+    // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
+    // the matte world values, so screen-space reflection has a glossy surface to march against.
+    // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
+    // of it survives at a glancing angle. Roughness is also what quiets a per-texel reflection
+    // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
+    // The wave ocean shades toward both where it calms (Effects/Ocean.cs).
+    internal const float WaterRoughness = 0.25f;
+    internal const float WaterSpecular = 0.5f;
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -312,6 +330,10 @@ public sealed class SceneBuilder
     /// have always used and keeps them byte-identical.</summary>
     internal IReadOnlyDictionary<int, int>? ConflictRanks;
 
+    /// <summary>Called with each node a build makes, before its contents. A suite's only view of a
+    /// build that throws before it returns its root. Null outside that suite.</summary>
+    internal Action<Node3D>? NodeMade;
+
     private const string LightShaderCode = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
@@ -354,13 +376,6 @@ void fragment() {
     // The source UVs are exact 0.0/1.0 at the fold, so this only absorbs float noise.
     private const float UvEpsilon = 1e-6f;
 
-    // Depth-bias fraction per priority level. Polygons are pulled toward the eye by
-    // priority × this fraction of their view distance, same projected position, nearer
-    // depth, replicating the original's coplanar-decal layering (terrain patches,
-    // road/shadow decals, plane logos) without z-fighting at any range.
-    // TUNE: big enough to beat coplanar interpolation noise at 10 km, small enough that
-    // the ±49 extremes (cockpit gauges, skydome) stay well under 1% of view distance.
-    private const float DepthBiasPerLevel = 2e-4f;
     // The within-mesh equal-priority tie-break, reproducing the original's draw order (drawn later
     // = on top): surface rank is the first-occurrence order of the (material, priority) group in
     // the polygon list, so a tile's roads and shoreline blends land over its base grass.
@@ -397,13 +412,6 @@ void fragment() {
     // decides how far it spreads. ⚠ Only the light-source arms take it; the general `lighting:
     // false` population is not emissive (docs/org/vertexLighting.md).
     private const float EmissiveScale = 1.5f;
-    // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
-    // the matte world values, so screen-space reflection has a glossy surface to march against.
-    // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
-    // of it survives at a glancing angle. Roughness is also what quiets a per-texel reflection
-    // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
-    private const float WaterRoughness = 0.25f;
-    private const float WaterSpecular = 0.5f;
     // What an aircraft surface reflects under the scene lights, which only enhanced mode's aircraft
     // and a shaded builder without the per-vertex sun term draw under. The original has no
     // specular term at all (docs/org/vertexLighting.md), so any highlight here is ours. A TUNE
@@ -627,6 +635,14 @@ void fragment() {
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
     public IReadOnlyList<(ShaderMaterial Material, string TextureName)> TexturedMaterials => _texturedMaterials;
 
+    /// <summary>The shader condition that the drawing camera is a spyglass disc's, which shows the flat
+    /// sea: it carries <see cref="UI.Boards.SplitScreen.FlatSeaLayer"/> and not the sun's layer. Read in
+    /// both stages: the ocean's grid collapses on it and the sheet's hide steps back. ⚠ Keep the sun's
+    /// bit; a pass reporting every layer (a fresh camera, a shadow pass) would read as the disc. ⚠ Keep
+    /// it a property: a field runs this type's engine statics, which the unit-test host cannot build.</summary>
+    internal static string FlatSeaEye => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"((CAMERA_VISIBLE_LAYERS & {UI.Boards.SplitScreen.FlatSeaLayer | UI.Boards.SplitScreen.SunLayer}u) == {UI.Boards.SplitScreen.FlatSeaLayer}u)");
+
     /// <summary>Whether a struck collider's node accepts a crater, the original's
     /// <c>CAN_MODIFY</c> gate read off <see cref="CanModifyMeta"/>.</summary>
     public static bool CanModify(Node? collider) => collider != null && collider.HasMeta(CanModifyMeta);
@@ -746,13 +762,26 @@ void fragment() {
         return null;
     }
 
+    /// <summary>Whether a water texture is the open-sea base sheet the Enhanced wave ocean
+    /// (<c>Effects.Ocean</c>) replaces. A coastline blend, surf ring or wake drawn over it is not.
+    /// ⚠ Match C1's <c>water1</c> exactly: its <c>water1_trans1/2</c> coast tiles are opaque land.</summary>
+    internal static bool IsOceanBaseTexture(string texName)
+    {
+        if (texName.StartsWith("wtr", StringComparison.OrdinalIgnoreCase))
+            return true;
+        int dot = texName.IndexOf('.');
+        var stem = dot < 0 ? texName.AsSpan() : texName.AsSpan(0, dot);
+        return stem.Equals("water1", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
     /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
     /// opaque sky sprite paints its backdrop in the sky's colour. Keying it lets the sky show up to
     /// the halo, with no quad edge.</summary>
     internal static ImageTexture ColorKeyed(ImageTexture tex)
     {
-        var img = tex.GetImage();
+        // ⚠ A copy: headless hands back the texture's own Image, which TextureUpload may still hold.
+        var img = (Image)tex.GetImage().Duplicate();
         img.ClearMipmaps();
         img.Convert(Image.Format.Rgba8);
         var bg = img.GetPixel(0, 0);
@@ -1104,6 +1133,7 @@ void fragment() {
             collidable = false;
 
         var n3d = new Node3D { Name = Sanitize(node.Name) };
+        NodeMade?.Invoke(n3d);
         try
         {
             FillSubtree(n3d, node, skip, collisionSkip, collidable, forceDoubleSided, forceLit, zoneGate, applyActive);
@@ -1834,7 +1864,8 @@ void fragment() {
                 return billboard;
             }
             bool water = ClassifySurface(texName) == "water";
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water);
+            bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase);
             if (keyed != null)
             {
                 bool scrolls = scroll != Vector2.Zero;
@@ -1880,14 +1911,14 @@ void fragment() {
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
         if (tex == null)
             edgeClamp = UvClampAxes.None;
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
-            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water));
+            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase));
         NoteAlpha(mat, blend, scissor);
         if (XrPreciseInterior && blend)
             mat.RenderPriority = XrInteriorBlendPriority;
@@ -1920,16 +1951,17 @@ void fragment() {
 
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
-    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
-    // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage,
-    // 262144 the race ghost, 524288 the stereo interior. The ghost's stereo text is 1048576.
+    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
+    // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
+    // 262144 the race ghost, 524288 the base sea, 1048576 the stereo interior, 2097152 the stereo ghost.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false, bool water = false)
+        bool clutterFade = false, bool water = false, bool oceanBase = false)
     {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
+        oceanBase &= water;
         bool sunVertexLit = shaded && _sunVertexLit;
         bool raceGhost = shaded && RaceGhostShader;
         // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
@@ -1944,14 +1976,15 @@ void fragment() {
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
-            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (xrInterior ? 524288 : 0)
-            | (stereoGhost ? 1048576 : 0);
+            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
+            | (xrInterior ? 1048576 : 0)
+            | (stereoGhost ? 2097152 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, xrInterior, stereoGhost), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost), "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -1964,7 +1997,7 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool xrInterior, bool stereoGhost)
+        bool oceanBase, bool xrInterior, bool stereoGhost)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -1974,6 +2007,8 @@ void fragment() {
         // ⚠ The water arm exists only inside the lit world arm, so original mode's shader text
         // cannot move.
         bool waterLit = worldLit && water;
+        // The sea-level base sheet steps aside while the wave ocean draws in its place.
+        bool oceanHide = waterLit && oceanBase;
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
         bool sunLit = sunVertexLit && !GraphicsMode.Enhanced;
@@ -2027,6 +2062,11 @@ void fragment() {
         bool pointLit = lit && (fullbright || sunLit);
         if (pointLit)
             sb.AppendLine(LightsInclude);
+        if (oceanHide)
+        {
+            sb.AppendLine(OceanInclude);
+            sb.AppendLine("varying vec3 v_ocean_pos;");
+        }
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -2083,6 +2123,10 @@ void fragment() {
         // already a world position, so only the model term takes the origin back.
         string sunAt = xrInterior ? "CAMERA_POSITION_WORLD" : "CAMERA_POSITION_WORLD + light_origin";
         string modelAt = xrInterior ? " + " + XrOriginGlobal : "";
+        // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
+        // would stretch to its model origin. The colliders stay flat. The hide reads the ocean's mask
+        // at the fragment's world X/Z, so a sheet shown after the bake still draws.
+        string oceanVertex = oceanHide ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2111,7 +2155,7 @@ void fragment() {
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{sunVertex}{pointVertex}{XrInteriorVertex(normalSign)}}}
+{clutterVertex}{ghostVertex}{oceanVertex}{sunVertex}{pointVertex}{XrInteriorVertex(normalSign)}}}
 
 void fragment() {{");
         }
@@ -2119,7 +2163,7 @@ void fragment() {{");
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{oceanVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -2128,6 +2172,9 @@ void vertex() {{
 
 void fragment() {{");
         }
+        // A spyglass disc draws no ocean (FlatSeaEye), so the sheet stays whole there.
+        if (oceanHide)
+            sb.AppendLine($"    if (!{FlatSeaEye} && csky_ocean_hides_sea(v_ocean_pos)) {{ discard; }}");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         if (raceGhost)
@@ -2317,12 +2364,7 @@ void vertex() {{
     // The SphericalY facade pose, keeping the instance scale (Godot's billboard_keep_scale, by
     // hand, the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
     // quad centre and the instance placed there, so the quad pivots at its centre.
-    mat3 face = csky_facade_spherical(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD);
-    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
-        vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
-    MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
-    MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
-    MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{pose}
+    MODELVIEW_MATRIX = csky_facade_modelview(VIEW_MATRIX, MODEL_MATRIX, CAMERA_POSITION_WORLD);{pose}
 }}
 
 void fragment() {{

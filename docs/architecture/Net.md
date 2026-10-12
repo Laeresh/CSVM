@@ -5,9 +5,8 @@ ENet carrier a match ships over, the WebRTC carrier internet play rides, and the
 picks between them. Only the carriers and the port mapping name an engine type beyond Godot's plain math structs, and nothing
 here names a socket API, which is what lets one session run over the loopback in a plain unit test
 and over ENet in a match; the boundary and its exemptions are asserted over compiled metadata by
-`CSVM.Tests/NetNamespaceDependencyTests.cs`, which also holds every Steam name to the Steam
-carrier. Nothing about the world crosses this seam, and the message vocabulary sits entirely above
-it.
+`CSVM.Tests/NetNamespaceDependencyTests.cs`. Nothing about the world crosses this seam, and the
+message vocabulary sits entirely above it.
 
 One `## src/...` entry per module, body at most 8 lines.
 
@@ -46,9 +45,10 @@ These are the design rules every module below is shaped by, and every multiplaye
   sits out with a line saying so, and never takes a seat already flying.
 - **The carrier is a flag.** ENet ships, by LAN search or direct IP with an IPv4 UPnP mapping or an
   IPv6 pinhole. With a master server set (`--master-server=`, `server/README.md`), a host also lists
-  its game there and takes WebRTC guests, who join by code with STUN and a TURN fallback. A Steam carrier (Networking Sockets, relay, lobbies) is added behind `CsvmSteam`
-  without touching a session; listing the game on Steam is a distribution and legal decision, not
-  the code's.
+  its game there and takes WebRTC guests, who join by code with STUN and a TURN fallback. A Steam
+  carrier (Networking Sockets, relay, lobbies) would be one more `INetTransport` chosen in
+  `NetCarrier.cs`, with no session edit; listing the game on Steam is a distribution and legal
+  decision, not the code's.
 - **Two seams above the transport.** On the session side `INetTransport`; on the aircraft side a
   `FlightController` fed a `RemotePoseBuffer` in place of an `IFlightInputSource`. A remote human is
   a pose that arrives late, never a stick that arrives late. Godot's `MultiplayerApi`,
@@ -60,7 +60,9 @@ These are the design rules every module below is shaped by, and every multiplaye
   state, because a lost hit is a lost kill.
 - **Star topology.** A guest connects to the host alone, and the host relays every guest's states
   and events to the other guests (`NetSession`), so one port and one router mapping serve a match
-  and a guest-to-guest packet costs one extra hop. Guests never connect to each other.
+  and a guest-to-guest packet costs one extra hop. Guests never connect to each other. The host
+  relays and applies a guest's report only for a seat that guest flies, and takes none of the
+  decisions it alone sends (a spawn, a score, a death notice) from a guest at all.
 - **The doors are the Original presentation's.** The campaign cabin's Host Co-op button opens the
   network and reads Close Network while open; the NETWORK OPEN band shows the address and guest
   count, and a chip per guest its Ready mark. Close Network, or leaving the cabin for the main menu,
@@ -117,14 +119,14 @@ payload at or below the newest on its channel is discarded. `Lost` (per channel 
 channel, which no sequence stream rides. Read `LoopbackTransportTests.cs`.
 
 ## src/Net/EnetTransport.cs
-The shipped carrier over Godot's ENet peer, and the one type under `CSVM/` allowed to name a Godot
-networking type. `Host` opens a listen server on every address `ListenAddresses` names (for `*`:
-IPv4's wildcard, the stable global IPv6 address and `::1`) as one roster, so a reply leaves from the
-address a guest dialled; a guest drops a reply from a temporary one. `Join` reports the host (peer 1)
-joining. Every roster change and payload comes out of `Step`. A service thread polls ENet when the
-main thread has not stepped for `ServiceGapSeconds`, up to `Keepalive.CeilingSeconds`, so a
-blocking mission load keeps acknowledging. `INetLink` is where a board reads the socket, and a
-socket with no listener holds what lands and replays it on `Bind`. Read `NetLink.cs` next.
+The shipped carrier over Godot's ENet peer, the one type under `CSVM/` allowed to name a Godot
+networking type. `Host` opens one roster over every address `ListenAddresses` names (for `*`:
+IPv4's wildcard, the stable global IPv6 address, `::1`), so a reply leaves from the address a guest
+dialled; a guest drops one from a temporary address. `Join` reports the host as peer 1. Every roster
+change and payload comes out of `Step`. A service thread polls when the main thread has not stepped
+for `ServiceGapSeconds`, up to the keepalive's ceiling, so a blocking load keeps acknowledging. A
+socket with no listener holds what lands and replays it on `Bind`. At quit, the launcher's
+`CloseAll` ends every service thread before the engine disposes the peers. Read `NetLink.cs` next.
 
 ## src/Net/NetLink.cs
 `NetLinkState`, where one end's link stands (connecting, up, down) in words a board can show
@@ -133,19 +135,10 @@ WebRTC, a merged host) shows a board: its state, the payloads held while no list
 a fault as a player reads it. `HeldPayloads` is the one depth every carrier holds to before
 `Bind`. A carrier without it, the loopback, is read through its peer roster instead.
 
-## src/Net/SteamTransport.cs
-The Steam carrier's place in the seam with nothing behind it: the Steamworks SDK cannot be
-committed here under its licence, so every way in throws "not built with the Steamworks SDK" and
-says which of the two cases the build is. `SteamBuild` is the `CSVM_STEAM` define, set by the
-`CsvmSteam` build property, and the only thing that define changes. The throw is an
-`InvalidOperationException`, the kind the door and the launcher already catch from a socket that
-will not open, so a Steam build reaches a board as a line of text rather than a crash. Read
-`NetCarrier.cs` for where it is chosen.
-
 ## src/Net/NetCarrier.cs
-Which carrier a match runs over, chosen once: the menu door's registration in `Launcher.cs` and
+Which carrier a match runs over, chosen once: the menu door's registration in `Launch/NetFlight.cs` and
 the command line's own open both come through `Host` and `Join`, so a build changes carrier with
-no edit above the seam. `UsesSteam` is the switch, `Name` the log word. `PortMap`/`PortUnmap` are
+no edit above the seam. `Name` is the log word. `PortMap`/`PortUnmap` are
 the router door a direct-IP host asks for, `Pinhole` (given the address) and `PinholeClose` its
 IPv6 pinhole, and `StableIpv6`/`LanIpv4` the addresses it names (`Utils/HostAddress.cs`). All are
 null for a carrier reachable without them. `HostListed` adds a listed WebRTC host beside ENet as a
@@ -345,7 +338,7 @@ Where a search asks each round: `Limited` (255.255.255.255) first, then the dire
 (address with every host bit set) of each IPv4 network the machine sits on, once each, loopback and
 single-host masks skipped. ⚠ The limited broadcast alone is not enough: Windows sends it out of one
 adapter only, so a machine with several adapters can miss its host's network. The networks come
-from `Utils/LocalNetworks.cs` through `NetPlayFeature.LanNetworks`.
+from `Utils/LocalNetworks.cs` through `UI/Menu/LanDoor.cs`'s `Networks`.
 
 ## src/Net/LoopbackLan.cs
 The in-process datagram network the suites and the screenshot aids run the LAN search on, the
@@ -390,13 +383,13 @@ wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.
 
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
-`DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3), `DogfightRosterMessage`
-the whole player list with each row's team and the reading guest's own row marked, and
-`LobbyChatMessage` one typed line, which the host relays. `LobbyTeamActionMessage` is a guest's
-team action to its host and `LobbyTeamsMessage` the host's team names. A guest's plane and Ready
-ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask
-of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's placed return is
-`NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+`DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3) and a spare flag bit saying whether the host's match lands on Game Scores, `DogfightRosterMessage`
+the whole player list with each row's team, a bot row's tier and Random plane, and the reading
+guest's own row marked, and `LobbyChatMessage` one typed line, which the host relays.
+`LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
+team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
+session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.
+Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetRaceMessages.cs
 A network stunt race's four session messages, all reliable. `RaceCallMessage` (`NetRaceCall`) is the window's end one machine decides for the rest: the host's rerun and return to the lobby, a guest's leaving. `RaceRunMessage` is one event of a
@@ -435,8 +428,8 @@ The two cursors every serialiser and deserialiser runs on, `NetMessageWriter` an
 Little-endian primitives over the caller's span, plus the two quantised forms the layouts need: a
 unit-range field as a 16-bit integer, and a fixed-width UTF-8 field that truncates on a whole
 character. The writer opens with the header and patches the total length in on `Close`; the
-reader reads the header in its constructor, so `Type`, `Length` and `Valid` answer before any
-payload byte is touched. A text field decodes on the stack, so a read allocates only its string.
+reader reads the header in its constructor, so `Type`, `Length` and `Valid` answer first, and a
+NaN or infinite float clears `Valid`. A text field decodes on the stack and allocates only its string.
 `NetMessageFuzzTests.cs` feeds every reader random, truncated and mislabelled bytes.
 
 ## src/Net/NetClockSlew.cs
@@ -478,17 +471,19 @@ that carry it are the message vocabulary's.
 
 ## src/Net/NetSeat.cs
 One pilot's place in a match, shaped like the record the original allocates per player: the peer it
-is addressed by, its team, whether this machine flies it, its callsign, its airframe and paint, its
-pilot voice in the pick's form, its seat index and its signed score. The roster carries the voice to every machine. `Color` reads the seat's own entry in `NetSeats`. The seat index is
-the whole identity: a remote pilot indexes spawns, scores, markers and colours exactly as a
-splitscreen pane does, which is why the session orders its rigs by it. Read
-`docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an aeroplane
-without a pane.
+is addressed by, its team, its callsign, airframe, paint, voice, seat index and signed score, and
+who flies it where. `Pilot` says a person or a host's bot (`NetPilot`), with a bot's `Skill` tier
+(`NetBotSkill`), militia and accent. `FlownHere` (this machine simulates and reports it) and `HasPane` (a person sits
+at it here) are two claims: a bot is flown on its host with no pane. The seat index is the whole
+identity, so a remote pilot or a bot indexes spawns, scores, markers and colours as a splitscreen
+pane does. Read `docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an
+aeroplane without a pane.
 
 ## src/Net/NetSeats.cs
 The roster's rules: `MaxPlayers = 16` pilots admitted, the count the original's lobby shows and
 its data holds, every seat-indexed table built `SeatCapacity = 16` wide, each seat's identity
-colour, and `Validate`, which requires seats numbered from zero with no gap and at least one flown here. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick.
+colour, and `Validate`: seats numbered from zero with no gap, at least one with a pane here, a
+person at seat 0, and every bot owned and flown where seat 0 is. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick. `Bot` makes a host's bot seat and `AddBots` appends several after the guests, leaving out any past the field, `LocalPanes` opens a local match's roster with its panes on `OfflinePeer`, `LocalOrdinal` a seat's pane ordinal, and `LeavingWith` the seats a dropped guest takes with it, never a bot.
 Seats 0 to 7 take the original's authored dwords at `00628eb4` in order, low byte red as the
 original's one reader takes them (the remake's index is 0-based where the original's was 1-based
 and its eighth pilot read past the table); seats 8 to 15 take the channel-wise complement of seat
@@ -538,8 +533,8 @@ peer with the handshake (which names its first seat and the run after it, `Local
 and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
 addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
 `RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to
-its sender; `FliesOnTeam` answers a team line's addressing. A suite reads the counters (`Sent`,
-`Received`, `Relayed`, `DroppedUnknown`, `Malformed`) and `Instruments`, fed before any handler.
+its sender; `FliesOnTeam` answers a team line's addressing by the persons a machine seats, never its bots. A host's `RequireSeatOwner` drops, before relay and handler, a type whose seat the sender does not fly. A suite reads the counters (`Sent`,
+`Received`, `Relayed`, `DroppedUnknown`, `Malformed`, `Forged`) and `Instruments`, fed before any handler.
 
 ## src/Net/NetInstruments.cs
 One machine's desync counters over its own traffic, engine-free, read by `net-soak` and the

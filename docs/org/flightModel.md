@@ -866,10 +866,14 @@ player compare and remains the evidence `docs/architecture.md` cites for the AI 
 far-field test is the pair at `0x48c4d7` and `0x48c4e9`.
 
 **How CSVM flies it.** `FlightModel.FarFieldPlant` is re-decided every step from
-`FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
-`PlayerPositions` snapshot. The original measures against its single player pointer; CSVM measures
-against the **nearest human pilot**, deliberately widening a player-only behaviour to all four
-human pilots. This is the only difference from the decode. The `[obj+0x384]` arm is deliberately not
+`FlightInput.NearestHumanDistSqM`, which `FlightController` fills from its `HumanPositions`
+binding. For every AI-flown aircraft, roster AI and network bots alike, that binding is
+`HumanFlightAdapter.PersonSeatPositions`: this machine's panes outside a network match, and every
+person's seat inside one, a guest's flown elsewhere included and a bot's or a departed guest's
+left out. It is not the session's pane snapshot, which on a host would put an AI beside a guest
+and a kilometre from the host on the far-field plant. The original measures against its single
+player pointer; CSVM measures against the **nearest human pilot**, deliberately widening a
+player-only behaviour to every person in the session. This is the only difference from the decode. The `[obj+0x384]` arm is deliberately not
 ported, and that is now the decode rather than a gap: the flag is a developer switch no gameplay
 event sets, so a wreck in the original flies the near-field plant exactly as CSVM's does. Two
 constants of the plant's inventory come from here,
@@ -957,7 +961,7 @@ much smaller stick than its slow ones, which is roll-off produced in the input s
 aerodynamics are involved, see the landing note below.
 
 **Landing note, with the kinematic nose-chase retired, the roll-off gap is closed.** Ported as
-`StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the gamepad's
+`StickRamp`, applied to the keyboard axes in `SeatControls.ReadStick` (the gamepad's
 analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep` through
 the ramp on the current plant (`NoseChaseFactor` 0) reads the 1300 → 570 ms roll-off at **42.0×
 against the original's 42×** (unramped 34.4×). The 1.57× deficit this note used to record was
@@ -2955,7 +2959,7 @@ final leg's climb-out.
 
 Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`), **completed for `C21`**
 with the placement, the angular impulse and the partition's inertia correction below (retiring
-`BL-381`): `FlightModel.BounceNormalSpeed`/`BounceRateKick` are the law and `FlightModel.Collide`
+`BL-381`): `FlightModel.BounceImpulse` is the law (`BounceNormalSpeed` exposes its linear half) and `FlightModel.Collide`
 the site, gated on `IsHumanPiloted` and not-already-crashed. The sweep runs on every other sim
 step, as the original's does, with the skipped step's motion carried into the next sweep
 (`SweepCadence`, "What the parity is ported as" below), and every contact it resolves spends the
@@ -3025,6 +3029,24 @@ player-pointer guard to every human-piloted aircraft that `C21` recorded for the
 by the `graze-bounce` suite, which flies a player rig and an AI rig down the same trajectory into the
 same floor and measures `e = 0.56` against `0.00`.
 
+**Remake-only rule: a Dogfight bot seat takes the player's arm.** A bot is AI-piloted but stands in
+a person's seat with a person's hull, so it dies to a contact only when a person in the same plane
+would: it sweeps the airframe hulls, bounces, and is exempt from `local_11` below
+(`FlightController.TakesPersonsContactRule`). It keeps the 0.2 entity cut, the AI force path and the
+AI shakes. World AI keeps the decoded rule. `graze-bounce-bot` flies a person, a bot and world AI
+down `graze-bounce`'s trajectory, and `versus-local-bot-graze` stages a local match's bot into MP1.
+
+**Remake-only rule: a bot's impulse reads `ω` without the AI ground blow's share.** The AI ground
+blow (`0x0048c317`) writes a fixed push straight into `ω` every tick, where the player's law only
+biases the stick. Near the ground it pitches a bot nose-up within a few steps (the Fury staged 25°
+down at 80 m/s over MP1 turns from −25° to +29° in three steps), so the tail strikes carrying that
+rotation, and `vp` above turns it into rebound: read with that share, a bot's restitution across the
+stock airframes spans −0.4 to 7.3 against a person's 0.52 to 0.57. The original never meets this
+case, since its AI takes no impulse. `FlightModel` keeps the blow's deposit as its own decayed share of `ω` and
+`Collide` subtracts it before the impulse, so the bot's rebound is the one a person's state would
+give; the share is always zero on the player path. `graze-bounce-bot` sweeps every stock airframe on
+two trajectories with the blow on, and `versus-local-bot-graze` reads the MP1 staging.
+
 With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
 `I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
 
@@ -3055,8 +3077,7 @@ two momenta, `2.25·|J|` against `|I·u|`, which is also the physically coherent
 Bloodhawk's reciprocal moments near 1.1 the correction moves `f_lin` a few points up
 (`f_lin = 2.25/(2.25 + sinθ/(recI·|r|))`: ≈0.93 at a 5 m arm, ≈0.71 at 1 m), so every direction
 claim below survives it unchanged. Ported: `BounceImpulse` divides by `RecInertia` for the share
-and applies the net kick with no inertia factor; `BounceRateKick` exposes it and `Collide` spends
-it on the body rates in place of the retired fitted `GrazeKick`.
+and applies the net kick with no inertia factor; `Collide` spends it on the body rates in place of the retired fitted `GrazeKick`.
 
 Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
 `[0, 0.6]` as authored.
@@ -3737,7 +3758,8 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   authority, a forced limiter scalar, and the two load-factor readouts left where the last
   near-field step put them. ⚠ Two of its cases are controls rather than claims: the ground blow
   still runs far-field, and an AI at 999 m integrates identically to one standing on the human.
-  The in-engine half, which is the session plumbing, is the `ai-far-field-plant` suite.
+  The in-engine half, which is the session plumbing, is the `ai-far-field-plant` suite, and its
+  network half, a host's AI measured against a guest's plane, is `net-ai-far-field`.
 - **`FlightConstantInventoryTests`**, the inventory table above, as a census over the plant's own
   const fields plus the `flightModel.*` config block. It checks provenance, not correctness: a
   constant added, dropped or moved fails until somebody classifies it, which is the step skipped

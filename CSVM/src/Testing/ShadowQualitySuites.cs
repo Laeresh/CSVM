@@ -92,15 +92,15 @@ internal static class ShadowQualitySuites
         ctx.Check(unknown.Word == ShadowQualitySetting.Default && unknown.Source == SettingSource.Default,
             $"an unknown word at every layer falls through to the default ({Describe(unknown)})");
         var integrated = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedDefault, ShadowQualitySetting.IntegratedDefault);
-        ctx.Check(integrated.Word == ShadowQualitySetting.High && integrated.Source == SettingSource.IntegratedGpuDefault,
+        ctx.Check(integrated.Word == ShadowQualitySetting.High && integrated.Rule == ShadowQualitySetting.IntegratedRule,
             $"an integrated GPU with nothing set runs High ({Describe(integrated)})");
         var panes = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedSplitDefault, ShadowQualitySetting.IntegratedSplitDefault);
-        ctx.Check(panes.Word == ShadowQualitySetting.Off && panes.Source == SettingSource.IntegratedGpuPanesDefault,
+        ctx.Check(panes.Word == ShadowQualitySetting.Off && panes.Rule == ShadowQualitySetting.IntegratedSplitRule,
             $"an integrated GPU's three- or four-pane session with nothing set runs Off under its own source ({Describe(panes)})");
         var keyUltra = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.Ultra, ShadowQualitySetting.IntegratedDefault);
         ctx.Check(keyUltra.Word == ShadowQualitySetting.Ultra && keyUltra.Source == SettingSource.Config,
             $"and a key spelling ultra still wins there, since ultra is not that machine's fallback ({Describe(keyUltra)})");
-        ctx.Check(ShadowQualitySetting.DefaultFor(det: true) == ShadowQualitySetting.Default,
+        ctx.Check(ShadowQualitySetting.Lookup.Fallback(new SettingContext(Det: true, Enhanced: true, Panes: 4)).Word == ShadowQualitySetting.Default,
             $"a --det run falls back to Ultra whatever the GPU, so a capture does not depend on the machine");
     }
 
@@ -217,11 +217,11 @@ internal static class ShadowQualitySuites
     private static void CommandLine(TestContext ctx)
     {
         var picked = SessionSpec.Parse(new[] { "--shadow-quality=medium" });
-        ctx.Check(picked.ShadowQuality == ShadowQualitySetting.Medium,
-            $"--shadow-quality=medium reaches the spec ({picked.ShadowQuality ?? "unset"})");
+        ctx.Check(picked.WordFlags[ShadowQualitySetting.Lookup] == ShadowQualitySetting.Medium,
+            $"--shadow-quality=medium reaches the spec ({picked.WordFlags[ShadowQualitySetting.Lookup] ?? "unset"})");
         var refused = SessionSpec.Parse(new[] { "--shadow-quality=epic" });
-        ctx.Check(refused.ShadowQuality == null,
-            $"and an unknown word is refused rather than kept ({refused.ShadowQuality ?? "unset"})");
+        ctx.Check(refused.WordFlags[ShadowQualitySetting.Lookup] == null,
+            $"and an unknown word is refused rather than kept ({refused.WordFlags[ShadowQualitySetting.Lookup] ?? "unset"})");
     }
 
     private static void SavedWordDrop(TestContext ctx)
@@ -237,11 +237,11 @@ internal static class ShadowQualitySuites
         OptionsStore.DirectoryOverride = dir;
         try
         {
-            OptionsStore.UserOptions().Save(new OptionsDef { ShadowQuality = ShadowQualitySetting.Low });
-            ctx.Check(ShadowQualitySetting.SavedWord(det: false) == ShadowQualitySetting.Low,
-                $"a plain launch reads the saved word ({ShadowQualitySetting.SavedWord(det: false) ?? "unset"})");
-            ctx.Check(ShadowQualitySetting.SavedWord(det: true) == null,
-                $"and a --det launch reads no saved word at all ({ShadowQualitySetting.SavedWord(det: true) ?? "unset"})");
+            OptionsStore.UserOptions().Save(new OptionsDef { Words = { [ShadowQualitySetting.Lookup] = ShadowQualitySetting.Low } });
+            ctx.Check(WordSettings.ReadSaved(det: false)[ShadowQualitySetting.Lookup] == ShadowQualitySetting.Low,
+                $"a plain launch reads the saved word ({WordSettings.ReadSaved(det: false)[ShadowQualitySetting.Lookup] ?? "unset"})");
+            ctx.Check(WordSettings.ReadSaved(det: true)[ShadowQualitySetting.Lookup] == null,
+                $"and a --det launch reads no saved word at all ({WordSettings.ReadSaved(det: true)[ShadowQualitySetting.Lookup] ?? "unset"})");
         }
         finally
         {
@@ -250,7 +250,7 @@ internal static class ShadowQualitySuites
     }
 
     private static string Describe(ShadowQualityPlan plan) =>
-        $"{plan.Word} source={ShadowQualitySetting.Lookup.SourceName(plan.Source)}";
+        $"{plan.Word} source={ShadowQualitySetting.Lookup.SourceName(plan.Source, plan.Rule)}";
 
     private static string Describe(SunShadowPlan plan) => string.Format(CultureInfo.InvariantCulture,
         "cast={0} angle={1} blur={2} filter={3} atlas={4}", plan.Cast, plan.AngularDistance, plan.Blur, plan.Filter, plan.AtlasSize);

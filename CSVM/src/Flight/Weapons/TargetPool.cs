@@ -177,6 +177,82 @@ public sealed class TargetPool
     internal static bool IsEmplacement(object? source) =>
         source is TurretController { Site: not null };
 
+    /// <summary>A standing target's current geometry and liveness, read off whichever source type it
+    /// is: a <see cref="FlightController"/>, a <see cref="SurfaceVehicle"/>, a
+    /// <see cref="TurretController"/> or a <see cref="DestructibleRegistry.Instance"/>. No
+    /// non-aircraft source carries a facing axis, so forward comes back zero. That collapses the
+    /// aspect test and the lead offset to "aim at the position".</summary>
+    internal static bool TryTargetGeometry(object? target, out Vector3 position, out Vector3 velocity,
+        out Vector3 forward, out bool live)
+    {
+        switch (target)
+        {
+            case FlightController fc:
+                position = fc.WorldPosition;
+                velocity = fc.WorldVelocity;
+                forward = fc.NoseDirection;
+                live = fc.InPlay && fc.IsInsideTree();
+                return true;
+            case SurfaceVehicle hull:
+                // A hull that has not been woken is present but not live, as an inert pilot is. It is
+                // not a target until its WAKEUP_ENEMIES clause runs.
+                live = !hull.Inert && !hull.IsDestroyed && GodotObject.IsInstanceValid(hull.Body)
+                    && hull.Body.IsInsideTree();
+                position = live ? hull.Position : Vector3.Zero;
+                velocity = hull.Velocity;
+                forward = Vector3.Zero;
+                return true;
+            case TurretController t:
+                position = t.WorldPosition;
+                velocity = t.PlatformVelocity;
+                forward = Vector3.Zero;
+                live = t.Alive;
+                return true;
+            case DestructibleRegistry.Instance inst:
+                live = inst.Status != DestructibleRegistry.State.Destroyed
+                    && GodotObject.IsInstanceValid(inst.Anchor) && inst.Anchor.IsInsideTree();
+                position = live ? inst.Centre : Vector3.Zero;
+                velocity = Vector3.Zero;
+                forward = Vector3.Zero;
+                return true;
+            default:
+                position = velocity = forward = Vector3.Zero;
+                live = false;
+                return false;
+        }
+    }
+
+    /// <summary>Where a target source is DRAWN this frame, as opposed to where the gun solves to. An
+    /// aircraft's node sits on its render pose, interpolated between sim steps as the chase camera
+    /// follows. A marker projected from the physics pose stalls between ticks and jumps on each.
+    /// Turret and structure positions are node positions already. False on a freed, out-of-tree or
+    /// unknown source, where the caller keeps its physics snapshot.</summary>
+    internal static bool TryRenderPosition(object? source, out Vector3 position)
+    {
+        switch (source)
+        {
+            case FlightController fc when GodotObject.IsInstanceValid(fc) && fc.IsInsideTree():
+                position = fc.GlobalPosition;
+                return true;
+            case TurretController t:
+                position = t.WorldPosition;
+                return true;
+            case DestructibleRegistry.Instance inst when GodotObject.IsInstanceValid(inst.Anchor)
+                && inst.Anchor.IsInsideTree():
+                position = inst.Centre;
+                return true;
+            default:
+                position = Vector3.Zero;
+                return false;
+        }
+    }
+
+    /// <summary>How a standing target is named in a log line and in the F15 overlay's roll-call:
+    /// "P{n}" for an aircraft slot, <see cref="NameOf"/> for anything else. One rule for both, since
+    /// the two get read side by side when a run is being explained.</summary>
+    internal static string TargetLabel(object? source) =>
+        source is FlightController fc ? $"P{fc.PlayerIndex + 1}" : NameOf(source);
+
     // The torpedo gate on the zeppelin sub-part channel. No shipped mission table flags a gasbag,
     // an engine or a cannon, so those parts stand in for a flag nothing authors, and the stand-in
     // is offered only for the capability it exists for: aiming a LOCK_ON torpedo at an airship.

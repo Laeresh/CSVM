@@ -26,8 +26,9 @@ public readonly record struct AntiAliasingPlan(AntiAliasingMethod Method, string
 
 /// <summary>
 /// The anti-aliasing method the 3D viewports run, one of
-/// <see cref="DisplayWords.AntiAliasingChoices"/>. <see cref="Lookup"/> reads <see cref="FlagWord"/>,
-/// the saved <c>antiAliasing</c> option, then the <see cref="Key"/> config key, then
+/// <see cref="DisplayWords.AntiAliasingChoices"/>. <see cref="Lookup"/> reads
+/// <c>--anti-aliasing=</c> or the VR profile's word (<see cref="VrQuality"/>), then the saved
+/// <c>antiAliasing</c> option. Then come the <see cref="Key"/> config key and
 /// <see cref="DefaultFor"/> the graphics mode. It is a display setting, so a chosen method is
 /// written whichever mode won. Only the default follows the mode.
 /// <see cref="ViewportQuality"/> is the one reader of <see cref="Method"/>. It
@@ -40,37 +41,49 @@ public static class AntiAliasingSetting
     /// <summary>The config key under the saved option, one of the five words.</summary>
     public const string Key = "graphics.antiAliasing";
 
-    /// <summary>The source order over the five words, beaten by <c>--anti-aliasing=</c>.</summary>
-    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices, "--anti-aliasing");
-
-    /// <summary>The word that beats the saved one for the whole process: the flag, else the VR
-    /// profile's word under a live headset (<see cref="VrQuality"/>). Null leaves the saved word,
-    /// the config key and the mode's default to decide. Set once at launch, before any resolve.</summary>
-    public static string? FlagWord { get; set; }
+    /// <summary>The setting's registry entry, beaten by <c>--anti-aliasing=</c>. Its fallback
+    /// follows the graphics mode.</summary>
+    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices, "--anti-aliasing")
+    {
+        SavedField = "antiAliasing",
+        LogName = "anti_aliasing",
+        Title = "Anti-aliasing",
+        Labels = new[] { "Off", "FXAA", "SMAA", "TAA", "FSR 2.2" },
+        Detail = static _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
+        Shown = DefaultFor,
+        // FSR 2.2 refuses a scale above native, so the scale standing there moves to native.
+        Picked = static (staged, word) =>
+            staged[RenderScaleSetting.Lookup] = RenderScaleSetting.ClampFor(staged[RenderScaleSetting.Lookup], word),
+        Fallback = static context => new ResolvedWord(DefaultFor(context.Enhanced), SettingSource.Default),
+        Take = static resolved =>
+        {
+            Store(resolved.Word);
+            RenderScaleSetting.Lookup.Retake();
+            return resolved;
+        },
+    };
 
     /// <summary>Resolved once at launch by <see cref="Resolve"/>, before any 3D viewport is
     /// built, so every viewport in a run takes the same method.</summary>
     public static AntiAliasingMethod Method { get; private set; } = AntiAliasingMethod.Off;
+
+    /// <summary>The word <see cref="Method"/> was spelled as, which the render scale clamps under.</summary>
+    public static string Word { get; private set; } = DisplayWords.AntiAliasingOff;
 
     /// <summary>The word a launch with nothing saved and no config key runs. Off keeps the faithful
     /// mode on its own image, and the enhanced mode runs TAA.</summary>
     public static string DefaultFor(bool enhanced) =>
         enhanced ? DisplayWords.AntiAliasingTaa : DisplayWords.AntiAliasingOff;
 
-    /// <summary>The method <see cref="Lookup"/> resolves <see cref="FlagWord"/>,
-    /// <paramref name="savedWord"/> and <paramref name="configWord"/> to over <see cref="DefaultFor"/>
-    /// the mode, stored as <see cref="Method"/>.</summary>
+    /// <summary>The method <see cref="Lookup"/> resolves <paramref name="savedWord"/> and
+    /// <paramref name="configWord"/> to over <see cref="DefaultFor"/> the mode, stored as
+    /// <see cref="Method"/> through the registry's <see cref="WordSetting.Take"/>. The render scale is
+    /// then taken again under it, as a launch takes it.</summary>
     public static AntiAliasingPlan Resolve(string? savedWord, string? configWord, bool enhanced)
     {
-        var resolved = Lookup.Resolve(FlagWord, savedWord, configWord, DefaultFor(enhanced));
-        TryParse(resolved.Word, out var method);
-        Method = method;
-        return new AntiAliasingPlan(method, resolved.Word, resolved.Source);
+        var resolved = Lookup.Take(Lookup.Resolve(null, savedWord, configWord, DefaultFor(enhanced)));
+        return new AntiAliasingPlan(Method, resolved.Word, resolved.Source);
     }
-
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.AntiAliasing);
 
     /// <summary>Whether <paramref name="word"/> is one of
     /// <see cref="DisplayWords.AntiAliasingChoices"/>, and the method it spells.</summary>
@@ -91,5 +104,13 @@ public static class AntiAliasingSetting
             _ => AntiAliasingMethod.Off,
         };
         return true;
+    }
+
+    private static AntiAliasingMethod Store(string word)
+    {
+        TryParse(word, out var method);
+        Method = method;
+        Word = word;
+        return method;
     }
 }

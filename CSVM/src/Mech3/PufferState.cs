@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -109,7 +110,7 @@ public sealed class PufferState
         }
         catch (Exception e)
         {
-            GD.PushWarning($"could not load puffer '{pufferName}' from {fileName}: {e.Message}");
+            Log.Warn("world", $"could not load puffer '{pufferName}' from {fileName}: {e.Message}");
             return null;
         }
     }

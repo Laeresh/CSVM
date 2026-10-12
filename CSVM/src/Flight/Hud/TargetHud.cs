@@ -10,15 +10,14 @@ using Godot;
 namespace CSVM.Flight.Hud;
 
 /// <summary>
-/// The per-pane targeting HUD, built on every human pane in every flight session (a <c>--vs</c>
-/// pane gets one alongside <see cref="Modes.VersusHud"/>). It draws the pilot's own sticky selection
-/// (<see cref="Selected"/>) in the original's shape: a bracket box gated on the SELECTED GUN's
-/// reach (<see cref="GunReaches"/>), the label below it, and off screen the edge marker with a name
-/// and clock bearing. Colour is the decoded <c>Target::GetColor</c> (<see cref="MarkerColor"/>).
-/// <see cref="TrackedHostile"/> is the fallback where no selection exists at all, and the F16 key
-/// or <c>--debug-markers</c> (<see cref="MarkAll"/>) widens it to every live aircraft with a
-/// full identity string (<see cref="DebugTag"/>). The edge placement and clock bearing are
-/// <see cref="EdgeMarker"/>'s; only the arrow and label styling is this HUD's own.
+/// The per-pane targeting HUD, built on every human pane in every flight session; <c>--vs</c>
+/// players mark each other through it. It draws the pilot's sticky selection
+/// (<see cref="Selected"/>) in the original's shape, brackets gated on the SELECTED GUN's reach
+/// (<see cref="GunReaches"/>) and the label below. Off screen it draws the edge marker, whose
+/// placement and clock bearing are <see cref="EdgeMarker"/>'s. Colour is the decoded
+/// <c>Target::GetColor</c> (<see cref="MarkerColor"/>), and the fallback with no selection is
+/// <see cref="TrackedHostile"/>. F16 or <c>--debug-markers</c> (<see cref="MarkAll"/>) widens it
+/// to every live aircraft with a full identity string (<see cref="DebugTag"/>).
 /// Decode: <see href="../../../../docs/org/targeting.md">org/targeting.md</see>.
 /// </summary>
 public sealed partial class TargetHud : Control
@@ -76,7 +75,7 @@ public sealed partial class TargetHud : Control
 
     /// <summary>The friendly-target colour. In the decode a friendly is GREEN, not blue
     /// (docs/org/targeting.md "Colour"). This is its (0,255,0) in the HUD palette's desaturation, as
-    /// <see cref="HudRed"/> is (200,0,0). Shared with the Dogfight HUD's teammate marker.</summary>
+    /// <see cref="HudRed"/> is (200,0,0).</summary>
     internal static readonly Color HudGreen = new(0.6f, 1f, 0.6f);
 
     /// <summary>The label block's line pitch in reference pixels, for a caller sizing a surface
@@ -86,7 +85,7 @@ public sealed partial class TargetHud : Control
     /// <summary>The step between two edge tags on one bearing, in reference pixels.</summary>
     internal static readonly float StaggerStepRef = RefStaggerStep;
 
-    // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
+    // 1440p reference metrics, scaled by HudMetrics.
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
     private const float RefStaggerStep = 18f;  // --debug-markers: gap between two edge tags on one bearing
 
@@ -151,18 +150,17 @@ public sealed partial class TargetHud : Control
     private bool _marksInWorld;
 
     /// <summary>This pane's own world pose, fed every frame by FlightController, the tracked
-    /// hostile's clock bearing reads off it, exactly like VersusHud's PlanePos/HeadingDeg.</summary>
+    /// hostile's clock bearing reads off it.</summary>
     public Vector3 PlanePos { get; set; }
 
     /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
 
     /// <summary>The pose this pane's aeroplane is DRAWN at, the render-interpolated one the chase
-    /// camera follows, which the spyglass eye stands on and rolls with (for an aircraft target;
-    /// every other class is watched level).
-    /// ⚠ Not <see cref="PlanePos"/>'s sim pose. The target point the picture is aimed at comes off
-    /// the same interpolation, and an eye quantised to the physics tick against it is the shake
-    /// <see cref="FlightController.TryRenderPosition"/> exists to keep out of the markers.</summary>
+    /// camera follows. The spyglass eye stands on it and, for an aircraft target, rolls with it.
+    /// ⚠ Not <see cref="PlanePos"/>'s sim pose. The picture's aim point comes off the same
+    /// interpolation. An eye quantised to the physics tick against it is the shake
+    /// <see cref="TargetPool.TryRenderPosition"/> keeps out of the markers.</summary>
     public Transform3D RenderPose { get; set; } = Transform3D.Identity;
 
     /// <summary>Whether this pane's spyglass is armed, <see cref="Spyglass.DefaultOn"/> at level
@@ -326,6 +324,12 @@ public sealed partial class TargetHud : Control
         string head = cut > 0 ? name.Substring(0, cut) : name;
         return head.Length > 0 ? head.ToUpperInvariant() : "AI";
     }
+
+    /// <summary>The tracked hostile's tag: the pilot's name where its seat gives one, else
+    /// <see cref="HostileTag"/> of the node name. A bot then reads by its callsign, as on the name
+    /// line.</summary>
+    public static string TrackedTag(FlightController plane) =>
+        plane.PilotName is { Length: > 0 } callsign ? callsign : HostileTag(plane.Name);
 
     /// <summary><c>--debug-markers</c>' own tag: <c>AI1 Fury 640 m H78 A91 pursue</c>. The one
     /// marker that keeps the FULL identity string rather than the shipped marker's plane-type-alone
@@ -517,7 +521,7 @@ public sealed partial class TargetHud : Control
             return;
         if (next != null)
         {
-            _hostileTag = HostileTag(next.Name);
+            _hostileTag = TrackedTag(next);
             Utils.Log.Info("flight",
                 $"targeting hud: P{PlayerIndex + 1} tracking {next.Name} at {PlanePos.DistanceTo(next.WorldPosition):0} m");
         }
@@ -584,10 +588,14 @@ public sealed partial class TargetHud : Control
         _spyglass?.Idle();
     }
 
+    /// <summary>Where the selection's marker stands on this pane, the placement <see cref="_Draw"/>
+    /// draws it at before any disc inset, or null with nothing selected. Read by the suite.</summary>
+    public EdgeMarker.Placement? SelectedPlacement() =>
+        Selected is { Source: not null } target ? Place(target, out _, out _, out _) : null;
+
     public override void _Draw()
     {
-        // Same zero-size guard as VersusHud: a draw can land before _Process has sized
-        // this pane.
+        // A draw can land before _Process has sized this pane.
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f || MarksInWorld)
             return;
@@ -623,7 +631,7 @@ public sealed partial class TargetHud : Control
             // At the source's render pose, like --debug-markers. The candidate's own Position is the
             // gun's physics pose, a fly-by shake through a camera on the render pose. The gate in
             // UpdateBrackets stays on the physics pose.
-            var pos = FlightController.TryRenderPosition(target.Source, out var render) ? render : target.Position;
+            var pos = TargetPool.TryRenderPosition(target.Source, out var render) ? render : target.Position;
             into.Add(new WorldMark(WorldMarkStyle.Selected, pos, MarkerColor(target, OwnTeam), "", target,
                 _bracketed, 0));
             selected = true;
@@ -660,7 +668,7 @@ public sealed partial class TargetHud : Control
             {
                 if (!GodotObject.IsInstanceValid(pilot) || !pilot.IsInsideTree())
                     continue;
-                var at = FlightController.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
+                var at = TargetPool.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
                 into.Add(new WorldMark(WorldMarkStyle.Tagged, at, HudGreen,
                     TargetPool.AircraftDisplayName(pilot, OwnTeam) ?? pilot.Name, default, false, stagger++));
             }
@@ -823,12 +831,27 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        var at = FlightController.TryRenderPosition(sel.Source, out var render)
+        var at = TargetPool.TryRenderPosition(sel.Source, out var render)
             ? render
             : sel.Position;
         var placed = EdgeMarker.Resolve(_camera.UnprojectPosition(at),
             _camera.IsPositionBehind(at), Size);
         UpdateSpyglass(sel, at, !placed.OnScreen);
+    }
+
+    // Drawn at the source's render pose, like --debug-markers. The candidate's own Position is the
+    // physics pose the gun solves to, and projecting it through a camera on the render pose shakes.
+    // The gate in UpdateBrackets stays on the physics pose.
+    private EdgeMarker.Placement Place(in TargetRef target, out Vector3 pos, out Vector2 sp, out bool behind)
+    {
+        if (!TargetPool.TryRenderPosition(target.Source, out pos))
+        {
+            pos = target.Position;
+        }
+
+        behind = _camera.IsPositionBehind(pos);
+        sp = _camera.UnprojectPosition(pos);
+        return EdgeMarker.Resolve(sp, behind, Size);
     }
 
     // The selected target's marker. On screen it is the label block under the box the gun's reach

@@ -136,6 +136,9 @@ public partial class GameSession : Node3D
     // Where an ended Instant Action mission's final numbers go on a presentation with a wrap-up
     // page of its own, routed by the Launcher. Null leaves the ending to the in-flight board.
     private readonly Action<IaWrapupSnapshot>? _instantActionWrapup;
+    // A finished lobby match's landing on Game Scores, routed by the Launcher. Null leaves the
+    // ending to the in-flight board.
+    private readonly Action? _versusLobbyLanding;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
@@ -152,6 +155,7 @@ public partial class GameSession : Node3D
     private readonly string _soundsPath;
     private readonly string _interpPath;
     private readonly string _messagesPath;
+    private readonly DecodeCache? _decode;
     // the extracted UI archive (paint patterns)
     private readonly string _rofPath;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
@@ -162,6 +166,12 @@ public partial class GameSession : Node3D
     // here rather than through key-repeat events, since the grace period is measured on wall
     // time regardless of the sim being halted.
     private readonly HoldToRepeat _stepHold = new(initialDelay: 0.3f, repeatInterval: 0f);
+
+    // The two position snapshots refill these, because every aircraft asks on every sim step.
+    // ⚠ A caller reads the answer on the spot and never keeps it, since the next call overwrites
+    // it. Arrays, not lists, so a nested call during a caller's foreach cannot throw.
+    private Vector3[] _playerPositions = Array.Empty<Vector3>();
+    private Vector3[] _fieldPositions = Array.Empty<Vector3>();
 
     // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
     // Launcher once per process and re-applied here at each session build. A pinned run takes
@@ -264,6 +274,8 @@ public partial class GameSession : Node3D
     // The stunt race (--stunt with several pilots), for the same reason: a rerun resets it rather
     // than each pilot's own run. Null outside a race.
     private StuntRace? _race;
+    // The race's bots this machine flies. Null outside a race or with none flown here.
+    private StuntRaceBots? _raceBots;
     // Who is holding the sim clock and why, shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
@@ -288,6 +300,9 @@ public partial class GameSession : Node3D
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
     // build again. The camera, lights and global shader params live on the Launcher and persist.
     private Node3D? _worldRoot;
+    // The empty stage's match arena, the flag and rearm nodes a Dogfight there stands on. Null on a
+    // chapter, whose own world holds them.
+    private Node3D? _stageArena;
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
     // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
@@ -299,6 +314,14 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
+    private Effects.Ocean? _ocean;
+    private bool _oceanEligible;
+    // The chapter's saved sea, and the one the ocean draws: the saved one under any --debug-ocean
+    // overrides and the ocean lab's edits. An ocean rebuilt by a live switch takes the drawn one.
+    private Effects.SeaState _seaSaved = Effects.SeaState.Default;
+    private Effects.SeaState _sea = Effects.SeaState.Default;
+    // The world runtime whose motions say which hulls the ocean follows; set in every mode it builds in.
+    private AnimRuntime? _oceanRuntime;
     private ClutterBuilder? _clutter;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
@@ -341,6 +364,7 @@ public partial class GameSession : Node3D
         _soundsPath = ctx.SoundsPath;
         _interpPath = ctx.InterpPath;
         _messagesPath = ctx.MessagesPath;
+        _decode = ctx.Decode;
         _rofPath = ctx.RofPath;
         _probeRunner = ctx.ProbeRunner;
         _captureDirector = ctx.CaptureDirector;
@@ -368,12 +392,19 @@ public partial class GameSession : Node3D
         _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
         _instantActionWrapup = ctx.InstantActionWrapup;
+        _versusLobbyLanding = ctx.VersusLobbyLanding;
         _music = ctx.Music;
     }
 
     /// <summary>Whether the build completed, the Launcher's Esc routing reads it (return to the
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
+
+    /// <summary>Whether the wave ocean stands in this session's world.</summary>
+    public bool OceanBuilt => _ocean != null;
+
+    /// <summary>The static world's scene builder, null outside a built world. Read by the suites.</summary>
+    internal SceneBuilder? WorldScene => _worldScene;
 
     /// <summary>Has the session drawn the first frame the player is meant to see. That frame is
     /// an intro's camera posed onto the rigs, or the flown aeroplane on its spawn under its own
@@ -429,7 +460,8 @@ public partial class GameSession : Node3D
     /// the suites.</summary>
     internal WorldFlareRig? WorldFlare => _sky?.WorldFlare;
 
-    /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
+    /// <summary>The whole match's roster in seat order: a network match's, or a local match's with
+    /// bots. Empty in any other session.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _wire.Seats;
 
     /// <summary>The Dogfight's director, null outside <c>--vs</c>: the match, its team modes and
@@ -439,6 +471,13 @@ public partial class GameSession : Node3D
     /// <summary>The stunt race, null outside one. The launcher lands an ended network race's table
     /// in the lobby from it.</summary>
     internal StuntRace? Race => _race;
+
+    /// <summary>The race's bots this machine flies, for a suite to read; null with none.</summary>
+    internal StuntRaceBots? RaceBots => _raceBots;
+
+    /// <summary>The chapter world's animation runtime, for a suite that steps the world's doors
+    /// itself; null with no world.</summary>
+    internal AnimRuntime? WorldRuntime => _worldRuntime;
 
     /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
     internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
@@ -506,6 +545,10 @@ public partial class GameSession : Node3D
     // ⚠ Do not spell "does this session build colliders" any other way. The labs and the F20
     // overlay read this one definition, so they cannot disagree with what WorldSession built.
     private bool BuildsCollision => _spec.BuildsCollision;
+
+    // An Original menu flight lands in the menu rather than on an in-flight board. Instant Action
+    // lands on its wrap-up page, a lobby match on Game Scores. A command-line launch has no menu.
+    private bool LandsInMenu => _menuDriven && _presentation == UI.Menu.PresentationId.Original;
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -623,12 +666,19 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"smoke screen: player.json unavailable ({e.Message}), flying on the image defaults");
+            Log.Warn("flight", $"smoke screen: player.json unavailable ({e.Message}), flying on the image defaults");
             smokeTunables = SmokeScreenTunables.Image;
         }
         var screenFlashSink = _screenFlash;
-        _smokeScreens = new SmokeScreens(smokeTunables, AllAircraft,
-            (playerIndex, colour, weight, duration) => screenFlashSink.PlayBlend(playerIndex, colour, weight, duration));
+        _smokeScreens = new SmokeScreens(smokeTunables, AllAircraft, (playerIndex, colour, weight, duration) =>
+        {
+            // A guest's seat index is not its pane index, so the wash finds the pane by its pilot.
+            for (int i = 0; i < _rigs.Count; i++)
+            {
+                if (_rigs[i].Controller?.PlayerIndex == playerIndex)
+                    screenFlashSink.PlayBlend(i, colour, weight, duration);
+            }
+        });
         // A fresh list per build: a tag never outlives the session that painted it.
         _beeperTags = new BeeperTags<FlightController>();
         LoadProgress.Report(LoadStep.Rigs);
@@ -821,6 +871,12 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        _oceanEligible = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
+        _oceanRuntime = state.WorldRuntime;
+        ResolveSea();
+        FollowOcean();
+        if (_oceanEligible && Effects.Ocean.Covers(_spec.Chapter))
+            _labs!.BuildOceanLab(_seaSaved, _sea, () => _ocean, ApplySea);
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.
@@ -849,6 +905,7 @@ public partial class GameSession : Node3D
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
+        FollowOcean();
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
@@ -903,6 +960,10 @@ public partial class GameSession : Node3D
         _edgeExtender?.FollowClutterFade();
     }
 
+    /// <summary>A live Water Quality change builds or drops the wave ocean
+    /// (<see cref="EnhancedLook.ApplyWaterQuality"/>). The graphics-mode switch follows it too.</summary>
+    public void FollowWaterQuality() => FollowOcean();
+
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
     /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
     /// writes put back defaults the zone's sky colour, energies and shadow distance overwrite.
@@ -951,7 +1012,7 @@ public partial class GameSession : Node3D
             if (_rigs.Count > 0)
                 _xrRig?.Release(_rigs[0]);
             // The sun is Launcher-owned too, so a splitscreen session's pane default leaves with it.
-            FollowPaneShadows(1);
+            FollowPanes(1);
             // A line still open when the session ends leaves no field for the keyboard to type into.
             ScreenKeyboard.Hide(SessionNet.ChatKeyboardOwner);
         }
@@ -1316,7 +1377,7 @@ public partial class GameSession : Node3D
         // ambient SOUND_NODE emitters and needs the archive while it runs.
         var archives = SessionArchives.OpenFor(
             _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
-            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute);
+            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute, _decode);
         state.Gamez = archives.Gamez;
         state.Textures = archives.Textures;
         state.Sounds = archives.Sounds;
@@ -1404,9 +1465,10 @@ public partial class GameSession : Node3D
     private void BuildEmptyStage(BuildState state)
     {
         long mark = StartupProfile.Mark();
-        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
+        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision, arena: _spec.Versus);
         StartupProfile.Record("world", mark);
         _plane = stage.Root;
+        _stageArena = stage.Arena;
         state.MeshInstances = stage.MeshInstanceCount;
         state.Colliders = stage.ColliderCount;
         state.What = "empty stage";
@@ -1458,7 +1520,8 @@ public partial class GameSession : Node3D
             {
                 extraAccents.AddRange(InstantActionRuntime.VoiceAccentIds(iaVoice.Runtime.Def));
             }
-            // Each network seat's chosen pilot speaks its lines at runtime too.
+            // So does each bot seat's militia accent, and each network seat's chosen pilot.
+            extraAccents.AddRange(_wire.Seats.Select(s => s.BotAccent).OfType<int>());
             var seatPilots = _wire.Seats.Select(s => UI.Menu.PilotVoices.SpeakerFor(s.Voice))
                 .OfType<int>().ToList();
             voiceClips = CombatVoice.SessionPrewarmNames(
@@ -1474,6 +1537,7 @@ public partial class GameSession : Node3D
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
+                Decode = _decode,
                 EffectsParent = _worldRoot!,
                 // The one instance the weather rig publishes to and the player's own effects read.
                 // Without it the world's emitters hold the camera-less still-air null object, which
@@ -1768,14 +1832,15 @@ public partial class GameSession : Node3D
 
     private void BuildFlightRigs(BuildState state)
     {
-        var voices = _voices = new SessionVoices(_spec, _zrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats);
+        var voices = _voices = new SessionVoices(_spec, _zrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
+            onWire: _wire.Link != null);
         long mark = StartupProfile.Mark();
         // On the empty stage the session gamez IS planes.zbd (there is no chapter world), so there
         // is nothing to load a second time. ⚠ Unless --zep= grafted a chapter node on: the session
         // gamez is then that chapter's, and planes.zbd has to be loaded here as everywhere else.
         var planesGamez = _spec.EmptyStage && _spec.Zep == null
             ? state.Gamez
-            : GameZ.Load(state.PlanesGamezPath);
+            : _decode?.Gamez(state.PlanesGamezPath) ?? GameZ.Load(state.PlanesGamezPath);
         StartupProfile.Record("gamez", mark);
         // Stats are per plane, not per player (splitscreen players can pick
         // different aircraft), load each distinct one once, logging it as it appears.
@@ -1884,7 +1949,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"turrets: ai.zrd unavailable, no turret gunners: {e.Message}");
+            Log.Warn("weapons", $"turrets: ai.zrd unavailable, no turret gunners: {e.Message}");
         }
         StartupProfile.Record("zrdr", mark);
         // The one shared projectile pool and its sinks (src/Launch/ProjectileStage.cs).
@@ -1954,9 +2019,9 @@ public partial class GameSession : Node3D
                 Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
-        // Dogfight (--vs): built here, before the rigs, same reason Race is (HumanFlightAdapter
-        // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
-        // that feeds it Downed reports only runs once every rig exists, further down.
+        // Dogfight (--vs): built here, before the rigs, for the reason Race is. HumanFlightAdapter
+        // binds every pane's VersusStatusLine to this one instance. The score/respawn plumbing that
+        // feeds it Downed reports runs only once every rig exists, further down.
         _dogfight = VersusDirector.TryCreate(_spec, new VersusDirector.Field
         {
             Net = _wire.Link,
@@ -2079,6 +2144,7 @@ public partial class GameSession : Node3D
         {
             RigCount = _seatRigs.Count,
             NetSeats = _wire.Seats,
+            SeatLeft = _wire.HasLeft,
             SeatFit = _wire.SeatFit,
             SeatBuild = _wire.SeatBuild,
             MixGain = mixGain,
@@ -2143,6 +2209,7 @@ public partial class GameSession : Node3D
         if (race != null)
         {
             _race = race;
+            _raceBots = StuntRaceBots.For(race, _seatRigs, _wire.Seats);
             var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
             if (raceLink is { IsHost: false })
                 raceLink.Rerun = () => RerunRace(race);
@@ -2168,6 +2235,10 @@ public partial class GameSession : Node3D
         // Downed report once every rig exists (src/Session/World/VersusDirector.cs).
         if (_dogfight is { } dogfight)
         {
+            // The host's presentation decides the ending for every machine, so a guest follows its
+            // host's word (NetFlight.LandsOnScores) whatever its own presentation is.
+            var toScores = (_wire.Link is { IsHost: false } ? _menuDriven : LandsInMenu)
+                ? _versusLobbyLanding : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
                 Spawns = _spawnPicker,
@@ -2176,14 +2247,18 @@ public partial class GameSession : Node3D
                 SpawnListName = _spawnPicker.ScenarioOverride ?? _spec.Scenario,
                 ReportDeath = _wire.ReportDeath,
                 ToLobby = _menuDriven ? _exitSession : null,
+                LandOnScores = toScores,
             });
 
             // The match's shared board, its R the director's rematch. A guest's board says why it
             // offers no Restart, except in Zeppelin vs Zeppelin, where each machine's own Restart
             // takes it to the lobby.
-            boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                dogfight.Restart,
-                dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
+            if (toScores == null)
+            {
+                boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                    dogfight.Restart,
+                    dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
+            }
         }
 
         // Fire, hit, damage and death over the wire. It runs after the match so a death report
@@ -2199,6 +2274,9 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
+        // No Dogfight seat and no network seat but a stunt racer's takes the respawn control in
+        // flight. After WireCombat, which hands the wire the match; every seat stands now.
+        _wire.WireLiveRespawn();
         AttachScores(race, weaponMessages);
 
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
@@ -2366,10 +2444,7 @@ public partial class GameSession : Node3D
             LockCandidates = LockCandidateAircraft,
             RespawnDelay = VersusDirector.RespawnDelay,
             BuildWrapupBoard = boards.BuildIaWrapupBoard,
-            // Only the Original presentation has a wrap-up page to go to. Everywhere else, and on a
-            // command-line launch with no menu behind it, the in-flight board takes the ending.
-            WrapupToMenu = _menuDriven && _presentation == UI.Menu.PresentationId.Original
-                ? _instantActionWrapup : null,
+            WrapupToMenu = LandsInMenu ? _instantActionWrapup : null,
         });
 
         // World AA emplacements, after the zeppelins and the Instant Action turret arm above.
@@ -2450,7 +2525,7 @@ public partial class GameSession : Node3D
             Radio = voices.Radio,
             GroundAt = GroundSampler(),
         });
-        _dogfight?.WireRearmBases(state.WorldRuntime, state.ZrdrPath, _zeppelins);
+        _dogfight?.WireRearmBases(state.WorldRuntime, _stageArena, state.ZrdrPath, _zeppelins);
 
         _wire.WirePositionalStarts(_landings, _ladder, state.WorldRuntime);
         _wire.WireCutscenes(_cutscene);
@@ -2474,6 +2549,7 @@ public partial class GameSession : Node3D
             SheetCarriesObjectives = boards.SheetCarriesObjectives,
             Stunting = stuntZones != null,
             Dogfight = _dogfight,
+            StageArena = _stageArena,
         });
 
         if (_rigs.Count > 1)
@@ -2546,6 +2622,104 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // The Enhanced wave ocean, built on the first Enhanced frame that asks for waves. A switch back
+    // to Original or to flat water drops it, and the sea sheet draws again because the shared
+    // switch resets.
+    private void FollowOcean()
+    {
+        if (!GraphicsMode.Enhanced || !WaterQualitySetting.DrawsWaves)
+        {
+            Drop(_ocean);
+            _ocean = null;
+            return;
+        }
+        if (_ocean != null || !_oceanEligible || _plane == null || _worldScene == null || _sessionTextures == null
+            || !Effects.Ocean.Covers(_spec.Chapter))
+            return;
+        if ((_spec.SkippedPasses & EnhancedPasses.Ocean) != 0)
+        {
+            Log.Info("world", $"ocean: skipped (--no-ocean)");
+            return;
+        }
+        var hulls = new HashSet<Node>();
+        if (_surfaceVehicles != null)
+        {
+            foreach (var v in _surfaceVehicles.Vessels)
+                hulls.Add(v.Body);
+        }
+        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _sea, _spec.OceanMaskPath);
+        if (_ocean != null)
+        {
+            _ocean.DebugDrive = _spec.DebugWake;
+            _plane.AddChild(_ocean);
+        }
+    }
+
+    // The chapter's sea from the shipped file, read once per session that can stand an ocean, under
+    // any --debug-ocean overrides. A chapter with no entry draws the defaults.
+    private void ResolveSea()
+    {
+        if (!_oceanEligible || !Effects.Ocean.Covers(_spec.Chapter))
+            return;
+        _seaSaved = Effects.OceanSeas.Load().For(_spec.Chapter);
+        _sea = _seaSaved.WithOverrides(_spec.DebugOcean);
+        string debug = _spec.DebugOcean is { Length: > 0 } spec ? $" (--debug-ocean={spec})" : "";
+        Log.Info("world", $"ocean: sea {_spec.Chapter} saved={_seaSaved.Describe()} drawn={_sea.Describe()}{debug}");
+    }
+
+    // The ocean lab's edit: the standing ocean takes it at once, and a rebuilt one takes it too.
+    private void ApplySea(Effects.SeaState sea)
+    {
+        _sea = sea.Clamped();
+        _ocean?.Apply(_sea);
+    }
+
+    // The world nodes the bound program's played motions carry, as the runtime resolves them. The
+    // roster hulls are left out; they have their own source.
+    private List<Node3D> AnimatedMovers(HashSet<Node> roster)
+    {
+        var movers = new List<Node3D>();
+        if (_oceanRuntime is not { } runtime || _plane == null)
+            return movers;
+        var seen = new HashSet<Node3D>();
+        foreach (var def in runtime.ProgramDefs)
+        {
+            var moving = Effects.OceanMovers.MovingEvents(def);
+            if (moving.Count == 0)
+                continue;
+            foreach (var node in runtime.TargetsOf(def, moving))
+            {
+                if (node != _plane && GodotObject.IsInstanceValid(node) && !InRoster(node) && seen.Add(node))
+                    movers.Add(node);
+            }
+        }
+        var names = movers.Select(m => m.Name.ToString()).OrderBy(n => n, StringComparer.Ordinal);
+        Log.Debug("world", $"ocean: movers resolved [{string.Join(", ", names)}]");
+        return movers;
+
+        bool InRoster(Node node)
+        {
+            for (Node? n = node; n != null; n = n.GetParent())
+            {
+                if (roster.Contains(n))
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    // The roster hulls the ocean calms around, each over its own waterline.
+    private IEnumerable<Node3D> OceanHulls()
+    {
+        if (_surfaceVehicles == null)
+            yield break;
+        foreach (var v in _surfaceVehicles.Vessels)
+        {
+            if (GodotObject.IsInstanceValid(v.Body) && v.Body.IsVisibleInTree())
+                yield return v.Body;
+        }
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
@@ -2637,32 +2811,44 @@ public partial class GameSession : Node3D
     // EXECUTION_BY_RANGE and PLAYER_RANGE cannot answer "who is nearest" differently.
     private IReadOnlyList<Vector3> PlayerPositionsSnapshot()
     {
+        if (_rigs.Count == 0 && _camera == null)
+            return Array.Empty<Vector3>();
+        int count = Math.Max(_rigs.Count, 1);
+        if (_playerPositions.Length != count)
+            _playerPositions = new Vector3[count];
         if (_rigs.Count == 0)
-            return _camera is { } cam ? new[] { cam.GlobalPosition } : Array.Empty<Vector3>();
-        var positions = new Vector3[_rigs.Count];
+            _playerPositions[0] = _camera!.GlobalPosition;
         for (int i = 0; i < _rigs.Count; i++)
-            positions[i] = _rigs[i].Controller is { } fc
+            _playerPositions[i] = _rigs[i].Controller is { } fc
                 ? fc.GlobalPosition
                 : _rigs[i].Camera.GlobalPosition;
-        return positions;
+        return _playerPositions;
     }
 
-    // The anim runtime's range reads: every seat's aeroplane, a guest's copy included. A range gate
-    // that starts a swap then counts a guest on every end. Outside a network session it is the
-    // panes' snapshot, which the per-viewer consumers keep in every session.
+    // The anim runtime's range reads: every seat's aeroplane, a guest's copy and a bot included. A
+    // range gate that starts a swap then counts a guest on every end. Without a seat roster it is
+    // the panes' snapshot, which the per-viewer consumers keep in every session.
     private IReadOnlyList<Vector3> FieldPositionsSnapshot()
     {
         if (_wire.Seats.Count == 0)
             return PlayerPositionsSnapshot();
-        var positions = new List<Vector3>(_seatRigs.Count);
+        int count = 0;
+        foreach (var rig in _seatRigs)
+        {
+            if (rig.Controller != null || rig.Camera != null)
+                count++;
+        }
+        if (_fieldPositions.Length != count)
+            _fieldPositions = new Vector3[count];
+        int i = 0;
         foreach (var rig in _seatRigs)
         {
             if (rig.Controller is { } fc)
-                positions.Add(fc.GlobalPosition);
+                _fieldPositions[i++] = fc.GlobalPosition;
             else if (rig.Camera is { } cam)
-                positions.Add(cam.GlobalPosition);
+                _fieldPositions[i++] = cam.GlobalPosition;
         }
-        return positions;
+        return _fieldPositions;
     }
 
     // The stick's half of _UnhandledInput's cutscene skip, for seat 1, who owns every stick. Ahead
@@ -2741,7 +2927,7 @@ public partial class GameSession : Node3D
         _boards = null;
         _rigs.Clear();
         _split = null;
-        FollowPaneShadows(count);
+        FollowPanes(count);
         if (count <= 1)
         {
             _camera.Current = true;
@@ -2801,19 +2987,18 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"stereo: whiteout, flash, sun wash and mission-end fade drawn as head-locked quads");
     }
 
-    // The shadow level's fallback follows the pane count (ShadowQualitySetting.ResolveForPanes). An
-    // integrated GPU's three- and four-pane sessions drop the sun's shadow pass unless a level was
-    // chosen. The sun is the Launcher's and outlives the session, so the exit puts one pane back.
-    // A one-pane session after another leaves the launch's resolution standing.
-    private void FollowPaneShadows(int panes)
+    // A word setting's fallback may follow the pane count (WordSettings.FollowPanes). An integrated
+    // GPU's three- and four-pane sessions drop the sun's shadow pass unless a level was chosen. The
+    // sun is the Launcher's and outlives the session, so the exit puts one pane back.
+    private void FollowPanes(int panes)
     {
-        if (panes <= 1 && ShadowQualitySetting.Panes <= 1)
+        var moved = WordSettings.FollowPanes(panes);
+        if (moved.Count == 0)
             return;
-        string before = ShadowQualitySetting.Word;
-        var plan = ShadowQualitySetting.ResolveForPanes(panes, VrQuality.Current.ShadowQuality ?? _spec.ShadowQuality, _spec.Det);
-        Log.Info("world", $"shadow quality at {panes} pane(s): shadow_quality={plan.Word} shadow_source={ShadowQualitySetting.Lookup.SourceName(plan.Source)}");
-        if (plan.Word != before && IsInstanceValid(_sun))
-            EnhancedLook.ApplyShadowQuality(_sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
+        Log.Info("world", $"word settings at {panes} pane(s): {string.Join(" ", moved.Select(setting => setting.Describe()))}");
+        var world = new LiveWorld(IsInstanceValid(_sun) ? _sun : null, this);
+        foreach (var setting in moved)
+            setting.Apply?.Invoke(world);
     }
 
     // A layer a switch drops leaves the tree now and is freed at the frame's end. ⚠ Do not QueueFree
@@ -2942,9 +3127,10 @@ public partial class GameSession : Node3D
         race.Rerun();
         _wire.Race?.CallRerun();
         IReadOnlyList<StartCountPhase>? opening = null;
-        foreach (var rig in _rigs)
+        // Every seat flown here, the bots among them; a seat flown elsewhere is its own machine's.
+        foreach (var rig in _seatRigs)
         {
-            if (rig.Controller is not { } seat)
+            if (rig.Controller is not { RemoteOwned: false } seat)
                 continue;
             seat.Stunt?.Reset();
             seat.StuntShots?.Reset();
@@ -3047,7 +3233,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
+            Log.Warn("flight", $"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return default;
         }
     }
@@ -3275,6 +3461,7 @@ public partial class GameSession : Node3D
         // match the two lists hold the same rigs.
         public void StepHumanAircraft(float dt)
         {
+            session._raceBots?.Step();
             foreach (var rig in session._seatRigs)
                 rig.Controller?.SimStep(dt);
             // After every seat: a run started this step was started inside the window it saw.

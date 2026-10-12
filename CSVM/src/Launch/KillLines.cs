@@ -21,11 +21,11 @@ internal static class KillLines
     public static void Wire(IReadOnlyList<PlayerRig> rigs, FlightRoster roster, Messages strings,
         VersusDirector? dogfight, string? pilotName)
     {
-        void PostKillLine(FlightController victim, int victimId, int? killer)
+        void PostKillLine(FlightController victim, int victimId)
         {
-            // A seat's death in a match takes the Dogfight death lines, which post on every death,
-            // crashes included. On the wire the host's notice posts them, never this report.
-            if (dogfight?.TakeKillLine(victimId, killer) == true)
+            // A seat's death in a match takes the Dogfight death lines, which the director posts
+            // itself, on every death, crashes included.
+            if (dogfight?.TakeKillLine(victimId) == true)
             {
                 return;
             }
@@ -51,7 +51,7 @@ internal static class KillLines
         {
             if (rig.Controller is { } human)
             {
-                human.Downed += (victimId, killer) => PostKillLine(human, victimId, killer);
+                human.Downed += (victimId, _) => PostKillLine(human, victimId);
                 // The crash notice is the local player's own announcement, so it lands in the
                 // crashing pane's stack alone rather than in every pane's.
                 human.GroundImpact += crashed =>
@@ -64,7 +64,6 @@ internal static class KillLines
             }
         }
 
-        roster.VehicleDowned += (victim, killer) =>
-            PostKillLine(victim, victim.PlayerIndex, killer);
+        roster.VehicleDowned += (victim, _) => PostKillLine(victim, victim.PlayerIndex);
     }
 }

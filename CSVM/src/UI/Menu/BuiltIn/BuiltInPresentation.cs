@@ -67,9 +67,13 @@ public sealed class BuiltInPresentation : IMenuPresentation
 
         string aid = _aid;
         _aid = string.Empty;
-        _menu.ShowMenu(aid);
+        // A campaign flight's return keeps the co-op door its guests flew through.
+        _menu.ShowMenu(aid, keepCoopDoor: destination is CabinReturn or DebriefReturn);
         switch (destination)
         {
+            case CoopGuestReturn:
+                _menu.OpenCoopWait();
+                break;
             case InstantActionReturn:
             // Built-in has no wrap-up page: its own board took the screen inside the flight, so the
             // nearest screen this graph has is the one that board's Exit already lands on.

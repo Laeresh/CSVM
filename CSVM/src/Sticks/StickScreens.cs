@@ -30,6 +30,6 @@ public static class StickScreens
     }
 
     /// <summary>Creates the user profile folder if missing and opens it in the system file browser.
-    /// Returns its OS path, or null with a log line when either step failed.</summary>
-    public static string? OpenUserFolder() => FolderOpener.Open(StickProfiles.UserPath(), "stick profiles folder");
+    /// Returns how the open ended and the folder's OS path.</summary>
+    public static FolderOpenResult OpenUserFolder() => FolderOpener.Open(StickProfiles.UserPath(), "stick profiles folder");
 }

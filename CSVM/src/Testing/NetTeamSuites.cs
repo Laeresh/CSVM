@@ -9,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -54,14 +55,17 @@ internal static class NetTeamSuites
     internal static void ATeamMatchAcrossThreeMachines(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.ZrdrPath))}");
-        var table = SpawnPoints.LoadNetTable(SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission));
+        // The whole table the sessions' own pickers read for these teams: MP1's net.zrd, or the
+        // empty stage's team blocks.
+        var table = new SpawnPicker(spec) { SeatTeams = Teams }
+            .LoadSpawnList(SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission), spec.Scenario);
         if (table is not { Count: > 2 * SpawnPoints.NetBlock })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission}'s net.zrd authors no second team block");
+            throw new SuiteSkippedException($"{NetCombatSuites.ArenaTable(ctx, spec)} authors no second team block");
         }
 
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(8401));
-        var roster = NetCombatSuites.Roster(3).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
+        var roster = NetCombatSuites.Roster(3, spec).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try
@@ -176,8 +180,8 @@ internal static class NetTeamSuites
         }
     }
 
-    // Each machine's own pane on the other two seats. A teammate files on the Ally cycle, and its box
-    // and Dogfight marker take the friendly green. The other team's seat takes neither.
+    // Each machine's own pane on the other two seats. A teammate files on the Ally cycle, and its
+    // target marker takes the friendly green. The other team's seat takes neither.
     private static void Markers(TestContext ctx, GameSession[] peers)
     {
         var readings = new List<string>();
@@ -197,16 +201,15 @@ internal static class NetTeamSuites
                 bool mate = Teams[seat] == Teams[machine];
                 var found = RefOf(pool, s => ReferenceEquals(s, other));
                 bool green = found is { } t && TargetHud.MarkerColor(t, own.Team) == TargetHud.HudGreen;
-                bool hud = VersusHud.MarkerColor(own.Team, other.Team, seat) == TargetHud.HudGreen;
                 bool reads = found is { } f && f.Class == (mate ? TargetClass.Ally : TargetClass.Enemy)
-                    && green == mate && hud == mate;
+                    && green == mate;
                 right &= !mate || reads;
                 foes &= mate || reads;
-                readings.Add($"m{machine}:s{seat} {found?.Class.ToString() ?? "missing"} box={(green ? "green" : "not green")} hud={(hud ? "green" : "own colour")}");
+                readings.Add($"m{machine}:s{seat} {found?.Class.ToString() ?? "missing"} box={(green ? "green" : "not green")}");
             }
         }
 
-        ctx.Check(right, $"every machine's pane reads its teammate on the Ally cycle, its box and its Dogfight marker in the friendly green ({string.Join(", ", readings)})");
+        ctx.Check(right, $"every machine's pane reads its teammate on the Ally cycle and its target marker in the friendly green ({string.Join(", ", readings)})");
         ctx.Check(foes, $"ABLE-TO-FAIL CONTROL: and the other team's seat on the Enemy cycle, never green ({string.Join(", ", readings)})");
     }
 

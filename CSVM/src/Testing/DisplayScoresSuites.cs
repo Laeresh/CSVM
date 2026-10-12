@@ -103,7 +103,7 @@ internal static class DisplayScoresSuites
                 && lines[1] == OriginalScoresText.Cell("P2", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("1", OriginalScoresText.ScoreWidth) + " " + OriginalScoresText.Cell("1", 6) + " 0"
                 && lines[2] == OriginalScoresText.Cell("P1", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("0", OriginalScoresText.ScoreWidth) + " " + OriginalScoresText.Cell("0", 6) + " 1",
             rows => rows.Count == 2 && rows[0] == "#1  P2  1  1  0" && rows[1] == "#2  P1  0  0  1",
-            seat => seat.VersusHud is { StatusShown: true });
+            seat => seat.VersusStatusLine is { StatusShown: true });
         ctx.Note($"a held Dogfight table in the holder's pane alone, gone on release");
     }
 
@@ -151,7 +151,7 @@ internal static class DisplayScoresSuites
 
     // Two seats built through the roster over C1, each in a pane of its own. Each pane carries the
     // chat panel the session gives it, with a line posted so the panel is up.
-    private sealed class TwoSeats : IDisposable
+    internal sealed class TwoSeats : IDisposable
     {
         private readonly TextureArchive _textures;
         private readonly ProjectilePool _pool;

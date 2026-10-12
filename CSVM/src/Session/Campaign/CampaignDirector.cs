@@ -305,7 +305,7 @@ public sealed class CampaignDirector
 
         if (MissionFor(zrdrPath, seq) is not { } mission || mission.ChapterFolder.Length == 0)
         {
-            GD.PushWarning($"--campaign: seq {seq} is not in cm_sequence, flying the CLI chapter instead");
+            Log.Warn("core", $"--campaign: seq {seq} is not in cm_sequence, flying the CLI chapter instead");
             return spec;
         }
 
@@ -338,9 +338,7 @@ public sealed class CampaignDirector
         {
             if (!string.Equals(spec.PlaneNames[0], node, StringComparison.OrdinalIgnoreCase))
             {
-                GD.PushWarning($"--plane={spec.PlaneNames[0]} overrides the seated aircraft: " +
-                               $"'{profile.Name}' flies \"{plane.Name}\" ({node}) at story position " +
-                               $"{spec.CampaignMissionSeq}, and it is flying stock {spec.PlaneNames[0]} instead");
+                Log.Warn("core", $"--plane={spec.PlaneNames[0]} overrides the seated aircraft: '{profile.Name}' flies \"{plane.Name}\" ({node}) at story position {spec.CampaignMissionSeq}, and it is flying stock {spec.PlaneNames[0]} instead");
             }
 
             return spec;
@@ -396,8 +394,7 @@ public sealed class CampaignDirector
 
         if ((guest ? CampaignProfileDef.NewProfile(CoopGuestPilot) : store!.Load(spec.CampaignProfile)) is not { } profile)
         {
-            GD.PushWarning($"--campaign={spec.CampaignProfile}: " +
-                           $"{store!.LoadProblem(spec.CampaignProfile)}, flying without a mission");
+            Log.Warn("core", $"--campaign={spec.CampaignProfile}: {store!.LoadProblem(spec.CampaignProfile)}, flying without a mission");
             return null;
         }
 
@@ -515,7 +512,7 @@ public sealed class CampaignDirector
         }
         catch (Exception e)
         {
-            GD.PushWarning($"campaign: cannot read the roster ({e.Message}): no roster spawned");
+            Log.Warn("core", $"campaign: cannot read the roster ({e.Message}): no roster spawned");
             return "";
         }
 
@@ -1192,7 +1189,7 @@ public sealed class CampaignDirector
         int at = _profile.WingmanPlane;
         if (at < 0 || at >= _profile.Planes.Count)
         {
-            GD.PushWarning($"campaign: wingman plane index {at} is not one '{_profile.Name}' owns, no wingman fit bound");
+            Log.Warn("core", $"campaign: wingman plane index {at} is not one '{_profile.Name}' owns, no wingman fit bound");
             return;
         }
 
@@ -1214,9 +1211,7 @@ public sealed class CampaignDirector
 
         if (told is not { } wingman)
         {
-            GD.PushWarning($"campaign: the co-op host named no aeroplane for {WingmanName}; it flies its " +
-                         "block's own def here, which need not match the host's");
-            Log.Warn("core", $"campaign: the co-op host named no aeroplane for {WingmanName}, flying its block's own def");
+            Log.Warn("core", $"campaign: the co-op host named no aeroplane for {WingmanName}, flying its block's own def, which need not match the host's");
             return;
         }
 

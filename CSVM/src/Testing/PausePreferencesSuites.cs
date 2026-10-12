@@ -50,6 +50,7 @@ internal static class PausePreferencesSuites
     internal static void PausePreferencesLeaf(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
@@ -113,6 +114,7 @@ internal static class PausePreferencesSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequirePlane("player_bhawk");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -140,7 +142,7 @@ internal static class PausePreferencesSuites
         var seats = new[] { one, two };
         var selection = one.Targeting;
         OptionsApplyExit? applied = null;
-        // Launcher.PersistOptions' own write of the two fields, so the page reopens on what it saved.
+        // LiveSettings.Persist's own write of the two fields, so the page reopens on what it saved.
         var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, a =>
         {
             applied = a;
@@ -379,7 +381,7 @@ internal static class PausePreferencesSuites
         report.AppendLine($"held button on return: leaf stayed closed across the press and the release");
     }
 
-    // The apply written the way Launcher.PersistOptions writes it, then the door opened again: the
+    // The apply written the way LiveSettings.Persist writes it, then the door opened again. The
     // page a pilot reopens in the same flight stands on what they just accepted.
     private static void ReopenOnApplied(
         TestContext ctx, OriginalPauseBoard board, PausePreferences leaf, OptionsApplyExit? applied,

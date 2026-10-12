@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
@@ -11,6 +12,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
 using CSVM.Spec;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -35,7 +37,9 @@ internal static class HudKillLineSuites
         "death is the profile the store last used and an empty store keeps the fall-through, " +
         "the stack keeps four lines a fifth of the way down with an " +
         "18 px pitch, a newer line pushes the older ones down carrying their own remaining time, " +
-        "a repeat refreshes rather than duplicates, every line clears after five seconds, and the " +
+        "a repeat refreshes rather than duplicates, every line clears after five seconds of sim " +
+        "time (a halted clock keeps it, a slow fixed-step frame spends one step, and the damage " +
+        "dial's post-hit blink runs on the same sim step), and the " +
         "same stack takes the crash notice in the player's own colour and the mission clock's " +
         "'Mission LOST!' over 'Time Expired' in the default one, and a hull flown into the world " +
         "posts that notice alone with no kill line behind it")]
@@ -51,9 +55,14 @@ internal static class HudKillLineSuites
         string shotDown = strings.Get(HudMessages.ShotDownKey);
         string wingman = strings.Get(HudMessages.WingmanKey);
         string destroyed = strings.Get(HudMessages.DestroyedKey);
-        ctx.Check(shotDown == "was shot down" && wingman == "Wingman was shot down"
-                  && destroyed == "was destroyed",
-            $"the three decoded rows read out of the string table: '{shotDown}' / '{wingman}' / '{destroyed}'");
+        ctx.Check(Rows(strings, HudMessages.ShotDownKey, HudMessages.WingmanKey, HudMessages.DestroyedKey),
+            $"the three decoded rows read out of the string table as three wordings: '{shotDown}' / '{wingman}' / '{destroyed}'");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(shotDown == "was shot down" && wingman == "Wingman was shot down"
+                      && destroyed == "was destroyed",
+                $"the three decoded rows read out of the string table: '{shotDown}' / '{wingman}' / '{destroyed}'");
+        }
 
         Wording(ctx, strings, shotDown, wingman, destroyed);
         Pilot(ctx, strings, shotDown, wingman);
@@ -97,6 +106,8 @@ internal static class HudKillLineSuites
             ctx.Host.AddChild(stack);
             Stack(ctx, stack);
             Notices(ctx, stack, strings);
+            SimClock(ctx, stack);
+            GaugeBlinkClock(ctx, planesGamez, textures);
 
             // The session's own seam: the roster reports a death, and a death the hull was spent in
             // puts the line composed for that pane into the reading pane's stack.
@@ -109,13 +120,19 @@ internal static class HudKillLineSuites
                 }
             };
 
+            // The install flies the Medusa Kestrel the line was reported on. Any other tree flies its
+            // own default airframe under its first AI flavour, and the line names it by its title.
             var at = new Vector3(0f, 500f, 0f);
-            ai = roster.SpawnAi(new AiSpawn("player_kestrel", at, at + Vector3.Forward,
-                AiPilot.HoldingCourse(at, at + Vector3.Forward), Scheme: null,
-                Team: InstantActionRuntime.EnemyTeam, AiDef: "medkestrel"));
+            ai = roster.SpawnAi(new AiSpawn(ctx.SyntheticData ? ctx.PlaneName : "player_kestrel", at,
+                at + Vector3.Forward, AiPilot.HoldingCourse(at, at + Vector3.Forward), Scheme: null,
+                Team: InstantActionRuntime.EnemyTeam, AiDef: ctx.SyntheticData ? null : "medkestrel"));
             string name = PlaneRoster.PlaneDisplayName(ai.Stats!);
-            ctx.Check(name == "Medusa Kestrel",
-                $"the spawned aircraft carries the title the line names it by: '{name}'");
+            ctx.Check(name.Length > 0, $"the spawned aircraft carries a title the line names it by: '{name}'");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(name == "Medusa Kestrel",
+                    $"the spawned aircraft carries the title the line names it by: '{name}'");
+            }
             ctx.Check(HudMessages.IsAeroplane(ai.Stats) && ai.Team == InstantActionRuntime.EnemyTeam,
                 $"…as an aeroplane on an enemy team mode={ai.Stats?.VehicleMode ?? "<none>"} team={ai.Team}");
 
@@ -135,7 +152,7 @@ internal static class HudKillLineSuites
             // The same real aircraft as the death that does word a line: a hull spent in the air.
             HudMessages.PostKill(stack, strings, ai, AimAssist.PlayerTeam, victimIsViewer: false,
                 viewerName: "Nathan Zachary");
-            ctx.Check(stack.LineAt(0) == $"Medusa Kestrel {shotDown}",
+            ctx.Check(stack.LineAt(0) == $"{name} {shotDown}",
                 $"its death posts the decoded line: '{stack.LineAt(0) ?? "<none>"}'");
             ctx.Check(stack.SideAt(0) == HudMessages.Side.Enemy,
                 $"…in the enemy colour arm side={stack.SideAt(0)}");
@@ -229,8 +246,13 @@ internal static class HudKillLineSuites
         string crash = strings.Get(HudMessages.CrashKey);
         string expired = strings.Get(HudMessages.TimeExpiredKey);
         string lost = strings.Get(HudMessages.MissionLostKey);
-        ctx.Check(crash == "Fatal Crash!" && expired == "Time Expired" && lost == "Mission LOST!",
-            $"the three notice rows read out of the string table: '{crash}' / '{expired}' / '{lost}'");
+        ctx.Check(Rows(strings, HudMessages.CrashKey, HudMessages.TimeExpiredKey, HudMessages.MissionLostKey),
+            $"the three notice rows read out of the string table as three wordings: '{crash}' / '{expired}' / '{lost}'");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(crash == "Fatal Crash!" && expired == "Time Expired" && lost == "Mission LOST!",
+                $"the three notice rows read out of the string table: '{crash}' / '{expired}' / '{lost}'");
+        }
 
         HudMessages.PostCrash(stack, strings);
         ctx.Check(stack.LineAt(0) == crash && stack.SideAt(0) == HudMessages.Side.Friendly,
@@ -245,16 +267,128 @@ internal static class HudKillLineSuites
             $"…both in the stack's default colour side={stack.SideAt(0)}/{stack.SideAt(1)}");
         stack.Clear();
 
+        // The Dogfight lines are the table's two templates filled with the pilots' names; the
+        // install pins the shipped wordings too.
+        ctx.Check(Rows(strings, HudMessages.SelfDestroyedKey, HudMessages.DestroyedByKey),
+            $"the two Dogfight templates read out of the string table: '{strings.Get(HudMessages.SelfDestroyedKey)}' / '{strings.Get(HudMessages.DestroyedByKey)}'");
+        string selfLoss = strings.Format(HudMessages.SelfDestroyedKey, "P2");
+        string killedBy = strings.Format(HudMessages.DestroyedByKey, "P1");
         HudMessages.PostMatchKill(stack, strings, HudMessages.MatchDeath.NoKiller, "P2", null);
-        ctx.Check(stack.LineAt(0) == "P2 Self-Destroyed" && stack.LineAt(1) == null,
-            $"a Dogfight death no killer owns still words itself, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        ctx.Check(stack.LineAt(0) == selfLoss && selfLoss.Contains("P2") && stack.LineAt(1) == null,
+            $"a Dogfight death no killer owns still words itself from its template, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(stack.LineAt(0) == "P2 Self-Destroyed" && stack.LineAt(1) == null,
+                $"a Dogfight death no killer owns still words itself, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        }
         stack.Clear();
 
         HudMessages.PostMatchKill(stack, strings, HudMessages.MatchDeath.Killer, "P2", "P1");
-        ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == "Destroyed by P1"
+        ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == killedBy && killedBy.Contains("P1")
                   && stack.SideAt(0) == HudMessages.Side.Enemy && stack.SideAt(1) == HudMessages.Side.Enemy,
-            $"a Dogfight kill reads the victim over its killer, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+            $"a Dogfight kill reads the victim over its killer's template, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == "Destroyed by P1"
+                      && stack.SideAt(0) == HudMessages.Side.Enemy && stack.SideAt(1) == HudMessages.Side.Enemy,
+                $"a Dogfight kill reads the victim over its killer, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+        }
         stack.Clear();
+    }
+
+    // A frame ages the stack by the session clock's step, never by its wall delta. A halted clock
+    // keeps a line whole; a fixed-step frame spends one step however long it took.
+    private static void SimClock(TestContext ctx, HudMessages stack)
+    {
+        const float SlowFrame = HudMessages.LineLife * 2f;
+        var saved = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.FixedStep, Halted = true };
+        GameClock.Current = clock;
+        try
+        {
+            stack.Post("held", HudMessages.Side.Enemy);
+            clock.BeginFrame(SlowFrame);
+            stack._Process(SlowFrame);
+            ctx.Check(stack.LineAt(0) == "held" && Mathf.IsEqualApprox(stack.LifeAt(0), HudMessages.LineLife),
+                $"a halted clock keeps the line whole through a {SlowFrame:0} s frame life={stack.LifeAt(0):0.000}");
+
+            clock.Halted = false;
+            clock.BeginFrame(SlowFrame);
+            stack._Process(SlowFrame);
+            ctx.Check(stack.LineAt(0) == "held"
+                      && Mathf.IsEqualApprox(stack.LifeAt(0), HudMessages.LineLife - GameClock.FixedDt),
+                $"…and a running fixed-step clock spends one sim step of it, not the frame's wall time life={stack.LifeAt(0):0.000}");
+
+            // ABLE-TO-FAIL CONTROL: with no session clock the same frame falls back to its wall delta.
+            GameClock.Current = null;
+            stack._Process(SlowFrame);
+            ctx.Check(stack.LineAt(0) == null,
+                $"ABLE-TO-FAIL CONTROL: with no session clock the wall delta spends the line: '{stack.LineAt(0) ?? "<none>"}'");
+        }
+        finally
+        {
+            GameClock.Current = saved;
+            stack.Clear();
+        }
+    }
+
+    // The damage dial's post-hit blink on the same clock. A 0.2 s step from phase 0 lands in the
+    // 0.32 s blink's dark half. A wall frame is ten periods and an eighth. Two of them would spend
+    // the 5 s window. Two or three put a wall-timed phase in the lit half. So a wall-timed blink
+    // window or blink phase each fails the check alone.
+    private static void GaugeBlinkClock(TestContext ctx, GameZ planesGamez, TextureArchive textures)
+    {
+        const float WallFrame = 10f * GaugeCluster.DamageBlinkPeriod + GaugeCluster.DamageBlinkPeriod / 8f;
+        var parts = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).DestroyableParts;
+        var cluster = GaugeCluster.Build(planesGamez, ctx.PlaneName, textures, parts);
+        // A synthetic tree carries no cockpit art to build a cluster from.
+        if (cluster == null)
+        {
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(false, $"a real gauge cluster was built for '{ctx.PlaneName}'");
+            }
+            return;
+        }
+        var saved = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.FixedStep, Halted = true, Scale = 12f };
+        GameClock.Current = clock;
+        ctx.Host.AddChild(cluster);
+        try
+        {
+            foreach (var part in parts)
+            {
+                cluster.OnPartDamage(part.Name);
+            }
+            bool Dark() => parts.Any(p => cluster.ZoneTier(p.Name) < 0);
+
+            string State() => $"blinkLeft={cluster.BlinkLeftAt(parts[0].Name):0.000} "
+                + $"phase={cluster.BlinkPhase:0.000} tier={cluster.ZoneTier(parts[0].Name)}";
+
+            clock.BeginFrame(WallFrame);
+            cluster._Process(WallFrame);
+            clock.Halted = false;
+            clock.BeginFrame(WallFrame);
+            cluster._Process(WallFrame);
+            ctx.Check(Dark(),
+                $"after a halted and a running {WallFrame:0.00} s frame, the struck zone blinks in its dark half: one {clock.FrameDt:0.00} s sim step aged it, the wall time did not {State()}");
+
+            clock.Halted = true;
+            clock.BeginFrame(WallFrame);
+            cluster._Process(WallFrame);
+            ctx.Check(Dark(), $"…and a halted clock holds the blink where it is {State()}");
+
+            // ABLE-TO-FAIL CONTROL: with no session clock a frame falls back to its wall delta.
+            GameClock.Current = null;
+            cluster._Process(2 * WallFrame);
+            ctx.Check(!Dark(),
+                $"ABLE-TO-FAIL CONTROL: with no session clock the wall delta spends the blink window {State()}");
+        }
+        finally
+        {
+            GameClock.Current = saved;
+            cluster.Free();
+        }
     }
 
     // The three colour arms, tested in the decoded order: the enemy test runs first, so a pane on
@@ -330,5 +464,14 @@ internal static class HudKillLineSuites
         ctx.Check(stack.LineAt(0) == "after" && stack.LineAt(1) == null,
             $"a spent slot 0 has nothing to push, so the next line enters alone");
         stack.Clear();
+    }
+
+    // Whether the table words every key, each differently. A key the table lacks reads back as
+    // itself, which is the miss this tells apart from a row.
+    private static bool Rows(Messages strings, params string[] keys)
+    {
+        var words = keys.Select(strings.Get).ToList();
+        return words.Select((w, i) => w.Length > 0 && w != keys[i]).All(found => found)
+            && words.Distinct(System.StringComparer.Ordinal).Count() == words.Count;
     }
 }

@@ -47,6 +47,11 @@ public sealed class AiGunner
     /// Off, a cleared target simply holds fire, an explicitly ordered gunner.</summary>
     public bool AutoTarget = true;
 
+    /// <summary>Whether the pilot has broken off: no quarry is held or taken while it stands. The
+    /// pilot sets it each step from its rearm run (<see cref="AiPilot.RearmOrder"/>), so a launch's
+    /// <see cref="AutoTarget"/> is never touched and comes back as it was.</summary>
+    public bool Disengaged;
+
     /// <summary>Game time the standing target's hold runs out, after which the host sweeps the
     /// pool again (<see cref="TakeTarget"/>). Settable so a suite can force the expiry rather
     /// than sim twenty seconds.</summary>
@@ -74,6 +79,14 @@ public sealed class AiGunner
     /// <c>--ai</c>/egen spawn carries no roster block and so no biases, the documented gap
     /// until mission spawns attach roster identities.</summary>
     public System.Collections.Generic.IReadOnlyList<Mech3.AiRatingBias>? RatingBiases;
+
+    /// <summary>Whether the ranking gives a human-piloted candidate the decoded player weight
+    /// (<see cref="AiTargetRanking.PlayerWeight"/>) over the base one. The campaign, Instant Action
+    /// and <c>--ai=</c> keep it; a bot seat's pilot is armed with it off, because a Dogfight ranks
+    /// every pilot alike. ⚠ Gate the weight here, never on
+    /// <see cref="FlightController.IsHumanPiloted"/>, which the aim assist, the flight model's force
+    /// path and the <c>"player"</c> role also read.</summary>
+    public bool PlayersPreferred = true;
 
     /// <summary>Dead-eye aim-error cone half-angle, degrees, <c>ai_skill_parameters</c>'s
     /// <c>dead_eye_angle</c> at the pilot's rating (4.0° at 1, 1.45° at 9; the default is the
@@ -156,6 +169,14 @@ public sealed class AiGunner
         TargetRank = rank;
         TargetRankFor = target;
         TargetHoldUntil = now + TargetHoldSeconds;
+    }
+
+    /// <summary>Orders <paramref name="target"/> with no rank snapshot, as a bot's objective does.
+    /// The acquisition's hold then keeps it while it lives instead of re-ranking it away.</summary>
+    public void OrderTarget(object target)
+    {
+        Target = target;
+        TargetRankFor = null;
     }
 
     /// <summary>Whether <paramref name="target"/> is this gunner's assigned

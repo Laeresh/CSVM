@@ -44,6 +44,7 @@ internal static class CampaignPlaneChangeSuites
     internal static void CampaignFlightCheckPlaneChange(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var report = new StringBuilder();
         var reward = CheckAuthored(ctx, ctx.ZrdrPath, report);
         string root = Path.Combine(ctx.ScratchDir, "campaign-plane-change");

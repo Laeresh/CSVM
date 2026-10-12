@@ -766,6 +766,7 @@ internal static class TargetingSuites
             ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
             string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
             ctx.RequireData(texturesPath, $"C1 textures");
+            ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
             var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
             var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
             // Private: the assertions read every site as ia1.gw leaves it and then the five aaguns
@@ -840,6 +841,58 @@ internal static class TargetingSuites
             crate.Free();
             gasbag.Free();
             deadEngine.Free();
+        }
+    }
+
+    // Splitscreen Dogfight draws no per-seat markers, so each pane finds the other local pilot
+    // through its own target cycle and target marker alone.
+    [Suite("dogfight-splitscreen-marks",
+        "two Dogfight seats built through the roster, each in its own pane: on the seat's own "
+        + "frame each pane's target cycle acquires the other local pilot on the Enemy cycle, and "
+        + "its target HUD places a red marker for that pilot inside the pane; the pane carries the "
+        + "match status line; after Target Nothing the HUD places and tracks nothing")]
+    internal static void DogfightSplitscreenMarks(TestContext ctx)
+    {
+        var match = new Flight.Modes.VersusMatch(2, killTarget: 0, timeLimit: 0f);
+        using var seats = DisplayScoresSuites.TwoSeats.Build(ctx,
+            new HumanRosterBindings { RigCount = 2, VersusMatch = match });
+        if (seats.Pilot(0) is not { } p1 || seats.Pilot(1) is not { } p2)
+        {
+            ctx.Check(false, $"both seats were built");
+            return;
+        }
+
+        foreach (var (own, other) in new[] { (p1, p2), (p2, p1) })
+        {
+            string tag = UI.Boards.SplitScreen.PlayerTag(own.PlayerIndex);
+            string foe = UI.Boards.SplitScreen.PlayerTag(other.PlayerIndex);
+            if (own.PilotHud.TargetHud is not { } hud)
+            {
+                ctx.Check(false, $"{tag}'s pane has a target HUD");
+                continue;
+            }
+
+            // The live frame's order: the seat's own frame steps its selection, then the HUD's.
+            own._Process(1.0 / 60.0);
+            hud._Process(0.0);
+            var marked = hud.Selected;
+            var placed = hud.SelectedPlacement();
+            var pane = new Rect2(Vector2.Zero, hud.Size);
+            ctx.Check(marked is { Class: TargetClass.Enemy } t && ReferenceEquals(t.Source, other)
+                      && TargetHud.MarkerColor(t, own.Team) == TargetHud.HudRed,
+                $"{tag}'s pane selects {foe} on the Enemy cycle in red ({marked?.Class.ToString() ?? "nothing"} {marked?.Name})");
+            ctx.Check(placed is { } at && hud.Size.X > 0f && pane.HasPoint(at.Anchor),
+                $"and its target HUD places {foe}'s marker inside the {hud.Size.X:0}x{hud.Size.Y:0} pane (on screen {placed?.OnScreen}, at {placed?.Anchor})");
+            ctx.Check(own.VersusStatusLine is { StatusShown: true },
+                $"and {tag}'s pane carries the match status line");
+
+            // ABLE-TO-FAIL CONTROL: Target Nothing on the same path leaves the HUD nothing to draw.
+            // A person is never the tracked-hostile fallback, so no marker stands in for it.
+            own.Targeting?.Clear();
+            own._Process(1.0 / 60.0);
+            hud._Process(0.0);
+            ctx.Check(hud.SelectedPlacement() == null && hud.TrackedHostile == null,
+                $"ABLE-TO-FAIL CONTROL: after Target Nothing {tag}'s HUD places no marker and tracks no one");
         }
     }
 

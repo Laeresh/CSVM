@@ -53,8 +53,8 @@ resolve backwards on one path only.
 When a bound Throttle (lever) drives the commanded throttle setting. A lever holds its position
 untouched, so it takes over only when it moves past `Epsilon` and hands back when a rate key, a digit
 or a schedule commands while it is still. `Release` re-seeds it after the throttle is placed. The
-flight model steps one per aircraft; the order against the other commands is in `FlightController`'s
-`ReadKeyboard`.
+flight model steps one per aircraft; the order against the other commands is in `SeatControls`'
+`ReadStick`.
 
 ## src/Bindings/Binding.cs
 A device identity plus a control, and the whole read: `Resolve` reaches hardware only through
@@ -247,7 +247,7 @@ reinterprets an old save. `Encode` and `Decode` are the token grammar (version 3
 stick hat tokens, the lever row reusing the full-axis token, version 4 the `xr` device); an older file
 loads whole, and a row it names keeps the shipped `xr` binding. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
 Shape, tokens and unreadable rows: [../org/input.md](../org/input.md). `DirectoryOverride` keeps a
-suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`.
+suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`. A file that is no JSON object is moved to `.bad`.
 
 ## src/Bindings/SnapLookRows.cs
 The original's Views 2 snap-look rows: eight directions round Look Forward, one numpad key each, the

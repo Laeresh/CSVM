@@ -75,7 +75,7 @@ dotnet build CSVM/CSVM.csproj -t:Rebuild                                  # Styl
 dotnet test CSVM/CSVM.sln                                                 # unit tests
 ```
 
-The content gate runs five checks, each also a script of its own:
+The content gate runs these checks, each also a script of its own:
 
 - `CheckEncoding.ps1`: no double-encoded UTF-8 anywhere in the tree.
 - `CheckItemIds.ps1`: no item id defined twice in `backlog.md` or `playtest.md`.
@@ -85,6 +85,8 @@ The content gate runs five checks, each also a script of its own:
   conventions. A comment over cap usually explains too much: keep the reason the code is the
   way it is, and move a longer explanation into `docs/`.
 - `CheckDocEntries.ps1`: the size and coverage of the module entries in `docs/architecture/`.
+- `CheckUidSidecars.ps1`: every `.cs` and `.gdshaderinc` under `CSVM/` has the `.uid` file
+  Godot writes beside it; a headless import of the project writes the missing ones.
 
 Unit tests that need an extracted install report as skipped rather than failing, so a
 checkout without the game passes them.

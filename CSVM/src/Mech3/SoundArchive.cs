@@ -63,7 +63,7 @@ public sealed class SoundArchive : IDisposable
         {
             if (warn)
             {
-                GD.PushWarning($"sound not found in archive: {wavName}");
+                Log.Warn("sound", $"sound not found in archive: {wavName}");
             }
         }
         else
@@ -85,7 +85,7 @@ public sealed class SoundArchive : IDisposable
             }
             catch (Exception e)
             {
-                GD.PushWarning($"sound '{wavName}' failed to decode: {e.Message}");
+                Log.Warn("sound", $"sound '{wavName}' failed to decode: {e.Message}");
             }
         }
         _cache[key] = stream;

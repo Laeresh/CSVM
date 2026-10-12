@@ -189,7 +189,7 @@ public sealed partial class OriginalShell
         }
 
         _setup.Confirm(seat);
-        return _instantAction.BuildExit(_setup.Choices(_flightDevices));
+        return _instantAction.BuildExit(_setup.Choices(_flightDevices), bots: _setup.Bots.LaunchEntries());
     }
 
     // Back's one way out of the walk, whoever pressed it: the screen it came from returns with

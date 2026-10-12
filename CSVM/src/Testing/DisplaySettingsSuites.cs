@@ -33,17 +33,15 @@ internal static class DisplaySettingsSuites
     // gameplay rows, the graphics mode, the view distance and the monitor.
     private const int BuiltInResolutionRow = 8;
 
-    // Every field OptionsDef carries, with a value the store validates and whether it is a display
-    // setting, which is what makes it something no deterministic run may read. The list is compared
-    // against the def by reflection, so a field added there and not here fails display-det-guard.
-    // The sample is typed as object rather than as string because a volume level is an int? and the
-    // targeting switch a bool?: the table names what the store must keep, not a vocabulary. The
-    // Master sample is 0 on purpose, the mute a plain int could not tell from "never set".
+    // Every field OptionsDef carries beside its registered words, with a value the store validates.
+    // Each says whether it is a display setting, which no deterministic run may read. The list is
+    // compared against the def by reflection, so a field added there and not here fails the guard.
+    // The sample is an object because a volume level is an int? and the targeting switch a bool?.
+    // The Master sample is 0 on purpose, the mute a plain int could not tell from "never set".
     private static readonly (string Property, object Sample, bool Display)[] SavedFields =
     {
         ("MenuPresentation", "original", false),
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
-        ("ViewDistance", "veryfar", true),
         ("Difficulty", Flight.Hangar.Difficulty.Word(Flight.Hangar.Difficulty.Hard), false),
         ("NearestAfterKill", true, false),
         ("Rumble", false, false),
@@ -56,9 +54,6 @@ internal static class DisplaySettingsSuites
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),
         ("VSync", "144", true),
-        ("RenderScale", "200", true),
-        ("AntiAliasing", DisplayWords.AntiAliasingFsr2, true),
-        ("ShadowQuality", ShadowQualitySetting.Low, true),
         ("AudioMaster", 0, false),
         ("AudioMusic", 100, false),
         ("AudioEffects", 50, false),
@@ -203,19 +198,19 @@ internal static class DisplaySettingsSuites
         OptionsStore.DirectoryOverride = dir;
         try
         {
-            OptionsStore.UserOptions().Save(new OptionsDef { RenderScale = "200" });
-            ctx.Check(RenderScaleSetting.SavedWord(det: false) == "200",
-                $"a plain launch reads the saved word ({RenderScaleSetting.SavedWord(det: false) ?? "unset"})");
-            ctx.Check(RenderScaleSetting.SavedWord(det: true) == null,
-                $"and a --det launch reads no saved display setting at all ({RenderScaleSetting.SavedWord(det: true) ?? "unset"})");
+            OptionsStore.UserOptions().Save(new OptionsDef { Words = { [RenderScaleSetting.Lookup] = "200" } });
+            ctx.Check(WordSettings.ReadSaved(det: false)[RenderScaleSetting.Lookup] == "200",
+                $"a plain launch reads the saved word ({WordSettings.ReadSaved(det: false)[RenderScaleSetting.Lookup] ?? "unset"})");
+            ctx.Check(WordSettings.ReadSaved(det: true)[RenderScaleSetting.Lookup] == null,
+                $"and a --det launch reads no saved display setting at all ({WordSettings.ReadSaved(det: true)[RenderScaleSetting.Lookup] ?? "unset"})");
             AppliedScaleRow(ctx, layout);
 
-            OptionsStore.UserOptions().Save(new OptionsDef { AntiAliasing = DisplayWords.AntiAliasingSmaa });
-            ctx.Check(AntiAliasingSetting.SavedWord(det: false) == DisplayWords.AntiAliasingSmaa,
-                $"a plain launch reads the saved anti-aliasing word ({AntiAliasingSetting.SavedWord(det: false) ?? "unset"})");
-            ctx.Check(AntiAliasingSetting.SavedWord(det: true) == null,
-                $"and a --det launch drops it ({AntiAliasingSetting.SavedWord(det: true) ?? "unset"})");
-            OptionsStore.UserOptions().Save(new OptionsDef { RenderScale = "200" });
+            OptionsStore.UserOptions().Save(new OptionsDef { Words = { [AntiAliasingSetting.Lookup] = DisplayWords.AntiAliasingSmaa } });
+            ctx.Check(WordSettings.ReadSaved(det: false)[AntiAliasingSetting.Lookup] == DisplayWords.AntiAliasingSmaa,
+                $"a plain launch reads the saved anti-aliasing word ({WordSettings.ReadSaved(det: false)[AntiAliasingSetting.Lookup] ?? "unset"})");
+            ctx.Check(WordSettings.ReadSaved(det: true)[AntiAliasingSetting.Lookup] == null,
+                $"and a --det launch drops it ({WordSettings.ReadSaved(det: true)[AntiAliasingSetting.Lookup] ?? "unset"})");
+            OptionsStore.UserOptions().Save(new OptionsDef { Words = { [RenderScaleSetting.Lookup] = "200" } });
             AppliedAntiAliasingRow(ctx, layout);
         }
         finally
@@ -464,16 +459,19 @@ internal static class DisplaySettingsSuites
 
     [Suite("display-det-guard",
         "The --det drop as a guard rather than four assertions: every field OptionsDef carries is "
-        + "named in this suite's own table, every reader of a saved display setting has the shape "
-        + "SavedWord(det) and there are no more of them than there are display settings, each one "
+        + "named in this suite's own table or is a registered word setting, every reader of a saved "
+        + "display setting has the shape SavedWord(det) and there are no more of them than there are "
+        + "display settings, each one "
         + "returns its field on a plain launch and null under --det, and no other field is read "
-        + "through one. A display setting added to the def without the drop fails here rather than "
+        + "through one. The registered words go through WordSettings.ReadSaved, the read the launch "
+        + "resolves them from: a plain read carries every saved word and a --det read carries none. "
+        + "A display setting added to the def without the drop fails here rather than "
         + "in the goldens, which cannot see the drop fail while Launcher's scripted-run guard "
         + "stands in front of it (docs/verification.md's DET-14)")]
     internal static void DisplayDetGuard(TestContext ctx)
     {
         var carried = typeof(OptionsDef).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var known = new HashSet<string>(SavedFields.Select(f => f.Property), StringComparer.Ordinal);
+        var known = new HashSet<string>(SavedFields.Select(f => f.Property), StringComparer.Ordinal) { nameof(OptionsDef.Words) };
         var actual = new HashSet<string>(carried.Select(p => p.Name), StringComparer.Ordinal);
         ctx.Check(known.SetEquals(actual),
             $"every field the options def carries is named in this suite's table (unnamed: {Join(actual.Except(known))}; gone: {Join(known.Except(actual))})");
@@ -497,6 +495,11 @@ internal static class DisplaySettingsSuites
             foreach (var field in SavedFields)
             {
                 OneField(ctx, carried, readers, field);
+            }
+
+            foreach (var setting in WordSettings.All)
+            {
+                OneWord(ctx, readers, setting);
             }
 
             EveryField(ctx, carried, readers);
@@ -536,6 +539,24 @@ internal static class DisplaySettingsSuites
         }
     }
 
+    // One registered word saved alone, through the read the launch resolves the words from. The plain
+    // read carrying exactly that word is the control. Without it, a file the store had dropped the
+    // word from would read as a guard holding.
+    private static void OneWord(TestContext ctx, IReadOnlyList<(string Owner, Func<bool, string?> Read)> readers, WordSetting setting)
+    {
+        var def = new OptionsDef();
+        def.Words[setting] = setting.Words[^1];
+        OptionsStore.UserOptions().Save(def);
+        var expected = new WordValues { [setting] = setting.Words[^1] };
+        ctx.Check(WordSettings.ReadSaved(det: false).Equals(expected),
+            $"a plain launch reads the saved {setting.SavedField} of '{setting.Words[^1]}' and no other word ({WordSettings.ReadSaved(det: false)})");
+        ctx.Check(WordSettings.ReadSaved(det: true).Equals(new WordValues()),
+            $"and a --det launch reads no saved word at all ({WordSettings.ReadSaved(det: true)})");
+        var plain = readers.Where(r => r.Read(false) != null).Select(r => r.Owner).ToList();
+        ctx.Check(plain.Count == 0,
+            $"{setting.SavedField} is no SavedWord reader's to read, its guard being the registry's (plain: {Join(plain)})");
+    }
+
     // Every field set at once, the shape of a file written at the controls: what a golden shot's
     // --det run reads out of it has to be nothing at all, while a plain launch reads every one.
     private static void EveryField(TestContext ctx, PropertyInfo[] carried,
@@ -547,6 +568,13 @@ internal static class DisplaySettingsSuites
             carried.First(p => p.Name == field.Property).SetValue(def, field.Sample);
         }
 
+        var words = new WordValues();
+        foreach (var setting in WordSettings.All)
+        {
+            def.Words[setting] = setting.Words[^1];
+            words[setting] = setting.Words[^1];
+        }
+
         OptionsStore.UserOptions().Save(def);
         var det = readers.Where(r => r.Read(true) != null).Select(r => r.Owner).ToList();
         ctx.Check(det.Count == 0,
@@ -554,6 +582,8 @@ internal static class DisplaySettingsSuites
         var plain = readers.Where(r => r.Read(false) != null).Select(r => r.Owner).ToList();
         ctx.Check(plain.Count == readers.Count,
             $"while a plain launch reads all {readers.Count} of them, so the drop above is the guard and not an empty file ({Join(plain)})");
+        ctx.Check(WordSettings.ReadSaved(det: true).Equals(new WordValues()) && WordSettings.ReadSaved(det: false).Equals(words),
+            $"and the registered words reach a plain launch, all {WordSettings.All.Count} of them, and a --det launch not at all ({WordSettings.ReadSaved(det: false)}; det: {WordSettings.ReadSaved(det: true)})");
     }
 
     // The saved-display readers, found by shape rather than by name: a public static string?
@@ -587,10 +617,10 @@ internal static class DisplaySettingsSuites
         return joined.Length == 0 ? "none" : joined;
     }
 
-    // The monitor row driven: the page opens on the saved screen, draws that screen's own label and
-    // hands the index back on the exit, which is what Launcher.ApplyOptions resolves and applies
-    // before the mode and the size. The plan is asserted rather than applied to another screen; a
-    // scripted run's window is hidden off screen and moving it would put it over the desktop.
+    // The monitor row driven: the page opens on the saved screen and draws that screen's own label.
+    // The exit hands the index back, and LiveSettings.Persist resolves and applies it before the mode
+    // and the size. The plan is asserted rather than applied to another screen. A scripted run's
+    // window is hidden off screen, and moving it would put it over the desktop.
     private static void AppliedMonitorRow(TestContext ctx, MenuLayout layout, int standing)
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
@@ -609,7 +639,7 @@ internal static class DisplaySettingsSuites
     }
 
     // The resolution row driven: the page opens on the saved size and ACCEPT CHANGES hands it back on
-    // the exit, which is the size Launcher.ApplyOptions resolves and applies. The plan is asserted
+    // the exit. LiveSettings.Persist resolves and applies that size. The plan is asserted
     // rather than applied; resizing a scripted run's window would move the viewport every later shot
     // in this process is captured from.
     private static void AppliedSizeRow(TestContext ctx, MenuLayout layout)
@@ -712,9 +742,9 @@ internal static class DisplaySettingsSuites
     }
 
     // The display-mode row driven: the page opens on the saved word and ACCEPT CHANGES hands it back
-    // on the exit, which is the word Launcher.ApplyOptions resolves and applies. The mode the plan
-    // resolves to is asserted rather than applied; changing a scripted run's window mode would put
-    // the hidden window back on the screen every other suite renders behind.
+    // on the exit. LiveSettings.Persist resolves and applies that word. The mode the plan resolves
+    // to is asserted rather than applied. Changing a scripted run's window mode would put the hidden
+    // window back on the screen every other suite renders behind.
     private static void AppliedModeRow(TestContext ctx, MenuLayout layout)
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
@@ -770,15 +800,15 @@ internal static class DisplaySettingsSuites
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load());
         shell.Options.Video.Open();
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.RenderScaleChoice == "200",
-            $"the VIDEO page opens showing the saved scale ({shell.Screen}, {shell.Options.Video.RenderScaleChoice ?? "unset"})");
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.Choice(RenderScaleSetting.Lookup) == "200",
+            $"the VIDEO page opens showing the saved scale ({shell.Screen}, {shell.Options.Video.Choice(RenderScaleSetting.Lookup) ?? "unset"})");
         ctx.Check(Label(shell, OriginalVideoPage.RenderScaleKey) == "200%",
             $"with the row drawing it as a percentage of native ({Label(shell, OriginalVideoPage.RenderScaleKey)})");
         var applied = Accept(shell);
-        ctx.Check(applied?.RenderScale == "200",
-            $"ACCEPT CHANGES carries it on the apply exit ({applied?.RenderScale ?? "no exit"})");
-        ctx.Check(RenderScaleSetting.TryParseWord(applied?.RenderScale, out float scale) && scale == 2.0f,
-            $"and the word the exit carries is the factor the next start's viewports take ({applied?.RenderScale ?? "no exit"})");
+        ctx.Check(applied?.Words[RenderScaleSetting.Lookup] == "200",
+            $"ACCEPT CHANGES carries it on the apply exit ({applied?.Words[RenderScaleSetting.Lookup] ?? "no exit"})");
+        ctx.Check(RenderScaleSetting.TryParseWord(applied?.Words[RenderScaleSetting.Lookup], out float scale) && scale == 2.0f,
+            $"and the word the exit carries is the factor the next start's viewports take ({applied?.Words[RenderScaleSetting.Lookup] ?? "no exit"})");
     }
 
     // What ViewportQuality writes, read back off a viewport rather than trusted. The control is an
@@ -952,13 +982,13 @@ internal static class DisplaySettingsSuites
         ctx.Check(Label(shell, OriginalVideoPage.AntiAliasingKey) == "Off",
             $"the anti-aliasing row opens on the original mode's default ({Label(shell, OriginalVideoPage.AntiAliasingKey)})");
         shell.Step(new MenuCommands { MoveX = -1 });
-        ctx.Check(shell.Options.Video.AntiAliasingChoice == DisplayWords.AntiAliasingFsr2 && shell.Options.Video.RenderScaleChoice == "100",
-            $"a step back onto fsr2 moves the saved 200 to 100 ({shell.Options.Video.AntiAliasingChoice ?? "unset"}, {shell.Options.Video.RenderScaleChoice ?? "unset"})");
-        ctx.Check(Label(shell, OriginalVideoPage.RenderScaleKey) == "100%" && shell.Options.Video.RenderScaleWords.Count == 4,
-            $"and the scale row redraws at once over the four scales fsr2 runs ({Label(shell, OriginalVideoPage.RenderScaleKey)}, {shell.Options.Video.RenderScaleWords.Count})");
+        ctx.Check(shell.Options.Video.Choice(AntiAliasingSetting.Lookup) == DisplayWords.AntiAliasingFsr2 && shell.Options.Video.Choice(RenderScaleSetting.Lookup) == "100",
+            $"a step back onto fsr2 moves the saved 200 to 100 ({shell.Options.Video.Choice(AntiAliasingSetting.Lookup) ?? "unset"}, {shell.Options.Video.Choice(RenderScaleSetting.Lookup) ?? "unset"})");
+        ctx.Check(Label(shell, OriginalVideoPage.RenderScaleKey) == "100%" && shell.Options.Video.Offered(RenderScaleSetting.Lookup).Count == 4,
+            $"and the scale row redraws at once over the four scales fsr2 runs ({Label(shell, OriginalVideoPage.RenderScaleKey)}, {shell.Options.Video.Offered(RenderScaleSetting.Lookup).Count})");
         var applied = Accept(shell);
-        ctx.Check(applied?.AntiAliasing == DisplayWords.AntiAliasingFsr2 && applied?.RenderScale == "100",
-            $"ACCEPT CHANGES carries both ({applied?.AntiAliasing ?? "no exit"}, {applied?.RenderScale ?? "no exit"})");
+        ctx.Check(applied?.Words[AntiAliasingSetting.Lookup] == DisplayWords.AntiAliasingFsr2 && applied?.Words[RenderScaleSetting.Lookup] == "100",
+            $"ACCEPT CHANGES carries both ({applied?.Words[AntiAliasingSetting.Lookup] ?? "no exit"}, {applied?.Words[RenderScaleSetting.Lookup] ?? "no exit"})");
     }
 
     // Walks the page's focus onto ACCEPT CHANGES and presses it, the keyboard's own way out.

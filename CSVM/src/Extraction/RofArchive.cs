@@ -29,7 +29,7 @@ public static class RofArchive
     public static IEnumerable<RofEntry> Walk(byte[] archive)
     {
         var ordered = new List<RofEntry>();
-        WalkNode(archive, 0, string.Empty, ordered);
+        WalkNode(archive, 0, string.Empty, ordered, new HashSet<int>());
         return ordered;
     }
 
@@ -74,8 +74,16 @@ public static class RofArchive
         return data;
     }
 
-    private static void WalkNode(byte[] b, int offset, string prefix, List<RofEntry> into)
+    // ⚠ Do not drop the ancestor check. A directory targeting itself or an ancestor would recurse
+    // until the stack overflows, which no catch can stop. The entry cap bounds a tree that shares
+    // one node under many parents.
+    private static void WalkNode(byte[] b, int offset, string prefix, List<RofEntry> into, HashSet<int> ancestors)
     {
+        if (!ancestors.Add(offset))
+        {
+            throw new InvalidDataException(".rof directory " + prefix + " loops back to the node at " + offset);
+        }
+
         uint count = U32(b, offset);
         uint poolLength = U32(b, offset + 4);
         if (count > MaxEntries || poolLength > MaxPoolBytes)
@@ -99,10 +107,15 @@ public static class RofArchive
             string path = prefix + Encoding.ASCII.GetString(b, nameStart, nameEnd - nameStart);
             int target = (int)U32(b, e);
             uint kind = U32(b, e + 12);
+            if (into.Count >= MaxEntries)
+            {
+                throw new InvalidDataException(".rof archive lists more than " + MaxEntries + " entries");
+            }
+
             if (kind == KindDirectory)
             {
                 into.Add(new RofEntry(path, true, target, 0, 0, false));
-                WalkNode(b, target, path + "/", into);
+                WalkNode(b, target, path + "/", into, ancestors);
             }
             else if (kind == KindStored || kind == KindDeflated)
             {
@@ -113,6 +126,8 @@ public static class RofArchive
                 throw new InvalidDataException("unknown .rof entry kind " + kind + " for " + path);
             }
         }
+
+        ancestors.Remove(offset);
     }
 
     private static uint U32(byte[] b, int offset)

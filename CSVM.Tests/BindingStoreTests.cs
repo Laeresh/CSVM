@@ -348,6 +348,31 @@ public class BindingStoreTests
         AssertSameMaps(BindingProfile.Defaults(Pad, true), loaded);
     }
 
+    /// <summary>A keymap file broken by a hand edit loads the defaults with a warning. It is moved
+    /// aside, so the next save cannot replace the player's edit.</summary>
+    [Fact]
+    public void Load_AMalformedFile_IsMovedAsideAndTheNextSaveLeavesIt()
+    {
+        string dir = TestData.TempDir();
+        string path = Path.Combine(dir, BindingStore.FileNameFor(1));
+        File.WriteAllText(path, "{ \"contexts\": { \"flight\": { \"Nitro\": [] } ");
+        var lines = new List<string>();
+
+        BindingProfile loaded;
+        using (CSVM.Utils.Log.PushConsoleSink(lines.Add))
+        {
+            loaded = new BindingStore(dir).Load(1, Pad, readsKeyboard: true);
+        }
+
+        AssertSameMaps(BindingProfile.Defaults(Pad, true), loaded);
+        Assert.Contains(lines, l => l.StartsWith("WARN", StringComparison.Ordinal) && l.Contains(path) && l.Contains(".bad"));
+        Assert.False(File.Exists(path));
+
+        new BindingStore(dir).Save(1, loaded);
+        Assert.Equal("{ \"contexts\": { \"flight\": { \"Nitro\": [] } ", File.ReadAllText(path + ".bad"));
+        Assert.True(File.Exists(path));
+    }
+
     /// <summary>A file saved on one machine and read where the pad is a different one: a row saved
     /// on the placeholder identity follows the seat, while a row naming a real pad keeps naming it.
     /// </summary>

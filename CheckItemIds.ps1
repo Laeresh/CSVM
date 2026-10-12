@@ -1,9 +1,14 @@
 #!/usr/bin/env pwsh
-# Duplicate item-ID check for backlog.md and playtest.md.
+# Duplicate item-ID check for backlog.md and playtest.md, and duplicate rule IDs in
+# docs/verification.md.
 #
 # IDs are minted once by New-ItemId.ps1 and never reused or renumbered, so the same BL-/PT-/CAP-
 # defined twice means two sessions minted against a stale counter. Catching it at commit time is
 # what keeps the rule "a missing ID was deleted, not moved" true.
+#
+# Verification rules (SHOT-41, INSTR-100) are numbered by hand from the writer's own tree, so two
+# branches that each add one take the same next number, and the merge keeps both without a
+# conflict. The merge commit is where that is caught.
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md). Files are READ only.
 # Exit code 1 on a duplicate, so a caller can gate a commit on it.
@@ -22,7 +27,8 @@ if (-not $Root) { $Root = (Get-Location).Path }
 
 $sources = @(
     @{ File = 'backlog.md';  Pattern = '^\s*-\s+`(BL-\d+)`' },
-    @{ File = 'playtest.md'; Pattern = '^\s*(?:-\s+|\|\s*)`((?:PT|CAP)-\d+)`' }
+    @{ File = 'playtest.md'; Pattern = '^\s*(?:-\s+|\|\s*)`((?:PT|CAP)-\d+)`' },
+    @{ File = 'docs/verification.md'; Pattern = '^\s*-\s+\*\*([A-Z]+-\d+)\*\*' }
 )
 
 $defs = @()
@@ -88,10 +94,16 @@ if (-not $Quiet) {
     foreach ($d in $dupes) {
         Write-Output ('Duplicate item ID defined more than once: {0} ({1} times)' -f $d.Name, $d.Count)
     }
-    if ($dupes.Count -gt 0) {
+    if (@($dupes | Where-Object { $_.Name -match '^(BL|PT|CAP)-' }).Count -gt 0) {
         Write-Output ''
         Write-Output 'backlog.md/playtest.md define the same ID twice - mint a fresh ID with'
         Write-Output './New-ItemId.ps1 and renumber the later mint before committing.'
+    }
+    if (@($dupes | Where-Object { $_.Name -notmatch '^(BL|PT|CAP)-' }).Count -gt 0) {
+        Write-Output ''
+        Write-Output 'docs/verification.md defines the same rule twice, usually two branches that each took'
+        Write-Output 'the next number. Give the later rule the next free number in its family and'
+        Write-Output 'update every citation of it (git grep the old ID).'
     }
     foreach ($p in $tagProblems) { Write-Output ('Tag vocabulary: {0}' -f $p) }
     if ($tagProblems.Count -gt 0) {

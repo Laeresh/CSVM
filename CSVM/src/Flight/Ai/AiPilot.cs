@@ -63,11 +63,35 @@ public sealed class AiPilot
     /// done, and stunned holds the controls neutral. Mutable like every other order.</summary>
     public AiModeMachine? Machine;
 
+    /// <summary>The rearm standing order, or null for a pilot that never breaks off to a base: only a
+    /// bot seat is given one. While its run stands the gunner is disengaged and no quarry is chased.
+    /// The run replaces patrol in the dispatch, so a stun, avoid crash or an evasive maneuver still
+    /// comes first. The base runtime starts and ends the run.</summary>
+    public AiRearmOrder? RearmOrder;
+
+    /// <summary>A run to a point an objective names, a Capture the Flag bot's flag, flown as a rearm
+    /// run's approach, or null. It outranks pursuit and a rearm run: the pilot flies it whatever its
+    /// quarry, and its gunner still fires where its guns bear. A stun, avoid crash's climb-out, a
+    /// live escort and an evasive maneuver still come first. The objective's runtime starts and drops
+    /// it.</summary>
+    public AiRearmOrder? ObjectiveRun;
+
+    /// <summary>A Capture the Flag defender's tether, or null. Beyond <c>Radius</c> metres of
+    /// <c>Center</c>, measured flat, the pilot takes no quarry, as on a rearm run
+    /// (<see cref="BeyondTether"/>). It then flies its heading and altitude orders, which its
+    /// objective points home.</summary>
+    public (Vector3 Center, float Radius)? Tether;
+
     /// <summary>The mission's <c>dzpathN</c> ribbons, or null for a session with none: with a
     /// <see cref="Machine"/> and a <see cref="Patrol"/>, reaching a net node carrying the
     /// danger-zone tag starts a run on the ribbon the node names (docs/org/aiPilot.md "The
     /// danger-zone run"). Shared across pilots, since lanes are occupancy-counted.</summary>
     public DangerZoneRibbons? DangerZones;
+
+    /// <summary>A stunt race bot's lever, or null. When set, the lever holds it in place of the law's
+    /// walk, except on the emergency climb-out. Its tier sets it (<see cref="StuntBotObjective"/>).
+    /// </summary>
+    public float? CruiseThrottle;
 
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
@@ -172,6 +196,12 @@ public sealed class AiPilot
     /// way round, and the two agree only at north and south.</summary>
     public static float HeadingDegOf(Vector3 dir) =>
         Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z));
+
+    /// <summary>Whether <paramref name="position"/> stands past <paramref name="tether"/>'s radius
+    /// of its centre, measured flat, so the pilot breaks off and flies home. False with no tether.
+    /// </summary>
+    public static bool BeyondTether(Vector3 position, (Vector3 Center, float Radius)? tether) =>
+        tether is { } t && new Vector2(position.X - t.Center.X, position.Z - t.Center.Z).LengthSquared() > t.Radius * t.Radius;
 
     /// <summary>The decoded aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>): whether the
     /// pursuer sits on its victim's own axis, within the pilot's <c>quick_draw_angle</c> of it.
@@ -282,13 +312,89 @@ public sealed class AiPilot
             machine.Enter(AiMode.Patrol, "respawned");
     }
 
+    /// <summary>A seat pilot's one reset on a return, so any standing order added later is cleared
+    /// here too. No quarry, mode, stun, rearm run or danger-zone run survives the aeroplane it lost.
+    /// It holds the new placement's course and lever until its gunner finds a quarry. What a mission
+    /// or a launch ordered (net, escort, primary target, auto-targeting, ratings) stays.</summary>
+    public void ResetForSpawn(Vector3 pos, Vector3 lookAt, float throttle)
+    {
+        TargetHeadingDeg = HeadingDegOf(lookAt - pos);
+        TargetAltitude = pos.Y;
+        Throttle = throttle;
+        _bareStunRemainingS = 0f;
+        ZoneRun?.Release();
+        ZoneRun = null;
+        _rail = null;
+        _zoneEntryLegFrom = -1;
+        _zoneEntryLegTo = -1;
+        RailPose = null;
+        RailSpeed = 0f;
+        SteeringPatrol = false;
+        if (Gunner is { } gunner)
+        {
+            gunner.Target = null;
+            gunner.TargetRank = default;
+            gunner.TargetRankFor = null;
+            gunner.TargetHoldUntil = 0d;
+            gunner.HoldFire();
+        }
+
+        Rocketeer?.Reset();
+        Machine?.Reset("respawned");
+        RearmOrder?.Reset();
+        ObjectiveRun?.Reset();
+        Tether = null;
+        if (Gunner is { } freed)
+        {
+            freed.Disengaged = false;
+        }
+    }
+
+    /// <summary>Starts a run on <paramref name="ribbon"/> for a pilot at <paramref name="at"/>, from its
+    /// far end when <paramref name="farEnd"/>. The approach and the rail follow, as from a tagged net
+    /// node. False with no mode machine, which a run needs.</summary>
+    public bool FlyDangerZone(DangerZoneRibbon ribbon, bool farEnd, Vector3 at, string why)
+    {
+        if (Machine is not { } machine)
+            return false;
+        ZoneRun?.Release();
+        StartDangerZoneRun(new DangerZoneRun(ribbon, farEnd), at, machine, why);
+        return true;
+    }
+
+    /// <summary>Locks the pilot onto <paramref name="ribbon"/> where it passes nearest, running the
+    /// way the nose points. A pilot set back onto a route so rides it out of the zone. The lock is at
+    /// once, since the approach's crash check would climb it out of a slot. False with no machine.</summary>
+    public bool RejoinDangerZone(DangerZoneRibbon ribbon, Vector3 at, Basis attitude, Vector3 velocity, string why)
+    {
+        if (Machine is not { } machine)
+            return false;
+        var (segment, t) = ribbon.NearestTo(at);
+        bool reversed = ribbon.TangentAt(segment, t).Dot(-attitude.Z) < 0f;
+        ZoneRun?.Release();
+        StartDangerZoneRun(new DangerZoneRun(ribbon, reversed, segment, t), at, machine, why);
+        _rail = new DangerZoneRail(ZoneRun!, at, attitude, velocity, velocity.Length());
+        machine.Enter(AiMode.NavigatingDangerZone, $"'{ribbon.Name}' rejoined ({why})");
+        return true;
+    }
+
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
     /// state and this instance's fields (no clocks, and the only randomness is
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic. The
     /// one node read is a turret or structure quarry's position, which lives on its node alone.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        var quarry = PursuitQuarry.Of(Gunner?.Target, Gunner);
+        // A rearm run takes no quarry, so the machine reverts any chase on this step. An objective
+        // run keeps its quarry, which only its guns pursue.
+        var objective = ObjectiveRun is { Flying: true } named ? named : null;
+        var rearm = objective == null && RearmOrder is { Flying: true } run ? run : null;
+        bool off = rearm != null || BeyondTether(model.Position, Tether);
+        if (Gunner is { } held)
+        {
+            held.Disengaged = off;
+        }
+
+        var quarry = off ? null : PursuitQuarry.Of(Gunner?.Target, Gunner);
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
         RailPose = null;          // set again below only while the rail writes the pose
 
@@ -311,6 +417,8 @@ public sealed class AiPilot
                 return FlyClimbOut(model, dt, machine);
             if (Escort is { Leader.InPlay: true } escorting)
                 return FlyEscort(model, dt, escorting, quarry);
+            if (objective != null && mode != AiMode.EvasiveManeuver)
+                return FlyRearm(model, dt, objective);
 
             // The dynamic entry into a danger-zone run, on the original's own gate: a combat
             // state (its state 0) with the evade flag up. That is a hit pilot being chased, and
@@ -347,7 +455,9 @@ public sealed class AiPilot
                 case AiMode.LayOff when quarry is { } pursuer:
                     return FlyLayOff(model, dt, machine, pursuer);
 
-                default: // patrol, and any mode whose quarry went away
+                default: // patrol, and any mode whose quarry went away; a rearm run replaces patrol
+                    if ((objective ?? rearm) is { } standing)
+                        return FlyRearm(model, dt, standing);
                     var input = FlyPatrol(model, dt);
                     if (mode == AiMode.Patrol && Patrol is { ArrivedNode: { EntersDangerZone: true } node })
                         TryStartDangerZone(node.DangerZonePath, model, machine);
@@ -365,6 +475,8 @@ public sealed class AiPilot
         if (Escort is { Leader.InPlay: true } escort)
             return FlyEscort(model, dt, escort, quarry);
 
+        if ((objective ?? rearm) is { } ordered)
+            return FlyRearm(model, dt, ordered);
         return quarry is { } bare ? FlyPursuit(model, dt, bare) : FlyPatrol(model, dt);
     }
 
@@ -385,6 +497,8 @@ public sealed class AiPilot
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
             emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, stationKeeping,
             openAltitudeBand);
+        if (CruiseThrottle is { } cruise && !emergency)
+            input.Throttle = cruise;
         Throttle = input.Throttle;
         return input;
     }
@@ -516,6 +630,18 @@ public sealed class AiPilot
         return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
     }
 
+    // A rearm or objective run: the order's aim point, on the cruise table the combat driver flies while
+    // breaking off. Heading and altitude follow it, so a run that ends leaves the pilot holding its last course.
+    private FlightInput FlyRearm(FlightModel model, float dt, AiRearmOrder run)
+    {
+        var aim = run.Aim(model.Position);
+        var toAim = aim - model.Position;
+        if (new Vector2(toAim.X, toAim.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toAim);
+        TargetAltitude = aim.Y;
+        return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
+    }
+
     // The node-tag entry (FUN_0041d1f0 after the walk step): a numbered tag resolves dzpath<N>
     // and the run enters from whichever end is nearer; a negative one takes the nearest end of
     // any active ribbon. No roll, no range and no difficulty test on this arm.
@@ -541,7 +667,7 @@ public sealed class AiPilot
         {
             return;
         }
-        StartDangerZoneRun(ribbon, farEnd, model, machine, "tagged node");
+        StartDangerZoneRun(new DangerZoneRun(ribbon, farEnd), model.Position, machine, "tagged node");
     }
 
     // The proximity entry (FUN_0041d9f0's first statement, 0x0041da3e, into FUN_004210e0's
@@ -557,21 +683,20 @@ public sealed class AiPilot
             machine.StampDangerZoneRetry();
             return;
         }
-        StartDangerZoneRun(pick.Ribbon, pick.FarEnd, model, machine, "dare devil test passed");
+        StartDangerZoneRun(new DangerZoneRun(pick.Ribbon, pick.FarEnd), model.Position, machine, "dare devil test passed");
     }
 
     // What both entries do once a ribbon and an end are chosen: the run record, the leg the exit
     // re-seats off, and state 2. The machine's own transition drops the standing target
     // (FUN_00421500 nulls +0x948).
-    private void StartDangerZoneRun(DangerZoneRibbon ribbon, bool farEnd, FlightModel model,
-        AiModeMachine machine, string why)
+    private void StartDangerZoneRun(DangerZoneRun run, Vector3 at, AiModeMachine machine, string why)
     {
-        ZoneRun = new DangerZoneRun(ribbon, farEnd);
+        ZoneRun = run;
         _rail = null;
         _zoneEntryLegFrom = Patrol?.LegStartIndex ?? -1;
         _zoneEntryLegTo = Patrol?.CurrentIndex ?? -1;
         machine.Enter(AiMode.ApproachingDangerZone,
-            $"'{ribbon.Name}' from its {(farEnd ? "far" : "near")} end, {model.Position.DistanceTo(ZoneRun.Point):0} m out ({why})");
+            $"'{run.Ribbon.Name}' {(run.Reversed ? "backwards" : "forwards")}, {at.DistanceTo(run.Point):0} m out ({why})");
     }
 
     // The approach (FUN_004216e0): the run's current point on the emergency table, no aim

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -34,22 +35,24 @@ internal static class MenuInstantActionSuites
     private static readonly MenuCommands Left = new() { MoveX = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
 
-    [Suite("menu-instant-action-journey",
-        "Built-in's Instant Action journey pinned end to end: a real LaunchMenu is driven Mode to "
-        + "Environment, the Table of Contents applies a preset, Mission type steps the lives, a second "
-        + "seat on Stunt Flying hides the stepper, which a race does not spend, and another type or a "
-        + "solo run brings it back with its count, the "
-        + "ace duel skips Waves and Wingmen both ways, the wave editor edits a slot live and a new "
-        + "militia resets its aircraft, Wingmen hides its aircraft row at zero and opens the "
-        + "wingman loadout, the launch leaves as a LaunchExit carrying the built InstantActionDef, "
-        + "the fields survive a return from flight, and the --menu= and --debug-* aids open their "
-        + "states; every check is what the screens do today")]
-    internal static void MenuInstantActionJourney(TestContext ctx)
+    // Without the install an environment's base def is InstantAction.Defaults(). The wizard's rows,
+    // presets and launch fields are the menu's own, so only the ace, which the base def carries,
+    // needs the install. That check is menu-instant-action-journey's.
+    [Suite("menu-instant-action-journey-core",
+        "Built-in's Instant Action journey pinned end to end. A real LaunchMenu is driven from Mode to "
+        + "Environment, the Table of Contents applies a preset, and Mission type steps the lives. A "
+        + "second seat on Stunt Flying hides the lives stepper, since a race spends no lives, and "
+        + "Accept then skips Waves and Wingmen, with Back returning to Mission. Another type or a "
+        + "solo run brings the stepper back with its count. The ace duel skips Waves and Wingmen both "
+        + "ways, the wave editor edits a slot live and a new militia resets its aircraft, and Wingmen "
+        + "hides its aircraft row at zero and opens the wingman loadout. The launch leaves as a "
+        + "LaunchExit carrying the built InstantActionDef, the fields survive a return from flight, "
+        + "and the --menu= and --debug-* aids open their states. Every check is what the screens do today.")]
+    internal static void MenuInstantActionJourneyCore(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey");
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey-core");
         ctx.Host.AddChild(menu);
         var launches = new Launches(exits);
         try
@@ -65,6 +68,44 @@ internal static class MenuInstantActionSuites
             Launch(ctx, menu, launches);
             Return(ctx, menu, launches);
             Aids(ctx, menu, launches);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
+    }
+
+    [Suite("menu-instant-action-journey",
+        "Built-in's Instant Action launch over the install: the Girl Trouble preset's squadron "
+        + "launched from Sky Haven through the wizard carries the environment's own ace, not the "
+        + "built-in default the def falls back to without the install")]
+    internal static void MenuInstantActionJourney(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1"), "ia.json");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey");
+        ctx.Host.AddChild(menu);
+        var launches = new Launches(exits);
+        try
+        {
+            // The core journey's launch: the first preset applied, then Accept through Mission,
+            // Waves, Wingmen and both presses on the Aircraft screen. The first show builds the
+            // seats the preset writes its aircraft onto.
+            menu.ShowMenu();
+            menu.DebugPreset(0);
+            menu.ShowMenu("environment");
+            for (int press = 0; press < 6 && launches.Count == 0; press++)
+            {
+                menu.Drive(Accept);
+            }
+
+            var def = launches.Count == 1 ? launches[0].InstantAction : null;
+            ctx.Check(launches.Count == 1 && launches[0].Chapter == "C4" && def != null
+                && def.AceName != "Marshall Bill Redmann" && def.AceName.Length > 0,
+                $"the ace is the environment's own, not the built-in default ({launches.Count} launches, {(launches.Count == 1 ? launches[0].Chapter : "-")}, {def?.AceName})");
         }
         finally
         {
@@ -96,9 +137,10 @@ internal static class MenuInstantActionSuites
         + "aircraft screen by Fly Mission before the launch carries both seats, the remake-only race time box hidden "
         + "on a solo stunt run showing once that pilot joins on the clear line over the enemy block, taking the walk "
         + "between the environment and the enemy count and a sideways step, hiding under another mission type, "
-        + "and its pick riding the def into the session spec, while the lives box, which a race does not spend, "
-        + "hides with its title as the pilot joins, the cursor left on it lifting to the box above, and returns "
-        + "with its count under another type")]
+        + "and its pick riding the def into the session spec. The lives box, which a race does not spend, "
+        + "hides with its title as the pilot joins and returns with its count under another type, and a "
+        + "cursor left on the lives box lifts to the live box above it. The race also blanks the wingman "
+        + "and enemy boxes.")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -267,6 +309,11 @@ internal static class MenuInstantActionSuites
         Is(ctx, "two seats on a stunt run show no lives", "", menu.ShownDetail);
         ctx.Check(!menu.ShownFooter.Contains("Lives", StringComparison.Ordinal),
             $"and the footer no longer names the stepper ({menu.ShownFooter})");
+        menu.Drive(Accept);
+        Is(ctx, "Accept on the race skips Waves and Wingmen as the ace duel does", "Plane", menu.ShownScreen);
+        menu.Drive(Back);
+        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Stunt Flying",
+            $"and Back returns to Mission ({menu.ShownScreen}, {menu.ShownRowText})");
         menu.Drive(Right);
         Is(ctx, "a sideways press leaves the hidden count alone", "Stunt Flying", menu.ShownRowText);
         menu.Drive(Down);
@@ -456,8 +503,6 @@ internal static class MenuInstantActionSuites
             $"the second as the preset had it ({def.Waves[1]})");
         ctx.Check(def.Waves[2] == InstantAction.EmptyWave && def.Waves[3] == InstantAction.EmptyWave,
             $"the two unused slots as the empty wave");
-        ctx.Check(def.AceName != "Marshall Bill Redmann" && def.AceName.Length > 0,
-            $"the ace is the environment's own, not the built-in default ({def.AceName})");
         ctx.Check(menu.ShownScreen == "Plane" && menu.Visible,
             $"the menu keeps its state for the host to hide ({menu.ShownScreen})");
     }
@@ -984,7 +1029,7 @@ internal static class MenuInstantActionSuites
             ia.SetWingmen(1);
         }
 
-        ctx.Check(ReferenceEquals(ia.LaunchWingmanFit, ia.WingmanFit), $"and the launch carries the wingman fit ({ia.MissionType.Key}, {ia.NumWingmen} wingmen)");
+        ctx.Check(ReferenceEquals(ia.LaunchWingmanFit(host.Seats.Count), ia.WingmanFit), $"and the launch carries the wingman fit ({ia.MissionType.Key}, {ia.NumWingmen} wingmen)");
         ia.ResetWingmanFit();
     }
 
@@ -1098,7 +1143,9 @@ internal static class MenuInstantActionSuites
         ctx.Check(StripLines(shell) == 2, $"and the strip names both seats ({StripLines(shell)})");
         ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false, Enabled: false, Column: -1, Label: "" } && !HasLine(shell, "Lives:"),
             $"a race spends no lives, so the lives box and its title go ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Visible})");
-        ctx.Check(shell.FocusedKey is OriginalInstantActionScreen.WingmenKey or OriginalInstantActionScreen.WingmanPlaneKey,
+        ctx.Check(Row(shell, OriginalInstantActionScreen.WingmenKey) is { Enabled: false, Label: "" } && Row(shell, "IA_D_NENEMY0") is { Enabled: false, Label: "" },
+            $"the race blanks the wingman count and the enemy boxes ({Row(shell, OriginalInstantActionScreen.WingmenKey)?.Enabled})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey,
             $"and the cursor left on it lifts to the live box above it, not the far page ({shell.FocusedKey})");
         OriginalRaceTime(ctx, host, seat, shell, ia, livesLabel);
 
@@ -1174,7 +1221,8 @@ internal static class MenuInstantActionSuites
         ctx.Check(ia.RaceWindowMinutes == 10 && Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label == "10 minutes",
             $"a sideways step picks the next window ({ia.RaceWindowMinutes})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == "IA_D_NENEMY0", $"and Down leaves it for the enemy count ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.PageDownKey,
+            $"and Down leaves it past the blank enemy count for the paging button ({shell.FocusedKey})");
 
         Press(host, seat, Up);
         Press(host, seat, Up);

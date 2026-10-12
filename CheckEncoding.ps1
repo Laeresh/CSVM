@@ -27,11 +27,39 @@
 #   ./CheckEncoding.ps1                    this tree
 #   ./CheckEncoding.ps1 -Root <path>       another worktree
 #   ./CheckEncoding.ps1 -Quiet             exit code only
+#   <hook payload on stdin> | ./CheckEncoding.ps1 -Hook
+#                                          the .ps1 an Edit/Write touched, anywhere: exit 2 when
+#                                          it holds non-ASCII without a UTF-8 BOM
 [CmdletBinding()]
 param(
     [string]$Root,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$Hook
 )
+
+# The post-edit hook. The usual source of mojibake is a script, often a scratch one outside the
+# tree, that PowerShell 5.1 read as ANSI and that then wrote repo text; the tree check above only
+# sees the damage afterwards. So the script is stopped as it is written.
+if ($Hook) {
+    $f = ''
+    try { $f = [string]([Console]::In.ReadToEnd() | ConvertFrom-Json).tool_input.file_path } catch { exit 0 }
+    if ($f -notlike '*.ps1' -or -not (Test-Path -LiteralPath $f -PathType Leaf)) { exit 0 }
+    $bytes = [IO.File]::ReadAllBytes($f)
+    $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+    if ($bom) { exit 0 }
+    $line = 1
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 10) { $line++ }
+        if ($bytes[$i] -gt 127) {
+            [Console]::Error.WriteLine($f + ':' + $line + ' holds a non-ASCII character, and the file has no UTF-8 BOM.')
+            [Console]::Error.WriteLine('Windows PowerShell 5.1 reads such a script as ANSI, which mangles that character and')
+            [Console]::Error.WriteLine('any text the script writes with it. Keep the script ASCII and build the character')
+            [Console]::Error.WriteLine('from its code point ([char]0x2014), or save the file with a BOM.')
+            exit 2
+        }
+    }
+    exit 0
+}
 
 if (-not $Root) { $Root = $PSScriptRoot }
 if (-not $Root) { $Root = (Get-Location).Path }

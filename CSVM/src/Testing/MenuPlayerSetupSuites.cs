@@ -44,7 +44,6 @@ internal static class MenuPlayerSetupSuites
         + "and dropping the picks")]
     internal static void MenuPlayerSetupJourney(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-player-setup-journey");
@@ -85,7 +84,6 @@ internal static class MenuPlayerSetupSuites
         + "from the top level")]
     internal static void MenuPlayerSetupSeats(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         BuiltInSeats(ctx);
         OriginalSeats(ctx);
     }
@@ -100,7 +98,6 @@ internal static class MenuPlayerSetupSuites
         + "row and its staged edits with it")]
     internal static void MenuControlsSeats(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string dir = System.IO.Path.Combine(ctx.ScratchDir, "menu-controls-seats");
         System.IO.Directory.CreateDirectory(dir);
         // ⚠ Before the host: the save below writes through the store, and without the override it

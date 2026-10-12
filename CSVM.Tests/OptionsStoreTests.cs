@@ -16,6 +16,39 @@ namespace CSVM.Tests;
 /// a mute while a level of -1 means never set.</summary>
 public class OptionsStoreTests
 {
+    /// <summary>A file saved before the word settings registered themselves loads every word under its
+    /// old field name. It saves back under the same names with the same values. A field the build
+    /// added since writes as null, never in place of an old one.</summary>
+    [Fact]
+    public void AFileSavedBeforeTheWordRegistryRoundTrips()
+    {
+        string text = File.ReadAllText(TestData.Fixture("options", "options-v1.json"));
+        var def = OptionsStore.Deserialize(text);
+
+        Assert.NotNull(def);
+        Assert.Equal("veryfar", def!.Words[ViewDistance.Lookup]);
+        Assert.Equal("77", def.Words[RenderScaleSetting.Lookup]);
+        Assert.Equal(DisplayWords.AntiAliasingSmaa, def.Words[AntiAliasingSetting.Lookup]);
+        Assert.Equal(ShadowQualitySetting.Medium, def.Words[ShadowQualitySetting.Lookup]);
+        Assert.Equal(WaterQualitySetting.Flat, def.Words[WaterQualitySetting.Lookup]);
+        Assert.Equal("enhanced", def.GraphicsMode);
+        Assert.Equal("144", def.VSync);
+
+        using var before = System.Text.Json.JsonDocument.Parse(text);
+        using var after = System.Text.Json.JsonDocument.Parse(OptionsStore.Serialize(def));
+        foreach (var field in before.RootElement.EnumerateObject())
+        {
+            Assert.True(after.RootElement.TryGetProperty(field.Name, out var saved), $"{field.Name} is no longer written");
+            Assert.Equal(field.Value.GetRawText(), saved.GetRawText());
+        }
+
+        foreach (var field in after.RootElement.EnumerateObject())
+        {
+            Assert.True(before.RootElement.TryGetProperty(field.Name, out _) || field.Value.ValueKind == System.Text.Json.JsonValueKind.Null,
+                $"{field.Name} is new and carries a value the old file never held");
+        }
+    }
+
     [Fact]
     public void Load_MissingFile_ReadsAsEmpty()
     {
@@ -109,10 +142,10 @@ public class OptionsStoreTests
         var store = new OptionsStore(TestData.TempDir());
         foreach (string word in ViewDistance.Words)
         {
-            store.Save(new OptionsDef { GraphicsMode = "enhanced", ViewDistance = word });
+            store.Save(new OptionsDef { GraphicsMode = "enhanced", Words = { [ViewDistance.Lookup] = word } });
             var def = store.Load();
 
-            Assert.Equal(word, def.ViewDistance);
+            Assert.Equal(word, def.Words[ViewDistance.Lookup]);
             Assert.Equal("enhanced", def.GraphicsMode);
         }
     }
@@ -131,7 +164,7 @@ public class OptionsStoreTests
             var def = new OptionsStore(dir).Load();
 
             Assert.Equal("enhanced", def.GraphicsMode);
-            Assert.Null(def.ViewDistance);
+            Assert.Null(def.Words[ViewDistance.Lookup]);
         }
     }
 
@@ -184,13 +217,37 @@ public class OptionsStoreTests
         Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
     }
 
+    /// <summary>A hand edit that broke the JSON reads as empty. The file is moved aside with a
+    /// warning rather than left for the next save to replace.</summary>
     [Fact]
-    public void Load_MalformedJson_ReadsAsEmpty()
+    public void Load_MalformedJson_ReadsAsEmptyAndMovesTheFileAside()
     {
         var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "options.json"), "{ not json", new UTF8Encoding(false));
+        string path = Path.Combine(dir, "options.json");
+        File.WriteAllText(path, "{ not json", new UTF8Encoding(false));
+        var lines = new System.Collections.Generic.List<string>();
+
+        OptionsDef loaded;
+        using (Log.PushConsoleSink(lines.Add))
+        {
+            loaded = new OptionsStore(dir).Load();
+        }
+
+        Assert.Null(loaded.MenuPresentation);
+        Assert.Contains(lines, l => l.StartsWith("WARN", System.StringComparison.Ordinal) && l.Contains(path) && l.Contains(".bad"));
+        new OptionsStore(dir).Save(new OptionsDef { MenuPresentation = "original" });
+        Assert.Equal("{ not json", File.ReadAllText(path + ".bad"));
+        Assert.Equal("original", new OptionsStore(dir).Load().MenuPresentation);
+    }
+
+    [Fact]
+    public void Load_ANonObjectFile_ReadsAsEmptyRatherThanThrowing()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"), "[1, 2]", new UTF8Encoding(false));
 
         Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
+        Assert.True(File.Exists(Path.Combine(dir, "options.json.bad")));
     }
 
     /// <summary>The four display settings round-trip beside the three words, so a page that hands

@@ -38,27 +38,26 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves; a stereo process (`StereoFacing.Live`) keys the ghost's stereo text under another. `XrPreciseInterior` keys the stereo cockpit interior's variant the same way (`Flight/Hud/XrCockpit.cs`): each eye places a vertex from its offset to that eye, read off the `Xr*Global` uniforms, and the depth bias pulls toward the drawing eye; its opaque and cutout surfaces write `XrInteriorStencil`, which the stereo whiteout and flare rings skip, and its blended ones draw at `XrInteriorBlendPriority`, between the whiteout and the flash. `OmittedPolygons` leaves polygons out by identity (`CockpitPlate.cs`) while each surface group keeps its rank. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves; a stereo process (`StereoFacing.Live`) keys the ghost's stereo text under another. `XrPreciseInterior` keys the stereo cockpit interior's variant the same way (`Flight/Hud/XrCockpit.cs`): each eye places a vertex from its offset to that eye, read off the `Xr*Global` uniforms, and the depth bias pulls toward the drawing eye; its opaque and cutout surfaces write `XrInteriorStencil`, which the stereo whiteout and flare rings skip, and its blended ones draw at `XrInteriorBlendPriority`, between the whiteout and the flash. `OmittedPolygons` leaves polygons out by identity (`CockpitPlate.cs`) while each surface group keeps its rank. `NodeMade` hands a suite each node a build makes, so a build that throws can be checked for what it left alive. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ShaderTwins.cs
-The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites,
-`EmitterRenderer`'s variants), one `Shader` per text, and the materials wearing them. A cache key is
-a `ModeShader` with one shader per graphics mode, so keys whose texts agree in a mode share one and
-Godot compiles it once. `Follow` records the key a material wears, `Copy` and `FadeCopy` the key a
-duplicate wears, and `Regenerate` moves each onto its key's shader for the standing mode with no
-text changed. `WarmOtherMode` compiles the other mode ahead. Before an Enhanced frame has drawn
-(`EnhancedDrawn`), a first switch to Enhanced rewrites in place and keeps a material on each shader
-it rewrites (LOG-26). `Pooled` serves per-instance constant texts too. Read `Launch/EnhancedLook.cs`.
+The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites, `EmitterRenderer`'s
+variants), one `Shader` per text, and the materials wearing them. A cache key is a `ModeShader` with one shader per
+graphics mode, so keys whose texts agree in a mode share one and Godot compiles it once. `Follow` records the key a
+material wears, `Copy` and `FadeCopy` the key a duplicate wears, and `Regenerate` moves each onto its key's shader for
+the standing mode with no text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
+(`EnhancedDrawn`) a first switch to Enhanced rewrites in place through `Rewrite` (the ocean's too) and pins each rewritten shader on a material until two frames have drawn (LOG-26). `Pooled` also serves
+per-instance constant texts (plane flare, light sprites, ground shadow). A test harness names the world it builds
+(`BuildingWorld`), drops its materials when it destroys it (`Untrack`) and unworn shaders (`ReleaseUnworn`). Read `Launch/EnhancedLook.cs`.
 
 ## src/Mech3/StereoFacing.cs
 How a camera-facing sprite takes its basis under the stereo path. A quad that copies the view's
 basis lies in the head's view plane there, so it is seen turning edge-on as the head looks away
 and rolls with every tilt. `Live` is set by `Launch/XrSession.cs` before any world is built, and
-each sprite then emits a stereo text posed by `csky_facade_spherical` toward the eye: the moon
-(`WorldBuilder.MoonMaterial`, `SpriteShaderCode`), the puffer sprites (`EmitterRenderer`), the heat
-shimmer, the snow flakes and the Enhanced cloud-field grade. The flat texts are untouched. Suite
-`xr-sprite-facing`; golden `c1-moon-xr-sim`.
-
+each sprite then emits a stereo text posed by `csky_facade_spherical` toward the eye: the puffer
+sprites (`EmitterRenderer`), the heat shimmer, the snow flakes and the Enhanced cloud-field grade.
+The flat texts are untouched, and the moon's one facade text (`WorldBuilder`) faces the eye on every
+path. Suite `xr-sprite-facing`; golden `c1-moon-xr-sim`.
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
 with the zone set `{0, camera weather state}`; the walk draws a node iff its gamez `zone_id` is
@@ -191,13 +190,21 @@ shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 [../formats/paint.md](../formats/paint.md),
 [../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.
 
+## src/Mech3/MilitiaFits.cs
+The militia table read once against `vehicle.json`, both halves off one parse: `PatternFor` is a
+militia's paint pattern (`MilitiaPaint`) and `DefFor` the def it flies an airframe as
+(`VehicleDefs.MilitiaDefFor`), null for Fortune Hunter, Broadway Bomber and a pair the install
+ships no def for. A bot seat is painted and armed through it, on every machine, by
+`Session/Roster/HumanFlightAdapter.cs`. `Empty` stands in for an install whose file cannot be read.
+Decode: [../formats/instant-action.md](../formats/instant-action.md).
+
 ## src/Mech3/MilitiaPaint.cs
 Each militia's paint pattern, keyed by the militia half of a vehicle's display name, which is all a
 militia decides on the Instant Action path: the original builds every wingman, ace and wave member
 from the plain AI def of its aircraft and writes the setup screen's pattern, decals and colours over
 it, so no militia ever selects a vehicle def there. The pattern is read off whichever def of that
 militia names one, since every def of a militia wears the same one. `PatternForWave` answers for a
-single wave's `enemy_name`, or null where that militia names no pattern. Read `PaintScheme.cs`
+single wave's `enemy_name` and `PatternFor` for a militia by its table name, or null where that militia names no pattern. Read `PaintScheme.cs`
 next. Decode: [../formats/instant-action.md](../formats/instant-action.md), [../formats/paint.md](../formats/paint.md).
 
 ## src/Mech3/PropParts.cs
@@ -297,7 +304,8 @@ read. Schema, offsets, the per-chapter census and the keying rules: [../formats/
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
 `LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
-`ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+`ne0*` nets), `HasFile` (whether an entry is there, under either stored name), and `ZrdrDict`, the
+key/[values…] view over a reader's alternating list.
 
 ## src/Mech3/GamePath.cs
 Splits a path the game's data names (`..\data\c1\m02\zrdr\cutscenes\cabpickup.zrd`) on `\` and `/`
@@ -373,7 +381,7 @@ the launchscreen's Instant Action wizard. The first two funnel through one priva
 `BuildDef(ZrdrDict)`, `LoadFromJson` doing nothing but mapping a JSON object onto the same
 key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
 path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
-chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
+chosen environment's own `Load` result. `Militias` is the decoded militia table, each militia's aircraft and accent, read by the wizard and by the bot seats. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
 and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Two fields no `ia.json` key carries are the remake's own rules: `Lives`, and `RaceWindowMinutes`, the split screen stunt race's window, which only the wizard sets and which defaults to 5. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
@@ -411,7 +419,7 @@ The `vehicle.json` def table as an index, next to `Flight/Airframe/PlaneStats.cs
 `kind_of` to the nearest authored `mode` (`jet` at the root, the engine's zero default),
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
-`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
+`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `MilitiaDefFor` finds the plain def a militia's pattern flies over an airframe. `StartAnimsOf`, `InjureAnimsOf`,
 `TitleOf`, `WeaponsOf` and `AttackOf` return the nearest authored value up that chain, `TitleOf` naming a hull whose block authors no slot 20 and the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
 Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 
@@ -481,7 +489,7 @@ Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): ty
 events, and the SI-script pool, where `Script(index)` parses lazily in `metadata.json` order. The
 `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately off `Sequences`
 so bootstrap and the sequence-walking derivations never see it and only
-`AnimRuntime.RunDeathSequence` dispatches it. The `ACTIVATION_PREREQUISITE` node-state form parses
+`DestructibleDamage.RunDeathSequence` dispatches it. The `ACTIVATION_PREREQUISITE` node-state form parses
 into `AnimDefinition.PrereqNodes` beside the anim-list form's `PrereqAnims`, and `AnimDefs.cs`
 reads the reader spelling into the same list. Decode, including the `active_raw` bit a leaf's state
 is read from: [../formats/anim-definitions.md](../formats/anim-definitions.md), [../formats/destructibles.md](../formats/destructibles.md).
@@ -569,22 +577,21 @@ in cell space and the two axes run opposite ways; both are in [../formats/interp
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims, a safety net), then dispatch-table
 event playback; an unhandled event kind is counted, never fatal. It owns the live definition instances and their condition evaluation, the
-destructible-damage entries (`DamageAt`, which also raises `DestructibleKilled` on a healthy-role
-kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`; a host publishes each stage change and kill off `DestructibleDamaged` and the health between stages off `DestructibleChipped`, and a guest's runtime is `DamageReplicated`, spending only through `ApplyReplicatedHealth`), the world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
+destructible-damage entries and the sinks callers configure (`DamageAt`, `ApplyDamageStages`, `CarryState`, `ResetDestructible`, `ApplyReplicatedHealth`; `DestructibleKilled`, `DestructibleDamaged`, `DestructibleChipped`, `DamageReplicated`), which forward to `Anim/DestructibleDamage.cs`, the world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
 with a frame budget, which never splits one def), the range-deferred start sweep
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
-probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. `ClaimedNodes` and `NodeClaimed` say which nodes a name query has handed out, the set `WorldMerge` leaves alone. Decode: docs/org/sequences.md.
+probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/DestructibleDamage.cs`, `Anim/TemplateStage.cs`. `ClaimedNodes` and `NodeClaimed` say which nodes a name query has handed out, the set `WorldMerge` leaves alone. Decode: docs/org/sequences.md.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own namespace,
 purely for file size: `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
 `MotionRuntime`), `AnimLight` (built only by `LightChannel`) and the bind-census `AnchorKind` enum.
 Not an independently owned subsystem; `AnimRuntime` drives all of it. `MotionSet`, `EmitterDirector`,
-`SoundChannel`, `LightChannel`, `PoseChannel`, `NameResolver` and `TemplateStage` share the
+`SoundChannel`, `LightChannel`, `PoseChannel`, `DestructibleDamage`, `NameResolver` and `TemplateStage` share the
 namespace and ARE owned in their own right, each with its entry below. `SpinMotion.ComposeSpin` is
 the one member reached from outside without `AnimRuntime` at all, by `Flight/Airframe/PropAnimator.cs`. The
 motion decode, both contact tiers and the readings they supersede: [../org/objectMotion.md](../org/objectMotion.md).
@@ -639,6 +646,15 @@ container, while the tick spine stays in `AnimRuntime.Advance`. The two `AT_NODE
 and the SI-script duration rules are on their own members. Spellings and census:
 docs/formats/anim-definitions/cutscenes.md.
 
+## src/Mech3/Anim/DestructibleDamage.cs
+One runtime's destructible damage and death as a module: `SpendHealth` (the one place a pool is
+lowered, shared by a local and a replicated hit, which raises the host's publish sinks), the
+`DAMAGE_SEQUENCE` stages, `RunDeathSequence` with its RESET-derived swap fallback, the silent
+`CarryState` pose, `ResetDestructible`, the `CALL_ANIMATION` kill and the pool sync an
+`OBJECT_ACTIVE_STATE` role swap drives. It owns the death bracket (`InDeathCall`, `Dying`) the
+dispatch reads to relocate and record a death's calls. The registry and `_rest` stay on
+`AnimRuntime`, which keeps the public entries and sinks as forwards. Decode: docs/formats/destructibles.md.
+
 ## src/Mech3/Anim/OpacityWriter.cs
 Writes a subtree's opacity per instance: the `csky_opacity` instance shader parameter on every
 geometry node, and a translucent twin of a material with no alpha path, installed as that
@@ -651,12 +667,12 @@ edits the prototype material the rack copies share. The fade shader itself is
 ## src/Mech3/Anim/NameResolver.cs
 Name to node resolution as one public module, generic over the node type (`NameResolver<TNode>`):
 the index, the wildcard `Matcher`, the memoized `FindAll` (an answer extends over appended rows
-rather than being voided by them), the scoped tier chain
-(`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
+rather than being voided by them), the scoped tier chain (`Resolve`/`ResolveScoped`, and `PeekScoped` for read-only queries), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
 copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
-the world holds several instances of. `Claimed` hears each node a `FindAll` answer or `Anchors` first hands out. Decode: [../org/sequences.md](../org/sequences.md).
+the world holds several instances of. `Claimed` hears each node a `FindAll` answer or `Anchors` first hands out. Inside `Peek` (with `PeekScoped` and
+`PeekAnchors`) a query claims nothing and writes no memo, so a later real query still claims what it finds. Decode: [../org/sequences.md](../org/sequences.md).
 
 ## src/Mech3/Anim/CutsceneFastForward.cs
 The rate one cutscene episode's own definitions run at while the player holds a key through a scene
@@ -842,8 +858,9 @@ Callers are serial by construction. An instance lives as long as its holder.
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
 for a chapter world so flight and ballistics runs boot in about 2 s with nothing else in the frame.
-It also carries the one patrol net a session on this stage has: `PatrolNet`, a closed eight-node ring
-of 1000 m about the grid origin at the spawn altitude, authoring 2500/1500/700 m volumes so a vehicle
-put on it runs on a net's gates rather than the mode machine's defaults. `--ai=<plane>:grid` and
-`--zep=...:net=grid` reach it through `ResolveNet`, which answers before the chapter `neindex` lookup
-on a name no shipped index carries. Built in code, like the grid texture: no chapter assets are here.
+Its patrol net, `PatrolNet`, is a closed eight-node 1000 m ring at the spawn altitude with its own
+2500/1500/700 m volumes, which `--ai=<plane>:grid` and `--zep=...:net=grid` reach through `ResolveNet`.
+A `--vs` match walks `SpawnRing` in place of `net.zrd`, sixteen entries 600 m out and aimed in, and a
+team match `SpawnTable`, that ring plus four team blocks at the teams' bases. `Build(arena: true)`
+stands `ArenaNodes`, two bases' `ctf_n`, `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`, which
+`ArenaNode` finds by name; `ArenaTargets` lists the flag markers. All of it is built in code.

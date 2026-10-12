@@ -109,11 +109,11 @@ public static class EnhancedLook
 
     /// <summary>The live graphics-mode switch, the one sequence the launcher runs and the round-trip
     /// suite drives. It sets the flag, regenerates the shaders and re-dresses <paramref name="sun"/>
-    /// and <paramref name="env"/>. Then the clutter fade and the display quality are resolved again,
+    /// and <paramref name="env"/>. Then the clutter fade and the word settings are resolved again,
     /// and <paramref name="session"/> rebuilds what the two modes build differently. Returns whether it
     /// switched: not when the mode already stands, nor for a network session.</summary>
     public static bool Switch(bool enhanced, DirectionalLight3D sun, Godot.Environment? env,
-        EnhancedPasses skipped, bool det, GameSession? session, string why)
+        EnhancedPasses skipped, GameSession? session, string why)
     {
         if (enhanced == GraphicsMode.Enhanced)
             return false;
@@ -130,13 +130,13 @@ public static class EnhancedLook
         HasSwitched = true;
         var regen = ShaderTwins.Regenerate();
         SwitchProfile.Mark("shaders");
-        ApplySun(sun, enhanced, skipped);
+        ApplySun(sun, enhanced);
         SwitchProfile.Mark("sun");
         if (env != null)
             ApplyEnvironment(env, enhanced, skipped);
         SwitchProfile.Mark("env");
         WriteClutterFadeScale();
-        ReapplyDisplayQuality(det, why);
+        ReapplyWordSettings(why);
         SwitchProfile.Mark("display");
         session?.ApplyGraphicsMode();
         SwitchProfile.End();
@@ -193,10 +193,35 @@ public static class EnhancedLook
     public static void ApplyViewDistance(string? word, GameSession? session)
     {
         ViewDistance.Set(word);
+        FollowClutterFade(session);
+    }
+
+    /// <summary>The standing View Distance reach on the clutter fade global, and
+    /// <paramref name="session"/>'s clutter cut again at it. Nothing moves in original mode.</summary>
+    public static void FollowClutterFade(GameSession? session)
+    {
         if (!WriteClutterFadeScale())
             return;
         session?.FollowClutterFade();
-        Log.Info("world", $"view distance: {word}, clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+        Log.Info("world", $"view distance: clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+    }
+
+    /// <summary>What the session builds from the word settings, followed on the running world. That is
+    /// the clutter fade at the View Distance reach and the wave ocean for the water word. A setting
+    /// whose word changes another session build adds it here.</summary>
+    public static void FollowWordSettings(GameSession? session)
+    {
+        FollowClutterFade(session);
+        ApplyWaterQuality(session);
+    }
+
+    /// <summary>The resolved <see cref="WaterQualitySetting"/> word on the running world: the session
+    /// builds the wave ocean or drops it, and with it the flat sheet's hole. Original mode moves
+    /// nothing, and a later switch to Enhanced builds what the word asks for.</summary>
+    public static void ApplyWaterQuality(GameSession? session)
+    {
+        session?.FollowWaterQuality();
+        Log.Info("world", $"water quality: {WaterQualitySetting.Word} (applied live, ocean {(session?.OceanBuilt == true ? "built" : "not built")})");
     }
 
     /// <summary>A texture's alpha depth on the running world. The archive uploads its alpha-plane
@@ -221,24 +246,20 @@ public static class EnhancedLook
     public static float ClutterFadeScaleSq() =>
         EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale() * ViewDistance.ClutterReach());
 
-    /// <summary>The anti-aliasing method and the render scale resolved again from the sources the
-    /// startup reads, and written on every live 3D viewport. The method's default follows the mode.
-    /// </summary>
-    public static void ReapplyDisplayQuality(bool det, string why)
+    /// <summary>The word settings whose fallback the standing mode moves resolved again from the
+    /// sources they last read, as the anti-aliasing default follows the mode. Then every live 3D
+    /// viewport takes the display pair.</summary>
+    public static void ReapplyWordSettings(string why)
     {
-        bool enhanced = GraphicsMode.Enhanced;
-        var antiAliasing = AntiAliasingSetting.Resolve(AntiAliasingSetting.SavedWord(det),
-            Config.GetString(AntiAliasingSetting.Key, AntiAliasingSetting.DefaultFor(enhanced)), enhanced);
-        var renderScale = RenderScaleSetting.Resolve(RenderScaleSetting.SavedWord(det),
-            Config.GetString(RenderScaleSetting.Key, RenderScaleSetting.Default), antiAliasing.Word);
+        WordSettings.FollowMode();
         ViewportQuality.ReapplyAll();
-        Log.Info("world", $"display quality: render_scale={renderScale.Word}% source={RenderScaleSetting.Lookup.SourceName(renderScale.Source)} anti_aliasing={antiAliasing.Word} aa_source={AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} (applied live by {why})");
+        Log.Info("world", $"word settings: {WordSettings.Describe()} (applied live by {why})");
     }
 
     /// <summary>The session sun's shadow maps and visual layer, on at the resolved shadow quality or
     /// back to a fresh light's defaults. ⚠ Also sets the renderer-wide soft-shadow filter and shadow
     /// atlas, which belong to this light alone; the off direction puts back the project's own pair.</summary>
-    public static void ApplySun(DirectionalLight3D sun, bool enhanced, EnhancedPasses skipped)
+    public static void ApplySun(DirectionalLight3D sun, bool enhanced)
     {
         if (!enhanced)
         {
@@ -271,16 +292,15 @@ public static class EnhancedLook
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = ShadowBias;
         sun.ShadowNormalBias = ShadowNormalBias;
-        ApplyShadowQuality(sun, true, skipped);
+        ApplyShadowQuality(sun, true);
     }
 
     /// <summary>The resolved <see cref="ShadowQualitySetting"/> level on the sun and the renderer:
     /// whether it casts, its penumbra, the filter and the atlas. Writes nothing unless
-    /// <paramref name="enhanced"/>. <c>--no-soft-shadows</c> keeps the shadow and drops its
-    /// penumbra, which isolates the filter's screen-space sample pattern.</summary>
-    public static void ApplyShadowQuality(DirectionalLight3D sun, bool enhanced, EnhancedPasses skipped) =>
-        ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.Sun, enhanced,
-            (skipped & EnhancedPasses.SoftShadows) != 0);
+    /// <paramref name="enhanced"/>. <c>--no-soft-shadows</c> (<see cref="ShadowQualitySetting.HardShadows"/>)
+    /// keeps the shadow and drops its penumbra, which isolates the filter's screen-space sample pattern.</summary>
+    public static void ApplyShadowQuality(DirectionalLight3D sun, bool enhanced) =>
+        ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.Sun, enhanced, ShadowQualitySetting.HardShadows);
 
     /// <summary>The screen-space passes, the tonemap and the mission sky on one Environment, or a
     /// fresh Environment's values for each. The faithful path's world is fullbright, so none of
@@ -350,5 +370,32 @@ public static class EnhancedLook
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, scaleSq);
         EffectsLevel.RegisteredScaleSq = scaleSq;
         return moved;
+    }
+}
+
+/// <summary>The running world a word setting's live-apply hook reaches: the session sun and the
+/// session, either absent where none stands. One is built per apply, so the session follows once.</summary>
+public sealed class LiveWorld : ILiveWorld
+{
+    private readonly GameSession? _session;
+    private bool _followed;
+
+    /// <summary>A world over <paramref name="sun"/> and <paramref name="session"/>.</summary>
+    public LiveWorld(DirectionalLight3D? sun, GameSession? session)
+    {
+        Sun = sun;
+        _session = session;
+    }
+
+    /// <inheritdoc/>
+    public DirectionalLight3D? Sun { get; }
+
+    /// <inheritdoc/>
+    public void FollowSession()
+    {
+        if (_followed)
+            return;
+        _followed = true;
+        EnhancedLook.FollowWordSettings(_session);
     }
 }

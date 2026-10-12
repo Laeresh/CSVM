@@ -7,8 +7,8 @@ namespace CSVM.Testing;
 
 /// <summary>The stereo shader texts of the camera-facing sprites (<see cref="StereoFacing"/>). Each
 /// poses its quad by the facade look-at toward the eye, builds no basis from the view, and compiles.
-/// The suite runs flat, so the texts are asked for by argument. What the head sees is pinned by the
-/// <c>c1-moon-xr-sim</c> golden. Entry: docs/architecture/Mech3.md.</summary>
+/// The suite runs flat, so the texts are asked for by argument. The moon's one text faces the eye
+/// on every path (<c>WorldBuilder</c>), and the <c>c1-moon-xr-sim</c> golden pins it in stereo. Entry: docs/architecture/Mech3.md.</summary>
 internal static class XrSpriteSuites
 {
     // The rain streak's fallback for an eye looking straight down the fall line. The stereo text keeps
@@ -19,14 +19,13 @@ internal static class XrSpriteSuites
     // turning edge-on as the head looks away and rolling with every tilt. The flat texts keep that
     // basis on purpose: the flat goldens pin them.
     [Suite("xr-sprite-facing",
-        "Under the stereo path the moon, the puffer sprites, the heat shimmer, the snow flakes and the "
+        "Under the stereo path the puffer sprites, the heat shimmer, the snow flakes and the "
         + "Enhanced cloud-field grade take the facade basis toward the eye and no column of the view "
         + "matrix, each stereo text compiles, and the flat texts keep the view basis they always had")]
     internal static void XrSpriteFacing(TestContext ctx)
     {
         var texts = new List<(string Name, string? Flat, string Stereo)>
         {
-            ("moon", null, StereoFacing.SpriteShaderCode()),
             ("heat shimmer", HeatShimmer.CodeFor(stereo: false), HeatShimmer.CodeFor(stereo: true)),
             ("precipitation", Precipitation.CodeFor(stereo: false), Precipitation.CodeFor(stereo: true)),
         };

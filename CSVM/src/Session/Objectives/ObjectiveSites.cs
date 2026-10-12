@@ -50,6 +50,7 @@ public sealed class ObjectiveSites
     private readonly Messages _messages;
     private readonly MissionTargets _targets;
     private readonly AnimRuntime? _runtime;
+    private readonly Func<string, Node3D?>? _find;
     private readonly Dictionary<string, ObjectiveSite> _sites =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Node3D> _nodes = new(StringComparer.OrdinalIgnoreCase);
@@ -79,6 +80,15 @@ public sealed class ObjectiveSites
         _messages = messages;
         _targets = targets;
         _runtime = runtime;
+    }
+
+    /// <summary>The same director-free feed on a stage with no world index, whose own
+    /// <paramref name="find"/> answers a key with the node it stands on, or null.</summary>
+    public ObjectiveSites(Messages messages, MissionTargets targets, Func<string, Node3D?> find)
+    {
+        _messages = messages;
+        _targets = targets;
+        _find = find;
     }
 
     /// <summary>A team mode's labelling of a target key by side, null for a key the mode leaves to
@@ -401,12 +411,7 @@ public sealed class ObjectiveSites
             return cached;
         }
 
-        if (_runtime == null)
-        {
-            return null;
-        }
-
-        var found = ResolveTarget(_runtime, ObjectiveTarget.Parse(key));
+        var found = _runtime != null ? ResolveTarget(_runtime, ObjectiveTarget.Parse(key)) : _find?.Invoke(key);
         if (found == null || !found.IsInsideTree())
         {
             return null;

@@ -219,9 +219,10 @@ internal static class ExtractionScreenSuites
     private static string Install(string root)
     {
         string install = Path.Combine(root, "Crimson Skies");
-        Directory.CreateDirectory(Path.Combine(install, "ZBD"));
+        Directory.CreateDirectory(Path.Combine(install, "ZBD", "C1"));
         Directory.CreateDirectory(Path.Combine(install, "GOSDATA", "ASSETS"));
         File.WriteAllText(Path.Combine(install, "ZBD", "planes.zbd"), "x");
+        File.WriteAllText(Path.Combine(install, "ZBD", "C1", "gamez.zbd"), "x");
         return install;
     }
 

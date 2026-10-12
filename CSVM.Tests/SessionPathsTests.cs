@@ -25,6 +25,27 @@ public class SessionPathsTests
             SessionPaths.MissionZrdr(root, "C4", "IA1"));
     }
 
+    /// <summary>An extraction of a disc's contents holds the root archives and no chapter world,
+    /// zipped or unpacked; one chapter's GameZ in either shape is enough.</summary>
+    [Fact]
+    public void AChapterWorldIsFoundZippedOrUnpackedAndNeverAtTheRoot()
+    {
+        var root = TestData.TempDir();
+        string extracted = Directory.CreateDirectory(Path.Combine(root, "extracted")).FullName;
+        File.WriteAllText(Path.Combine(extracted, "planes.zip"), "x");
+        Directory.CreateDirectory(Path.Combine(extracted, "rimage"));
+        Assert.False(SessionPaths.HasAnyChapterWorld(root));
+        Assert.False(SessionPaths.HasAnyChapterWorld(Path.Combine(root, "absent")));
+
+        Directory.CreateDirectory(Path.Combine(extracted, "C3", "gamez"));
+        Assert.True(SessionPaths.HasAnyChapterWorld(root));
+
+        var zipped = TestData.TempDir();
+        Directory.CreateDirectory(Path.Combine(zipped, "extracted", "C1"));
+        File.WriteAllText(Path.Combine(zipped, "extracted", "C1", "gamez.zip"), "x");
+        Assert.True(SessionPaths.HasAnyChapterWorld(zipped));
+    }
+
     /// <summary>The campaign sequence names its folders <c>c3</c>/<c>m01</c>; the extraction
     /// writes <c>C3/M01</c>. Compared as strings, since a Windows disk would find either.</summary>
     [Fact]

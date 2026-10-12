@@ -216,6 +216,8 @@ first four from `.env`). Defaults suit one small VPS.
 | `Master__MaxGamesPerAddress` | `4` | games one address may host at once |
 | `Master__MaxSocketsPerAddress` | `16` | open sockets per address |
 | `Master__MaxPendingGuests` | `16` | guests negotiating with one game at once |
+| `Master__MaxPendingGuestsPerAddress` | `2` | guests from one address negotiating with one game at once; a guest stops counting once its link stands, so players behind one NAT joining one after another are not held by it |
+| `Master__TurnMintsPerHour` | `10` | TURN credentials one address may cause to be minted per hour; a join takes two (the guest's, and the host's for that guest, both charged to the guest), so the default is five joins an hour. Not counted while no TURN entry is handed out |
 | `Master__MessageBurst` | `60` | messages a socket may send in a burst |
 | `Master__MessagesPerSecond` | `5` | messages per second after the burst |
 | `Master__ListPerMinute` | `60` | games list and health requests per address per minute |
@@ -223,7 +225,17 @@ first four from `.env`). Defaults suit one small VPS.
 | `Master__GuestSocketSeconds` | `120` | the longest a guest's negotiating socket may stay open |
 | `Master__OldestProtocol` | `1` | the oldest wire protocol served; a host or join below it is told to update CSVM. Raise it only once a game release speaking the newer protocol is out; `seen` in `/api/health` counts the versions still in use since the server started |
 
-A message over 16 KiB closes its socket; so does a socket silent for 90 seconds.
+A message over 16 KiB closes its socket; so does a socket silent for 90 seconds. A join naming a
+code no game is hosted under is answered `no game is listed under that code` and its socket
+closes, so guessing at a Private game's code costs a socket per guess, which `SocketsPerMinute`
+bounds.
+
+Each TURN credential lets its holder take up to coturn's `user-quota` (4) relay ports until it
+expires, and the relay range holds 41, so `TurnMintsPerHour` slows one address down rather than
+keeping it below the whole range: at the defaults one address can still pin most of the ports
+within its first hour. `TurnCredentialMinutes` is not the lever either, since the game is handed
+its credential once per join and coturn refuses a refresh past its expiry, so a shorter one ends
+long relayed matches.
 
 ## Without Docker
 

@@ -35,7 +35,8 @@ public struct RankedTargetCandidate
     /// candidate object's velocity virtual, not its nose (<c>FUN_00421ad0</c>).</summary>
     public Vector3 Velocity;
 
-    /// <summary>Whether this candidate is a human-piloted aircraft, the 0.7 weight case.</summary>
+    /// <summary>Whether this candidate is a human-piloted aircraft, the 0.7 weight case for a
+    /// shooter that prefers players (<see cref="AiGunner.PlayersPreferred"/>).</summary>
     public bool IsPlayer;
 
     /// <summary>Whether this candidate is an aircraft flying in <c>wingman</c> mode (a netless
@@ -171,20 +172,20 @@ public static class AiTargetRanking
     public static bool AircraftFirst { get; set; } = true;
 
     /// <summary>One candidate's rank and its inputs, the decoded arithmetic term for term.
-    /// <paramref name="ownForward"/> must be unit-length (a basis column), and is unread under
-    /// <see cref="AiScorer.Other"/>. ⚠ Ahead is the UNFAVOURABLE arm and so is being above the
-    /// scorer: do not "fix" either sign to the design document's front-arc reading.
-    /// ⚠ <paramref name="attackRange"/> is the SCORER's ATTACK volume, never its activation one
-    /// (docs/org/aiPilot.md). <paramref name="scorer"/> has no default: the wrong one is silent.</summary>
+    /// The forward must be unit-length, and is unread under <see cref="AiScorer.Other"/>.
+    /// ⚠ Ahead is the UNFAVOURABLE arm and so is being above the scorer: do not "fix" either sign.
+    /// ⚠ The <paramref name="attackRange"/> is the SCORER's ATTACK volume, never its activation one
+    /// (docs/org/aiPilot.md). The <paramref name="scorer"/> has no default: the wrong one is silent.
+    /// With <paramref name="playersPreferred"/> off a player weighs as any other (<see cref="AiGunner.PlayersPreferred"/>).</summary>
     public static TargetScore Score(Vector3 ownPos, Vector3 ownForward, float attackRange,
-        AiScorer scorer, in RankedTargetCandidate c)
+        AiScorer scorer, in RankedTargetCandidate c, bool playersPreferred = true)
     {
         var to = c.Position - ownPos;
         float dist = to.Length();
         float bias = c.ObjectiveBias + c.ClassBias;
         if (dist > attackRange)
             return new TargetScore(0f, dist, bias, NotRanked);
-        float weight = c.IsPlayer ? PlayerWeight : BaseWeight;
+        float weight = c.IsPlayer && playersPreferred ? PlayerWeight : BaseWeight;
         if (c.IsWingman)
             weight += WingmanWeight;
         if (scorer == AiScorer.Jet)
@@ -209,13 +210,13 @@ public static class AiTargetRanking
 
     /// <summary>The pick: the minimal-rank candidate no ally already holds; when every ranked
     /// candidate is held, the minimal-rank candidate outright (the design's exhausted-pool
-    /// fallback). Returns the candidate's index and its score, or −1 when nothing ranks (all
-    /// beyond the attack radius, or the list is empty). <paramref name="aircraftFirst"/> engages the
-    /// preference (<see cref="AircraftFirst"/>); it has no default because a picker that silently
-    /// took the wrong one would disagree with the pickers beside it.</summary>
+    /// fallback). Returns the candidate's index and its score, or −1 when nothing ranks.
+    /// The <paramref name="aircraftFirst"/> flag engages the preference (<see cref="AircraftFirst"/>).
+    /// It has no default: a picker that silently took the wrong one would disagree with its neighbours.
+    /// The <paramref name="playersPreferred"/> flag is the shooter's own, as <see cref="Score"/> reads it.</summary>
     public static int SelectBest(Vector3 ownPos, Vector3 ownForward, float attackRange,
         AiScorer scorer, bool aircraftFirst, IReadOnlyList<RankedTargetCandidate> candidates,
-        out TargetScore best)
+        out TargetScore best, bool playersPreferred = true)
     {
         bool dropStructures = aircraftFirst
             && AnyAircraftRanks(ownPos, ownForward, attackRange, scorer, candidates);
@@ -225,7 +226,7 @@ public static class AiTargetRanking
         {
             if (dropStructures && candidates[i].IsStructureClass)
                 continue;
-            var s = Score(ownPos, ownForward, attackRange, scorer, candidates[i]);
+            var s = Score(ownPos, ownForward, attackRange, scorer, candidates[i], playersPreferred);
             if (s.Rank >= NotRanked)
                 continue;
             if (bestAny < 0 || s.Rank < scoreAny.Rank)

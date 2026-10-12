@@ -43,7 +43,17 @@ internal static class NetStuntRaceSuites
     // How far a seat may stand from the spawn on its GO step: one step's flight at race speed.
     private const float SpawnReach = 5f;
 
+    // How long the other machine is given to show a seat's new pose. It covers the link's latency
+    // and the remote pose buffer's own delay, with room to spare.
+    private const int FollowSteps = 60;
+
+    // How near the other machine's copy must come to where its owner stands once it has followed.
+    private const float FollowReach = 25f;
+
     private static readonly int HoldFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / GameClock.FixedDt) + 2;
+
+    // A press released short of the hold split, which resolves as a tap.
+    private static readonly int TapFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / GameClock.FixedDt) - 2;
 
     [Suite("net-stunt-race-wire",
         "a two-machine Stunt Race from the lobby's options over a 100 ms loopback, then the same over one "
@@ -101,6 +111,119 @@ internal static class NetStuntRaceSuites
         }
     }
 
+    [Suite("net-stunt-race-respawn",
+        "a two-machine Stunt Race over a 100 ms loopback, the respawn control pressed in flight on the "
+        + "host's and the guest's own seats: the wire leaves a race's control live and the seat asks "
+        + "nobody for its return; a tap puts each seat abeam the exit of the Danger Zone it cleared "
+        + "last, zones and clock kept and no count run, and the other machine's copy follows it there; "
+        + "a hold restarts each seat's run once behind the count, zones cleared, its release taps "
+        + "nothing, and GO stands each seat on the shared spawn")]
+    internal static void ANetworkRaceRespawnsInFlight(TestContext ctx)
+    {
+        const string cell = "respawn";
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, RaceChapter, SessionSpec.StuntRaceMission);
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, RaceChapter), $"{RaceChapter} gamez");
+        ctx.RequireData(missionZrdr, $"{RaceChapter}/{SessionSpec.StuntRaceMission} zrdr");
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var ends = OpenEnds(ctx, 9505, new int[2]);
+        try
+        {
+            if (Seats(ctx, cell, ends) is not { } s)
+            {
+                return;
+            }
+
+            var spawn = s.Peers[0].SeatRigs[1].Controller!.WorldPosition;
+            var seats = new[] { s.Host, s.Guest };
+            var runs = new[] { s.HostRun, s.GuestRun };
+            // Each seat's copy on the other machine.
+            var copies = new[] { s.Peers[1].SeatRigs[0].Controller!, s.Peers[0].SeatRigs[1].Controller! };
+            var names = new[] { "host", "guest" };
+            ctx.Check(seats.All(p => p.AllowLiveRespawn && p.RespawnRequest == null),
+                $"[{cell}] the wire leaves both race seats' in-flight respawn live, asked of nobody ({string.Join(", ", seats.Select(p => $"{p.AllowLiveRespawn}/{p.RespawnRequest != null}"))})");
+
+            Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
+            Steps(s.Peers, 30);
+            if (runs.Any(r => r.TotalCount < 2))
+            {
+                ctx.Check(false, $"[{cell}] the course has two zones to clear");
+                return;
+            }
+
+            // Two zones each, so the tap's zone is the one cleared last and not the first.
+            foreach (var run in runs)
+            {
+                StuntRaceSuites.ClearZone(run, run.Zones[0]);
+                StuntRaceSuites.ClearZone(run, run.Zones[1]);
+            }
+
+            Steps(s.Peers, 10);
+            var exits = runs.Select(r => r.ReturnPose()!.Value).ToArray();
+            var respawns = seats.Select(p => p.RespawnCount).ToArray();
+            var clocks = runs.Select(r => r.Elapsed).ToArray();
+            var away = seats.Select((p, i) => p.WorldPosition.DistanceTo(exits[i].Position)).ToArray();
+            Press(s.Peers, seats, TapFrames);
+            for (int i = 0; i < seats.Length; i++)
+            {
+                float drift = seats[i].WorldPosition.DistanceTo(exits[i].Position);
+                ctx.Check(seats[i].RespawnCount == respawns[i] + 1 && drift < SpawnReach && !seats[i].StartCount.Running
+                          && runs[i].CompletedCount == 2 && runs[i].Elapsed > clocks[i],
+                    $"[{cell}] the {names[i]}'s tap returns it once abeam {runs[i].Zones[1].PathName}'s exit, {away[i]:0} m from where it flew ({drift:0.0} m off after a step, {seats[i].RespawnCount - respawns[i]} respawn(s), zones {runs[i].CompletedCount}, clock {StuntMission.FormatTime(clocks[i])} on to {StuntMission.FormatTime(runs[i].Elapsed)}, count running={seats[i].StartCount.Running})");
+            }
+
+            Steps(s.Peers, FollowSteps);
+            for (int i = 0; i < seats.Length; i++)
+            {
+                float gap = copies[i].WorldPosition.DistanceTo(seats[i].WorldPosition);
+                ctx.Check(gap < FollowReach,
+                    $"[{cell}] the other machine's copy of the {names[i]} follows it there ({gap:0.0} m from its owner {FollowSteps} steps on)");
+                ctx.Note($"[{cell}] the {names[i]}'s tap moved it {away[i]:0} m; its copy stood {gap:0.0} m from it {FollowSteps} steps on");
+            }
+
+            // The hold: the run restarts behind the count, and GO stands the seat on the spawn.
+            respawns = seats.Select(p => p.RespawnCount).ToArray();
+            Hold(s.Peers, seats, HoldFrames);
+            for (int i = 0; i < seats.Length; i++)
+            {
+                ctx.Check(seats[i].RespawnCount == respawns[i] + 1 && runs[i].CompletedCount == 0 && seats[i].StartCount.Running,
+                    $"[{cell}] the {names[i]}'s hold restarts its run once behind the count ({seats[i].RespawnCount - respawns[i]} respawn(s), zones {runs[i].CompletedCount}, count running={seats[i].StartCount.Running})");
+            }
+
+            Release(seats);
+            var at = new Vector3?[seats.Length];
+            for (int step = 0; step < StepLimit && at.Any(p => p == null); step++)
+            {
+                Step(s.Peers);
+                for (int i = 0; i < seats.Length; i++)
+                {
+                    if (at[i] == null && !seats[i].StartCount.Running)
+                    {
+                        at[i] = seats[i].WorldPosition;
+                    }
+                }
+            }
+
+            for (int i = 0; i < seats.Length; i++)
+            {
+                float off = at[i]?.DistanceTo(spawn) ?? float.PositiveInfinity;
+                ctx.Check(seats[i].RespawnCount == respawns[i] + 1 && off < SpawnReach,
+                    $"[{cell}] the {names[i]}'s release taps nothing and GO stands it on the shared spawn ({seats[i].RespawnCount - respawns[i]} respawn(s), {off:0.0} m off)");
+            }
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
     /// <summary>A lobby race's launch arguments. A race spec is not <c>--det</c>, so without a named
     /// store a guest's best would land in the player's own stunt scores.</summary>
     internal static string[] RaceArgs(TestContext ctx) =>
@@ -116,7 +239,7 @@ internal static class NetStuntRaceSuites
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
 
         var mesh = LoopbackTransport.Mesh(2, link, new Random(seed));
-        var roster = NetCombatSuites.Roster(2);
+        var roster = NetCombatSuites.Roster(2, spec);
         var ends = new List<NetCombatSuites.Ends>();
         try
         {
@@ -341,7 +464,7 @@ internal static class NetStuntRaceSuites
             Opening(ctx, cell, s.Peers, s.HostRace, s.GuestRace, 1);
             FlyBoth(s, hostGap: HostGap, guestGap: GuestFirstGap);
             Until(s.Peers, () => s.GuestRace.Of(0)!.RunsFinished == 1 && s.GuestRace.Of(1)!.RunsFinished == 1);
-            ctx.Check(Launcher.RaceLanding(s.HostRace) == null, $"ABLE-TO-FAIL CONTROL: [{cell}] a race still running lands no table");
+            ctx.Check(NetFlight.RaceLanding(s.HostRace) == null, $"ABLE-TO-FAIL CONTROL: [{cell}] a race still running lands no table");
             CloseWindow(s);
             Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
             var guestLink = s.Peers[1].Wire.Race!;
@@ -350,8 +473,8 @@ internal static class NetStuntRaceSuites
 
             s.Peers[0].LeaveFlight();
             bool called = Until(s.Peers, () => guestLink.LobbyCalled);
-            var here = Launcher.RaceLanding(s.HostRace);
-            var there = Launcher.RaceLanding(s.GuestRace);
+            var here = NetFlight.RaceLanding(s.HostRace);
+            var there = NetFlight.RaceLanding(s.GuestRace);
             ctx.Check(exits[0] == 1 && called && s.Peers[0].Wire.Race!.CallsTaken == 0,
                 $"[{cell}] the host's Lobby leaves its flight and calls the guest to the lobby ({exits[0]} exit, called={called})");
             ctx.Check(here is { Count: 2 } && there != null && here.SequenceEqual(there),
@@ -376,7 +499,7 @@ internal static class NetStuntRaceSuites
             new[] { "player_pfighter" }, DogfightLobby.LaunchMode(options), vsTimeMinutes: rules.TimeLimitMinutes,
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(Latency, 0.0, 0.0), new Random(seed));
-        var roster = NetCombatSuites.Roster(2);
+        var roster = NetCombatSuites.Roster(2, spec);
         var ends = new List<NetCombatSuites.Ends>();
         for (int i = 0; i < 2; i++)
         {
@@ -580,6 +703,33 @@ internal static class NetStuntRaceSuites
         }
 
         return condition();
+    }
+
+    // The respawn control down on every listed seat for `frames` steps, then up for the one step its
+    // release resolves on.
+    private static void Press(GameSession[] peers, FlightController[] seats, int frames)
+    {
+        Hold(peers, seats, frames);
+        Release(seats);
+        Step(peers);
+    }
+
+    private static void Hold(GameSession[] peers, FlightController[] seats, int frames)
+    {
+        foreach (var seat in seats)
+        {
+            seat.HoldActionForTest(InputAction.Respawn, true);
+        }
+
+        Steps(peers, frames);
+    }
+
+    private static void Release(FlightController[] seats)
+    {
+        foreach (var seat in seats)
+        {
+            seat.HoldActionForTest(InputAction.Respawn, false);
+        }
     }
 
     private static void Steps(GameSession[] peers, int steps)

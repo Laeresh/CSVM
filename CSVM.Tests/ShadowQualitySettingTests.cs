@@ -26,16 +26,16 @@ public class ShadowQualitySettingTests
     /// <summary>The fallback's source names the rule that chose it, so a log line can tell the
     /// splitscreen rule from the one-pane integrated default.</summary>
     [Theory]
-    [InlineData(false, 4, SettingSource.Default, "default")]
-    [InlineData(true, 2, SettingSource.IntegratedGpuDefault, "default_integrated_gpu")]
-    [InlineData(true, 4, SettingSource.IntegratedGpuPanesDefault, "default_integrated_gpu_panes")]
-    public void NothingSetRunsTheFallbackUnderItsOwnSource(bool integrated, int panes, SettingSource source, string name)
+    [InlineData(false, 4, null, "default")]
+    [InlineData(true, 2, ShadowQualitySetting.IntegratedRule, "default_integrated_gpu")]
+    [InlineData(true, 4, ShadowQualitySetting.IntegratedSplitRule, "default_integrated_gpu_panes")]
+    public void NothingSetRunsTheFallbackUnderItsOwnSource(bool integrated, int panes, string? rule, string name)
     {
         string fallback = ShadowQualitySetting.FallbackFor(integrated, panes);
         var plan = ShadowQualitySetting.Pick(null, null, fallback, fallback);
         Assert.Equal(fallback, plan.Word);
-        Assert.Equal(source, plan.Source);
-        Assert.Equal(name, ShadowQualitySetting.Lookup.SourceName(plan.Source));
+        Assert.Equal((SettingSource.Default, rule), (plan.Source, plan.Rule));
+        Assert.Equal(name, ShadowQualitySetting.Lookup.SourceName(plan.Source, plan.Rule));
     }
 
     /// <summary>A level the player saved beats the four-pane rule, and so do the flag and the

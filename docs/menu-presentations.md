@@ -86,8 +86,8 @@ A switch is three host calls in order: `Deactivate()` (ends the instance and cal
 `Features.DiscardTransient()`), `Select(...)` (re-resolves from the two flags), then
 `Show(TopLevel)`. The shipped build never switches at run time, since the presentation is the command
 line's alone; the suites drive the three calls to hold the seam. `Launcher.ApplyOptions` makes the
-first and the last of them, one frame after the `OptionsApplyExit` that asked, after saving every
-choice it carries, so an apply restarts the same presentation at its top level.
+first and the last of them, one frame after the `OptionsApplyExit` that asked, once
+`LiveSettings.Persist` has saved every choice it carries, so an apply restarts the same presentation at its top level.
 
 The frame in between belongs to no presentation: the host hides the outgoing instance as it hands the
 exit to the sink, and the fresh one does not stand up until the apply runs. Nothing opaque is
@@ -253,7 +253,7 @@ a nullable field on `OptionsDef` with its accepted-value set (or its shape check
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
 `Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options,
 AUDIO or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
-`Launcher.ApplyOptions` that saves it. The store's
+`LiveSettings.Persist` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
@@ -283,15 +283,16 @@ that has moved nothing. The render scale is `RenderScaleSetting.Resolve`, the sa
 `graphics.renderScale` config key over native, and the anti-aliasing method is
 `AntiAliasingSetting.Resolve`, the saved word over the `graphics.antiAliasing` config key over the
 graphics mode's own default; FSR 2.2 clamps a scale above native back to it. These two are the display
-settings that reach no window: they are written on each 3D viewport as it is built, so they take hold
-at the next start the way the graphics mode does, which is what the rows' own descriptions say. The
+settings that reach no window: they are written on each 3D viewport as it is built, and the apply
+writes them again on every live one. The
 shadow quality beside them is `ShadowQualitySetting.Resolve`, `--shadow-quality=` over the saved word
 over the `graphics.shadowQuality` config key over `ultra` (`high` on an integrated GPU, `off` there in a
-three- or four-pane session); it reaches the Enhanced sun alone, and unlike
-those two the apply puts it on the flying world at once (`Launcher.ApplyShadowQuality`, which the
-cockpit pass follows). Its row draws dead while the page's own graphics word is Original. Every other display
+three- or four-pane session); it reaches the Enhanced sun alone, and the apply puts it on the flying
+world at once, which the cockpit pass follows. All three are registered word settings
+(`CSVM/src/Utils/WordSettings.cs`), which the apply resolves and puts on the world through each one's
+own live-apply hook. Its row draws dead while the page's own graphics word is Original. Every other display
 setting is the case where the apply does
-more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
+more than save, since `LiveSettings.Persist` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
 screen the window sits on first, since a mode applied before the move would fill the screen the
 window is leaving, then the mode, then the size, then the pacing. The startup half of the pair is not
@@ -300,22 +301,22 @@ at, a scripted run's window being hidden off screen with its capture compared ag
 `project.godot` pins.
 
 VR mode is the one option an apply answers with a new process. Both screens offer it, Original on
-its VIDEO page's Clutter Detail line, live on Windows alone. `Launcher.ApplyOptions` saves it and,
-when the player changed it and the running launch did not already ask Godot for that mode,
+its VIDEO page's Clutter Detail line, live on Windows alone. `LiveSettings.Persist` saves it, and
+the menu's `Launcher.ApplyOptions`, when the player changed it and the running launch did not already ask Godot for that mode,
 restarts the executable with or without `--xr-mode on` (`CSVM/src/Launch/XrRelaunch.cs`); the
 pause leaf's apply saves it and no more. A launch with it saved on restarts itself once at boot. A
 new process that fails to start leaves this one running, with a notice at the menu's next show.
 Under a headset or the `--xr-sim` stand-in the shared player setup holds one seat
 (`PlayerSetupFeature.SeatLimit`), so both join boards draw the seats past the captain's closed and a
-local Dogfight's gate says VR flies one seat. The headset's render scale and comfort vignette are
+local Dogfight's gate says VR flies one seat, which a bot row answers. The headset's render scale and comfort vignette are
 ordinary options applied at once: Built-in shows their rows always, and Original's VIDEO page puts
 them on the Display Mode and V-Sync lines while a headset is live, those two settings meaning nothing
 there. A launch that asked for OpenXR and plays flat posts a
 `MenuNoticeFeature` notice, which Built-in writes on its error line and Original raises as its
 one-button box at the next show.
 
-A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
-writer, so the options file has exactly one, and no test or suite that drives an Options screen
+A screen never writes the store. Both values ride the exit, and `LiveSettings.Persist`, which the
+menu's apply and the pause leaf's both call, is the options file's one writer, so no test or suite that drives an Options screen
 through Apply can write the player's own file. Nor read it: `--run-tests` points
 `OptionsStore.UserOptions()` at an emptied scratch directory (`OptionsStore.DirectoryOverride`)
 before any suite runs, so every driven Options screen opens on the shipped defaults whatever the
@@ -351,16 +352,18 @@ control, so a level is a stepper moving by the AUDIO page slider's own keyboard 
 (`SliderControl.KeyStep`, five) and clamped at both ends; a step that moves nothing writes nothing,
 so a level never touched stays never set. Built-in has no live preview either: a level is heard
 once the apply writes it. Seventeen rows overflow the band, so the screen is a window of the
-Controls list's height with its position in the heading. The two presentations read the five
+Controls list's height with its position in the heading. The two presentations read the
 display settings through one rule
-set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
+set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`, and each word setting's own descriptor) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
-the running world at once (`Launcher.SwitchGraphicsMode`), so neither description owes a restart.
-Built-in's screen adds a View Distance row under its chooser (`Utils/ViewDistance.cs`), live the
-same way and marked as Enhanced only. The Original VIDEO page has no line for it and hands the
-saved word back unchanged. The
+the running world at once (`Launch/LiveSettings.cs`), so neither description owes a restart.
+Built-in's screen shows one row per registered word setting, which adds a View Distance row under
+its chooser (`Utils/ViewDistance.cs`), live the same way and marked as Enhanced only, and a Water
+Quality row under its shadow quality (`Utils/WaterQualitySetting.cs`), dead under Original, whose
+apply builds or drops the wave ocean on the flying world. The Original VIDEO page has no line for either and hands both saved words
+back unchanged. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 **What an Options page focuses with, and what it draws focus as.** Two choices on these pages are
@@ -421,7 +424,7 @@ clips this port needs, since Music and Master are already audible through the me
 clip that is still running is left to run, its loudness following the bus the level moved, so a drag
 sounds one clip rather than one per frame. `EndMixPreview` puts back the gains that stood when the
 page opened and is called on every door out of the page and on `Hide`, so a preview cannot survive
-the page; an accepted mix is written and reapplied by `Launcher.ApplyOptions`, which stays the
+the page; an accepted mix is written and reapplied by `LiveSettings.Persist`, which stays the
 options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
 `--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
 
@@ -591,7 +594,7 @@ Connection page, `connection:gameinfo` and `connection:playerinfo` with GAME INF
 INFORMATION standing over it on a sample answer, `connection:code` with Join by code picked and a
 sample code in its box, and `connection-games` and `connection-games:searching` on the LAN games list
 over an in-process network holding five sample games, one of another build version, or none, and `lobby[:host|guest[:tab]]` on
-the Multiplayer Lobby over an in-process wire with two guests), and any other value opens that 
+the Multiplayer Lobby over an in-process wire with two guests, `lobby:late` a guest waiting on its host's match), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
 A new presentation's aids follow the same rules: they select a screen of its own graph, they never

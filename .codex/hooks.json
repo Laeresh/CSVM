@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$(git rev-parse --show-toplevel)/.codex/hooks/pre-tool-use.ps1\"",
-            "timeout": 300,
+            "timeout": 900,
             "statusMessage": "repository policy checks..."
           }
         ]

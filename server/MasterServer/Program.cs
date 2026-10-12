@@ -86,7 +86,7 @@ public static class MasterApp
             string address = AddressOf(context);
             if (open.AddOrUpdate(address, 1, (_, count) => count + 1) > settings.MaxSocketsPerAddress)
             {
-                open.AddOrUpdate(address, 0, (_, count) => Math.Max(0, count - 1));
+                SocketClient.Release(open, address);
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
             }
 

@@ -1,0 +1,59 @@
+[
+  [
+    "CLOUD_COVER",
+    [
+      "TOP",
+      2600.0,
+      "BOTTOM",
+      2200.0,
+      "THICKNESS",
+      80.0
+    ],
+    "ZONE1",
+    [
+      "FOG_COLOR",
+      [0.55, 0.6, 0.7],
+      "FOG_RANGES",
+      [600.0, 2400.0],
+      "FOG_ALTITUDE",
+      [0.0, 1800.0],
+      "CLIP_RANGES",
+      [2.0, 3000.0],
+      "SUNLIGHT_ACTIVE",
+      [1],
+      "SUNLIGHT_ORIENTATION",
+      [-50.0, 60.0, 0.0],
+      "SUNLIGHT_DIFFUSE",
+      [1.1],
+      "SUNLIGHT_AMBIENT",
+      [0.3],
+      "SUNLIGHT_COLOR_DIFFUSE",
+      [1.0, 1.0, 1.0],
+      "SUNLIGHT_COLOR_AMBIENT",
+      [0.9, 0.95, 1.0]
+    ],
+    "ZONE2",
+    [
+      "FOG_COLOR",
+      [0.75, 0.8, 0.9],
+      "FOG_RANGES",
+      [900.0, 3600.0],
+      "FOG_ALTITUDE",
+      [2000.0, 4000.0],
+      "CLIP_RANGES",
+      [2.0, 4500.0],
+      "SUNLIGHT_ACTIVE",
+      [1],
+      "SUNLIGHT_ORIENTATION",
+      [-20.0, 150.0, 0.0],
+      "SUNLIGHT_DIFFUSE",
+      [1.4],
+      "SUNLIGHT_AMBIENT",
+      [0.35],
+      "SUNLIGHT_COLOR_DIFFUSE",
+      [1.0, 1.0, 1.0],
+      "SUNLIGHT_COLOR_AMBIENT",
+      [1.0, 1.0, 1.0]
+    ]
+  ]
+]

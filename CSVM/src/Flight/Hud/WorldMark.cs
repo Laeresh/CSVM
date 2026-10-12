@@ -13,10 +13,6 @@ public enum WorldMarkStyle
     /// <summary>A tag over an aircraft: the hostile fallback, a race pilot or a debug mark
     /// (<see cref="TargetHud"/>).</summary>
     Tagged,
-
-    /// <summary>A dogfight opponent's tag, with the versus HUD's own edge arrow
-    /// (<see cref="Modes.VersusHud"/>).</summary>
-    Versus,
 }
 
 /// <summary>One marker a flat HUD draws at a world point, as data: where, in which colour and

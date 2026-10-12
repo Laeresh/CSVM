@@ -53,8 +53,12 @@ public static class Difficulty
     /// tier. The armour scale above is NOT exempted; it runs before that read.</summary>
     public static int SkillRatingForSpawn(
         int rating, int? team, bool ace, int? spawnDifficulty, int sessionDifficulty) =>
-        Math.Clamp(
-            rating + (ace || !AppliesTo(team) ? 0 : K(spawnDifficulty ?? sessionDifficulty)), 0, 9);
+        ace || !AppliesTo(team) ? Math.Clamp(rating, 0, 9) : ShiftRating(rating, spawnDifficulty ?? sessionDifficulty);
+
+    /// <summary>One rating shifted by a tier's <c>k</c> and clamped to 0-9, with no gate and no
+    /// hull scale. This is the whole of what a bot seat's tier does to each of its nine ratings.
+    /// </summary>
+    public static int ShiftRating(int rating, int difficulty) => Math.Clamp(rating + K(difficulty), 0, 9);
 
     /// <summary>The setting a name selects, taking both vocabularies: the campaign selector's
     /// <c>IDS_DIFFICULTY</c> (normal / hard / hardest) and Instant Action's <c>IDS_IA_DIFFICULTY</c>

@@ -156,16 +156,140 @@ public class MasterHubTests
     }
 
     [Fact]
-    public void AJoinToNoListedGameIsRefused()
+    public void AJoinToNoListedGameClosesItsSocketWithTheReason()
     {
         var hub = new MasterHub(new MasterOptions(), new ManualClock());
-        var guest = new FakeClient();
+        var unknown = new FakeClient();
+        var garbled = new FakeClient();
 
-        hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = "ZZZ-ZZZ" });
-        hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = "not a code" });
+        hub.Receive(unknown, new MasterMessage { T = MasterWire.Join, Code = "ZZZ-ZZZ" });
+        hub.Receive(garbled, new MasterMessage { T = MasterWire.Join, Code = "not a code" });
 
-        Assert.All(guest.Inbox, message => Assert.Equal(MasterWire.Error, message.T));
-        Assert.Equal(2, guest.Inbox.Count);
+        Assert.Equal(MasterHub.NoGameWhy, unknown.ClosedWhy);
+        Assert.Equal(MasterHub.NoGameWhy, garbled.ClosedWhy);
+        Assert.Empty(unknown.Inbox);
+        Assert.Empty(garbled.Inbox);
+    }
+
+    [Fact]
+    public void AGameTakesNoMoreThanItsPendingGuestsAndOneThatLeavesFreesItsPlace()
+    {
+        var hub = new MasterHub(new MasterOptions { MaxPendingGuests = 3 }, new ManualClock());
+        var host = new FakeClient();
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing() });
+        string code = host.Last.Code!;
+        var guests = Enumerable.Range(0, 4).Select(i => new FakeClient($"198.51.100.{i + 10}")).ToList();
+
+        foreach (var guest in guests)
+        {
+            hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = code });
+        }
+
+        Assert.All(guests.Take(3), guest => Assert.Equal(MasterWire.Joined, guest.Last.T));
+        Assert.Equal(MasterWire.Error, guests[3].Last.T);
+        Assert.Null(guests[3].ClosedWhy);
+        Assert.Equal(3, host.Of(MasterWire.Incoming).Count());
+
+        // A linked guest closes its socket, which takes it off the game's pending guests.
+        hub.Closed(guests[0]);
+        var late = new FakeClient("198.51.100.20");
+        hub.Receive(late, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterWire.Joined, late.Last.T);
+    }
+
+    [Fact]
+    public void OneAddressHoldsOnlyItsShareOfAGamesPendingGuests()
+    {
+        var hub = new MasterHub(new MasterOptions { MaxPendingGuestsPerAddress = 2 }, new ManualClock());
+        var host = new FakeClient();
+        var other = new FakeClient("203.0.113.6");
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing() });
+        hub.Receive(other, new MasterMessage { T = MasterWire.Host, Game = Listing("Other") });
+        string code = host.Last.Code!;
+        var crowd = Enumerable.Range(0, 3).Select(_ => new FakeClient("198.51.100.7")).ToList();
+
+        foreach (var guest in crowd)
+        {
+            hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = code });
+        }
+
+        Assert.Equal(MasterWire.Joined, crowd[0].Last.T);
+        Assert.Equal(MasterWire.Joined, crowd[1].Last.T);
+        Assert.Equal((MasterWire.Error, MasterHub.AddressPendingWhy), (crowd[2].Last.T, crowd[2].Last.Why));
+        Assert.Equal(2, host.Of(MasterWire.Incoming).Count());
+
+        // Another address still joins that game, and the same address another game.
+        var stranger = new FakeClient("198.51.100.8");
+        hub.Receive(stranger, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterWire.Joined, stranger.Last.T);
+        var elsewhere = new FakeClient("198.51.100.7");
+        hub.Receive(elsewhere, new MasterMessage { T = MasterWire.Join, Code = other.Last.Code });
+        Assert.Equal(MasterWire.Joined, elsewhere.Last.T);
+
+        // Players behind one NAT joining one after another: each linked guest's socket closes.
+        hub.Closed(crowd[0]);
+        var next = new FakeClient("198.51.100.7");
+        hub.Receive(next, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterWire.Joined, next.Last.T);
+    }
+
+    [Fact]
+    public void AnAddressMintsOnlyItsHourlyTurnCredentialsAndTheHostsForItsJoinsCountAgainstIt()
+    {
+        var clock = new ManualClock();
+        var options = new MasterOptions { Turn = "turn:turn.example.org:3478", TurnSecret = "s", TurnMintsPerHour = 5 };
+        var hub = new MasterHub(options, clock);
+        var host = new FakeClient();
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing() });
+        string code = host.Last.Code!;
+
+        // Two mints a join, so the third would take the address to six of five.
+        var joins = Enumerable.Range(0, 3).Select(_ => new FakeClient("198.51.100.7")).ToList();
+        foreach (var guest in joins)
+        {
+            hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = code });
+            hub.Closed(guest);
+        }
+
+        Assert.Single(joins[0].Of(MasterWire.Joined));
+        Assert.Single(joins[1].Of(MasterWire.Joined));
+        Assert.Equal((MasterWire.Error, MasterHub.TurnSpentWhy), (joins[2].Last.T, joins[2].Last.Why));
+        Assert.Equal(2, host.Of(MasterWire.Incoming).Count());
+
+        // The host's own allowance is untouched, so another address still joins its game.
+        var stranger = new FakeClient("198.51.100.8");
+        hub.Receive(stranger, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterWire.Joined, stranger.Last.T);
+
+        // An hour after the joins their mints have left the window, and not a second before.
+        clock.Advance(MasterHub.MintWindow.TotalSeconds - 1.0);
+        hub.Receive(host, new MasterMessage { T = MasterWire.Update });
+        var early = new FakeClient("198.51.100.7");
+        hub.Receive(early, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterHub.TurnSpentWhy, early.Last.Why);
+
+        clock.Advance(1.0);
+        hub.Receive(host, new MasterMessage { T = MasterWire.Update });
+        var later = new FakeClient("198.51.100.7");
+        hub.Receive(later, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterWire.Joined, later.Last.T);
+    }
+
+    [Fact]
+    public void WithoutTurnNoJoinIsCountedAgainstAnAddress()
+    {
+        var hub = new MasterHub(new MasterOptions { Stun = "stun:turn.example.org:3478", TurnMintsPerHour = 2 }, new ManualClock());
+        var host = new FakeClient();
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing() });
+        string code = host.Last.Code!;
+
+        for (int i = 0; i < 5; i++)
+        {
+            var guest = new FakeClient("198.51.100.7");
+            hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = code });
+            Assert.Equal(MasterWire.Joined, guest.Last.T);
+            hub.Closed(guest);
+        }
     }
 
     [Fact]

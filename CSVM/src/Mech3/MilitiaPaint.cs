@@ -18,11 +18,14 @@ public static class MilitiaPaint
     /// ("Sacred Trust Hellhound" keys "Sacred Trust" to <c>sactrust</c>). A militia/aircraft pair the
     /// install ships no def for is reached all the same, which is what paints a Sacred Trust
     /// Warhawk.</summary>
-    public static Dictionary<string, string> PatternByMilitia(string zrdrPath, Messages messages)
-    {
-        var root = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
-            ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
+    public static Dictionary<string, string> PatternByMilitia(string zrdrPath, Messages messages) =>
+        PatternByMilitia(Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
+            ?? throw new InvalidOperationException("vehicle.json: unexpected root shape"), messages);
 
+    /// <summary><see cref="PatternByMilitia(string, Messages)"/> over an already-parsed
+    /// <c>vehicle.json</c> root, the alternating name/properties list.</summary>
+    public static Dictionary<string, string> PatternByMilitia(List<object?> root, Messages messages)
+    {
         var byMilitia = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i + 1 < root.Count; i += 2)
         {
@@ -47,9 +50,13 @@ public static class MilitiaPaint
         string enemyName)
     {
         int cut = enemyName.LastIndexOfAny(Space);
-        return cut > 0 && patternByMilitia.TryGetValue(Key(enemyName[..cut]), out var pattern)
-            ? pattern : null;
+        return cut > 0 ? PatternFor(patternByMilitia, enemyName[..cut]) : null;
     }
+
+    /// <summary>The pattern a militia of the militia table is painted in. Null for the two that
+    /// name none, Fortune Hunter (the player's own) and Broadway Bomber.</summary>
+    public static string? PatternFor(IReadOnlyDictionary<string, string> patternByMilitia, string militia) =>
+        patternByMilitia.TryGetValue(Key(militia), out var pattern) ? pattern : null;
 
     // The militia half, normalised: the menu says "Hollywood Knight" and the message table
     // "Hollywood Knights", so the trailing plural comes off both before either is compared.

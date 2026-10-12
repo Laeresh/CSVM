@@ -51,6 +51,7 @@ internal static class NetDirectorSuites
     internal static void DirectorFollow(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>().FirstOrDefault(m =>
                 string.Equals(m!.Value.ChapterFolder, Chapter, StringComparison.OrdinalIgnoreCase)
@@ -97,7 +98,7 @@ internal static class NetDirectorSuites
         mesh[1].Disconnect(2);
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "control", PlaneNode = Airframes[1] },
         };

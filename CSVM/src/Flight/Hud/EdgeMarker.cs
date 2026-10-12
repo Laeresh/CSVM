@@ -2,13 +2,12 @@ using Godot;
 
 namespace CSVM.Flight.Hud;
 
-/// <summary>The off-screen edge marker's placement rules, the one home for what
-/// VersusHud and TargetHud each used to carry privately (docs/architecture.md): a world target's
-/// marker sits at its projected point while that point is on the pane, else clamps into the inset
-/// screen edge with an outward arrow direction and a second point on the pane boundary for the
-/// arrow to reach; the edge tag carries a clock-hour bearing. Engine-free, the caller projects
-/// through its own camera and passes the result in, and each HUD keeps its own arrow, tag and
-/// label styling. Decode: <see href="../../../../docs/org/spyglass.md">org/spyglass.md</see>.</summary>
+/// <summary>The off-screen edge marker's placement rules, which TargetHud draws by
+/// (docs/architecture.md). A world target's marker sits at its projected point while that point is
+/// on the pane. Otherwise it clamps into the inset edge, with an outward arrow direction and a
+/// boundary point for the arrow to reach. The edge tag carries a clock-hour bearing. Engine-free:
+/// the caller projects through its own camera and keeps its own arrow, tag and label styling.
+/// Decode: <see href="../../../../docs/org/spyglass.md">org/spyglass.md</see>.</summary>
 public static class EdgeMarker
 {
     /// <summary>The share of each pane axis the marker ANCHOR is held inside, the original's own

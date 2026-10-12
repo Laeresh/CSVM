@@ -13,8 +13,8 @@ namespace CSVM.UI.Boards;
 /// camera-anchored singletons like the skydome, which <see cref="PlayerCullMask"/> keeps private.
 /// Every pane is a 3D audio listener (docs/architecture.md), or a splitscreen session has no
 /// listener at all. The zone-gate, <see cref="OwnAirframeLayer"/> and <see cref="FirstPersonLayer"/>
-/// bands, <see cref="HeadsetLayer"/> and <see cref="HeadOverlayLayer"/> share the 20 named layers;
-/// <see cref="WorldFlareBand"/> sits above them.
+/// bands and <see cref="HeadsetLayer"/> share the 20 named layers with <see cref="FlatSeaLayer"/>;
+/// <see cref="WorldFlareBand"/> and <see cref="HeadOverlayLayer"/> sit above them.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -31,6 +31,13 @@ public sealed partial class SplitScreen : CanvasLayer
     /// carries it (<see cref="PaneCullMask"/>), or a pane would be lit twice.</summary>
     public const uint SpyglassSunLayer = 1u << 6;
 
+    /// <summary>The spyglass disc's flat-sea marker under Enhanced Graphics. No geometry or light is
+    /// drawn on it, and only the disc's camera carries it
+    /// (<see cref="Flight.Camera.SpyglassView.DiscMask"/>); no pane's cull mask does. A camera
+    /// carrying it without <see cref="SunLayer"/> sees the flat sea: the wave ocean's grid collapses
+    /// and the base sheet keeps drawing (<c>Mech3.SceneBuilder.FlatSeaEye</c>).</summary>
+    public const uint FlatSeaLayer = 1u << 5;
+
     /// <summary>The world's layer 1, which every pane, spyglass and photograph camera draws. A race
     /// ghost of a seat flown on another machine names it as its owner's layer. No camera here then
     /// takes that aeroplane for its own, however many seats the race has.</summary>
@@ -44,8 +51,9 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>The layer of a stereo session's overlays on the flown view: the head-locked colour
     /// quads and the flight markers' cards. Every pane camera draws it, the cutscene pair too, so a
     /// mission-end fade still darkens a held film. The spyglass picture drops it, as the flat disc
-    /// shows the world alone.</summary>
-    public const uint HeadOverlayLayer = 1u << 5;
+    /// shows the world alone. Bit 28, above the editor's gizmo bits, since Godot's 20 named layers are
+    /// all taken, so the pane masks add it as they add <see cref="WorldFlareLayer"/>.</summary>
+    public const uint HeadOverlayLayer = 1u << 28;
 
     /// <summary>The band <see cref="WorldFlareLayer"/> takes its bits from, bits 20 to 23. Every
     /// picture camera standing in the world for its own view (the spyglass disc, the Danger Zone
@@ -172,16 +180,19 @@ public sealed partial class SplitScreen : CanvasLayer
     public static string PlayerTag(int index) => $"P{index + 1}";
 
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
-    /// reserved per-player band (the shared world, all aircraft). It adds only this player's own bit
-    /// and this player's <see cref="WorldFlareLayer"/>.</summary>
+    /// reserved per-player band (the shared world, all aircraft). It adds only this player's own bit,
+    /// with this player's <see cref="WorldFlareLayer"/> and <see cref="HeadOverlayLayer"/>. The spyglass
+    /// disc's two layers are left out.</summary>
     public static uint PlayerCullMask(int index) =>
-        (AllLayers & ~PlayerBand & ~SpyglassSunLayer) | PlayerVisualLayer(index) | WorldFlareLayer(index);
+        (AllLayers & ~PlayerBand & ~SpyglassSunLayer & ~FlatSeaLayer) | PlayerVisualLayer(index) | WorldFlareLayer(index) | HeadOverlayLayer;
 
-    /// <summary><paramref name="mask"/> less <see cref="SpyglassSunLayer"/>, with every
-    /// <see cref="FirstPersonLayer"/> back and the first pane's <see cref="WorldFlareLayer"/>, for a
-    /// pane camera <see cref="PlayerCullMask"/> did not build. That is the main camera, which
-    /// outlives a session whose pilot dropped a bit. A headset draws through it too.</summary>
-    public static uint PaneCullMask(uint mask) => (OutsideCullMask(mask) & ~SpyglassSunLayer) | WorldFlareLayer(0);
+    /// <summary><paramref name="mask"/> less <see cref="SpyglassSunLayer"/> and
+    /// <see cref="FlatSeaLayer"/>, with every <see cref="FirstPersonLayer"/> back and the first pane's
+    /// <see cref="WorldFlareLayer"/> and the <see cref="HeadOverlayLayer"/>, for a pane camera <see cref="PlayerCullMask"/> did not build.
+    /// That is the main camera, which outlives a session whose pilot dropped a bit. A headset draws
+    /// through it too.</summary>
+    public static uint PaneCullMask(uint mask) =>
+        (OutsideCullMask(mask) & ~SpyglassSunLayer & ~FlatSeaLayer) | WorldFlareLayer(0) | HeadOverlayLayer;
 
     /// <summary>The layer player <paramref name="index"/>'s world flare quads are drawn on
     /// (<c>Session/World/WorldFlareRig.cs</c>). Only that player's pane camera draws it. ⚠ Keep it off

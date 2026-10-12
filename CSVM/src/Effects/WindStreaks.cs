@@ -176,6 +176,7 @@ public sealed partial class WindStreaks : Node3D
     private void Init()
     {
         Name = "wind_streaks";
+        ShaderCensus.Note(ShaderCode);
         _mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
         var tint = StreakTint.SrgbToLinear();
         _mat.SetShaderParameter("tint", new Vector3(tint.R, tint.G, tint.B));

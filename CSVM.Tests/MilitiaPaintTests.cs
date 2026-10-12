@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.UI.Screens;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -66,9 +67,9 @@ public class MilitiaPaintTests
         var patterns = Patterns();
         var catalog = PaintScheme.LoadCatalog(ZrdrPath);
 
-        foreach (string militia in LaunchMenu.MilitiaNames())
+        foreach (string militia in InstantActionFeature.Militias.Select(m => m.Name))
         {
-            foreach (string aircraft in LaunchMenu.AircraftFor(militia))
+            foreach (string aircraft in InstantActionFeature.AircraftFor(militia))
             {
                 string? pattern = MilitiaPaint.PatternForWave(patterns, $"{militia} {aircraft}");
                 if (pattern == null)

@@ -345,6 +345,90 @@ public class NetMessagesTests
         Assert.Equal(1 | (CoopPickMessage.MaxVoice << 1) | (1 << 4), buffer[SeatRosterMessage.PrefixSize + 2]);
     }
 
+    // A bot rides bit 5 of the flags byte and its skill tier bits 6 and 7. A reader of the host bit
+    // alone still finds the host.
+    [Fact]
+    public void SeatRosterCarriesBotsAndTheirSkillBesideTheOtherFlags()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host", Voice: 2, Unnamed: true),
+            new(1, 2, 0, false, "guest"),
+            new(2, 1, 7, true, "Novice", Pilot: NetPilot.Bot, Skill: NetBotSkill.Novice),
+            new(3, 2, 1, true, "Veteran", Pilot: NetPilot.Bot, Skill: NetBotSkill.Veteran),
+            new(4, 0, 2, true, "Ace", Voice: 1, Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+
+        Assert.Equal(SeatRosterMessage.PrefixSize + (SeatRosterMessage.EntrySize * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(seats, got.Seats.ToList());
+
+        int Flags(int entry) => buffer[SeatRosterMessage.PrefixSize + (entry * SeatRosterMessage.EntrySize) + 2];
+        Assert.Equal(1 | (2 << 1) | (1 << 4), Flags(0));
+        Assert.Equal(0, Flags(1));
+        Assert.Equal(1 | (1 << 5), Flags(2));
+        Assert.Equal(1 | (1 << 5) | (1 << 6), Flags(3));
+        Assert.Equal(1 | (1 << 1) | (1 << 5) | (2 << 6), Flags(4));
+
+        // ABLE-TO-FAIL CONTROL: a tier past Ace, or skill bits on a person, is no roster this writes.
+        buffer[SeatRosterMessage.PrefixSize + (4 * SeatRosterMessage.EntrySize) + 2] = (byte)(1 | (1 << 5) | (3 << 6));
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+        new SeatRosterMessage(5u, seats).Write(buffer);
+        buffer[SeatRosterMessage.PrefixSize + SeatRosterMessage.EntrySize + 2] = 1 << 6;
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+    }
+
+    // A bot's militia and accent ride the two bytes after its airframe. A guest then arms, paints
+    // and voices the bot as its host drew it. A person's entry carries neither.
+    [Fact]
+    public void SeatRosterCarriesABotsMilitiaAndAccentBesideItsAirframe()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host"),
+            new(1, 1, 10, true, "Tex", Pilot: NetPilot.Bot, Militia: 0, Accent: 0),
+            new(2, 2, 7, true, "Jack", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace, Militia: 4, Accent: 15),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+
+        Assert.Equal(SeatRosterMessage.PrefixSize + (22 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(seats, got.Seats.ToList());
+        int Entry(int seat) => SeatRosterMessage.PrefixSize + (seat * SeatRosterMessage.EntrySize);
+        Assert.Equal(new byte[] { 7, 4, 15 }, buffer.AsSpan(Entry(2) + 3, 3).ToArray());
+        Assert.Equal(new[] { NetSeat.Unset, NetSeat.Unset }, new[] { got.Seats[0].Militia, got.Seats[0].Accent });
+
+        // ABLE-TO-FAIL CONTROL: a roster of another entry width is no roster this reads.
+        Assert.False(SeatRosterMessage.TryRead(buffer.AsSpan(0, SeatRosterMessage.PrefixSize + (20 * seats.Count)), out _));
+    }
+
+    // A militia past the table, an accent past the wingman range, or either on a person's entry is no
+    // roster this vocabulary writes. The reader refuses it before a bot is armed or voiced.
+    [Theory]
+    [InlineData(1, NetSeat.MilitiaRows, 0)]
+    [InlineData(1, 0, NetSeat.MaxAccent + 1)]
+    [InlineData(0, 4, NetSeat.Unset)]
+    [InlineData(0, NetSeat.Unset, 12)]
+    public void SeatRosterRefusesAMilitiaOrAccentItCannotCarry(int seat, int militia, int accent)
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 0, 3, true, "host"),
+            new(1, 0, 3, true, "Tex", Pilot: NetPilot.Bot, Militia: 12, Accent: NetSeat.MaxAccent),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        // ABLE-TO-FAIL CONTROL: the last row and the top accent, on a bot, read.
+        Assert.True(SeatRosterMessage.TryRead(buffer, out _));
+
+        int entry = SeatRosterMessage.PrefixSize + (seat * SeatRosterMessage.EntrySize);
+        buffer[entry + 4] = (byte)militia;
+        buffer[entry + 5] = (byte)accent;
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]
@@ -975,6 +1059,39 @@ public class NetMessagesTests
         });
         Assert.NotEqual(sent, other);
         Assert.False(DogfightRosterMessage.TryRead(buffer.AsSpan(0, DogfightRosterMessage.Size - 1), out _));
+    }
+
+    [Fact]
+    public void ADogfightRosterCarriesBotRowsWithTheirTierAndRandomPlane()
+    {
+        var buffer = new byte[DogfightRosterMessage.Size];
+        var sent = new DogfightRosterMessage(3, 1, new[]
+        {
+            new DogfightLobbySeat("Host", 5, false, true, 1, true),
+            new DogfightLobbySeat("Lucy", 1, true, false),
+            new DogfightLobbySeat("Winthrop", DogfightLobbySeat.RandomAirframe, true, false, 1, false, NetPilot.Bot, NetBotSkill.Ace),
+            new DogfightLobbySeat("Cabbie", 7, true, false, 0, false, NetPilot.Bot, NetBotSkill.Novice),
+        });
+        sent.Write(buffer);
+        Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+        Assert.Equal(new[] { false, false, true, true }, got.Rows.Select(r => r.IsBot));
+        Assert.Equal((NetBotSkill.Ace, DogfightLobbySeat.RandomAirframe, (byte)1), (got.Rows[2].Skill, got.Rows[2].Airframe, got.Rows[2].Team));
+        Assert.Equal(NetBotSkill.Novice, got.Rows[3].Skill);
+
+        // ABLE-TO-FAIL CONTROL: a tier on a person's row, a tier past ace and a bot hosting are refused.
+        int flagsAt = NetMessage.HeaderBytes + 4;
+        int lucy = flagsAt + DogfightRosterMessage.RowSize;
+        int bot = flagsAt + (2 * DogfightRosterMessage.RowSize);
+        var tiered = (byte[])buffer.Clone();
+        tiered[lucy] |= 0x10;
+        Assert.False(DogfightRosterMessage.TryRead(tiered, out _));
+        var past = (byte[])buffer.Clone();
+        past[bot] |= 0x30;
+        Assert.False(DogfightRosterMessage.TryRead(past, out _));
+        var hosting = (byte[])buffer.Clone();
+        hosting[bot] |= 0x02;
+        Assert.False(DogfightRosterMessage.TryRead(hosting, out _));
     }
 
     [Fact]

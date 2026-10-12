@@ -63,20 +63,20 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
     {
         new(MasterKey, MenuMixLevel.Master, "Master", "AP_T_MusicTitle", null, "AP_T_MusicDesc",
             "Set the overall volume of all sounds.", 266f, 278f,
-            s => s._master ?? CSVM.Utils.AudioMix.DefaultMaster,
-            (s, v) => s._master = v),
+            c => c.AudioMaster ?? CSVM.Utils.AudioMix.DefaultMaster,
+            (c, v) => c.AudioMaster = v),
         new(MusicKey, MenuMixLevel.Music, "Music Volume", "AP_T_MVolTitle", "AP_S_MVOLUME", "AP_T_MVolDesc",
             "Set the volume of the in-game music.", 324f, 332f,
-            s => s._music ?? CSVM.Utils.AudioMix.DefaultMusic,
-            (s, v) => s._music = v),
+            c => c.AudioMusic ?? CSVM.Utils.AudioMix.DefaultMusic,
+            (c, v) => c.AudioMusic = v),
         new(EffectsKey, MenuMixLevel.Effects, "Effects Volume", "AP_T_EVolTitle", "AP_S_EVOLUME", "AP_T_EVolDesc",
             "Set the volume of the sound effects.", 381f, 387f,
-            s => s._effects ?? CSVM.Utils.AudioMix.DefaultEffects,
-            (s, v) => s._effects = v),
+            c => c.AudioEffects ?? CSVM.Utils.AudioMix.DefaultEffects,
+            (c, v) => c.AudioEffects = v),
         new(VoiceKey, MenuMixLevel.Voice, "Voice Volume", "AP_T_VVolTitle", "AP_S_VVOLUME", "AP_T_VVolDesc",
             "Set the volume of the voices.", 434f, 442f,
-            s => s._voice ?? CSVM.Utils.AudioMix.DefaultVoice,
-            (s, v) => s._voice = v),
+            c => c.AudioVoice ?? CSVM.Utils.AudioMix.DefaultVoice,
+            (c, v) => c.AudioVoice = v),
     };
 
     // The first authored slider row, which is where the page's slider geometry is read from. The
@@ -88,22 +88,19 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
     private readonly IOriginalOptionsForm _form;
+    // The form's staged settings, the four levels among them, shared with the other settings pages.
+    private readonly OptionsChoices _choices;
 
     // Which level a row's slider moved, cleared by the host's read of it. The control writes only
     // where the value actually changed. This stands at None through every frame of a drag that held
     // the thumb still, which keeps a preview off a pointer's frame rate.
     private MenuMixLevel _moved;
-    // The four saved volume levels, null while never set. The other pages carry them too, since
-    // every page's apply hands back the settings it does not show.
-    private int? _master;
-    private int? _music;
-    private int? _effects;
-    private int? _voice;
 
-    internal OriginalAudioPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form)
+    internal OriginalAudioPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form, OptionsChoices choices)
     {
         _chrome = chrome ?? throw new ArgumentNullException(nameof(chrome));
         _form = form ?? throw new ArgumentNullException(nameof(form));
+        _choices = choices ?? throw new ArgumentNullException(nameof(choices));
         _host = chrome.Host;
     }
 
@@ -120,16 +117,16 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
 
     /// <summary>The Master level (<see cref="CSVM.Utils.AudioMix"/>'s 0..100) the page would apply,
     /// or null while nothing has been saved and no row has been touched.</summary>
-    public int? MasterChoice => _master;
+    public int? MasterChoice => _choices.AudioMaster;
 
     /// <summary>The Music level the page would apply, or null while never set.</summary>
-    public int? MusicChoice => _music;
+    public int? MusicChoice => _choices.AudioMusic;
 
     /// <summary>The Effects level the page would apply, or null while never set.</summary>
-    public int? EffectsChoice => _effects;
+    public int? EffectsChoice => _choices.AudioEffects;
 
     /// <summary>The Voice level the page would apply, or null while never set.</summary>
-    public int? VoiceChoice => _voice;
+    public int? VoiceChoice => _choices.AudioVoice;
 
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.Audio;
 
@@ -155,10 +152,10 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
             return;
         }
 
-        _master = PoseMaster;
-        _music = PoseMusic;
-        _effects = PoseEffects;
-        _voice = PoseVoice;
+        _choices.AudioMaster = PoseMaster;
+        _choices.AudioMusic = PoseMusic;
+        _choices.AudioEffects = PoseEffects;
+        _choices.AudioVoice = PoseVoice;
     }
 
     /// <summary>Which level has moved since this was last asked, and <see cref="MenuMixLevel.None"/>
@@ -182,7 +179,7 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
             for (int i = 0; i < Options.Length; i++)
             {
                 var fallback = Options[i];
-                rows.Add(_host.PlaqueRow(fallback.Key, $"{fallback.Title} {fallback.Read(this)}", i, true, 0));
+                rows.Add(_host.PlaqueRow(fallback.Key, $"{fallback.Title} {fallback.Read(_choices)}", i, true, 0));
             }
 
             _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
@@ -198,10 +195,10 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
             // same whole number records nothing, and the host sounds nothing for it.
             rows.Add(_chrome.SliderRow(control, option.Key, place.SliderX, place.SliderY,
                 CSVM.Utils.AudioMix.MinLevel, CSVM.Utils.AudioMix.MaxLevel,
-                option.Read(this),
+                option.Read(_choices),
                 v =>
                 {
-                    option.Write(this, v);
+                    option.Write(_choices, v);
                     _moved = option.Level;
                 }));
         }
@@ -264,16 +261,6 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
         }
     }
 
-    /// <summary>Takes the four levels this page shows off <paramref name="saved"/>, never set where
-    /// it is null.</summary>
-    internal void Read(CSVM.Utils.OptionsDef? saved)
-    {
-        _master = saved?.AudioMaster;
-        _music = saved?.AudioMusic;
-        _effects = saved?.AudioEffects;
-        _voice = saved?.AudioVoice;
-    }
-
     // The column every slider stands in, read off the first authored slider row. It places the
     // Master row, whose own authored widget is the checkbox. A row with a slider of its own is
     // placed by that widget, and reaches this only when the layout has dropped it.
@@ -318,7 +305,7 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
         {
             if (option.Level == level)
             {
-                return option.Read(this);
+                return option.Read(_choices);
             }
         }
 
@@ -333,7 +320,7 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
     private sealed record AudioOption(
         string Key, MenuMixLevel Level, string Title, string TitleKey, string? ControlKey,
         string DescriptionKey, string Description, float TitleY, float DescY,
-        Func<OriginalAudioPage, int> Read, Action<OriginalAudioPage, int> Write);
+        Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write);
 
     // One row's place in authored pixels. It is the title box, the corner its slider stands at
     // where the row authors no slider of its own, and the description box.

@@ -46,7 +46,7 @@ public static class RofExtraction
             ExtractArchive(request.PatchArchive, "crimptch.rof", Path.Combine(output, PatchFolder), request.Force, log),
         };
 
-        MovieCopyResult movies = CopyMovies(request.MovieFolder, output, log);
+        MovieCopyResult movies = CopyMovies(request.MovieFolder, output, request.Force, log);
 
         // langui.dll first: the first row for an id wins everywhere downstream, the order the
         // original loads the two in.
@@ -69,7 +69,7 @@ public static class RofExtraction
         if (rofPath == null || !File.Exists(rofPath))
         {
             log("SKIP " + label + " (not present)");
-            return new RofArchiveResult(label, RofArchiveOutcome.Absent, 0, 0, 0);
+            return new RofArchiveResult(label, RofArchiveOutcome.Absent, 0, 0, 0, Array.Empty<string>());
         }
 
         // The ASSETS folder is the marker a finished unpack leaves, so one at least as new as the
@@ -79,7 +79,7 @@ public static class RofExtraction
             && Directory.GetLastWriteTimeUtc(marker) >= File.GetLastWriteTimeUtc(rofPath))
         {
             log("ok   " + label + " (up to date)");
-            return new RofArchiveResult(label, RofArchiveOutcome.UpToDate, 0, 0, 0);
+            return new RofArchiveResult(label, RofArchiveOutcome.UpToDate, 0, 0, 0, Array.Empty<string>());
         }
 
         log("->   " + label);
@@ -88,9 +88,20 @@ public static class RofExtraction
         int files = 0;
         int dirs = 0;
         int images = 0;
+        var refused = new List<string>();
+        string root = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
         foreach (var entry in RofArchive.Walk(archive))
         {
-            string target = RofTree.Member(destination, entry.Path);
+            // Names come from the archive's bytes, so a ".." or rooted one would land outside the
+            // output folder. The shipped archives hold none; one that does is reported, not written.
+            string target = Path.GetFullPath(RofTree.Member(destination, entry.Path));
+            if (!target.StartsWith(root, StringComparison.Ordinal))
+            {
+                log("     REFUSED " + entry.Path + " (its name leads outside " + destination + ")");
+                refused.Add(entry.Path);
+                continue;
+            }
+
             if (entry.IsDirectory)
             {
                 Directory.CreateDirectory(target);
@@ -114,13 +125,13 @@ public static class RofExtraction
         }
 
         log("     " + files + " files, " + dirs + " dirs, " + images + " .BM decoded");
-        return new RofArchiveResult(label, RofArchiveOutcome.Extracted, files, dirs, images);
+        return new RofArchiveResult(label, RofArchiveOutcome.Extracted, files, dirs, images, refused);
     }
 
-    private static MovieCopyResult CopyMovies(string? movieFolder, string output, Action<string> log)
+    private static MovieCopyResult CopyMovies(string? movieFolder, string output, bool force, Action<string> log)
     {
         string destination = Path.Combine(output, "ASSETS", "GRAPHICS", "MPG");
-        MovieCopyResult movies = MovieCopy.Run(movieFolder, destination);
+        MovieCopyResult movies = MovieCopy.Run(movieFolder, destination, force);
         if (!movies.SourceFound)
         {
             log("SKIP GRAPHICS/MPG (not present at " + (movieFolder ?? "<none>") + ")");
@@ -200,8 +211,9 @@ public static class RofExtraction
 }
 
 /// <summary>What <see cref="RofExtraction.Run"/> reads and where it writes. Each input is an
-/// absolute path already resolved against the install, or null when the install lacks it.
-/// <see cref="Force"/> re-unpacks archives whose output is already newer.</summary>
+/// absolute path already resolved against the install, or null when the install lacks it. A
+/// forced run (<see cref="Force"/>) re-unpacks archives whose output is newer and recopies every
+/// movie.</summary>
 public sealed record RofExtractionRequest(
     string? BaseArchive,
     string? PatchArchive,
@@ -219,5 +231,8 @@ public sealed record RofExtractionResult(
     int StringRows,
     MenuLayoutDocument? MenuLayout);
 
-/// <summary>One archive's step: the counts are zero unless it was unpacked this run.</summary>
-public sealed record RofArchiveResult(string Name, RofArchiveOutcome Outcome, int Files, int Directories, int DecodedTextures);
+/// <summary>One archive's step: the counts are zero unless it was unpacked this run.
+/// The members whose paths lead outside the output folder are not written, and
+/// <see cref="Refused"/> lists them.</summary>
+public sealed record RofArchiveResult(
+    string Name, RofArchiveOutcome Outcome, int Files, int Directories, int DecodedTextures, IReadOnlyList<string> Refused);

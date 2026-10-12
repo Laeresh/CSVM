@@ -99,6 +99,26 @@ public sealed class RearmBases
     public bool Serves(int baseTeam, int pilotTeam) =>
         Rule == RearmRule.AnyBase || (pilotTeam > 0 && baseTeam == pilotTeam);
 
+    /// <summary>The nearest base that serves a pilot of <paramref name="pilotTeam"/> at
+    /// <paramref name="at"/> and offers anything this step, or null when none does.</summary>
+    public Vector3? NearestServing(Vector3 at, int pilotTeam, IReadOnlyList<RearmBase> bases)
+    {
+        ArgumentNullException.ThrowIfNull(bases);
+        Vector3? nearest = null;
+        float best = float.PositiveInfinity;
+        foreach (var rearmBase in bases)
+        {
+            if (rearmBase.Position is { } position && Serves(rearmBase.Team, pilotTeam)
+                && at.DistanceSquaredTo(position) < best)
+            {
+                best = at.DistanceSquaredTo(position);
+                nearest = position;
+            }
+        }
+
+        return nearest;
+    }
+
     /// <summary>One living seat's step: true on the step it enters the radius of a base that serves
     /// it, which is when it rearms. It stays latched until it is outside every such base.</summary>
     public bool Enters(int seat, Vector3 at, int pilotTeam, IReadOnlyList<RearmBase> bases)

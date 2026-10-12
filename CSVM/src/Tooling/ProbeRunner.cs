@@ -259,6 +259,7 @@ public sealed class ProbeRunner
         {
             RepoRoot = _repoRoot,
             DataRoot = _dataRoot,
+            SyntheticData = SyntheticData.Marks(_dataRoot),
             Chapter = spec.Chapter,
             Mission = spec.Mission,
             ZrdrPath = _zrdrPath,
@@ -271,6 +272,7 @@ public sealed class ProbeRunner
             LoadoutOverride = spec.LoadoutOverride,
             AuditFinalizers = spec.DebugFinalizers,
             AuditFinalizersAcrossRun = spec.DebugFinalizersAcrossRun,
+            DebugMem = spec.DebugMem,
             Host = host,
             Camera = camera,
         };

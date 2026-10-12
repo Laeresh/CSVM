@@ -133,6 +133,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// manifest or <c>join-board:N</c> with that many entries posed as signed on.</summary>
     public const string JoinBoardAid = "join-board";
 
+    /// <summary>The join board aid's suffix, <c>join-board:N:bots</c>, that stands five bot rows
+    /// under the articles.</summary>
+    public const string JoinBoardBotsAid = "bots";
+
+    /// <summary>The join board aid's suffix, <c>join-board:N:bot</c>, that also opens the Edit Bot
+    /// panel on one of them.</summary>
+    public const string JoinBoardBotAid = "bot";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -215,10 +223,9 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
-    /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
-    /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
-    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed. A third,
-    /// <c>code</c> or <c>offline</c>, says what the host's master server does.</summary>
+    /// waiting (a guest not yet Ready). The second names the tab or pose, mission by default, and a
+    /// third, <c>code</c> or <c>offline</c>, what the host's master server does. Each value is
+    /// listed in <c>docs/org/menu-inventory.md</c>.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -659,6 +666,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case JoinBoardAid:
                     _shell.JoinBoard.Open();
                     break;
+                case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal)
+                    && board.Split(':') is { Length: 3 } parts && parts[2] is JoinBoardBotsAid or JoinBoardBotAid:
+                    _shell.JoinBoard.PoseBots(AidCount(parts[0] + ":" + parts[1]), parts[2] == JoinBoardBotAid);
+                    break;
                 case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal):
                     _shell.JoinBoard.Pose(AidCount(board));
                     break;
@@ -850,8 +861,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             if (step.Exit != null)
             {
                 // The exit ends this presentation, so a mix page's preview goes before the host acts
-                // on it: an accepted mix is applied by Launcher.ApplyOptions, and every other door
-                // owes back the mix the page opened over.
+                // on it. LiveSettings.Persist applies an accepted mix, and every other door owes back
+                // the mix the page opened over.
                 _host.Audio.EndMixPreview();
                 _host.Exit(step.Exit);
                 return;
@@ -908,6 +919,20 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             _view.QueueRedraw();
         }
+    }
+
+    /// <summary>Stands <paramref name="message"/> in the shell's warning box and redraws. False while
+    /// the menu is not on screen, where nothing would show it.</summary>
+    public bool RaiseWarning(string message)
+    {
+        if (!_shown || _shell == null)
+        {
+            return false;
+        }
+
+        _shell.RaiseWarning(message);
+        Redraw();
+        return true;
     }
 
     public void Hide()
@@ -1046,6 +1071,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     private void OpenLobbyAid(string argument)
     {
         string[] parts = argument.Split(':');
+        if (parts[0] == "late")
+        {
+            // A guest that joined while its host flies a match: no options, no list but its own row.
+            _shell!.StandInNetDoor(NetDoorAid.LateDogfightGuest());
+            _shell.Lobby.OpenGuest();
+            _shell.StepNet(0.0);
+            return;
+        }
+
         bool waiting = parts[0] == "waiting";
         bool guestView = parts[0] == "guest" || waiting;
         string tab = parts.Length > 1 ? parts[1] : parts[0] is "host" or "guest" or "waiting" ? string.Empty : parts[0];
@@ -1055,6 +1089,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (guestView)
         {
             host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            if (host.Dogfight is { } drawn)
+            {
+                drawn.CallsignPool = _shell.Lobby.BotNames();
+            }
         }
         else
         {
@@ -1083,6 +1121,27 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         NetDoorAid.PoseDogfight(host, guests);
+        if (tab is "bots" or "bot" or "bot-scores" or "race" && host.Dogfight is { } field)
+        {
+            // Three bot rows after the two guests, the first an ace on the Fury.
+            field.FillTo(6);
+            field.SetBotAirframe(field.Bots[0].Id, 7);
+            field.SetBotSkill(field.Bots[0].Id, NetBotSkill.Ace);
+            if (tab == "race")
+            {
+                // A Stunt Race over those rows, which fly it as the course's bots.
+                field.SetMissionType(Spec.DogfightMissionType.StuntRace);
+            }
+
+            NetDoorAid.SettleDogfight(host, guests);
+            if (tab == "bot")
+            {
+                _shell.Lobby.ShowBot(field.Bots[0].Id);
+                _shell.StepNet(0.0);
+                return;
+            }
+        }
+
         if (outlaw)
         {
             _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);
@@ -1090,10 +1149,10 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
-        if (tab == "scores")
+        if (tab is "scores" or "bot-scores")
         {
             // Game Scores fills only on the way back from a match, so every door lands one.
-            var scores = NetDoorAid.PlayedScores(host);
+            var scores = tab == "scores" ? NetDoorAid.PlayedScores(host) : NetDoorAid.PlayedBotScores(host);
             foreach (var door in guests.Prepend(host).Where(door => door != shown))
             {
                 door.Dogfight?.Land(scores);
@@ -1108,7 +1167,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             {
                 "plane" => LobbyTab.Plane,
                 "ammo" or "rockets" => LobbyTab.Ammo,
-                "scores" => LobbyTab.Scores,
+                "scores" or "bot-scores" => LobbyTab.Scores,
                 _ => LobbyTab.Mission,
             },
             rockets: tab == "rockets");
@@ -1207,7 +1266,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 int.TryParse(coop[0], System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out int guests);
                 var door = NetDoorAid.Host(guests, out _, out var named, NetDoorAid.InternetOf(coop.Length > 1 ? coop[1] : string.Empty));
-                door.PlayerName = NetDoorAid.HostName;
+                door.Identity.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(door);
                 NetDoorAid.OpenCoopHost(door, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.StepNet(0.0);
@@ -1229,7 +1288,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             case CampaignCoopReadyAid:
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 var ready = NetDoorAid.Host(2, out _, out var guestEnds);
-                ready.PlayerName = NetDoorAid.HostName;
+                ready.Identity.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(ready);
                 NetDoorAid.OpenCoopHost(ready, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);

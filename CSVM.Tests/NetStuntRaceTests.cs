@@ -398,7 +398,7 @@ public sealed class NetStuntRaceTests
         var lobby = new NetLobby(carrier);
         var roster = new[]
         {
-            new NetSeat { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "Red" },
+            new NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "Red" },
             new NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "Blue" },
         };
         var host = NetSession.Host(lobby, roster, 0x5EEDUL);
@@ -448,7 +448,7 @@ public sealed class NetStuntRaceTests
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(2267));
         var roster = new[]
         {
-            new NetSeat { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "Red" },
+            new NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "Red" },
             new NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "Blue" },
         };
         var host = NetSession.Host(mesh[0], roster, 0x5EEDUL);

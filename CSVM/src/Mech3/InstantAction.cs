@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using Godot;
 
@@ -19,6 +20,12 @@ namespace CSVM.Mech3;
 public readonly record struct InstantActionWave(
     int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 
+/// <summary>One militia, the aircraft it flies in the airframe dropdown's order, and the accent
+/// id its wave speaks with. The militia is the only thing that gives a wave a voice. The setup
+/// screen writes the accent beside the livery, so picking a militia picks the pilots
+/// (docs/formats/instant-action.md, "A militia also picks the wave's voice").</summary>
+public readonly record struct InstantActionMilitia(string Name, IReadOnlyList<string> Aircraft, int AccentId);
+
 /// <summary>Builds an <see cref="InstantActionDef"/> the three ways decision 2 names: the
 /// shipped <c>ia.zrd.json</c> (<see cref="Load"/>), a hand-authored <c>--ia=&lt;path&gt;</c>
 /// file (<see cref="LoadFromJson"/>), and the launchscreen's Instant Action wizard
@@ -26,6 +33,10 @@ public readonly record struct InstantActionWave(
 /// (<c>BuildDef</c>); plumbing: this module's entry in docs/architecture.md.</summary>
 public static class InstantAction
 {
+    /// <summary>The player's own militia, the one that flies all eleven airframes and the livery
+    /// picker's default pattern covers (docs/formats/instant-action.md).</summary>
+    public const string PlayerMilitia = "Fortune Hunter";
+
     // "The built-in defaults" (docs/formats/instant-action.md), decoded from FUN_00458ff0's
     // record reset and FUN_00458d00's per-wave reset.
     private const string DefaultMissionType = "dogfight_ace";
@@ -42,26 +53,58 @@ public static class InstantAction
     private const int DefaultWaveAccentId = -1; // the roster-block constructor's general "unset"
     private static readonly int[] DefaultAceStats = { 5, 6, 6, 8, 9, 6, 7, 6, 9 };
 
-    // Display name -> planes.zbd root node (docs/formats/instant-action.md "The built-in
-    // defaults": the IDS_IA_PLANES order). Deliberately duplicates UI.Screens.LaunchMenu.Planes rather
-    // than sharing it, which keeps the launchscreen file free of this table. CSVM ships one gamez
-    // node per airframe (extracted/planes/nodes.json carries no bare "bhawk", only "player_bhawk"),
-    // reused for the player and every AI/generator spawn alike, so there is no separate "plain" or
-    // wingman model to pick between.
-    private static readonly Dictionary<string, string> PlaneNodes = new(StringComparer.OrdinalIgnoreCase)
+    // The eleven airframes in the langui 3700 order, the order FUN_00410420's mask flags them in,
+    // each with the planes.zbd root node it builds (docs/formats/instant-action.md). Names are
+    // ia.json's singular vocabulary. CSVM ships one gamez node per airframe, reused for the player
+    // and every AI spawn alike. There is no separate "plain" or wingman model to pick between.
+    private static readonly (string Name, string Node)[] AirframeRows =
     {
-        ["Devastator"] = "player_pfighter",
-        ["Bloodhawk"] = "player_bhawk",
-        ["Firebrand"] = "player_fbrand",
-        ["Brigand"] = "player_brigand",
-        ["Fury"] = "player_fury",
-        ["Autogyro"] = "player_autogyro",
-        ["Hellhound"] = "player_avenger",
-        ["Kestrel"] = "player_kestrel",
-        ["Peacemaker"] = "player_peacemaker",
-        ["Balmoral"] = "player_balmoral",
-        ["Warhawk"] = "player_warhawk",
+        ("Autogyro", "player_autogyro"),
+        ("Hellhound", "player_avenger"),
+        ("Balmoral", "player_balmoral"),
+        ("Bloodhawk", "player_bhawk"),
+        ("Brigand", "player_brigand"),
+        ("Devastator", "player_pfighter"),
+        ("Firebrand", "player_fbrand"),
+        ("Fury", "player_fury"),
+        ("Kestrel", "player_kestrel"),
+        ("Peacemaker", "player_peacemaker"),
+        ("Warhawk", "player_warhawk"),
     };
+
+    private static readonly string[] MaskOrder = Array.ConvertAll(AirframeRows, a => a.Name);
+
+    private static readonly Dictionary<string, string> PlaneNodes =
+        AirframeRows.ToDictionary(a => a.Name, a => a.Node, StringComparer.OrdinalIgnoreCase);
+
+    // The thirteen militias in the langui 3670 order, each with the aircraft FUN_00410420's mask
+    // allows it, in the mask order. The mask filters the dropdown and never reorders it. The accent
+    // is the same switch's own write. Fortune Hunter's 12 is the wingman range's base, re-rolled to
+    // 12..16 per aircraft at spawn.
+    private static readonly InstantActionMilitia[] MilitiaRows =
+    {
+        new("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" }, 0),
+        new("Black Swan", new[] { "Fury" }, 1),
+        new("Blake Aviation", new[] { "Bloodhawk", "Peacemaker" }, 2),
+        new("British", new[] { "Balmoral", "Peacemaker" }, 3),
+        new(PlayerMilitia, MaskOrder, 12),
+        new("Hollywood Knight", new[] { "Firebrand" }, 7),
+        new("Hughes Aviation", new[] { "Bloodhawk", "Fury", "Kestrel" }, 10),
+        new("Medusa", new[] { "Brigand", "Kestrel" }, 8),
+        new("Russian", new[] { "Devastator" }, 5),
+        new("Sacred Trust", new[] { "Hellhound", "Warhawk" }, 9),
+        new("German", new[] { "Hellhound" }, 6),
+        new("Studio Security", new[] { "Autogyro", "Fury" }, 10),
+        new("Broadway Bomber", new[] { "Peacemaker" }, 4),
+    };
+
+    /// <summary>The thirteen militias in the setup screen's dropdown order, each with its aircraft
+    /// and accent (docs/formats/instant-action.md "Militias and aircraft").</summary>
+    public static IReadOnlyList<InstantActionMilitia> Militias => MilitiaRows;
+
+    /// <summary>The eleven airframes in the setup screen's dropdown order, each with its gamez node.
+    /// </summary>
+    public static IReadOnlyList<(string Name, string Node)> Airframes => AirframeRows;
 
     /// <summary>The built-in defaults for a wave with no <c>groupN</c> key at all
     /// (<c>FUN_00458d00</c>'s per-wave reset, read through <see cref="MakeWave"/> with nothing to
@@ -89,6 +132,10 @@ public static class InstantAction
     /// (a malformed <c>--ia=</c> file).</summary>
     public static string? PlaneNodeFor(string displayName) =>
         PlaneNodes.TryGetValue(displayName, out var node) ? node : null;
+
+    /// <summary>The militia a seat's militia byte names, null for its unset value or any byte past
+    /// the table.</summary>
+    public static InstantActionMilitia? MilitiaAt(byte row) => row < MilitiaRows.Length ? MilitiaRows[row] : null;
 
     /// <summary>Loads one chapter's shipped <c>ia.zrd.json</c> (the mission's own zrdr scope,
     /// e.g. <c>&lt;chapter&gt;/IA1/zrdr</c>, only IA1 folders carry one). Throws

@@ -48,6 +48,9 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     // loads the service thread carried.
     private const double StallLogSeconds = 1.0;
 
+    // Every transport not yet closed, for CloseAll. Its service thread already keeps each alive.
+    private static readonly List<EnetTransport> OpenTransports = new();
+
     // ⚠ Every touch of an ENet peer happens under this gate. The service thread polls them, and
     // Godot's ENet peer is not safe to use from two threads at once.
     private readonly object _gate = new();
@@ -82,6 +85,11 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
         }
 
         _local = _sockets[0].Peer.GetUniqueId();
+        lock (OpenTransports)
+        {
+            OpenTransports.Add(this);
+        }
+
         var service = new Thread(Serve) { IsBackground = true, Name = "enet-service" };
         service.Start();
     }
@@ -205,6 +213,26 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     /// <see cref="Step"/>, and a join that fails ends at <see cref="NetLinkState.Down"/>.</summary>
     public static EnetTransport Join(string address, int port, Keepalive? keepalive = null) =>
         Join(address, port, keepalive, null, 0);
+
+    /// <summary>Closes every transport still open, whoever holds it. The launcher's quit calls it
+    /// ahead of the engine's teardown. That teardown disposes every Godot wrapper, these sockets
+    /// among them, while a service thread may still be polling (docs/architecture/Net.md).
+    /// Answers how many it closed.</summary>
+    public static int CloseAll()
+    {
+        EnetTransport[] open;
+        lock (OpenTransports)
+        {
+            open = OpenTransports.ToArray();
+        }
+
+        foreach (var transport in open)
+        {
+            transport.Close();
+        }
+
+        return open.Length;
+    }
 
     /// <inheritdoc/>
     /// <remarks>The peers this end already has are announced from inside the call, and so is
@@ -348,6 +376,11 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
             _peers.Clear();
             _roster.Clear();
             _held.Clear();
+        }
+
+        lock (OpenTransports)
+        {
+            OpenTransports.Remove(this);
         }
     }
 
@@ -548,6 +581,9 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
                     return;
                 }
 
+                // ⚠ Do not catch ObjectDisposedException around these polls. A socket disposed under
+                // one can also be an uncatchable access violation, and the catch would hide the
+                // open transport from enet-quit-close.
                 double idle = _wall.Elapsed.TotalSeconds - _steppedAt;
                 if (!_keepalive.Service || _frozen || idle < ServiceGapSeconds || idle > _keepalive.CeilingSeconds
                     || _sockets[0].Peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected)

@@ -1,7 +1,6 @@
 using System;
 using System.Linq;
 using CSVM.UI.Menu;
-using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -98,9 +97,9 @@ public class InstantActionPresetsTests
         foreach (var wave in applied.Waves.Skip(2))
         {
             Assert.Equal(0, wave.Count);
-            Assert.Equal(Array.IndexOf(LaunchMenu.MilitiaNames(), "Fortune Hunter"), wave.MilitiaIndex);
-            Assert.Equal(Array.IndexOf(LaunchMenu.AircraftFor("Fortune Hunter"), "Devastator"), wave.AircraftIndex);
-            Assert.Equal(Array.IndexOf(LaunchMenu.SkillKeys(), "veteran"), wave.SkillIndex);
+            Assert.Equal(InstantActionFeature.Militias.Select(m => m.Name).ToList().IndexOf("Fortune Hunter"), wave.MilitiaIndex);
+            Assert.Equal(InstantActionFeature.AircraftFor("Fortune Hunter").ToList().IndexOf("Devastator"), wave.AircraftIndex);
+            Assert.Equal(InstantActionFeature.Skills.ToList().IndexOf("veteran"), wave.SkillIndex);
         }
     }
 
@@ -126,7 +125,7 @@ public class InstantActionPresetsTests
     [Fact]
     public void APresetOnTheCloudsIndexesTheFilteredMissionTypeRoster()
     {
-        Assert.Equal(3, LaunchMenu.MissionTypeKeysFor("C2B").Length);
+        Assert.Equal(3, InstantActionFeature.MissionTypesFor("C2B").Count);
         var gemini = InstantActionPresets.Resolve(7, WaveSlots); // Death of the Gemini
         Assert.Equal("the clouds", InstantActionPresets.All[7].Environment);
         Assert.Equal("zeppelin_run", InstantActionPresets.All[7].MissionType);

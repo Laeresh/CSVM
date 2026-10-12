@@ -223,16 +223,16 @@ internal static class NetCustomPlaneSuites
             // The launcher's host half: the field, each seat's fit and plane, then the opener.
             var planes = new[] { StockAirframes.Node(hostPlane.Airframe) };
             var customs = new CustomPlaneDef?[] { hostPlane };
-            var (roster, seatFits) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null },
+            var (roster, seatFits) = SeatFields.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null },
                 StockLoadouts.Load(), rules);
-            var builds = Launcher.SeatBuildsFor(roster, customs, hostLaunch.Transport, rules);
+            var builds = SeatFields.SeatBuildsFor(roster, customs, hostLaunch.Transport, rules);
             hostDoor.TellSeatFits(seatFits);
             hostDoor.TellSeatBuilds(builds);
             ctx.Check(roster.Length == 2 && builds[1] != null && builds[1]!.Equals(guest.Build),
                 $"[flight] the host's field takes the guest's custom plane off its pick ({builds[1]?.Name ?? "stock"})");
             hostEnd = NetCombatSuites.Ends.Open(ctx, spec.WithSeatedAircraft(planes[0], hostPlane, null),
                 hostLaunch.Transport, isHost: true, HostSeed, roster, StockAirframes.Nodes,
-                seatBuild: s => Launcher.SeatBuildFor(s, builds, null));
+                seatBuild: s => SeatFields.SeatBuildFor(s, builds, null));
             for (int i = 0; i < OpenerSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 hostEnd.Session._PhysicsProcess(GameClock.FixedDt);
@@ -252,7 +252,7 @@ internal static class NetCustomPlaneSuites
             guestEnd = NetCombatSuites.Ends.Open(ctx,
                 spec.WithSeatedAircraft(StockAirframes.Node(guest.Airframe), own, null),
                 guestLaunch.Transport, isHost: false, HostSeed + 1, null, StockAirframes.Nodes,
-                seatBuild: s => Launcher.SeatBuildFor(s, null, guestDoor));
+                seatBuild: s => SeatFields.SeatBuildFor(s, null, guestDoor));
             ctx.Check(hostEnd.Built && guestEnd.Built, $"[flight] both sessions build ({hostEnd.Built}, {guestEnd.Built})");
             if (!hostEnd.Built || !guestEnd.Built)
             {

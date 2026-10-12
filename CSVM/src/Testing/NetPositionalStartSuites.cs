@@ -80,6 +80,7 @@ internal static class NetPositionalStartSuites
     internal static void PositionalStart(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == Cm02Seq)
@@ -149,7 +150,7 @@ internal static class NetPositionalStartSuites
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(2627));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = SessionAirframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = SessionAirframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = SessionAirframes[1] },
         };
         var report = new StringBuilder();
@@ -193,7 +194,7 @@ internal static class NetPositionalStartSuites
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2626));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
         var hostNet = NetSession.Host(mesh[0], roster, Seed, null, Airframes);

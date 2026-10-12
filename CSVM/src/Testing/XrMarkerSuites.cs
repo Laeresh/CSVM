@@ -44,7 +44,7 @@ internal static class XrMarkerSuites
                 new(WorldMarkStyle.Selected, boxAt, TargetHud.HudRed, "", target, true, 0),
                 new(WorldMarkStyle.Tagged, farAt, TargetHud.HudRed, "AI1", default, false, 0),
                 new(WorldMarkStyle.Tagged, rightAt, TargetHud.HudGreen, "Fury", default, false, 0),
-                new(WorldMarkStyle.Versus, asternAt, SplitScreen.PlayerColor(1), "P2", default, false, 0),
+                new(WorldMarkStyle.Tagged, asternAt, TargetHud.HudRed, "AI3", default, false, 0),
                 new(WorldMarkStyle.Tagged, leftBehindAt, TargetHud.HudRed, "AI2", default, false, 0),
             };
             var pipperTex = Utils.TextureUpload.Create(Image.CreateEmpty(8, 8, false, Image.Format.Rgba8));
@@ -125,6 +125,10 @@ internal static class XrMarkerSuites
         ctx.Host.AddChild(subject);
         var hud = TargetHud.Build(0, ctx.Camera, null!);
         ctx.Host.AddChild(hud);
+        // The pane's own mask, as a session gives the main camera; the head overlay's bit sits above
+        // the 20 a camera starts with.
+        uint cameraMask = ctx.Camera.CullMask;
+        ctx.Camera.CullMask = SplitScreen.PaneCullMask(cameraMask);
         try
         {
             var seat = Basis.FromEuler(new Vector3(0.05f, -2.3f, 0.1f));
@@ -154,7 +158,7 @@ internal static class XrMarkerSuites
             uint headset = SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer;
             ctx.Check((pane & headset) == headset && (mask & headset) == 0
                     && mask == (Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), Utils.GraphicsMode.Enhanced) & ~headset),
-                $"the picture's camera leaves out the headset's two layers the pane draws (0x{mask:X5} against 0x{pane:X5}) and nothing else");
+                $"the picture's camera leaves out the headset's two layers the pane draws (0x{mask:X8} against 0x{pane:X8}) and nothing else");
             ctx.Check(Flight.Camera.SpyglassView.DiscMask(pane, SplitScreen.OwnAirframeLayer(0), false)
                     == (pane & ~SplitScreen.OwnAirframeLayer(0) & ~SplitScreen.WorldFlareBand),
                 $"CONTROL: the flat picture's mask is the pane's less the own airframe and the world flare");
@@ -219,6 +223,7 @@ internal static class XrMarkerSuites
         }
         finally
         {
+            ctx.Camera.CullMask = cameraMask;
             hud.QueueFree();
             subject.QueueFree();
             markers.QueueFree();
