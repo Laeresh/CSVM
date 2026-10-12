@@ -1138,6 +1138,12 @@ public sealed class OriginalPresentation : IMenuPresentation
             }
         }
 
+        if (tab == "ctf" && host.Dogfight is { } flag)
+        {
+            flag.SetMissionType(Spec.DogfightMissionType.CaptureTheFlag);
+            NetDoorAid.SettleDogfight(host, guests);
+        }
+
         if (outlaw)
         {
             _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);

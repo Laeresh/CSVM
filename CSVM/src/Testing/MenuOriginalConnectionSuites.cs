@@ -2476,6 +2476,12 @@ internal static class MenuOriginalConnectionSuites
                 ctx.Check(boards.All(b => Draws(b, shipped) && !Draws(b, Deathmatch)),
                     $"{type} is described on both ends with its own line and not the Deathmatch's ({guest.Door.Dogfight!.Options.MissionType})");
             }
+
+            if (type == DogfightMissionType.CaptureTheFlag)
+            {
+                FlagHomeStandsClear(ctx, host, "the host");
+                FlagHomeStandsClear(ctx, guest, "the guest");
+            }
         }
 
         host.Door.Dogfight!.SetMissionType(DogfightMissionType.Deathmatch);
@@ -2492,6 +2498,56 @@ internal static class MenuOriginalConnectionSuites
         {
             ctx.Check(back is { MissionType: (byte)DogfightMissionType.Deathmatch, RestrictTeams: false } && Draws(guest.Shell.Compose(), Deathmatch),
                 $"and back on a Deathmatch without teams the guest reads 10123 again ({back.MissionType}, {back.RestrictTeams})");
+        }
+    }
+
+    // Capture the Flag's own-flag-home box and label, measured as the view sets them, cross no
+    // other control or line on Mission Options. The control is the box's old place under
+    // the team boxes, 15 above Limited Lives, where the label ran into the Lives heading.
+    private static void FlagHomeStandsClear(TestContext ctx, End end, string who)
+    {
+        var board = end.Shell.Compose();
+        var box = Row(end.Shell, OriginalLobbyScreen.FlagHomeKey);
+        var lives = Row(end.Shell, OriginalLobbyScreen.LimitedLivesKey);
+        var label = board.Lines.FirstOrDefault(line => line.Text == "Own Flag Home to Capture");
+        ctx.Check(box != null && lives != null && label != null,
+            $"{who}'s Capture the Flag page draws the own-flag-home box and its label ({box != null}, {label != null})");
+        if (box == null || lives == null || label == null)
+        {
+            return;
+        }
+
+        // At the authored page size: the suite's own viewport is no window a pilot sizes.
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            Godot.Font FontOf(BoardLine line) => (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            Godot.Rect2 Drawn(BoardLine line)
+            {
+                var font = FontOf(line);
+                var set = ComposedBoardView.Fitted(fit, font, line);
+                var wide = ComposedBoardView.MeasureBox(fit, font, set.Size)(set.Text, set.Width > 0f ? set.Width : 100000f);
+                return new Godot.Rect2(line.X, line.Y, wide.X, wide.Y);
+            }
+
+            var footprint = Drawn(label).Merge(new Godot.Rect2(box.X, box.Y, box.Height, box.Height));
+            ctx.Check(footprint.End.X <= box.X + box.Width,
+                $"{who}'s label ends inside its row, which ends at the page's edge ({footprint.End.X:0.0} against {box.X + box.Width:0}, {label.Size:0.0} px)");
+            var others = end.Shell.Rows.Where(row => row.Key != box.Key && row.Visible)
+                .Select(row => (row.Key, Rect: new Godot.Rect2(row.X, row.Y, row.Width, row.Height)))
+                .Concat(board.Lines.Where(line => line != label && line.Text.Length > 0).Select(line => (Key: line.Text, Rect: Drawn(line))))
+                .ToList();
+            string Crossed(Godot.Rect2 at) => string.Join(", ", others.Where(other => other.Rect.Intersects(at)).Select(other => other.Key));
+
+            string crossed = Crossed(footprint);
+            ctx.Check(crossed.Length == 0, $"{who}'s own-flag-home box and label at {footprint} cross nothing ({crossed})");
+            string old = Crossed(new Godot.Rect2(footprint.Position + new Godot.Vector2(lives.X - box.X, lives.Y - 15f - box.Y), footprint.Size));
+            ctx.Check(old.Length > 0, $"ABLE-TO-FAIL CONTROL: the same box at its old place under the team boxes crosses {old}");
+        }
+        finally
+        {
+            view.Free();
         }
     }
 

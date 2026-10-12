@@ -1543,14 +1543,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, rules));
         rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, rules && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
         // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
-        // mail(5) and mail(1109) do. The remake's own-flag-home option stands under the boxes.
+        // mail(5) and mail(1109) do. The remake's own-flag-home option stands beside the Teams
+        // heading, the column's one clear line, and runs to the page's right edge.
         bool ctf = DogfightLobby.IsCtf(options);
         bool fixedTeams = DogfightLobby.FixesTeams(options);
         rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, rules && !fixedTeams));
         bool counts = rules && options.RestrictTeams && !fixedTeams;
         if (ctf)
         {
-            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 241f, PageY + 177f, 180f, 11f, live));
+            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 290f, PageY + 114f, 168f, 11f, live));
         }
 
         rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
@@ -2205,10 +2206,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         else if (id != 0)
         {
             float lift = row.Key == AutoRespawnKey ? 3f : 2f;
-            layers.Lines.Add(_text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
+            var line = _text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
                 row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or TeamsKey or FlagHomeKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
                     ? Black
-                    : TabDisabled));
+                    : TabDisabled);
+
+            // A pixel under its siblings, the own-flag-home label ends inside the page beside the
+            // Teams heading. A fixed size, so it scales with the window as its siblings do.
+            layers.Lines.Add(row.Key == FlagHomeKey ? line with { Size = line.Size - 1f } : line);
         }
     }
 
