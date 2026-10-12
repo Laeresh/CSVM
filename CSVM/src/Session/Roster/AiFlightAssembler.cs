@@ -311,9 +311,10 @@ internal sealed class AiFlightAssembler
     /// the same skill tables, and the airframe's ranges. Its nine ratings are a personality rolled
     /// on <see cref="Rng.Bots"/> and shifted by <paramref name="tier"/> (<see cref="BotSeats.Ratings"/>);
     /// <c>--ai-attack=</c> pins them instead. The human path builds the seat's aeroplane, so no tier
-    /// reaches its hull, fit or spawn. No world AI passes here, so only a bot launches on the
-    /// wingman rule with no roll.</summary>
-    public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team, Net.NetBotSkill tier)
+    /// reaches its hull, fit or spawn. Only a bot launches on the wingman rule with no roll. A race
+    /// seat (<paramref name="arms"/> of none) keeps no gunner and no ordnance, so it takes no quarry.</summary>
+    public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team, Net.NetBotSkill tier,
+        SeatArms arms = SeatArms.Stock)
     {
         var ratings = BotSeats.Ratings(BotSeats.Personality(Rng.Stream(Rng.Bots).Randi()), tier);
         // Already shifted, so the spawn's own difficulty is the unshifting middle tier, whatever the
@@ -322,6 +323,12 @@ internal sealed class AiFlightAssembler
             AttackRating: _policy.AiAttackSkill ?? SeatRating,
             RosterSkills: _policy.AiAttackSkillExplicit ? null : ratings, Difficulty: Difficulty.Hard);
         PreparePilot(spawn, stats, Rng.Bots);
+        if (arms == SeatArms.None)
+        {
+            pilot.Gunner = null;
+            pilot.Rocketeer = null;
+        }
+
         if (pilot.Gunner is { } gunner)
         {
             gunner.PlayersPreferred = false;   // a Dogfight ranks a person and a bot alike

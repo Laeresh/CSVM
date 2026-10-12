@@ -534,7 +534,7 @@ internal sealed class OriginalBotPanel
     private void ComposeBlock(BoardLayers layers)
     {
         layers.Lines.Add(_text.Line(-1, "Bots", PageX, BlockY, 0f, Black, faceId: HeadingFace));
-        string hint = _setup.Bots.Count > 0 ? "Dogfight only. Pick a bot to edit it." : "Dogfight only. Add one to fly against.";
+        string hint = _setup.Bots.Count > 0 ? "Dogfight or stunt race. Pick a bot to edit it." : "Dogfight or stunt race. Add one to fly against.";
         layers.Lines.Add(_text.Line(-1, hint, PageX + 50f, BlockY + 3f, 0f, Black, faceId: HintFace));
     }
 

@@ -545,7 +545,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     // Whether the race time control shows. It is read fresh on every build, so a seat joining or
     // leaving and a mission type change both reach it on the next frame.
-    private bool RaceTimeShown => _instantAction.OffersRaceWindow(_setup.Seats.Count);
+    private bool RaceTimeShown => _instantAction.OffersRaceWindow(_setup.FieldPilots);
 
     // The remake-only box the page hides right now, exactly one of the two. A race spends no
     // lives, so the lives box gives way while the race time box shows.
@@ -948,7 +948,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // would fill.
     private void AddWave(MenuLayoutScreen screen, List<OriginalRow> rows, int wave)
     {
-        bool counted = !_instantAction.TakesNoWaves(_setup.Seats.Count);
+        bool counted = !_instantAction.TakesNoWaves(_setup.FieldPilots);
         bool configured = counted && _instantAction.Waves[wave].Count > 0;
         string n = wave.ToString(CultureInfo.InvariantCulture);
         AddDropdown(screen, rows, WaveKeyPrefixes[0] + n, live: counted);
@@ -1231,7 +1231,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 return _instantAction.BuildExit(new[]
                 {
                     new MenuSeatChoice(pilot.Node, Array.Empty<int>(), fit.IsStock ? null : fit, pilot.Custom),
-                });
+                }, bots: _setup.Bots.LaunchEntries());
             case ExitKey:
                 _host.Open(OriginalScreen.TopLevel);
                 return null;

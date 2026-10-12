@@ -264,12 +264,13 @@ internal static class SeatFields
         return names;
     }
 
-    /// <summary>A local Dogfight's seat roster: its panes, then the spec's bots (the command line's or
-    /// the join board's), all flown here with no wire. Null without bots, so such a match keeps its
-    /// panes as its seats. Random planes and blank callsigns are drawn as a host draws them.</summary>
+    /// <summary>A local Dogfight's or stunt race's seat roster, flown here with no wire. Its panes come
+    /// first, then the spec's bots, the command line's or the join board's. Null without bots, so such a
+    /// launch keeps its panes as its seats. Random planes and blank callsigns are drawn as a host draws
+    /// them.</summary>
     internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, string messagesPath)
     {
-        if (!spec.Versus || spec.VsBots.Count == 0)
+        if (spec.VsBots.Count == 0)
         {
             return null;
         }

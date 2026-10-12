@@ -182,13 +182,14 @@ lines**.
 - `--vs-no-respawn` (with `--vs`, a downed pilot stays on the crash camera until it presses the
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
-- `--vs-bots=N` (with `--vs`, seat N bots after this machine's panes, or with `--net-host` after
-  the guests: a Random stock plane, veteran, no team, and a callsign drawn from the shipped pilot
-  names. This machine flies them, and a host's roster carries them, so a guest passes no flag; one
-  passed there, or beside a local `--ctf` or `--zvz`, is ignored with a warning. A field past 16 seats is cut with a warning, and guests
+- `--vs-bots=N` (with `--vs` or `--stunt`, whose bots race the course: seat N bots after this
+  machine's panes, or with `--net-host` after the guests: a Random stock plane, veteran, no team,
+  and a callsign drawn from the pilot names. This machine flies them and a host's roster carries
+  them, so a guest passes no flag; one passed there, or beside a local `--ctf` or `--zvz`,
+  is ignored with a warning. Past 16 seats the field is cut, warned, and guests
   that fill it leave the last bots out. `--vs-bot=` entries take the first places. A menu launch
-  seats the join board's bots instead)
-- `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs`, local or
+  seats its join board's bots)
+- `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs` or `--stunt`, local or
   `--net-host`, one bot per entry, ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
   `player_fury`, or `random` or empty for Random; `skill=` takes `--difficulty=`'s words or 0-2,
   default veteran; `team=` a lobby team 0-16, the command line's pilots flying on 0; `name=` the

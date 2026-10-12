@@ -1125,7 +1125,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             field.SetBotSkill(field.Bots[0].Id, NetBotSkill.Ace);
             if (tab == "race")
             {
-                // A Stunt Race over those rows, which stand grounded with the bot controls greyed.
+                // A Stunt Race over those rows, which fly it as the course's bots.
                 field.SetMissionType(Spec.DogfightMissionType.StuntRace);
             }
 

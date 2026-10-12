@@ -58,7 +58,7 @@ public class JoinBoardBotTests
         Assert.Equal(1, setup.Pilots(MenuMode.Free));
         Assert.Null(setup.BuildExit("C1", MenuMode.Free, _ => Array.Empty<int>()).Bots);
 
-        // A Capture the Flag, Zeppelin or Stunt Race spec, and a Free Flight one, carry none.
+        // A Capture the Flag or Zeppelin spec, and a Free Flight one, carry none; a Stunt Race races them.
         var cli = SessionSpec.Parse(Array.Empty<string>());
         var bots = setup.Bots.LaunchEntries();
         Assert.Empty(SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Free, bots: bots).VsBots);
@@ -66,7 +66,7 @@ public class JoinBoardBotTests
             missionType: DogfightMissionType.CaptureTheFlag, bots: bots).VsBots);
         Assert.Empty(SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus,
             missionType: DogfightMissionType.ZeppelinVsZeppelin, bots: bots).VsBots);
-        Assert.Empty(SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Stunt,
+        Assert.NotEmpty(SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Stunt,
             missionType: DogfightMissionType.StuntRace, bots: bots).VsBots);
         Assert.NotEmpty(SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus,
             missionType: DogfightMissionType.Deathmatch, bots: bots).VsBots);

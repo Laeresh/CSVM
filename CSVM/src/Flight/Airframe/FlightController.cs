@@ -3822,6 +3822,7 @@ public partial class FlightController : Node3D
     {
         IsHumanPiloted = IsHumanPiloted,
         IsBotSeat = IsBotSeat,
+        OnRail = IsBotSeat && Pilot is { RailPose: not null },
         VelocityDir = _model.VelocityDir,
         Speed = _model.Speed,
         Pose = GlobalTransform,

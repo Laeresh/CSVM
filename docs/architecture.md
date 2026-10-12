@@ -233,6 +233,7 @@ rows).
 - `src/Flight/Ai/GunnerAcquisition.cs`, the AI gunner's target acquisition: the decoded hold, the four-pool ranked sweep and the gasbag ordnance gate.
 - `src/Flight/Ai/AiWeaponsDrive.cs`, the AI's per-tick weapons drive: the gunner's acquisition and lead solve, then the rocketeer's pylon walk on the same target.
 - `src/Flight/Ai/CtfBotObjective.cs`, a Capture the Flag bot's order each step: carry home, chase the carrier, take a floating flag, defend or attack.
+- `src/Flight/Ai/StuntBotObjective.cs`, a stunt race bot's way round the course: steer for the next zone, run it on its ribbon, fluff by tier.
 - `src/Flight/Ai/ZvzBotObjective.cs`, a Zeppelin vs Zeppelin bot's target each step: its hull's attacker, its pursuer, then the other hull's parts by loadout.
 - `src/Flight/Ai/PursuitQuarry.cs`, the flight law's one-step snapshot of the standing target of any class: an aircraft, a turret or a zeppelin part.
 - `src/Flight/Ai/AiNetFollower.cs`, walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
@@ -794,6 +795,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/VersusDirector.cs`, the engine side of one Dogfight: the match and its scoring, the respawn rotation and grants, the host's match state, the rematch and the team modes.
 - `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
 - `src/Session/World/BotOrderLog.cs`, which bot order changes a team mode's host logs, a capped line per seat.
+- `src/Session/World/StuntRaceBots.cs`, the stunt race bots a machine flies, stepped on their objectives and rerun while the window is open.
 - `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.
 - `src/Session/World/RearmRuntime.cs`, the multiplayer rearm bases in a Dogfight: each machine's own seats restored in full on entering a base that serves them.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.

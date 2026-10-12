@@ -190,7 +190,8 @@ public sealed class PlayerSetupFeature : IMenuFeature
     public static int MinimumSeats(MenuMode mode) => mode == MenuMode.Versus ? 2 : 1;
 
     /// <summary>The pilots <paramref name="mode"/> counts against <see cref="MinimumSeats"/>: the
-    /// seats and, for a Dogfight, the bot rows. Bots fly no other mode.</summary>
+    /// seats and, for a Dogfight, the bot rows. A Stunt Flying run carries the rows too, through its own
+    /// exit (<see cref="InstantActionFeature.BuildExit"/>), but needs none to launch.</summary>
     public int Pilots(MenuMode mode) => mode == MenuMode.Versus ? FieldPilots : _seats.Count;
 
     /// <summary>Adds a bot row on a Random plane at veteran, refused on a full field.</summary>

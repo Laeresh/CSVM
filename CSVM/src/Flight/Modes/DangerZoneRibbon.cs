@@ -205,6 +205,15 @@ public sealed class DangerZoneRun
         }
     }
 
+    /// <summary>A run joined mid-ribbon, its cursor at <paramref name="segment"/> and
+    /// <paramref name="t"/> metres into it: a stunt race bot returned onto the route after a crash.</summary>
+    public DangerZoneRun(DangerZoneRibbon ribbon, bool reversed, int segment, float t)
+        : this(ribbon, reversed)
+    {
+        Segment = Math.Clamp(segment, 0, ribbon.Segments.Count - 1);
+        T = Math.Clamp(t, 0f, ribbon.Segments[Segment].Length);
+    }
+
     public DangerZoneRibbon Ribbon { get; }
 
     /// <summary>Entered from the far vertex, so the cursor walks the segments backwards.</summary>

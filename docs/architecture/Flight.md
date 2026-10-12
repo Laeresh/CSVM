@@ -606,6 +606,14 @@ team, or attacks the enemy flag at its base. `CtfPilot` is the seat snapshot it 
 fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host. Rule and limits:
 [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md); read `CtfBotObjectiveTests.cs`.
 
+## src/Flight/Ai/StuntBotObjective.cs
+One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
+zones in course order, a free steer for a lead-in point short of the next zone's nearer ribbon end,
+and inside the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers' approach
+and rail. Its tier sets `CruiseThrottle` and the odds of a fluff, a pass over the entry and another
+try. `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
+[../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots"; read `StuntBotObjectiveTests.cs`.
+
 ## src/Flight/Ai/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
 the nose axis of an aircraft or zero for a turret or structure, the aircraft-only facts the merge
@@ -1525,7 +1533,8 @@ off-engine against a synthetic world query and a scriptable effects sink.
 
 ## src/Flight/Airframe/AircraftContactSweep.cs
 Contact detection for one aircraft over the `IWorldQuery` seam, holding no node: `Detect` sweeps the
-airframe hulls for a person's rule or the def's collision probes for world AI, with the
+airframe hulls for a person's rule or the def's collision probes for world AI, one origin point on
+a bot seat's danger-zone rail (`ContactConditions.OnRail`), with the
 anti-tunnelling centre ray behind a miss, and fills one `ContactReport`. The struck node comes back
 beside the report, never in it. `HitWorld` is the single ray a falling wreck lands on, and
 `ShowProbe`/`DrawProbe` the `--debug-collision` lines. It decides nothing about a contact: read

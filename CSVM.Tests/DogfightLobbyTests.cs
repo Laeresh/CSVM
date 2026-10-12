@@ -1184,40 +1184,26 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
-    public void BotRowsFlyEveryTypeButTheStuntRace()
+    public void BotRowsFlyEveryType()
     {
         var (host, _, _) = Lobbies(1);
         Assert.True(host.AddBot());
-        Assert.False(host.BotsGrounded);
         Assert.Single(host.LaunchBots);
 
-        // Zeppelin vs Zeppelin and Capture the Flag give their bots the hull and flag objectives.
-        Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
-        Assert.True(host.AddBot());
-        Assert.False(host.BotsGrounded);
-        Assert.Equal(2, host.LaunchBots.Count);
-        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
-        Assert.True(host.AddBot());
-        Assert.False(host.BotsGrounded);
-        Assert.Equal(3, host.LaunchBots.Count);
-
-        // A Stunt Race flies no bot: no new row, and the launch is held.
-        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
-        Assert.False(host.AddBot());
-        Assert.True(host.BotsGrounded);
-        Assert.Empty(host.LaunchBots);
-        Assert.Equal(3, host.Bots.Count);
-
-        // ABLE-TO-FAIL CONTROL: removing the rows, or going back to Capture the Flag, frees the launch.
-        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
-        Assert.False(host.BotsGrounded);
-        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
-        while (host.Bots.Count > 0)
+        // Zeppelin vs Zeppelin, Capture the Flag and the Stunt Race give their bots objectives. Each
+        // takes a new row and launches every row standing.
+        int rows = 1;
+        foreach (var type in new[] { DogfightMissionType.ZeppelinVsZeppelin, DogfightMissionType.CaptureTheFlag, DogfightMissionType.StuntRace })
         {
-            Assert.True(host.RemoveBot(host.Bots[0].Id));
+            Assert.True(host.SetMissionType(type));
+            Assert.True(host.AddBot());
+            rows++;
+            Assert.Equal(rows, host.LaunchBots.Count);
         }
 
-        Assert.False(host.BotsGrounded);
+        // ABLE-TO-FAIL CONTROL: the rows a Stunt Race launches are the rows standing, so a removed one goes.
+        Assert.True(host.RemoveBot(host.Bots[0].Id));
+        Assert.Equal(rows - 1, host.LaunchBots.Count);
     }
 
     [Fact]

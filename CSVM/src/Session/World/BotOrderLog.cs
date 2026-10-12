@@ -4,7 +4,7 @@ namespace CSVM.Session.World;
 
 /// <summary>Which bot order changes a match logs: one line each time a bot seat's reason changes,
 /// at most <see cref="LinesPerSeat"/> per seat. A long match then does not log every run or torpedo
-/// cycle. The Zeppelin vs Zeppelin and Capture the Flag host steps share it.</summary>
+/// cycle. The Zeppelin vs Zeppelin, Capture the Flag and stunt race bot steps share it.</summary>
 internal sealed class BotOrderLog
 {
     /// <summary>Order changes logged per bot seat.</summary>

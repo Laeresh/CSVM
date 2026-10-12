@@ -551,13 +551,7 @@ internal sealed class HumanFlightAdapter
                 // Racing: no per-player splits board. The race's shared board covers the whole
                 // window when it ends, in Instant Action too, and the run HUD carries the live
                 // leaderboard meanwhile. The race hears this run's own clock, zones and finish.
-                var racer = race.Add(pi, planeDisplay, scoreKey);
-                if (seat is { Callsign.Length: > 0 })
-                    racer.Callsign = seat.Callsign;
-                if (_human.RaceFeed is { } feed)
-                    feed(pi, run);
-                else
-                    race.Follow(pi, run);
+                JoinRace(race, pi, planeDisplay, seat, run, scoreKey);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
                 // The pane's held scores stand across the top, so the two top lines step aside.
@@ -585,13 +579,24 @@ internal sealed class HumanFlightAdapter
                 WhatSuffix += $" [stunt: {controller.Stunt.TotalCount} zones]";
             }
         }
+        else if (swap == null && botPilot != null && _human.StuntZones != null && _human.Race is { } botRace)
+        {
+            // A bot this machine flies runs its own copy of the course, timed here as a local seat's
+            // run is, behind the same count. It records no best of its own.
+            var run = _human.StuntZones.ForAnotherPlayer();
+            run.LogTag = tag;
+            controller.Stunt = run;
+            controller.Race = botRace;
+            controller.RerunCount = _human.RerunCount;
+            // Nobody presses R for it, so a crash returns it to its last zone unattended.
+            controller.AutoRespawnAfter = AircraftLifecycle.AutoRespawnDelay;
+            JoinRace(botRace, pi, planeDisplay, seat, run);
+        }
         else if (swap == null && paneless && _human.StuntZones != null && _human.Race is { } remoteRace)
         {
             // A seat flown elsewhere still races on every board here. It runs no course on this
             // machine: its own machine times it, and the host's line feeds this record.
-            var racer = remoteRace.Add(pi, planeDisplay);
-            if (seat is { Callsign.Length: > 0 })
-                racer.Callsign = seat.Callsign;
+            JoinRace(remoteRace, pi, planeDisplay, seat, run: null);
         }
 
         // Every versus mode (--vs): the per-pane match timer/K-D/leader line, bound to the match
@@ -663,7 +668,7 @@ internal sealed class HumanFlightAdapter
         {
             botPilot.TargetHeadingDeg = AiPilot.HeadingDegOf(start.LookAt - start.Pos);
             botPilot.TargetAltitude = start.Pos.Y;
-            _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill);
+            _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill, arms);
             // A world AI's roster logs every mode change and a bot's logs none. The lay-off assist
             // is logged alone, the one change a sortie's log is read for: whether bots ease off people.
             if (botPilot.Machine is { } modes)
@@ -853,6 +858,22 @@ internal sealed class HumanFlightAdapter
     private int[]? PadsOf(int localPlayer) => _human.PadAssignment is not { } assignment
         ? null
         : localPlayer >= 0 && localPlayer < assignment.Length ? assignment[localPlayer] : Array.Empty<int>();
+
+    // A seat's racer on this machine's race, named by its network callsign where it has one. A run
+    // flown here feeds it, through the race link on a network race; a seat flown elsewhere has none.
+    private void JoinRace(StuntRace race, int pi, string planeDisplay, Net.NetSeat? seat, StuntMission? run,
+        string scoreKey = "")
+    {
+        var racer = race.Add(pi, planeDisplay, scoreKey);
+        if (seat is { Callsign.Length: > 0 })
+            racer.Callsign = seat.Callsign;
+        if (run == null)
+            return;
+        if (_human.RaceFeed is { } feed)
+            feed(pi, run);
+        else
+            race.Follow(pi, run);
+    }
 
     public readonly record struct AssemblyState(int MeshInstances, string WhatSuffix,
         ulong PaintRngState, IReadOnlyList<FlightStart>? Starts);

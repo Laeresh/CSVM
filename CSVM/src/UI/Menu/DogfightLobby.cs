@@ -213,20 +213,10 @@ public sealed class DogfightLobby
     /// Ready, the gate its options have.</summary>
     public bool EditsBots => IsHost && !Ready;
 
-    /// <summary>Whether the mission type takes bots at all. Every Dogfight type but the Stunt Race
-    /// does, Capture the Flag and Zeppelin vs Zeppelin through the bots' flag and hull objectives.
-    /// </summary>
-    public bool TakesBots => Options.MissionType is (byte)DogfightMissionType.Deathmatch
-        or (byte)DogfightMissionType.CaptureTheFlag or (byte)DogfightMissionType.ZeppelinVsZeppelin;
-
-    /// <summary>Whether bot rows stand under a type that takes none. LAUNCH! refuses until the host
-    /// removes them or picks a type that takes them.</summary>
-    public bool BotsGrounded => _bots.Count > 0 && !TakesBots;
-
-    /// <summary>The bot rows as the launch seats them. A Random plane is null, which the host draws
-    /// (<c>BotSeats.Resolve</c>), and a stock one is its node. Empty on a guest and under a type
-    /// that takes no bots.</summary>
-    public IReadOnlyList<VsBotEntry> LaunchBots => TakesBots ? _bots.LaunchEntries() : Array.Empty<VsBotEntry>();
+    /// <summary>The bot rows as the launch seats them, under every mission type. Capture the Flag,
+    /// Zeppelin vs Zeppelin and the Stunt Race fly them on their bot objectives. A Random plane is null,
+    /// which the host draws (<c>BotSeats.Resolve</c>), and a stock one is its node. Empty on a guest.</summary>
+    public IReadOnlyList<VsBotEntry> LaunchBots => _bots.LaunchEntries();
 
     /// <summary>Whether a guest has heard the host's options yet. Always true on the host.</summary>
     public bool HasOptions => IsHost || _wire.DogfightOptions.HasValue;
@@ -700,11 +690,10 @@ public sealed class DogfightLobby
     /// <summary>Adds a bot row on a Random plane at veteran, its callsign drawn from
     /// <see cref="CallsignPool"/> where no row holds it. It joins the team with the fewest pilots at
     /// this moment, the first created of a tie, or none while no team stands. Nothing moves it
-    /// afterwards but the host. Refused on a guest, while the host is Ready, on a full field and
-    /// under a type that takes no bots (<see cref="TakesBots"/>).</summary>
+    /// afterwards but the host. Refused on a guest, while the host is Ready and on a full field.</summary>
     public bool AddBot()
     {
-        if (!EditsBots || BotRoom == 0 || !TakesBots)
+        if (!EditsBots || BotRoom == 0)
         {
             return false;
         }

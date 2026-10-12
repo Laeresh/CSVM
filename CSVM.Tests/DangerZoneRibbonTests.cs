@@ -328,6 +328,25 @@ public class DangerZoneRibbonTests
     }
 
     [Fact]
+    public void ARejoinLocksOntoTheRibbonWhereItPassesTheWayTheNosePoints()
+    {
+        var ribbon = DangerZoneRibbon.FromPolyline("dzpath1", 1,
+            new[] { new Vector3(0f, 50f, 0f), new Vector3(0f, 50f, -100f), new Vector3(0f, 50f, -200f) });
+        var at = new Vector3(2f, 50f, -150f);
+        var pilot = new AiPilot { Machine = new AiModeMachine(new Random(1)) };
+        Assert.True(pilot.RejoinDangerZone(ribbon, at, Basis.Identity, new Vector3(0f, 0f, -70f), "test"));
+        Assert.Equal(AiMode.NavigatingDangerZone, pilot.Machine.Mode);
+        Assert.False(pilot.ZoneRun!.Reversed);
+        Assert.True(pilot.ZoneRun.Point.DistanceTo(new Vector3(0f, 50f, -150f)) < 1.5f);
+
+        // ABLE-TO-FAIL CONTROL: the nose the other way rides it backwards, and no machine takes none.
+        var back = new AiPilot { Machine = new AiModeMachine(new Random(1)) };
+        Assert.True(back.RejoinDangerZone(ribbon, at, new Basis(Vector3.Up, Mathf.Pi), new Vector3(0f, 0f, 70f), "test"));
+        Assert.True(back.ZoneRun!.Reversed);
+        Assert.False(new AiPilot().RejoinDangerZone(ribbon, at, Basis.Identity, Vector3.Zero, "test"));
+    }
+
+    [Fact]
     public void AnInterruptedRunResumesAsAnApproachAndTheRailIgnoresTheProbe()
     {
         var machine = new AiModeMachine(new Random(1)) { ProbeBlocked = (_, _) => "hill" };

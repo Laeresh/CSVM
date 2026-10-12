@@ -268,6 +268,8 @@ public partial class GameSession : Node3D
     // The stunt race (--stunt with several pilots), for the same reason: a rerun resets it rather
     // than each pilot's own run. Null outside a race.
     private StuntRace? _race;
+    // The race's bots this machine flies. Null outside a race or with none flown here.
+    private StuntRaceBots? _raceBots;
     // Who is holding the sim clock and why, shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
@@ -453,6 +455,13 @@ public partial class GameSession : Node3D
     /// <summary>The stunt race, null outside one. The launcher lands an ended network race's table
     /// in the lobby from it.</summary>
     internal StuntRace? Race => _race;
+
+    /// <summary>The race's bots this machine flies, for a suite to read; null with none.</summary>
+    internal StuntRaceBots? RaceBots => _raceBots;
+
+    /// <summary>The chapter world's animation runtime, for a suite that steps the world's doors
+    /// itself; null with no world.</summary>
+    internal AnimRuntime? WorldRuntime => _worldRuntime;
 
     /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
     internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
@@ -2157,6 +2166,7 @@ public partial class GameSession : Node3D
         if (race != null)
         {
             _race = race;
+            _raceBots = StuntRaceBots.For(race, _seatRigs, _wire.Seats);
             var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
             if (raceLink is { IsHost: false })
                 raceLink.Rerun = () => RerunRace(race);
@@ -3053,9 +3063,10 @@ public partial class GameSession : Node3D
         race.Rerun();
         _wire.Race?.CallRerun();
         IReadOnlyList<StartCountPhase>? opening = null;
-        foreach (var rig in _rigs)
+        // Every seat flown here, the bots among them; a seat flown elsewhere is its own machine's.
+        foreach (var rig in _seatRigs)
         {
-            if (rig.Controller is not { } seat)
+            if (rig.Controller is not { RemoteOwned: false } seat)
                 continue;
             seat.Stunt?.Reset();
             seat.StuntShots?.Reset();
@@ -3358,6 +3369,7 @@ public partial class GameSession : Node3D
         // match the two lists hold the same rigs.
         public void StepHumanAircraft(float dt)
         {
+            session._raceBots?.Step();
             foreach (var rig in session._seatRigs)
                 rig.Controller?.SimStep(dt);
             // After every seat: a run started this step was started inside the window it saw.

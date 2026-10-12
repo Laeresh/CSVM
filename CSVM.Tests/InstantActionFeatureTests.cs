@@ -230,6 +230,33 @@ public class InstantActionFeatureTests
     }
 
     [Fact]
+    public void AStuntRunCarriesTheJoinBoardsBotsWhichMakeItARace()
+    {
+        var ia = Feature();
+        ia.ApplyPreset(0);
+        ia.ConfirmEnvironment();
+        var seats = new[] { new MenuSeatChoice("player_fury", Array.Empty<int>()) };
+        var bots = new[] { new VsBotEntry("player_bhawk", Net.NetBotSkill.Ace, 0, "Racer") };
+        var squadron = ia.BuildExit(seats, bots: bots);
+        ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
+
+        // One seat and a bot make a race: the bots ride the exit, and the def flies no wingmen.
+        var stunt = ia.BuildExit(seats, bots: bots);
+        Assert.Same(bots, stunt.Bots);
+        Assert.Equal(0, stunt.InstantAction!.NumWingmen);
+        Assert.True(ia.NumWingmen > 0);
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), stunt.Chapter, new[] { "player_fury" },
+            stunt.Mode, stunt.InstantAction, bots: stunt.Bots);
+        Assert.True(spec.Stunt);
+        Assert.Equal(bots, spec.VsBots);
+
+        // ABLE-TO-FAIL CONTROL: a squadron mission carries no bots, and its spec seats none.
+        Assert.Null(squadron.Bots);
+        Assert.Empty(SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), squadron.Chapter, new[] { "player_fury" },
+            squadron.Mode, squadron.InstantAction, bots: bots).VsBots);
+    }
+
+    [Fact]
     public void TheExitCarriesTheEnvironmentsChapterTheModeAndTheBuiltDef()
     {
         var ia = Feature();

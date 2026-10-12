@@ -84,6 +84,8 @@ public static class Rng
     public const string Flags = "flags";
     // Zeppelin vs Zeppelin's radio variant picks (ZeppelinVersusRuntime), apart for the same reason.
     public const string ZeppelinVersus = "zvz";
+    // A stunt race bot's fluff draws (StuntRaceBots), apart for the same reason.
+    public const string StuntBots = "stuntbots";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

@@ -49,6 +49,12 @@ public readonly record struct ContactConditions
     /// ⚠ The entity cut and both shakes stay on <see cref="IsHumanPiloted"/>.</summary>
     public bool TakesPersonsContactRule => IsHumanPiloted || IsBotSeat;
 
+    /// <summary>Whether a bot seat's danger-zone rail writes the pose. The sweep then carries one
+    /// origin point, the probe every AI def resolves (docs/org/aiPilot.md "Stunt race bots"). World AI
+    /// already sweeps that probe, so only a bot seat sets it.
+    /// ⚠ Keep it for a bot seat: the ribbon threads slots its hull's wingtips strike.</summary>
+    public bool OnRail { get; init; }
+
     /// <summary>The striker's unit velocity, which sets the severity cosine against the contact
     /// normal.</summary>
     public Vector3 VelocityDir { get; init; }

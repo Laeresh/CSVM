@@ -167,6 +167,22 @@ public sealed class VsBotFlagTests
     }
 
     [Fact]
+    public void AStuntRaceSeatsBotsLocallyAndBesideTheHost()
+    {
+        foreach (var args in new[] { new[] { "--stunt", "--vs-bots=2" }, new[] { "--stunt", Host, "--vs-bots=2" }, new[] { "--stunt", "--ia=C1/IA1", "--vs-bots=2" } })
+        {
+            var s = SessionSpec.Parse(args);
+            Assert.Equal(2, s.VsBots.Count);
+            Assert.DoesNotContain(s.Warnings, w => w.Message.Contains("--vs-bot", StringComparison.Ordinal));
+        }
+
+        // ABLE-TO-FAIL CONTROL: the same bots on a free flight are refused.
+        var free = SessionSpec.Parse(new[] { "--fly", "--vs-bots=2" });
+        Assert.Empty(free.VsBots);
+        Assert.Contains(free.Warnings, w => w.Message.Contains("without --vs or --stunt", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void TheFieldIsCutToTheSeatsThisMachineLeaves()
     {
         var s = SessionSpec.Parse(new[] { "--vs", Host, "--players=4", "--vs-bots=20" });

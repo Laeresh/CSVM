@@ -14,6 +14,9 @@ internal sealed class AircraftContactSweep
 {
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
 
+    // The one origin probe a rail run sweeps (ContactConditions.OnRail).
+    private static readonly List<Vector3> OriginProbe = new() { Vector3.Zero };
+
     private readonly Func<IWorldQuery> _world;
     private ImmediateMesh? _probe;              // debug collision-probe line
 
@@ -49,7 +52,9 @@ internal sealed class AircraftContactSweep
     {
         var step = to - from;
         float len = step.Length();
-        bool hit = striker.TakesPersonsContactRule
+        bool hit = striker.OnRail
+            ? SweepProbes(from, step, attitude, OriginProbe, striker.ExcludeSelf, out contact, out hitBody)
+            : striker.TakesPersonsContactRule
             ? SweepAirframe(from, step, attitude, striker.Parts, striker.ExcludeSelf, out contact, out hitBody)
             : SweepProbes(from, step, attitude, striker.Stats?.CollisionProbes, striker.ExcludeSelf, out contact, out hitBody);
         if (!hit)

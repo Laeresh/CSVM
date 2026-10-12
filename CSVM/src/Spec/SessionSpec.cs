@@ -1912,8 +1912,8 @@ public sealed record SessionSpec
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line <paramref name="cli"/>,
     /// never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
     /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
-    /// are a screen's match rules, a Stunt Race's window among them, and <paramref name="bots"/> a local Deathmatch's join board
-    /// rows. ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever <c>--mission</c> says.
+    /// are a screen's rules, a Stunt Race's window among them, and <paramref name="bots"/> the
+    /// join board's rows a local Dogfight or stunt run seats. ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever <c>--mission</c> says.
     /// The type is all a guest hears of the host's mission.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
@@ -1927,9 +1927,10 @@ public sealed record SessionSpec
         bool ctf = type == DogfightMissionType.CaptureTheFlag;
         bool race = type == DogfightMissionType.StuntRace;
         bool deathmatch = mode == MenuMode.Versus && type == DogfightMissionType.Deathmatch;
+        bool stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt;
         return cli with
         {
-            VsBots = deathmatch && bots != null ? bots.ToArray() : Array.Empty<VsBotEntry>(),
+            VsBots = (deathmatch || stunt) && bots != null ? bots.ToArray() : Array.Empty<VsBotEntry>(),
             MissionType = type,
             FlagHomeToCapture = ctf && flagHomeToCapture,
             Mission = type switch
@@ -1951,7 +1952,7 @@ public sealed record SessionSpec
             // plane rather than to whatever the last session flew.
             PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
             Players = Mathf.Clamp(names.Length, 1, UI.Boards.SplitScreen.MaxPlayers),
-            Stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt,
+            Stunt = stunt,
             Versus = mode == MenuMode.Versus,
             VsKills = cli.VsKillsExplicit ? cli.VsKills : vsKills ?? cli.VsKills,
             VsTimeMinutes = cli.VsTimeExplicit ? cli.VsTimeMinutes : vsTimeMinutes ?? cli.VsTimeMinutes,
@@ -2703,7 +2704,7 @@ public sealed record SessionSpec
             return;
         }
 
-        string? refusal = !Versus ? "a Dogfight seats bots; ignoring them without --vs"
+        string? refusal = !Versus && !Stunt ? "a Dogfight or a stunt race seats bots; ignoring them without --vs or --stunt"
             : NetJoin != null ? "a guest flies the host's roster, whose bots the host seats; ignoring them"
             : MissionType == DogfightMissionType.CaptureTheFlag && NetHostPort == null ? "Capture the Flag runs its flags over the wire alone, so it seats bots only beside --net-host; ignoring them"
             : MissionType == DogfightMissionType.ZeppelinVsZeppelin && NetHostPort == null ? "Zeppelin vs Zeppelin runs over the wire alone, so it seats bots only beside --net-host; ignoring them"

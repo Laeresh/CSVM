@@ -297,8 +297,8 @@ public sealed class InstantActionFeature : IMenuFeature
     public void SelectRaceWindow(int index) =>
         RaceWindowMinutes = RaceWindowRows[Index(index, RaceWindowRows.Length, nameof(index))];
 
-    /// <summary>Whether the setup offers the race window: stunt flying with more than one seat
-    /// joined, the one setup that launches a race.</summary>
+    /// <summary>Whether the setup offers the race window: stunt flying with more than one pilot, the
+    /// one setup that launches a race. The join board's bots count as pilots.</summary>
     public bool OffersRaceWindow(int joinedSeats) => MissionType.Key == StuntKey && joinedSeats > 1;
 
     /// <summary>Whether the setup takes no waves and no wingmen with <paramref name="joinedSeats"/>
@@ -483,9 +483,11 @@ public sealed class InstantActionFeature : IMenuFeature
     }
 
     /// <summary>The typed exit for the confirmed seats, in seat order. It carries the environment's
-    /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. Throws when the gate is closed or a
-    /// seat names no plane, so a half-built launch cannot leave the menu.</summary>
-    public LaunchExit BuildExit(IReadOnlyList<MenuSeatChoice> seats, string? playerPlane = null)
+    /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. A Stunt Flying
+    /// run carries the join board's <paramref name="bots"/>, which race it. Throws when the gate is
+    /// closed or a seat names no plane, so a half-built launch cannot leave the menu.</summary>
+    public LaunchExit BuildExit(IReadOnlyList<MenuSeatChoice> seats, string? playerPlane = null,
+        IReadOnlyList<VsBotEntry>? bots = null)
     {
         ArgumentNullException.ThrowIfNull(seats);
         if (Refusal(seats.Count, seats.Count) is { } refusal)
@@ -501,8 +503,11 @@ public sealed class InstantActionFeature : IMenuFeature
             }
         }
 
-        return new LaunchExit(Environment.Code, seats, Mode, BuildDef(seats.Count, playerPlane),
-            WingmanLoadout: LaunchWingmanFit(seats.Count));
+        // The bots fly a stunt run alone, and they make it a race, so they count as pilots there.
+        var racers = MissionType.Key == StuntKey && bots is { Count: > 0 } ? bots : null;
+        int pilots = seats.Count + (racers?.Count ?? 0);
+        return new LaunchExit(Environment.Code, seats, Mode, BuildDef(pilots, playerPlane),
+            WingmanLoadout: LaunchWingmanFit(pilots), Bots: racers);
     }
 
     /// <summary>Puts every field back to the screen's opening state. That is the first

@@ -210,10 +210,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>Lets the picked bot go, back to the pilot's own plane.</summary>
     public const string BotDoneKey = "MPL_BOT_B_DONE";
 
-    /// <summary>The line a LAUNCH! with bot rows under a type that takes none raises, the remake's
-    /// own.</summary>
-    public const string BotsGroundedLine = "Bots do not fly a Stunt Race. Remove them to launch this mission type.";
-
     /// <summary>The line pinned over a guest's chat while its host flies a match the guest joined
     /// too late for. The remake's own: no langui line says what happens next.</summary>
     public const string MatchInProgress = "The host's match is under way. You take a seat when it ends.";
@@ -872,13 +868,6 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 if (lobby is { CanLaunch: true } && lobby.LaunchRefusal is var refusal and not TeamLaunchRefusal.None)
                 {
                     RefuseLaunch(refusal);
-                    return null;
-                }
-
-                if (lobby is { CanLaunch: true, BotsGrounded: true })
-                {
-                    _host.RaiseDialog(BotsGroundedLine, DialogIcon.Warning,
-                        new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), null));
                     return null;
                 }
 
@@ -1544,7 +1533,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         // The remake's bot controls, in the left column's free space under the type's description.
         // A guest's draw greyed, as its options do.
-        bool bots = lobby.EditsBots && lobby.TakesBots;
+        bool bots = lobby.EditsBots;
         rows.Add(_text.Strip(AddBotKey, SmallArt, PageX + 20f, BotsY + 20f, bots && lobby.BotRoom > 0, 1, 74f, 37f));
         rows.Add(_text.Strip(FillKey, SmallArt, PageX + 98f, BotsY + 20f, bots && lobby.FieldSeats < _fillTo, 1, 74f, 37f));
         rows.Add(Box(FillCountKey, BoxText(FillCountKey, lobby), PageX + 176f, BotsY + 27f, 28f, 22f, bots));

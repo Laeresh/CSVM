@@ -88,6 +88,11 @@ public sealed class AiPilot
     /// danger-zone run"). Shared across pilots, since lanes are occupancy-counted.</summary>
     public DangerZoneRibbons? DangerZones;
 
+    /// <summary>A stunt race bot's lever, or null. When set, the lever holds it in place of the law's
+    /// walk, except on the emergency climb-out. Its tier sets it (<see cref="StuntBotObjective"/>).
+    /// </summary>
+    public float? CruiseThrottle;
+
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
@@ -345,6 +350,34 @@ public sealed class AiPilot
         }
     }
 
+    /// <summary>Starts a run on <paramref name="ribbon"/> for a pilot at <paramref name="at"/>, from its
+    /// far end when <paramref name="farEnd"/>. The approach and the rail follow, as from a tagged net
+    /// node. False with no mode machine, which a run needs.</summary>
+    public bool FlyDangerZone(DangerZoneRibbon ribbon, bool farEnd, Vector3 at, string why)
+    {
+        if (Machine is not { } machine)
+            return false;
+        ZoneRun?.Release();
+        StartDangerZoneRun(new DangerZoneRun(ribbon, farEnd), at, machine, why);
+        return true;
+    }
+
+    /// <summary>Locks the pilot onto <paramref name="ribbon"/> where it passes nearest, running the
+    /// way the nose points. A pilot set back onto a route so rides it out of the zone. The lock is at
+    /// once, since the approach's crash check would climb it out of a slot. False with no machine.</summary>
+    public bool RejoinDangerZone(DangerZoneRibbon ribbon, Vector3 at, Basis attitude, Vector3 velocity, string why)
+    {
+        if (Machine is not { } machine)
+            return false;
+        var (segment, t) = ribbon.NearestTo(at);
+        bool reversed = ribbon.TangentAt(segment, t).Dot(-attitude.Z) < 0f;
+        ZoneRun?.Release();
+        StartDangerZoneRun(new DangerZoneRun(ribbon, reversed, segment, t), at, machine, why);
+        _rail = new DangerZoneRail(ZoneRun!, at, attitude, velocity, velocity.Length());
+        machine.Enter(AiMode.NavigatingDangerZone, $"'{ribbon.Name}' rejoined ({why})");
+        return true;
+    }
+
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
     /// state and this instance's fields (no clocks, and the only randomness is
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic. The
@@ -464,6 +497,8 @@ public sealed class AiPilot
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
             emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, stationKeeping,
             openAltitudeBand);
+        if (CruiseThrottle is { } cruise && !emergency)
+            input.Throttle = cruise;
         Throttle = input.Throttle;
         return input;
     }
@@ -632,7 +667,7 @@ public sealed class AiPilot
         {
             return;
         }
-        StartDangerZoneRun(ribbon, farEnd, model, machine, "tagged node");
+        StartDangerZoneRun(new DangerZoneRun(ribbon, farEnd), model.Position, machine, "tagged node");
     }
 
     // The proximity entry (FUN_0041d9f0's first statement, 0x0041da3e, into FUN_004210e0's
@@ -648,21 +683,20 @@ public sealed class AiPilot
             machine.StampDangerZoneRetry();
             return;
         }
-        StartDangerZoneRun(pick.Ribbon, pick.FarEnd, model, machine, "dare devil test passed");
+        StartDangerZoneRun(new DangerZoneRun(pick.Ribbon, pick.FarEnd), model.Position, machine, "dare devil test passed");
     }
 
     // What both entries do once a ribbon and an end are chosen: the run record, the leg the exit
     // re-seats off, and state 2. The machine's own transition drops the standing target
     // (FUN_00421500 nulls +0x948).
-    private void StartDangerZoneRun(DangerZoneRibbon ribbon, bool farEnd, FlightModel model,
-        AiModeMachine machine, string why)
+    private void StartDangerZoneRun(DangerZoneRun run, Vector3 at, AiModeMachine machine, string why)
     {
-        ZoneRun = new DangerZoneRun(ribbon, farEnd);
+        ZoneRun = run;
         _rail = null;
         _zoneEntryLegFrom = Patrol?.LegStartIndex ?? -1;
         _zoneEntryLegTo = Patrol?.CurrentIndex ?? -1;
         machine.Enter(AiMode.ApproachingDangerZone,
-            $"'{ribbon.Name}' from its {(farEnd ? "far" : "near")} end, {model.Position.DistanceTo(ZoneRun.Point):0} m out ({why})");
+            $"'{run.Ribbon.Name}' {(run.Reversed ? "backwards" : "forwards")}, {at.DistanceTo(run.Point):0} m out ({why})");
     }
 
     // The approach (FUN_004216e0): the run's current point on the emergency table, no aim
