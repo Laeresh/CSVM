@@ -66,6 +66,45 @@ public sealed class OceanWakeTrackTests
     }
 
     [Fact]
+    public void EveryFrameWritesAgesRisingAndASaneSpeedAlongTheTrack()
+    {
+        // Each frame, the just-pushed sample included: the shader reads arc over age between entries.
+        var track = new OceanWakeTrack();
+        var buffer = new Vector4[Samples];
+        for (int i = 0; i <= 60 * 40; i++)
+        {
+            double t = i / 60.0;
+            track.Observe(t, Speeding(t));
+            track.Write(buffer, 0, Half, (Speeding(t + 0.01) - Speeding(t)).Normalized());
+            for (int k = 0; k + 1 < Samples && buffer[k + 1] != buffer[k]; k++)
+            {
+                float age = buffer[k + 1].W - buffer[k].W;
+                Assert.True(age > 0f, $"at {t:0.###} s entry {k + 1} is no older than entry {k} ({buffer[k].W} then {buffer[k + 1].W})");
+                float speed = (buffer[k + 1].Z - buffer[k].Z) / age;
+                Assert.True(speed < 30f, $"at {t:0.###} s segment {k} reads {speed} m/s off a hull under 13");
+            }
+        }
+    }
+
+    [Fact]
+    public void FramePacingMovesNotTheLeadsAge()
+    {
+        // Both pacings meet at every sample instant and at the end, and differ everywhere between.
+        // A short hull, so the lead is its own length rather than a share of the way to the sample.
+        var half = new Vector2(8f, 3f);
+        static double Ragged(int i)
+        {
+            double x = (i % 148) / 148.0;
+            return (4.0 * (i / 148)) + (4.0 * (x + (0.1 * Math.Sin(2.0 * Math.PI * x) / (2.0 * Math.PI))));
+        }
+        var steady = Run(Speeding, 60 * 40, i => i / 60.0, half);
+        var ragged = Run(Speeding, 148 * 10, Ragged, half);
+        Assert.Equal(16f, steady[1].Z);
+        Assert.Equal(steady[1].W, ragged[1].W);
+        Assert.Equal(steady, ragged);
+    }
+
+    [Fact]
     public void TwoRunsOverTheSameSimTimesMatchBitForBit()
     {
         var first = Run(t => Turning(t), 60 * 25, i => i / 60.0);
@@ -129,14 +168,21 @@ public sealed class OceanWakeTrackTests
         return new Vector2(-5200f + (float)(300.0 * Math.Cos(a)), 9800f + (float)(300.0 * Math.Sin(a)));
     }
 
-    private static Vector4[] Run(Func<double, Vector2> path, int frames, Func<int, double> time)
+    // From 5 m/s gaining 0.2 m/s each second, on a 300 m circle.
+    private static Vector2 Speeding(double t)
+    {
+        double a = ((5.0 * t) + (0.1 * t * t)) / 300.0;
+        return new Vector2(-5200f + (float)(300.0 * Math.Cos(a)), 9800f + (float)(300.0 * Math.Sin(a)));
+    }
+
+    private static Vector4[] Run(Func<double, Vector2> path, int frames, Func<int, double> time, Vector2? half = null)
     {
         var track = new OceanWakeTrack();
         for (int i = 0; i <= frames; i++)
             track.Observe(time(i), path(time(i)));
         var buffer = new Vector4[Samples];
         double end = time(frames);
-        track.Write(buffer, 0, Half, (path(end) - path(end - 0.01)).Normalized());
+        track.Write(buffer, 0, half ?? Half, (path(end) - path(end - 0.01)).Normalized());
         return buffer;
     }
 

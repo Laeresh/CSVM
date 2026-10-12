@@ -96,7 +96,8 @@ box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold t
 One hull's track for the wave ocean's procedural wake, with no engine object touched: positions sampled at whole
 multiples of `SampleSecs` of sim time, interpolated between the observations around each, so frame pacing moves no
 sample. A gap, time running back or a jump restarts it standing. `Write` lays the samples out newest first with the
-metres behind the hull and the age, led by a point back along the hull's heading so the bow's V turns with it, for
+metres behind the hull and the age, led by a point back along the hull's heading so the bow's V turns with it, its
+age taken from the travel since the newest sample so that frame pacing moves no value written, for
 `Ocean.cs` to pass as uniforms; a track shorter than `MinSegment` draws no wake. `OceanWakeTrackTests`.
 
 ## src/Effects/OceanMask.cs

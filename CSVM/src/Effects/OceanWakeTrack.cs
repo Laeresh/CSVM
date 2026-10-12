@@ -45,7 +45,6 @@ internal sealed class OceanWakeTrack
     private bool _seen;
     private double _lastTime;
     private Vector2 _lastPoint;
-    private Vector2 _velocity;
 
     /// <summary>The bounds of a slot that draws no wake.</summary>
     public static Vector4 Unused => new(1e9f, 1e9f, 0f, 0f);
@@ -72,7 +71,6 @@ internal sealed class OceanWakeTrack
                 double at = n * SampleSecs;
                 Push(at, _lastPoint.Lerp(point, (float)((at - _lastTime) / dt)));
             }
-            _velocity = (point - _lastPoint) / (float)dt;
         }
         _lastTime = time;
         _lastPoint = point;
@@ -90,19 +88,23 @@ internal sealed class OceanWakeTrack
         var min = prev;
         var max = prev;
         int n = 0;
+        float age = 0f;
         track[at + n++] = new Vector4(prev.X, prev.Y, 0f, 0f);
-        float speed = _velocity.Length();
-        if (speed >= HeadingSpeed && Newest(out var first, out float firstAge))
+        // The lead takes its heading and age from the travel since the newest sample, not from the last
+        // frame's step, so frame pacing moves neither.
+        if (Newest(out var first, out float firstAge))
         {
-            var travel = axis.Dot(_velocity) < 0f ? -axis : axis;
-            float lead = Math.Min(2f * half.X, LeadShare * first.DistanceTo(prev));
-            if (lead >= MinSegment)
+            var chord = prev - first;
+            float span = chord.Length();
+            float lead = Math.Min(2f * half.X, LeadShare * span);
+            if (span >= HeadingSpeed * firstAge && lead >= MinSegment)
             {
-                prev -= travel * lead;
+                prev -= (axis.Dot(chord) < 0f ? -axis : axis) * lead;
                 arc = lead;
                 min = min.Min(prev);
                 max = max.Max(prev);
-                track[at + n++] = new Vector4(prev.X, prev.Y, arc, Math.Min(lead / speed, LeadShare * firstAge));
+                age = firstAge * lead / span;
+                track[at + n++] = new Vector4(prev.X, prev.Y, arc, age);
             }
         }
         for (int i = 0; i < _count && n < OceanShader.WakeSamples; i++)
@@ -110,13 +112,17 @@ internal sealed class OceanWakeTrack
             int k = (_newest - i + _points.Length) % _points.Length;
             var p = _points[k];
             float step = p.DistanceTo(prev);
-            if (step < MinSegment)
+            float sampleAge = (float)(_lastTime - _times[k]);
+            // A sample no older than the lead lies between it and the hull. The shader reads speed as
+            // arc over age, so a step back in age would read thousands of m/s.
+            if (step < MinSegment || sampleAge <= age)
                 continue;
             arc += step;
+            age = sampleAge;
             prev = p;
             min = min.Min(p);
             max = max.Max(p);
-            track[at + n++] = new Vector4(p.X, p.Y, arc, (float)(_lastTime - _times[k]));
+            track[at + n++] = new Vector4(p.X, p.Y, arc, age);
         }
         var last = track[at + n - 1];
         while (n < OceanShader.WakeSamples)
@@ -152,7 +158,6 @@ internal sealed class OceanWakeTrack
         _count = 0;
         _lastTime = time;
         _lastPoint = point;
-        _velocity = Vector2.Zero;
     }
 
     private void Push(double time, Vector2 point)
