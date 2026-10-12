@@ -608,7 +608,7 @@ fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host.
 
 ## src/Flight/Ai/StuntBotObjective.cs
 One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
-zones in course order, a free steer for a lead-in point short of the next zone's nearer ribbon end,
+nearest open zone first, a free steer for a lead-in point short of that zone's nearer ribbon end,
 and inside the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers'
 approach and rail. Where the rail alone misses the zone's gates (`RailClears`) the route gains a
 straight lead-in before its entry (`LeadInFor`), refused where the world blocks it, so the rail has

@@ -1628,8 +1628,13 @@ aeroplane's live nose, so a drop's first leg is the best-aligned one rather than
 it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
 `Session/World/StuntRaceBots.cs` on the machine that flies them) go round the course this way:
 
-1. The zones are taken in course order, the mission's `dzones` order, the first not yet cleared in
-   the run. A zone whose route builds no ribbon is passed over, so its course is never completed.
+1. The zones are taken nearest first, not in the mission's `dzones`
+   order. The next zone is the one not yet cleared in the run whose lead-in point (2 below) is
+   nearest the bot, measured on the zone's own route from its nearer end, so the pick runs no rail
+   check. The pick holds until a try at the zone ends, a crash's return or a rerun: picking each step would
+   flip between two zones at about the same distance, and a fluffed zone keeps its pick. It is a
+   greedy route, not the shortest tour. A zone whose route builds no ribbon is passed over, so its
+   course is never completed.
 2. Each try at a zone enters from the ribbon end nearer the bot. A stunt course authors no `aiv`
    net between its zones, so between them the bot steers freely, on bare heading and altitude
    orders, for a lead-in point 600 m short of that end along the ribbon's line into it
@@ -1659,7 +1664,8 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its best. A crash returns it to its last zone after `AircraftLifecycle.AutoRespawnDelay`, the
    unattended return, since nobody presses R for it. The return stands it on that zone's route,
    often low between walls, so it locks straight onto the ribbon there and rides it out
-   (`AiPilot.RejoinDangerZone`) rather than flying free from it.
+   (`AiPilot.RejoinDangerZone`) rather than flying free from it. The next pick is made where that
+   ride ends, not at the return point.
 6. On the rail a bot sweeps one origin point, as every AI def does (`ContactConditions.OnRail`),
    never its person's hull or its person def's wing probes. C2's `dzpath2` arch, the 9.7 m slot in
    the warning above, is narrower than a wingspan at the rail's roll, so a hull or wing probe meets
@@ -1677,12 +1683,12 @@ returned to that zone's exit every time):
 
 | Course | Zones cleared | Finish | Zone ends with a lead-in |
 |---|---|---|---|
-| C1 | 5 of 5 | 4:08.0 | none |
-| C1B | 5 of 5 | 3:08.6 | `dzpath6`, `dzpath7` |
-| C2 | 9 of 9 | 5:54.2 | `dzpath4` |
-| C3 | 4 of 4 | 4:10.5 | `dzpath4` from either end |
-| C4 | 14 of 14 | 10:21.3 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
-| C5 | 17 of 17 | 15:42.7 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
+| C1 | 5 of 5 | 3:22.0 | none |
+| C1B | 5 of 5 | 3:03.9 | `dzpath6`, `dzpath7` |
+| C2 | 9 of 9 | 4:29.3 | `dzpath4` |
+| C3 | 4 of 4 | 3:14.8 | `dzpath4` from either end |
+| C4 | 14 of 14 | 8:19.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
+| C5 | 17 of 17 | 10:41.3 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
 
 Every lead-in in the table probes clear of the world in that suite. A zone end not listed keeps its
 own entry (`StuntBotObjectiveTests` pins the list).

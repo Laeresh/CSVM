@@ -84,17 +84,69 @@ public class StuntBotObjectiveTests
     }
 
     [Fact]
-    public void ZonesGoInCourseOrderEachFromItsNearerEnd()
+    public void ZonesGoNearestFirstEachFromItsNearerEnd()
     {
-        var zones = Course();
-        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99));
+        var zones = Zigzag();
         zones[0].Completed = true;
-        var next = bot.Decide(zones, new Vector3(0, 100, -3000), -North, zoneRun: false);
-        Assert.True(next is { Zone: 1, FarEnd: true });
+        var leftFirst = new Vector3(0, 100, -300);
+        Assert.True(Ace().Decide(zones, leftFirst, North, zoneRun: false) is { Zone: 2, FarEnd: false });
 
-        // ABLE-TO-FAIL CONTROL: with the first zone still open it is the first, whatever is nearer.
-        zones[0].Completed = false;
-        Assert.Equal(0, new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)).Decide(zones, new Vector3(0, 100, -3000), -North, zoneRun: false).Zone);
+        // ABLE-TO-FAIL CONTROL: past the last zone in the list, that zone is nearest, from its far end.
+        Assert.True(Ace().Decide(zones, new Vector3(0, 100, -5000), -North, zoneRun: false) is { Zone: 1, FarEnd: true });
+    }
+
+    [Fact]
+    public void NearestIsMeasuredToTheLeadInPointNotTheZone()
+    {
+        // The first zone's middle is 200 m away, but its lead-in point is 500 m behind the bot. The
+        // second's middle is 850 m away and its lead-in point some 320 m.
+        var zones = new List<StuntZone>
+        {
+            Zone("dzpath1", 1, new Vector3(0, 100, -100), new Vector3(0, 100, -300)),
+            Zone("dzpath2", 2, new Vector3(300, 100, -700), new Vector3(300, 100, -900)),
+        };
+        Assert.Equal(1, Ace().Decide(zones, new Vector3(0, 100, 0), North, zoneRun: false).Zone);
+
+        // ABLE-TO-FAIL CONTROL: from the first zone's lead-in point, that zone is the nearer.
+        Assert.Equal(0, Ace().Decide(zones, new Vector3(0, 100, 500), North, zoneRun: false).Zone);
+    }
+
+    [Fact]
+    public void APickHoldsUntilATryEndsOrAReturn()
+    {
+        var zones = Zigzag();
+        zones[0].Completed = true;
+        var bot = Ace();
+        Assert.Equal(2, bot.Decide(zones, new Vector3(0, 100, -300), North, zoneRun: false).Zone);
+
+        // Nearer the other zone now, it keeps the one it picked.
+        var beyond = new Vector3(0, 100, -5500);
+        Assert.Equal(2, bot.Decide(zones, beyond, -North, zoneRun: false).Zone);
+
+        // A ride and its end: the next pick is from where the ride ends.
+        bot.Decide(zones, beyond, -North, zoneRun: true);
+        Assert.Equal(1, bot.Decide(zones, beyond, -North, zoneRun: false).Zone);
+
+        // ABLE-TO-FAIL CONTROL: nearer the first pick again, it holds the second until a return.
+        var back = new Vector3(0, 100, -1300);
+        Assert.Equal(1, bot.Decide(zones, back, North, zoneRun: false).Zone);
+        bot.Returned();
+        Assert.Equal(2, bot.Decide(zones, back, North, zoneRun: false).Zone);
+    }
+
+    [Fact]
+    public void AFluffKeepsItsZoneWhateverIsNearer()
+    {
+        var zones = Zigzag();
+        zones[0].Completed = true;
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.0));
+        Assert.True(bot.Decide(zones, new Vector3(0, 100, -1500), North, zoneRun: false) is { Leg: StuntBotLeg.Fluff, Zone: 2 });
+
+        // Past the entry and on toward the other zone, the fluffed one is still the order.
+        Assert.True(bot.Decide(zones, new Vector3(0, 200, -3300), North, zoneRun: false) is { Zone: 2, FarEnd: true });
+
+        // ABLE-TO-FAIL CONTROL: a bot with no fluff to keep takes the nearer zone from there.
+        Assert.Equal(1, Ace().Decide(zones, new Vector3(0, 200, -3300), North, zoneRun: false).Zone);
     }
 
     [Fact]
@@ -224,6 +276,16 @@ public class StuntBotObjectiveTests
         Zone("dzpath1", 1, FirstNear, FirstFar),
         Zone("dzpath2", 2, SecondNear, SecondFar),
     };
+
+    // Three zones on one line whose list order zigzags: the second listed lies beyond the third.
+    private static List<StuntZone> Zigzag() => new()
+    {
+        Zone("dzpath1", 1, FirstNear, FirstFar),
+        Zone("dzpath2", 2, new Vector3(0, 100, -4000), new Vector3(0, 100, -4200)),
+        Zone("dzpath3", 3, SecondNear, SecondFar),
+    };
+
+    private static StuntBotObjective Ace() => new(NetBotSkill.Ace, new Fixed(0.99));
 
     // A zone on a straight ribbon with its two gates either side of a point along it. By default they
     // are wide enough for the rail to pass them from any lock.

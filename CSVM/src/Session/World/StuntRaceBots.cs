@@ -79,6 +79,7 @@ internal sealed class StuntRaceBots
             if (_respawns.GetValueOrDefault(seat) != bot.RespawnCount)
             {
                 _respawns[seat] = bot.RespawnCount;
+                objective.Returned();
                 Rejoin(seat, bot, run, at);
             }
 

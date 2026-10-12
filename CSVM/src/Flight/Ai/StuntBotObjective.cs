@@ -37,11 +37,11 @@ public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 P
 
 /// <summary>
 /// One stunt race bot's way round the course, a remake-only rule, since the original seats no bots.
-/// It takes the zones in course order. Between zones it steers freely for a lead-in point short of
-/// the next zone's nearer ribbon end. Inside the approach cone it hands the zone to the pilot, which
-/// runs it on its <c>dzpathN</c> ribbon as a campaign racer does. Its tier sets its cruise throttle
-/// and the odds of fluffing a zone, passing over its entry and coming round again. Values:
-/// docs/org/aiPilot.md "Stunt race bots".
+/// It takes next the open zone whose lead-in point is nearest, and holds it until a try ends or a
+/// return. Between zones it steers freely for that point, short of the zone's nearer ribbon end.
+/// Inside the approach cone it hands the zone to the pilot, which runs it on its <c>dzpathN</c>
+/// ribbon as a campaign racer does. Its tier sets its cruise throttle and the odds of fluffing a
+/// zone, passing over its entry and coming round again. Values: docs/org/aiPilot.md "Stunt race bots".
 /// </summary>
 public sealed class StuntBotObjective
 {
@@ -182,15 +182,11 @@ public sealed class StuntBotObjective
     public StuntBotOrder Decide(IReadOnlyList<StuntZone> zones, Vector3 at, Vector3 velocity, bool zoneRun)
     {
         ArgumentNullException.ThrowIfNull(zones);
-        int next = -1;
-        for (int i = 0; i < zones.Count && next < 0; i++)
-        {
-            if (!zones[i].Completed && zones[i].Route != null)
-            {
-                next = i;
-            }
-        }
 
+        // ⚠ Do not pick again while the held zone is open and no try at it ended. Two zones about as
+        // near would flip the pick each step, and a fluff would hand its zone over.
+        bool pick = _running || _zone < 0 || _zone >= zones.Count || zones[_zone].Completed;
+        int next = pick ? Nearest(zones, at) : _zone;
         if (next < 0)
         {
             _zone = -1;
@@ -203,9 +199,8 @@ public sealed class StuntBotObjective
             return new StuntBotOrder(StuntBotLeg.Run, _zone, at, _farEnd, "flies the zone");
         }
 
-        var ribbon = zones[next].Route!;
-        // A new zone, or a try that ended, picks its entry afresh: the ribbon end nearer the bot.
-        if (next != _zone || _running)
+        // Each pick, including one after a try ends, takes its entry afresh: the ribbon end nearer the bot.
+        if (pick)
         {
             _zone = next;
             _running = false;
@@ -248,7 +243,39 @@ public sealed class StuntBotObjective
         return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, "steers for the zone");
     }
 
+    /// <summary>A crash's return, or a rerun's: the next order picks its zone afresh, after any ride
+    /// the return starts.</summary>
+    public void Returned() => _zone = -1;
+
     private static Vector3 Flat(Vector3 v) => new(v.X, 0f, v.Z);
+
+    private static bool NearerEnd(DangerZoneRibbon ribbon, Vector3 at)
+        => at.DistanceSquaredTo(ribbon.End(true)) < at.DistanceSquaredTo(ribbon.End(false));
+
+    // The open zone whose lead-in point is nearest, short of its nearer end on its own route. That
+    // skips the rail check: a lead-in straight moves the point up to 300 m back, a refused end to the far end.
+    private static int Nearest(IReadOnlyList<StuntZone> zones, Vector3 at)
+    {
+        int best = -1;
+        float bestSq = float.PositiveInfinity;
+        for (int i = 0; i < zones.Count; i++)
+        {
+            if (zones[i].Completed || zones[i].Route is not { } ribbon)
+            {
+                continue;
+            }
+
+            bool far = NearerEnd(ribbon, at);
+            float sq = at.DistanceSquaredTo(ribbon.End(far) - (Into(ribbon, far) * LeadInM));
+            if (sq < bestSq)
+            {
+                best = i;
+                bestSq = sq;
+            }
+        }
+
+        return best;
+    }
 
     private static Vector3 Into(DangerZoneRibbon ribbon, bool farEnd)
     {
@@ -296,7 +323,7 @@ public sealed class StuntBotObjective
     private void PickEnd(StuntZone zone, Vector3 at)
     {
         var ribbon = zone.Route!;
-        bool far = at.DistanceSquaredTo(ribbon.End(true)) < at.DistanceSquaredTo(ribbon.End(false));
+        bool far = NearerEnd(ribbon, at);
         if (LeadIn(zone, far) == null && LeadIn(zone, !far) != null)
         {
             far = !far;
