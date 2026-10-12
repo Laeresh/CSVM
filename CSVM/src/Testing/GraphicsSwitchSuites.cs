@@ -651,11 +651,13 @@ internal static class GraphicsSwitchSuites
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, OceanChapter, WakeMission), $"{OceanChapter}/{WakeMission} zrdr");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = WaterQualitySetting.Word;
-        var sessionClock = GameClock.Current;
+        var launchedClock = GameClock.Current;
         try
         {
             WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
             var rig = Open(ctx, enhanced: true, chapter: OceanChapter, extra: new[] { "--freecam", $"--mission={WakeMission}" });
+            // The session's own clock: what GameClock.Current held before the build depends on run order.
+            var sessionClock = rig.Session.SimClock;
             try
             {
                 var ocean = FirstOcean(rig.Session);
@@ -725,7 +727,7 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
-            GameClock.Current = sessionClock;
+            GameClock.Current = launchedClock;
             WaterQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
