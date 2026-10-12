@@ -158,6 +158,7 @@ public sealed class DogfightLobbyTests
         guest.Pick(3, default);
         Settle(host, guests);
         Assert.Empty(hostWire.Picks);
+        Assert.Equal(DogfightLobbySeat.NoPick, host.Players[1].Airframe);
 
         // ABLE-TO-FAIL CONTROL: once a lobby screen stands on it, the same guest's pick arrives.
         guest.Show();

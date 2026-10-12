@@ -583,6 +583,12 @@ constants rather than reading a layout.
   its members under it, then the players on no team. Restrict Number of Teams and its two count
   boxes, with the script's arrows (`MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`), are live on the
   host. The victory radios arm Time, Score or both, and a press on the only armed one keeps it.
+  Each player row names its pilot's plane in a column of the remake's own, since the original's
+  list names none: from x 170, 76 wide, ending clear of the bot tag and the Ready mark. It reads the
+  stock plane's short name, a custom plane's full name, Random on a bot's Random plane, and nothing
+  on a guest's row until the host has heard its pick. The names before it end at x 166. A name or a
+  plane wider than its box stays on its row, clipped to the box and scrolling through its text as
+  the board's other marquee captions do.
   Boot is live on the host once it picks a guest's row in the player list
   (the picked row takes the script's fill, 209, 180, 120); the host's own row is not offered, and a
   guest's list offers none. The host's Allow Custom Planes and Outlaw Components are live, Allow

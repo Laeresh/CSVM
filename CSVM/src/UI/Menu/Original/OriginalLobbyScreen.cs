@@ -232,6 +232,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>How many rows the player list shows.</summary>
     public const int VisiblePlayers = 11;
 
+    /// <summary>Where a player row's plane column starts, the remake's own: the original's list names
+    /// no plane. The column ends <see cref="PlaneWidth"/> on, clear of the bot tag and the Ready mark.
+    /// </summary>
+    internal const float PlaneX = ListX + 136f;
+
+    /// <summary>The plane column's width, ending 4 px short of the bot tag's box.</summary>
+    internal const float PlaneWidth = NameWidth - 14f - 136f - 4f;
+
     private const string GunKeyPrefix = "MPL_D_GUN_";
     private const string CellKeyPrefix = "MPL_D_CELL_";
 
@@ -1042,6 +1050,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// stepped, or null.</summary>
     public MenuExit? GuestLaunch() =>
         _net() is { DogfightLaunchDue: true } net && net.Dogfight is { } lobby ? Exit(net, lobby) : null;
+
+    /// <summary>What a player row's plane column reads: the custom plane's name, else the stock
+    /// airframe's, Random on a bot's Random plane. A person's row whose pick the host has not heard
+    /// reads nothing.</summary>
+    internal static string PlaneText(DogfightLobbySeat seat) =>
+        seat.Plane is { Length: > 0 } custom ? custom
+        : seat.Airframe < ShortNames.Length ? ShortNames[seat.Airframe]
+        : seat.IsBot ? MultiplayerBoardText.RandomPlaneWord : string.Empty;
 
     /// <summary>Typed characters and Backspace into the focused box. The chat box takes printable
     /// characters up to its width. The number boxes take digits, and a value inside the box's range
@@ -1917,8 +1933,20 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
             float indent = entry.Team != 0 ? MemberIndent : 0f;
             var colour = lobby != null && entry.Player == lobby.You ? OwnName : Black;
-            layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f + indent, y + ((ListPitch - size) / 2f), NameWidth - 4f - indent, size,
-                BoardInk.Row, -1, Face: face, Colour: colour));
+            float textY = y + ((ListPitch - size) / 2f);
+
+            // A plain line wider than its box would wrap onto the row below. A marquee line stays on
+            // its row, clipped to the box, and scrolls through its whole text.
+            layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f + indent, textY, PlaneX - ListX - 6f - indent, size,
+                BoardInk.Row, -1, Face: face, Colour: colour)
+            { Marquee = true });
+            if (PlaneText(players[entry.Player]) is { Length: > 0 } plane)
+            {
+                layers.Lines.Add(new BoardLine(plane, PlaneX, textY, PlaneWidth, size, BoardInk.Row, -1, Face: face, Colour: colour)
+                {
+                    Marquee = true,
+                });
+            }
 
             // A bot gives no consent to stand Ready, so its column carries the bot tag in place of
             // a mark that would always read ticked.

@@ -1040,12 +1040,13 @@ public class NetMessagesTests
         {
             new DogfightLobbySeat("Host", 5, true, true, 2, true),
             new DogfightLobbySeat("Lucy", 1, false, false, 2),
-            new DogfightLobbySeat("Red Baron Jr", 10, true, false),
+            new DogfightLobbySeat("Red Baron Jr", 10, true, false, Plane: "Flying Dutchman"),
         });
+        Assert.Equal(584, DogfightRosterMessage.Size);
         Assert.Equal(DogfightRosterMessage.Size, sent.Write(buffer));
         Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
-        Assert.Equal("Red Baron Jr", got.Rows[2].Name);
+        Assert.Equal(("Red Baron Jr", "Flying Dutchman", ""), (got.Rows[2].Name, got.Rows[2].Plane, got.Rows[1].Plane));
         Assert.Equal((2, true), (got.Rows[0].Team, got.Rows[0].Captain));
         Assert.Equal((2, false), (got.Rows[1].Team, got.Rows[1].Captain));
         Assert.Equal(0x54, (int)NetMessageType.DogfightRoster);
@@ -1055,7 +1056,7 @@ public class NetMessagesTests
         {
             new DogfightLobbySeat("Host", 5, true, true, 2, true),
             new DogfightLobbySeat("Lucy", 1, true, false, 2),
-            new DogfightLobbySeat("Red Baron Jr", 10, true, false),
+            new DogfightLobbySeat("Red Baron Jr", 10, true, false, Plane: "Flying Dutchman"),
         });
         Assert.NotEqual(sent, other);
         Assert.False(DogfightRosterMessage.TryRead(buffer.AsSpan(0, DogfightRosterMessage.Size - 1), out _));

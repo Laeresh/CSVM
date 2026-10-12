@@ -1312,7 +1312,10 @@ public sealed class DogfightLobby
     private List<DogfightLobbySeat> HostRows()
     {
         int self = _wire.LocalPeer;
-        var rows = new List<DogfightLobbySeat> { new(OwnName(), _airframe, Ready, true, _teams.TeamOf(self), _teams.IsCaptain(self)) };
+        var rows = new List<DogfightLobbySeat>
+        {
+            new(OwnName(), _airframe, Ready, true, _teams.TeamOf(self), _teams.IsCaptain(self), Plane: _build?.Name ?? ""),
+        };
         var peers = SeatedPeers();
         for (int i = 0; i < peers.Count; i++)
         {
@@ -1320,9 +1323,10 @@ public sealed class DogfightLobby
             string name = picked && pick.Name is { Length: > 0 } named
                 ? named
                 : "Pilot " + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
-            byte airframe = picked && pick.Airframe < AirframeCount ? pick.Airframe : DefaultAirframe;
+            byte airframe = !picked ? DogfightLobbySeat.NoPick : pick.Airframe < AirframeCount ? pick.Airframe : DefaultAirframe;
+            string plane = picked && _wire.PickBuilds.TryGetValue(peers[i], out var build) ? build.Name : "";
             rows.Add(new DogfightLobbySeat(name, airframe, picked && Admits(peers[i], pick), false,
-                _teams.TeamOf(peers[i]), _teams.IsCaptain(peers[i])));
+                _teams.TeamOf(peers[i]), _teams.IsCaptain(peers[i]), Plane: plane));
         }
 
         // A bot is always Ready: it has no plane of its own to consent to.
@@ -1413,7 +1417,7 @@ public sealed class DogfightLobby
     }
 
     // A guest that has not heard the host's list yet shows itself alone.
-    private DogfightLobbySeat[] GuestAlone() => new[] { new DogfightLobbySeat(OwnName(), _airframe, Ready, false) };
+    private DogfightLobbySeat[] GuestAlone() => new[] { new DogfightLobbySeat(OwnName(), _airframe, Ready, false, Plane: _build?.Name ?? "") };
 
     private void SendToGuests()
     {

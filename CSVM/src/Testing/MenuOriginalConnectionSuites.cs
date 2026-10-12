@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Flight.Hangar;
@@ -483,6 +484,107 @@ internal static class MenuOriginalConnectionSuites
 
             hostDoor.Discard();
             guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-lobby-planes",
+        "The Multiplayer Lobby's player list names each pilot's plane between the name and the Ready "
+        + "mark, a column of the remake's own, read on one Original session standing in for a host and "
+        + "two guests in turn. Before the guests show their lobbies the host's list names no plane on a "
+        + "guest's row. Then the host's stock pick, one guest's stock pick and the other's custom plane, "
+        + "named in full, reach every end's list, and the bot rows name the Fury and Random. Every plane "
+        + "box is a marquee line ending clear of the bot tag, the Ready marks and the list's scroll bar, "
+        + "and every name box ends before the column. A sixteen-character callsign in wide capitals on a "
+        + "team row, which drawn plain wraps onto the row below, is a marquee line inside its box")]
+    internal static void TheLobbyPlanes(TestContext ctx)
+    {
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string custom = "Flying Dutchman";
+        const string wide = "WWW MMM WWW MMMM";
+        var (door, guests) = NetDoorAid.DogfightDoors();
+        door.Identity.PlayerName = wide;
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-planes");
+        try
+        {
+            if (Open(ctx, layout, door, ends) is not { Shell: var shell })
+            {
+                return;
+            }
+
+            shell.StandInNetDoor(door);
+            shell.Lobby.OpenHost();
+            foreach (var guest in guests)
+            {
+                guest.OpenJoin();
+            }
+
+            NetDoorAid.SettleDogfight(door, guests);
+            if (door.Dogfight is not { } lobby || guests[0].Dogfight is not { } nathan || guests[1].Dogfight is not { } sheila)
+            {
+                ctx.Check(false, $"the host and both guests hold a Dogfight lobby");
+                return;
+            }
+
+            lobby.Pick(3, lobby.Fit);
+            var unpicked = PlaneColumn(shell, door);
+            ctx.Check(lobby.Players.Count == 3 && unpicked.Select(l => l.Text).SequenceEqual(new[] { "Bloodhawk" }),
+                $"ABLE-TO-FAIL CONTROL: before a guest's pick its row names no plane ({lobby.Players.Count} rows; {Texts(unpicked)})");
+
+            foreach (var guest in guests)
+            {
+                guest.Dogfight!.Show();
+            }
+
+            nathan.Pick(8, nathan.Fit);
+            sheila.PickCustom(new NetPlaneBuild { Name = custom, Airframe = 4, Engine = NetPlaneBuild.StockEngine }, sheila.Fit);
+            lobby.AddBot();
+            lobby.AddBot();
+            lobby.SetBotAirframe(lobby.Bots[0].Id, 7);
+            NetDoorAid.SettleDogfight(door, guests);
+            var expected = new[] { "Bloodhawk", "Kestrel", custom, "Fury", MultiplayerBoardText.RandomPlaneWord };
+            foreach (var (end, who) in new[] { (guests[0], "Nathan"), (guests[1], "Sheila"), (door, "host") })
+            {
+                var column = PlaneColumn(shell, end);
+                ctx.Check(column.Select(l => l.Text).SequenceEqual(expected),
+                    $"the {who}'s list names every row's plane, the guests' picks and the bots' included ({Texts(column)})");
+            }
+
+            // The shell stands on the host's door, whose bot tags and Ready marks bound the column.
+            var board = shell.Compose();
+            var planes = PlaneColumn(shell, door);
+            float tag = board.Lines.Where(l => l.Text == OriginalLobbyScreen.BotTag && l.X < 314f).Select(l => l.X).DefaultIfEmpty(0f).Min();
+            float mark = board.Pictures.Where(p => p.Art.Name == "MP_B_CHECKBOX.PNG").Select(p => p.X).DefaultIfEmpty(0f).Min();
+            var names = board.Lines.Where(l => l.Text is wide or "Nathan" or "Sheila").ToList();
+            ctx.Check(tag > 0f && mark > 0f && planes.All(l => l.Marquee && l.X + l.Width < Math.Min(tag, mark) && l.X + l.Width < 292f)
+                      && names.Count == 3 && names.All(l => l.X + l.Width <= OriginalLobbyScreen.PlaneX),
+                $"every plane box is a marquee line ending clear of the bot tag at {tag}, the Ready marks at {mark} and the bar at 292, and the names end before it ({Boxes(planes)}; {Boxes(names)})");
+
+            ctx.Check(lobby.CreateTeam("Aces"), $"the host creates a team");
+            WideCallsignStaysOnItsRow(ctx, shell.Compose().Lines.FirstOrDefault(l => l.Text == wide));
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            door.Discard();
+            foreach (var guest in guests)
+            {
+                guest.Discard();
+            }
+
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
@@ -2550,6 +2652,49 @@ internal static class MenuOriginalConnectionSuites
             view.Free();
         }
     }
+
+    // The host's callsign on its team row, indented under the team. Measured in the board's face, it
+    // is wider than its box, so a plain line would wrap onto the row below. A marquee line keeps it
+    // on one line clipped to the box.
+    private static void WideCallsignStaysOnItsRow(TestContext ctx, BoardLine? line)
+    {
+        ctx.Check(line != null, $"the host's list draws its callsign");
+        if (line == null)
+        {
+            return;
+        }
+
+        // At the authored page size: the suite's own viewport is no window a pilot sizes.
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            var font = (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            var measure = ComposedBoardView.MeasureBox(fit, font, line.Size);
+            var one = measure(line.Text, 100000f);
+            var wrapped = measure(line.Text, line.Width);
+            ctx.Check(one.X > line.Width && wrapped.Y > one.Y,
+                $"ABLE-TO-FAIL CONTROL: drawn plain, the callsign is wider than its box ({one.X:0.0} against {line.Width:0}) and wraps to {wrapped.Y:0.0} px against one line's {one.Y:0.0}");
+            ctx.Check(line.Marquee && line.X == 36f + 12f && line.X + line.Width <= OriginalLobbyScreen.PlaneX && one.Y <= 20f,
+                $"the team row draws it as a marquee line, one line inside the row's 20 px pitch, its box from {line.X} ending at {line.X + line.Width} before the plane column");
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    // The plane column of the list as one door's lobby draws it, top row first.
+    private static List<BoardLine> PlaneColumn(OriginalShell shell, NetPlayFeature door)
+    {
+        shell.StandInNetDoor(door);
+        return shell.Compose().Lines.Where(l => l.X == OriginalLobbyScreen.PlaneX).OrderBy(l => l.Y).ToList();
+    }
+
+    private static string Texts(IEnumerable<BoardLine> lines) => string.Join(", ", lines.Select(l => l.Text));
+
+    private static string Boxes(IEnumerable<BoardLine> lines) =>
+        string.Join(", ", lines.Select(l => string.Create(CultureInfo.InvariantCulture, $"{l.X}+{l.Width}")));
 
     // The guest's second stock plane and a shell of its own on its first gun, picked while Ready,
     // which the change clears on both ends. Returns that gun's slot.
