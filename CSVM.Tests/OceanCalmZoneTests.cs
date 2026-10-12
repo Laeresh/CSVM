@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The ship calm zone the wave ocean flattens its waves in (<see cref="OceanCalmZone"/>). It is a
-/// box along the hull's heading, grown over the waterline and the wake sheets' footprints. The
+/// box along the hull's heading, grown over the footprints of the hull's waterline meshes. The
 /// shader's smoothstep fades the waves back in past it.
 /// </summary>
 public class OceanCalmZoneTests
@@ -59,9 +59,9 @@ public class OceanCalmZoneTests
     }
 
     [Fact]
-    public void AWakeBehindTheHullStretchesTheZoneOverBoth()
+    public void TwoFootprintsStretchTheZoneOverBoth()
     {
-        // The hull's waterline from -60 to 60 m along its heading, a wake sheet trailing it to -200.
+        // The hull's waterline from -60 to 60 m along its heading, a flat sheet behind it to -200.
         var ship = new Transform3D(Basis.Identity, new Vector3(0f, 0f, 0f));
         var zone = new OceanCalmZone(Vector2.Zero, new Vector2(0f, 1f));
         zone.Add(new Aabb(new Vector3(-10f, -5f, -60f), new Vector3(20f, 10f, 120f)), ship);

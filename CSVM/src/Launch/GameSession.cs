@@ -2598,7 +2598,10 @@ public partial class GameSession : Node3D
         }
         _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, AnimatedMovers(hulls), _sea, _spec.OceanMaskPath);
         if (_ocean != null)
+        {
+            _ocean.DebugDrive = _spec.DebugWake;
             _plane.AddChild(_ocean);
+        }
     }
 
     // The chapter's sea from the shipped file, read once per session that can stand an ocean, under

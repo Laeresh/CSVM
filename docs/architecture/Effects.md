@@ -54,13 +54,13 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 
 ## src/Effects/Ocean.cs
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
-grid with a Gerstner swell in its vertex stage and drifting noise in its fragment normals replaces the sea-level base
-sheet, which steps aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. It
-draws a priority level below the lowest base sheet, one grid per zone-gate group; a spyglass disc
-(`SceneBuilder.FlatSeaEye`) sees the flat sheet. Owns the grids, the sea's uniforms and up to 16 ship calm zones
-(`OceanCalmZone.cs`, `OceanMovers.cs`), nearest the eye first; the swell, bent crests, noise detail, foam and coast
-ramps are the shader text `OceanShader.cs` writes from the chapter's `SeaState.cs`, all on `csky_time`. `Apply`
-takes a new sea live, recompiling (`ShaderTwins.Rewrite`) only on a text change. `GameSession.FollowOcean` builds and drops it.
+grid (Gerstner swell, drifting noise normals) replaces the sea-level base sheet, which steps aside through
+`csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. One grid per zone-gate group, a priority
+level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake sheets,
+which no pane draws while their hull holds a wake slot on the sim clock. Owns up to 16 ship slots, nearest the eye first: a calm zone over each
+waterline (`OceanCalmZone.cs`, `OceanMovers.cs`) and the track its wake rides (`OceanWakeTrack.cs`). The shader text is
+`OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; `Apply` takes a new sea live, recompiling only on
+a text change. `GameSession.FollowOcean` builds and drops it; `--debug-wake` sails a wake ship on an arc.
 
 ## src/Effects/OceanSeas.cs
 The shipped per-chapter seas, `CSVM/data/ocean_seas.json`, read through `res://` at each sea chapter's build: one
@@ -75,7 +75,8 @@ The wave ocean's shader text from one `SeaState`, with no engine object touched:
 tables, the bending field, the coast ramps and the open sea's tint, written as literals. At the defaults the text is
 byte-identical to the ocean's tune (`OceanShaderTests` against hashes and a fixture), so nothing moves until a sea
 is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
-setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`.
+setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`. `ship_wake` draws each moving hull's
+Kelvin V and foam trail from its track uniforms; `WakeSamples` is the track's sample count.
 
 ## src/Effects/SeaState.cs
 One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
@@ -90,6 +91,13 @@ One ship's calm zone on the wave ocean: a box on the water along the hull's head
 world-space footprints (a mesh AABB under its global transform, or a point), with no engine object
 touched. `Distance` and `Calm` are the shader's `ship_calm` in C#: no waves within a margin of the
 box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold the box and the fade.
+
+## src/Effects/OceanWakeTrack.cs
+One hull's track for the wave ocean's procedural wake, with no engine object touched: positions sampled at whole
+multiples of `SampleSecs` of sim time, interpolated between the observations around each, so frame pacing moves no
+sample. A gap, time running back or a jump restarts it standing. `Write` lays the samples out newest first with the
+metres behind the hull and the age, led by a point back along the hull's heading so the bow's V turns with it, for
+`Ocean.cs` to pass as uniforms; a track shorter than `MinSegment` draws no wake. `OceanWakeTrackTests`.
 
 ## src/Effects/OceanMask.cs
 The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on its `SceneBuilder`), reused by every

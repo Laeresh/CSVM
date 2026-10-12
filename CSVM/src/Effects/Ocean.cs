@@ -24,11 +24,12 @@ public sealed partial class Ocean : Node3D
     // The grid's angular resolution near the eye; it halves at each of BandEnds.
     private const int InnerSegments = 384;
 
-    // TUNE. The waves stay flat this far past a ship's zone, more than the swell's sideways sway,
-    // and reach full height over the fade beyond. Flat water keeps a wake sheet on the surface.
-    private const float CalmMargin = 6f;
-    private const float CalmFade = 50f;
+    // Remake-only rule, set by the look. The waves stay flat this far past a hull's waterline, about the swell's sideways sway.
+    // They reach full height over the fade beyond, so no crest crosses the deck.
+    private const float CalmMargin = 2f;
+    private const float CalmFade = 16f;
     private const int MaxShips = OceanShader.MaxShips;
+    private const int WakeSamples = OceanShader.WakeSamples;
 
     // The hull meshes that reach this close to the hull's own y = 0 make its waterline.
     private const float WaterlineBand = OceanMovers.WaterlineBand;
@@ -52,8 +53,17 @@ public sealed partial class Ocean : Node3D
     private readonly List<int> _order = new();
     private readonly Dictionary<Node3D, Transform3D> _nestedRest = new();
     private readonly HashSet<Node3D> _zoned = new();
+    private readonly Vector4[] _wakeTrack = new Vector4[MaxShips * WakeSamples];
+    private readonly Vector4[] _wakeBounds = new Vector4[MaxShips];
+    private readonly Dictionary<Node3D, OceanWakeTrack> _tracks = new();
+    private readonly List<Node3D> _untracked = new();
+    private readonly HashSet<Node3D> _tracked = new();
+    private readonly Dictionary<MeshInstance3D, uint> _sheetLayers = new();
     private readonly int _level;
     private readonly bool _zonedSheet;
+
+    // The hull --debug-wake sails, where it stood and the sim time it set off.
+    private (Node3D Hull, Transform3D Start, double From)? _driven;
 
     private Ocean(ShaderMaterial material, Func<IEnumerable<Node3D>> ships, OceanMask mask, Node3D worldRoot,
         int level, SeaState sea)
@@ -74,6 +84,14 @@ public sealed partial class Ocean : Node3D
 
     /// <summary>The grids' shader text, as the sea last wrote it.</summary>
     public string ShaderText => _material.Shader.Code;
+
+    /// <summary><c>--debug-wake</c>: the speed in m/s and the turn in degrees a second. The first wake
+    /// ship on the water sails at them from where it stands, along its own -Z. Null leaves hulls alone.</summary>
+    public Vector2? DebugDrive { get; set; }
+
+    /// <summary>The wake sheets the bake found, which step aside while the ocean draws their hull's
+    /// wake. Read by the suites.</summary>
+    internal IReadOnlyList<Node3D> WakeSheets => _wakes;
 
     /// <summary>Declares the switch and the mask globals the base sheet's hide reads. Must run before
     /// the first shader that reads them is built.</summary>
@@ -192,9 +210,21 @@ public sealed partial class Ocean : Node3D
     {
         RenderingServer.GlobalShaderParameterSet(ParamName, 0.0f);
         OceanMask.Withdraw();
+        foreach (var (sheet, layers) in _sheetLayers)
+        {
+            if (IsInstanceValid(sheet))
+                sheet.Layers = layers;
+        }
+        _sheetLayers.Clear();
+        _tracks.Clear();
+        _driven = null;
     }
 
-    public override void _Process(double delta) => PublishShips();
+    public override void _Process(double delta)
+    {
+        DriveDebugHull();
+        PublishShips();
+    }
 
     /// <summary>Takes <paramref name="sea"/> live, clamped. The shader recompiles only when its text
     /// changes; height, foam strength and roughness are uniforms and change nothing else. The grids,
@@ -307,6 +337,61 @@ public sealed partial class Ocean : Node3D
         _material.SetShaderParameter("rough_far", Sea.RoughFar);
     }
 
+    // The ocean draws a wake for each hull holding one of the first held slots. Those hulls' sheets
+    // move onto the flat-sea layer, which only a spyglass disc draws. Every other sheet keeps
+    // its own layers. A hidden sheet stays visible, so the zones and animations read it as before.
+    private void FollowWakeSheets(int held)
+    {
+        foreach (var wake in _wakes)
+        {
+            if (wake is not MeshInstance3D sheet || !IsInstanceValid(sheet))
+                continue;
+            bool hide = ZoneHullOf(wake, _zoneHulls, held) >= 0;
+            if (hide && sheet.Layers != UI.Boards.SplitScreen.FlatSeaLayer)
+            {
+                // A sheet written since it was hidden (an object's zone gate) keeps that mask for later.
+                _sheetLayers[sheet] = sheet.Layers;
+                sheet.Layers = UI.Boards.SplitScreen.FlatSeaLayer;
+            }
+            else if (!hide && _sheetLayers.Remove(sheet, out uint own))
+            {
+                sheet.Layers = own;
+            }
+        }
+    }
+
+    // --debug-wake: the first wake ship on the water sails an arc on the sim clock. It is set after the
+    // frame's animation, so the capture and the wake both see the arc.
+    private void DriveDebugHull()
+    {
+        if (DebugDrive is not { } drive || GameClock.Current is not { } clock)
+            return;
+        if (_driven is not { } driven || !IsInstanceValid(driven.Hull))
+        {
+            Node3D? hull = null;
+            foreach (var wake in _wakes)
+            {
+                if (WakeOnWater(wake) != null)
+                {
+                    hull = HullOf(wake);
+                    break;
+                }
+            }
+            if (hull == null)
+                return;
+            _driven = driven = (hull, hull.GlobalTransform, clock.Time);
+            Log.Info("world", $"--debug-wake: '{hull.Name}' sails at {drive.X:0.##} m/s turning {drive.Y:0.##} deg/s");
+        }
+        float t = (float)(clock.Time - driven.From);
+        float w = Mathf.DegToRad(drive.Y);
+        var forward = -driven.Start.Basis.Z with { Y = 0f };
+        forward = forward.Normalized();
+        var left = forward.Rotated(Vector3.Up, Mathf.Pi / 2f);
+        var path = Mathf.Abs(w) < 1e-6f ? forward * t
+            : (forward * (Mathf.Sin(w * t) / w)) + (left * ((1f - Mathf.Cos(w * t)) / w));
+        driven.Hull.GlobalTransform = new Transform3D(driven.Start.Basis.Rotated(Vector3.Up, w * t), driven.Start.Origin + (path * drive.X));
+    }
+
     // The hull a wake sheet trails: the sheet's mesh sits under its own node, which hangs off the
     // ship. A wake node straight under the world root is its own hull.
     private Node3D HullOf(Node3D wake)
@@ -315,7 +400,7 @@ public sealed partial class Ocean : Node3D
         return node.GetParent() is Node3D ship && ship != _worldRoot ? ship : node;
     }
 
-    // One zone per ship on the water, over its waterline and its visible wake sheets, each frame;
+    // One zone per ship on the water, over its waterline, and the track its wake rides, each frame;
     // an unused slot sits far away. With more ships afloat than slots, the nearest to the eye win.
     private void PublishShips()
     {
@@ -364,16 +449,15 @@ public sealed partial class Ocean : Node3D
                 added = n + 1;
             }
             if (added > n && _zoned.Add(hull))
-                Log.Debug("world", $"ocean: zone over '{hull.Name}' at ({_candidateAt[i].X:0},{_candidateAt[i].Y:0.0},{_candidateAt[i].Z:0}) of {_candidates.Count} afloat");
+                Log.Debug("world", $"ocean: zone over '{hull.Name}' at ({_candidateAt[i].X:0},{_candidateAt[i].Y:0.0},{_candidateAt[i].Z:0}) size {2f * _zones[n].HalfExtents.X:0}x{2f * _zones[n].HalfExtents.Y:0}m of {_candidates.Count} afloat");
             n = added;
         }
-        foreach (var wake in _wakes)
-        {
-            if (WakeOnWater(wake) is { } mesh && ZoneHullOf(wake, _zoneHulls, n) is var z and >= 0)
-                _zones[z].Add(mesh.GetAabb(), wake.GlobalTransform);
-        }
+        // The wakes run on the sim clock; with none, as in a menu's backdrop, no hull draws one.
+        double? time = GameClock.Current?.Time;
+        FollowWakeSheets(time != null ? n : 0);
         for (int i = 0; i < MaxShips; i++)
         {
+            _wakeBounds[i] = OceanWakeTrack.Unused;
             if (i < n)
             {
                 var c = _zones[i].Center;
@@ -381,6 +465,14 @@ public sealed partial class Ocean : Node3D
                 var half = _zones[i].HalfExtents;
                 _calmAxes[i] = new Vector4(c.X, c.Y, axis.X, axis.Y);
                 _calmSizes[i] = new Vector4(half.X, half.Y, CalmMargin, CalmFade);
+                if (time is { } t && _zoneHulls[i] is { } hull)
+                {
+                    if (!_tracks.TryGetValue(hull, out var track))
+                        _tracks[hull] = track = new OceanWakeTrack();
+                    track.Observe(t, c);
+                    _tracked.Add(hull);
+                    _wakeBounds[i] = track.Write(_wakeTrack, i * WakeSamples, half, axis);
+                }
             }
             else
             {
@@ -389,8 +481,26 @@ public sealed partial class Ocean : Node3D
             }
             _zoneHulls[i] = null;
         }
+        ForgetUnseenTracks();
         _material.SetShaderParameter("calm_axes", _calmAxes);
         _material.SetShaderParameter("calm_sizes", _calmSizes);
+        _material.SetShaderParameter("wake_track", _wakeTrack);
+        _material.SetShaderParameter("wake_bounds", _wakeBounds);
+    }
+
+    // A hull that held no slot this frame starts its track again when it next holds one, so a gap
+    // never reads as a passage.
+    private void ForgetUnseenTracks()
+    {
+        _untracked.Clear();
+        foreach (var hull in _tracks.Keys)
+        {
+            if (!_tracked.Contains(hull))
+                _untracked.Add(hull);
+        }
+        foreach (var hull in _untracked)
+            _tracks.Remove(hull);
+        _tracked.Clear();
     }
 
     // Opens a zone over a visible hull on the water and its waterline; returns the zones in use.
@@ -409,7 +519,7 @@ public sealed partial class Ocean : Node3D
     }
 
     // The union of the hull's meshes that reach its waterline, in the hull's own frame, measured
-    // once. The wake sheets are left out; they move on their own and are added each frame.
+    // once. The wake sheets are left out; the ocean draws the wake itself.
     private Aabb? Waterline(Node3D hull)
     {
         if (_waterlines.TryGetValue(hull, out var kept))

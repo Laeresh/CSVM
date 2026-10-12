@@ -966,6 +966,10 @@ public sealed record SessionSpec
     /// lab's overrides for this launch, filtered through <see cref="Effects.SeaState.FilterOverrides"/>
     /// and null outside <c>--freecam</c>, the only mode the lab exists in.</summary>
     public string? DebugOcean { get; private set; }
+
+    /// <summary><c>--debug-wake=speed[,turn]</c>: the wave ocean sails its first wake ship on an arc,
+    /// at the speed in m/s and turning the degrees a second. A capture then shows a chosen speed and turn.</summary>
+    public Godot.Vector2? DebugWake { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
     /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
@@ -1428,6 +1432,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-damage=")) { s.DebugDamage = arg["--debug-damage=".Length..]; }
             else if (arg == "--debug-ocean") { s.DebugOcean ??= ""; }
             else if (arg.StartsWith("--debug-ocean=")) { s.DebugOcean = arg["--debug-ocean=".Length..]; }
+            else if (arg.StartsWith("--debug-wake=")) { s.DebugWake = ParseDebugWake(arg["--debug-wake=".Length..]); }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }
             else if (arg == "--dump-markers") { s.DumpMarkers = true; }
             else if (arg.StartsWith("--dump-markers=")) { s.DumpMarkers = true; s.DumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -2259,6 +2264,20 @@ public sealed record SessionSpec
             rejected?.Add(token);
         }
         return string.Join(",", kept);
+    }
+
+    /// <summary>Parse <c>--debug-wake=speed[,turn]</c>: a speed in m/s and a turn in degrees a second,
+    /// zero when left out. Null, with a warning, for anything else.</summary>
+    public static Vector2? ParseDebugWake(string spec)
+    {
+        var parts = spec.Split(',');
+        float turn = 0f;
+        if (parts.Length is 1 or 2
+            && float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float speed)
+            && (parts.Length == 1 || float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out turn)))
+            return new Vector2(speed, turn);
+        Log.Warn("ui", $"--debug-wake={spec} is not <speed>[,<turn>]; ignoring it");
+        return null;
     }
 
     /// <summary>Parse <c>--debug-damage[=script]</c>, the world damage lab's ordered script:

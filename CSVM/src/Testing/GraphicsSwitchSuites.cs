@@ -34,6 +34,9 @@ internal static class GraphicsSwitchSuites
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string FlatWaterChapter = "C2B";
 
+    // The mission whose freighter cruises the ocean chapter trailing its wake sheets (startanims).
+    private const string WakeMission = "M03";
+
     // How far the lifted ocean may stand below a ramp: the bilinear lift's rounding, not a gap.
     private const float RampShortfall = 0.05f;
 
@@ -629,6 +632,100 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("ocean-wake",
+        "under Enhanced at water quality waves the C1B M03 freighter's wake sheets move onto the flat-sea "
+        + "layer, which no pane draws and a spyglass disc does, while the hull holds a wake slot on the sim "
+        + "clock, and with no sim clock every sheet keeps its own drawn layers; the ocean draws the wake from "
+        + "the hull's track: held still for 20 s of sim time the hull draws none, moved at 10 m/s for 20 s it "
+        + "draws one, and a rebuilt ocean driven over the same sim times on a fresh clock publishes the "
+        + "same wake uniforms bit for bit; a live move to flat water, a live switch to Original and a "
+        + "session built under Original leave every sheet on its own drawn layers")]
+    internal static void OceanWake(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, OceanChapter, WakeMission), $"{OceanChapter}/{WakeMission} zrdr");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        var sessionClock = GameClock.Current;
+        try
+        {
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var rig = Open(ctx, enhanced: true, chapter: OceanChapter, extra: new[] { "--freecam", $"--mission={WakeMission}" });
+            try
+            {
+                var ocean = FirstOcean(rig.Session);
+                var sheets = ocean?.WakeSheets.OfType<MeshInstance3D>().Where(s => GodotObject.IsInstanceValid(s) && s.IsVisibleInTree()).ToList() ?? new();
+                var hull = sheets.Count > 0 ? sheets[0].GetParent()?.GetParent() as Node3D : null;
+                if (!rig.Built || ocean == null || hull == null || sessionClock == null)
+                {
+                    ctx.Check(false, $"the Enhanced {OceanChapter}/{WakeMission} session stands an ocean over a ship with drawn wake sheets, on a sim clock (built={rig.Built}, ocean={(ocean != null)}, {sheets.Count} sheet(s), clock={(sessionClock != null)})");
+                    return;
+                }
+                GameClock.Current = null;
+                ocean._Process(0.0);
+                ctx.Check(sheets.All(PaneDraws),
+                    $"with no sim clock the ocean draws no wake, and every sheet keeps its own drawn layers ({SheetLayers(sheets)})");
+                GameClock.Current = sessionClock;
+                ocean._Process(0.0);
+                ctx.Check(sheets.All(SteppedAside),
+                    $"on the sim clock, with '{hull.Name}' holding a wake slot, its {sheets.Count} drawn wake sheets sit on the flat-sea layer alone, which no pane draws ({SheetLayers(sheets)})");
+
+                var start = hull.GlobalPosition;
+                var first = DriveWake(ocean, hull, start);
+                ctx.Check(first.Standing == 0 && first.Moving == 1,
+                    $"held still for 20 s '{hull.Name}' draws no wake ({first.Standing} drawn), moved at 10 m/s for 20 s it draws one ({first.Moving} drawn, {first.Arc.ToString("0.#", CultureInfo.InvariantCulture)} m of track)");
+
+                ApplyWater(rig, WaterQualitySetting.Flat);
+                ctx.Check(sheets.All(PaneDraws),
+                    $"a live move to flat water puts every sheet back on its own drawn layers ({SheetLayers(sheets)})");
+                ApplyWater(rig, WaterQualitySetting.Waves);
+                var rebuilt = FirstOcean(rig.Session);
+                hull.GlobalPosition = start;
+                var second = rebuilt != null && !ReferenceEquals(rebuilt, ocean) ? DriveWake(rebuilt, hull, start) : null;
+                ctx.Check(second != null && first.Track.Length > 0 && first.Track.SequenceEqual(second.Track) && first.Bounds.SequenceEqual(second.Bounds),
+                    $"a rebuilt ocean driven over the same sim times on a fresh clock publishes the same wake uniforms bit for bit (rebuilt={(rebuilt != null && !ReferenceEquals(rebuilt, ocean))})");
+                bool aside = sheets.All(SteppedAside);
+                GameClock.Current = sessionClock;
+                Switch(rig, false);
+                ctx.Check(aside && sheets.All(PaneDraws) && OceansUnder(rig.Session) == 0,
+                    $"a live switch to Original drops the ocean and puts every sheet it held aside back on its own drawn layers (aside before={aside}; {SheetLayers(sheets)})");
+                hull.GlobalPosition = start;
+            }
+            finally
+            {
+                GameClock.Current = sessionClock;
+                rig.Close();
+            }
+            var original = Open(ctx, enhanced: false, chapter: OceanChapter, extra: new[] { "--freecam", $"--mission={WakeMission}" });
+            try
+            {
+                var sheets = new List<MeshInstance3D>();
+                var names = new Dictionary<Material, string>();
+                foreach (var (material, texture) in original.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+                    names[material] = texture;
+                Walk(original.Session, node =>
+                {
+                    if (node is MeshInstance3D mi && mi.IsVisibleInTree() && Materials(mi).Any(m => names.TryGetValue(m, out var t)
+                            && (t.Contains("wakefront", StringComparison.OrdinalIgnoreCase) || t.Contains("wakeback", StringComparison.OrdinalIgnoreCase))))
+                        sheets.Add(mi);
+                });
+                ctx.Check(original.Built && FirstOcean(original.Session) == null && sheets.Count > 0
+                        && sheets.All(PaneDraws),
+                    $"ABLE-TO-FAIL CONTROL: an Original {OceanChapter}/{WakeMission} build stands no ocean and draws its {sheets.Count} wake sheet(s) on their own layers ({SheetLayers(sheets)})");
+            }
+            finally
+            {
+                original.Close();
+            }
+        }
+        finally
+        {
+            GameClock.Current = sessionClock;
             WaterQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
@@ -1404,6 +1501,45 @@ internal static class GraphicsSwitchSuites
             $"a spyglass disc's camera collapses the grid before its wave sum and keeps the sheet whole ({Mech3.SceneBuilder.FlatSeaEye}; sheet {(sheet.Length > 0 ? "read" : "missing")})");
     }
 
+    // A hull held at start for 20 s of sim time, then moved along its own -Z at 10 m/s for 20 s.
+    // A fresh clock runs at 30 frames a second, the ocean publishing each frame. Reads the wake
+    // slots drawn after each half, and the uniforms the second half ends on.
+    private static WakeDrive DriveWake(Effects.Ocean ocean, Node3D hull, Vector3 start)
+    {
+        var clock = new GameClock();
+        GameClock.Current = clock;
+        var heading = -hull.GlobalBasis.Z with { Y = 0f };
+        heading = heading.Normalized();
+        int standing = Run(t => start, 0.0);
+        int moving = Run(t => start + (heading * (float)(10.0 * (t - 20.0))), 20.0);
+        var material = Grid(ocean);
+        var bounds = material?.GetShaderParameter("wake_bounds").AsVector4Array() ?? Array.Empty<Vector4>();
+        var track = material?.GetShaderParameter("wake_track").AsVector4Array() ?? Array.Empty<Vector4>();
+        return new WakeDrive(standing, moving, bounds.Sum(b => b.W), bounds, track);
+
+        int Run(Func<double, Vector3> path, double from)
+        {
+            for (int i = 0; i < 600; i++)
+            {
+                clock.BeginFrame(1.0 / 30.0);
+                hull.GlobalPosition = path(Math.Max(clock.Time, from));
+                ocean._Process(1.0 / 30.0);
+            }
+            var drawn = Grid(ocean)?.GetShaderParameter("wake_bounds").AsVector4Array() ?? Array.Empty<Vector4>();
+            return drawn.Count(b => b.Z > 0f);
+        }
+    }
+
+    // Whether a pane camera draws the instance. A wake sheet that steps aside sits on the flat-sea layer alone.
+    private static bool PaneDraws(VisualInstance3D instance) =>
+        (instance.Layers & UI.Boards.SplitScreen.PaneCullMask(uint.MaxValue)) != 0;
+
+    private static bool SteppedAside(VisualInstance3D instance) =>
+        instance.Layers == UI.Boards.SplitScreen.FlatSeaLayer && !PaneDraws(instance);
+
+    private static string SheetLayers(IEnumerable<MeshInstance3D> sheets) =>
+        string.Join(", ", sheets.Select(s => string.Create(CultureInfo.InvariantCulture, $"{s.GetParent()?.Name}=0x{s.Layers:X}")));
+
     // Every drawn base-sheet triangle read at its centroid and near each corner. A sample over a sea
     // texel must be one the hide clears. A ramp rises off sea level to under OceanMask.RampTop, and
     // its shortfall is how far the lifted ocean stands below it.
@@ -1863,6 +1999,10 @@ internal static class GraphicsSwitchSuites
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
             $"{Vertices} vertices of {Materials} material(s) in {Nodes} surface draw(s)");
     }
+
+    // The wake slots drawn after a hull stood still and after it moved, the track length, and the
+    // uniforms published last.
+    private sealed record WakeDrive(int Standing, int Moving, float Arc, Vector4[] Bounds, Vector4[] Track);
 
     // One session, its pane and the lights the launcher would own for it.
     private sealed record Rig(SubViewport Pane, GameSession Session, DirectionalLight3D Sun,

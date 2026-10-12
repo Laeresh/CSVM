@@ -5,9 +5,8 @@ namespace CSVM.Effects;
 
 /// <summary>
 /// One ship's calm zone on the wave ocean: a box on the water along the hull's heading. It holds
-/// the hull's waterline and every wake sheet the hull trails. The shader keeps the waves flat inside
-/// it and a margin past it, then fades them in. A zone grows from footprints in world space, so it
-/// follows the wake sheets' own geometry and turns with the hull.
+/// the hull's waterline. The shader keeps the waves flat inside it and a margin past it, then fades
+/// them in. A zone grows from footprints in world space, so it turns with the hull.
 /// </summary>
 internal struct OceanCalmZone
 {
