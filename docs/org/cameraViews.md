@@ -467,10 +467,16 @@ same eased frames.
   CSVM's right stick has no decode; it is fitted to the two states. In state `0` it aims absolutely
   and a let-go stick returns the view. In state `1` it is a rate, the free-look arm's own law below
   with the stick's deflection in place of the normalised direction: the angles move by
-  `2·dt·deflection`, inside the same clamps, and a stick back inside its centre band adds nothing,
-  so the view stays where it was turned. Both views take it through the head; the chase view's
-  absolute swing stands aside while `HeadLook.PadRates` holds. The centre key, `J` and `K` return a
-  turned view as they return a parked pan.
+  `2·dt·deflection`, and a stick back inside its centre band adds nothing, so the view stays where
+  it was turned. It takes the pan's ceiling and azimuth stop but not its floor: in state `0` the
+  stick looks down to the absolute aim's lower edge (`-PadLookPitchMaxDeg`) in every view, and in
+  state `1` to that edge or to the placing view's floor where that is lower, so first person's
+  level floor never leaves the stick's lower half inert. The numpad and the mouse pan keep the
+  original's level floor in first person, so a pan from a pose the stick left below level first
+  returns the view to level. Both
+  views take it through the head; the chase view's absolute swing stands aside while
+  `HeadLook.PadRates` holds. The centre key, `J` and `K` return a turned view as they return a
+  parked pan.
 - **Angles.** `DAT_0064ef60` is elevation above level (`0` = level, `π/2` = straight up, clamped to
   `[0, π/2]` in the input paths, the original's head never looks below level in front of the
   clamp; the caller-supplied floor above is a SEPARATE, per-caller bound); `DAT_0064ef64` is

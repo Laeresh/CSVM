@@ -44,8 +44,8 @@ public readonly record struct HeadLookInput(
 /// view from them. Elevation is 0 at level and +π/2 straight up, clamped to
 /// <see cref="ElevationFloor"/>..π/2, the floor the placing view sets. Azimuth is 0 straight ahead
 /// and positive to the left, CLAMPED to ±π, the original's own stop at dead astern. Both bounds
-/// bind the relative paths (snap, free-look and its pad rate, center); the snap mode's absolute pad
-/// aim carries its own envelope, see <see cref="PadAimTargets"/>.</summary>
+/// bind the original's relative paths (snap, free-look, center); the look stick in either mode
+/// carries its own lower bound, see <see cref="PadAimTargets"/>.</summary>
 public sealed class HeadLook
 {
     /// <summary>Free-look pan rate, rad/s, in whichever direction the input points
@@ -435,14 +435,17 @@ public sealed class HeadLook
         TargetAzimuth = azimuth;
     }
 
-    // Free-look's pad law: the filtered deflection scales the decoded pan rate, inside the pan's own
-    // bounds. Capped at full length, so a square gate's corner turns no faster than its edge.
+    // Free-look's pad law: the filtered deflection scales the decoded pan rate. Capped at full
+    // length, so a square gate's corner turns no faster than its edge. Its floor is the lower of the
+    // view's floor and the snap aim's lower edge, for the reason PadAimTargets gives.
     private void PadRate(float dt)
     {
         float right = _padFilter.X, up = _padFilter.Y;
         float length = Mathf.Sqrt((right * right) + (up * up));
         float step = FreeLookRate * dt / Mathf.Max(1f, length);
-        SetTargets(TargetElevation + (step * up), TargetAzimuth - (step * right));
+        float floor = Mathf.Min(ElevationFloor, -Mathf.DegToRad(PadLookPitchMaxDeg));
+        TargetElevation = Mathf.Clamp(TargetElevation + (step * up), floor, MaxElevation);
+        TargetAzimuth = ClampAzimuth(TargetAzimuth - (step * right));
     }
 
     // Integrate the targets at the fixed pan rate along the input direction. The direction is

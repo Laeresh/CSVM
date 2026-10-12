@@ -295,15 +295,32 @@ public class HeadLookTests
         Assert.True(head.TargetAzimuth < further - 0.5f, $"read {head.TargetAzimuth} after {further}");
     }
 
-    // The stick stays inside the keyboard pan's own bounds: first person's level floor, the chase
-    // camera's straight-down one and the azimuth stop at dead astern.
+    // In first person the stick looks below level after J, down to the snap aim's own lower edge.
+    // The numpad and the mouse pan keep the original's level floor.
+    // Straight up, dead astern and the chase camera's straight-down floor bound it as they bound
+    // the pan. The snap stick's own reach is ThePadLooksBelowLevelWhereTheOtherPathsCannot.
     [Fact]
-    public void InFreeLookTheStickStaysInsideThePansBounds()
+    public void InFreeLookTheStickLooksDownToTheSnapAimsEdgeWhereThePansStopAtLevel()
     {
         var head = new HeadLook();
         head.Step(StepDt, SmoothKey);
-        HoldStick(head, 0f, -1f);
-        Assert.Equal(HeadLook.FirstPersonElevationFloor, head.TargetElevation, Tol);
+        for (int i = 0; i < 2; i++)
+        {
+            HoldStick(head, 0f, -1f);
+        }
+
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(Mathf.DegToRad(-HeadLook.PadLookPitchMaxDeg), head.TargetElevation, Tol);
+
+        foreach (var down in new[] { Snap(0f, -1f), Free(0f, -1f) })   // Kp2, the mouse pan
+        {
+            var pan = new HeadLook();
+            pan.Step(StepDt, SmoothKey);
+            pan.Step(0.5f, down);
+            Assert.Equal(LookMode.FreeLook, pan.Mode);
+            Assert.Equal(HeadLook.FirstPersonElevationFloor, pan.TargetElevation, Tol);
+        }
+
         for (int i = 0; i < 4; i++)
         {
             HoldStick(head, -1f, 1f);
