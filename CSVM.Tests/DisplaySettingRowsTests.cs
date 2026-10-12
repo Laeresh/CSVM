@@ -4,8 +4,8 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The row rules the two Options screens share for the four display settings, one label
-/// per vocabulary entry. The reads are forgiving: an unknown word reads as the setting's own
+/// <summary>The row rules the two Options screens share for the display settings, one label per
+/// vocabulary entry. The reads are forgiving: an unknown word reads as the setting's own
 /// default. A size the screen does not offer reads as the screen's own size. So does a size
 /// borderless owns, whatever is saved. A size the options file names stands in the picker as an
 /// entry of its own, and a sideways step wraps. Engine-free, so the multi-screen and other-screen
@@ -19,11 +19,14 @@ public class DisplaySettingRowsTests
     {
         Assert.Equal(DisplayWords.DisplayModes.Count, DisplaySettingRows.DisplayModeLabels.Count);
         Assert.Equal(DisplayWords.VSyncChoices.Count, DisplaySettingRows.VSyncLabels.Count);
-        Assert.Equal(DisplayWords.AntiAliasingChoices.Count, DisplaySettingRows.AntiAliasingLabels.Count);
-        Assert.Equal(ShadowQualitySetting.Words.Count, DisplaySettingRows.ShadowQualityLabels.Count);
+        foreach (var setting in WordSettings.All)
+        {
+            Assert.Equal(setting.Words.Count, setting.Labels.Count);
+        }
+
         Assert.Equal(
             new[] { "50%", "67%", "77%", "100%", "125%", "150%", "175%", "200%" },
-            DisplaySettingRows.RenderScaleLabels(DisplayWords.RenderScaleChoices));
+            RenderScaleSetting.Lookup.Labels);
     }
 
     /// <summary>An anti-aliasing row with nothing saved reads the default of its page's graphics
@@ -35,7 +38,8 @@ public class DisplaySettingRowsTests
     [InlineData(DisplayWords.AntiAliasingSmaa, GraphicsMode.Default, DisplayWords.AntiAliasingSmaa)]
     [InlineData(DisplayWords.AntiAliasingOff, GraphicsMode.EnhancedWord, DisplayWords.AntiAliasingOff)]
     public void TheAntiAliasingRowReadsTheSavedWordOrTheModesDefault(string? saved, string graphics, string expected) =>
-        Assert.Equal(expected, DisplaySettingRows.AntiAliasingWord(saved, graphics));
+        Assert.Equal(expected, AntiAliasingSetting.Lookup.Standing(
+            new WordValues { [AntiAliasingSetting.Lookup] = saved }, graphics == GraphicsMode.EnhancedWord));
 
     /// <summary>A shadow-quality row with nothing saved, or a word the vocabulary does not know,
     /// stands on Ultra, the enhanced mode's own look. Its description says Enhanced only while the
@@ -48,9 +52,9 @@ public class DisplaySettingRowsTests
     public void TheShadowQualityRowReadsTheSavedWordOrUltra(string? saved, string expected)
     {
         int at = DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, saved, ShadowQualitySetting.Default);
-        Assert.Equal(expected, DisplaySettingRows.ShadowQualityLabels[at]);
-        Assert.StartsWith("Enhanced Graphics only.", DisplaySettingRows.ShadowQualityDetail(GraphicsMode.Default), System.StringComparison.Ordinal);
-        Assert.StartsWith("Select how the sun's shadows", DisplaySettingRows.ShadowQualityDetail(GraphicsMode.EnhancedWord), System.StringComparison.Ordinal);
+        Assert.Equal(expected, ShadowQualitySetting.Lookup.Labels[at]);
+        Assert.StartsWith("Enhanced Graphics only.", ShadowQualitySetting.Lookup.Detail(false), System.StringComparison.Ordinal);
+        Assert.StartsWith("Select how the sun's shadows", ShadowQualitySetting.Lookup.Detail(true), System.StringComparison.Ordinal);
     }
 
     /// <summary>FSR 2.2 refuses a scale above native, so its Render Scale list stops at 100 and a

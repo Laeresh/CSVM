@@ -323,31 +323,39 @@ which is how a golden or a deterministic capture pins the mode on purpose. The m
 written up as a divergence in `docs/architecture/Spec.md`.
 
 ## src/Utils/WordSetting.cs
-The source order the five word-valued graphics settings share (`AntiAliasingSetting`, `RenderScaleSetting`,
-`ShadowQualitySetting`, `WaterQualitySetting`, `ViewDistance`), each holding one instance as its `Lookup` over its words, key and flag. `Resolve`
-takes the flag where the setting has one, then the saved word, then the config key, then the fallback the setting hands
-it; a word outside the list falls through, a key spelling the fallback reads as it, and an unknown config word the lookup
-reaches warns. The result is a `ResolvedWord` carrying a `SettingSource`, and `SourceName` spells that source for a log
-line (`options.json`, the key, the flag, `default`, or shadow and water quality's machine rules). `ReadSaved` is the `--det` guard each
-setting's `SavedWord` goes through. `Spec/SessionSpec.cs` parses a setting's flag through its `Lookup`.
+One word setting's descriptor, each setting's `Lookup`: its words, config key, flag, options-file field (`SavedField`), labels, Built-in
+row title, detail and place (`UnderGraphicsRow`), `Fallback` over a `SettingContext` (`--det`, the mode, the panes) naming its own rule,
+`Take` (where the word is stored) and live-apply hook over `ILiveWorld`, one surface for every setting (the sun, the session's follow).
+`Resolve` takes the flag, then the saved word, then the config key, then the fallback; a word outside the list falls through, a key spelling
+the fallback reads as it, and an unknown config word the lookup reaches warns. `ResolveFrom` keeps its inputs, so `Refresh` resolves again
+only when a moved mode or pane count moves the fallback of a setting already resolved, and `Retake` lets the render scale follow the
+anti-aliasing method. `SourceName` spells a source, or the fallback's rule, for a log line. The registry is `WordSettings.cs`.
+
+## src/Utils/WordSettings.cs
+The registry of word settings, in Built-in row order, and `WordValues`, one word per registered setting with value equality: the options
+file's, a screen's staged ones, an apply's and a command line's. `OptionsStore`, `Spec/SessionSpec.cs`, `UI/Menu/OptionsChoices.cs`, the
+VIDEO page's word rows, `Launch/Launcher.cs` (`ResolveLaunch` at startup, `ResolveAll` on an apply, then `ApplyAll`), `Launch/EnhancedLook.cs`
+(`FollowMode` on a live switch) and `Launch/GameSession.cs` (`FollowPanes`) walk it. `ReadSaved` is the words' `--det` guard. A new setting
+is its own file, one line in `All` and an authored VIDEO row where it shows there; one that changes a session build adds it to
+`EnhancedLook.FollowWordSettings`.
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
 `taa` or `fsr2`. `Resolve` runs `WordSetting` over the saved `antiAliasing` word, then the `graphics.antiAliasing` config
 key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
-written whichever mode won, since only the default follows the mode. `SavedWord` holds the
-`--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
-reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
-refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
+written whichever mode won, since only the default follows the mode. The resolve runs at launch after `GraphicsMode.Resolve`, and again
+on a live mode switch or an Options apply, landing in the static `Method` and `Word`, whose one reader is `ViewportQuality.Apply`;
+`Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2 refuses a render scale above native, which
+`RenderScaleSetting.ClampFor` applies; its registry `Take` has the stored scale taken again under the new method.
 
 ## src/Utils/ShadowQualitySetting.cs
 The Enhanced sun's shadow quality, a VIDEO page row over `Words` (`off` to `ultra`). `Resolve` runs `WordSetting` over `--shadow-quality=`,
-the saved `shadowQuality` word, the `graphics.shadowQuality` key, then `DefaultFor(det)`: `ultra` under `--det`, otherwise
+the saved `shadowQuality` word, the `graphics.shadowQuality` key, then the fallback: `ultra` under `--det`, otherwise
 `FallbackFor(integrated, panes)`, which is `ultra` on a discrete GPU, `high` on an integrated one (the Steam Deck) and `off`
-there at three or four panes (source `default_integrated_gpu_panes`). `Pick` is the same lookup without the store; `SavedWord`
-holds the `--det` guard. `Launch/GameSession.cs` calls `ResolveForPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
+there at three or four panes (rule `default_integrated_gpu_panes`). `Pick` is the same lookup without the store. `Launch/GameSession.cs`
+re-resolves it through `WordSettings.FollowPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
 casts, its angular distance and blur, and the renderer's soft filter and atlas edge. `ApplyTo` is the one writer, called by
-`Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing on the faithful path and bumps
+`EnhancedLook.ApplyShadowQuality` at the sun's build and by the live-apply hook on an Options apply, under `HardShadows` (`--no-soft-shadows`); it writes nothing on the faithful path and bumps
 `Revision`, which the cockpit pass re-copies the sun on. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
 
 ## src/Utils/WaterQualitySetting.cs
@@ -355,8 +363,8 @@ The Enhanced sea's water quality: `flat`, the sea-level sheet the faithful path 
 (`Effects/Ocean.cs`) in its place. `Resolve` runs `WordSetting` over `--water-quality=`, the saved `waterQuality` word,
 the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, otherwise `FallbackFor(linux, integrated)`,
 which is `flat` on Linux or on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`), so the Steam Deck runs flat, under
-the source `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store; `SavedWord` holds the `--det` guard.
-`Launcher` resolves it at startup and on every Options apply, then `EnhancedLook.ApplyWaterQuality` has
+the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store.
+`Launcher` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
 `Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. Only Built-in's Options screen shows a row.
 
 ## src/Utils/ViewportQuality.cs
@@ -430,7 +438,7 @@ image is resampled down, spending GPU headroom on edges; below native it is upsc
 without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` runs
 `WordSetting` over the saved `renderScale` word, then the `graphics.renderScale` config key, then native. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
-to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
+to 100. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
 
 ## src/Utils/ScriptedWindow.cs
@@ -439,8 +447,8 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
-display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow and water quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
+display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

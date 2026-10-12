@@ -414,8 +414,8 @@ public class OriginalOptionsTests
         Assert.Null(exit.Resolution);
         Assert.Null(exit.DisplayMode);
         Assert.Null(exit.VSync);
-        Assert.Null(exit.RenderScale);
-        Assert.Null(exit.AntiAliasing);
+        Assert.Null(exit.Words[RenderScaleSetting.Lookup]);
+        Assert.Null(exit.Words[AntiAliasingSetting.Lookup]);
         Assert.Equal("normal", exit.Difficulty);
     }
 
@@ -585,10 +585,10 @@ public class OriginalOptionsTests
         Assert.Equal("60", host.Module.Video.VSyncChoice);
         Down(host);
         StepX(host, 1);
-        Assert.Equal("125", host.Module.Video.RenderScaleChoice);
+        Assert.Equal("125", host.Module.Video.Choice(RenderScaleSetting.Lookup));
         Down(host);
         StepX(host, 1);
-        Assert.Equal(DisplayWords.AntiAliasingFxaa, host.Module.Video.AntiAliasingChoice);
+        Assert.Equal(DisplayWords.AntiAliasingFxaa, host.Module.Video.Choice(AntiAliasingSetting.Lookup));
         Down(host);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
@@ -600,8 +600,8 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
         Assert.Null(host.Module.Video.DisplayModeChoice);
         Assert.Null(host.Module.Video.VSyncChoice);
-        Assert.Null(host.Module.Video.RenderScaleChoice);
-        Assert.Null(host.Module.Video.AntiAliasingChoice);
+        Assert.Null(host.Module.Video.Choice(RenderScaleSetting.Lookup));
+        Assert.Null(host.Module.Video.Choice(AntiAliasingSetting.Lookup));
 
         host.Module.Video.Open();
         Down(host);
@@ -623,7 +623,7 @@ public class OriginalOptionsTests
     [Fact]
     public void TheAntiAliasingRowNarrowsTheRenderScaleRowLive()
     {
-        var saved = new OptionsDef { RenderScale = "200" };
+        var saved = new OptionsDef { Words = { [RenderScaleSetting.Lookup] = "200" } };
         var host = Host(() => saved);
         host.Module.Video.OpenOn(OriginalVideoPage.AntiAliasingKey);
         Assert.Equal("Off", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
@@ -631,25 +631,25 @@ public class OriginalOptionsTests
 
         // A step back from the first word wraps onto the last, FSR 2.2.
         StepX(host, -1);
-        Assert.Equal(DisplayWords.AntiAliasingFsr2, host.Module.Video.AntiAliasingChoice);
+        Assert.Equal(DisplayWords.AntiAliasingFsr2, host.Module.Video.Choice(AntiAliasingSetting.Lookup));
         Assert.Equal("FSR 2.2", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
-        Assert.Equal("100", host.Module.Video.RenderScaleChoice);
+        Assert.Equal("100", host.Module.Video.Choice(RenderScaleSetting.Lookup));
         Assert.Equal("100%", Row(host, OriginalVideoPage.RenderScaleKey).Label);
-        Assert.Equal(new[] { "50", "67", "77", "100" }, host.Module.Video.RenderScaleWords);
+        Assert.Equal(new[] { "50", "67", "77", "100" }, host.Module.Video.Offered(RenderScaleSetting.Lookup));
 
         // Off again offers every scale, and leaves the clamped 100 where it stands.
         StepX(host, 1);
-        Assert.Equal(DisplayWords.RenderScaleChoices, host.Module.Video.RenderScaleWords);
-        Assert.Equal("100", host.Module.Video.RenderScaleChoice);
+        Assert.Equal(DisplayWords.RenderScaleChoices, host.Module.Video.Offered(RenderScaleSetting.Lookup));
+        Assert.Equal("100", host.Module.Video.Choice(RenderScaleSetting.Lookup));
 
         // With nothing saved the row reads the default of the graphics choice on the same page.
-        saved.RenderScale = null;
+        saved.Words[RenderScaleSetting.Lookup] = null;
         host.Module.Video.OpenOn(OriginalVideoPage.GraphicsKey);
         Assert.Equal("Off", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
         Assert.Equal("TAA", Row(host, OriginalVideoPage.AntiAliasingKey).Label);
-        Assert.Null(host.Module.Video.AntiAliasingChoice);
+        Assert.Null(host.Module.Video.Choice(AntiAliasingSetting.Lookup));
     }
 
     /// <summary>The Shadow Quality row follows the page's own graphics choice. It is dead under
@@ -658,33 +658,33 @@ public class OriginalOptionsTests
     [Fact]
     public void TheShadowQualityRowIsLiveUnderEnhancedAndCarriesItsWord()
     {
-        var saved = new OptionsDef { ShadowQuality = ShadowQualitySetting.Medium };
+        var saved = new OptionsDef { Words = { [ShadowQualitySetting.Lookup] = ShadowQualitySetting.Medium } };
         var host = Host(() => saved);
         host.Module.Video.Open();
         Assert.False(Row(host, OriginalVideoPage.ShadowQualityKey).Enabled);
         Assert.Equal("Medium", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
-        saved.ShadowQuality = null;
+        saved.Words[ShadowQualitySetting.Lookup] = null;
         saved.GraphicsMode = GraphicsMode.EnhancedWord;
         host.Module.Video.OpenOn(OriginalVideoPage.ShadowQualityKey);
         Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
         Assert.True(Row(host, OriginalVideoPage.ShadowQualityKey).Enabled);
         Assert.Equal("Ultra", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
-        Assert.Null(host.Module.Video.ShadowQualityChoice);
+        Assert.Null(host.Module.Video.Choice(ShadowQualitySetting.Lookup));
 
         // Ultra is the last word, so a step right wraps onto Off and a step left comes back.
         StepX(host, 1);
-        Assert.Equal(ShadowQualitySetting.Off, host.Module.Video.ShadowQualityChoice);
+        Assert.Equal(ShadowQualitySetting.Off, host.Module.Video.Choice(ShadowQualitySetting.Lookup));
         StepX(host, -1);
         StepX(host, -1);
-        Assert.Equal(ShadowQualitySetting.High, host.Module.Video.ShadowQualityChoice);
+        Assert.Equal(ShadowQualitySetting.High, host.Module.Video.Choice(ShadowQualitySetting.Lookup));
         Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
         Down(host);
         Down(host);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
-        Assert.Equal(ShadowQualitySetting.High, exit.ShadowQuality);
+        Assert.Equal(ShadowQualitySetting.High, exit.Words[ShadowQualitySetting.Lookup]);
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
     }
 

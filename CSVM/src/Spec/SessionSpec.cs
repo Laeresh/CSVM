@@ -1095,20 +1095,11 @@ public sealed record SessionSpec
     /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
     public string? GraphicsMode { get; private set; }
 
-    /// <summary><c>--shadow-quality=off|low|medium|high|ultra</c>, the enhanced sun's shadow level.
-    /// Null when not given, and for an unrecognised word with a warning. Beats the saved option and
-    /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
-    public string? ShadowQuality { get; private set; }
-
-    /// <summary><c>--view-distance=normal|far|veryfar|unlimited</c>, how far Enhanced draws the
-    /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
-    /// the saved option and the config key, including under <c>--det</c>.</summary>
-    public string? ViewDistance { get; private set; }
-
-    /// <summary><c>--water-quality=flat|waves</c>, whether Enhanced draws the wave ocean or the flat
-    /// sea. Null when not given, and for an unknown word with a warning. Beats the saved option and the
-    /// config key, including under <c>--det</c>. <c>--no-ocean</c> still wins over waves.</summary>
-    public string? WaterQuality { get; private set; }
+    /// <summary>The word each registered setting's flag names (<see cref="Utils.WordSettings.All"/>),
+    /// such as <c>--shadow-quality=</c>. Null where not given, and for an unknown word with a warning.
+    /// A flag beats the saved option and the config key, including under <c>--det</c>, the same rule
+    /// <see cref="GraphicsMode"/> keeps.</summary>
+    public Utils.WordValues WordFlags { get; } = new();
 
     /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
     /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
@@ -1711,17 +1702,9 @@ public sealed record SessionSpec
                     notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
                 }
             }
-            else if (TryWordFlag(arg, Utils.ShadowQualitySetting.Lookup, notes, out string? shadowWord))
+            else if (TryWordFlag(arg, notes, out var wordSetting, out string? flagWord))
             {
-                s.ShadowQuality = shadowWord ?? s.ShadowQuality;
-            }
-            else if (TryWordFlag(arg, Utils.ViewDistance.Lookup, notes, out string? viewWord))
-            {
-                s.ViewDistance = viewWord ?? s.ViewDistance;
-            }
-            else if (TryWordFlag(arg, Utils.WaterQualitySetting.Lookup, notes, out string? waterWord))
-            {
-                s.WaterQuality = waterWord ?? s.WaterQuality;
+                s.WordFlags[wordSetting] = flagWord ?? s.WordFlags[wordSetting];
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
@@ -2355,28 +2338,33 @@ public sealed record SessionSpec
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
-    // Whether arg is the setting's own flag. A word the setting does not know comes back null with a
-    // note, so the earlier value stands and the saved option still decides.
-    private static bool TryWordFlag(string arg, Utils.WordSetting setting, List<Note> notes, out string? word)
+    // Whether arg is a registered setting's flag. A word the setting does not know comes back null
+    // with a note, so the earlier value stands and the saved option still decides.
+    private static bool TryWordFlag(string arg, List<Note> notes,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Utils.WordSetting? setting, out string? word)
     {
+        foreach (var candidate in Utils.WordSettings.All)
+        {
+            string prefix = candidate.Flag + "=";
+            if (candidate.Flag == null || !arg.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            setting = candidate;
+            word = arg[prefix.Length..];
+            if (!candidate.IsWord(word))
+            {
+                notes.Add(new Note("world", $"{prefix}{word} is not one of {string.Join("/", candidate.Words)}, keeping the saved option's value"));
+                word = null;
+            }
+
+            return true;
+        }
+
+        setting = null;
         word = null;
-        string prefix = setting.Flag + "=";
-        if (setting.Flag == null || !arg.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        string want = arg[prefix.Length..];
-        if (setting.IsWord(want))
-        {
-            word = want;
-        }
-        else
-        {
-            notes.Add(new Note("world", $"{prefix}{want} is not one of {string.Join("/", setting.Words)}, keeping the saved option's value"));
-        }
-
-        return true;
+        return false;
     }
 
     // The type a menu launch flies. The three Dogfight types need the Dogfight mode, and Stunt Race

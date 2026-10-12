@@ -31,14 +31,18 @@ public static class WaterQualitySetting
     /// spare.</summary>
     public const string LowPowerDefault = Flat;
 
+    /// <summary>The log's name for the fallback rule that chose <see cref="LowPowerDefault"/>.</summary>
+    public const string LowPowerRule = "default_linux_or_integrated_gpu";
+
     /// <summary>Every word, the cheaper first, the order the Options row offers them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Flat, Waves };
 
     /// <summary>What the Options row shows for each of <see cref="Words"/>, index for index.</summary>
     public static readonly IReadOnlyList<string> Labels = new[] { "Flat", "Waves" };
 
-    /// <summary>The source order over <see cref="Words"/>, beaten by <c>--water-quality=</c>.</summary>
-    public static readonly WordSetting Lookup = new(Key, Words, "--water-quality");
+    /// <summary>The setting's registry entry, beaten by <c>--water-quality=</c>. Only the Built-in
+    /// Options screen shows a row.</summary>
+    public static readonly WordSetting Lookup = Register();
 
     /// <summary>The word the run resolved, <see cref="Default"/> until <see cref="Resolve"/> runs. The
     /// Options row shows it when nothing is saved, and the session's ocean follows it.</summary>
@@ -75,20 +79,7 @@ public static class WaterQualitySetting
     public static ResolvedWord Pick(string? flagWord, string? savedWord, string? configWord,
         string fallback = Default) =>
         Lookup.Resolve(flagWord, savedWord, configWord, fallback,
-            fallback == LowPowerDefault ? SettingSource.LowPowerDefault : SettingSource.Default);
-
-    /// <summary>The launch's ladder: <paramref name="flagWord"/>, then the saved word and the config
-    /// key, which <c>--det</c> both drop, over <see cref="DefaultFor"/>. An Options apply passes the
-    /// word it applied as <paramref name="savedWord"/>.</summary>
-    public static ResolvedWord ResolveForLaunch(string? flagWord, string? savedWord, bool det)
-    {
-        string fallback = DefaultFor(det);
-        return Resolve(flagWord, savedWord, Config.GetString(Key, fallback), fallback);
-    }
-
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.WaterQuality);
+            FallbackRule(fallback));
 
     /// <summary>The label the Options row shows for <paramref name="word"/>, or for <see cref="Word"/>
     /// where the word is null or unknown.</summary>
@@ -97,4 +88,32 @@ public static class WaterQualitySetting
         int at = Lookup.IndexOf(word);
         return Labels[at >= 0 ? at : Math.Max(0, Lookup.IndexOf(Word))];
     }
+
+    private static string? FallbackRule(string fallback) => fallback == LowPowerDefault ? LowPowerRule : null;
+
+    // Built in a method rather than inline. Inside a static field initializer, the nullable analysis
+    // reads the Shown hook's static Word as maybe null and warns (CS8603).
+    private static WordSetting Register() => new(Key, Words, "--water-quality")
+    {
+        SavedField = "waterQuality",
+        LogName = "water_quality",
+        Title = "Water quality",
+        Labels = WaterQualitySetting.Labels,
+        EnhancedOnly = true,
+        Detail = static enhanced => enhanced
+            ? "Flat draws the original's sea; Waves draws a swell in its place. Flat runs faster. Applies at once."
+            : "Enhanced Graphics only: the original world's sea is always flat.",
+        Shown = static _ => Word,
+        Fallback = static context =>
+        {
+            string fallback = DefaultFor(context.Det);
+            return new ResolvedWord(fallback, SettingSource.Default, FallbackRule(fallback));
+        },
+        Take = static resolved =>
+        {
+            Word = resolved.Word;
+            return resolved;
+        },
+        Apply = static world => world.FollowSession(),
+    };
 }

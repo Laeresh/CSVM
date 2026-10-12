@@ -513,7 +513,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/MenuExit.cs`, the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
 - `src/UI/Menu/MenuReturnDestination.cs`, semantic return destinations (top level, cabin, debrief) each presentation maps into its own graph.
 - `src/UI/Menu/MenuChapters.cs`, the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
-- `src/UI/Menu/DisplaySettingRows.cs`, the display settings as rows, shared by both Options screens: a label per store word, the two forgiving reads, the wrap.
+- `src/UI/Menu/DisplaySettingRows.cs`, the monitor, size, mode and V-Sync as rows, shared by both Options screens: a label per store word, the forgiving reads, the wrap.
 - `src/UI/Menu/OptionsChoices.cs`, the Options settings both presentations stage before the apply: the rules that couple them, Built-in's row table, the exit.
 - `src/UI/Menu/MenuLayout.cs`, the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs`, the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
@@ -641,7 +641,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
 - `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
 - `src/Utils/WaterQualitySetting.cs`, the Enhanced sea's water quality (flat, waves): the flag/saved/config `WordSetting` lookup over waves (flat on Linux or an integrated GPU), which the session's wave ocean follows live.
-- `src/Utils/WordSetting.cs`, the flag/saved/config/fallback lookup the five word-valued graphics settings share, its invalid-config warning and the `SettingSource` a log line names.
+- `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
+- `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
 - `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.
 - `src/Utils/ViewportQuality.cs`, what the anti-aliasing method and the render scale write on a 3D viewport, in one call the four viewport construction sites share.
 - `src/Utils/VSyncSetting.cs`, the frame pacing: the flag/saved/config ladder, and the one place the vsync mode and the frame cap are applied to the engine.

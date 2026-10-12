@@ -414,7 +414,7 @@ internal static class NetSessionSuites
         var sun = new DirectionalLight3D();
         try
         {
-            return EnhancedLook.Switch(!GraphicsMode.Enhanced, sun, null, EnhancedPasses.None, det: true,
+            return EnhancedLook.Switch(!GraphicsMode.Enhanced, sun, null, EnhancedPasses.None,
                 session, "net-pause-sheet");
         }
         finally

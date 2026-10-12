@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.UI.Boards;
 
 namespace CSVM.UI.Menu.Original;
@@ -9,8 +10,8 @@ namespace CSVM.UI.Menu.Original;
 /// The VIDEO page behind the Options hub, one page module over the decoded <c>[@Video@]</c>
 /// section, in the Game Options table's shape. Per row it is a key, the authored title, control and
 /// description widgets it stands on, and the store field it reads and writes. The monitor and size
-/// rows are enumerated per machine and the rest are fixed words over
-/// <see cref="CSVM.Utils.DisplayWords"/>. It stages the display settings in the form's shared
+/// rows are enumerated per machine. The word rows bind to their registered setting by key, which
+/// gives the words, labels, description and gate; the layout stays the page's. It stages them in the form's shared
 /// <see cref="OptionsChoices"/>, whose rules it keeps, and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>). Rows: <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed class OriginalVideoPage : IOriginalOptionsPage
@@ -86,19 +87,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels, c => c.VSyncAt,
             (c, i) => c.VSync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
-        new(RenderScaleKey, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC",
-            _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
-            OriginalRowKind.Dropdown, c => DisplaySettingRows.RenderScaleLabels(c.RenderScaleWords), c => c.RenderScaleAt,
-            (c, i) => c.RenderScale = c.RenderScaleWords[i]),
-        new(AntiAliasingKey, "Anti-aliasing", "VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC",
-            _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.AntiAliasingLabels, c => c.AntiAliasingAt,
-            (c, i) => c.PickAntiAliasing(CSVM.Utils.DisplayWords.AntiAliasingChoices[i])),
-        new(ShadowQualityKey, "Shadow Quality", "VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC",
-            c => DisplaySettingRows.ShadowQualityDetail(c.Graphics),
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.ShadowQualityLabels, c => c.ShadowQualityAt,
-            (c, i) => c.ShadowQuality = CSVM.Utils.ShadowQualitySetting.Words[i],
-            c => c.Enhanced),
+        Word(RenderScaleKey, CSVM.Utils.RenderScaleSetting.Lookup, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC"),
+        Word(AntiAliasingKey, CSVM.Utils.AntiAliasingSetting.Lookup, "Anti-aliasing", "VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC"),
+        Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality", "VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC"),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             _ => GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             c => c.Enhanced ? 1 : 0,
@@ -109,8 +100,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
     private readonly IOriginalOptionsForm _form;
-    // The form's staged settings, shared with the other two settings pages. The view distance and
-    // water quality ride in it unshown, the apply carrying them unchanged.
+    // The form's staged settings, shared with the other two settings pages. A word setting with no
+    // row here rides in it unshown, the apply carrying it unchanged.
     private readonly OptionsChoices _choices;
 
     private string? _open;
@@ -146,13 +137,6 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The graphics mode word the page would apply.</summary>
     public string GraphicsChoice => _choices.Graphics;
 
-    /// <summary>The view-distance word the page would apply, null while never set.</summary>
-    public string? ViewDistanceChoice => _choices.ViewDistance;
-
-    /// <summary>The water-quality word the page would apply, which is the saved one, null while never
-    /// set.</summary>
-    public string? WaterQualityChoice => _choices.WaterQuality;
-
     /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
     /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
     public string? MonitorChoice => _choices.MonitorIndex;
@@ -170,33 +154,19 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// apply, or null while nothing has been saved and no row has been touched.</summary>
     public string? VSyncChoice => _choices.VSync;
 
-    /// <summary>The render-scale word (<see cref="CSVM.Utils.DisplayWords.RenderScaleChoices"/>) the
-    /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? RenderScaleChoice => _choices.RenderScale;
-
-    /// <summary>The anti-aliasing word (<see cref="CSVM.Utils.DisplayWords.AntiAliasingChoices"/>) the
-    /// page would apply, or null while nothing has been saved and no row has been touched. The next
-    /// start reads a null as the graphics mode's own default.</summary>
-    public string? AntiAliasingChoice => _choices.AntiAliasing;
-
-    /// <summary>The shadow-quality word (<see cref="CSVM.Utils.ShadowQualitySetting.Words"/>) the
-    /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? ShadowQualityChoice => _choices.ShadowQuality;
-
-    /// <summary>Whether the Shadow Quality row takes a press, which it does while the page's own
-    /// Enhanced Graphics box is ticked. The faithful world casts no sun shadow, so under Original the
-    /// row draws dead and keeps the saved word for a later flip.</summary>
-    public bool ShadowQualityLive => _choices.Enhanced;
-
-    /// <summary>The scales the Render Scale row offers under the method the Anti-aliasing row stands
-    /// on, which is fewer under FSR 2.2. The list follows that row live.</summary>
-    public IReadOnlyList<string> RenderScaleWords => _choices.RenderScaleWords;
-
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.Video;
 
     string IOriginalOptionsPage.AcceptKey => AcceptKey;
 
     string IOriginalOptionsPage.CancelKey => CancelKey;
+
+    /// <summary>The word the page would apply for <paramref name="setting"/>, or null while nothing has
+    /// been saved and no row has been touched. A setting with no row here rides unchanged.</summary>
+    public string? Choice(CSVM.Utils.WordSetting setting) => _choices.Words[setting];
+
+    /// <summary>The words <paramref name="setting"/>'s row offers under the other rows, as the Render
+    /// Scale row narrows under FSR 2.2. The list follows those rows live.</summary>
+    public IReadOnlyList<string> Offered(CSVM.Utils.WordSetting setting) => _choices.Offered(setting);
 
     /// <summary>Opens the page on the saved options with its first row focused. The hub's VIDEO door
     /// and the screenshot aid both go through it.</summary>
@@ -371,6 +341,16 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             layers.Overlays.Add(_chrome.ComposeOptionList(drop, _listTop, rows, focus));
         }
     }
+
+    // A row bound to a registered word setting by its key. The setting gives the words, labels,
+    // description and gate; the page gives its authored widgets and title.
+    private static VideoOption Word(string key, CSVM.Utils.WordSetting setting, string title,
+        string titleKey, string controlKey, string descriptionKey) =>
+        new(key, title, titleKey, controlKey, descriptionKey,
+            c => setting.Detail(c.Enhanced), OriginalRowKind.Dropdown,
+            c => c.Offered(setting).Select(setting.Label).ToArray(), c => c.At(setting),
+            (c, i) => c.Pick(setting, c.Offered(setting)[i]),
+            c => c.Live(setting));
 
     private static int IndexOf(string key)
     {

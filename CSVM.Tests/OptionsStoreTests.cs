@@ -16,6 +16,39 @@ namespace CSVM.Tests;
 /// a mute while a level of -1 means never set.</summary>
 public class OptionsStoreTests
 {
+    /// <summary>A file saved before the word settings registered themselves loads every word under its
+    /// old field name. It saves back under the same names with the same values. A field the build
+    /// added since writes as null, never in place of an old one.</summary>
+    [Fact]
+    public void AFileSavedBeforeTheWordRegistryRoundTrips()
+    {
+        string text = File.ReadAllText(TestData.Fixture("options", "options-v1.json"));
+        var def = OptionsStore.Deserialize(text);
+
+        Assert.NotNull(def);
+        Assert.Equal("veryfar", def!.Words[ViewDistance.Lookup]);
+        Assert.Equal("77", def.Words[RenderScaleSetting.Lookup]);
+        Assert.Equal(DisplayWords.AntiAliasingSmaa, def.Words[AntiAliasingSetting.Lookup]);
+        Assert.Equal(ShadowQualitySetting.Medium, def.Words[ShadowQualitySetting.Lookup]);
+        Assert.Equal(WaterQualitySetting.Flat, def.Words[WaterQualitySetting.Lookup]);
+        Assert.Equal("enhanced", def.GraphicsMode);
+        Assert.Equal("144", def.VSync);
+
+        using var before = System.Text.Json.JsonDocument.Parse(text);
+        using var after = System.Text.Json.JsonDocument.Parse(OptionsStore.Serialize(def));
+        foreach (var field in before.RootElement.EnumerateObject())
+        {
+            Assert.True(after.RootElement.TryGetProperty(field.Name, out var saved), $"{field.Name} is no longer written");
+            Assert.Equal(field.Value.GetRawText(), saved.GetRawText());
+        }
+
+        foreach (var field in after.RootElement.EnumerateObject())
+        {
+            Assert.True(before.RootElement.TryGetProperty(field.Name, out _) || field.Value.ValueKind == System.Text.Json.JsonValueKind.Null,
+                $"{field.Name} is new and carries a value the old file never held");
+        }
+    }
+
     [Fact]
     public void Load_MissingFile_ReadsAsEmpty()
     {
@@ -97,10 +130,10 @@ public class OptionsStoreTests
         var store = new OptionsStore(TestData.TempDir());
         foreach (string word in ViewDistance.Words)
         {
-            store.Save(new OptionsDef { GraphicsMode = "enhanced", ViewDistance = word });
+            store.Save(new OptionsDef { GraphicsMode = "enhanced", Words = { [ViewDistance.Lookup] = word } });
             var def = store.Load();
 
-            Assert.Equal(word, def.ViewDistance);
+            Assert.Equal(word, def.Words[ViewDistance.Lookup]);
             Assert.Equal("enhanced", def.GraphicsMode);
         }
     }
@@ -119,7 +152,7 @@ public class OptionsStoreTests
             var def = new OptionsStore(dir).Load();
 
             Assert.Equal("enhanced", def.GraphicsMode);
-            Assert.Null(def.ViewDistance);
+            Assert.Null(def.Words[ViewDistance.Lookup]);
         }
     }
 

@@ -620,34 +620,13 @@ public partial class Launcher : Node3D
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
         var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
-        // The view distance under the same --det rule, a machine's own state a capture must not read.
-        var viewDistance = Utils.ViewDistance.Resolve(_spec.ViewDistance, savedOptions?.ViewDistance,
-            Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default));
-        // Display settings rather than the mode's, so each is written whichever presentation won;
-        // only the method's default follows the mode. They share the mode's line because all three
-        // reach the same viewports, so a softer or slower run than expected is read off one line.
-        string antiAliasingDefault = Utils.AntiAliasingSetting.DefaultFor(graphicsEnhanced);
-        var antiAliasing = Utils.AntiAliasingSetting.Resolve(
-            Utils.AntiAliasingSetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.AntiAliasingSetting.Key, antiAliasingDefault),
-            graphicsEnhanced);
-        // After the method, which clamps the scale: FSR 2.2 runs at native or below.
-        var renderScale = Utils.RenderScaleSetting.Resolve(
-            Utils.RenderScaleSetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default),
-            antiAliasing.Word);
-        // Resolved under either mode so the line says what a flip to Enhanced would fly; only
-        // SetupLighting's enhanced sun reads it.
-        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
-        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
-            Utils.ShadowQualitySetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        // Before any session builds, since the ocean's build reads the word.
-        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality,
-            Utils.WaterQualitySetting.SavedWord(_spec.Det), _spec.Det);
+        // Every word setting under the same --det rule, before any viewport or session builds, since
+        // both read the words. They share the mode's line, so a softer or slower run than expected
+        // is read off one line.
+        Utils.WordSettings.ResolveLaunch(_spec.WordFlags, _spec.Det);
+        Utils.ShadowQualitySetting.HardShadows = (_spec.SkippedPasses & EnhancedPasses.SoftShadows) != 0;
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
-        string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)} water_quality={waterQuality.Word} water_source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} {Utils.WordSettings.Describe()}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -1807,7 +1786,7 @@ public partial class Launcher : Node3D
         };
         // Enhanced mode alone: a lit world has surfaces a shadow pass can land on.
         if (GraphicsMode.Enhanced)
-            EnhancedLook.ApplySun(_sun, true, _spec.SkippedPasses);
+            EnhancedLook.ApplySun(_sun, true);
         AddChild(_sun);
         // The modal day pair under this bearing, after the AddChild so the bearing is the one the
         // light wears in the tree. A session with no weather.json never reaches ApplyZone, and
@@ -2170,7 +2149,7 @@ public partial class Launcher : Node3D
     }
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // The display settings, the mix, the view distance and the graphics mode apply now.
+    // The display settings, the mix, the word settings and the graphics mode apply now.
     // ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
     // them here. The pause leaf puts the head turn and targeting switch on the seats flying now
     // (PausePreferences.FeedGameOptions).
@@ -2179,7 +2158,6 @@ public partial class Launcher : Node3D
         var store = OptionsStore.UserOptions();
         var options = store.Load();
         options.GraphicsMode = applied.Graphics;
-        options.ViewDistance = applied.ViewDistance;
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
         options.Rumble = applied.Rumble;
@@ -2189,10 +2167,8 @@ public partial class Launcher : Node3D
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
-        options.RenderScale = applied.RenderScale;
-        options.AntiAliasing = applied.AntiAliasing;
-        options.ShadowQuality = applied.ShadowQuality;
-        options.WaterQuality = applied.WaterQuality;
+        foreach (var setting in Utils.WordSettings.All)
+            options.Words[setting] = applied.Words[setting];
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2213,30 +2189,16 @@ public partial class Launcher : Node3D
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
-        ApplyViewDistance(applied.ViewDistance);
-        // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
-        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
-        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
-            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
-        // The same for the sea; --water-quality still beats the saved word.
-        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality, applied.WaterQuality, _spec.Det);
-        Log.Info("world", $"water quality applied: {waterQuality.Word} source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
-        // A mode switch dresses the sun at the new level and follows the sea itself; otherwise the
-        // level and the sea alone move.
-        if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
-        {
-            RequestGraphicsSwitch(enhanced, "options", save: false);
-        }
-        else
-        {
-            if (IsInstanceValid(_sun))
-                ApplyShadowQuality(_sun);
-            EnhancedLook.ApplyWaterQuality(_session);
-        }
+        // Each word setting resolved again with the applied word in the saved slot, so its flag still
+        // beats it.
+        Utils.WordSettings.ResolveAll(_spec.WordFlags, applied.Words, _spec.Det);
+        Log.Info("world", $"word settings applied: {Utils.WordSettings.Describe()}");
+        // A mode switch puts every word setting on the world itself; otherwise each applies alone.
+        bool switching = GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced
+            && RequestGraphicsSwitch(enhanced, "options", save: false);
+        if (!switching)
+            Utils.WordSettings.ApplyAll(new LiveWorld(IsInstanceValid(_sun) ? _sun : null, _session));
 
-        // The render scale and the anti-aliasing method reach every 3D viewport now as well.
-        EnhancedLook.ReapplyDisplayQuality(_spec.Det, "options");
         // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
         // apply and the gate keeps what boot gave it (see the arming above).
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
@@ -2245,22 +2207,23 @@ public partial class Launcher : Node3D
     // The live graphics-mode switch on this process's sun, Environment and session
     // (EnhancedLook.Switch). It stalls a few frames, so a flying world takes it under RequestGraphicsSwitch.
     private void SwitchGraphicsMode(bool enhanced, string why) =>
-        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _spec.Det, _session, why);
+        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _session, why);
 
     // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
-    // With no world up it runs at once. ⚠ Refuse it in a network session. Its shared world has no
-    // pause to hold it in, and the stall would halt one seat in a live match.
-    private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
+    // With no world up it runs at once. Returns whether a switch runs. ⚠ Refuse it in a network
+    // session. Its shared world has no pause to hold it in, and the stall would halt one seat in a
+    // live match.
+    private bool RequestGraphicsSwitch(bool enhanced, string why, bool save)
     {
         if (_session is { InSession: true, Wire.Link: not null })
         {
             Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
-            return;
+            return false;
         }
         if (_switchCover != null)
         {
             Log.Info("world", $"graphics mode: {why} ignored, a switch is already under way");
-            return;
+            return false;
         }
         void Run()
         {
@@ -2271,12 +2234,13 @@ public partial class Launcher : Node3D
         if (_session is not { InSession: true } session)
         {
             Run();
-            return;
+            return true;
         }
         string subject = enhanced ? "SWITCHING TO ENHANCED GRAPHICS" : "SWITCHING TO ORIGINAL GRAPHICS";
         var board = UI.Screens.LoadBoard.Build(_dataRoot, _zrdrPath, _messagesPath, false, subject, null);
         board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _switchCover = SwitchCover.Begin(this, board, session.Pause, GameClock.Current, Run, why);
+        return true;
     }
 
     // A cover over a session being torn down: off at once, its hold released.
@@ -2285,11 +2249,6 @@ public partial class Launcher : Node3D
         _switchCover?.Drop();
         _switchCover = null;
     }
-
-    // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
-    // level changes mid-flight; the cockpit pass follows on its next Sync.
-    private void ApplyShadowQuality(DirectionalLight3D sun) =>
-        EnhancedLook.ApplyShadowQuality(sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
 
     // G's save, the one field it changes. Never under --det, whose runs must not write the player's
     // options (the same rule the startup read keeps).
@@ -2302,11 +2261,6 @@ public partial class Launcher : Node3D
         options.GraphicsMode = GraphicsMode.Enhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default;
         store.Save(options);
     }
-
-    // The view distance on the running world (EnhancedLook.ApplyViewDistance), resolved again with the
-    // applied word in the saved slot, so --view-distance still beats it.
-    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(Utils.ViewDistance.Resolve(
-        _spec.ViewDistance, word, Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default)).Word, _session);
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's

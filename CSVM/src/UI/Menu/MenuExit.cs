@@ -36,13 +36,13 @@ public sealed record QuitExit : MenuExit;
 
 /// <summary>The player applied an Options screen: the consumer persists every choice it carries,
 /// then shows the active presentation again at its top level. Which presentation that is stays the
-/// command line's, never an option. Carried are a <see cref="Utils.GraphicsMode"/> word the apply
-/// switches the running world to, a <see cref="Flight.Hangar.Difficulty.Word"/> the next launch
-/// reads, and <see cref="Utils.OptionsDef"/>'s other fields, null where never set. A screen showing none of them
-/// hands back what it read, since the consumer writes every field it is given. ⚠ All nineteen ride
-/// the exit, not the screen's own save, so the options file keeps one writer, and none is
-/// defaulted. ⚠ A field no screen offers is dropped rather than left riding as a null, since a null
-/// the consumer saves wipes the file's value.</summary>
+/// command line's, never an option. It carries a <see cref="Utils.GraphicsMode"/> word, a
+/// <see cref="Flight.Hangar.Difficulty.Word"/>, <see cref="Utils.OptionsDef"/>'s other fields and
+/// one word per registered setting, null where never set. A screen showing none of them hands back what it
+/// read, since the consumer writes every field it is given. ⚠ Every setting rides the exit, not the
+/// screen's own save, so the options file keeps one writer, and none is defaulted. ⚠ A field no
+/// screen offers is dropped rather than left riding as a null, since a null the consumer saves wipes
+/// the file's value.</summary>
 public sealed record OptionsApplyExit(
     string Graphics,
     string Difficulty,
@@ -50,9 +50,6 @@ public sealed record OptionsApplyExit(
     string? Resolution,
     string? DisplayMode,
     string? VSync,
-    string? RenderScale,
-    string? AntiAliasing,
-    string? ShadowQuality,
     int? AudioMaster,
     int? AudioMusic,
     int? AudioEffects,
@@ -61,8 +58,7 @@ public sealed record OptionsApplyExit(
     bool? Rumble,
     string? DefaultView,
     bool? AutoHeadTurn,
-    string? ViewDistance,
-    string? WaterQuality) : MenuExit;
+    Utils.WordValues Words) : MenuExit;
 
 /// <summary>Dogfight's match rules as a screen set them. The kill target ends a match early and the
 /// match clock runs in MINUTES, a 0 on either disabling that limit. The lives are the deaths a pilot

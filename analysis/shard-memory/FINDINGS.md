@@ -185,9 +185,9 @@ Measured again on a later catalog (559 suites), the six shards peaked at 12.07, 
 5.66 and 12.05 GB. Three shards held a step of 5.0 to 6.1 GB at one suite that made no shader:
 `graphics-retext-compiles` (its own TAA frame), `sun-per-view` and `load-progress`. The last two
 draw the window's viewport, and an earlier graphics suite had left that viewport on TAA: a live
-switch to Enhanced resolves the anti-aliasing again (`EnhancedLook.ReapplyDisplayQuality`), and the
+switch to Enhanced resolves the anti-aliasing again (`EnhancedLook.ReapplyWordSettings`), and the
 suites' restore put the mode back without resolving it. The log shows each such suite's last
-`display quality:` line at `anti_aliasing=taa`. A step in private bytes with no new shader is a
+`[world] word settings:` line at `anti_aliasing=taa`. A step in private bytes with no new shader is a
 renderer feature turned on, not a cache that grew.
 
 Three changes bound it. The graphics suites' restore resolves the display quality again. The

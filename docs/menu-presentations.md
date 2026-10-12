@@ -283,13 +283,14 @@ that has moved nothing. The render scale is `RenderScaleSetting.Resolve`, the sa
 `graphics.renderScale` config key over native, and the anti-aliasing method is
 `AntiAliasingSetting.Resolve`, the saved word over the `graphics.antiAliasing` config key over the
 graphics mode's own default; FSR 2.2 clamps a scale above native back to it. These two are the display
-settings that reach no window: they are written on each 3D viewport as it is built, so they take hold
-at the next start the way the graphics mode does, which is what the rows' own descriptions say. The
+settings that reach no window: they are written on each 3D viewport as it is built, and the apply
+writes them again on every live one. The
 shadow quality beside them is `ShadowQualitySetting.Resolve`, `--shadow-quality=` over the saved word
 over the `graphics.shadowQuality` config key over `ultra` (`high` on an integrated GPU, `off` there in a
-three- or four-pane session); it reaches the Enhanced sun alone, and unlike
-those two the apply puts it on the flying world at once (`Launcher.ApplyShadowQuality`, which the
-cockpit pass follows). Its row draws dead while the page's own graphics word is Original. Every other display
+three- or four-pane session); it reaches the Enhanced sun alone, and the apply puts it on the flying
+world at once, which the cockpit pass follows. All three are registered word settings
+(`CSVM/src/Utils/WordSettings.cs`), which the apply resolves and puts on the world through each one's
+own live-apply hook. Its row draws dead while the page's own graphics word is Original. Every other display
 setting is the case where the apply does
 more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
@@ -336,17 +337,17 @@ control, so a level is a stepper moving by the AUDIO page slider's own keyboard 
 (`SliderControl.KeyStep`, five) and clamped at both ends; a step that moves nothing writes nothing,
 so a level never touched stays never set. Built-in has no live preview either: a level is heard
 once the apply writes it. Seventeen rows overflow the band, so the screen is a window of the
-Controls list's height with its position in the heading. The two presentations read the five
+Controls list's height with its position in the heading. The two presentations read the
 display settings through one rule
-set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
+set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`, and each word setting's own descriptor) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
 the running world at once (`Launcher.SwitchGraphicsMode`), so neither description owes a restart.
-Built-in's screen adds a View Distance row under its chooser (`Utils/ViewDistance.cs`), live the
-same way and marked as Enhanced only, and a Water Quality row under its shadow quality
-(`Utils/WaterQualitySetting.cs`), dead under Original, whose apply builds or drops the wave ocean
-on the flying world. The Original VIDEO page has no line for either and hands both saved words
+Built-in's screen shows one row per registered word setting, which adds a View Distance row under
+its chooser (`Utils/ViewDistance.cs`), live the same way and marked as Enhanced only, and a Water
+Quality row under its shadow quality (`Utils/WaterQualitySetting.cs`), dead under Original, whose
+apply builds or drops the wave ocean on the flying world. The Original VIDEO page has no line for either and hands both saved words
 back unchanged. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 

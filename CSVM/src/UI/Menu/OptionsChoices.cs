@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.Flight.Camera;
 using CSVM.Utils;
 using DifficultyTiers = CSVM.Flight.Hangar.Difficulty;
-using ViewDistances = CSVM.Utils.ViewDistance;
 
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// The nineteen settings an Options screen stages before the apply, and the rules tying them
-/// together. Borderless pins the size, and FSR 2.2 clamps the render scale. The view distance,
-/// shadow and water step only under Enhanced, and a volume step clamps where other rows wrap.
+/// The settings an Options screen stages before the apply, and the rules tying them together.
+/// Borderless pins the size, and a volume step clamps where other rows wrap. Each registered word
+/// setting (<see cref="WordSettings.All"/>) stages in <see cref="Words"/> under its own rules.
 /// Built-in walks it as numbered rows, each defined once in a table (<see cref="Step"/>,
 /// <see cref="Label"/>, <see cref="Detail"/>). Original's three settings pages read and write the
 /// same values from their own authored rows. Both read the saved options through <see cref="Load"/>
@@ -19,11 +19,9 @@ namespace CSVM.UI.Menu;
 /// </summary>
 public sealed class OptionsChoices
 {
-    // Built-in's stepper rows, top to bottom. The GAME OPTIONS page's three come first in its order,
-    // then the targeting switch, the rumble, the graphics mode and its view distance. The six display
-    // settings and the shadow quality follow in the VIDEO page's order, then the water quality. The
-    // four volume levels close in the AUDIO page's order.
-    private static readonly Row[] Rows =
+    // The GAME OPTIONS page's three in its order, then the targeting switch, the rumble and the
+    // graphics mode.
+    private static readonly Row[] GameRows =
     {
         new("Difficulty", c => DifficultyTiers.Label(c.Difficulty), (c, d) => c.Difficulty = Wrap(DifficultyTiers.Clamp(c.Difficulty) + d, 3),
             _ => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn."),
@@ -38,10 +36,11 @@ public sealed class OptionsChoices
         new("Graphics", c => c.Enhanced ? "Enhanced" : "Original",
             (c, _) => c.Graphics = c.Enhanced ? GraphicsMode.Default : GraphicsMode.EnhancedWord,
             _ => "Original is the faithful world; Enhanced lights it. Applies at once."),
-        new("View distance (Enhanced only)", c => ViewDistances.Label(c.ViewDistance), (c, d) => c.StepViewDistance(d),
-            c => c.Enhanced
-                ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
-                : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw."),
+    };
+
+    // The monitor, size, mode and V-Sync in the VIDEO page's order.
+    private static readonly Row[] DisplayRows =
+    {
         new("Monitor", c => c.Screens.Labels[c.MonitorAt], (c, d) => c.MonitorIndex = MonitorSetting.Word(DisplaySettingRows.Step(c.MonitorAt, d, c.Screens.Labels.Count)),
             _ => "Select the monitor the game opens on. Applied on the way out, before the size."),
         new("Resolution", c => c.Sizes.Words[c.ResolutionAt], (c, d) => c.StepResolution(d), c => c.ResolutionDetail()),
@@ -51,18 +50,11 @@ public sealed class OptionsChoices
         new("V-Sync", c => DisplaySettingRows.VSyncLabels[c.VSyncAt],
             (c, d) => c.VSync = DisplayWords.VSyncChoices[DisplaySettingRows.Step(c.VSyncAt, d, DisplayWords.VSyncChoices.Count)],
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap."),
-        new("Render scale", c => DisplaySettingRows.RenderScaleLabels(c.RenderScaleWords)[c.RenderScaleAt],
-            (c, d) => c.RenderScale = c.RenderScaleWords[DisplaySettingRows.Step(c.RenderScaleAt, d, c.RenderScaleWords.Count)],
-            _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once."),
-        new("Anti-aliasing", c => DisplaySettingRows.AntiAliasingLabels[c.AntiAliasingAt],
-            (c, d) => c.PickAntiAliasing(DisplayWords.AntiAliasingChoices[DisplaySettingRows.Step(c.AntiAliasingAt, d, DisplayWords.AntiAliasingChoices.Count)]),
-            _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once."),
-        new("Shadow quality", c => DisplaySettingRows.ShadowQualityLabels[c.ShadowQualityAt], (c, d) => c.StepShadowQuality(d),
-            c => DisplaySettingRows.ShadowQualityDetail(c.Graphics)),
-        new("Water quality", c => WaterQualitySetting.Label(c.WaterQuality), (c, d) => c.StepWaterQuality(d),
-            c => c.Enhanced
-                ? "Flat draws the original's sea; Waves draws a swell in its place. Flat runs faster. Applies at once."
-                : "Enhanced Graphics only: the original world's sea is always flat."),
+    };
+
+    // The four volume levels in the AUDIO page's order.
+    private static readonly Row[] AudioRows =
+    {
         new("Master volume", c => LevelLabel(c.AudioMaster, AudioMix.DefaultMaster), (c, d) => c.AudioMaster = StepLevel(c.AudioMaster, AudioMix.DefaultMaster, d),
             _ => "Set the overall volume of all sounds. Heard once the choices are applied."),
         new("Music volume", c => LevelLabel(c.AudioMusic, AudioMix.DefaultMusic), (c, d) => c.AudioMusic = StepLevel(c.AudioMusic, AudioMix.DefaultMusic, d),
@@ -72,6 +64,15 @@ public sealed class OptionsChoices
         new("Voice volume", c => LevelLabel(c.AudioVoice, AudioMix.DefaultVoice), (c, d) => c.AudioVoice = StepLevel(c.AudioVoice, AudioMix.DefaultVoice, d),
             _ => "Set the volume of the voices. Heard once the choices are applied."),
     };
+
+    // Built-in's stepper rows, top to bottom. The game rows, the word settings under the graphics row,
+    // the display rows, the other word settings, then the volume levels.
+    private static readonly Row[] Rows = GameRows
+        .Concat(WordSettings.All.Where(static s => s.UnderGraphicsRow).Select(WordRow))
+        .Concat(DisplayRows)
+        .Concat(WordSettings.All.Where(static s => !s.UnderGraphicsRow).Select(WordRow))
+        .Concat(AudioRows)
+        .ToArray();
 
     private readonly Func<SizeList> _screenSizes;
     private readonly Func<ScreenList> _screens;
@@ -112,12 +113,6 @@ public sealed class OptionsChoices
     /// <summary>The <see cref="GraphicsMode"/> word.</summary>
     public string Graphics { get; set; } = GraphicsMode.Default;
 
-    /// <summary>The view-distance word, null while never set.</summary>
-    public string? ViewDistance { get; set; }
-
-    /// <summary>The water-quality word, null while never set.</summary>
-    public string? WaterQuality { get; set; }
-
     /// <summary>The screen index in <see cref="MonitorSetting.Word"/>'s spelling, null while never set.</summary>
     public string? MonitorIndex { get; set; }
 
@@ -131,15 +126,9 @@ public sealed class OptionsChoices
     /// <summary>The <see cref="DisplayWords.VSyncChoices"/> word, null while never set.</summary>
     public string? VSync { get; set; }
 
-    /// <summary>The render-scale word, null while never set.</summary>
-    public string? RenderScale { get; set; }
-
-    /// <summary>The anti-aliasing word, null while never set. Set through
-    /// <see cref="PickAntiAliasing"/>, which keeps the render scale in step.</summary>
-    public string? AntiAliasing { get; private set; }
-
-    /// <summary>The <see cref="ShadowQualitySetting.Words"/> word, null while never set.</summary>
-    public string? ShadowQuality { get; set; }
+    /// <summary>The word staged for each registered setting, null while never set. Set through
+    /// <see cref="Pick"/>, which keeps a setting's partners in step.</summary>
+    public WordValues Words { get; private set; } = new();
 
     /// <summary>The Master level (<see cref="AudioMix"/>'s 0..100), null while never set.</summary>
     public int? AudioMaster { get; set; }
@@ -153,8 +142,8 @@ public sealed class OptionsChoices
     /// <summary>The Voice level, null while never set.</summary>
     public int? AudioVoice { get; set; }
 
-    /// <summary>Whether the graphics word is Enhanced, which the view distance, shadow and water
-    /// settings need to step at all. Under Original each keeps its word for a later flip.</summary>
+    /// <summary>Whether the graphics word is Enhanced, which an Enhanced-only word setting needs to
+    /// step at all. Under Original each keeps its word for a later flip.</summary>
     public bool Enhanced => Graphics == GraphicsMode.EnhancedWord;
 
     /// <summary>Whether the display mode owns the size, which borderless does. The size then reads as
@@ -181,13 +170,6 @@ public sealed class OptionsChoices
     /// sorts.</summary>
     public SizeList Sizes => _screenSizes().Including(_savedResolution);
 
-    /// <summary>The scales the render scale offers under the standing anti-aliasing method, fewer under
-    /// FSR 2.2.</summary>
-    public IReadOnlyList<string> RenderScaleWords => RenderScaleSetting.ChoicesFor(AntiAliasingWord);
-
-    /// <summary>The anti-aliasing method standing: the saved word, else the graphics mode's own default.</summary>
-    public string AntiAliasingWord => DisplaySettingRows.AntiAliasingWord(AntiAliasing, Graphics);
-
     /// <summary>Where the monitor stands among <see cref="Screens"/>, through <see cref="MonitorSetting.Resolve"/>,
     /// so it cannot name a screen the apply would not move the window to.</summary>
     public int MonitorAt => MonitorSetting.Resolve(MonitorIndex, Screens).Screen;
@@ -201,15 +183,6 @@ public sealed class OptionsChoices
     /// <summary>Where V-Sync stands among <see cref="DisplayWords.VSyncChoices"/>.</summary>
     public int VSyncAt => DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, VSync, VSyncSetting.Default);
 
-    /// <summary>Where the render scale stands among <see cref="RenderScaleWords"/>.</summary>
-    public int RenderScaleAt => DisplaySettingRows.WordIndex(RenderScaleWords, RenderScale, RenderScaleSetting.Default);
-
-    /// <summary>Where the anti-aliasing method stands among <see cref="DisplayWords.AntiAliasingChoices"/>.</summary>
-    public int AntiAliasingAt => DisplaySettingRows.WordIndex(DisplayWords.AntiAliasingChoices, AntiAliasingWord, AntiAliasingWord);
-
-    /// <summary>Where the shadow quality stands among <see cref="ShadowQualitySetting.Words"/>.</summary>
-    public int ShadowQualityAt => DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, ShadowQuality, ShadowQualitySetting.Word);
-
     /// <summary>Takes every setting off <paramref name="saved"/>, the shipped defaults where it is
     /// null. What was asked for, not what this process resolved from a flag or a config key.</summary>
     public void Load(OptionsDef? saved)
@@ -220,16 +193,12 @@ public sealed class OptionsChoices
         DefaultView = saved?.DefaultView;
         AutoHeadTurn = saved?.AutoHeadTurn;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
-        ViewDistance = saved?.ViewDistance;
-        WaterQuality = saved?.WaterQuality;
+        Words = saved?.Words.Copy() ?? new WordValues();
         MonitorIndex = saved?.MonitorIndex;
         Resolution = saved?.Resolution;
         _savedResolution = saved?.Resolution;
         DisplayMode = saved?.DisplayMode;
         VSync = saved?.VSync;
-        RenderScale = saved?.RenderScale;
-        AntiAliasing = saved?.AntiAliasing;
-        ShadowQuality = saved?.ShadowQuality;
         AudioMaster = saved?.AudioMaster;
         AudioMusic = saved?.AudioMusic;
         AudioEffects = saved?.AudioEffects;
@@ -239,15 +208,25 @@ public sealed class OptionsChoices
     /// <summary>The apply exit carrying every setting, never-set ones as null.</summary>
     public OptionsApplyExit ToExit() =>
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
-            RenderScale, AntiAliasing, ShadowQuality, AudioMaster, AudioMusic, AudioEffects, AudioVoice,
-            NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, ViewDistance, WaterQuality);
+            AudioMaster, AudioMusic, AudioEffects, AudioVoice,
+            NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy());
 
-    /// <summary>Picks an anti-aliasing method. FSR 2.2 refuses a scale above native, so a scale
-    /// standing there moves to native; the launch clamps a saved pair the same way.</summary>
-    public void PickAntiAliasing(string word)
+    /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
+    public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;
+
+    /// <summary>Where <paramref name="setting"/> stands among <see cref="Offered"/>: the staged word, or
+    /// the word a never-set row shows.</summary>
+    public int At(WordSetting setting) => DisplaySettingRows.WordIndex(Offered(setting), Words[setting], setting.Shown(Enhanced));
+
+    /// <summary>Whether <paramref name="setting"/> takes a step under the standing graphics word.</summary>
+    public bool Live(WordSetting setting) => !setting.EnhancedOnly || Enhanced;
+
+    /// <summary>Stages <paramref name="word"/> for <paramref name="setting"/> and keeps its partners in
+    /// step, as FSR 2.2 pulls a scale above native down to native.</summary>
+    public void Pick(WordSetting setting, string word)
     {
-        AntiAliasing = word;
-        RenderScale = RenderScaleSetting.ClampFor(RenderScale, word);
+        Words[setting] = word;
+        setting.Picked?.Invoke(Words, word);
     }
 
     /// <summary>A sideways step of <paramref name="direction"/> on numbered row <paramref name="row"/>.
@@ -277,14 +256,13 @@ public sealed class OptionsChoices
     private static string LevelLabel(int? level, int shipped) =>
         Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel).ToString(CultureInfo.InvariantCulture);
 
-    // Clamped at both ends, so a held arrow settles on Normal or Unlimited.
-    private void StepViewDistance(int dir)
-    {
-        if (Enhanced)
-        {
-            ViewDistance = ViewDistances.Words[Math.Clamp(ViewDistances.Index(ViewDistance) + dir, 0, ViewDistances.Words.Length - 1)];
-        }
-    }
+    // A word setting's row: its title, the label of the word it stands on, a step that clamps or
+    // wraps, and its detail.
+    private static Row WordRow(WordSetting setting) => new(
+        setting.Title,
+        c => setting.Label(c.Offered(setting)[c.At(setting)]),
+        (c, d) => c.StepWord(setting, d),
+        c => setting.Detail(c.Enhanced));
 
     private void StepResolution(int dir)
     {
@@ -295,21 +273,17 @@ public sealed class OptionsChoices
         }
     }
 
-    private void StepShadowQuality(int dir)
+    // A clamping row settles on its end under a held arrow; every other row wraps.
+    private void StepWord(WordSetting setting, int dir)
     {
-        if (Enhanced)
+        if (!Live(setting))
         {
-            ShadowQuality = ShadowQualitySetting.Words[DisplaySettingRows.Step(ShadowQualityAt, dir, ShadowQualitySetting.Words.Count)];
+            return;
         }
-    }
 
-    private void StepWaterQuality(int dir)
-    {
-        if (Enhanced)
-        {
-            var words = WaterQualitySetting.Words;
-            WaterQuality = words[DisplaySettingRows.Step(DisplaySettingRows.WordIndex(words, WaterQuality, WaterQualitySetting.Word), dir, words.Count)];
-        }
+        var offered = Offered(setting);
+        int at = At(setting);
+        Pick(setting, offered[setting.Clamps ? Math.Clamp(at + dir, 0, offered.Count - 1) : DisplaySettingRows.Step(at, dir, offered.Count)]);
     }
 
     // The size does something different in each display mode, and under borderless nothing at all.

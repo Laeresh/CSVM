@@ -986,23 +986,22 @@ plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Present
 sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/DisplaySettingRows.cs
-How the six display settings and the Enhanced shadow quality read as rows, shared so Built-in's Options screen and Original's VIDEO page cannot disagree
+How the monitor, size, display mode and V-Sync read as rows, shared so Built-in's Options screen and Original's VIDEO page cannot disagree
 about a saved value: one label per `DisplayWords` entry in that order, since a row reads and writes the store word by index,
-plus the two forgiving reads (an unknown word is the vocabulary's first value, a size the screen does not offer is the
-project default) and the wrap a sideways step takes. Under a `Pinned` display mode the size row reads the screen's own size
-whatever is saved. An unset anti-aliasing row reads the default of the graphics word on the same page, and the render-scale
-labels are built over the list the standing method offers, so the scale row narrows the moment FSR 2.2 is picked. The shadow row's description says Enhanced only while the page's graphics word is Original, where both screens hold the row dead. The
+plus the forgiving reads (an unknown word is the setting's own default, a size the screen does not offer is the
+screen's own) and the wrap a sideways step takes, which the word rows share. Under a `Pinned` display mode the size row reads the screen's own size
+whatever is saved. A word setting's labels, detail and offered words are its own descriptor's (`Utils/WordSetting.cs`). The
 screens and the sizes are enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
 ## src/UI/Menu/OptionsChoices.cs
-The nineteen settings an Options screen stages before the apply, one instance per screen, and the rules that couple them: a `Pinned`
-display mode freezes the size (the saved size kept), `PickAntiAliasing` clamps the render scale under FSR 2.2, the view distance, shadow
-and water steps need `Enhanced`, and a volume step is the AUDIO slider's `KeyStep`, clamped, a no-op step keeping a never-set level null.
+The settings an Options screen stages before the apply, one instance per screen, and the rules that couple them: a `Pinned`
+display mode freezes the size (the saved size kept), a registered word setting stages in `Words` (`Pick` runs its partner rule, as FSR 2.2
+clamps the render scale; an Enhanced-only one steps under `Enhanced`), and a volume step is the AUDIO slider's `KeyStep`, clamped.
 `Load` takes an `OptionsDef` (null for the shipped defaults) and `ToExit` hands every setting back as the `OptionsApplyExit`. Built-in's
-`LaunchMenu` walks it as numbered rows through `Step`, `Label` and `Detail`, each row one table entry so no row can lose an arm; it keeps
+`LaunchMenu` walks it as numbered rows through `Step`, `Label` and `Detail`, one row per registered word setting among them; it keeps
 only the cursor, the window and the drawing. Original's `OriginalOptionsScreen` shares one instance among its Game Options, AUDIO and
-VIDEO pages, which read and write the values and the `*At` positions from their own authored rows. The screens and sizes come from
+VIDEO pages, which read and write the values and the `*At` and `At` positions from their own authored rows. The screens and sizes come from
 readers handed in, so it tests engine-free (`CSVM.Tests/OptionsChoicesTests.cs`).
 
 ## src/UI/Menu/MenuLayout.cs
@@ -1235,7 +1234,8 @@ The VIDEO page, the Game Options table's shape over the authored Video rows: the
 Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
-clear. The Graphics row's title and description are the page's own. The pin, the FSR clamp and the Enhanced gate are `OptionsChoices`', the form's shared instance, which also carries the view distance and water quality unshown.
+clear. The three word rows bind to their registered setting by key, which gives their words, labels, description and gate; the titles and
+places are the page's. The pin, the FSR clamp and the Enhanced gate are `OptionsChoices`', the form's shared instance, which also carries the other word settings unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over

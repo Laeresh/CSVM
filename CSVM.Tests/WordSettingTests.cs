@@ -26,8 +26,9 @@ public class WordSettingTests
     [Fact]
     public void TheFallbackKeepsTheSourceItWasGiven()
     {
-        var resolved = Lookup.Resolve(null, null, null, "low", SettingSource.IntegratedGpuPanesDefault);
-        Assert.Equal(new ResolvedWord("low", SettingSource.IntegratedGpuPanesDefault), resolved);
+        var resolved = Lookup.Resolve(null, null, null, "low", "default_low_power");
+        Assert.Equal(new ResolvedWord("low", SettingSource.Default, "default_low_power"), resolved);
+        Assert.Equal("default_low_power", Lookup.SourceName(resolved.Source, resolved.Rule));
     }
 
     [Fact]
@@ -76,8 +77,84 @@ public class WordSettingTests
         Assert.Equal("options.json", Lookup.SourceName(SettingSource.Saved));
         Assert.Equal("test.key", Lookup.SourceName(SettingSource.Config));
         Assert.Equal("default", Lookup.SourceName(SettingSource.Default));
-        Assert.Equal("default_integrated_gpu", Lookup.SourceName(SettingSource.IntegratedGpuDefault));
-        Assert.Equal("default_integrated_gpu_panes", Lookup.SourceName(SettingSource.IntegratedGpuPanesDefault));
+
+    }
+
+    /// <summary>A registered resolve reads the fallback the run's context gives, and resolves again
+    /// only when a moved mode or pane count moves that fallback. A setting never resolved is left
+    /// alone, and a word a higher source chose stands.</summary>
+    [Fact]
+    public void ARefreshResolvesAgainOnlyWhenTheFallbackMoves()
+    {
+        int takes = 0;
+        var setting = new WordSetting("test.refresh", new[] { "low", "mid", "high" })
+        {
+            Fallback = static context => new ResolvedWord(context.Enhanced ? "high" : "low", SettingSource.Default),
+            Take = resolved =>
+            {
+                takes++;
+                return resolved;
+            },
+        };
+
+        Assert.False(setting.Refresh(enhanced: true, panes: 1));
+        Assert.Equal(0, takes);
+        Assert.Equal(new ResolvedWord("low", SettingSource.Default), setting.ResolveFrom(null, null, new SettingContext(false, false, 1)));
+        Assert.False(setting.Refresh(enhanced: false, panes: 4));
+        Assert.Equal(1, takes);
+        Assert.True(setting.Refresh(enhanced: true, panes: 1));
+        Assert.Equal("high", setting.Current.Word);
+
+        setting.ResolveFrom(null, "mid", new SettingContext(false, false, 1));
+        Assert.False(setting.Refresh(enhanced: true, panes: 1));
+        Assert.Equal(new ResolvedWord("mid", SettingSource.Saved), setting.Current);
+    }
+
+    /// <summary>A setting whose stored word reads a partner's takes it again when the partner
+    /// resolves, so the pair agrees whichever resolves last.</summary>
+    [Fact]
+    public void ARetakeFollowsThePartnerWhicheverResolvesLast()
+    {
+        string partnerWord = "off";
+        var clamped = new WordSetting("test.clamped", new[] { "50", "100", "200" })
+        {
+            Fallback = static _ => new ResolvedWord("100", SettingSource.Default),
+            Take = resolved => partnerWord == "cap" && resolved.Word == "200" ? resolved with { Word = "100" } : resolved,
+        };
+        var partner = new WordSetting("test.partner", new[] { "off", "cap" })
+        {
+            Fallback = static _ => new ResolvedWord("off", SettingSource.Default),
+            Take = resolved =>
+            {
+                partnerWord = resolved.Word;
+                clamped.Retake();
+                return resolved;
+            },
+        };
+        var context = new SettingContext(false, false, 1);
+
+        clamped.ResolveFrom(null, "200", context);
+        partner.ResolveFrom(null, "cap", context);
+        Assert.Equal("100", clamped.Current.Word);
+        partner.ResolveFrom(null, "off", context);
+        Assert.Equal("200", clamped.Current.Word);
+    }
+
+    /// <summary>Two sets of words compare by what they hold, so an apply exit carrying one compares
+    /// by value. A null clears a word rather than storing it.</summary>
+    [Fact]
+    public void WordValuesCompareByTheirWords()
+    {
+        var one = new WordValues { [Lookup] = "mid" };
+        var two = new WordValues { [Lookup] = "mid" };
+        Assert.Equal(one, two);
+        Assert.Equal(one.GetHashCode(), two.GetHashCode());
+        two[Lookup] = null;
+        Assert.Equal(new WordValues(), two);
+        Assert.NotEqual(one, two);
+        var copy = one.Copy();
+        copy[Lookup] = "high";
+        Assert.Equal("mid", one[Lookup]);
     }
 
     [Fact]

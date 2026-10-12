@@ -1188,7 +1188,7 @@ internal static class GraphicsSwitchSuites
         Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
-        EnhancedLook.ReapplyDisplayQuality(det: true, "a suite's restore");
+        EnhancedLook.ReapplyWordSettings("a suite's restore");
     }
 
     // One copy for the whole session, matching the session's sun after one frame of its own. The
@@ -1254,7 +1254,7 @@ internal static class GraphicsSwitchSuites
         root.AddChild(camera);
         try
         {
-            EnhancedLook.ApplySun(sun, true, EnhancedPasses.None);
+            EnhancedLook.ApplySun(sun, true);
             var rigs = new List<Flight.Camera.PlayerRig> { new() { Index = 0, Camera = camera, HudParent = root } };
             var weather = new WeatherRig(SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" }), root, sun);
             weather.Build(zrdr, rigs, Array.Empty<Mech3.HorizonZone>(), _ => { });
@@ -1502,7 +1502,7 @@ internal static class GraphicsSwitchSuites
     // The switch as the launcher makes it, then the steps a reading waits for.
     private static void Switch(Rig rig, bool enhanced)
     {
-        EnhancedLook.Switch(enhanced, rig.Sun, rig.Env, EnhancedPasses.None, det: true, rig.Session, "graphics-live-switch");
+        EnhancedLook.Switch(enhanced, rig.Sun, rig.Env, EnhancedPasses.None, rig.Session, "graphics-live-switch");
         Step(rig);
     }
 
@@ -1536,7 +1536,7 @@ internal static class GraphicsSwitchSuites
             ShadowEnabled = false,
         };
         if (enhanced)
-            EnhancedLook.ApplySun(sun, true, EnhancedPasses.None);
+            EnhancedLook.ApplySun(sun, true);
         var env = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,

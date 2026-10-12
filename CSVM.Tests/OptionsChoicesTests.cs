@@ -47,9 +47,22 @@ public class OptionsChoicesTests
         choices.Step(row, -1);
         Assert.Equal(before, choices.Label(row));
         Assert.StartsWith("Enhanced Graphics only", choices.Detail(row), System.StringComparison.Ordinal);
-        Assert.Null(choices.ToExit().ViewDistance);
-        Assert.Null(choices.ToExit().ShadowQuality);
-        Assert.Null(choices.ToExit().WaterQuality);
+        Assert.Equal(new WordValues(), choices.ToExit().Words);
+    }
+
+    /// <summary>The word rows stand where the screen always showed them: the view distance under the
+    /// graphics row, the other four after V-Sync.</summary>
+    [Theory]
+    [InlineData(6, "View distance (Enhanced only)")]
+    [InlineData(11, "Render scale")]
+    [InlineData(12, "Anti-aliasing")]
+    [InlineData(13, "Shadow quality")]
+    [InlineData(14, "Water quality")]
+    public void TheWordRowsKeepTheirPlaces(int row, string title)
+    {
+        var choices = new OptionsChoices();
+        choices.Load(null);
+        Assert.StartsWith(title + ": ", choices.Label(row), System.StringComparison.Ordinal);
     }
 
     /// <summary>Borderless owns the size: the row reads the screen's own size, takes no step, says
@@ -72,14 +85,17 @@ public class OptionsChoicesTests
     public void FsrTwoClampsTheRenderScale()
     {
         var choices = new OptionsChoices();
-        choices.Load(new OptionsDef { RenderScale = "200", AntiAliasing = DisplayWords.AntiAliasingOff });
+        choices.Load(new OptionsDef
+        {
+            Words = { [RenderScaleSetting.Lookup] = "200", [AntiAliasingSetting.Lookup] = DisplayWords.AntiAliasingOff },
+        });
         choices.Step(12, -1);
-        Assert.Equal(DisplayWords.AntiAliasingFsr2, choices.AntiAliasing);
-        Assert.Equal("100", choices.RenderScale);
-        Assert.Equal(4, choices.RenderScaleWords.Count);
-        choices.Load(new OptionsDef { RenderScale = "67" });
-        choices.PickAntiAliasing(DisplayWords.AntiAliasingFsr2);
-        Assert.Equal("67", choices.RenderScale);
+        Assert.Equal(DisplayWords.AntiAliasingFsr2, choices.Words[AntiAliasingSetting.Lookup]);
+        Assert.Equal("100", choices.Words[RenderScaleSetting.Lookup]);
+        Assert.Equal(4, choices.Offered(RenderScaleSetting.Lookup).Count);
+        choices.Load(new OptionsDef { Words = { [RenderScaleSetting.Lookup] = "67" } });
+        choices.Pick(AntiAliasingSetting.Lookup, DisplayWords.AntiAliasingFsr2);
+        Assert.Equal("67", choices.Words[RenderScaleSetting.Lookup]);
     }
 
     /// <summary>A volume step clamps at the ends, and one that moves nothing leaves a never-set level
@@ -116,9 +132,6 @@ public class OptionsChoicesTests
             Resolution = "1024x768",
             DisplayMode = DisplayWords.Fullscreen,
             VSync = "144",
-            RenderScale = "67",
-            AntiAliasing = DisplayWords.AntiAliasingSmaa,
-            ShadowQuality = ShadowQualitySetting.Medium,
             AudioMaster = 10,
             AudioMusic = 20,
             AudioEffects = 30,
@@ -127,22 +140,25 @@ public class OptionsChoicesTests
             Rumble = false,
             DefaultView = PilotView.Name(PilotViewMode.Cockpit),
             AutoHeadTurn = true,
-            ViewDistance = ViewDistance.Words[^1],
-            WaterQuality = WaterQualitySetting.Words[^1],
         };
+        foreach (var setting in WordSettings.All)
+        {
+            saved.Words[setting] = setting.Words[^1];
+        }
+
         var choices = new OptionsChoices();
         choices.Load(saved);
         Assert.Equal(
             new OptionsApplyExit(saved.GraphicsMode, saved.Difficulty, saved.MonitorIndex, saved.Resolution,
-                saved.DisplayMode, saved.VSync, saved.RenderScale, saved.AntiAliasing, saved.ShadowQuality,
-                saved.AudioMaster, saved.AudioMusic, saved.AudioEffects, saved.AudioVoice, saved.NearestAfterKill,
-                saved.Rumble, saved.DefaultView, saved.AutoHeadTurn, saved.ViewDistance, saved.WaterQuality),
+                saved.DisplayMode, saved.VSync, saved.AudioMaster, saved.AudioMusic, saved.AudioEffects,
+                saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
+                saved.Words),
             choices.ToExit());
 
         choices.Load(null);
         Assert.Equal(
             new OptionsApplyExit(GraphicsMode.Default, Difficulty.Word(Difficulty.Normal), null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, new WordValues()),
             choices.ToExit());
     }
 

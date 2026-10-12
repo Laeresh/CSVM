@@ -745,12 +745,12 @@ internal static class MenuOriginalSuites
                 $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync
-                && applied.RenderScale == display.RenderScale && applied.AntiAliasing == display.AntiAliasing,
-                $"and all six display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.RenderScale}, {applied.AntiAliasing})");
-            ctx.Check(applied.ShadowQuality == shadowQuality,
-                $"and the shadow quality the row left, never set where the row stood dead ({applied.ShadowQuality ?? "unset"})");
-            ctx.Check(applied.WaterQuality == waterQuality,
-                $"and the water quality the row left, never set where the row stood dead ({applied.WaterQuality ?? "unset"})");
+                && applied.Words[RenderScaleSetting.Lookup] == display.RenderScale && applied.Words[AntiAliasingSetting.Lookup] == display.AntiAliasing,
+                $"and all six display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.Words[RenderScaleSetting.Lookup]}, {applied.Words[AntiAliasingSetting.Lookup]})");
+            ctx.Check(applied.Words[ShadowQualitySetting.Lookup] == shadowQuality,
+                $"and the shadow quality the row left, never set where the row stood dead ({applied.Words[ShadowQualitySetting.Lookup] ?? "unset"})");
+            ctx.Check(applied.Words[WaterQualitySetting.Lookup] == waterQuality,
+                $"and the water quality the row left, never set where the row stood dead ({applied.Words[WaterQualitySetting.Lookup] ?? "unset"})");
             ctx.Check(applied.AudioMaster == null && applied.AudioMusic == AudioMix.DefaultMusic - SliderControl.KeyStep
                 && applied.AudioEffects == null && applied.AudioVoice == AudioMix.MinLevel,
                 $"and the levels the volume rows moved, the two left alone still never set ({Level(applied.AudioMaster)}, {Level(applied.AudioMusic)}, {Level(applied.AudioEffects)}, {Level(applied.AudioVoice)})");
@@ -1223,21 +1223,21 @@ internal static class MenuOriginalSuites
         // The shadow row under Original, whose world casts no sun shadow: dead and out of the walk.
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         ctx.Check(Row(shell, OriginalVideoPage.ShadowQualityKey) is { Enabled: false }
-            && shell.FocusedKey != OriginalVideoPage.ShadowQualityKey && shell.Options.Video.ShadowQualityChoice == null,
-            $"the Shadow Quality row stands dead under Original, out of the walk's reach ({shell.FocusedKey}, {shell.Options.Video.ShadowQualityChoice ?? "unset"})");
+            && shell.FocusedKey != OriginalVideoPage.ShadowQualityKey && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == null,
+            $"the Shadow Quality row stands dead under Original, out of the walk's reach ({shell.FocusedKey}, {shell.Options.Video.Choice(ShadowQualitySetting.Lookup) ?? "unset"})");
         WalkTo(host, seat, shell, OriginalVideoPage.GraphicsKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.Video.GraphicsChoice == GraphicsMode.EnhancedWord,
             $"Accept on the checkbox under it flips the graphics word ({shell.Options.Video.GraphicsChoice})");
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Left);
-        ctx.Check(shell.FocusedKey == OriginalVideoPage.ShadowQualityKey && shell.Options.Video.ShadowQualityChoice == ShadowQualitySetting.High,
-            $"which brings the Shadow Quality row to life, a step left of the Ultra default taking High ({shell.FocusedKey}, {shell.Options.Video.ShadowQualityChoice ?? "unset"})");
+        ctx.Check(shell.FocusedKey == OriginalVideoPage.ShadowQualityKey && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == ShadowQualitySetting.High,
+            $"which brings the Shadow Quality row to life, a step left of the Ultra default taking High ({shell.FocusedKey}, {shell.Options.Video.Choice(ShadowQualitySetting.Lookup) ?? "unset"})");
         WalkTo(host, seat, shell, OriginalVideoPage.CancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.Video.GraphicsChoice == GraphicsMode.Default
             && shell.Options.Video.VSyncChoice == null && shell.Options.Video.DisplayModeChoice == null && shell.Options.Video.ResolutionChoice == null
-            && shell.Options.Video.MonitorChoice == null && shell.Options.Video.ShadowQualityChoice == null && exits.Count == before,
+            && shell.Options.Video.MonitorChoice == null && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == null && exits.Count == before,
             $"CANCEL CHANGES lands back on Preferences with all six edits dropped and no exit ({shell.Screen}, {shell.Options.Video.GraphicsChoice}, {shell.Options.Video.VSyncChoice ?? "unset"}, {shell.Options.Video.DisplayModeChoice ?? "unset"}, {shell.Options.Video.ResolutionChoice ?? "unset"}, {shell.Options.Video.MonitorChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
@@ -1254,9 +1254,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
         {
-            Graphics: GraphicsMode.EnhancedWord, VSync: "60",
-            DisplayMode: DisplayWords.Fullscreen, ShadowQuality: ShadowQualitySetting.Off,
-        },
+            Graphics: GraphicsMode.EnhancedWord, VSync: "60", DisplayMode: DisplayWords.Fullscreen,
+        } applied && applied.Words[ShadowQualitySetting.Lookup] == ShadowQualitySetting.Off,
             $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all four words ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }

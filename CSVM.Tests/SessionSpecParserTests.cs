@@ -24,8 +24,8 @@ public class SessionSpecParserTests
     [Fact]
     public void TheViewDistanceAndGraphicsSwitchFlagsParse()
     {
-        Assert.Equal("veryfar", SessionSpec.Parse(new[] { "--view-distance=veryfar" }).ViewDistance);
-        Assert.Null(SessionSpec.Parse(new[] { "--view-distance=farthest" }).ViewDistance);
+        Assert.Equal("veryfar", SessionSpec.Parse(new[] { "--view-distance=veryfar" }).WordFlags[CSVM.Utils.ViewDistance.Lookup]);
+        Assert.Null(SessionSpec.Parse(new[] { "--view-distance=farthest" }).WordFlags[CSVM.Utils.ViewDistance.Lookup]);
         Assert.Equal(new long[] { 5, 15 }, SessionSpec.ParseFrameList("15, 5,x,-3"));
     }
 

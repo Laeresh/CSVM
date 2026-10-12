@@ -40,12 +40,34 @@ public static class AntiAliasingSetting
     /// <summary>The config key under the saved option, one of the five words.</summary>
     public const string Key = "graphics.antiAliasing";
 
-    /// <summary>The source order over the five words. Anti-aliasing has no command-line flag.</summary>
-    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices);
+    /// <summary>The setting's registry entry. Anti-aliasing has no command-line flag, and its
+    /// fallback follows the graphics mode.</summary>
+    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices)
+    {
+        SavedField = "antiAliasing",
+        LogName = "anti_aliasing",
+        Title = "Anti-aliasing",
+        Labels = new[] { "Off", "FXAA", "SMAA", "TAA", "FSR 2.2" },
+        Detail = static _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
+        Shown = DefaultFor,
+        // FSR 2.2 refuses a scale above native, so the scale standing there moves to native.
+        Picked = static (staged, word) =>
+            staged[RenderScaleSetting.Lookup] = RenderScaleSetting.ClampFor(staged[RenderScaleSetting.Lookup], word),
+        Fallback = static context => new ResolvedWord(DefaultFor(context.Enhanced), SettingSource.Default),
+        Take = static resolved =>
+        {
+            Store(resolved.Word);
+            RenderScaleSetting.Lookup.Retake();
+            return resolved;
+        },
+    };
 
     /// <summary>Resolved once at launch by <see cref="Resolve"/>, before any 3D viewport is
     /// built, so every viewport in a run takes the same method.</summary>
     public static AntiAliasingMethod Method { get; private set; } = AntiAliasingMethod.Off;
+
+    /// <summary>The word <see cref="Method"/> was spelled as, which the render scale clamps under.</summary>
+    public static string Word { get; private set; } = DisplayWords.AntiAliasingOff;
 
     /// <summary>The word a launch with nothing saved and no config key runs. Off keeps the faithful
     /// mode on its own image, and the enhanced mode runs TAA.</summary>
@@ -54,18 +76,13 @@ public static class AntiAliasingSetting
 
     /// <summary>The method <see cref="Lookup"/> resolves <paramref name="savedWord"/> and
     /// <paramref name="configWord"/> to over <see cref="DefaultFor"/> the mode, stored as
-    /// <see cref="Method"/>.</summary>
+    /// <see cref="Method"/> through the registry's <see cref="WordSetting.Take"/>. The render scale is
+    /// then taken again under it, as a launch takes it.</summary>
     public static AntiAliasingPlan Resolve(string? savedWord, string? configWord, bool enhanced)
     {
-        var resolved = Lookup.Resolve(null, savedWord, configWord, DefaultFor(enhanced));
-        TryParse(resolved.Word, out var method);
-        Method = method;
-        return new AntiAliasingPlan(method, resolved.Word, resolved.Source);
+        var resolved = Lookup.Take(Lookup.Resolve(null, savedWord, configWord, DefaultFor(enhanced)));
+        return new AntiAliasingPlan(Method, resolved.Word, resolved.Source);
     }
-
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
-    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
-    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.AntiAliasing);
 
     /// <summary>Whether <paramref name="word"/> is one of
     /// <see cref="DisplayWords.AntiAliasingChoices"/>, and the method it spells.</summary>
@@ -86,5 +103,13 @@ public static class AntiAliasingSetting
             _ => AntiAliasingMethod.Off,
         };
         return true;
+    }
+
+    private static AntiAliasingMethod Store(string word)
+    {
+        TryParse(word, out var method);
+        Method = method;
+        Word = word;
+        return method;
     }
 }

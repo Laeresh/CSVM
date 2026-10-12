@@ -127,7 +127,7 @@ public class GraphicsModeTests
             Assert.Equal(new ResolvedWord("far", SettingSource.Saved), ViewDistance.Resolve("farther", "far", null));
             Assert.Equal(SettingSource.Default, ViewDistance.Resolve(null, "farthest", ViewDistance.Default).Source);
             Assert.Equal("--view-distance", ViewDistance.Lookup.SourceName(SettingSource.Flag));
-            Assert.Null(ViewDistance.SavedWord(det: true));
+            Assert.Null(WordSettings.ReadSaved(det: true)[ViewDistance.Lookup]);
         }
         finally
         {

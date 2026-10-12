@@ -55,8 +55,8 @@ public class WaterQualitySettingTests
     {
         string fallback = WaterQualitySetting.FallbackFor(linux: true, integrated: false);
         var none = WaterQualitySetting.Pick(null, null, fallback, fallback);
-        Assert.Equal((WaterQualitySetting.Flat, SettingSource.LowPowerDefault), (none.Word, none.Source));
-        Assert.Equal("default_linux_or_integrated_gpu", WaterQualitySetting.Lookup.SourceName(none.Source));
+        Assert.Equal((WaterQualitySetting.Flat, SettingSource.Default, WaterQualitySetting.LowPowerRule), (none.Word, none.Source, none.Rule));
+        Assert.Equal("default_linux_or_integrated_gpu", WaterQualitySetting.Lookup.SourceName(none.Source, none.Rule));
 
         var saved = WaterQualitySetting.Pick(null, WaterQualitySetting.Waves, fallback, fallback);
         Assert.Equal((WaterQualitySetting.Waves, SettingSource.Saved), (saved.Word, saved.Source));
@@ -77,19 +77,19 @@ public class WaterQualitySettingTests
     [Fact]
     public void TheCommandLineParsesTheFlagAndDropsAnUnknownWord()
     {
-        Assert.Equal(WaterQualitySetting.Flat, SessionSpec.Parse(new[] { "--water-quality=flat" }).WaterQuality);
-        Assert.Equal(WaterQualitySetting.Waves, SessionSpec.Parse(new[] { "--water-quality=waves" }).WaterQuality);
-        Assert.Null(SessionSpec.Parse(new[] { "--water-quality=choppy" }).WaterQuality);
+        Assert.Equal(WaterQualitySetting.Flat, SessionSpec.Parse(new[] { "--water-quality=flat" }).WordFlags[WaterQualitySetting.Lookup]);
+        Assert.Equal(WaterQualitySetting.Waves, SessionSpec.Parse(new[] { "--water-quality=waves" }).WordFlags[WaterQualitySetting.Lookup]);
+        Assert.Null(SessionSpec.Parse(new[] { "--water-quality=choppy" }).WordFlags[WaterQualitySetting.Lookup]);
     }
 
     /// <summary>The options file keeps a known word and drops an unknown one as never set.</summary>
     [Fact]
     public void TheOptionsFileKeepsAKnownWordAndDropsAnUnknownOne()
     {
-        var kept = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { WaterQuality = WaterQualitySetting.Flat }));
-        Assert.Equal(WaterQualitySetting.Flat, kept?.WaterQuality);
+        var kept = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [WaterQualitySetting.Lookup] = WaterQualitySetting.Flat } }));
+        Assert.Equal(WaterQualitySetting.Flat, kept?.Words[WaterQualitySetting.Lookup]);
         var dropped = OptionsStore.Deserialize("{\"version\":1,\"waterQuality\":\"choppy\"}");
         Assert.NotNull(dropped);
-        Assert.Null(dropped!.WaterQuality);
+        Assert.Null(dropped!.Words[WaterQualitySetting.Lookup]);
     }
 }

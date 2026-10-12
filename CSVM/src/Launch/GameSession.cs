@@ -962,7 +962,7 @@ public partial class GameSession : Node3D
             // the panes rendered, and the launchscreen and the next session expect it current.
             _camera.Current = true;
             // The sun is Launcher-owned too, so a splitscreen session's pane default leaves with it.
-            FollowPaneShadows(1);
+            FollowPanes(1);
             // A line still open when the session ends leaves no field for the keyboard to type into.
             ScreenKeyboard.Hide(SessionNet.ChatKeyboardOwner);
         }
@@ -2871,7 +2871,7 @@ public partial class GameSession : Node3D
         _boards = null;
         _rigs.Clear();
         _split = null;
-        FollowPaneShadows(count);
+        FollowPanes(count);
         if (count <= 1)
         {
             _camera.Current = true;
@@ -2910,19 +2910,18 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"splitscreen: {count} panes sharing one world ({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
     }
 
-    // The shadow level's fallback follows the pane count (ShadowQualitySetting.ResolveForPanes). An
-    // integrated GPU's three- and four-pane sessions drop the sun's shadow pass unless a level was
-    // chosen. The sun is the Launcher's and outlives the session, so the exit puts one pane back.
-    // A one-pane session after another leaves the launch's resolution standing.
-    private void FollowPaneShadows(int panes)
+    // A word setting's fallback may follow the pane count (WordSettings.FollowPanes). An integrated
+    // GPU's three- and four-pane sessions drop the sun's shadow pass unless a level was chosen. The
+    // sun is the Launcher's and outlives the session, so the exit puts one pane back.
+    private void FollowPanes(int panes)
     {
-        if (panes <= 1 && ShadowQualitySetting.Panes <= 1)
+        var moved = WordSettings.FollowPanes(panes);
+        if (moved.Count == 0)
             return;
-        string before = ShadowQualitySetting.Word;
-        var plan = ShadowQualitySetting.ResolveForPanes(panes, _spec.ShadowQuality, _spec.Det);
-        Log.Info("world", $"shadow quality at {panes} pane(s): shadow_quality={plan.Word} shadow_source={ShadowQualitySetting.Lookup.SourceName(plan.Source)}");
-        if (plan.Word != before && IsInstanceValid(_sun))
-            EnhancedLook.ApplyShadowQuality(_sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
+        Log.Info("world", $"word settings at {panes} pane(s): {string.Join(" ", moved.Select(setting => setting.Describe()))}");
+        var world = new LiveWorld(IsInstanceValid(_sun) ? _sun : null, this);
+        foreach (var setting in moved)
+            setting.Apply?.Invoke(world);
     }
 
     // A layer a switch drops leaves the tree now and is freed at the frame's end. ⚠ Do not QueueFree
