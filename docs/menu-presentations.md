@@ -40,8 +40,12 @@ shared features' operations, and a presentation only decides how to offer them. 
 constructs a session, never names a launcher type, never hides itself, and never reads a device: it
 reads semantic commands from the host's seats and leaves through one typed exit.
 
-Built-in is permanent. It is the fallback every unavailable request resolves to, it needs no
-extracted menu artwork to be usable, and every other presentation is additive beside it.
+Built-in is frozen and slated for removal (#196). It is still the fallback every unavailable
+request resolves to and needs no extracted menu artwork, but no change owes it parity: a menu,
+lobby, options or board change lands for Original alone, and Built-in keeps what it already draws.
+A gap on Built-in is not a bug, and no issue, suite or playtest check is filed for one. #196
+removes it once Original covers every screen it draws, and replaces the fallback with a plain
+error screen naming the fault and the re-extract instruction.
 
 ## Registration
 
@@ -248,10 +252,10 @@ the size then means is the display mode's to say, for a hand-written size as for
 windowed takes it as the window's size, exclusive fullscreen as the size the game draws at inside a
 screen-sized window, and borderless ignores it and runs at the desktop's own size.
 
-**An option is a store field plus a row in each presentation's Options screen.** Adding one means
+**An option is a store field plus a row in Original's Options pages.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
-`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options,
+`Deserialize`, an entry in the table Original's Game Options,
 AUDIO or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
 `LiveSettings.Persist` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
@@ -674,8 +678,8 @@ In order. Each step names the file it touches and the test that proves it.
     `menu-player-setup-seats` stand for Original;
     add the presentation's cases to `menu-launch-return`, which drives every exit and every
     destination at the host's sink. Register each suite in `SuiteCatalog`.
-11. **Prove Built-in unchanged.** Shoot Built-in's aids before and after and compare decoded pixels;
-    a new presentation makes no Built-in change.
+11. **Leave Built-in alone.** It is frozen (#196): a new presentation neither changes nor extends
+    it.
 12. **Document it.** Its `##` entries in `architecture/UI.md` with their index lines in
     `architecture.md`, its remake-only readings where they belong, `cli.md`'s aids, and this
     page's registration paragraph.
@@ -696,12 +700,11 @@ Five layers, each catching what the others cannot:
 - **Hand-authored legal fixtures.** `CSVM.Tests/fixtures/menu-layout/` for the decoder and
   `fixtures/menu-layout-original/` for the shell: invented geometry and file names in the shipped
   file's shape, so no game data is committed and every rule is still exercised.
-- **Local extracted-data comparisons.** Built-in's aids shot before and after a change and compared
-  by decoded pixels; Original's aids shot at 800x600, 1280x720, 1920x1080 and 600x750 to show the
+- **Local extracted-data comparisons.** Original's aids shot at 800x600, 1280x720, 1920x1080 and 600x750 to show the
   fit; the manifest's recovery probes over a scratch copy of the data root, never the player's tree.
 - **Driven suites.** The `menu-*` suites and `campaign-layout-parity` through real hosts and real
   shells over the install's own layout, up to the host's sink. The harness runs a suite before any
   session builds, so no suite flies a launch or performs the frame-deferred Options restart.
 - **At the controls.** The launcher's leg and everything a suite cannot hear or hold: the flown
-  launch and its return in every mode and both presentations, a cold start under each flag, a real
+  launch and its return in every mode on Original, a cold start under each flag, a real
   pad, the sounds, the pointer's rollover and pressed frames.

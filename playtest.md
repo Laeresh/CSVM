@@ -478,19 +478,14 @@ against `BL-389` rather than against the wash routing.
 ```
 
 - `PT-173` `[Own]` **A stunt run through every marker photographs each one, and any landed
-  photograph opens full size on both presentations.** One pilot is enough. Menu path: Instant
-  Action → C4 → Stunt Flying, then the same run with `--presentation=original`. The photographs
-  and the grid are proved by suite on a synthetic run where every marker is latched from a parked
-  aircraft (`git log --grep=BL-256`, `git log --grep=BL-970`); no human has flown the markers or
-  opened a photograph. *Look for:*
-  - (a) each marker crossed at speed takes one photograph with its sting, and the C4 run's 14
-    thumbnails wrap into a grid on the results board rather than one shrunken row;
-  - (b) on Built-in, up from Photo Mode enters the grid, arrows walk the landed cells, confirm
-    opens the photograph full size and Esc or pad B closes it with the cursor on the same cell;
-    mouse hover and click do the same;
-  - (c) on Original, the prints stand as rows after CONTINUE, a landed one opens in the
-    presentation's viewer and Back closes it with focus on that print;
-  - (d) a marker entered during the 3 s hold after the finish takes no photograph.
+  photograph opens full size.** One pilot is enough. Menu path, on the Original presentation:
+  Instant Action → C4 → Stunt Flying. The photographs are proved by suite on a synthetic run where
+  every marker is latched from a parked aircraft (`git log --grep=BL-256`,
+  `git log --grep=BL-970`); no human has flown the markers or opened a photograph. *Look for:*
+  - (a) each marker crossed at speed takes one photograph with its sting;
+  - (b) the prints stand as rows after CONTINUE, a landed one opens in the presentation's viewer
+    and Back closes it with focus on that print;
+  - (c) a marker entered during the 3 s hold after the finish takes no photograph.
   *Variations:* `--presentation=original` for (c). *Blocks:* nothing tracks the outcome; a fail
   mints a new `BL` item.
 
