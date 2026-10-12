@@ -261,8 +261,9 @@ internal sealed class HumanFlightAdapter
             // The buffer's presence IS that ownership, so it is built here and nowhere else.
             // The session fills it from the samples that seat's owner sends.
             RemotePoses = flownElsewhere ? new Net.RemotePoseBuffer() : null,
-            // one scripted sequence per player ('|'-separated); the last covers the rest
-            HoldSegments = _policy.HoldSets == null ? null
+            // One scripted sequence per player ('|'-separated); the last covers the rest. A bot is
+            // flown by its pilot, which a hold would replace.
+            HoldSegments = bot || _policy.HoldSets == null ? null
                 : _policy.HoldSets[Math.Min(pi, _policy.HoldSets.Length - 1)],
             LeverSteps = _policy.LeverSteps,
             PlaneModel = planeModel,

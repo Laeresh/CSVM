@@ -390,6 +390,25 @@ public sealed class AiModeMachine
         _ => mode.ToString(),
     };
 
+    /// <summary>The pursued test (invented geometry) for an aircraft at <paramref name="pos"/> whose
+    /// nose is <paramref name="axis"/>. The target sits within <see cref="LayOffRearConeDeg"/> of
+    /// its tail and flies within <see cref="LayOffPursuerConeDeg"/> of it, so it is chasing. The
+    /// Zeppelin vs Zeppelin bot objective reads it as an enemy on the bot's tail.</summary>
+    public static bool IsPursuedBy(Vector3 axis, Vector3 pos, Vector3 targetPos, Vector3? targetVelocity)
+    {
+        if (targetVelocity is not { } tv || tv.LengthSquared() < 1e-4f
+            || axis.LengthSquared() < 1e-4f)
+            return false;
+        var toTarget = targetPos - pos;
+        if (toTarget.LengthSquared() < 1e-4f)
+            return false;
+        float behindCos = (-axis.Normalized()).Dot(toTarget.Normalized());
+        if (behindCos < Mathf.Cos(Mathf.DegToRad(LayOffRearConeDeg)))
+            return false;
+        float chaseCos = tv.Normalized().Dot((-toTarget).Normalized());
+        return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
+    }
+
     /// <summary>External mode override, the mission-script / test seam. Resets the overridden
     /// mode's own timers so a forced state behaves as if entered normally.</summary>
     public void Enter(AiMode mode, string reason = "ordered")
@@ -745,7 +764,7 @@ public sealed class AiModeMachine
         _layOffHold -= dt;
         float gap = pos.DistanceTo(targetPos);
         bool pursued = AssistEnabled && targetIsHuman
-            && IsPursuedBy(pos, velocity, targetPos, targetVelocity);
+            && IsPursuedBy(TailAxis(velocity), pos, targetPos, targetVelocity);
         if (Mode == AiMode.Pursue)
         {
             // Entry needs the geometry SUSTAINED, not one passing frame: a turning fight can
@@ -770,26 +789,10 @@ public sealed class AiModeMachine
         }
     }
 
-    // The pursued test (invented geometry): the target sits within LayOffRearConeDeg of the tail
-    // axis and its velocity points within LayOffPursuerConeDeg of the AI, i.e. it is chasing.
-    // The tail axis is the NOSE when supplied, velocity only as fallback, mid-maneuver the two
-    // diverge and velocity alone let the test pass for a frame with the enemy behind the player.
-    private bool IsPursuedBy(Vector3 pos, Vector3 velocity, Vector3 targetPos,
-        Vector3? targetVelocity)
-    {
-        var axis = _nose is { } n && n.LengthSquared() > 1e-4f ? n : velocity;
-        if (targetVelocity is not { } tv || tv.LengthSquared() < 1e-4f
-            || axis.LengthSquared() < 1e-4f)
-            return false;
-        var toTarget = targetPos - pos;
-        if (toTarget.LengthSquared() < 1e-4f)
-            return false;
-        float behindCos = (-axis.Normalized()).Dot(toTarget.Normalized());
-        if (behindCos < Mathf.Cos(Mathf.DegToRad(LayOffRearConeDeg)))
-            return false;
-        float chaseCos = tv.Normalized().Dot((-toTarget).Normalized());
-        return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
-    }
+    // The axis the pursued test measures the tail from: the NOSE when supplied, velocity only as
+    // fallback. Mid-maneuver the two diverge, and velocity alone let the test pass for a frame
+    // with the enemy behind the player.
+    private Vector3 TailAxis(Vector3 velocity) => _nose is { } n && n.LengthSquared() > 1e-4f ? n : velocity;
 
     // The obstacle-closure override, in the original's three altitude bands (FUN_0041f810): below
     // AltitudeFloorM it arms outright, above ProbeCeilingM nothing is cast and a running one is

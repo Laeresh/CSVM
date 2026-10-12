@@ -232,6 +232,7 @@ rows).
 - `src/Flight/Ai/AiTargetRanking.cs`, the decoded target-ranking formula, minimised over weight, distance and objective bias, the deconfliction pick, and the two-scorer selector.
 - `src/Flight/Ai/GunnerAcquisition.cs`, the AI gunner's target acquisition: the decoded hold, the four-pool ranked sweep and the gasbag ordnance gate.
 - `src/Flight/Ai/AiWeaponsDrive.cs`, the AI's per-tick weapons drive: the gunner's acquisition and lead solve, then the rocketeer's pylon walk on the same target.
+- `src/Flight/Ai/ZvzBotObjective.cs`, a Zeppelin vs Zeppelin bot's target each step: its hull's attacker, its pursuer, then the other hull's parts by loadout.
 - `src/Flight/Ai/PursuitQuarry.cs`, the flight law's one-step snapshot of the standing target of any class: an aircraft, a turret or a zeppelin part.
 - `src/Flight/Ai/AiNetFollower.cs`, walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/Ai/ManeuverExecutor.cs`, plays one library maneuver's attitude-step program as `FlightInput` per sim step, for the `evasive maneuver` mode.

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
@@ -64,10 +66,27 @@ internal sealed class ZeppelinVersusRuntime
     private const string HullDestroyedLine = "snd_Zep_dest";
     private const string HullLostLine = "snd_Zep_lost";
 
+    // Target changes logged per bot seat; a long match would otherwise log every torpedo cycle.
+    private const int BotLinesPerSeat = 8;
+
+    // A remake-only rule: how long a seat that damaged a hull's pool stays that hull's attacker for
+    // its bots to defend against. Nothing decodes it; the original seats no bots.
+    private const double HullAttackerMemoryS = 20.0;
+
     private readonly ZeppelinVersusInputs _in;
     private readonly ZeppelinVersus _rules;
     private readonly int _localTeam;
     private readonly Random _rng = new(Rng.IntSeedFor(Rng.ZeppelinVersus));
+
+    // Each hull's parts this step, by placement index, and each pool's health at the last step, so
+    // a drop names the seat that hit it.
+    private readonly List<HullPart>[] _hullParts = { new(), new() };
+    private readonly Dictionary<DestructibleRegistry.Instance, float> _seenHealth = new();
+
+    // Each hull's last attacker: the seat whose round last damaged one of its pools, and when.
+    private readonly (int Seat, double At)[] _hullAttacker = { (-1, 0d), (-1, 0d) };
+    private readonly List<EnemyPilot> _enemies = new();
+    private readonly Dictionary<int, (string Why, int Logged)> _botReasons = new();
     private bool _announced;
 
     private ZeppelinVersusRuntime(ZeppelinVersusInputs inputs, ZeppelinVersus rules, int localTeam)
@@ -92,6 +111,10 @@ internal sealed class ZeppelinVersusRuntime
 
     /// <summary>How many ending lines this machine's panes were posted, for a suite to read.</summary>
     public int LinesPosted { get; private set; }
+
+    /// <summary>Whether the bots the host flies take <see cref="ZvzBotObjective"/>'s targets. Off,
+    /// each bot ranks its targets as a Deathmatch bot does; a suite's control turns it off.</summary>
+    public bool BotObjective { get; set; } = true;
 
     /// <summary><c>player.zrd</c>'s <c>respawn_rad</c> and <c>respawn_el</c> (1200 and 100 shipped),
     /// read by <c>FUN_004735b0</c> into <c>0x628f08</c> and <c>0x628f0c</c>. A key the file lacks
@@ -207,6 +230,67 @@ internal sealed class ZeppelinVersusRuntime
     /// <summary>A guest's copy of the host's objective ending, with the lobby team that won.</summary>
     public void TakeEnding(int winner) => _in.Match.EndOnHullLoss(_rules.OtherTeam(winner), winner);
 
+    /// <summary>One host step of the bots it flies. It notes which seat last damaged each hull, then
+    /// hands every bot with a hull of its own <see cref="ZvzBotObjective"/>'s target. A gunner held
+    /// off (<see cref="AiGunner.AutoTarget"/> clear) or breaking off to rearm is left alone.
+    /// </summary>
+    public void StepBots(double now)
+    {
+        if (!_in.Net.IsHost || !BotObjective || _in.Match.Completed || !FliesBots())
+        {
+            return;
+        }
+
+        for (int hull = 0; hull < 2; hull++)
+        {
+            _hullParts[hull].Clear();
+            _in.Zeppelins.CollectHullParts(hull, _hullParts[hull]);
+            NoteAttacker(hull, now);
+        }
+
+        for (int seat = 0; seat < _in.SeatRigs.Count && seat < _in.SeatTeams.Count; seat++)
+        {
+            int own = _rules.HullOf(_in.SeatTeams[seat]);
+            if (own < 0 || _in.SeatRigs[seat].Controller is not { IsBotSeat: true, Crashed: false, Pilot.Gunner: { AutoTarget: true, Disengaged: false } gunner } bot
+                || !GodotObject.IsInstanceValid(bot))
+            {
+                continue;
+            }
+
+            _enemies.Clear();
+            for (int other = 0; other < _in.SeatRigs.Count; other++)
+            {
+                if (_in.SeatRigs[other].Controller is { Crashed: false, Inert: false } enemy && GodotObject.IsInstanceValid(enemy)
+                    && AimAssist.Hostile(bot.Team, enemy.Team))
+                {
+                    var (attacker, at) = _hullAttacker[own];
+                    bool onHull = attacker == other && now - at <= HullAttackerMemoryS;
+                    _enemies.Add(new EnemyPilot(enemy, enemy.WorldPosition, enemy.WorldVelocity, onHull));
+                }
+            }
+
+            var target = ZvzBotObjective.Pick(bot.WorldPosition, bot.NoseDirection, bot.Pilot.Machine?.AttackRange ?? 0f,
+                CarriesTorpedoes(bot), _enemies, _hullParts[1 - own], gunner.Target, out string why);
+            if (target == null)
+            {
+                continue;
+            }
+
+            // An ordered target, no rank snapshot: the acquisition then keeps it while it lives rather
+            // than re-ranking it away when a decoded hold runs out.
+            gunner.Target = target;
+            gunner.TargetRankFor = null;
+            var (was, logged) = _botReasons.TryGetValue(seat, out var last) ? last : ("", 0);
+            if (why != was && logged < BotLinesPerSeat)
+            {
+                Log.Info("flight", $"zvz: bot seat {seat} {why}, {TargetPool.TargetLabel(target)}");
+                logged++;
+            }
+
+            _botReasons[seat] = (why, logged);
+        }
+    }
+
     /// <summary>The ending on this machine, once: "Game Over:" and "Zeppelin Destroyed" in every
     /// pane. The lost hull's side hears its hull lost, the other side a hull destroyed.</summary>
     public void Announce()
@@ -228,6 +312,20 @@ internal sealed class ZeppelinVersusRuntime
 
         int winner = _in.Match.ObjectiveWinner;
         Speak(_localTeam > 0 && winner > 0 && _localTeam != winner && _rules.HullOf(_localTeam) >= 0 ? HullLostLine : HullDestroyedLine);
+    }
+
+    // Whether the bot has a DAMAGES_ZEPPELIN round left on any pylon, launchable now or after its lockout.
+    private static bool CarriesTorpedoes(FlightController bot)
+    {
+        foreach (var hp in bot.Loadout?.Hardpoints ?? (IReadOnlyList<Hardpoint>)Array.Empty<Hardpoint>())
+        {
+            if (hp.Weapon.DamagesZeppelin && hp.Armed(bot.InfiniteAmmo))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Every machine hears a gas bag's scoring event. The host alone scores it, to the seat whose
@@ -256,6 +354,44 @@ internal sealed class ZeppelinVersusRuntime
         _in.Match.AddScore(seat, points);
         _in.SendScore(seat);
         Log.Info("flight", $"zvz: seat {seat} downed hull {hull}'s {(cannon ? "cannon on " : "")}{gasbag}, {points:+#;-#;0}");
+    }
+
+    // Whether this machine pilots any bot, so a match without one reads no hull parts at all.
+    private bool FliesBots()
+    {
+        foreach (var rig in _in.SeatRigs)
+        {
+            if (rig.Controller is { IsBotSeat: true, Pilot: not null })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A pool of the hull that lost health since the last step names its attacker, when the round
+    // was a seat's on the other team. Turrets carry no pool, so they name nobody.
+    private void NoteAttacker(int hull, double now)
+    {
+        foreach (var part in _hullParts[hull])
+        {
+            if (part.Source is not DestructibleRegistry.Instance pool)
+            {
+                continue;
+            }
+
+            if (_seenHealth.TryGetValue(pool, out float seen) && pool.Health < seen)
+            {
+                int seat = _in.SeatOfShooter(pool.LastShooter);
+                if (seat >= 0 && seat < _in.SeatTeams.Count && _in.SeatTeams[seat] != _rules.TeamOfHull(hull))
+                {
+                    _hullAttacker[hull] = (seat, now);
+                }
+            }
+
+            _seenHealth[pool] = pool.Health;
+        }
     }
 
     // The host's end reason 3: the lost hull's side loses and the other wins.

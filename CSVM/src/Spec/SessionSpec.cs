@@ -242,8 +242,8 @@ public sealed record SessionSpec
     public bool VsAutoRespawnExplicit { get; private set; }
     /// <summary>Resolved. The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
     /// the bot seats a <c>--net-host</c> Dogfight seats after its guests, or a local one after its
-    /// panes. Empty without <see cref="Versus"/>, outside a Deathmatch and on a guest, and cut to the
-    /// seats <see cref="Players"/> leaves.</summary>
+    /// panes. Empty without <see cref="Versus"/>, in Capture the Flag, in a Zeppelin vs Zeppelin
+    /// with no <c>--net-host</c> and on a guest, and cut to the seats <see cref="Players"/> leaves.</summary>
     public IReadOnlyList<VsBotEntry> VsBots { get; private set; } = Array.Empty<VsBotEntry>();
     /// <summary>Resolved: the lobby type this session flies. Capture the Flag (<c>--ctf</c>) flies the
     /// flags for the lobby teams. Zeppelin vs Zeppelin (<c>--zvz</c>) flies the two hulls. Each needs
@@ -2697,8 +2697,9 @@ public sealed record SessionSpec
         }
 
         string? refusal = !Versus ? "a Dogfight seats bots; ignoring them without --vs"
-            : MissionType != DogfightMissionType.Deathmatch ? "only a Deathmatch seats bots; ignoring them beside --ctf or --zvz"
+            : MissionType == DogfightMissionType.CaptureTheFlag ? "Capture the Flag seats no bots; ignoring them beside --ctf"
             : NetJoin != null ? "a guest flies the host's roster, whose bots the host seats; ignoring them"
+            : MissionType == DogfightMissionType.ZeppelinVsZeppelin && NetHostPort == null ? "Zeppelin vs Zeppelin runs over the wire alone, so it seats bots only beside --net-host; ignoring them"
             : null;
         if (refusal != null)
         {

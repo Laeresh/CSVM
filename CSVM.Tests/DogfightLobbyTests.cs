@@ -1184,24 +1184,31 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
-    public void BotRowsFlyADeathmatchOnly()
+    public void BotRowsFlyADeathmatchAndAZeppelinMatch()
     {
         var (host, _, _) = Lobbies(1);
         Assert.True(host.AddBot());
         Assert.False(host.BotsGrounded);
         Assert.Single(host.LaunchBots);
 
+        // Zeppelin vs Zeppelin gives its bots the hull objective: rows are added and launched.
+        Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Assert.True(host.AddBot());
+        Assert.False(host.BotsGrounded);
+        Assert.Equal(2, host.LaunchBots.Count);
+
         // Capture the Flag has no flag-flying pilot to give a bot: no new row, and the launch is held.
         Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
         Assert.False(host.AddBot());
         Assert.True(host.BotsGrounded);
         Assert.Empty(host.LaunchBots);
-        Assert.Single(host.Bots);
+        Assert.Equal(2, host.Bots.Count);
 
-        // ABLE-TO-FAIL CONTROL: removing the row, or going back to Deathmatch, frees the launch.
+        // ABLE-TO-FAIL CONTROL: removing the rows, or going back to Deathmatch, frees the launch.
         Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
         Assert.False(host.BotsGrounded);
-        Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Assert.True(host.RemoveBot(host.Bots[0].Id));
         Assert.True(host.RemoveBot(host.Bots[0].Id));
         Assert.False(host.BotsGrounded);
     }

@@ -210,9 +210,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>Lets the picked bot go, back to the pilot's own plane.</summary>
     public const string BotDoneKey = "MPL_BOT_B_DONE";
 
-    /// <summary>The line a LAUNCH! with bot rows outside a Deathmatch raises, the remake's own.
-    /// </summary>
-    public const string BotsDeathmatchOnly = "Bots fly Deathmatch only. Remove them to launch this mission type.";
+    /// <summary>The line a LAUNCH! with bot rows under a type that takes none raises, the remake's
+    /// own.</summary>
+    public const string BotsGroundedLine = "Bots fly Deathmatch and Zeppelin vs Zeppelin only. Remove them to launch this mission type.";
 
     /// <summary>The line pinned over a guest's chat while its host flies a match the guest joined
     /// too late for. The remake's own: no langui line says what happens next.</summary>
@@ -877,7 +877,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
                 if (lobby is { CanLaunch: true, BotsGrounded: true })
                 {
-                    _host.RaiseDialog(BotsDeathmatchOnly, DialogIcon.Warning,
+                    _host.RaiseDialog(BotsGroundedLine, DialogIcon.Warning,
                         new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), null));
                     return null;
                 }

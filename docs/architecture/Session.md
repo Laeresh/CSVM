@@ -228,11 +228,11 @@ markers, and the carrier carries its tag. Decode: [../org/multiplayer-ctf.md](..
 Zeppelin vs Zeppelin in a network match, built by `VersusDirector.WireZeppelinVersus` for a `--zvz`
 launch over the `MP3` world's `ZeppelinRuntime`: hull 0 goes to the first side's lobby team and
 hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull. Off
-`PartDestroyed` the host scores each gas bag to the seat whose hit killed it, and every machine
-speaks the gas bag line. `ZeppelinKilled` ends the match on the host, a guest taking the winner
-from the `0x17` state; `Rules` names the side a broadside's kill goes to. `RespawnPoint` is
-the host's return, sent as `SpawnAtMessage`, and `SideOf` labels each hull's marker and its rearm
-base's. Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
+`PartDestroyed` the host scores each gas bag to the seat whose hit killed it; every machine speaks
+the gas bag line. `ZeppelinKilled` ends the match on the host. `RespawnPoint` is the host's return
+and `SideOf` labels each hull's marker and rearm base. `StepBots` notes each hull's last attacker
+and hands the host's bots `Flight/Ai/ZvzBotObjective.cs`'s targets (`BotObjective` turns it off).
+Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
 
 ## src/Session/World/RearmRuntime.cs
 The multiplayer rearm bases in any Dogfight, built by `VersusDirector.WireRearmBases`: the world's
@@ -466,7 +466,7 @@ switched on, placed at its authored pose and flown by `ZeppelinMotion`; an anima
 neither placed nor stepped. `WireDamage` builds the part pools, `PollDamage` owns the kill (and
 `PartDestroyed`, each part's with its killing shooter), the Instant Action engine count and the
 generator disable; `CollectTargetParts` makes a structure selectable under `TargetPool`'s torpedo
-gate. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. Networked, the host sends
+gate, and `CollectHullParts` lists one hull's parts for the Zeppelin vs Zeppelin bots. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. Networked, the host sends
 `TryReadPath` and a guest's `Replicate` gives each hull a `ZeppelinReplica` that `TakePath` feeds in
 place of the follower. Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 

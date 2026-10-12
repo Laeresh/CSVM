@@ -213,12 +213,12 @@ public sealed class DogfightLobby
     /// Ready, the gate its options have.</summary>
     public bool EditsBots => IsHost && !Ready;
 
-    /// <summary>Whether the mission type takes bots at all. Only a Deathmatch does: the computer
-    /// pilot has no flag or zeppelin objective to fly.</summary>
-    public bool TakesBots => Options.MissionType == (byte)DogfightMissionType.Deathmatch;
+    /// <summary>Whether the mission type takes bots at all. A Deathmatch and a Zeppelin vs Zeppelin
+    /// do, the second through the bots' hull objective; the computer pilot has no flag to fly.</summary>
+    public bool TakesBots => Options.MissionType is (byte)DogfightMissionType.Deathmatch or (byte)DogfightMissionType.ZeppelinVsZeppelin;
 
-    /// <summary>Whether bot rows stand under a type that takes none, which LAUNCH! refuses until
-    /// the host removes them or goes back to Deathmatch.</summary>
+    /// <summary>Whether bot rows stand under a type that takes none. LAUNCH! refuses until the host
+    /// removes them or picks a type that takes them.</summary>
     public bool BotsGrounded => _bots.Count > 0 && !TakesBots;
 
     /// <summary>The bot rows as the launch seats them. A Random plane is null, which the host draws
@@ -699,7 +699,7 @@ public sealed class DogfightLobby
     /// <see cref="CallsignPool"/> where no row holds it. It joins the team with the fewest pilots at
     /// this moment, the first created of a tie, or none while no team stands. Nothing moves it
     /// afterwards but the host. Refused on a guest, while the host is Ready, on a full field and
-    /// outside a Deathmatch.</summary>
+    /// under a type that takes no bots (<see cref="TakesBots"/>).</summary>
     public bool AddBot()
     {
         if (!EditsBots || BotRoom == 0 || !TakesBots)

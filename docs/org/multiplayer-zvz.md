@@ -191,6 +191,20 @@ carries that side's team, so every guest sets the same term and posts "Killed by
 the team's name. A broadside cannon a seat destroys scores its bound gas bag, as above; a gas bag a
 hull's round destroys is spent and scores nobody, since no seat fired it.
 
+**Remake-only rule, bots.** The original seats no bots. The remake's bots fly Zeppelin vs Zeppelin
+on a host, and each step the host re-decides each bot's target (`Flight/Ai/ZvzBotObjective.cs`).
+Nothing in it is decoded, and the 20 s memory and each limit are the remake's own choices.
+An enemy pilot whose round damaged a pool of the bot's own hull in the last 20 s (`HullAttackerMemoryS`) is fought first.
+An enemy on the bot's tail comes next, by the lay-off assist's pursued test, counted only inside the
+airframe's attack radius. Otherwise the bot attacks the other hull. Only a `DAMAGES_ZEPPELIN` round
+hurts a gas bag, so a bot carrying a torpedo stays on the nearest live gas bag, between launches too,
+and the rocketeer's torpedo match launches at it. A bot without one takes a broadside cannon that is
+out of the hull, then a turret, then an engine, nearest first. A bot keeps its part while the same
+rule still offers it. The broadsides' arcs are not avoided, since they aim at the other hull. A team
+holds at most one torpedo bot, the Black Hat Warhawk. Known gap: the attacker is read off pool
+health, so a raider whose rounds strike a turret (no pool) or a gas bag with no `DAMAGES_ZEPPELIN`
+round (no damage) goes unseen by the defence rule.
+
 **Remake choice, the end's sounds.** The original plays `snd_Zep_dest` to every machine at reason 3,
 and `snd_MP_mis_Won`/`snd_MP_mis_Lost` have no recording. The remake plays `snd_Zep_dest` to the
 winning side and `snd_Zep_lost`, which the original loads and never plays, to the side whose hull

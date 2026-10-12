@@ -401,6 +401,7 @@ public sealed class VersusDirector
         Match.Advance(dt);
         HoldSpentPilots();
         HoldTheEnd(dt);
+        ZvzPlay?.StepBots(GameClock.Current?.Time ?? 0.0);
         if (_matchCadence is not { } cadence)
         {
             return;

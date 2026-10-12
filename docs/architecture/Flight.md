@@ -589,6 +589,14 @@ ordnance gate. `AcquiringShooter` is the shooter's view the host answers once pe
 leaves the pick on `AiGunner.Target`, or drops it for a `Disengaged` gunner, and `RankedSources`/`ScannedStructureCount` expose the last
 sweep. `FlightController` owns one as `Acquisition`. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
+## src/Flight/Ai/ZvzBotObjective.cs
+A Zeppelin vs Zeppelin bot's target, a remake-only rule decided each step and engine-free: an enemy
+shooting at the bot's own hull, then an enemy on its tail inside its attack radius
+(`AiModeMachine.IsPursuedBy`), then the other hull. A bot carrying a torpedo stays on the nearest
+live gas bag; otherwise its guns take broadside cannons, then turrets, then engines. `HullPart` and
+`EnemyPilot` are the snapshots it reads. `Session/World/ZeppelinVersusRuntime.cs` feeds it on the
+host and writes the pick onto `AiGunner.Target`. Read `ZvzBotObjectiveTests.cs`.
+
 ## src/Flight/Ai/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
 the nose axis of an aircraft or zero for a turret or structure, the aircraft-only facts the merge
