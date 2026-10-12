@@ -550,8 +550,8 @@ in cell space and the two axes run opposite ways; both are in [../formats/interp
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims, a safety net), then dispatch-table
 event playback; an unhandled event kind is counted, never fatal. It owns the live definition instances and their condition evaluation, the
 destructible-damage entries and the sinks callers configure (`DamageAt`, `ApplyDamageStages`, `CarryState`, `ResetDestructible`, `ApplyReplicatedHealth`; `DestructibleKilled`, `DestructibleDamaged`, `DestructibleChipped`, `DamageReplicated`), which forward to `Anim/DestructibleDamage.cs`, the world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
-with a frame budget, which never splits one def), the range-deferred start sweep
-and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
+with a frame budget, which never splits one def), the range-deferred start sweep (a range start,
+from that sweep or from a call made inside the band, names its episode owner's seat to `RangeTriggerOwner`) and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:

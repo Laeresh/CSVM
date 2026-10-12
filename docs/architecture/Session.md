@@ -422,8 +422,8 @@ The mid-mission cutscene trigger: a story mission's resolved `LandingApproaches`
 frame against every flying human (arming gate, speed band, attitude cone, condition volume), and
 the first passing row is started as an explicit mission trigger with `CutsceneController.Own` given
 both the row and the human who flew it. A row fires once per entry into its volume; an `auto` row
-lights the auto-land prompt in each passing human's pane instead of starting anything. Rows staged
-later bind when their nodes appear. `Started` reports each start; a `Replicate`d trigger on a
+lights the auto-land prompt in each passing human's pane instead of starting anything. Its bind also
+claims a range-gated start for the seat the runtime names as episode owner. `Started` reports each start; a `Replicate`d trigger on a
 network guest starts only what `StartRow` names, still offering its own humans the prompt and
 recording a held button (`Pressing`). Next: `CutsceneController.cs`, [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 

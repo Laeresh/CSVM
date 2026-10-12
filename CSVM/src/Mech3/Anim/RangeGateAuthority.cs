@@ -5,7 +5,7 @@ using System.Globalization;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>
-/// Which machine answers a <c>PLAYER_RANGE</c> gate. A gate is a mission decision when its
+/// Which machine answers a <c>PLAYER_RANGE</c> or <c>EXECUTION_BY_RANGE</c> gate. A gate is a mission decision when its
 /// definition, or one it starts through <c>CALL_ANIMATION</c>, raises a <c>CALLBACK</c>. In network
 /// co-op the host answers such a gate over its whole human field and a guest replays the verdict.
 /// Every other gate, the ordnance washes among them, stays each machine's own read, since each
@@ -15,13 +15,18 @@ namespace CSVM.Mech3.Anim;
 /// </summary>
 public sealed class RangeGateAuthority
 {
-    /// <summary>Set on a deciding end: raised with a host-decided gate's name and its new verdict
-    /// each time that verdict changes. A gate never passed has told nobody anything.</summary>
-    public Action<string, bool>? Decided;
+    /// <summary>Set on a deciding end: raised each time a host-decided gate's verdict changes. It
+    /// carries the gate's name, the verdict, and the seat a pass names as episode owner, or null.
+    /// A gate never passed has told nobody anything.</summary>
+    public Action<string, bool, int?>? Decided;
 
     /// <summary>Set on a network guest only: the host's verdict for a gate, by name. While it is
     /// set, a host-decided gate is never read against this machine's own field.</summary>
     public Func<string, bool>? HostVerdict;
+
+    /// <summary>Set on a network guest only: the seat the host's last pass of a gate named, or
+    /// null where it named none.</summary>
+    public Func<string, int?>? HostSeat;
 
     private readonly Dictionary<AnimDefinition, bool> _raisesCode = new();
     private readonly Dictionary<string, bool> _told = new(StringComparer.OrdinalIgnoreCase);
@@ -62,14 +67,14 @@ public sealed class RangeGateAuthority
 
     /// <summary>Records this end's own verdict on a host-decided gate and answers it unchanged,
     /// raising <see cref="Decided"/> when it differs from the last one.</summary>
-    public bool Decide(string gate, bool passed)
+    public bool Decide(string gate, bool passed, int? seat = null)
     {
         ArgumentNullException.ThrowIfNull(gate);
         _told.TryGetValue(gate, out bool last);
         if (passed != last)
         {
             _told[gate] = passed;
-            Decided?.Invoke(gate, passed);
+            Decided?.Invoke(gate, passed, seat);
         }
 
         return passed;

@@ -25,9 +25,9 @@ internal sealed class NetPositionalStartLink
     private readonly LandingApproachRuntime? _landings;
     // A guest's own seats whose held button the host was last told about.
     private readonly HashSet<int> _told = new();
-    // A guest's copy of the host's gate verdicts by name hash. Each holds the last verdict sent and
-    // whether a pass arrived that this end's gate has not read yet.
-    private readonly Dictionary<int, (bool Passed, bool Unread)> _gates = new();
+    // A guest's copy of the host's gate verdicts by name hash. Each holds the last verdict sent,
+    // whether a pass arrived that this end's gate has not read yet, and the seat that pass named.
+    private readonly Dictionary<int, (bool Passed, bool Unread, int? Seat)> _gates = new();
 
     private NetPositionalStartLink(NetSession net, Func<IReadOnlyList<PlayerRig>> seats,
         LandingApproachRuntime? landings)
@@ -98,11 +98,11 @@ internal sealed class NetPositionalStartLink
     {
         if (world != null)
         {
-            world.RangeGates.Decided = (gate, passed) =>
+            world.RangeGates.Decided = (gate, passed, seat) =>
             {
                 GateVerdicts++;
-                _net.Broadcast(new PositionalStartMessage(
-                    NetPositionalStart.RangeGate, NetMessage.NoSeat, NetWorldLink.NameKey(gate), passed));
+                _net.Broadcast(new PositionalStartMessage(NetPositionalStart.RangeGate,
+                    seat is { } owner ? (byte)owner : NetMessage.NoSeat, NetWorldLink.NameKey(gate), passed));
             };
         }
 
@@ -141,6 +141,8 @@ internal sealed class NetPositionalStartLink
         if (world != null)
         {
             world.RangeGates.HostVerdict = HostVerdict;
+            world.RangeGates.HostSeat = gate =>
+                _gates.TryGetValue(NetWorldLink.NameKey(gate), out var verdict) ? verdict.Seat : null;
         }
 
         _net.On<PositionalStartMessage>((_, message) =>
@@ -149,7 +151,9 @@ internal sealed class NetPositionalStartLink
             {
                 case NetPositionalStart.RangeGate:
                     _gates.TryGetValue(message.Row, out var was);
-                    _gates[message.Row] = (message.Held, was.Unread || (message.Held && !was.Passed));
+                    // A withdrawal keeps the seat its pass named, which an unread pass still needs.
+                    int? seat = message.Held ? (message.Seat == NetMessage.NoSeat ? null : message.Seat) : was.Seat;
+                    _gates[message.Row] = (message.Held, was.Unread || (message.Held && !was.Passed), seat);
                     GateVerdicts++;
                     break;
                 case NetPositionalStart.LandingRow when _landings != null && SeatRig(message.Seat) is { } by:
@@ -183,7 +187,7 @@ internal sealed class NetPositionalStartLink
 
         if (verdict.Unread)
         {
-            _gates[key] = (verdict.Passed, false);
+            _gates[key] = verdict with { Unread = false };
         }
 
         return verdict.Passed || verdict.Unread;

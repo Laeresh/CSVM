@@ -58,6 +58,10 @@ public partial class GameSession : Node3D
     // How long a race's opening count stands on READY before its 3, 2, 1. TUNE at the controls.
     private const float RaceReadySeconds = 2f;
 
+    // Where a seat with neither an aeroplane nor a camera stands in the range field. It is far above
+    // any map, so the seat keeps its index there without ever opening a gate.
+    private static readonly Vector3 UnplacedSeat = new(0f, 1e7f, 0f);
+
     // Everything this launch settled, parsed and resolved once (see SessionSpec), the command
     // line verbatim, or the launchscreen's pick (SessionSpec.FromMenu). Every consumer below reads
     // it and nothing re-derives a launch setting; the pristine command line stays on the Launcher.
@@ -2785,25 +2789,19 @@ public partial class GameSession : Node3D
     // The anim runtime's range reads: every seat's aeroplane, a guest's copy and a bot included. A
     // range gate that starts a swap then counts a guest on every end. Without a seat roster it is
     // the panes' snapshot, which the per-viewer consumers keep in every session.
+    // ⚠ Keep one entry per seat, in seat order: a range start names its episode owner by index here.
     private IReadOnlyList<Vector3> FieldPositionsSnapshot()
     {
         if (_wire.Seats.Count == 0)
             return PlayerPositionsSnapshot();
-        int count = 0;
-        foreach (var rig in _seatRigs)
+        if (_fieldPositions.Length != _seatRigs.Count)
+            _fieldPositions = new Vector3[_seatRigs.Count];
+        for (int i = 0; i < _seatRigs.Count; i++)
         {
-            if (rig.Controller != null || rig.Camera != null)
-                count++;
-        }
-        if (_fieldPositions.Length != count)
-            _fieldPositions = new Vector3[count];
-        int i = 0;
-        foreach (var rig in _seatRigs)
-        {
-            if (rig.Controller is { } fc)
-                _fieldPositions[i++] = fc.GlobalPosition;
-            else if (rig.Camera is { } cam)
-                _fieldPositions[i++] = cam.GlobalPosition;
+            var rig = _seatRigs[i];
+            _fieldPositions[i] = rig.Controller is { } fc ? fc.GlobalPosition
+                : rig.Camera is { } cam ? cam.GlobalPosition
+                : UnplacedSeat;
         }
         return _fieldPositions;
     }

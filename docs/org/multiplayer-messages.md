@@ -699,7 +699,7 @@ The kinds are `NetPositionalStart`:
 | 1 Landing row | host to all | the row the host's trigger started, and the seat whose flying started it |
 | 2 Ladder holder | host to all | the seat now holding the switch, or no seat |
 | 3 Auto-land held | guest to host | the guest's own seat has the auto-land button down while offered the prompt, or has let it go |
-| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, no seat |
+| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` or `EXECUTION_BY_RANGE` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, and the seat the episode owner, where a range start names one |
 
 A guest starts the named row for the named seat's rig, which makes that seat the episode's owner
 on the guest as on the host. An `auto` row's prompt is per pane, so a guest still tests its own
@@ -716,6 +716,17 @@ hidden hull are applied on every end. The hand-over to the wingman activates a b
 the world, so it names an ordinal both ends already hold, and the host's samples fly it on a
 guest. A guest's scripted player, which an episode claimed by nobody
 belongs to, is the host's first seat.
+
+An `EXECUTION_BY_RANGE` gate whose definition reaches a `CALLBACK` is the host's too. The host
+reads it over its whole field and claims the start for the seat whose aeroplane is nearest the
+gate's anchor, its episode owner (`AnimRuntime.RangeTriggerOwner`, wired by
+`LandingApproachRuntime.Bind`). It sends kind 4 as one pass carrying that seat and its withdrawal.
+A guest never reads such a gate against its own field: it starts the definition on the unread pass
+and claims it for the same seat. C1/M02's hangar drop is one, so the pilot who flies into the
+hangar owns the drop and its 965 on every end. A start made inside a mission trigger's own start
+names no seat, and keeps that trigger's claim. A `PlayerRange` gate's verdict names no seat, so the
+episode it starts is claimed by nobody. Every other `EXECUTION_BY_RANGE` gate stays each end's own
+read over its whole field.
 
 A `PlayerRange` gate is the host's when its definition, or one it starts through
 `CALL_ANIMATION`, raises a `CALLBACK` (`Mech3/Anim/RangeGateAuthority.cs`). The host tests it

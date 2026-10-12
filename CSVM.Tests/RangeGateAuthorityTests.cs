@@ -60,17 +60,17 @@ public class RangeGateAuthorityTests
     public void ADecidingEndReportsOnlyChanges()
     {
         var gates = Bound();
-        var told = new List<(string Gate, bool Passed)>();
-        gates.Decided = (gate, passed) => told.Add((gate, passed));
+        var told = new List<(string Gate, bool Passed, int? Seat)>();
+        gates.Decided = (gate, passed, seat) => told.Add((gate, passed, seat));
 
         Assert.False(gates.Decide("drop/marker/4096", false));
         Assert.True(gates.Decide("drop/marker/4096", true));
         Assert.True(gates.Decide("drop/marker/4096", true));
         Assert.False(gates.Decide("drop/marker/4096", false));
-        Assert.True(gates.Decide("other/marker/4096", true));
+        Assert.True(gates.Decide("other/marker/4096", true, seat: 1));
 
         Assert.Equal(
-            new[] { ("drop/marker/4096", true), ("drop/marker/4096", false), ("other/marker/4096", true) },
+            new (string, bool, int?)[] { ("drop/marker/4096", true, null), ("drop/marker/4096", false, null), ("other/marker/4096", true, 1) },
             told);
     }
 
