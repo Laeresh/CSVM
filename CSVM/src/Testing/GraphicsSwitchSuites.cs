@@ -904,7 +904,8 @@ internal static class GraphicsSwitchSuites
     }
 
     // Able to fail: a release that drops a worn shader leaves its material off its key. One that
-    // drops nothing keeps the unworn key's shader alive.
+    // drops nothing keeps the unworn key's shader alive. It releases with no sync or pool drain, as
+    // freeing a drawn shader waits for its queued pipeline compiles (analysis/shard-memory/FINDINGS.md).
     private static void ReleasesUnworn(TestContext ctx)
     {
         var worn = Mech3.ShaderTwins.Make(() => OriginalProbe.Replace("retext", "release-worn", StringComparison.Ordinal),

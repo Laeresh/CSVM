@@ -1039,8 +1039,8 @@ member, and it does not go here.
   empty text in between.
 - **INSTR-103**, **Judge a free's saving over several rounds against a control that keeps the same
   objects, never on the first drop, which returns only part.** 128 drawn shaders a round: the first
-  free returned 0.44 of 0.85 GB, later rounds held a 1.34 to 1.39 GB plateau, and the keeping control
-  grew 0.63 to 0.73 GB a round.
+  free returned 0.43 of 0.83 GB, later rounds held a 1.31 to 1.36 GB plateau, and the keeping control
+  grew 0.62 to 0.71 GB a round.
 
 ## SRC, sources and documents
 

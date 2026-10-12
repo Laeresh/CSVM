@@ -205,8 +205,9 @@ public static class TestHarness
                 {
                     GC.Collect();
                     GC.WaitForPendingFinalizers();
-                    // An unworn shader holds its compiled variants until finalized. A headless process
-                    // builds none. The sync lands the suite's last draws before the release frees the cache's shaders.
+                    // An unworn shader holds its compiled variants until finalized; a headless process builds
+                    // none. No worker-pool drain: freeing a drawn shader waits for its queued pipeline
+                    // compiles (analysis/shard-memory/FINDINGS.md). The sync lands the suite's last draws first.
                     if (draws)
                         RenderingServer.ForceSync();
                     if (draws && ShaderTwins.ReleaseUnworn() > 0)

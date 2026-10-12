@@ -95,6 +95,141 @@ internal static class ShaderFreeProbeSuites
         ctx.Check(true, $"probe ran free={free} shaders={count} rounds={rounds} taa={taa}");
     }
 
+    /// <summary>Throwaway probe: graphics-retext-compiles step for step, with its in-place rewrite
+    /// swapped for the harness's release when CSVM_PROBE_ARM is release. Arm code runs the suite
+    /// itself with ShaderTwins.Rewrite cut to a plain Code assignment, the control that prints
+    /// free_rid lines: wrap Rewrite's empty-text line in
+    /// <c>if (Environment.GetEnvironmentVariable("CSVM_PROBE_PLAIN") != "1")</c> and run it with
+    /// CSVM_PROBE_PLAIN=1. Arm empty runs it as shipped. CSVM_PROBE_SHADERS keys, CSVM_PROBE_SLEEP
+    /// ms per sleeping task (two per core). Run with <c>-EngineArgs '--log-file',&lt;path&gt;</c>;
+    /// windowed, since headless builds no variant.</summary>
+    [Suite("probe-shader-free-retext", "throwaway: the rewrite suite's race, with the release in place of the rewrite")]
+    internal static void ProbeRetext(TestContext ctx)
+    {
+        if (RenderingServer.GetRenderingDevice() == null)
+            throw new SuiteSkippedException("no rendering device, so no pipeline is compiled");
+        string arm = System.Environment.GetEnvironmentVariable("CSVM_PROBE_ARM") ?? "release";
+        int count = Env("CSVM_PROBE_SHADERS", 1);
+        int sleep = Env("CSVM_PROBE_SLEEP", 150);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
+        var host = new Node { Name = "retext_probe" };
+        ctx.Host.AddChild(host);
+        var busy = new List<long>();
+        try
+        {
+            GraphicsMode.Set(false);
+            Mech3.ShaderTwins.Regenerate();
+            Mech3.ShaderTwins.EnhancedDrawn = false;
+            RenderingServer.ForceSync();
+            int? errorsBefore = TestHarness.EngineErrorsSoFar();
+            var keys = Enumerable.Range(0, count).Select(i => Mech3.ShaderTwins.Make(
+                () => ProbeText(i, GraphicsMode.Enhanced), "retext-probe", $"retext-probe-{i}")).ToList();
+            var view = new SubViewport
+            {
+                Size = new Vector2I(64, 64),
+                OwnWorld3D = true,
+                World3D = new World3D(),
+                RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+                RenderTargetClearMode = SubViewport.ClearMode.Always,
+            };
+            view.AddChild(new Camera3D { Current = true });
+            var quads = keys.Select(_ => new MeshInstance3D { Mesh = new QuadMesh { Size = new Vector2(4f, 4f) }, Position = new Vector3(0f, 0f, -1f) }).ToList();
+            foreach (var quad in quads)
+                view.AddChild(quad);
+            host.AddChild(view);
+            foreach (var quad in quads)
+                quad.ForceUpdateTransform();
+            var worn = keys.Select(k => Mech3.ShaderTwins.Follow(new ShaderMaterial(), k)).ToList();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            busy = Enumerable.Range(0, 2 * OS.GetProcessorCount())
+                .Select(_ => WorkerThreadPool.AddTask(Callable.From(() => System.Threading.Thread.Sleep(sleep)))).ToList();
+            for (int i = 0; i < count; i++)
+                quads[i].MaterialOverride = worn[i];
+            RenderingServer.ForceDraw();
+            RenderingServer.ForceDraw();
+            _ = view.GetTexture()?.GetImage();
+            double drawnMs = watch.Elapsed.TotalMilliseconds;
+            foreach (var quad in quads)
+                quad.MaterialOverride = null;
+            foreach (var material in worn)
+                material.Dispose();
+            int released = 0;
+            double freeSyncMs = 0;
+            if (arm == "release")
+            {
+                // The harness's sequence: collect, sync, release, collect.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                RenderingServer.ForceSync();
+                released = Mech3.ShaderTwins.ReleaseUnworn();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                double before = watch.Elapsed.TotalMilliseconds;
+                RenderingServer.ForceSync();
+                freeSyncMs = watch.Elapsed.TotalMilliseconds - before;
+            }
+            GraphicsMode.Set(true);
+            var stats = Mech3.ShaderTwins.Regenerate();
+            double actedMs = watch.Elapsed.TotalMilliseconds;
+            int busyDone = busy.Count(WorkerThreadPool.IsTaskCompleted);
+            var taa = new SubViewport
+            {
+                Size = new Vector2I(256, 256),
+                OwnWorld3D = true,
+                World3D = new World3D(),
+                UseTaa = true,
+                RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            };
+            taa.AddChild(new Camera3D { Current = true });
+            host.AddChild(taa);
+            RenderingServer.ForceDraw();
+            taa.Free();
+            var fresh = keys.Select(k => Mech3.ShaderTwins.Follow(new ShaderMaterial(), k)).ToList();
+            for (int i = 0; i < count; i++)
+                quads[i].MaterialOverride = fresh[i];
+            RenderingServer.ForceDraw();
+            RenderingServer.ForceDraw();
+            var image = view.GetTexture()?.GetImage();
+            var pixel = image == null || image.IsEmpty() ? new Color(0f, 0f, 0f, 0f) : image.GetPixel(32, 32);
+            RenderingServer.ForceSync();
+            int? errorsAtDraw = TestHarness.EngineErrorsSoFar();
+            int busyDoneAtDraw = busy.Count(WorkerThreadPool.IsTaskCompleted);
+            foreach (long task in busy)
+                WorkerThreadPool.WaitForTaskCompletion(task);
+            busy.Clear();
+            Settle();
+            System.Threading.Thread.Sleep(500);
+            int? errorsAfter = TestHarness.EngineErrorsSoFar();
+            string line = $"probe-retext arm={arm} plain={System.Environment.GetEnvironmentVariable("CSVM_PROBE_PLAIN") ?? "0"} keys={count} sleep_ms={sleep} tasks={2 * OS.GetProcessorCount()} "
+                + $"drawn_ms={drawnMs:0} acted_ms={actedMs:0} free_sync_ms={freeSyncMs:0} busy_done_at_act={busyDone} busy_done_at_draw={busyDoneAtDraw} "
+                + $"released={released} retexted={stats.Retexted} pixel={pixel} "
+                + $"errors_at_draw={(errorsAtDraw ?? -1) - (errorsBefore ?? 0)} errors_end={(errorsAfter ?? -1) - (errorsBefore ?? 0)} log={(errorsBefore != null ? "read" : "missing")}";
+            ctx.Note($"{line}");
+            Log.Info("test", $"{line}");
+            foreach (var material in fresh)
+                material.Dispose();
+        }
+        finally
+        {
+            foreach (long task in busy)
+                WorkerThreadPool.WaitForTaskCompletion(task);
+            host.Free();
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
+            GraphicsMode.Set(wasEnhanced);
+            Mech3.ShaderTwins.Regenerate();
+        }
+        ctx.Check(true, $"probe ran arm={arm}");
+    }
+
+    // The rewrite suite's probe texts, Original (red, three uniforms) or Enhanced (green, one), each
+    // with a comment of its own so every key holds its own shader.
+    private static string ProbeText(int n, bool after) =>
+        "shader_type spatial;\nrender_mode unshaded, cull_disabled;\n// free-busy " + n.ToString(CultureInfo.InvariantCulture) + "\n" + (after
+            ? "uniform vec4 probe_a = vec4(0.0);\nvoid fragment() {\n    ALBEDO = vec3(0.0, 1.0, 0.0) + probe_a.rgb * 0.0;\n}\n"
+            : "uniform vec4 probe_a = vec4(0.0);\nuniform vec4 probe_b = vec4(0.0);\nuniform vec4 probe_c = vec4(0.0);\n"
+                + "void fragment() {\n    ALBEDO = vec3(1.0, 0.0, 0.0) + (probe_a.rgb + probe_b.rgb + probe_c.rgb) * 0.0;\n}\n");
+
     // A world-bias shader text as the world builder writes it, with a uniform of its own so every
     // text compiles to its own code.
     private static string Text(int round, int i)
