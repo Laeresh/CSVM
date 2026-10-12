@@ -758,7 +758,8 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-twins-world-release",
         "the shader cache stops following a test world's materials, a fade copy made after the build "
         + "included, once the harness destroys that world, and keeps following the cached chapter "
-        + "world's, its fade copy held only from C# included, through the release a session build runs")]
+        + "world's, its fade copy held only from C# included, through the release a session build runs; "
+        + "the harness's release between suites drops a shader no material wears and keeps a worn one")]
     internal static void TwinsWorldRelease(TestContext ctx)
     {
         ShaderMaterial? cachedSource = null, cachedFade = null, privateSource = null, privateFade = null;
@@ -797,6 +798,7 @@ internal static class GraphicsSwitchSuites
             cachedFade?.Dispose();
             privateFade?.Dispose();
         }
+        ReleasesUnworn(ctx);
     }
 
     [Suite("world-merge",
@@ -900,6 +902,42 @@ internal static class GraphicsSwitchSuites
                 $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
         }
     }
+
+    // Able to fail: a release that drops a worn shader leaves its material off its key. One that
+    // drops nothing keeps the unworn key's shader alive.
+    private static void ReleasesUnworn(TestContext ctx)
+    {
+        var worn = Mech3.ShaderTwins.Make(() => OriginalProbe.Replace("retext", "release-worn", StringComparison.Ordinal),
+            "release-probe", "release-worn");
+        var unworn = Mech3.ShaderTwins.Make(() => OriginalProbe.Replace("retext", "release-unworn", StringComparison.Ordinal),
+            "release-probe", "release-unworn");
+        var material = Mech3.ShaderTwins.Follow(new ShaderMaterial(), worn);
+        try
+        {
+            ulong unwornId = InstanceIdOf(unworn);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            int released = Mech3.ShaderTwins.ReleaseUnworn();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            bool unwornFreed = !GodotObject.IsInstanceIdValid(unwornId);
+            ctx.Check(worn.Has(GraphicsMode.Enhanced) && ReferenceEquals(material.Shader, worn.Current),
+                $"the release keeps a shader a material wears ({released} released)");
+            ctx.Check(!unworn.Has(GraphicsMode.Enhanced) && unwornFreed,
+                $"and drops one nothing wears, which the collector then frees (freed {unwornFreed})");
+            int made = Mech3.ShaderTwins.Made;
+            ctx.Check(unworn.Current.Code.Contains("release-unworn", StringComparison.Ordinal) && Mech3.ShaderTwins.Made == made + 1,
+                $"a dropped key makes its shader again on next use");
+        }
+        finally
+        {
+            material.Dispose();
+        }
+    }
+
+    // In a frame of its own, so no stack slot of the caller keeps the shader's wrapper alive.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static ulong InstanceIdOf(Mech3.ModeShader key) => key.Current.GetInstanceId();
 
     // A small pane of its own world, no TAA, whose quad fills the camera's view.
     private static (SubViewport View, MeshInstance3D Quad) ProbeView(Node host)

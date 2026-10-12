@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// them. Godot compiles each <see cref="Shader"/> object on its own, so two cache keys whose texts
 /// agree share one. A material keeps the key it was made for. A live switch moves it onto that key's
 /// shader for the other mode, and no text changes (<see cref="Regenerate"/>).
-/// Main thread only, process-lifetime, like the caches.
+/// Main thread only, process-lifetime in the game, like the caches.
 /// </summary>
 internal static class ShaderTwins
 {
@@ -54,6 +54,10 @@ internal static class ShaderTwins
 
     /// <summary>Gets how many shaders have been made in this process, one per text.</summary>
     public static int Made { get; private set; }
+
+    /// <summary>Gets how many shaders the cache holds now, which <see cref="ReleaseUnworn"/> lowers.
+    /// For an instrument.</summary>
+    public static int Live => ByText.Count;
 
     /// <summary>Gets how many materials follow a key. For an instrument.</summary>
     public static int TrackedCount => Tracked.Count;
@@ -183,6 +187,29 @@ internal static class ShaderTwins
         foreach (var material in unused)
             Tracked.Remove(material);
         ReleasePins();
+    }
+
+    /// <summary>Drops every shader no material wears, and the collector then frees its variants. A key
+    /// whose shader went makes it again on next use. Returns how many went. ⚠ Test harness only,
+    /// between suites: the game keeps every shader to spare a compile. The other mode's warmed twins
+    /// go too, so a suite that needs them warm warms them itself.</summary>
+    public static int ReleaseUnworn()
+    {
+        // A build holds a shader before any material wears it, so it would read as unworn.
+        if (BuildingWorld != null)
+            return 0;
+        var unworn = ByText.Where(kv => Unworn(kv.Value)).ToList();
+        if (unworn.Count == 0)
+            return 0;
+        var gone = new HashSet<Shader>(unworn.Select(kv => kv.Value), ReferenceEqualityComparer.Instance);
+        foreach (var twins in All)
+            twins.Drop(gone);
+        foreach (var (text, shader) in unworn)
+        {
+            ByText.Remove(text);
+            FamilyByShader.Remove(shader);
+        }
+        return unworn.Count;
     }
 
     /// <summary>Stops tracking every material of <paramref name="world"/>, for a test harness that
@@ -322,6 +349,9 @@ internal static class ShaderTwins
         return rewrote;
     }
 
+    // No material wears it: the cache's own wrapper holds its one reference.
+    private static bool Unworn(Shader shader) => shader.GetReferenceCount() <= 1;
+
     private static ShaderMaterial Follow(ShaderMaterial material, ModeShader twins, bool fade, object? world)
     {
         material.Shader = fade ? twins.FadeFor(GraphicsMode.Enhanced) : twins.Current;
@@ -423,6 +453,16 @@ internal sealed class ModeShader
             _enhanced = null;
         else
             _original = null;
+    }
+
+    // Forgets each slot holding one of gone, which its next use makes again.
+    internal void Drop(HashSet<Shader> gone)
+    {
+        Shader? Keep(Shader? slot) => slot != null && gone.Contains(slot) ? null : slot;
+        _original = Keep(_original);
+        _enhanced = Keep(_enhanced);
+        _fadeOriginal = Keep(_fadeOriginal);
+        _fadeEnhanced = Keep(_fadeEnhanced);
     }
 
     // Every shader it holds: each mode's, then each mode's fade copy.

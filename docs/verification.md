@@ -1037,6 +1037,10 @@ member, and it does not go here.
   drawn and rewritten, an idle pool printed no free_rid line, and a pool held by sleeping tasks
   printed 50 with no drain, 50 after a `ForceSync`, 50 after a drawn frame, and 0 through an
   empty text in between.
+- **INSTR-103**, **Judge a free's saving over several rounds against a control that keeps the same
+  objects, never on the first drop, which returns only part.** 128 drawn shaders a round: the first
+  free returned 0.44 of 0.85 GB, later rounds held a 1.34 to 1.39 GB plateau, and the keeping control
+  grew 0.63 to 0.73 GB a round.
 
 ## SRC, sources and documents
 

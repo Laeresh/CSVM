@@ -149,7 +149,7 @@ public static class TestHarness
         var runGate = ctx.AuditFinalizersAcrossRun ? FinalizerGate.Hold() : null;
         if (ctx.DebugMem)
         {
-            Log.Info("test", $"mem after=0/{selected.Count} suite=- {MemoryCensus.Line(ShaderTwins.Made)} tracked={ShaderTwins.TrackedCount}");
+            Log.Info("test", $"mem after=0/{selected.Count} suite=- {MemoryCensus.Line(ShaderTwins.Made)} live={ShaderTwins.Live} tracked={ShaderTwins.TrackedCount}");
         }
         foreach (var suite in selected)
         {
@@ -165,6 +165,7 @@ public static class TestHarness
             // thread the run gate holds, and the process hangs.
             var gate = ctx.AuditFinalizers && runGate == null ? FinalizerGate.Hold() : null;
             double staticAtStart = Performance.GetMonitor(Performance.Monitor.MemoryStatic);
+            int madeAtStart = ShaderTwins.Made;
             ShaderCensus.Begin();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
@@ -194,13 +195,25 @@ public static class TestHarness
                 ctx.EvictCollidableWorlds();
                 ctx.FreeQueuedNodes();
                 // A dead wrapper holds its Godot object until finalized, so sessions ride into the
-                // next suite. A collection costs 0.1 to 0.6 s, so only after Godot's heap grew.
+                // next suite. A collection costs 0.1 to 0.6 s, so only after Godot's heap grew or a
+                // drawing process made a shader.
+                bool draws = RenderingServer.GetRenderingDevice() != null;
                 // ⚠ Never under a finalizer gate: its parked thread never finishes the wait.
                 if (gate == null && runGate == null
-                    && Performance.GetMonitor(Performance.Monitor.MemoryStatic) - staticAtStart > CollectAfterStaticGrowth)
+                    && (Performance.GetMonitor(Performance.Monitor.MemoryStatic) - staticAtStart > CollectAfterStaticGrowth
+                        || (draws && ShaderTwins.Made > madeAtStart)))
                 {
                     GC.Collect();
                     GC.WaitForPendingFinalizers();
+                    // An unworn shader holds its compiled variants until finalized. A headless process
+                    // builds none. The sync lands the suite's last draws before the release frees the cache's shaders.
+                    if (draws)
+                        RenderingServer.ForceSync();
+                    if (draws && ShaderTwins.ReleaseUnworn() > 0)
+                    {
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                    }
                 }
                 // A suite ticking two weather rigs in different zones leaves the fog table
                 // published, and the next suite's render would search those freed cameras.
@@ -276,7 +289,7 @@ public static class TestHarness
             Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
             if (ctx.DebugMem)
             {
-                Log.Info("test", $"mem after={results.Count}/{selected.Count} suite={suite.Name} {MemoryCensus.Line(ShaderTwins.Made)} tracked={ShaderTwins.TrackedCount}");
+                Log.Info("test", $"mem after={results.Count}/{selected.Count} suite={suite.Name} {MemoryCensus.Line(ShaderTwins.Made)} live={ShaderTwins.Live} tracked={ShaderTwins.TrackedCount}");
             }
             if (gate != null)
             {
