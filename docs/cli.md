@@ -185,7 +185,7 @@ lines**.
 - `--vs-bots=N` (with `--vs`, seat N bots after this machine's panes, or with `--net-host` after
   the guests: a Random stock plane, veteran, no team, and a callsign drawn from the shipped pilot
   names. This machine flies them, and a host's roster carries them, so a guest passes no flag; one
-  passed there, beside `--ctf`, or beside a local `--zvz`, is ignored with a warning. A field past 16 seats is cut with a warning, and guests
+  passed there, or beside a local `--ctf` or `--zvz`, is ignored with a warning. A field past 16 seats is cut with a warning, and guests
   that fill it leave the last bots out. `--vs-bot=` entries take the first places. A menu launch
   seats the join board's bots instead)
 - `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs`, local or
@@ -197,8 +197,9 @@ lines**.
 - `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
   team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
   scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's
-  option that an enemy flag scores only while the carrier's own flag is at home. The Multiplayer
-  Lobby's Capture the Flag type sets both. Ignored without `--vs`, with a warning)
+  option that an enemy flag scores only while the carrier's own flag is at home. A host's bots fly
+  for the flags. The Multiplayer Lobby's Capture the Flag type sets both. Ignored without `--vs`,
+  with a warning)
 - `--zvz` (with `--vs` over the wire, fly the match as Zeppelin vs Zeppelin: the zeppelins run, the
   first two lobby teams in seat order each fly one hull, the host scores every gas bag and cannon
   downed and the first hull lost ends the match for the other side. Pair with `--mission=MP3`, the

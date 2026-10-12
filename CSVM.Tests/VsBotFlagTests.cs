@@ -99,27 +99,17 @@ public sealed class VsBotFlagTests
         Assert.Equal(3, SessionSpec.Parse(new[] { "--vs", "--vs-bots=3", Host }).VsBots.Count);
     }
 
-    [Fact]
-    public void CaptureTheFlagSeatsNoBots()
+    [Theory]
+    [InlineData("--ctf")]
+    [InlineData("--zvz")]
+    public void ObjectiveTypesSeatBotsOnAHostAlone(string type)
     {
-        var s = SessionSpec.Parse(new[] { "--vs", "--ctf", "--vs-bots=2", Host });
-        Assert.Empty(s.VsBots);
-        Assert.Contains(s.Warnings, w => w.Category == "core"
-            && w.Message.Contains("Capture the Flag seats no bots", StringComparison.Ordinal));
-
-        // ABLE-TO-FAIL CONTROL: the same host on a Deathmatch seats them.
-        Assert.Equal(2, SessionSpec.Parse(new[] { "--vs", "--vs-bots=2", Host }).VsBots.Count);
-    }
-
-    [Fact]
-    public void ZeppelinVsZeppelinSeatsBotsOnAHostAlone()
-    {
-        var hosted = SessionSpec.Parse(new[] { "--vs", "--zvz", "--vs-bots=2", Host });
+        var hosted = SessionSpec.Parse(new[] { "--vs", type, "--vs-bots=2", Host });
         Assert.Equal(2, hosted.VsBots.Count);
         Assert.DoesNotContain(hosted.Warnings, w => w.Message.Contains("--vs-bot", StringComparison.Ordinal));
 
-        // ABLE-TO-FAIL CONTROL: a local match never runs the hulls, so it seats none.
-        var local = SessionSpec.Parse(new[] { "--vs", "--zvz", "--vs-bots=2" });
+        // ABLE-TO-FAIL CONTROL: a local match never runs the flags or the hulls, so it seats none.
+        var local = SessionSpec.Parse(new[] { "--vs", type, "--vs-bots=2" });
         Assert.Empty(local.VsBots);
         Assert.Contains(local.Warnings, w => w.Category == "core"
             && w.Message.Contains("seats bots only beside --net-host", StringComparison.Ordinal));

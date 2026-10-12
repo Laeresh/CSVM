@@ -472,7 +472,7 @@ an optional `Machine`, an optional `Escort` and a bot's `RearmOrder`), one `Flig
 `FlightController` whose `Pilot` is set. A `Machine` is stepped first and picks this step's aim point
 and parameter table; an `Escort` whose leader is in play takes the dispatch away from every mode but
 stunned and avoid crash, which is the original's own wingman fork. `Stun` is the AI stun's entry,
-leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag. A standing rearm run disengages the gunner and replaces patrol in the dispatch. `ResetForSpawn` is a seat pilot's one reset on a return: the gunner's quarry, the machine, the launcher, a stun, a rearm run and a danger-zone run are dropped, and the new placement's course and lever taken, while the orders a mission or launch set stay. A standing order added later clears there too.
+leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag. A standing rearm run disengages the gunner and replaces patrol in the dispatch. A standing `ObjectiveRun` (a Capture the Flag bot's flag) outranks pursuit and the rearm run with the gunner left engaged, only a stun, avoid crash, a live escort and a maneuver coming first. A `Tether` past its radius (a defender's) takes the quarry away as a rearm run does. `ResetForSpawn` is a seat pilot's one reset on a return: the gunner's quarry, the machine, the launcher, a stun, a rearm run and a danger-zone run are dropped, and the new placement's course and lever taken, while the orders a mission or launch set stay. A standing order added later clears there too.
 Pure and seeded, so a fixed-dt run is deterministic. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/Ai/AiRearmOrder.cs
@@ -480,7 +480,8 @@ A bot's rearm standing order, engine-free. `Update`, called by `Session/World/Re
 step, starts a run when `RocketsOut` reads every loaded pylon empty or the whole-vehicle health falls to
 its TUNE threshold (the guns are not read), plans the bay's open side with the world line probe the seat path hands it (`OpenBearing`), and walks
 the legs: the gate out on that side, the level final leg through the node, and clear of the base once
-restored. `AiPilot` flies `Aim` on the cruise table while the run stands. Approach and the measured
+restored. `FlyTo` runs the same approach to a node another objective names, standing while it names one; such a flag run also refuses a bay closed past the node and raises its gate over hills.
+`AiPilot` flies `Aim` on the cruise table while the run stands. Approach and the measured
 bay: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md); units `AiRearmOrderTests.cs`, suite
 `net-bot-rearm`.
 
@@ -531,7 +532,7 @@ line from that barrel to the intercept point so wing guns converge, perturbed in
 draw per shot. Gates in the engine's order: the quick-draw cone off the target's nose-tail axis, the separation inside
 the slot's authored engagement window, then the airframe's traverse clamp on the lead with the residual the clamp
 leaves gated in turn, so the employable cone is the traverse limit plus that gate. It also carries the standing target:
-`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`. `PlayersPreferred` is the pilot's own switch for the ranking's player weight: on for every campaign, Instant Action and `--ai=` pilot, off for a bot seat's, since a Dogfight ranks every pilot alike. `Disengaged`, set by the pilot each step while a rearm run stands, holds acquisition off.
+`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, `OrderTarget` writes a bot objective's target with no rank so the hold keeps it, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`. `PlayersPreferred` is the pilot's own switch for the ranking's player weight: on for every campaign, Instant Action and `--ai=` pilot, off for a bot seat's, since a Dogfight ranks every pilot alike. `Disengaged`, set by the pilot each step while a rearm run stands, holds acquisition off.
 Engine-free; the live half is the `ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/Weapons/SurfaceGunMount.cs
@@ -596,6 +597,14 @@ shooting at the bot's own hull, then an enemy on its tail inside its attack radi
 live gas bag; otherwise its guns take broadside cannons, then turrets, then engines. `HullPart` and
 `EnemyPilot` are the snapshots it reads. `Session/World/ZeppelinVersusRuntime.cs` feeds it on the
 host and writes the pick onto `AiGunner.Target`. Read `ZvzBotObjectiveTests.cs`.
+
+## src/Flight/Ai/CtfBotObjective.cs
+A Capture the Flag bot's order, a remake-only rule decided each step and engine-free: a carrier
+flies home, then a bot chases an enemy carrying its team's flag. On a team of three or more, the bot
+nearest its own flag then defends it, tethered there; any other flies for a floating flag of either
+team, or attacks the enemy flag at its base. `CtfPilot` is the seat snapshot it reads, `CtfBotOrder` the answer, whose straight roles
+fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host. Rule and limits:
+[../org/multiplayer-ctf.md](../org/multiplayer-ctf.md); read `CtfBotObjectiveTests.cs`.
 
 ## src/Flight/Ai/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,

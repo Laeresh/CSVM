@@ -1184,32 +1184,39 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
-    public void BotRowsFlyADeathmatchAndAZeppelinMatch()
+    public void BotRowsFlyEveryTypeButTheStuntRace()
     {
         var (host, _, _) = Lobbies(1);
         Assert.True(host.AddBot());
         Assert.False(host.BotsGrounded);
         Assert.Single(host.LaunchBots);
 
-        // Zeppelin vs Zeppelin gives its bots the hull objective: rows are added and launched.
+        // Zeppelin vs Zeppelin and Capture the Flag give their bots the hull and flag objectives.
         Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
         Assert.True(host.AddBot());
         Assert.False(host.BotsGrounded);
         Assert.Equal(2, host.LaunchBots.Count);
-
-        // Capture the Flag has no flag-flying pilot to give a bot: no new row, and the launch is held.
         Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Assert.True(host.AddBot());
+        Assert.False(host.BotsGrounded);
+        Assert.Equal(3, host.LaunchBots.Count);
+
+        // A Stunt Race flies no bot: no new row, and the launch is held.
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
         Assert.False(host.AddBot());
         Assert.True(host.BotsGrounded);
         Assert.Empty(host.LaunchBots);
-        Assert.Equal(2, host.Bots.Count);
+        Assert.Equal(3, host.Bots.Count);
 
-        // ABLE-TO-FAIL CONTROL: removing the rows, or going back to Deathmatch, frees the launch.
-        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
-        Assert.False(host.BotsGrounded);
+        // ABLE-TO-FAIL CONTROL: removing the rows, or going back to Capture the Flag, frees the launch.
         Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
-        Assert.True(host.RemoveBot(host.Bots[0].Id));
-        Assert.True(host.RemoveBot(host.Bots[0].Id));
+        Assert.False(host.BotsGrounded);
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        while (host.Bots.Count > 0)
+        {
+            Assert.True(host.RemoveBot(host.Bots[0].Id));
+        }
+
         Assert.False(host.BotsGrounded);
     }
 

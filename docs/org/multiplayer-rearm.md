@@ -151,7 +151,9 @@ height by 700 m out and is level after it, because the AI's avoid-crash lookahea
 500 m at cruise) reads any descent near the bay as the floor and climbs out. The bot aims 400 m
 ahead along the leg, since a point aim hunts in roll, and joins the leg only while its track lies
 within 60 degrees of inbound. Restored, it holds the node's height for 60 m, then climbs, and hands
-back to combat 150 m from the node.
+back to combat 150 m from the node. A Capture the Flag bot's flag run uses the same planner with two
+checks a rearm run does not take ([`multiplayer-ctf.md`](multiplayer-ctf.md), "Remake-only rule,
+bots").
 
 [Evidence: measured] From eight starts 3 km out at every 45 degrees, every run reached the base
 with no return, in 34 to 94 s. A 1500 m gate with a 600 m level probe failed four of the eight:

@@ -222,7 +222,13 @@ own seats and asks the host (`FlagRequestMessage`); the host decides, scores thr
 changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
 the flag rows. A death, a drop or `Eject` (the console's `ejectflag`, relayed by the host) floats a
 flag everywhere, and the host sends it home when the throw runs out. `SideOf` labels the three
-markers, and the carrier carries its tag. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+markers, and the carrier carries its tag. `StepBots` hands the host's bots `Flight/Ai/CtfBotObjective.cs`'s orders (`BotObjective` turns it off). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+
+## src/Session/World/BotOrderLog.cs
+Which bot order changes a team mode's host step logs: `Admit` notes a bot seat's reason each step
+and answers true when it changed and the seat still has one of its `LinesPerSeat` lines left, so a
+long match does not log every run. `FlagRuntime.StepBots` and `ZeppelinVersusRuntime.StepBots` share
+it, each writing its own line.
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `VersusDirector.WireZeppelinVersus` for a `--zvz`

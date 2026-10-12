@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
@@ -89,6 +90,8 @@ internal sealed class FlagRuntime
     private readonly FlagRuntimeInputs _in;
     private readonly FlagMatch _flags;
     private readonly Dictionary<int, FlagProps> _props = new();
+    private readonly List<CtfPilot> _pilots = new();
+    private readonly BotOrderLog _botLog = new();
     private readonly Random _rng = new(Rng.IntSeedFor(Rng.Flags));
     private readonly int _localTeam;
 
@@ -114,6 +117,10 @@ internal sealed class FlagRuntime
     /// <summary>The voice lines this machine asked the radio for, in order, for a suite to read.
     /// </summary>
     public List<string> Spoken { get; } = new();
+
+    /// <summary>Whether the bots the host flies take <see cref="CtfBotObjective"/>'s orders. Off,
+    /// each flies as a Deathmatch bot does; a suite's control turns it off.</summary>
+    public bool BotObjective { get; set; } = true;
 
     /// <summary>Builds one flag per lobby team <c>n</c> whose <c>cs_flag_n</c> node the world
     /// holds, as <c>FUN_00495d40</c> does, and wires the wire. Null when the world holds no flag
@@ -200,6 +207,45 @@ internal sealed class FlagRuntime
                 && _flags.Check(seat, pilot.WorldPosition) is { } ask)
             {
                 Ask(seat, ask.Team, ask.Ask);
+            }
+        }
+    }
+
+    /// <summary>One host step of the bots it flies, each on <see cref="CtfBotObjective"/>'s order. A
+    /// straight run flies <see cref="AiPilot.ObjectiveRun"/> over the flag, a chase hands the gunner
+    /// the carrier, and a defender steers over its own flag. The flags themselves move only by
+    /// <see cref="Step"/>'s asks. A match flying no bot here reads nothing.</summary>
+    public void StepBots()
+    {
+        if (!_in.Net.IsHost || _in.Match.Completed)
+        {
+            return;
+        }
+
+        _pilots.Clear();
+        bool bots = false;
+        for (int seat = 0; seat < _in.SeatRigs.Count && seat < _in.SeatTeams.Count; seat++)
+        {
+            if (_in.SeatRigs[seat].Controller is { } pilot && GodotObject.IsInstanceValid(pilot))
+            {
+                bool live = pilot is { Crashed: false, Destroyed: false, Inert: false };
+                _pilots.Add(new CtfPilot(seat, _in.SeatTeams[seat], pilot, pilot.WorldPosition, pilot.IsBotSeat, live));
+                bots |= pilot.IsBotSeat && live && _in.IsLocal(seat);
+            }
+        }
+
+        if (!bots)
+        {
+            return;
+        }
+
+        foreach (var seat in _pilots)
+        {
+            if (seat is { Bot: true, Live: true, Source: FlightController { Pilot: { } pilot } bot } && _in.IsLocal(seat.Seat))
+            {
+                var order = BotObjective ? CtfBotObjective.Decide(seat.Seat, _flags, _pilots)
+                    : new CtfBotOrder(CtfBotRole.None, null, null, "has its objective off");
+                Steer(seat.Seat, bot, pilot, order);
             }
         }
     }
@@ -583,6 +629,36 @@ internal sealed class FlagRuntime
         string holder = CallsignOf(seat);
         int side = SideTeam(team);
         pilot.MarkerName = team == 0 ? null : own => FlagMarkers.HolderTag(_in.Strings, holder, own, side);
+    }
+
+    // One bot's order on its pilot. A bot breaking off to rearm keeps that run, unless it carries a
+    // flag, which goes home first. A defender is tethered to its flag and steered back over it.
+    private void Steer(int seat, FlightController bot, AiPilot pilot, CtfBotOrder order)
+    {
+        bool straight = order.Straight && (order.Role == CtfBotRole.Carrier || pilot.RearmOrder is not { Flying: true });
+        if (straight || pilot.ObjectiveRun != null)
+        {
+            pilot.ObjectiveRun ??= new AiRearmOrder(bot.WorldBlocksLine);
+            pilot.ObjectiveRun.FlyTo(bot.WorldPosition, bot.WorldVelocity, straight ? order.Goal : null);
+        }
+
+        pilot.Tether = null;
+        if (order is { Role: CtfBotRole.Chaser, Target: { } carrier } && pilot.Gunner is { AutoTarget: true, Disengaged: false } gunner)
+        {
+            gunner.OrderTarget(carrier);
+        }
+        else if (order is { Role: CtfBotRole.Defender, Goal: { } over })
+        {
+            pilot.Tether = (over, CtfBotObjective.DefendRadiusM);
+            pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(over - bot.WorldPosition);
+            pilot.TargetAltitude = over.Y;
+        }
+
+        if (_botLog.Admit(seat, order.Why))
+        {
+            string at = order.Goal is { } goal ? FormattableString.Invariant($" at {goal.X:0} {goal.Y:0} {goal.Z:0}") : "";
+            Log.Info("flight", $"ctf: bot seat {seat} {order.Why}{at}");
+        }
     }
 
     // A seat's callsign, or the original's "Unknown" for a pilot never named.

@@ -69,6 +69,19 @@ public sealed class AiPilot
     /// comes first. The base runtime starts and ends the run.</summary>
     public AiRearmOrder? RearmOrder;
 
+    /// <summary>A run to a point an objective names, a Capture the Flag bot's flag, flown as a rearm
+    /// run's approach, or null. It outranks pursuit and a rearm run: the pilot flies it whatever its
+    /// quarry, and its gunner still fires where its guns bear. A stun, avoid crash's climb-out, a
+    /// live escort and an evasive maneuver still come first. The objective's runtime starts and drops
+    /// it.</summary>
+    public AiRearmOrder? ObjectiveRun;
+
+    /// <summary>A Capture the Flag defender's tether, or null. Beyond <c>Radius</c> metres of
+    /// <c>Center</c>, measured flat, the pilot takes no quarry, as on a rearm run
+    /// (<see cref="BeyondTether"/>). It then flies its heading and altitude orders, which its
+    /// objective points home.</summary>
+    public (Vector3 Center, float Radius)? Tether;
+
     /// <summary>The mission's <c>dzpathN</c> ribbons, or null for a session with none: with a
     /// <see cref="Machine"/> and a <see cref="Patrol"/>, reaching a net node carrying the
     /// danger-zone tag starts a run on the ribbon the node names (docs/org/aiPilot.md "The
@@ -178,6 +191,12 @@ public sealed class AiPilot
     /// way round, and the two agree only at north and south.</summary>
     public static float HeadingDegOf(Vector3 dir) =>
         Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z));
+
+    /// <summary>Whether <paramref name="position"/> stands past <paramref name="tether"/>'s radius
+    /// of its centre, measured flat, so the pilot breaks off and flies home. False with no tether.
+    /// </summary>
+    public static bool BeyondTether(Vector3 position, (Vector3 Center, float Radius)? tether) =>
+        tether is { } t && new Vector2(position.X - t.Center.X, position.Z - t.Center.Z).LengthSquared() > t.Radius * t.Radius;
 
     /// <summary>The decoded aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>): whether the
     /// pursuer sits on its victim's own axis, within the pilot's <c>quick_draw_angle</c> of it.
@@ -318,6 +337,8 @@ public sealed class AiPilot
         Rocketeer?.Reset();
         Machine?.Reset("respawned");
         RearmOrder?.Reset();
+        ObjectiveRun?.Reset();
+        Tether = null;
         if (Gunner is { } freed)
         {
             freed.Disengaged = false;
@@ -330,14 +351,17 @@ public sealed class AiPilot
     /// one node read is a turret or structure quarry's position, which lives on its node alone.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        // A rearm run takes no quarry, so the machine reverts any chase on this step.
-        var rearm = RearmOrder is { Flying: true } run ? run : null;
+        // A rearm run takes no quarry, so the machine reverts any chase on this step. An objective
+        // run keeps its quarry, which only its guns pursue.
+        var objective = ObjectiveRun is { Flying: true } named ? named : null;
+        var rearm = objective == null && RearmOrder is { Flying: true } run ? run : null;
+        bool off = rearm != null || BeyondTether(model.Position, Tether);
         if (Gunner is { } held)
         {
-            held.Disengaged = rearm != null;
+            held.Disengaged = off;
         }
 
-        var quarry = rearm != null ? null : PursuitQuarry.Of(Gunner?.Target, Gunner);
+        var quarry = off ? null : PursuitQuarry.Of(Gunner?.Target, Gunner);
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
         RailPose = null;          // set again below only while the rail writes the pose
 
@@ -360,6 +384,8 @@ public sealed class AiPilot
                 return FlyClimbOut(model, dt, machine);
             if (Escort is { Leader.InPlay: true } escorting)
                 return FlyEscort(model, dt, escorting, quarry);
+            if (objective != null && mode != AiMode.EvasiveManeuver)
+                return FlyRearm(model, dt, objective);
 
             // The dynamic entry into a danger-zone run, on the original's own gate: a combat
             // state (its state 0) with the evade flag up. That is a hit pilot being chased, and
@@ -397,8 +423,8 @@ public sealed class AiPilot
                     return FlyLayOff(model, dt, machine, pursuer);
 
                 default: // patrol, and any mode whose quarry went away; a rearm run replaces patrol
-                    if (rearm != null)
-                        return FlyRearm(model, dt, rearm);
+                    if ((objective ?? rearm) is { } standing)
+                        return FlyRearm(model, dt, standing);
                     var input = FlyPatrol(model, dt);
                     if (mode == AiMode.Patrol && Patrol is { ArrivedNode: { EntersDangerZone: true } node })
                         TryStartDangerZone(node.DangerZonePath, model, machine);
@@ -416,8 +442,8 @@ public sealed class AiPilot
         if (Escort is { Leader.InPlay: true } escort)
             return FlyEscort(model, dt, escort, quarry);
 
-        if (rearm != null)
-            return FlyRearm(model, dt, rearm);
+        if ((objective ?? rearm) is { } ordered)
+            return FlyRearm(model, dt, ordered);
         return quarry is { } bare ? FlyPursuit(model, dt, bare) : FlyPatrol(model, dt);
     }
 
@@ -569,8 +595,8 @@ public sealed class AiPilot
         return Fly(model, dt, aim, Vector3.Zero, AiLawParams.Cruise);
     }
 
-    // The rearm run: the order's aim point, on the cruise table the combat driver flies while breaking
-    // off. Heading and altitude follow it, so a run that ends leaves the pilot holding its last course.
+    // A rearm or objective run: the order's aim point, on the cruise table the combat driver flies while
+    // breaking off. Heading and altitude follow it, so a run that ends leaves the pilot holding its last course.
     private FlightInput FlyRearm(FlightModel model, float dt, AiRearmOrder run)
     {
         var aim = run.Aim(model.Position);

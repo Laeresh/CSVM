@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
@@ -142,6 +143,41 @@ public sealed class AiRearmOrderTests
 
         Assert.Equal(AiRearmLeg.Gate, order.Leg);
         Assert.Equal(0f, order.Approach.DistanceTo(Vector3.Back), 3);
+    }
+
+    [Fact]
+    public void AFlagRunRefusesAHallClosedPastTheFlag()
+    {
+        // The same world for a flag run, which flies on past the node. The hall is closed at its far
+        // end, so the run falls back to the pilot's own bearing.
+        var deadEnd = new AiRearmOrder((from, to) => (to - from).Normalized().Z < 0.99f);
+        deadEnd.FlyTo(new Vector3(800f, 300f, 800f), Vector3.Zero, Node);
+        Assert.Equal(0f, deadEnd.Approach.DistanceTo(new Vector3(1f, 0f, 1f).Normalized()), 3);
+
+        // ABLE-TO-FAIL CONTROL: a hall open at both ends takes the flag run from the south.
+        var through = new AiRearmOrder((from, to) => Mathf.Abs((to - from).Normalized().Z) < 0.99f);
+        through.FlyTo(new Vector3(800f, 300f, 800f), Vector3.Zero, Node);
+        Assert.Equal(0f, through.Approach.DistanceTo(Vector3.Back), 3);
+    }
+
+    [Fact]
+    public void AFlagRunRaisesItsGateUntilALegClearsTheHills()
+    {
+        // Ground stands 250 m over the node everywhere past the level stretch. A gate at 120 m is
+        // under it, and one raised by two steps clears it.
+        var node = new Vector3(0f, 100f, 0f);
+        Func<Vector3, Vector3, bool> hills = (from, to) => Mathf.Max(from.Y, to.Y) < node.Y + 250f
+            && new Vector2(to.X, to.Z).Length() > AiRearmOrder.LevelLegM + 1f;
+        var flag = new AiRearmOrder(hills);
+        flag.FlyTo(new Vector3(0f, 600f, 4000f), Vector3.Zero, node);
+        Assert.True(flag.Flying);
+        Assert.Equal(3 * AiRearmOrder.GateAboveM, flag.GateAbove);
+
+        // ABLE-TO-FAIL CONTROL: a rearm run over the same hills keeps its first height.
+        var rearm = new AiRearmOrder(hills);
+        rearm.Update(new Vector3(0f, 600f, 4000f), Vector3.Zero, true, 1f, node, restored: false);
+        Assert.True(rearm.Flying);
+        Assert.Equal(AiRearmOrder.GateAboveM, rearm.GateAbove);
     }
 
     [Fact]

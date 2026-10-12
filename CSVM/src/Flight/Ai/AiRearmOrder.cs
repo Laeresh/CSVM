@@ -19,8 +19,9 @@ public enum AiRearmLeg : byte
 /// A bot's rearm standing order: out of rockets or badly damaged, it breaks off to the nearest base
 /// serving it. Once restored and clear of the base it hands back to combat. A base is a fly-through
 /// bay, so the run flies a gate out on the bay's open side, then a final leg through the node. The
-/// base runtime feeds <see cref="Update"/> and <see cref="AiPilot"/> flies <see cref="Aim"/>. Approach
-/// and the measured bay: docs/org/multiplayer-rearm.md, "Bots at a base"; engine-free beyond the vector struct.
+/// base runtime feeds <see cref="Update"/> and <see cref="AiPilot"/> flies <see cref="Aim"/>. The same
+/// class carries a Capture the Flag bot's flag run, fed by <see cref="FlyTo"/>. Approach and the measured
+/// bay: docs/org/multiplayer-rearm.md, "Bots at a base"; engine-free beyond the vector struct.
 /// </summary>
 public sealed class AiRearmOrder
 {
@@ -38,6 +39,11 @@ public sealed class AiRearmOrder
     /// <summary>How far above the node the gate stands, metres; the leg descends to the node's height
     /// before <see cref="LevelLegM"/>.</summary>
     public const float GateAboveM = 120f;
+
+    /// <summary>TUNE, a remake value: the original has no computer pilots. How many times a flag
+    /// run's plan may stack <see cref="GateAboveM"/> on its gate while every leg meets the ground.
+    /// C1's Capture the Flag bases need it. A rearm run keeps the first height.</summary>
+    public const int GateRaises = 4;
 
     /// <summary>How far ahead along the leg the pilot aims, metres. It closes on the line without the
     /// hunting a point aim gives the control law's sign-relay roll.</summary>
@@ -73,6 +79,9 @@ public sealed class AiRearmOrder
 
     private readonly Func<Vector3, Vector3, bool>? _blocks;
 
+    // Set by FlyTo: the order carries a flag run, whose plan takes the two flag-only checks.
+    private bool _flagRun;
+
     /// <summary>An order whose open-side search asks <paramref name="worldBlocks"/> whether static
     /// world blocks a segment. Without one, the run approaches along the pilot's own bearing.</summary>
     public AiRearmOrder(Func<Vector3, Vector3, bool>? worldBlocks = null)
@@ -88,6 +97,11 @@ public sealed class AiRearmOrder
 
     /// <summary>The node the run flies to.</summary>
     public Vector3 Base { get; private set; }
+
+    /// <summary>How far above the node this run's gate stands, metres: <see cref="GateAboveM"/>. A
+    /// flag run raises it, a remake value, by up to <see cref="GateRaises"/> steps where every leg
+    /// meets the ground.</summary>
+    public float GateAbove { get; private set; } = GateAboveM;
 
     /// <summary>The horizontal unit bearing from the node out along the open side the run comes in on.</summary>
     public Vector3 Approach { get; private set; }
@@ -248,6 +262,26 @@ public sealed class AiRearmOrder
         }
     }
 
+    /// <summary>A run to a node another objective names, a Capture the Flag bot's flag. It is planned
+    /// and flown as a rearm run's approach, standing while the objective names a node. A node moved
+    /// past the replan distance, or a pass that missed, is planned afresh. Null drops the run.</summary>
+    public void FlyTo(Vector3 at, Vector3 velocity, Vector3? node)
+    {
+        _flagRun = true;
+        if (node is not { } goal)
+        {
+            Reset();
+        }
+        else if (Leg == AiRearmLeg.None)
+        {
+            Plan(at, velocity, goal);
+        }
+        else
+        {
+            Update(at, velocity, rocketsOut: false, hullShare: 1f, goal, restored: false);
+        }
+    }
+
     /// <summary>Drops any run outright, the return to a fresh airframe.</summary>
     public void Reset()
     {
@@ -266,7 +300,7 @@ public sealed class AiRearmOrder
 
         if (Leg == AiRearmLeg.Gate)
         {
-            return Base + (Approach * FinalLegM) + (Vector3.Up * GateAboveM);
+            return Base + (Approach * FinalLegM) + (Vector3.Up * GateAbove);
         }
 
         float along = Along(at);
@@ -274,7 +308,7 @@ public sealed class AiRearmOrder
         var aim = Base + (Approach * ahead);
         aim.Y = Leg == AiRearmLeg.Clear
             ? Base.Y + (along > -ClearLevelM ? 0f : ClearClimbM)
-            : Base.Y + (GateAboveM * Mathf.Clamp((ahead - LevelLegM) / (FinalLegM - LevelLegM), 0f, 1f));
+            : Base.Y + (GateAbove * Mathf.Clamp((ahead - LevelLegM) / (FinalLegM - LevelLegM), 0f, 1f));
         return aim;
     }
 
@@ -294,21 +328,30 @@ public sealed class AiRearmOrder
 
     // A new run, or the same one planned afresh: the open side nearest the pilot, then the gate.
     // A pilot already in the final leg's corridor joins the leg at once. The bay is the level
-    // stretch from the node; the leg adds the climb from there up to the gate.
+    // stretch from the node; the leg adds the climb from there up to the gate. A flag run's bay also
+    // needs the miss distance past the node, and its gate rises while no bearing's leg is clear.
     private void Plan(Vector3 at, Vector3 velocity, Vector3 node)
     {
         Base = node;
         var want = Horizontal(at - node);
         var bay = new bool[Bearings];
         var leg = new bool[Bearings];
-        for (int i = 0; _blocks is { } blocks && i < Bearings; i++)
+        bool clear = false;
+        int raises = _flagRun ? GateRaises : 1;
+        for (int step = 1; _blocks is { } blocks && step <= raises && !clear; step++)
         {
-            var dir = BearingDir(i, Bearings);
-            var level = node + (dir * LevelLegM);
-            bay[i] = !blocks(node, level);
-            leg[i] = bay[i] && !blocks(level, node + (dir * FinalLegM) + (Vector3.Up * GateAboveM));
+            GateAbove = GateAboveM * step;
+            for (int i = 0; i < Bearings; i++)
+            {
+                var dir = BearingDir(i, Bearings);
+                var level = node + (dir * LevelLegM);
+                bay[i] = !blocks(node, level) && (!_flagRun || !blocks(node, node - (dir * MissM)));
+                leg[i] = bay[i] && !blocks(level, node + (dir * FinalLegM) + (Vector3.Up * GateAbove));
+                clear |= leg[i];
+            }
         }
 
+        GateAbove = clear ? GateAbove : GateAboveM;
         Approach = OpenBearing(bay, leg, want);
         Leg = InCorridor(at, velocity) ? AiRearmLeg.Final : AiRearmLeg.Gate;
     }

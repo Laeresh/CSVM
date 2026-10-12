@@ -171,6 +171,14 @@ public sealed class AiGunner
         TargetHoldUntil = now + TargetHoldSeconds;
     }
 
+    /// <summary>Orders <paramref name="target"/> with no rank snapshot, as a bot's objective does.
+    /// The acquisition's hold then keeps it while it lives instead of re-ranking it away.</summary>
+    public void OrderTarget(object target)
+    {
+        Target = target;
+        TargetRankFor = null;
+    }
+
     /// <summary>Whether <paramref name="target"/> is this gunner's assigned
     /// <see cref="PrimaryTargetName"/>, by the same name match the picker's primary arm uses: the
     /// node name, or any human aircraft for the <c>"player"</c> role. The original's test is the

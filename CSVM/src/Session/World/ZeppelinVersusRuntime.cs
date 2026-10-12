@@ -66,9 +66,6 @@ internal sealed class ZeppelinVersusRuntime
     private const string HullDestroyedLine = "snd_Zep_dest";
     private const string HullLostLine = "snd_Zep_lost";
 
-    // Target changes logged per bot seat; a long match would otherwise log every torpedo cycle.
-    private const int BotLinesPerSeat = 8;
-
     // A remake-only rule: how long a seat that damaged a hull's pool stays that hull's attacker for
     // its bots to defend against. Nothing decodes it; the original seats no bots.
     private const double HullAttackerMemoryS = 20.0;
@@ -86,7 +83,7 @@ internal sealed class ZeppelinVersusRuntime
     // Each hull's last attacker: the seat whose round last damaged one of its pools, and when.
     private readonly (int Seat, double At)[] _hullAttacker = { (-1, 0d), (-1, 0d) };
     private readonly List<EnemyPilot> _enemies = new();
-    private readonly Dictionary<int, (string Why, int Logged)> _botReasons = new();
+    private readonly BotOrderLog _botLog = new();
     private bool _announced;
 
     private ZeppelinVersusRuntime(ZeppelinVersusInputs inputs, ZeppelinVersus rules, int localTeam)
@@ -276,18 +273,11 @@ internal sealed class ZeppelinVersusRuntime
                 continue;
             }
 
-            // An ordered target, no rank snapshot: the acquisition then keeps it while it lives rather
-            // than re-ranking it away when a decoded hold runs out.
-            gunner.Target = target;
-            gunner.TargetRankFor = null;
-            var (was, logged) = _botReasons.TryGetValue(seat, out var last) ? last : ("", 0);
-            if (why != was && logged < BotLinesPerSeat)
+            gunner.OrderTarget(target);
+            if (_botLog.Admit(seat, why))
             {
                 Log.Info("flight", $"zvz: bot seat {seat} {why}, {TargetPool.TargetLabel(target)}");
-                logged++;
             }
-
-            _botReasons[seat] = (why, logged);
         }
     }
 

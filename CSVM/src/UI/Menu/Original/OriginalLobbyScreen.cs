@@ -212,7 +212,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     /// <summary>The line a LAUNCH! with bot rows under a type that takes none raises, the remake's
     /// own.</summary>
-    public const string BotsGroundedLine = "Bots fly Deathmatch and Zeppelin vs Zeppelin only. Remove them to launch this mission type.";
+    public const string BotsGroundedLine = "Bots do not fly a Stunt Race. Remove them to launch this mission type.";
 
     /// <summary>The line pinned over a guest's chat while its host flies a match the guest joined
     /// too late for. The remake's own: no langui line says what happens next.</summary>

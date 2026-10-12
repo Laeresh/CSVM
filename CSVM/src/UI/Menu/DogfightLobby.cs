@@ -213,9 +213,11 @@ public sealed class DogfightLobby
     /// Ready, the gate its options have.</summary>
     public bool EditsBots => IsHost && !Ready;
 
-    /// <summary>Whether the mission type takes bots at all. A Deathmatch and a Zeppelin vs Zeppelin
-    /// do, the second through the bots' hull objective; the computer pilot has no flag to fly.</summary>
-    public bool TakesBots => Options.MissionType is (byte)DogfightMissionType.Deathmatch or (byte)DogfightMissionType.ZeppelinVsZeppelin;
+    /// <summary>Whether the mission type takes bots at all. Every Dogfight type but the Stunt Race
+    /// does, Capture the Flag and Zeppelin vs Zeppelin through the bots' flag and hull objectives.
+    /// </summary>
+    public bool TakesBots => Options.MissionType is (byte)DogfightMissionType.Deathmatch
+        or (byte)DogfightMissionType.CaptureTheFlag or (byte)DogfightMissionType.ZeppelinVsZeppelin;
 
     /// <summary>Whether bot rows stand under a type that takes none. LAUNCH! refuses until the host
     /// removes them or picks a type that takes them.</summary>

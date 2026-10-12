@@ -221,3 +221,48 @@ shipped). `Session/World/FlagRuntime.cs` runs them in a network match. The diffe
   taking it only from the machine flying the seat and only for the flag that seat carries, floats
   it and sends the same ask to every guest. The command stays available whenever the chat is, not
   only after a script edit.
+
+**Remake-only rule, bots.** The original seats no bots, so nothing here is decoded. A host's bots
+fly Capture the Flag over the wire (`Flight/Ai/CtfBotObjective.cs`, run by `FlagRuntime.StepBots`),
+and every step the host re-decides each bot's order by the first rule that holds:
+
+1. A bot carrying a flag flies home, its own flag returned or the enemy's captured.
+2. An enemy carries the bot's team's flag: the bot chases the carrier, written onto its gunner as an
+   ordered target that the ranking keeps while the carrier lives, wherever it is.
+3. On a team of three or more pilots, people and bots together (`DefenderTeamSize`), the team's bot
+   nearest its own flag defends it. It flies 150 m over the flag (`DefendAboveM`) and dogfights by
+   its ordinary ranking, but past 1000 m of the flag, measured flat (`DefendRadiusM`), it drops its
+   quarry and flies home (`AiPilot.Tether`). It leaves home only for rule 2, since a taken flag
+   leaves nothing to defend, and never for a floating flag.
+4. A flag of either team floats: the bot flies for the nearest, 10 m above it (`FloatingPassAboveM`),
+   since a flag at rest lies on the ground.
+5. Otherwise the bot attacks the enemy flag at its base.
+
+The remake's own choices beyond the issue's decision: the attacker and the retriever fly straight
+as the carrier does, though only the carrier's straight run home was decided; a bot whose enemy flag
+a teammate carries holds over its own flag, as a defender does ("waits over its flag"); a local
+`--ctf` seats no bots, since the flags run only over the wire; and the local join board keeps its
+"Dogfight only" hint, since a local Dogfight never offers Capture the Flag.
+
+The carrier, the retriever and the attacker fly a flag run: a rearm run's approach
+([`multiplayer-rearm.md`](multiplayer-rearm.md), "Bots at a base"), a gate on the open side and a
+level final leg through the flag, flown whatever the bot's quarry. Its gunner stays engaged, so it
+fires where its guns already bear, but it never turns to dogfight; a stun, avoid crash and an
+evasive maneuver still come first. A bot breaking off to rearm keeps that run unless it carries a
+flag. Every take and every flag brought home is the bot's own seat asking through `FlagMatch.Check`
+and the host's `Decide`, the reach and both cooldowns as a person's. A flag run's plan takes two
+checks a rearm run does not: a bearing is refused when the line 150 m past the flag (`MissM`) is
+closed, since the run flies on through, and where every leg meets the ground the gate is raised by
+120 m at a time, up to four times (`GateRaises`, a remake value).
+
+[Evidence: measured] On C1's `MP2` each flag stands in its `ctf_n` base, 15.5 m over the base's
+floor, inside a wall (`g456`) 40 to 63 m out on both X sides and open to the north and south: level
+rays from the flag pass between about headings 340 and 30 and between 160 and 200, and meet the wall
+on every other heading. A run passing 10 m over the flag struck the wall over the north opening, so
+a flag at its base is passed at its own point. A run planned through the opening at heading 30
+faced the wall at 210 past the flag, and the avoid-crash ray climbed it out 300 m short, which the
+far-side check refuses. Hills stand over every leg out to the 120 m gate round team 2's base, so the
+gate there is raised. From eight starts 1500 m past team 2's flag at every 45 degrees, facing away,
+the bot came in from heading 165 every time, took the flag in 46 to 85 s, and brought it home to
+team 1's base for a capture in 91 to 100 s more. Only C1's `MP2` was flown. Each number above, the
+order of the rules and every choice in this section are the remake's own.
