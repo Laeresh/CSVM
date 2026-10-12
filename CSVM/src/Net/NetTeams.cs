@@ -87,8 +87,14 @@ public sealed class NetTeamBook
     public const string DefaultName = "Default team name";
 
     private readonly List<Team> _teams = new();
+    private readonly Func<byte, bool> _held;
 
-    /// <summary>The teams in the order they were created.</summary>
+    /// <summary>A book whose team stands while <paramref name="held"/> says it holds a lobby's bots,
+    /// even once no member is left on it.</summary>
+    public NetTeamBook(Func<byte, bool>? held = null) => _held = held ?? (_ => false);
+
+    /// <summary>The teams in the order they were created. A team no member is on has captain -1.
+    /// </summary>
     public IReadOnlyList<NetTeam> Teams
     {
         get
@@ -97,7 +103,7 @@ public sealed class NetTeamBook
             for (int i = 0; i < teams.Length; i++)
             {
                 var team = _teams[i];
-                teams[i] = new NetTeam(team.Number, team.Name, team.Members[0], team.Members.ToArray());
+                teams[i] = new NetTeam(team.Number, team.Name, team.Members.Count > 0 ? team.Members[0] : -1, team.Members.ToArray());
             }
 
             return teams;
@@ -231,6 +237,26 @@ public sealed class NetTeamBook
         return events;
     }
 
+    /// <summary>A new team under <paramref name="name"/> with no member, numbered as
+    /// <see cref="Create"/> numbers. It stands only while held. Answers its number, 0 once
+    /// <see cref="MaxTeams"/> stand.</summary>
+    public byte Open(string? name)
+    {
+        if (_teams.Count >= MaxTeams)
+        {
+            return 0;
+        }
+
+        byte number = 1;
+        while (FindNumber(number) != null)
+        {
+            number++;
+        }
+
+        _teams.Add(new Team(number, Kept(name)));
+        return number;
+    }
+
     /// <summary><paramref name="member"/> joins team <paramref name="number"/>. Nothing happens for a
     /// team that does not stand. Nor for a member already on a team, whom the lobby offers only Leave
     /// Team.</summary>
@@ -246,7 +272,8 @@ public sealed class NetTeamBook
     }
 
     /// <summary><paramref name="member"/> leaves its team. A captain's leave disbands it, as the
-    /// original's <c>FUN_00413390</c> does. Nothing happens for a member on no team.</summary>
+    /// original's <c>FUN_00413390</c> does, unless the team is held; then the next member, if any,
+    /// captains it. Nothing happens for a member on no team.</summary>
     public IReadOnlyList<NetTeamEvent> Leave(int member)
     {
         if (FindMember(member) is not { } team)
@@ -254,7 +281,8 @@ public sealed class NetTeamBook
             return Array.Empty<NetTeamEvent>();
         }
 
-        if (team.Members[0] == member)
+        // A solo host forms a bots' team by creating it and leaving, so a held team outlives its captain.
+        if (team.Members[0] == member && !_held(team.Number))
         {
             return Disband(team.Number);
         }
@@ -305,6 +333,21 @@ public sealed class NetTeamBook
         foreach (int member in gone)
         {
             events.AddRange(Leave(member));
+        }
+
+        return events;
+    }
+
+    /// <summary>Disbands every team no member is on and nothing holds any longer.</summary>
+    public IReadOnlyList<NetTeamEvent> Prune()
+    {
+        var events = new List<NetTeamEvent>();
+        foreach (var team in _teams.ToArray())
+        {
+            if (team.Members.Count == 0 && !_held(team.Number))
+            {
+                events.AddRange(Disband(team.Number));
+            }
         }
 
         return events;

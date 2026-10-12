@@ -601,8 +601,9 @@ constants rather than reading a layout.
   staying above the window. The text column ends 4 px clear of `KG`, which stands over the
   scroll bar the background paints at the pane's right.
   Game Scores is greyed until a match has landed. The own
-  name is drawn red in the list and the chat, and the player list shows its first eleven rows with
-  no scroll bar. Leave Game always lands on the Connection page. The host's options lock while it
+  name is drawn red in the list and the chat. The player list shows eleven rows; past them, which
+  bots and team rows reach, it scrolls under the remake's own bar at x 292, inside the pane's right
+  border, drawn as the chat's. Leave Game always lands on the Connection page. The host's options lock while it
   is Ready, and any option change clears every Ready. A stunt race's end-of-race board under the
   Original presentation is this screen on Game Scores, drawn in flight, since the original has no
   race: the standings on the scores page (place and callsign left and the aircraft right in the name

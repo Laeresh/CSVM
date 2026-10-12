@@ -143,19 +143,20 @@ public sealed class DogfightBots
     public bool SetSkill(int id, NetBotSkill skill) =>
         skill is >= NetBotSkill.Novice and <= NetBotSkill.Ace && Edit(id, bot => bot with { Skill = skill });
 
-    /// <summary>Moves row <paramref name="id"/> to lobby team <paramref name="team"/>. The owner
-    /// says which teams stand.</summary>
-    public bool SetTeam(int id, byte team) => Edit(id, bot => bot with { Team = team });
+    /// <summary>Moves row <paramref name="id"/> to lobby team <paramref name="team"/>, which
+    /// <paramref name="placed"/> marks as the host's own pick. The owner says which teams stand.
+    /// </summary>
+    public bool SetTeam(int id, byte team, bool placed) => Edit(id, bot => bot with { Team = team, Placed = placed });
 
-    /// <summary>Puts every row on <paramref name="team"/> on no team, as a disband must, or a later
-    /// team minted with the same number would take them unasked.</summary>
+    /// <summary>Puts every row on <paramref name="team"/> on no team, back in the owner's balancing.
+    /// A disband must, or a later team minted with the same number would take them unasked.</summary>
     public void ClearTeam(byte team)
     {
         for (int i = 0; i < _rows.Count; i++)
         {
             if (_rows[i].Team == team)
             {
-                _rows[i] = _rows[i] with { Team = 0 };
+                _rows[i] = _rows[i] with { Team = 0, Placed = false };
             }
         }
     }

@@ -66,6 +66,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat pane's scroll bar's down arrow.</summary>
     public const string ChatDownKey = "MPL_B_CHATDOWN";
 
+    /// <summary>The player list's scroll bar's up arrow, a row while the list outgrows its rows.
+    /// </summary>
+    public const string PlayersUpKey = "MPL_B_PLAYERSUP";
+
+    /// <summary>The player list's scroll bar's down arrow.</summary>
+    public const string PlayersDownKey = "MPL_B_PLAYERSDOWN";
+
     /// <summary>The Mission Environment box.</summary>
     public const string EnvironmentKey = "MPL_D_ENVIRONMENT";
 
@@ -219,6 +226,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// bots.</summary>
     public const string BotTag = "BOT";
 
+    /// <summary>The bot team box's first item, which hands the bot to the lobby's balancing.</summary>
+    public const string AutoTeam = "Auto";
+
     /// <summary>How many rows the player list shows.</summary>
     public const int VisiblePlayers = 11;
 
@@ -299,6 +309,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The scores page's scroll bar over the landed match's lines.
     private static readonly OriginalScrollBar ScoresBar = OriginalRaceTable.ScrollBar(PageX, PageY);
 
+    // The player list's bar, the remake's own: the original's sixteen people and no bots fit its rows.
+    // It wears the chat's track inside the pane's right border, clear of the Ready marks.
+    private static readonly OriginalScrollBar PlayersBar =
+        new(292f, ListY - 2f, VisiblePlayers * ListPitch, VisiblePlayers, new BoardTint(0x20, 0x24, 0x18));
+
     // The scripts' colours beyond the plaque labels' four: the tab ink, the picked sub-tab's red,
     // the Ready? label, the LAUNCH! blink and the own name.
     private static readonly BoardTint TabDisabled = new(128, 128, 128);
@@ -336,6 +351,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private string _lastTeamName = string.Empty;
     private int _listTop;
     private int _scoresTop;
+    private int _playersTop;
 
     // The chat window's first line, and whether the reader scrolled it up off the newest line.
     private int _chatTop;
@@ -627,6 +643,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     top => _scoresTop = top));
             }
 
+            if (!_outlaw.IsOpen && Lobby is { } listed && ListEntries(listed).Count is var entries && PlayersBar.Scrolls(entries))
+            {
+                lists.Add(new OriginalList("MPL_L_PLAYERS", PlayersBar.Window(ListX, entries, _playersTop),
+                    top => _playersTop = PlayersBar.Clamp(top, entries)));
+            }
+
             if (Lobby is { } talk && ChatWindow(talk.Chat.Count) is var (bar, _, first) && bar.Scrolls(talk.Chat.Count))
             {
                 lists.Add(new OriginalList("MPL_L_CHAT", bar.Window(ChatX, talk.Chat.Count, first),
@@ -782,6 +804,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 if (lobby != null)
                 {
                     _scoresTop = ScoresBar.Clamp(_scoresTop + (row.Key == ScoresUpKey ? -1 : 1), ScoreCount(lobby));
+                }
+
+                return null;
+            case PlayersUpKey:
+            case PlayersDownKey:
+                if (lobby != null)
+                {
+                    _playersTop = PlayersBar.Clamp(_playersTop + (row.Key == PlayersUpKey ? -1 : 1), ListEntries(lobby).Count);
                 }
 
                 return null;
@@ -1459,15 +1489,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (lobby != null && !_outlaw.IsOpen)
         {
             var entries = ListEntries(lobby);
-            for (int slot = 0; slot < entries.Count && slot < VisiblePlayers; slot++)
+            _playersTop = PlayersBar.Clamp(_playersTop, entries.Count);
+            for (int slot = 0; _playersTop + slot < entries.Count && slot < VisiblePlayers; slot++)
             {
-                var entry = entries[slot];
+                var entry = entries[_playersTop + slot];
                 string key = entry.Player < 0 ? TeamRowKey(entry.Team) : PlayerKey(entry.Player);
                 if (entry.Player < 0 || (lobby.IsHost && entry.Player >= 1))
                 {
                     rows.Add(new OriginalRow(key, entry.Text, OriginalRowKind.ListRow, ListX, ListY + (slot * ListPitch),
                         NameWidth + ListPitch, ListPitch, true, 0, null));
                 }
+            }
+
+            if (PlayersBar.Scrolls(entries.Count))
+            {
+                rows.Add(PlayersBar.ArrowRow(PlayersUpKey, down: false, entries.Count, _playersTop));
+                rows.Add(PlayersBar.ArrowRow(PlayersDownKey, down: true, entries.Count, _playersTop));
             }
         }
 
@@ -1550,7 +1587,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Box(BotNameKey, BoxText(BotNameKey, lobby), PageX + 11f, PageY + 88f, 195f, 22f, live));
         rows.Add(Drop(BotPlaneKey, plane, PageX + 11f, PageY + 134f, 195f, 22f, live));
         rows.Add(Drop(BotSkillKey, _text.SkillWord(bot.Skill), PageX + 11f, PageY + 180f, 195f, 22f, live));
-        rows.Add(Drop(BotTeamKey, TeamWord(lobby, bot.Team), PageX + 11f, PageY + 226f, 195f, 22f, live));
+        rows.Add(Drop(BotTeamKey, bot.Placed ? TeamWord(lobby, bot.Team) : AutoTeam, PageX + 11f, PageY + 226f, 195f, 22f, live));
         rows.Add(_text.Strip(RemoveBotKey, MediumArt, PageX + 11f, PageY + 262f, live, 1, 96f, 37f));
         rows.Add(_text.Strip(BotDoneKey, MediumArt, PageX + 110f, PageY + 262f, true, 1, 96f, 37f));
     }
@@ -1668,12 +1705,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 {
                     var teams = lobby.Teams;
                     var items = new string[teams.Count + 1];
-                    items[0] = TeamWord(lobby, 0);
+                    items[0] = AutoTeam;
                     int current = 0;
                     for (int i = 0; i < teams.Count; i++)
                     {
                         items[i + 1] = teams[i].Name;
-                        current = teams[i].Number == bot.Team ? i + 1 : current;
+                        current = bot.Placed && teams[i].Number == bot.Team ? i + 1 : current;
                     }
 
                     return new DropdownList(items, current, _ => true,
@@ -1857,9 +1894,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         var mark = new BoardArt(BoardArtLibrary.Ui, MarkArt, 4);
         var entries = lobby != null ? ListEntries(lobby) : new List<ListEntry>();
-        for (int slot = 0; slot < entries.Count && slot < VisiblePlayers; slot++)
+        int top = PlayersBar.Clamp(_playersTop, entries.Count);
+        if (!_outlaw.IsOpen)
         {
-            var entry = entries[slot];
+            PlayersBar.Compose(ListX, entries.Count, top, layers);
+        }
+
+        for (int slot = 0; top + slot < entries.Count && slot < VisiblePlayers; slot++)
+        {
+            var entry = entries[top + slot];
             float y = ListY + (slot * ListPitch);
             if (entry.Player < 0)
             {

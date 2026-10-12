@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Net;
 using CSVM.Session.Roster;
@@ -19,8 +20,9 @@ public readonly record struct DogfightScore(string Name, int Points, int Kills, 
 /// <summary>One bot row a Dogfight host keeps. Its id stays with the row while the rows around it
 /// come and go. It carries a callsign, a stock airframe or
 /// <see cref="DogfightLobbySeat.RandomAirframe"/>, a skill tier and a lobby team (0 for none).
+/// <paramref name="Placed"/> marks a team the host picked. The lobby balances any other.
 /// </summary>
-public readonly record struct DogfightBot(int Id, string Callsign, byte Airframe, NetBotSkill Skill, byte Team)
+public readonly record struct DogfightBot(int Id, string Callsign, byte Airframe, NetBotSkill Skill, byte Team, bool Placed = false)
 {
     /// <summary>Whether the host resolves this bot's plane at launch.</summary>
     public bool RandomPlane => Airframe == DogfightLobbySeat.RandomAirframe;
@@ -71,6 +73,10 @@ public sealed class DogfightLobby
     /// <summary>How many teams a Capture the Flag launch takes, one per flag. It fixes the Restrict
     /// Number of Teams boxes at this, and langui 10519 says "one of two teams".</summary>
     public const int CtfTeams = 2;
+
+    /// <summary>The name of the team the bots open when one team alone stands in a team match.
+    /// The remake's own: the original has no bots.</summary>
+    public const string BotTeamName = "Bots";
 
     /// <summary>How many types the Type box lists: the string table's three and Stunt Race.</summary>
     public const int TypeCount = 4;
@@ -128,7 +134,7 @@ public sealed class DogfightLobby
     private readonly Dictionary<int, LobbyPlaneRulesMessage> _rulesSent = new();
     private readonly Dictionary<int, LobbyTeamsMessage> _teamsSent = new();
     private readonly List<PlaneRefusal> _refusals = new();
-    private readonly NetTeamBook _teams = new();
+    private readonly NetTeamBook _teams;
     private readonly DogfightBots _bots = new();
     private DogfightOptionsMessage _options = new(
         1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
@@ -161,6 +167,7 @@ public sealed class DogfightLobby
         _wire = wire ?? throw new ArgumentNullException(nameof(wire));
         _name = name ?? throw new ArgumentNullException(nameof(name));
         _hostPeer = hostPeer;
+        _teams = new NetTeamBook(team => _bots.Rows.Any(bot => bot.Team == team));
     }
 
     /// <summary>Whether a host lists and tells a peer on the wire. Every peer is, unless the door
@@ -346,6 +353,13 @@ public sealed class DogfightLobby
             var weighed = Weighed();
             var options = Options;
             var refusal = NetTeamBook.Check(weighed, options.RestrictTeams, options.MinTeams, options.MaxTeams);
+
+            // A host fielding bots sets the odds itself, four people against eight bots included.
+            if (refusal == TeamLaunchRefusal.Unbalanced && BotsListed > 0)
+            {
+                refusal = TeamLaunchRefusal.None;
+            }
+
             if (refusal != TeamLaunchRefusal.None || !IsCtf(options))
             {
                 return refusal;
@@ -688,9 +702,9 @@ public sealed class DogfightLobby
     public bool WaitsOnMatch(NetSessionStatus? status) => !IsHost && !HasOptions && status == NetSessionStatus.InMission;
 
     /// <summary>Adds a bot row on a Random plane at veteran, its callsign drawn from
-    /// <see cref="CallsignPool"/> where no row holds it. It joins the team with the fewest pilots at
-    /// this moment, the first created of a tie, or none while no team stands. Nothing moves it
-    /// afterwards but the host. Refused on a guest, while the host is Ready and on a full field.</summary>
+    /// <see cref="CallsignPool"/> where no row holds it. The lobby balances it across the teams
+    /// (<see cref="Arrange"/>) until the host picks its team. Refused on a guest, while the host is
+    /// Ready and on a full field.</summary>
     public bool AddBot()
     {
         if (!EditsBots || BotRoom == 0)
@@ -698,8 +712,8 @@ public sealed class DogfightLobby
             return false;
         }
 
-        _bots.Add(PeopleNames(), SmallestTeam());
-        return true;
+        _bots.Add(PeopleNames(), 0);
+        return Arrange();
     }
 
     /// <summary>Adds bot rows as <see cref="AddBot"/> does until the field holds
@@ -710,7 +724,7 @@ public sealed class DogfightLobby
 
     /// <summary>Removes the bot row <paramref name="id"/>. Refused as <see cref="AddBot"/> is, and
     /// for a row that is not there.</summary>
-    public bool RemoveBot(int id) => EditsBots && _bots.Remove(id);
+    public bool RemoveBot(int id) => EditsBots && _bots.Remove(id) && Arrange();
 
     /// <summary>Renames bot row <paramref name="id"/>, cut at the Callsign box's 12 characters.
     /// Refused for a blank name and for one another row holds.</summary>
@@ -723,10 +737,11 @@ public sealed class DogfightLobby
     /// <summary>Sets bot row <paramref name="id"/>'s skill tier.</summary>
     public bool SetBotSkill(int id, NetBotSkill skill) => EditsBots && _bots.SetSkill(id, skill);
 
-    /// <summary>Moves bot row <paramref name="id"/> to team <paramref name="team"/>, a standing
-    /// team or 0 for none.</summary>
+    /// <summary>Keeps bot row <paramref name="id"/> on standing team <paramref name="team"/> whatever
+    /// the balancing does, or with 0 hands it back to the balancing. A team left with no person and
+    /// no bot disbands.</summary>
     public bool SetBotTeam(int id, byte team) =>
-        (team == 0 || _teams.Find(team) != null) && EditsBots && _bots.SetTeam(id, team);
+        (team == 0 || _teams.Find(team) != null) && EditsBots && _bots.SetTeam(id, team, placed: team != 0) && Arrange();
 
     /// <summary>The bot row <paramref name="id"/> as the host holds it, or null.</summary>
     public DogfightBot? BotById(int id) => _bots.ById(id);
@@ -1005,6 +1020,7 @@ public sealed class DogfightLobby
         {
             TakeTeamActions();
             YieldToPeople();
+            Arrange();
             SendToGuests();
         }
         else
@@ -1091,28 +1107,59 @@ public sealed class DogfightLobby
         return weighed;
     }
 
-    // The standing team with the fewest players, the first created of a tie, or 0 with none.
-    private byte SmallestTeam()
+    // ⚠ Only the bots the host has not placed move here. A team match wants two sides. Where one team
+    // alone holds a person or a placed bot, the bots take a team of their own. Each then joins
+    // the side with the fewest pilots, the first created of a tie. With nobody on a team they fly
+    // the free-for-all, and a bots' team left empty is pruned. The host's placements are its odds.
+    private bool Arrange()
     {
-        var weighed = Weighed();
-        byte smallest = 0;
-        int fewest = int.MaxValue;
-        foreach (var team in _teams.Teams)
+        if (!IsHost)
         {
-            int size = 0;
-            foreach (var (on, seats) in weighed)
-            {
-                size += on == team.Number ? seats : 0;
-            }
+            return true;
+        }
 
-            if (size < fewest)
+        var sizes = new Dictionary<byte, int>();
+        foreach (var player in Players)
+        {
+            if (!player.IsBot && player.Team != 0)
             {
-                smallest = team.Number;
-                fewest = size;
+                sizes[player.Team] = sizes.GetValueOrDefault(player.Team) + (player.IsHost ? Math.Max(1, LocalSeats()) : 1);
             }
         }
 
-        return smallest;
+        foreach (var bot in _bots.Rows)
+        {
+            if (bot.Placed)
+            {
+                sizes[bot.Team] = sizes.GetValueOrDefault(bot.Team) + 1;
+            }
+        }
+
+        var free = _bots.Rows.Where(bot => !bot.Placed).Select(bot => bot.Id).ToList();
+        var sides = _teams.Teams.Select(team => team.Number).Where(sizes.ContainsKey).ToList();
+        if (IsStuntRace(_options))
+        {
+            sides.Clear();
+        }
+        else if (sides.Count == 1 && free.Count > 0
+            && (_teams.Teams.FirstOrDefault(team => !sizes.ContainsKey(team.Number))?.Number ?? _teams.Open(BotTeamName)) is var own and > 0)
+        {
+            sides.Add(own);
+            sizes[own] = 0;
+        }
+
+        foreach (int id in free)
+        {
+            byte side = sides.Count == 0 ? (byte)0 : sides.MinBy(team => sizes[team]);
+            _bots.SetTeam(id, side, placed: false);
+            if (side != 0)
+            {
+                sizes[side]++;
+            }
+        }
+
+        Post(_teams.Prune());
+        return true;
     }
 
     // The people's names as the list writes them, the host's and every seated guest's.
@@ -1317,6 +1364,7 @@ public sealed class DogfightLobby
         };
 
         Post(events);
+        Arrange();
         return events.Count > 0;
     }
 

@@ -56,6 +56,26 @@ public sealed class NetTeamsTests
     }
 
     [Fact]
+    public void AHeldTeamOutlivesItsCaptainUntilPrunedUnheld()
+    {
+        bool held = true;
+        var book = new NetTeamBook(_ => held);
+        book.Create(1, "A");
+        book.Join(2, 1);
+
+        Assert.Equal(new[] { NetTeamEventKind.Left }, book.Leave(1).Select(e => e.Kind));
+        Assert.True(book.IsCaptain(2));
+        book.Leave(2);
+        Assert.Equal(-1, book.Teams[0].Captain);
+        Assert.Empty(book.Prune());
+
+        // ABLE-TO-FAIL CONTROL: unheld, the empty team is disbanded.
+        held = false;
+        Assert.Equal(NetTeamEventKind.Disbanded, Assert.Single(book.Prune()).Kind);
+        Assert.Equal(0, book.Count);
+    }
+
+    [Fact]
     public void ANewTeamTakesTheLowestFreeNumber()
     {
         var book = new NetTeamBook();

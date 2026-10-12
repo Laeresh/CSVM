@@ -1279,7 +1279,8 @@ no name. The launch refusals, in order:
 3. A team match with one team: 10519.
 4. A player on no team in a team match: the remake's own line.
 5. Two teams whose sizes differ by more than one player: the remake's own line. A machine's
-   splitscreen seats fly on its team and count as players.
+   splitscreen seats fly on its team and count as players. A field with bots is never refused on
+   this line: the host sets the odds, as four people against eight bots.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|

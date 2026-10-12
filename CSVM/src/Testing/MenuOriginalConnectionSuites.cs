@@ -414,7 +414,8 @@ internal static class MenuOriginalConnectionSuites
         + "greyed and its list holding no row it can pick. Fill to, its count stepped down to five, "
         + "fills the field to five pilots and then greys. A press on a bot's row opens Select Plane "
         + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, and "
-        + "Remove takes a row out. With the host, the guest and both bots on one team, LAUNCH! "
+        + "Remove takes a row out. A full field outgrows the player list's eleven rows and its scroll "
+        + "bar reaches every row below them. With the host, the guest and both bots on one team, LAUNCH! "
         + "raises langui 10519 and hands nothing out. With no team standing it launches, the "
         + "host's field seats the bots after the guest, the Random plane drawn on the host, and "
         + "the guest joins that match reading both bots on real stock planes")]
@@ -470,6 +471,7 @@ internal static class MenuOriginalConnectionSuites
             var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
             AddAndFillBots(ctx, host, guest, ends, pool);
             EditTheBots(ctx, host, guest, ends);
+            ScrollTheList(ctx, host, ends);
             LaunchWithBots(ctx, host, guest, ends, hostExits, guestExits);
         }
         finally
@@ -3470,7 +3472,8 @@ internal static class MenuOriginalConnectionSuites
             $"the boxes set the Fury, ace, the typed callsign and the host's team ({bot})");
         ctx.Check(row is { IsBot: true, Airframe: 7, Skill: NetBotSkill.Ace, Name: "Red Ace" } && row.Team == lobby.OwnTeam,
             $"and the guest's row reads them ({row})");
-        ctx.Check(lobby.Bots[1].Team == 0, $"ABLE-TO-FAIL CONTROL: a bot added before the team stood stays off it ({lobby.Bots[1].Team})");
+        ctx.Check(lobby.Bots[1] is { Placed: false, Team: not 0 } other && other.Team != lobby.OwnTeam,
+            $"ABLE-TO-FAIL CONTROL: a bot left on Auto opens the bots' own team against the host's ({lobby.Bots[1].Team})");
 
         int third = lobby.Bots[2].Id;
         ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(4));
@@ -3478,6 +3481,37 @@ internal static class MenuOriginalConnectionSuites
         SettleEnds(ends);
         ctx.Check(lobby.Bots.Count == 2 && lobby.BotById(third) == null && guest.Door.Dogfight!.Players.Count == 4 && host.Shell.Lobby.PickedBot == -1,
             $"Remove takes the picked bot's row out on both ends ({lobby.Bots.Count}, {guest.Door.Dogfight!.Players.Count})");
+    }
+
+    // A full field outgrows the list's eleven rows, and its scroll bar brings the last bot's row into
+    // reach. The extra bots go again, and with them the bar.
+    private static void ScrollTheList(TestContext ctx, End host, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        int kept = lobby.Bots.Count;
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) == null,
+            $"ABLE-TO-FAIL CONTROL: a list that fits its rows stands no scroll bar");
+        lobby.FillTo(NetSeats.MaxPlayers);
+        SettleEnds(ends);
+        var below = Enumerable.Range(1, lobby.Players.Count - 1).Where(i => Row(host.Shell, OriginalLobbyScreen.PlayerKey(i)) == null).ToList();
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.PlayersUpKey) is { Enabled: false } && Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) is { Enabled: true }
+                  && below.Count > 0,
+            $"a field of {lobby.Players.Count} stands the list's scroll bar with {below.Count} row(s) below its window");
+        for (int press = 0; press < NetSeats.MaxPlayers && Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) is { Enabled: true }; press++)
+        {
+            ClickRow(ctx, host, OriginalLobbyScreen.PlayersDownKey);
+        }
+
+        ctx.Check(below.All(i => Row(host.Shell, OriginalLobbyScreen.PlayerKey(i)) != null) && Row(host.Shell, OriginalLobbyScreen.PlayersUpKey) is { Enabled: true },
+            $"the down arrow scrolls every row below the window into the list, where a press can pick it");
+        foreach (var bot in lobby.Bots.Skip(kept).ToList())
+        {
+            lobby.RemoveBot(bot.Id);
+        }
+
+        SettleEnds(ends);
+        ctx.Check(lobby.Bots.Count == kept && Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) == null && Row(host.Shell, OriginalLobbyScreen.PlayerKey(2)) != null,
+            $"and with the extra bots removed the bar goes and the list shows from its top ({lobby.Bots.Count})");
     }
 
     // Every pilot on one team refuses LAUNCH! with langui 10519. With no team the launch goes, the
@@ -3502,6 +3536,9 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalShell.DialogOkKey);
 
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+
+        // A team its placed bots fly on outlives its captain, so the bots go back to Auto first.
+        ctx.Check(lobby.Bots.ToList().All(b => lobby.SetBotTeam(b.Id, 0)), $"the host hands both bots back to Auto");
         ctx.Check(lobby.LeaveTeam(), $"the host's leave disbands the team");
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
         SettleEnds(ends);
