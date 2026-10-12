@@ -54,7 +54,8 @@ internal sealed class ZeppelinVersusInputs
 /// mission's two hulls. Each hull takes its side's lobby team, so aim and friend-or-foe follow it.
 /// The host scores each dead gas bag or cannon to the seat whose hit killed it, and ends the match
 /// on a lost hull. Both hulls' broadsides are engaged, their rounds named for the hull
-/// that fired. Every machine speaks the gas bag lines and posts the ending.
+/// that fired, and both hulls' turrets are awake. Every machine speaks the gas bag lines and posts
+/// the ending.
 /// Decode: docs/org/multiplayer-zvz.md.
 /// </summary>
 internal sealed class ZeppelinVersusRuntime
@@ -161,6 +162,11 @@ internal sealed class ZeppelinVersusRuntime
         zeppelins.NamesBroadsideRounds = true;
         zeppelins.SetCannonsEngaged(hull0, true, "Zeppelin vs Zeppelin");
         zeppelins.SetCannonsEngaged(hull1, true, "Zeppelin vs Zeppelin");
+
+        // A remake-only rule: the original wakes no hull turret in this mode. Each machine runs its own
+        // copy, and the host decides their hits, as for the broadsides. The team above aims them.
+        zeppelins.WakeTurrets(hull0, "Zeppelin vs Zeppelin");
+        zeppelins.WakeTurrets(hull1, "Zeppelin vs Zeppelin");
         int localTeam = 0;
         for (int seat = 0; seat < inputs.SeatTeams.Count && localTeam == 0; seat++)
         {

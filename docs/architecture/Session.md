@@ -240,7 +240,7 @@ long match does not log every run. `FlagRuntime.StepBots`, `ZeppelinVersusRuntim
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `VersusDirector.WireZeppelinVersus` for a `--zvz`
 launch over the `MP3` world's `ZeppelinRuntime`: hull 0 goes to the first side's lobby team and
-hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull. Off
+hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull and both hulls' turrets awake. Off
 `PartDestroyed` the host scores each gas bag to the seat whose hit killed it; every machine speaks
 the gas bag line. `ZeppelinKilled` ends the match on the host. `RespawnPoint` is the host's return
 and `SideOf` labels each hull's marker and rearm base. `StepBots` notes each hull's last attacker
@@ -479,7 +479,7 @@ switched on, placed at its authored pose and flown by `ZeppelinMotion`; an anima
 neither placed nor stepped. `WireDamage` builds the part pools, `PollDamage` owns the kill (and
 `PartDestroyed`, each part's with its killing shooter), the Instant Action engine count and the
 generator disable; `CollectTargetParts` makes a structure selectable under `TargetPool`'s torpedo
-gate, and `CollectHullParts` lists one hull's parts for the Zeppelin vs Zeppelin bots. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. Networked, the host sends
+gate, and `CollectHullParts` lists one hull's parts for the Zeppelin vs Zeppelin bots. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. `WakeTurrets` wakes a hull's turrets, for Zeppelin vs Zeppelin. Networked, the host sends
 `TryReadPath` and a guest's `Replicate` gives each hull a `ZeppelinReplica` that `TakePath` feeds in
 place of the follower. Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 
