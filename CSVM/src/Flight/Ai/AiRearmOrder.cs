@@ -25,7 +25,7 @@ public enum AiRearmLeg : byte
 /// </summary>
 public sealed class AiRearmOrder
 {
-    /// <summary>TUNE, a remake value: the original has no computer pilots. The share of whole-vehicle
+    /// <summary>Remake-only rule: the original has no computer pilots. The share of whole-vehicle
     /// health, the pool the death test reads, at or below which a run starts.</summary>
     public const float DamagedHullShare = 0.35f;
 
@@ -40,7 +40,7 @@ public sealed class AiRearmOrder
     /// before <see cref="LevelLegM"/>.</summary>
     public const float GateAboveM = 120f;
 
-    /// <summary>TUNE, a remake value: the original has no computer pilots. How many times a flag
+    /// <summary>Remake-only rule: the original has no computer pilots. How many times a flag
     /// run's plan may stack <see cref="GateAboveM"/> on its gate while every leg meets the ground.
     /// C1's Capture the Flag bases need it. A rearm run keeps the first height.</summary>
     public const int GateRaises = 4;

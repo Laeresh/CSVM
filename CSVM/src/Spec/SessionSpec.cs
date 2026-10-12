@@ -241,9 +241,9 @@ public sealed record SessionSpec
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
     /// <summary>Resolved. The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
-    /// the bot seats a <c>--net-host</c> Dogfight seats after its guests, or a local one after its
-    /// panes. Empty without <see cref="Versus"/>, on a guest, and in a Capture the Flag or a Zeppelin
-    /// vs Zeppelin with no <c>--net-host</c>. Cut to the seats <see cref="Players"/> leaves.</summary>
+    /// bot seats a <c>--net-host</c> Dogfight or stunt race adds after its guests, a local one after
+    /// its panes. Empty without <see cref="Versus"/> or <see cref="Stunt"/>, on a guest, and in
+    /// a Capture the Flag or a Zeppelin vs Zeppelin with no <c>--net-host</c>. Cut to the seats <see cref="Players"/> leaves.</summary>
     public IReadOnlyList<VsBotEntry> VsBots { get; private set; } = Array.Empty<VsBotEntry>();
     /// <summary>Resolved: the lobby type this session flies. Capture the Flag (<c>--ctf</c>) flies the
     /// flags for the lobby teams. Zeppelin vs Zeppelin (<c>--zvz</c>) flies the two hulls. Each needs

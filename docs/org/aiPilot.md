@@ -1661,8 +1661,9 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    often low between walls, so it locks straight onto the ribbon there and rides it out
    (`AiPilot.RejoinDangerZone`) rather than flying free from it.
 6. On the rail a bot sweeps one origin point, as every AI def does (`ContactConditions.OnRail`),
-   never its person's hull or its person def's wing probes: C2's `dzpath2` arch, the slot in the
-   warning above, struck a bot's wingtip at `(-6038, 23, -3848)` on every try until it did.
+   never its person's hull or its person def's wing probes. C2's `dzpath2` arch, the 9.7 m slot in
+   the warning above, is narrower than a wingspan at the rail's roll, so a hull or wing probe meets
+   its front face at `(-6038, 23, -3848)` on every pass; an origin point clears it.
 
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
 join board's bot rows on a menu Stunt Flying run, which they make a race.

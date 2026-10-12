@@ -1203,7 +1203,7 @@ The form behind the Options hub's four doors, one standalone `IOriginalScreenMod
 ACCEPT CHANGES and CANCEL CHANGES, routed to that page's `Accept` and `Cancel` before any other row reaches its `Activate`. Its `IOriginalOptionsPage`
 is the page-sized sibling of the module seam, and `IOriginalOptionsForm` the narrow way back a page has: `Apply`, the one `OptionsApplyExit` the three
 settings pages' shared `OptionsChoices` hands back, and `Leave`, back to the hub with the edits dropped. `ScreenOpened` re-reads the saved settings into
-that instance, so a page carries the settings it does not show and only `Launcher.ApplyOptions` writes the store. The shell exposes it as `Options`, and
+that instance, so a page carries the settings it does not show and only `LiveSettings.Persist` writes the store. The shell exposes it as `Options`, and
 `OriginalOptionsTests` drives it over a hand-written host. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalOptionsChrome.cs

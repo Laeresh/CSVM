@@ -857,8 +857,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             if (step.Exit != null)
             {
                 // The exit ends this presentation, so a mix page's preview goes before the host acts
-                // on it: an accepted mix is applied by Launcher.ApplyOptions, and every other door
-                // owes back the mix the page opened over.
+                // on it. LiveSettings.Persist applies an accepted mix, and every other door owes back
+                // the mix the page opened over.
                 _host.Audio.EndMixPreview();
                 _host.Exit(step.Exit);
                 return;

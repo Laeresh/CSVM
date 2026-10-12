@@ -614,10 +614,10 @@ internal static class DisplaySettingsSuites
         return joined.Length == 0 ? "none" : joined;
     }
 
-    // The monitor row driven: the page opens on the saved screen, draws that screen's own label and
-    // hands the index back on the exit, which is what Launcher.ApplyOptions resolves and applies
-    // before the mode and the size. The plan is asserted rather than applied to another screen; a
-    // scripted run's window is hidden off screen and moving it would put it over the desktop.
+    // The monitor row driven: the page opens on the saved screen and draws that screen's own label.
+    // The exit hands the index back, and LiveSettings.Persist resolves and applies it before the mode
+    // and the size. The plan is asserted rather than applied to another screen. A scripted run's
+    // window is hidden off screen, and moving it would put it over the desktop.
     private static void AppliedMonitorRow(TestContext ctx, MenuLayout layout, int standing)
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
@@ -636,7 +636,7 @@ internal static class DisplaySettingsSuites
     }
 
     // The resolution row driven: the page opens on the saved size and ACCEPT CHANGES hands it back on
-    // the exit, which is the size Launcher.ApplyOptions resolves and applies. The plan is asserted
+    // the exit. LiveSettings.Persist resolves and applies that size. The plan is asserted
     // rather than applied; resizing a scripted run's window would move the viewport every later shot
     // in this process is captured from.
     private static void AppliedSizeRow(TestContext ctx, MenuLayout layout)
@@ -739,9 +739,9 @@ internal static class DisplaySettingsSuites
     }
 
     // The display-mode row driven: the page opens on the saved word and ACCEPT CHANGES hands it back
-    // on the exit, which is the word Launcher.ApplyOptions resolves and applies. The mode the plan
-    // resolves to is asserted rather than applied; changing a scripted run's window mode would put
-    // the hidden window back on the screen every other suite renders behind.
+    // on the exit. LiveSettings.Persist resolves and applies that word. The mode the plan resolves
+    // to is asserted rather than applied. Changing a scripted run's window mode would put the hidden
+    // window back on the screen every other suite renders behind.
     private static void AppliedModeRow(TestContext ctx, MenuLayout layout)
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),

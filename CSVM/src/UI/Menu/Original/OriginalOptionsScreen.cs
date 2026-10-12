@@ -262,7 +262,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
     }
 
     // Every settings page's ACCEPT CHANGES. A page writes the settings it shows and hands the rest
-    // back as ReadSavedOptions read them, which keeps Launcher.ApplyOptions the options file's one
+    // back as ReadSavedOptions read them, which keeps LiveSettings.Persist the options file's one
     // writer.
     OptionsApplyExit IOriginalOptionsForm.Apply() => _choices.ToExit();
 

@@ -238,11 +238,11 @@ and every step the host re-decides each bot's order by the first rule that holds
    since a flag at rest lies on the ground.
 5. Otherwise the bot attacks the enemy flag at its base.
 
-The remake's own choices beyond the issue's decision: the attacker and the retriever fly straight
-as the carrier does, though only the carrier's straight run home was decided; a bot whose enemy flag
-a teammate carries holds over its own flag, as a defender does ("waits over its flag"); a local
-`--ctf` seats no bots, since the flags run only over the wire; and the local join board keeps its
-"Dogfight only" hint, since a local Dogfight never offers Capture the Flag.
+Further remake-only rules: the attacker and the retriever fly straight, as the carrier does on its
+run home; a bot whose enemy flag a teammate carries holds over its own flag, as a defender does
+("waits over its flag"); a local `--ctf` seats no bots, since the flags run only over the wire; and
+the local join board's hint reads "Dogfight or stunt race", since a local run never offers Capture
+the Flag.
 
 The carrier, the retriever and the attacker fly a flag run: a rearm run's approach
 ([`multiplayer-rearm.md`](multiplayer-rearm.md), "Bots at a base"), a gate on the open side and a

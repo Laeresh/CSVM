@@ -86,8 +86,8 @@ A switch is three host calls in order: `Deactivate()` (ends the instance and cal
 `Features.DiscardTransient()`), `Select(...)` (re-resolves from the two flags), then
 `Show(TopLevel)`. The shipped build never switches at run time, since the presentation is the command
 line's alone; the suites drive the three calls to hold the seam. `Launcher.ApplyOptions` makes the
-first and the last of them, one frame after the `OptionsApplyExit` that asked, after saving every
-choice it carries, so an apply restarts the same presentation at its top level.
+first and the last of them, one frame after the `OptionsApplyExit` that asked, once
+`LiveSettings.Persist` has saved every choice it carries, so an apply restarts the same presentation at its top level.
 
 The frame in between belongs to no presentation: the host hides the outgoing instance as it hands the
 exit to the sink, and the fresh one does not stand up until the apply runs. Nothing opaque is
@@ -253,7 +253,7 @@ a nullable field on `OptionsDef` with its accepted-value set (or its shape check
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
 `Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options,
 AUDIO or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
-`Launcher.ApplyOptions` that saves it. The store's
+`LiveSettings.Persist` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
@@ -292,7 +292,7 @@ world at once, which the cockpit pass follows. All three are registered word set
 (`CSVM/src/Utils/WordSettings.cs`), which the apply resolves and puts on the world through each one's
 own live-apply hook. Its row draws dead while the page's own graphics word is Original. Every other display
 setting is the case where the apply does
-more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
+more than save, since `LiveSettings.Persist` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
 screen the window sits on first, since a mode applied before the move would fill the screen the
 window is leaving, then the mode, then the size, then the pacing. The startup half of the pair is not
@@ -300,8 +300,8 @@ symmetric: the pacing is applied on every launch, the mode and the size only on 
 at, a scripted run's window being hidden off screen with its capture compared against the viewport
 `project.godot` pins.
 
-A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
-writer, so the options file has exactly one, and no test or suite that drives an Options screen
+A screen never writes the store. Both values ride the exit, and `LiveSettings.Persist`, which the
+menu's apply and the pause leaf's both call, is the options file's one writer, so no test or suite that drives an Options screen
 through Apply can write the player's own file. Nor read it: `--run-tests` points
 `OptionsStore.UserOptions()` at an emptied scratch directory (`OptionsStore.DirectoryOverride`)
 before any suite runs, so every driven Options screen opens on the shipped defaults whatever the
@@ -409,7 +409,7 @@ clips this port needs, since Music and Master are already audible through the me
 clip that is still running is left to run, its loudness following the bus the level moved, so a drag
 sounds one clip rather than one per frame. `EndMixPreview` puts back the gains that stood when the
 page opened and is called on every door out of the page and on `Hide`, so a preview cannot survive
-the page; an accepted mix is written and reapplied by `Launcher.ApplyOptions`, which stays the
+the page; an accepted mix is written and reapplied by `LiveSettings.Persist`, which stays the
 options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
 `--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
 

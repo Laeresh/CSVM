@@ -454,7 +454,7 @@ unknown value drops only that field, and a field the file does not carry reads a
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
 distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes through `AtomicFile`. Under `--run-tests`, `UserOptions()` uses an emptied scratch
-directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` and those boxes' OK are its writers.
+directory (`DirectoryOverride`), so no suite touches the player's file; `Launch/LiveSettings.cs`'s `Persist` (the menu's Options apply and the pause leaf's) and those boxes' OK are its writers.
 
 ## src/Utils/AtomicFile.cs
 Whole-file replacement for player data: `WriteAllText` writes BOM-less UTF-8 to `<path>.tmp`, then

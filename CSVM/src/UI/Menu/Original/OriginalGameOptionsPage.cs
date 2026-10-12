@@ -103,7 +103,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     // The page's options in their authored row order. Each is a title, a control, a description
     // and the words of the store field it reads and writes. A page never saves. The apply exit
-    // carries every choice, and Launcher.ApplyOptions is the options file's one writer.
+    // carries every choice, and LiveSettings.Persist is the options file's one writer.
     // The difficulty row's title and description are IDS_GO_DIFFICULTY_TITLE and _DESC as authored.
     // The setting scales enemy armour and health at spawn and nothing about how the enemy flies.
     private static readonly GameOption[] Options =
