@@ -128,7 +128,8 @@ public static class NetSeats
                 continue;
             }
 
-            roster.Add(Bot(hostPeer, roster.Count, bot.Callsign, bot.Plane, bot.Skill, bot.Team));
+            var seat = Bot(hostPeer, roster.Count, bot.Callsign, bot.Plane, bot.Skill, bot.Team);
+            roster.Add(seat with { Militia = bot.Militia, Accent = bot.Accent });
         }
 
         return left;

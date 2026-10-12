@@ -147,7 +147,8 @@ internal sealed class SessionVoices
 
     // Every human aircraft joins the voice runtime. Outside a network match that is each pane's,
     // voiceless. In one, every human seat speaks on every machine as the pilot its roster voice
-    // names, rolling the session's talker rating. A bot seat is silent and joins nothing.
+    // names, rolling the session's talker rating. A bot seat speaks in its militia's accent, in
+    // either kind of match.
     private void RegisterPlayers(AiVoiceRuntime voice)
     {
         var seats = _netSeats;
@@ -160,6 +161,11 @@ internal sealed class SessionVoices
                     voice.RegisterPlayer(human);
                 }
             }
+        }
+
+        bool bots = System.Linq.Enumerable.Any(seats, s => s.IsBot);
+        if (!_onWire && !bots)
+        {
             return;
         }
 
@@ -178,8 +184,18 @@ internal sealed class SessionVoices
         float constitution = _aiSkills?.At("constitution_chance", rating) ?? 0f;
         for (int seat = 0; seat < seats.Count && seat < _seatRigs.Count; seat++)
         {
-            if (_seatRigs[seat].Controller is not { } human || seats[seat].IsBot)
+            if (_seatRigs[seat].Controller is not { } human || (!_onWire && !seats[seat].IsBot))
             {
+                continue;
+            }
+
+            if (seats[seat].IsBot)
+            {
+                if (seats[seat].BotAccent is { } accent)
+                {
+                    voice.RegisterBot(human, accent, talker, constitution);
+                }
+
                 continue;
             }
             int? voId = UI.Menu.PilotVoices.SpeakerFor(seats[seat].Voice);

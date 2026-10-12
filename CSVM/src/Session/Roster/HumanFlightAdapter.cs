@@ -51,6 +51,10 @@ internal sealed class HumanFlightAdapter
     // Every player's start, resolved in one call (see Assemble).
     private IReadOnlyList<FlightStart>? _starts;
 
+    // Read on the first bot seat with a militia. Empty when it cannot be read, and such a bot flies
+    // the stock fit in the session livery.
+    private MilitiaFits? _militias;
+
     public HumanFlightAdapter(FlightRosterPolicy policy, LiveryResolver liveries, IFlightStarts spawns,
         WorldEffectsFactory worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
         FlightWorldBindings world, HumanRosterBindings human, AiFlightAssembler botPilots)
@@ -163,6 +167,10 @@ internal sealed class HumanFlightAdapter
                 ? _policy.PlaneName
                 : _policy.PlaneNames[Math.Min(pi, _policy.PlaneNames.Count - 1)]);
         var stats = _aircraft.StatsFor(planeName);
+        // A bot's militia paints and arms it on every machine; its airframe is still a person's.
+        var militia = bot ? Mech3.InstantAction.MilitiaAt(seat!.Militia) : null;
+        string? militiaPattern = militia is { } painted ? Militias().PatternFor(painted.Name) : null;
+        string? militiaDef = militia is { } armed ? Militias().DefFor(armed.Name, planeName) : null;
 
         // The plane this pilot BUILT, when they picked one: its guns, pylons, paint and armour
         // replace the airframe's stock ones below. Null on a stock pick, empty outside a
@@ -182,15 +190,17 @@ internal sealed class HumanFlightAdapter
         }
 
         // Every player flies the Fortune Hunters livery unless --paint says otherwise, as the
-        // original's stock planes do; a custom plane wears the paint it was built with instead.
-        // A swap's ShippedSkins reading wins over all three, null included (below).
+        // original's stock planes do. A custom plane wears the paint it was built with, and a bot its
+        // militia's. A swap's ShippedSkins reading wins over all of them, null included.
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
         // FlightRoster's AI builder deliberately does not ask for one.
         var scheme = swap is { ShippedSkins: true } capturedSwap
             ? capturedSwap.Scheme
             : swap?.Scheme
-                ?? (custom != null && !_liveries.PaintRequested
+                ?? (militia is { Name: not Mech3.InstantAction.PlayerMilitia } && !_liveries.PaintRequested
+                    ? (militiaPattern == null ? null : _liveries.CatalogScheme(_aircraft.ZrdrPath, militiaPattern))
+                    : custom != null && !_liveries.PaintRequested
                     ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, Flight.Hangar.CustomPlaneBuild.PatternName(custom.PaintPattern))
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
@@ -295,12 +305,30 @@ internal sealed class HumanFlightAdapter
         // its built model, resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _policy.LoadoutOverride ?? stats.DefName;
-        if (_world.Racing)
+        var militiaStats = militiaDef != null && !_world.Racing && _policy.LoadoutOverride == null
+            ? _aircraft.AiStatsFor(planeName, militiaDef) : null;
+        var arms = BotSeats.ArmsFor(_world.Racing, _policy.LoadoutOverride != null, militiaStats is { AiWeapons.Count: > 0 });
+        if (arms == SeatArms.None)
         {
             // A race pilot carries no weapons. With no loadout there is no fire control, so a held
             // trigger does nothing. No gun gauge, missile gauge, pipper or pylon rocket is built.
             if (verbose)
                 Log.Info("flight", $"weapons: none, a race pilot flies unarmed");
+        }
+        else if (arms == SeatArms.MilitiaDef)
+        {
+            // A bot carries its militia def's own weapons block, as that militia's campaign aircraft do.
+            try
+            {
+                controller.InfiniteAmmo = _policy.InfiniteAmmo;
+                controller.Loadout = Loadout.BindAi(militiaStats!.AiWeapons, militiaDef!, planeModel, _aircraft.WeaponDefs);
+                AiFlightAssembler.HangLoadout(controller, _world);
+                Log.Info("flight", $"{tag}weapons: bot seat {pi} flies {militia!.Value.Name}'s '{militiaDef}' fit");
+            }
+            catch (Exception e)
+            {
+                Log.Warn("weapons", $"weapons: loadout bind failed for '{militiaDef}': {e.Message}");
+            }
         }
         else if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
@@ -795,6 +823,25 @@ internal sealed class HumanFlightAdapter
         int menu when menu < _policy.MenuCustomPlanes.Count => _policy.MenuCustomPlanes[menu],
         _ => null,
     };
+
+    // Each militia's pattern and the def it flies an airframe as, read on the first need.
+    private MilitiaFits Militias()
+    {
+        if (_militias == null)
+        {
+            try
+            {
+                _militias = MilitiaFits.Load(_aircraft.ZrdrPath, _aircraft.WeaponMessages);
+            }
+            catch (Exception e)
+            {
+                Log.Warn("core", $"bot: cannot read the militias' patterns and defs, so no bot flies its militia's: {e.Message}");
+                _militias = MilitiaFits.Empty;
+            }
+        }
+
+        return _militias;
+    }
 
     // Which of this machine's menu seats flies seat pi. The menu lists only the local seats, and a
     // guest's own seat stands behind its host's in the roster. A seat flown elsewhere has none.

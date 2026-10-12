@@ -253,8 +253,9 @@ internal sealed class NetFlight
         System.Func<int, byte>? teamOf = _lobbyFlight ? Door!.Dogfight!.TeamOfPeer : null;
         var bots = _lobbyFlight ? Door!.Dogfight!.LaunchBots : System.Array.Empty<VsBotEntry>();
         var pool = bots.Count > 0 ? Session.Roster.BotSeats.CallsignPool(Mech3.Messages.Load(messagesPath)) : null;
+        var mission = _lobbyFlight ? (DogfightMissionType)Door!.Dogfight!.Options.MissionType : DogfightMissionType.Deathmatch;
         (_roster, _seatFits) = SeatFields.VersusLaunchField(_wire, planes, fits, _stock ??= StockLoadouts.Load(), rules, teamOf,
-            bots, pool);
+            bots, pool, mission: mission);
         _seatBuilds = SeatFields.SeatBuildsFor(_roster, customs, _wire, rules);
         if (_lobbyFlight)
         {

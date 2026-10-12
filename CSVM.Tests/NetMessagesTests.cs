@@ -345,8 +345,8 @@ public class NetMessagesTests
         Assert.Equal(1 | (CoopPickMessage.MaxVoice << 1) | (1 << 4), buffer[SeatRosterMessage.PrefixSize + 2]);
     }
 
-    // A bot rides bit 5 of the flags byte and its skill tier bits 6 and 7. The entry keeps its 20
-    // bytes, and a build that reads the host bit alone still finds the host.
+    // A bot rides bit 5 of the flags byte and its skill tier bits 6 and 7. A reader of the host bit
+    // alone still finds the host.
     [Fact]
     public void SeatRosterCarriesBotsAndTheirSkillBesideTheOtherFlags()
     {
@@ -360,7 +360,7 @@ public class NetMessagesTests
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
 
-        Assert.Equal(SeatRosterMessage.PrefixSize + (20 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.Equal(SeatRosterMessage.PrefixSize + (SeatRosterMessage.EntrySize * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
         Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(seats, got.Seats.ToList());
 
@@ -376,6 +376,56 @@ public class NetMessagesTests
         Assert.False(SeatRosterMessage.TryRead(buffer, out _));
         new SeatRosterMessage(5u, seats).Write(buffer);
         buffer[SeatRosterMessage.PrefixSize + SeatRosterMessage.EntrySize + 2] = 1 << 6;
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+    }
+
+    // A bot's militia and accent ride the two bytes after its airframe. A guest then arms, paints
+    // and voices the bot as its host drew it. A person's entry carries neither.
+    [Fact]
+    public void SeatRosterCarriesABotsMilitiaAndAccentBesideItsAirframe()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host"),
+            new(1, 1, 10, true, "Tex", Pilot: NetPilot.Bot, Militia: 0, Accent: 0),
+            new(2, 2, 7, true, "Jack", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace, Militia: 4, Accent: 15),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+
+        Assert.Equal(SeatRosterMessage.PrefixSize + (22 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(seats, got.Seats.ToList());
+        int Entry(int seat) => SeatRosterMessage.PrefixSize + (seat * SeatRosterMessage.EntrySize);
+        Assert.Equal(new byte[] { 7, 4, 15 }, buffer.AsSpan(Entry(2) + 3, 3).ToArray());
+        Assert.Equal(new[] { NetSeat.Unset, NetSeat.Unset }, new[] { got.Seats[0].Militia, got.Seats[0].Accent });
+
+        // ABLE-TO-FAIL CONTROL: a roster of another entry width is no roster this reads.
+        Assert.False(SeatRosterMessage.TryRead(buffer.AsSpan(0, SeatRosterMessage.PrefixSize + (20 * seats.Count)), out _));
+    }
+
+    // A militia past the table, an accent past the wingman range, or either on a person's entry is no
+    // roster this vocabulary writes. The reader refuses it before a bot is armed or voiced.
+    [Theory]
+    [InlineData(1, NetSeat.MilitiaRows, 0)]
+    [InlineData(1, 0, NetSeat.MaxAccent + 1)]
+    [InlineData(0, 4, NetSeat.Unset)]
+    [InlineData(0, NetSeat.Unset, 12)]
+    public void SeatRosterRefusesAMilitiaOrAccentItCannotCarry(int seat, int militia, int accent)
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 0, 3, true, "host"),
+            new(1, 0, 3, true, "Tex", Pilot: NetPilot.Bot, Militia: 12, Accent: NetSeat.MaxAccent),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        // ABLE-TO-FAIL CONTROL: the last row and the top accent, on a bot, read.
+        Assert.True(SeatRosterMessage.TryRead(buffer, out _));
+
+        int entry = SeatRosterMessage.PrefixSize + (seat * SeatRosterMessage.EntrySize);
+        buffer[entry + 4] = (byte)militia;
+        buffer[entry + 5] = (byte)accent;
         Assert.False(SeatRosterMessage.TryRead(buffer, out _));
     }
 

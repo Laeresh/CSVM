@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace CSVM.Mech3;
 
@@ -144,6 +145,24 @@ public sealed class VehicleDefs
                 && string.Equals(PlayerNodeOf(name), planeNode, StringComparison.OrdinalIgnoreCase)
                 && Has(name[1..]))
                 return name[1..];
+        }
+        return null;
+    }
+
+    /// <summary>The def a militia flies an airframe as: the first def authoring the militia's
+    /// <c>paint_pattern</c> over that airframe's model. Its <c>_N</c> flights are other aeroplanes
+    /// and are passed over (docs/formats/instant-action.md). Null for a pair the install ships no
+    /// def for, such as Sacred Trust's Warhawk.</summary>
+    public string? MilitiaDefFor(string pattern, string planeNode)
+    {
+        foreach (var name in Names)
+        {
+            int cut = name.LastIndexOf('_');
+            bool flight = cut > 0 && cut < name.Length - 1 && name[(cut + 1)..].All(char.IsAsciiDigit);
+            if (!flight && string.Equals(_defs[name].Str("paint_pattern"), pattern, StringComparison.OrdinalIgnoreCase)
+                && AirframeFor(name) is { } airframe
+                && string.Equals(airframe.PlaneNode, planeNode, StringComparison.OrdinalIgnoreCase))
+                return name;
         }
         return null;
     }

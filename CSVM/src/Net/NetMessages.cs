@@ -457,10 +457,12 @@ public interface INetMessage<TSelf>
 /// roster's size therefore depends only on how many seats there are. <see cref="Voice"/> is the
 /// seat's pilot voice in the pick's form, 0 for none. The nameless flag carries
 /// <see cref="NetSeat.Unnamed"/> to every machine, and <see cref="Pilot"/> and <see cref="Skill"/>
-/// say which seats the host's bots fly. A human entry carries the default skill.</summary>
+/// say which seats the host's bots fly. A human entry carries the default skill, and no militia
+/// or accent (<see cref="NetSeat.Unset"/>).</summary>
 public readonly record struct NetSeatEntry(
     byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0, bool Unnamed = false,
-    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = NetBotSkill.Veteran);
+    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = NetBotSkill.Veteran,
+    byte Militia = NetSeat.Unset, byte Accent = NetSeat.Unset);
 
 /// <summary>
 /// One aircraft's state as its owner has it: pose, motion, the lever and the surfaces. It is the
@@ -1426,8 +1428,9 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// <summary>The bytes before the first seat entry: the seed and the count.</summary>
     public const int PrefixSize = 12;
 
-    /// <summary>The bytes one seat entry takes.</summary>
-    public const int EntrySize = 20;
+    /// <summary>The bytes one seat entry takes. ⚠ Do not change it in a patch release, only in a
+    /// minor one: a reader refuses a roster of another width (docs/org/multiplayer-messages.md).</summary>
+    public const int EntrySize = 22;
 
     /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded.</summary>
     public const int CallsignBytes = 16;
@@ -1512,16 +1515,25 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             byte team = reader.ReadByte();
             byte flags = reader.ReadByte();
             byte plane = reader.ReadByte();
+            byte militia = reader.ReadByte();
+            byte accent = reader.ReadByte();
             bool bot = (flags & BotBit) != 0;
             int skill = flags >> SkillShift;
             // A tier past Ace, or skill bits on a human, is no roster this vocabulary writes.
             if (bot ? skill > (int)NetBotSkill.Ace : skill != 0)
                 return false;
 
+            // Nor is a militia or an accent on a human, or one past the table a bot draws from.
+            if (bot ? (militia != NetSeat.Unset && militia >= NetSeat.MilitiaRows)
+                    || (accent != NetSeat.Unset && accent > NetSeat.MaxAccent)
+                : militia != NetSeat.Unset || accent != NetSeat.Unset)
+                return false;
+
             seats[i] = new NetSeatEntry(
                 seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes),
                 (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice), (flags & UnnamedBit) != 0,
-                bot ? NetPilot.Bot : NetPilot.Human, bot ? (NetBotSkill)skill : NetBotSkill.Veteran);
+                bot ? NetPilot.Bot : NetPilot.Human, bot ? (NetBotSkill)skill : NetBotSkill.Veteran,
+                militia, accent);
         }
 
         message = new SeatRosterMessage(seats, seed);
@@ -1547,6 +1559,8 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift) | (seat.Unnamed ? UnnamedBit : 0)
                 | (bot ? BotBit : 0) | (skill << SkillShift)));
             writer.WriteByte(seat.Plane);
+            writer.WriteByte(seat.Militia);
+            writer.WriteByte(seat.Accent);
             writer.WriteText(seat.Callsign, CallsignBytes);
         }
 

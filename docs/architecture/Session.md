@@ -19,7 +19,7 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 ## src/Session/Roster/LiveryResolver.cs
 Resolves which livery each player flies: the shipped paint catalog and the per-pattern
 region-mask library (both lazy and cached), `PatternsForPlane`, and the per-player `SchemeFor`
-pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=` overrides.
+pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=` overrides; `CatalogScheme` is a militia pattern's shipped colours.
 Constructed once per session build, so a relaunch resolves against the fresh spec. With no
 override every aircraft wears `DefaultPattern`, the only pattern covering all eleven airframes;
 an AI spawn prefers an explicit scheme, then its own def's `paint_*`, and reaches that default
@@ -497,7 +497,7 @@ rig as a damage source whose rounds draw the ally distress out of a teammate the
 because the bearing call-out, the taunt, the killer's gloat and the flight's enemy-down call on a player kill are spoken by an aircraft other than the one the event reached.
 An evade episode's end speaks the successful-shake taunt, and only once the machine's own evade flag has cleared.
 `Step` raises the rest of the pursue path for every AI in play whose gunner holds a hostile human, at the slot cooldown's own interval rather than on a mode edge, so a commit inside the mute window is not lost: the taunt the pursuer's own nose against that human picks, its `WA-Attack`, and the flight's bearing call-out; it also raises the taunt of every hostile player flown elsewhere within range of a local one.
-`RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet. A replicated AI (`RemoteOwned`) raises nothing here: the raises that read the flying end's own state fire `Raised` for the network link to relay, and a guest replays them through `TakeRaise` and derives the DI tiers through `TakeHull`.
+`RegisterBot` takes a bot seat on every machine as a player flown elsewhere, its pilot dealt from its militia's accent by the same registration turn. `RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet. A replicated AI (`RemoteOwned`) raises nothing here: the raises that read the flying end's own state fire `Raised` for the network link to relay, and a guest replays them through `TakeRaise` and derives the DI tiers through `TakeHull`.
 Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. `WatchTurrets` adds the one non-aircraft source, a gunner's acquisition of a human player off the shared `ProjectilePool`, broadcast on that player's team, and `DangerZoneCompleted` the other, the flight's praise for a player's run through the gates, which the campaign's own completion report raises. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/Roster/FlightRoster.cs
@@ -540,7 +540,7 @@ the spawn streams. Read `AiFlightAssembler.cs` for the build it calls.
 
 ## src/Session/Roster/AiFlightAssembler.cs
 `FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the airframe, controller, livery,
-loadout (a spawn's fit through `Loadout.BindWingman` ahead of the AI def's `weapons`) and ordnance, damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
+loadout (a spawn's fit through `Loadout.BindWingman` ahead of the AI def's `weapons`) and ordnance (`HangLoadout`, which a bot's militia fit shares), damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
 optional crash runtime, then the node placed. The airframe (painted model, hulls, prop, wing-light and surface animators) is CLAIMED
 from `AiAirframePool.cs` where one is ready and built in place otherwise, over one shared `PlaneCollider` per airframe and one shared
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
@@ -550,13 +550,13 @@ title, stamps the block's objective marker and the session's race flag, and owns
 
 ## src/Session/Roster/BotSeats.cs
 What a network bot seat is once its host seats it, engine-free. `Resolve` turns the command line's
-bot field into seats: a Random plane drawn over the eleven stock airframes, so the roster carries a
-real one, and each unnamed bot a callsign drawn once from `CallsignPool`, the message table's
-character names cut to the Callsign box's 12 characters, skipping every name a seat already holds.
+bot field into seats: each bot a militia/airframe pair off the Instant Action militia table
+(`DrawPair`: any pair at equal odds for a Random plane, a militia flying it for a picked one, the
+torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
+unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
 `Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
 of a tier's effect. Only the host calls it; a guest reads the roster. Decodes:
-[../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md).
-Read `AiFlightAssembler.cs` next.
+[../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 
 ## src/Session/Roster/HumanFlightAdapter.cs
 `FlightRoster`'s private seat path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
@@ -564,7 +564,7 @@ the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this 
 (flown elsewhere, or a host's bot) takes the aeroplane, paint, loadout, spawn slot and score row, only one flown elsewhere is built with the `RemotePoseBuffer` that IS its ownership, and
 both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. A bot seat is AI-piloted
 (`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, with `IsBotSeat` set so its contacts take a person's rule (it grazes and bounces where world AI dies outright), and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`
-under its seat index as `PlayerIndex`, its far-field plant measured against `PersonSeatPositions` (every seat's aeroplane but a bot's or a departed guest's, the panes outside a network match, the one rule roster AI reads too), and given an `AiRearmOrder` probing the world's lines. Every later return of that aeroplane, through `FlightController.Respawned`, starts the pilot over with `AiPilot.ResetForSpawn` on its new placement's course. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
+under its seat index as `PlayerIndex`, its far-field plant measured against `PersonSeatPositions` (every seat's aeroplane but a bot's or a departed guest's, the panes outside a network match, the one rule roster AI reads too), and given an `AiRearmOrder` probing the world's lines. Its seat's militia gives it, on every machine, that militia's livery (the shipped skins for Broadway Bomber, the session's for Fortune Hunter) and the weapons block of the def the militia flies its airframe as (`Mech3/MilitiaFits.cs`), the stock fit where no def exists; `BotSeats.ArmsFor` decides that order, a race seat unarmed first. Every later return of that aeroplane, through `FlightController.Respawned`, starts the pilot over with `AiPilot.ResetForSpawn` on its new placement's course. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
 It reads only the roster's copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its captured scheme and own build over
 that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run followed, its solo score key and its network seat's callsign; a seat with no pane here runs no course and joins no local race, and every stunt seat outside `--det` carries the rerun count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a pane-less seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
 

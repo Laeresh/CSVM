@@ -95,7 +95,8 @@ internal static class SeatFields
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
         Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null,
-        IReadOnlyList<VsBotEntry>? bots = null, IReadOnlyList<string>? callsignPool = null, System.Random? draws = null)
+        IReadOnlyList<VsBotEntry>? bots = null, IReadOnlyList<string>? callsignPool = null, System.Random? draws = null,
+        DogfightMissionType mission = DogfightMissionType.Deathmatch)
     {
         teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
@@ -150,7 +151,8 @@ internal static class SeatFields
         if (bots is { Count: > 0 })
         {
             var resolved = Session.Roster.BotSeats.Resolve(bots, System.Linq.Enumerable.Select(seats, seat => seat.Callsign),
-                callsignPool ?? System.Array.Empty<string>(), draws ?? new System.Random(Rng.IntSeedFor(Rng.BotField)));
+                callsignPool ?? System.Array.Empty<string>(), draws ?? new System.Random(Rng.IntSeedFor(Rng.BotField)),
+                oneTorpedoPerTeam: mission == DogfightMissionType.ZeppelinVsZeppelin);
             int people = seats.Count;
             int left = Net.NetSeats.AddBots(seats, wire.LocalPeer, resolved);
             for (int seat = people; seat < seats.Count; seat++)
@@ -342,7 +344,8 @@ internal static class SeatFields
         var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(messagesPath));
         return Session.Roster.BotSeats.Resolve(spec.VsBots,
             System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
-            new System.Random(Rng.IntSeedFor(Rng.BotField)));
+            new System.Random(Rng.IntSeedFor(Rng.BotField)),
+            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin);
     }
 
     // One line per bot seat of a roster just built, prefixed by where it was built.
@@ -352,7 +355,8 @@ internal static class SeatFields
         {
             if (bot.IsBot)
             {
-                Log.Info("core", $"{where}: bot seat {bot.SeatIndex} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
+                string militia = InstantAction.MilitiaAt(bot.Militia)?.Name ?? "no militia";
+                Log.Info("core", $"{where}: bot seat {bot.SeatIndex} '{bot.Callsign}' flies {bot.PlaneNode} for {militia} (accent {bot.Accent}) at {bot.Skill.ToString().ToLowerInvariant()}");
             }
         }
     }

@@ -52,6 +52,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
 - `src/Mech3/PlanePainter.cs`, applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
+- `src/Mech3/MilitiaFits.cs`, the militia table read once against vehicle.json: each militia's pattern and the def it flies an airframe as, which paint and arm a bot seat.
 - `src/Mech3/MilitiaPaint.cs`, each militia's paint pattern by display name, which is all a militia decides on Instant Action.
 - `src/Mech3/PropParts.cs`, classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
 - `src/Mech3/ControlSurfaces.cs`, classifies left/right aileron, elevator and rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).

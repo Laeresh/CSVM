@@ -524,7 +524,7 @@ public sealed class NetSession : INetTransportListener
             entries[i] = new NetSeatEntry(
                 (byte)seat.SeatIndex, (byte)seat.TeamId, AirframeIndex(seat.PlaneNode),
                 seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice, seat.Unnamed,
-                seat.Pilot, seat.Skill);
+                seat.Pilot, seat.Skill, seat.Militia, seat.Accent);
         }
 
         return entries;
@@ -602,6 +602,8 @@ public sealed class NetSession : INetTransportListener
                 Unnamed = entry.Unnamed,
                 PlaneNode = AirframeName(entry.Plane),
                 Voice = entry.Voice,
+                Militia = entry.Militia,
+                Accent = entry.Accent,
             });
         }
     }

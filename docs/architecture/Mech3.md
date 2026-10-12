@@ -162,13 +162,21 @@ shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 [../formats/paint.md](../formats/paint.md),
 [../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.
 
+## src/Mech3/MilitiaFits.cs
+The militia table read once against `vehicle.json`, both halves off one parse: `PatternFor` is a
+militia's paint pattern (`MilitiaPaint`) and `DefFor` the def it flies an airframe as
+(`VehicleDefs.MilitiaDefFor`), null for Fortune Hunter, Broadway Bomber and a pair the install
+ships no def for. A bot seat is painted and armed through it, on every machine, by
+`Session/Roster/HumanFlightAdapter.cs`. `Empty` stands in for an install whose file cannot be read.
+Decode: [../formats/instant-action.md](../formats/instant-action.md).
+
 ## src/Mech3/MilitiaPaint.cs
 Each militia's paint pattern, keyed by the militia half of a vehicle's display name, which is all a
 militia decides on the Instant Action path: the original builds every wingman, ace and wave member
 from the plain AI def of its aircraft and writes the setup screen's pattern, decals and colours over
 it, so no militia ever selects a vehicle def there. The pattern is read off whichever def of that
 militia names one, since every def of a militia wears the same one. `PatternForWave` answers for a
-single wave's `enemy_name`, or null where that militia names no pattern. Read `PaintScheme.cs`
+single wave's `enemy_name` and `PatternFor` for a militia by its table name, or null where that militia names no pattern. Read `PaintScheme.cs`
 next. Decode: [../formats/instant-action.md](../formats/instant-action.md), [../formats/paint.md](../formats/paint.md).
 
 ## src/Mech3/PropParts.cs
@@ -345,7 +353,7 @@ the launchscreen's Instant Action wizard. The first two funnel through one priva
 `BuildDef(ZrdrDict)`, `LoadFromJson` doing nothing but mapping a JSON object onto the same
 key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
 path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
-chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
+chosen environment's own `Load` result. `Militias` is the decoded militia table, each militia's aircraft and accent, read by the wizard and by the bot seats. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
 and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Two fields no `ia.json` key carries are the remake's own rules: `Lives`, and `RaceWindowMinutes`, the split screen stunt race's window, which only the wizard sets and which defaults to 5. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
@@ -383,7 +391,7 @@ The `vehicle.json` def table as an index, next to `Flight/Airframe/PlaneStats.cs
 `kind_of` to the nearest authored `mode` (`jet` at the root, the engine's zero default),
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
-`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
+`DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `MilitiaDefFor` finds the plain def a militia's pattern flies over an airframe. `StartAnimsOf`, `InjureAnimsOf`,
 `TitleOf`, `WeaponsOf` and `AttackOf` return the nearest authored value up that chain, `TitleOf` naming a hull whose block authors no slot 20 and the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
 Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 

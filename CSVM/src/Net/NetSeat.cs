@@ -25,9 +25,11 @@ public enum NetBotSkill : byte
     Ace = 2,
 }
 
-/// <summary>A bot as a host seats it. Its plane is resolved to a stock node and its callsign is
-/// drawn. <paramref name="Team"/> is a lobby team number, 0 for none.</summary>
-public readonly record struct SeatedBot(string Plane, NetBotSkill Skill, int Team, string Callsign);
+/// <summary>A bot as a host seats it: a stock plane, the militia flying it and that militia's
+/// accent (<see cref="NetSeat.Militia"/>, <see cref="NetSeat.Accent"/>), and a drawn callsign.
+/// The team is a lobby team number, 0 for none.</summary>
+public readonly record struct SeatedBot(string Plane, NetBotSkill Skill, int Team, string Callsign,
+    byte Militia = NetSeat.Unset, byte Accent = NetSeat.Unset);
 
 /// <summary>
 /// One pilot's place in a network match, shaped like the record the original allocates per player.
@@ -39,6 +41,17 @@ public readonly record struct SeatedBot(string Plane, NetBotSkill Skill, int Tea
 /// </summary>
 public sealed record NetSeat
 {
+    /// <summary>What <see cref="Militia"/> and <see cref="Accent"/> hold on a seat with none.</summary>
+    public const byte Unset = byte.MaxValue;
+
+    /// <summary>How many rows the militia table has, the bound a roster reader holds
+    /// <see cref="Militia"/> to (docs/formats/instant-action.md "Militias and aircraft").</summary>
+    public const int MilitiaRows = 13;
+
+    /// <summary>The highest accent a bot speaks in: Fortune Hunter's 12 re-rolled to at most 16, the
+    /// wingman range's top (docs/formats/instant-action.md).</summary>
+    public const int MaxAccent = 16;
+
     /// <summary>The transport peer this seat is reached through, the match key. A seat on this
     /// machine carries the local peer's own id, and a bot seat its host's, so one peer can own
     /// several seats.</summary>
@@ -94,6 +107,18 @@ public sealed record NetSeat
     /// Voice list plus one, 0 for none (<see cref="CoopPickMessage.Voice"/>). The roster carries
     /// it to every machine, which speaks the seat's in-flight lines in it.</summary>
     public byte Voice { get; init; }
+
+    /// <summary>A bot's militia, its row in <c>Mech3.InstantAction.Militias</c>, drawn by its host
+    /// with its plane. Every machine arms and paints the bot by it. <see cref="Unset"/> on a person.
+    /// </summary>
+    public byte Militia { get; init; } = Unset;
+
+    /// <summary>The accent id a bot speaks in: its militia's, Fortune Hunter's re-rolled by the
+    /// host. <see cref="Unset"/> on a person.</summary>
+    public byte Accent { get; init; } = Unset;
+
+    /// <summary>The accent a bot seat speaks in, null for a person or a bot that carries none.</summary>
+    public int? BotAccent => IsBot && Accent != Unset ? Accent : null;
 
     /// <summary>This pilot's match score, signed: a suicide costs a point, so it goes negative.
     /// </summary>

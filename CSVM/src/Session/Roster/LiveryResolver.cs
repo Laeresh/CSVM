@@ -61,6 +61,11 @@ public sealed class LiveryResolver
         return _paintCatalog;
     }
 
+    /// <summary>The catalog's scheme for <paramref name="pattern"/>, the shipped colours a militia's
+    /// pattern is worn in; null for a pattern no def authors.</summary>
+    public PaintScheme? CatalogScheme(string zrdrPath, string pattern) =>
+        PaintCatalog(zrdrPath).Find(s => string.Equals(s.Pattern, pattern, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>The livery a vehicle def authors for itself, cached per def name. This is what an AI
     /// aircraft wears in the original: the spawn resolves each paint field against the def and only
     /// an explicit override displaces it (docs/org/paint.md). Null when the def's chain authors no

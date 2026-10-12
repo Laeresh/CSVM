@@ -76,10 +76,17 @@ internal static class NetBotSuites
 
     private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
 
+    // The bot's militia: the Russians, who fly the Devastator as rusdevastator in the cccp livery.
+    private static byte BotMilitia => MilitiaRow("Russian");
+
+    private static byte BotAccent => (byte)Mech3.InstantAction.Militias[BotMilitia].AccentId;
+
     [Suite("net-bot-seat",
         "a host with a bot seat and a guest seat in one process over a clean loopback: the host flies "
         + "the bot with an armed AI pilot under its seat index, never as world AI, and the guest "
-        + "builds it as a remote seat whose path traces the host's; each end's pane names it by its "
+        + "builds it as a remote seat whose path traces the host's; both ends read its militia off "
+        + "the roster and fly it in that militia's livery and def's weapons, where the host's pane "
+        + "in the same airframe keeps the stock fit; each end's pane names it by its "
         + "callsign in the target pool and on the hostile tracker; beside the guest and over a "
         + "kilometre from the host's plane the bot flies the full plant, not the far-field one; the "
         + "bot's gunner picks a seat as "
@@ -241,7 +248,7 @@ internal static class NetBotSuites
         {
             new() { PeerId = 0, SeatIndex = HostSeat, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = GuestSeat, Callsign = "guest", PlaneNode = Airframes[1] },
-            NetSeats.Bot(0, BotSeat, "bot", Airframes[0]),
+            NetSeats.Bot(0, BotSeat, "bot", Airframes[0]) with { Militia = BotMilitia, Accent = BotAccent },
         };
         NetSeats.Validate(roster, hostPeer: 0);
 
@@ -303,6 +310,18 @@ internal static class NetBotSuites
         ctx.Check(peers.All(p => p.Wire.World is { Admitted: 0 }),
             $"[{cell}] and neither end's world link admits it as host-flown AI ({string.Join(", ", peers.Select(p => p.Wire.World?.Admitted))} admitted)");
 
+        // The guest reads the militia off the roster, and both ends arm and paint the bot by it.
+        var host = peers[0].SeatRigs[HostSeat].Controller;
+        ctx.Check(peers[1].NetSeats[BotSeat] is { } told && told.Militia == BotMilitia && told.Accent == BotAccent
+                  && bot.Scheme?.Pattern == "cccp" && copy.Scheme?.Pattern == "cccp"
+                  && Fit(bot) == Fit(copy) && Fit(bot).Contains("wep_13", StringComparison.Ordinal),
+            $"[{cell}] both ends fly the bot as its militia's: the guest's roster reads militia {peers[1].NetSeats[BotSeat].Militia} and accent {peers[1].NetSeats[BotSeat].Accent}, livery {bot.Scheme?.Pattern} and {copy.Scheme?.Pattern}, fit [{Fit(bot)}] and [{Fit(copy)}]");
+
+        // ABLE-TO-FAIL CONTROL. The host's own pane in the same airframe flies the stock fit and the
+        // session livery. The reading above is then the militia's, not the airframe's.
+        ctx.Check(host != null && host.Scheme?.Pattern != "cccp" && Fit(host) != Fit(bot),
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the host's pane in the same airframe wears {host?.Scheme?.Pattern} on [{(host == null ? "" : Fit(host))}]");
+
         // ABLE-TO-FAIL CONTROL. The guest's own seat on the same two machines is the reverse: flown
         // on the guest, a remote copy on the host. The bot's reading is then the roster, not a
         // build that made every rig alike.
@@ -313,6 +332,17 @@ internal static class NetBotSuites
             $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's own seat is a person's, flown on the guest and copied on the host");
         return true;
     }
+
+    // A militia's row in the table by name, failing loudly rather than seating the unset row.
+    private static byte MilitiaRow(string name)
+    {
+        int row = Mech3.InstantAction.Militias.ToList().FindIndex(m => m.Name == name);
+        return row >= 0 ? (byte)row : throw new InvalidOperationException($"the militia table names no '{name}'");
+    }
+
+    // An aeroplane's weapons by id, guns then pylons.
+    private static string Fit(FlightController plane) => plane.Loadout is not { } loadout ? ""
+        : string.Join(",", loadout.Guns.Select(g => g.Weapon.Id).Concat(loadout.Hardpoints.Select(h => h.Weapon.Id)));
 
     // Each end's aeroplane for the bot carries its callsign. The pane on that end names it so in the
     // target pool and on the hostile tracker, not by its node name. The pool is built here as the

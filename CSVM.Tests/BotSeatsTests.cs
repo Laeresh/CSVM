@@ -88,7 +88,159 @@ public sealed class BotSeatsTests
 
         Assert.All(seated.Take(40), bot => Assert.Contains(bot.Plane, StockAirframes.Nodes));
         Assert.True(seated.Take(40).Select(bot => bot.Plane).Distinct().Count() > 5, "Random draws over the field, not one plane");
-        Assert.Equal(new SeatedBot("player_fury", NetBotSkill.Ace, 3, "Red"), seated[^1]);
+        Assert.Equal(("player_fury", NetBotSkill.Ace, 3, "Red"), (seated[^1].Plane, seated[^1].Skill, seated[^1].Team, seated[^1].Callsign));
+        Assert.All(seated, bot => Assert.Contains((bot.Militia, bot.Plane), BotSeats.Pairs));
+    }
+
+    // The table's own pairs: Fortune Hunter flies all eleven airframes, the other twelve twenty-one
+    // between them, and a Random plane draws each at equal odds.
+    [Fact]
+    public void RandomDrawsEveryMilitiaAirframePairAtEqualOdds()
+    {
+        Assert.Equal(32, BotSeats.Pairs.Count);
+        Assert.Equal(BotSeats.Pairs.Count, BotSeats.Pairs.Distinct().Count());
+        var rng = new Random(11);
+        var counts = BotSeats.Pairs.ToDictionary(pair => pair, _ => 0);
+        for (int i = 0; i < 32_000; i++)
+        {
+            counts[BotSeats.DrawPair(null, false, rng)!.Value]++;
+        }
+
+        Assert.All(counts.Values, count => Assert.InRange(count, 850, 1150));
+    }
+
+    // A picked plane rolls a militia among those that fly it, and only those.
+    [Fact]
+    public void APickedPlaneRollsOnlyTheMilitiasThatFlyIt()
+    {
+        foreach (string node in StockAirframes.Nodes)
+        {
+            var flying = InstantAction.Militias
+                .Where(m => m.Aircraft.Any(a => InstantAction.PlaneNodeFor(a) == node))
+                .Select(m => m.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+            var bots = Enumerable.Repeat(new VsBotEntry(node, NetBotSkill.Veteran, 0, "x"), 200).ToArray();
+
+            var seated = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(node.Length));
+
+            Assert.All(seated, bot => Assert.Equal(node, bot.Plane));
+            Assert.Equal(flying, seated.Select(bot => InstantAction.Militias[bot.Militia].Name).Distinct()
+                .OrderBy(n => n, StringComparer.Ordinal).ToArray());
+        }
+
+        var fury = BotSeats.Resolve(new[] { new VsBotEntry("player_fury", NetBotSkill.Veteran, 0, "x") },
+            Array.Empty<string>(), Array.Empty<string>(), new Random(2));
+        Assert.Contains(InstantAction.Militias[fury[0].Militia].Name, new[] { "Black Swan", "Fortune Hunter", "Hughes Aviation", "Studio Security" });
+    }
+
+    // A bot speaks in its militia's accent; Fortune Hunter's 12 is re-rolled over the wingman range.
+    [Fact]
+    public void ABotTakesItsMilitiasAccentAndFortuneHuntersIsReRolled()
+    {
+        var bots = Enumerable.Repeat(new VsBotEntry(null, NetBotSkill.Veteran, 0, "x"), 400).ToArray();
+        var seated = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(23));
+
+        foreach (var bot in seated)
+        {
+            var militia = InstantAction.Militias[bot.Militia];
+            if (militia.Name == InstantAction.PlayerMilitia)
+            {
+                Assert.InRange(bot.Accent, 12, 16);
+            }
+            else
+            {
+                Assert.Equal(militia.AccentId, bot.Accent);
+            }
+        }
+
+        Assert.Equal(5, seated.Where(b => InstantAction.Militias[b.Militia].Name == InstantAction.PlayerMilitia)
+            .Select(b => b.Accent).Distinct().Count());
+    }
+
+    // A race seat carries no weapons whatever its militia or a named fit. Out of a race the militia
+    // def arms a bot unless --loadout= names a fit.
+    [Fact]
+    public void ARaceSeatIsUnarmedWhateverItsMilitia()
+    {
+        foreach (bool named in new[] { false, true })
+        {
+            foreach (bool militia in new[] { false, true })
+            {
+                Assert.Equal(SeatArms.None, BotSeats.ArmsFor(racing: true, named, militia));
+            }
+        }
+
+        // ABLE-TO-FAIL CONTROL: the same militia bot out of a race flies its def's weapons.
+        Assert.Equal(SeatArms.MilitiaDef, BotSeats.ArmsFor(racing: false, loadoutNamed: false, militiaWeapons: true));
+        Assert.Equal(SeatArms.Stock, BotSeats.ArmsFor(racing: false, loadoutNamed: true, militiaWeapons: true));
+        Assert.Equal(SeatArms.Stock, BotSeats.ArmsFor(racing: false, loadoutNamed: false, militiaWeapons: false));
+    }
+
+    // The roster reader's bounds are the table's: every row a bot draws, and every accent it speaks.
+    [Fact]
+    public void TheRosterBoundsHoldEveryMilitiaAndAccentABotDraws()
+    {
+        Assert.Equal(InstantAction.Militias.Count, NetSeat.MilitiaRows);
+        Assert.Null(InstantAction.MilitiaAt(NetSeat.Unset));
+        Assert.Null(InstantAction.MilitiaAt((byte)NetSeat.MilitiaRows));
+        var accents = Enumerable.Range(0, 5)
+            .SelectMany(draw => InstantAction.Militias.Select(m => Session.InstantAction.InstantActionRuntime.ResolveWaveAccentId(m.AccentId, (uint)draw)));
+        Assert.Equal(NetSeat.MaxAccent, accents.Max());
+        Assert.Equal(InstantAction.Airframes.Select(a => a.Name), InstantAction.Militias.Single(m => m.Name == InstantAction.PlayerMilitia).Aircraft);
+    }
+
+    // Zeppelin vs Zeppelin holds one torpedo bot a team. A team's later roll of the Black Hat
+    // Warhawk is re-rolled, so a field of Warhawks seats one per team.
+    [Fact]
+    public void ZvzSeatsAtMostOneTorpedoBotPerTeam()
+    {
+        var bots = Enumerable.Range(0, 12)
+            .Select(i => new VsBotEntry(i % 3 == 0 ? null : "player_warhawk", NetBotSkill.Veteran, 1 + (i % 2), "x")).ToArray();
+        int capOffDoubles = 0;
+        for (int seed = 0; seed < 200; seed++)
+        {
+            var capped = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(seed), oneTorpedoPerTeam: true);
+            Assert.All(capped.GroupBy(bot => bot.Team), team => Assert.InRange(team.Count(bot => BotSeats.IsTorpedoPair(bot.Militia, bot.Plane)), 0, 1));
+
+            var free = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(seed));
+            capOffDoubles += free.GroupBy(bot => bot.Team).Any(team => team.Count(bot => BotSeats.IsTorpedoPair(bot.Militia, bot.Plane)) > 1) ? 1 : 0;
+        }
+
+        // ABLE-TO-FAIL CONTROL: with the cap off, the same field seats two Black Hat Warhawks on one team.
+        Assert.True(capOffDoubles > 0, "the uncapped roll seats a second torpedo bot on a team");
+        Assert.True(BotSeats.IsTorpedoPair(0, "player_warhawk"));
+        Assert.Single(BotSeats.Pairs, pair => BotSeats.IsTorpedoPair(pair.Militia, pair.Plane));
+    }
+
+    // The data behind the rule. Of every pair's militia def, only Black Hat's Warhawk carries a
+    // torpedo. A def is the plain flight rather than an _N one, and a pair with no def gets none.
+    [ExtractedDataFact]
+    public void OnlyTheBlackHatWarhawksDefCarriesTorpedoes()
+    {
+        string zrdr = Extraction.SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var defs = VehicleDefs.Load(zrdr);
+        var patterns = MilitiaPaint.PatternByMilitia(zrdr, Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
+        var torpedoes = new List<string>();
+        int withDef = 0;
+        foreach (var (militia, plane) in BotSeats.Pairs)
+        {
+            string? pattern = MilitiaPaint.PatternFor(patterns, InstantAction.Militias[militia].Name);
+            if (pattern == null || defs.MilitiaDefFor(pattern, plane) is not { } def)
+            {
+                continue;
+            }
+
+            withDef++;
+            if (defs.WeaponsOf(def).Any(slot => slot.WeaponId == "wep_14"))
+            {
+                torpedoes.Add(def);
+            }
+        }
+
+        Assert.Equal(new[] { "bhatwarhawk" }, torpedoes);
+        Assert.Equal(19, withDef);
+        Assert.Equal("blakepeace", defs.MilitiaDefFor("blake", "player_peacemaker"));
+        Assert.Equal("bhatbrigand", defs.MilitiaDefFor("blackhat", "player_brigand"));
+        Assert.Null(defs.MilitiaDefFor("sactrust", "player_warhawk"));
     }
 
     [Fact]
@@ -185,6 +337,9 @@ public sealed class BotSeatsTests
         Assert.Equal(bots[0].Plane, copy.PlaneNode);
         Assert.Equal(bots[0].Callsign, copy.Callsign);
         Assert.Equal(hostSession.Seats[2].PlaneNode, copy.PlaneNode);
+        Assert.Equal((bots[0].Militia, bots[0].Accent), (copy.Militia, copy.Accent));
+        Assert.Contains((copy.Militia, copy.PlaneNode), BotSeats.Pairs);
+        Assert.Equal(NetSeat.Unset, guest.Seats[1].Militia);
 
         // ABLE-TO-FAIL CONTROL: the guest's own spec seats no bot, so nothing on its side drew one.
         Assert.Empty(SessionSpec.Parse(new[] { "--vs", "--net-join=127.0.0.1:47600", "--vs-bot=random" }).VsBots);

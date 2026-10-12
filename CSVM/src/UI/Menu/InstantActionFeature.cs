@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -17,12 +18,6 @@ public readonly record struct InstantActionMissionType(string Label, string Key)
 
 /// <summary>One stock airframe: its display name and the planes.zbd node the launch builds.</summary>
 public readonly record struct InstantActionAirframe(string Name, string Node);
-
-/// <summary>One militia, the aircraft it flies in the airframe dropdown's order, and the accent
-/// id its wave speaks with. The militia is the only thing that gives a wave a voice: the setup
-/// screen writes the accent beside the livery, so picking a militia picks the pilots
-/// (docs/formats/instant-action.md, "A militia also picks the wave's voice").</summary>
-public readonly record struct InstantActionMilitia(string Name, IReadOnlyList<string> Aircraft, int AccentId);
 
 /// <summary>One wave as the setup holds it: how many enemies (0 is unconfigured), and the
 /// militia, aircraft and skill cursors. The aircraft index is into the militia's own list.</summary>
@@ -89,42 +84,12 @@ public sealed class InstantActionFeature : IMenuFeature
     // The eleven airframes in the langui 3700 order, which the original stores an aircraft as an
     // index into. Names are ia.json's singular vocabulary (Autogyro, not Hoplite).
     private static readonly InstantActionAirframe[] AirframeRows =
-    {
-        new("Autogyro", "player_autogyro"),
-        new("Hellhound", "player_avenger"),
-        new("Balmoral", "player_balmoral"),
-        new("Bloodhawk", "player_bhawk"),
-        new("Brigand", "player_brigand"),
-        new("Devastator", "player_pfighter"),
-        new("Firebrand", "player_fbrand"),
-        new("Fury", "player_fury"),
-        new("Kestrel", "player_kestrel"),
-        new("Peacemaker", "player_peacemaker"),
-        new("Warhawk", "player_warhawk"),
-    };
+        InstantAction.Airframes.Select(a => new InstantActionAirframe(a.Name, a.Node)).ToArray();
 
     private static readonly string[] AirframeNames = Array.ConvertAll(AirframeRows, a => a.Name);
 
-    // The thirteen militias in the langui 3670 order, each with the aircraft FUN_00410420's mask
-    // allows it, in the airframe order above; the mask filters the dropdown, never reorders it.
-    // The accent is the same switch's own write, one per militia; Fortune Hunter's 12 is the
-    // wingman range's base and is re-rolled to 12..16 per aircraft at spawn.
-    private static readonly InstantActionMilitia[] MilitiaRows =
-    {
-        new("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" }, 0),
-        new("Black Swan", new[] { "Fury" }, 1),
-        new("Blake Aviation", new[] { "Bloodhawk", "Peacemaker" }, 2),
-        new("British", new[] { "Balmoral", "Peacemaker" }, 3),
-        new("Fortune Hunter", AirframeNames, 12),
-        new("Hollywood Knight", new[] { "Firebrand" }, 7),
-        new("Hughes Aviation", new[] { "Bloodhawk", "Fury", "Kestrel" }, 10),
-        new("Medusa", new[] { "Brigand", "Kestrel" }, 8),
-        new("Russian", new[] { "Devastator" }, 5),
-        new("Sacred Trust", new[] { "Hellhound", "Warhawk" }, 9),
-        new("German", new[] { "Hellhound" }, 6),
-        new("Studio Security", new[] { "Autogyro", "Fury" }, 10),
-        new("Broadway Bomber", new[] { "Peacemaker" }, 4),
-    };
+    // The militia table is the decode's, shared with the bot seats that draw from it.
+    private static readonly IReadOnlyList<InstantActionMilitia> MilitiaRows = InstantAction.Militias;
 
     private static readonly string[] SkillRows = { "novice", "veteran", "ace" };
 
@@ -353,7 +318,7 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>Writes one wave whole, every cursor checked against its roster.</summary>
     public void SetWave(int wave, InstantActionWaveSetup setup)
     {
-        int militia = Index(setup.MilitiaIndex, MilitiaRows.Length, nameof(setup));
+        int militia = Index(setup.MilitiaIndex, MilitiaRows.Count, nameof(setup));
         _waves[Slot(wave)] = new InstantActionWaveSetup(
             Math.Clamp(setup.Count, 0, MaxEnemies),
             militia,
@@ -371,13 +336,13 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>Steps a wave's militia with wrap. A new militia resets the wave's aircraft to the
     /// first it flies, the decoded screen's own rule (<c>AV[BA].QG = 0</c>).</summary>
     public void StepWaveMilitia(int wave, int direction) =>
-        SelectWaveMilitia(wave, Wrap(_waves[Slot(wave)].MilitiaIndex + direction, MilitiaRows.Length));
+        SelectWaveMilitia(wave, Wrap(_waves[Slot(wave)].MilitiaIndex + direction, MilitiaRows.Count));
 
     /// <summary>Picks a wave's militia, resetting its aircraft to the militia's first.</summary>
     public void SelectWaveMilitia(int wave, int index)
     {
         var w = _waves[Slot(wave)];
-        _waves[wave] = w with { MilitiaIndex = Index(index, MilitiaRows.Length, nameof(index)), AircraftIndex = 0 };
+        _waves[wave] = w with { MilitiaIndex = Index(index, MilitiaRows.Count, nameof(index)), AircraftIndex = 0 };
     }
 
     /// <summary>Steps a wave's aircraft within its militia's roster, with wrap.</summary>

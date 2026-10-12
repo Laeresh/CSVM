@@ -109,11 +109,7 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
-        // ⚠ Deal the pilot by registration turn, never from _rng; each network end's stream is its own.
-        // A host and its guests register the same AI in the same order, so they deal the same pilot.
-        int turn = _accentTurns.GetValueOrDefault(accent);
-        _accentTurns[accent] = turn + 1;
-        int? voId = _voice.PilotFor(accent, turn);
+        int? voId = DealPilot(accent);
         if (voId is not { } vo)
         {
             Log.Info("sound", $"ai voice: {ai.Name}: accent {accent} resolves to no voiced pilot, silent");
@@ -186,6 +182,12 @@ public sealed partial class AiVoiceRuntime : Node
         IndexAndWatchKills(rig);
         RegisterHumanVoice(rig, voId, talkerChance, constitutionChance);
     }
+
+    /// <summary>Registers a bot seat's aircraft on every machine alike, as a player flown elsewhere
+    /// speaking as the pilot its militia's accent deals it. It taunts, gloats and cries out as a
+    /// network player does, which every end derives for itself.</summary>
+    public void RegisterBot(FlightController rig, int accentId, float talkerChance, float constitutionChance) =>
+        RegisterRemotePlayer(rig, DealPilot(accentId), talkerChance, constitutionChance);
 
     /// <summary>Wires the <c>WA-Turret</c> site (id 0): every gunner in the session, carried or
     /// emplaced, reports its first clear sight of a human player through the shared pool, and the
@@ -492,6 +494,15 @@ public sealed partial class AiVoiceRuntime : Node
         {
             speaker.Alive = IsInstanceValid(rig) && rig.InPlay;
         }
+    }
+
+    // ⚠ Deal the pilot by registration turn, never from _rng; each network end's stream is its own.
+    // A host and its guests register the same aircraft in the same order, so they deal the same pilot.
+    private int? DealPilot(int accent)
+    {
+        int turn = _accentTurns.GetValueOrDefault(accent);
+        _accentTurns[accent] = turn + 1;
+        return _voice.PilotFor(accent, turn);
     }
 
     // A player's aircraft speaks as the pilot its player chose, or not at all. It is never elected

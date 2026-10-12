@@ -223,12 +223,7 @@ internal sealed class AiFlightAssembler
                     string armed = stats.AiDefName ?? stats.DefName;
                     Log.Warn("weapons", $"ai: no weapons block on '{armed}' and no stock loadout for '{stats.DefName}', this plane flies unarmed");
                 }
-                if (controller.Loadout != null)
-                {
-                    controller.Destructibles = _world.WorldRuntime?.Destructibles;
-                    controller.SurfaceVehicles = _world.SurfaceVehicles;
-                    controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
-                }
+                HangLoadout(controller, _world);
             }
             catch (Exception e)
             {
@@ -354,6 +349,20 @@ internal sealed class AiFlightAssembler
         {
             Log.Info("flight", $"bot: '{planeName}' {tier} on ratings {ratings.DareDevil} {ratings.NaturalTouch} {ratings.SixthSense} {ratings.DeadEye} {ratings.QuickDraw} {ratings.SteadyHand} {ratings.StunRecovery} {ratings.Talker} {ratings.Constitution}");
         }
+    }
+
+    /// <summary>What a bound AI loadout needs beside it: the world's structure and vehicle candidates
+    /// and the pylon ordnance, hidden as its ammo depletes. Nothing without a loadout.</summary>
+    internal static void HangLoadout(FlightController controller, FlightWorldBindings world)
+    {
+        if (controller.Loadout == null)
+        {
+            return;
+        }
+
+        controller.Destructibles = world.WorldRuntime?.Destructibles;
+        controller.SurfaceVehicles = world.SurfaceVehicles;
+        controller.Ordnance = PylonOrdnance.Build(controller.Loadout, world.Projectiles, controller.InfiniteAmmo);
     }
 
     // The airframe def's engagement volumes and dwell timers onto a mode machine.

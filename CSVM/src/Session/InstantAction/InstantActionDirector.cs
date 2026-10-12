@@ -892,12 +892,9 @@ public sealed class InstantActionDirector
     // does. Null when the militia is not named or names no pattern, and the member keeps its skins.
     private PaintScheme? WaveMilitiaScheme(ActorBuildInputs inputs, string enemyName)
     {
-        if (MilitiaPaint.PatternForWave(MilitiaPatterns(inputs), enemyName) is not { } pattern)
-            return null;
-        foreach (var scheme in inputs.LiveryResolver.PaintCatalog(inputs.ZrdrPath))
-            if (string.Equals(scheme.Pattern, pattern, StringComparison.OrdinalIgnoreCase))
-                return scheme;
-        return null;
+        return MilitiaPaint.PatternForWave(MilitiaPatterns(inputs), enemyName) is { } pattern
+            ? inputs.LiveryResolver.CatalogScheme(inputs.ZrdrPath, pattern)
+            : null;
     }
 
     private IReadOnlyDictionary<string, string> MilitiaPatterns(ActorBuildInputs inputs)

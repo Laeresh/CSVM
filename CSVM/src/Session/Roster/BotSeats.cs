@@ -8,12 +8,26 @@ using CSVM.Spec;
 
 namespace CSVM.Session.Roster;
 
+/// <summary>Where a seat's weapons come from (<see cref="BotSeats.ArmsFor"/>).</summary>
+public enum SeatArms
+{
+    /// <summary>No weapons: a race seat.</summary>
+    None,
+
+    /// <summary>A bot's militia def's own weapons block.</summary>
+    MilitiaDef,
+
+    /// <summary>The airframe's stock fit, or the one its pilot picked or built.</summary>
+    Stock,
+}
+
 /// <summary>
-/// What a bot seat is once its host seats it. A Random plane resolves to a stock airframe, and a
-/// callsign is drawn from the shipped pilot names. Its pilot takes an Instant Action personality
-/// shifted by its tier. Engine-free and host-only by its callers: a guest reads the roster the host
-/// built and draws nothing. The names, the personalities and the offset
-/// are the original's data; the rules joining them are remake-only. Decodes:
+/// What a bot seat is once its host seats it. It draws a militia and the airframe that militia
+/// flies from the Instant Action militia table, and a callsign from the shipped pilot names. Its
+/// pilot takes an Instant Action personality shifted by its tier. Engine-free and host-only by its
+/// callers: a guest reads the roster the host built and draws nothing. The table, the names, the
+/// personalities and the offset are the original's data; the rules joining them are remake-only.
+/// Decodes:
 /// <c>docs/formats/missions.md</c> "Message table" and <c>docs/formats/instant-action.md</c>.
 /// </summary>
 public static class BotSeats
@@ -22,6 +36,10 @@ public static class BotSeats
     /// (<c>UGA.FD</c>, <c>docs/org/multiplayer-messages.md</c>), the limit a person's seat has.
     /// </summary>
     public const int CallsignLimit = 12;
+
+    // The torpedo pair's two halves, as the militia table names them.
+    private const string TorpedoMilitia = "Black Hat";
+    private const string TorpedoAirframe = "Warhawk";
 
     // The message table's character names (ids 13001-13036) that name a person. Rows naming an
     // aircraft or a role are left out: Getaway Plane, Bomber, Stunt Plane, the three regional aces.
@@ -36,8 +54,14 @@ public static class BotSeats
         "MSG_VVBECK_NAME", "MSG_CABBIE_NAME", "MSG_TINY_NAME", "MSG_ILSA_NAME", "MSG_JPEROT_NAME",
     };
 
+    private static readonly (byte Militia, string Plane)[] PairRows = BuildPairs();
+
     /// <summary>The message-table keys the callsign pool is read from, in id order.</summary>
     public static IReadOnlyList<string> PilotNames => PilotNameKeys;
+
+    /// <summary>Every militia/airframe pair the militia table allows, as a militia row and a stock
+    /// node, in the table's order (docs/formats/instant-action.md "Militias and aircraft").</summary>
+    public static IReadOnlyList<(byte Militia, string Plane)> Pairs => PairRows;
 
     /// <summary>The callsigns a bot may draw: each pilot name the table resolves, cut by
     /// <see cref="CutName"/>, the first of any two the cut makes equal kept. Empty when the table
@@ -93,13 +117,15 @@ public static class BotSeats
         return trimmed.Length <= CallsignLimit ? trimmed : trimmed[..CallsignLimit].TrimEnd();
     }
 
-    /// <summary>The command line's bots as the host seats them. A null plane is Random, drawn with
-    /// equal odds over <see cref="StockAirframes.Nodes"/>, so the roster carries a real airframe. A
-    /// bot with no callsign draws one from <paramref name="pool"/>, shuffled once. It never takes a
-    /// name drawn before, named by another bot or held in <paramref name="taken"/>. An exhausted
-    /// pool falls back to <see cref="SessionSpec.BotCallsign"/>.</summary>
+    /// <summary>The command line's bots as the host seats them. Each draws a militia/airframe pair
+    /// (<see cref="DrawPair"/>), so the roster carries a real airframe and its militia. A bot with
+    /// no callsign draws one from <paramref name="pool"/>, shuffled once. It never takes a name drawn
+    /// before, named by another bot or held in <paramref name="taken"/>. An exhausted pool falls back
+    /// to <see cref="SessionSpec.BotCallsign"/>. <paramref name="oneTorpedoPerTeam"/> is
+    /// Zeppelin vs Zeppelin's cap.</summary>
     public static IReadOnlyList<SeatedBot> Resolve(
-        IReadOnlyList<VsBotEntry> bots, IEnumerable<string> taken, IReadOnlyList<string> pool, Random rng)
+        IReadOnlyList<VsBotEntry> bots, IEnumerable<string> taken, IReadOnlyList<string> pool, Random rng,
+        bool oneTorpedoPerTeam = false)
     {
         ArgumentNullException.ThrowIfNull(bots);
         ArgumentNullException.ThrowIfNull(taken);
@@ -126,13 +152,23 @@ public static class BotSeats
             (order[i], order[j]) = (order[j], order[i]);
         }
 
-        var nodes = StockAirframes.Nodes;
         var seated = new SeatedBot[bots.Count];
+        var torpedoTeams = new HashSet<int>();
         int next = 0;
         for (int i = 0; i < bots.Count; i++)
         {
             var bot = bots[i];
-            string plane = bot.Plane ?? nodes[rng.Next(nodes.Count)];
+            var pair = DrawPair(bot.Plane, oneTorpedoPerTeam && torpedoTeams.Contains(bot.Team), rng);
+            if (pair is { } drawn && IsTorpedoPair(drawn.Militia, drawn.Plane))
+            {
+                torpedoTeams.Add(bot.Team);
+            }
+
+            string plane = pair?.Plane ?? bot.Plane!;
+            byte militia = pair?.Militia ?? NetSeat.Unset;
+            byte accent = pair is { } p
+                ? (byte)InstantActionRuntime.ResolveWaveAccentId(Mech3.InstantAction.Militias[p.Militia].AccentId, (uint)rng.Next())
+                : NetSeat.Unset;
             string callsign = ClipName(bot.Callsign);
             if (callsign.Length == 0)
             {
@@ -144,11 +180,42 @@ public static class BotSeats
                 callsign = next < order.Count ? order[next++] : Fallback(i + 1, used);
             }
 
-            seated[i] = new SeatedBot(plane, bot.Skill, bot.Team, callsign);
+            seated[i] = new SeatedBot(plane, bot.Skill, bot.Team, callsign, militia, accent);
         }
 
         return seated;
     }
+
+    /// <summary>A pair at equal odds over <see cref="Pairs"/>: any pair for a Random plane (null),
+    /// else one whose militia flies the plane. A torpedo cap leaves the torpedo pair out, the same
+    /// odds as re-rolling it. Null for a plane no militia flies.</summary>
+    public static (byte Militia, string Plane)? DrawPair(string? plane, bool noTorpedo, Random rng)
+    {
+        ArgumentNullException.ThrowIfNull(rng);
+        var candidates = new List<(byte Militia, string Plane)>();
+        foreach (var pair in PairRows)
+        {
+            if ((plane == null || string.Equals(pair.Plane, plane, StringComparison.OrdinalIgnoreCase))
+                && !(noTorpedo && IsTorpedoPair(pair.Militia, pair.Plane)))
+            {
+                candidates.Add(pair);
+            }
+        }
+
+        return candidates.Count == 0 ? null : candidates[rng.Next(candidates.Count)];
+    }
+
+    /// <summary>Where a seat's weapons come from. A race seat carries none, whatever its militia.
+    /// Otherwise a named <c>--loadout=</c> wins, then a bot's militia def with a weapons block, then
+    /// the airframe's stock or picked fit.</summary>
+    public static SeatArms ArmsFor(bool racing, bool loadoutNamed, bool militiaWeapons) =>
+        racing ? SeatArms.None : !loadoutNamed && militiaWeapons ? SeatArms.MilitiaDef : SeatArms.Stock;
+
+    /// <summary>Whether a pair carries torpedoes. Only Black Hat's Warhawk does: its def,
+    /// <c>bhatwarhawk</c>, fits <c>wep_14</c> (docs/org/aiPilot/aiWeapons.md).</summary>
+    public static bool IsTorpedoPair(byte militia, string plane) =>
+        Mech3.InstantAction.MilitiaAt(militia)?.Name == TorpedoMilitia
+        && string.Equals(plane, Mech3.InstantAction.PlaneNodeFor(TorpedoAirframe), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The personality one draw selects, Instant Action's own per-aircraft roll. It is
     /// <c>draw % 5</c> over four authored rows and the flat row of fours, each at equal odds.
@@ -174,6 +241,20 @@ public static class BotSeats
             Talker = Shift(personality.Talker),
             Constitution = Shift(personality.Constitution),
         };
+    }
+
+    private static (byte Militia, string Plane)[] BuildPairs()
+    {
+        var pairs = new List<(byte, string)>();
+        for (int m = 0; m < Mech3.InstantAction.Militias.Count; m++)
+        {
+            foreach (string aircraft in Mech3.InstantAction.Militias[m].Aircraft)
+            {
+                pairs.Add(((byte)m, Mech3.InstantAction.PlaneNodeFor(aircraft)!));
+            }
+        }
+
+        return pairs.ToArray();
     }
 
     // "Bot <n>" by place, the first such name no other seat holds.

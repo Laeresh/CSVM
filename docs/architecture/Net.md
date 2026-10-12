@@ -473,7 +473,7 @@ that carry it are the message vocabulary's.
 One pilot's place in a match, shaped like the record the original allocates per player: the peer it
 is addressed by, its team, its callsign, airframe, paint, voice, seat index and signed score, and
 who flies it where. `Pilot` says a person or a host's bot (`NetPilot`), with a bot's `Skill` tier
-(`NetBotSkill`). `FlownHere` (this machine simulates and reports it) and `HasPane` (a person sits
+(`NetBotSkill`), militia and accent. `FlownHere` (this machine simulates and reports it) and `HasPane` (a person sits
 at it here) are two claims: a bot is flown on its host with no pane. The seat index is the whole
 identity, so a remote pilot or a bot indexes spawns, scores, markers and colours as a splitscreen
 pane does. Read `docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an

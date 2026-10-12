@@ -1469,7 +1469,8 @@ public partial class GameSession : Node3D
             {
                 extraAccents.AddRange(InstantActionRuntime.VoiceAccentIds(iaVoice.Runtime.Def));
             }
-            // Each network seat's chosen pilot speaks its lines at runtime too.
+            // So does each bot seat's militia accent, and each network seat's chosen pilot.
+            extraAccents.AddRange(_wire.Seats.Select(s => s.BotAccent).OfType<int>());
             var seatPilots = _wire.Seats.Select(s => UI.Menu.PilotVoices.SpeakerFor(s.Voice))
                 .OfType<int>().ToList();
             voiceClips = CombatVoice.SessionPrewarmNames(
