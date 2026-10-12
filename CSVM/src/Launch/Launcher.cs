@@ -117,13 +117,9 @@ public partial class Launcher : Node3D
     // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
     // presentation's own tick, which is no place to free it.
     private OptionsApplyExit? _pendingApply;
-    // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
-    private bool _pendingGraphicsToggle;
-
-    // The cover over a live graphics switch in flight, null when none is up.
-    private SwitchCover? _switchCover;
-    // How many of --debug-graphics-switch's frames have fired, process-scoped like the capture.
-    private int _debugSwitchesDone;
+    // The Options settings on the window and the world, and the live graphics switch. Built beside
+    // the sun it dresses.
+    private LiveSettings _settings = null!;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -253,6 +249,10 @@ public partial class Launcher : Node3D
         _menuHost is { } host ? host.Selected
         : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
         : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride));
+
+    // The boards stood with no flight in front of them, over the live spec and the current paths.
+    // Built per use, since an extraction's hand-back re-resolves the paths.
+    private LaunchBoards Boards => new(_spec, _dataRoot, _zrdrPath, _messagesPath);
 
     public override void _Ready()
     {
@@ -406,24 +406,8 @@ public partial class Launcher : Node3D
             CSVM.Bindings.BindingStore.DirectoryOverride = scratchOptions;
         }
 
-        // The pacing's three sources and both engine calls are VSyncSetting's; --no-vsync uncaps
-        // the loop so frame/fps/script report work done rather than a refresh cap. The config read
-        // stays unconditional so it self-registers, see Utils/Config.cs's entry.
-        bool vsyncOnByConfig = Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault);
-        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, VSyncSetting.SavedWord(_spec.Det), vsyncOnByConfig));
-
-        // The saved screen, then the mode, then the size, for a session someone is at only: a
-        // scripted run's window is hidden off screen and its capture compared against the viewport
-        // project.godot pins, so none may reach one. None asks for focus; docs/architecture/Utils.md.
-        if (!_spec.IsScripted)
-        {
-            MonitorSetting.Apply(MonitorSetting.Resolve(MonitorSetting.SavedWord(_spec.Det), MonitorSetting.Screens()));
-            var displayMode = DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det));
-            DisplayModeSetting.Apply(displayMode);
-            ResolutionSetting.Apply(
-                ResolutionSetting.Resolve(ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes(), displayMode.Word),
-                GetWindow());
-        }
+        // After the options directory is settled, since both read the saved options.
+        LiveSettings.ApplyWindowAtLaunch(_spec, GetWindow());
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
         // legacy spelling of their console filter; an explicit --log= is applied after it and can
@@ -616,20 +600,8 @@ public partial class Launcher : Node3D
         CSVM.UI.Boards.BoardMarquee.PinnedSeconds = _spec.DebugMarquee ?? (_spec.Det || _spec.RunTests ? 0d : null);
 
         // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
-        // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
-        // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
-        var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
-        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
-        // Every word setting under the same --det rule, before any viewport or session builds, since
-        // both read the words. They share the mode's line, so a softer or slower run than expected
-        // is read off one line.
-        Utils.WordSettings.ResolveLaunch(_spec.WordFlags, _spec.Det);
-        Utils.ShadowQualitySetting.HardShadows = (_spec.SkippedPasses & EnhancedPasses.SoftShadows) != 0;
-        string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} {Utils.WordSettings.Describe()}");
-        // The window's own viewport takes the render flags here, before any scene builds. The
-        // three SubViewports take them at construction.
-        Utils.ViewportQuality.Apply(GetViewport());
+        // clutter fade, which needs the mode to follow the pushed fog.
+        LiveSettings.ResolveGraphicsAtLaunch(_spec, GetViewport());
         // The clutter fade's squared distance scale, 0 when the fade is off. Enhanced mode pushes
         // the fade out with the fog and further by the View Distance (ClutterFadeScaleSq).
         float clutterFadeScaleSq = EnhancedLook.ClutterFadeScaleSq();
@@ -746,6 +718,7 @@ public partial class Launcher : Node3D
         }
 
         SetupLighting();
+        _settings = new LiveSettings(this, _sun, _env, subject => Boards.SwitchScreen(subject));
         // GameSession re-applies these same two framings per launch. The decoded world base serves
         // every camera that draws the world, and the viewer's own 50 a model on a stage.
         _camera = new Camera3D
@@ -1034,27 +1007,8 @@ public partial class Launcher : Node3D
             ApplyOptions(applied);
         }
 
-        // The graphics-mode action, a frame after the seat that fired it, so no switch runs inside a
-        // controller's own _Process. Saved like the Options row.
-        if (_pendingGraphicsToggle)
-        {
-            _pendingGraphicsToggle = false;
-            if (_session is { InSession: true })
-                RequestGraphicsSwitch(!GraphicsMode.Enhanced, "the graphics-mode action", save: true);
-        }
-
-        // --debug-graphics-switch: the same flip at each named sim frame, unsaved.
-        if (_session is { InSession: true } && GameClock.Current is { } simClock && _switchCover == null
-            && _debugSwitchesDone < _spec.DebugGraphicsSwitch.Count
-            && simClock.Frame >= _spec.DebugGraphicsSwitch[_debugSwitchesDone])
-        {
-            _debugSwitchesDone++;
-            RequestGraphicsSwitch(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}", save: false);
-        }
-
-        if (_switchCover?.Tick(frameMs) == true)
-            _switchCover = null;
-        GraphicsMode.SwitchLocked = _session is { InSession: true, Wire.Link: not null };
+        // Null only on the frame an early quit leaves, which built no sun.
+        _settings?.Tick(frameMs, _spec, _session);
 
         if (_session is { InSession: true } && GameClock.Current is { } diagClock)
         {
@@ -1453,234 +1407,13 @@ public partial class Launcher : Node3D
         _startFade = null;
     }
 
-    // The load screen over the whole window, on the board layer. A campaign launch takes the
-    // original's chart sheet for the mission being built and everything else its blackboard
-    // (docs/org/loading-screen.md).
+    // The load screen over the whole window, on the board layer; what it draws is LaunchBoards'.
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
     {
-        // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
-        // describes the flight. The chart sheet writes no words of ours at all.
-        string subject = campaign ? string.Empty : LaunchSubject().ToUpperInvariant();
-        var sheet = campaign
-            ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
-            : null;
+        var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight);
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
-        string? briefing = campaign || missionType != null ? null : LaunchBriefing();
-        var board = UI.Screens.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet, briefing);
-        if (briefing != null)
-        {
-            Log.Info("ui", $"load screen: {_spec.Chapter} Dogfight reads {briefing}");
-        }
-        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
-    }
-
-    // A Dogfight's multiplayer dialog, from its chapter, its type and whether a lobby pilot joined a
-    // team. The session's pause board resolves the same key off its seats. Null for anything else.
-    private string? LaunchBriefing() =>
-        _spec.Versus
-            ? UI.Screens.LoadScreens.MultiplayerKey(
-                _spec.Chapter, _spec.MissionType,
-                _net.TeamedLobbyFlight)
-            : null;
-
-    // The chart sheet a story position resolves: the loading dialog the mission's own storage
-    // address names, that mission's objectives for the parchment, and the profile's memento.
-    private UI.Screens.LoadSheet? CampaignLoadSheet(int seq)
-    {
-        if (CampaignMissionAt(seq) is not { } named)
-        {
-            Log.Warn("ui", $"load screen: cm_sequence names no mission at seq {seq}");
-            return null;
-        }
-
-        string key = UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission);
-        var sheet = UI.Screens.LoadSheet.Load(
-            _zrdrPath, _messagesPath,
-            SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder),
-            key, SeatedMemento());
-        if (sheet == null)
-        {
-            Log.Warn("ui",
-                $"load screen: Loading.zrd has no sheet for {named.ChapterFolder}/{named.MissionFolder}");
-            return null;
-        }
-
-        // The screen is torn down before the world appears, so this line is the only record of
-        // which mission's chart a launch actually drew.
-        string map = sheet.State.Map?.Bitmap ?? "-";
-        Log.Info("ui",
-            $"load screen: {named.ChapterFolder}/{named.MissionFolder} {key} map={map} objectives={sheet.Objectives.Count}");
-        return sheet;
-    }
-
-    // The mission a sequence position names, or null where cm_sequence carries none.
-    private CampaignMission? CampaignMissionAt(int seq)
-    {
-        CampaignMission? found = null;
-        foreach (var mission in Mech3.CampaignSequence.Load(_zrdrPath))
-        {
-            if (mission.Seq == seq)
-            {
-                found = mission;
-            }
-        }
-
-        return found;
-    }
-
-    // The Original presentation's pause sheet over the whole window, standing on its own with no
-    // mission behind it. The objectives are the named mission's own and the ownship icon sits on
-    // its authored PLAYER_INIT spawn, so nothing on the screen is invented; there is no world, so
-    // the zeppelin icon is absent. docs/org/pause-screen.md.
-    private void ShowPauseSheet(int ordinal, int completed)
-    {
-        int last = System.Math.Max(0, Mech3.CampaignSequence.Load(_zrdrPath).Count - 1);
-        int seq = System.Math.Clamp(ordinal - 1, 0, last);
-        if (CampaignMissionAt(seq) is not { } named)
-        {
-            Log.Warn("ui", $"pause aid: cm_sequence names no mission at seq {seq}");
-            return;
-        }
-
-        string missionZrdr = SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder);
-        var sheet = UI.Screens.PauseSheet.Load(
-            _zrdrPath, _messagesPath,
-            UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
-        if (sheet == null)
-        {
-            Log.Warn("ui", $"pause aid: no escape.zrd sheet for {named.ChapterFolder}/{named.MissionFolder}");
-            return;
-        }
-
-        var readout = PauseAidReadout(sheet, missionZrdr, completed);
-        var pause = new Flight.Modes.PauseState();
-        var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
-        layer.AddChild(board);
-        AddChild(layer);
-        pause.TryToggle(0);
-        Log.Info("ui",
-            $"pause aid: {named.ChapterFolder}/{named.MissionFolder} sheet with {completed} objective(s) marked");
-    }
-
-    // The Instant Action sortie's own pause sheet with no sortie behind it: the blackboard its
-    // chapter and mission type resolve, which carries no map, memento or parchment and so needs no
-    // readout at all. docs/org/pause-screen.md.
-    private void ShowInstantActionPauseSheet(string chapter, string missionType)
-    {
-        if (UI.Screens.LoadScreens.LetterFor(missionType) is not { } letter)
-        {
-            Log.Warn("ui", $"pause aid: '{missionType}' is no Instant Action mission type");
-            return;
-        }
-
-        string key = UI.Menu.EscapeDialog.InstantActionKey(
-            Mech3.CampaignSequence.ChapterNumber(chapter), letter);
-        var sheet = UI.Screens.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
-        if (sheet == null)
-        {
-            Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
-            return;
-        }
-
-        var pause = new Flight.Modes.PauseState();
-        var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet,
-            () => UI.Screens.PauseReadout.Empty);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
-        layer.AddChild(board);
-        AddChild(layer);
-        pause.TryToggle(0);
-        Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
-    }
-
-    // A Dogfight's pause sheet with no match behind it: a Deathmatch on that chapter's environment
-    // with nobody on a team. docs/org/pause-screen.md.
-    private void ShowMultiplayerPauseSheet(string chapter)
-    {
-        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, DogfightMissionType.Deathmatch, false) is not { } key)
-        {
-            Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
-            return;
-        }
-
-        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
-        if (sheet == null)
-        {
-            Log.Warn("ui", $"pause aid: no escape.zrd or Loading.zrd sheet for {chapter} ({key})");
-            return;
-        }
-
-        var pause = new Flight.Modes.PauseState();
-        var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet,
-            () => UI.Screens.PauseReadout.Empty);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
-        layer.AddChild(board);
-        AddChild(layer);
-        pause.TryToggle(0);
-        Log.Info("ui", $"pause aid: {chapter} Dogfight draws {sheet.State.Key}");
-    }
-
-    private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, string missionZrdr, int completed)
-    {
-        var objectives = UI.Menu.BriefingObjectives.Load(
-            Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(_messagesPath));
-        var rows = new List<UI.Screens.PauseObjective>(objectives.Count);
-        for (int i = 0; i < objectives.Count; i++)
-        {
-            rows.Add(new UI.Screens.PauseObjective(objectives[i].Text, i < completed));
-        }
-
-        var icons = new List<UI.Screens.PauseWorldIcon>();
-        if (sheet.Shared.OwnShip.Length > 0
-            && Flight.Modes.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
-        {
-            // Through the readout's own conversion off a nose vector, never off the spawn's heading
-            // degrees. Those are the mission data's yaw, which runs opposite the compass.
-            var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
-            if (UI.Screens.PauseReadout.Icon(
-                sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
-                nose.X, nose.Z) is { } ship)
-            {
-                icons.Add(ship);
-            }
-
-            if (sheet.State.Map is { } map
-                && !map.TryProject(init.Spawn.Position.X, init.Spawn.Position.Z, out _))
-            {
-                Log.Info("ui",
-                    $"pause aid: the mission's spawn sits off the chart's window, so no ownship icon draws");
-            }
-        }
-
-        return new UI.Screens.PauseReadout(rows, SeatedMemento(), icons);
-    }
-
-    // The picture the seated profile hangs, read back off the store the cabin's chooser writes.
-    // This screen, a real pause and the cabin wall all draw the one name. A launch or a door with
-    // no profile behind it draws the seeded keepsake (docs/org/pause-screen.md).
-    private string SeatedMemento() =>
-        CampaignMementos.BitmapFor(
-            _spec.CampaignProfile is { } name
-                ? CampaignProfileStore.ForSession(_spec.ProfilesDir).Load(name)
-                : null);
-
-    // What the load screen calls this flight: an Instant Action mission by the wizard's own name
-    // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName, that is the log
-    // file's and the startup line's internal tag ("fly", "stunt"), which is not a player's word.
-    private string LaunchSubject()
-    {
-        if (_spec.IaDef is { } def)
-        {
-            return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
-        }
-        return _spec.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
-            : _spec.Versus ? "Dogfight" : "Free Flight";
     }
 
     private void HideLoadScreen()
@@ -1737,7 +1470,7 @@ public partial class Launcher : Node3D
             Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
-            ToggleGraphicsMode = () => _pendingGraphicsToggle = true,
+            ToggleGraphicsMode = _settings.RequestToggle,
             PauseOptions = BuildPauseOptions,
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
@@ -1980,28 +1713,7 @@ public partial class Launcher : Node3D
                 false, missionType.Length > 0 ? missionType : _spec.IaDef?.MissionType);
         }
 
-        // The pause sheet stands only while a mission is halted, so a shot of it needs the same
-        // kind of door. Its arguments name the campaign mission and how many of its objectives
-        // have been marked, since that is the whole of what the reference stills differ by.
-        if (aid.StartsWith("pauseboard-ia", System.StringComparison.Ordinal))
-        {
-            var parts = aid.Split(':');
-            ShowInstantActionPauseSheet(
-                parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1",
-                parts.Length > 2 && parts[2].Length > 0 ? parts[2] : "stunt_flying");
-        }
-        else if (aid.StartsWith("pauseboard-mp", System.StringComparison.Ordinal))
-        {
-            var parts = aid.Split(':');
-            ShowMultiplayerPauseSheet(parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1");
-        }
-        else if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
-        {
-            var parts = aid.Split(':');
-            ShowPauseSheet(
-                parts.Length > 1 && int.TryParse(parts[1], out int cm) ? cm : 1,
-                parts.Length > 2 && int.TryParse(parts[2], out int done) ? done : 0);
-        }
+        Boards.ShowPauseAid(aid, this);
 
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
         // what the original's own mail(11004) does (docs/org/music.md).
@@ -2143,129 +1855,15 @@ public partial class Launcher : Node3D
             return;
         }
 
-        PersistOptions(applied);
+        _settings.Persist(applied, _spec, _session);
         _menuHost.Deactivate();
         ShowMenu(MenuReturnDestination.TopLevel);
-    }
-
-    // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // The display settings, the mix, the word settings and the graphics mode apply now.
-    // ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
-    // them here. The pause leaf puts the head turn and targeting switch on the seats flying now
-    // (PausePreferences.FeedGameOptions).
-    private void PersistOptions(OptionsApplyExit applied)
-    {
-        var store = OptionsStore.UserOptions();
-        var options = store.Load();
-        options.GraphicsMode = applied.Graphics;
-        options.Difficulty = applied.Difficulty;
-        options.NearestAfterKill = applied.NearestAfterKill;
-        options.Rumble = applied.Rumble;
-        options.DefaultView = applied.DefaultView;
-        options.AutoHeadTurn = applied.AutoHeadTurn;
-        options.MonitorIndex = applied.MonitorIndex;
-        options.Resolution = applied.Resolution;
-        options.DisplayMode = applied.DisplayMode;
-        options.VSync = applied.VSync;
-        foreach (var setting in Utils.WordSettings.All)
-            options.Words[setting] = applied.Words[setting];
-        options.AudioMaster = applied.AudioMaster;
-        options.AudioMusic = applied.AudioMusic;
-        options.AudioEffects = applied.AudioEffects;
-        options.AudioVoice = applied.AudioVoice;
-        store.Save(options);
-        // The display settings take effect now instead of at the next start, through the same calls
-        // the startup path makes and in the order the window needs them: the screen it sits on, the
-        // mode, the size, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).
-        MonitorSetting.Apply(MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens()));
-        DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
-        ResolutionSetting.Apply(
-            ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
-            GetWindow());
-        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
-        // The mix takes effect now too, through the same call the startup path makes. Apply is
-        // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
-        AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
-        // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
-        // pause sheet flies the rest of the sortie with a quiet pad.
-        PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
-        // Each word setting resolved again with the applied word in the saved slot, so its flag still
-        // beats it.
-        Utils.WordSettings.ResolveAll(_spec.WordFlags, applied.Words, _spec.Det);
-        Log.Info("world", $"word settings applied: {Utils.WordSettings.Describe()}");
-        // A mode switch puts every word setting on the world itself; otherwise each applies alone.
-        bool switching = GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced
-            && RequestGraphicsSwitch(enhanced, "options", save: false);
-        if (!switching)
-            Utils.WordSettings.ApplyAll(new LiveWorld(IsInstanceValid(_sun) ? _sun : null, _session));
-
-        // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
-        // apply and the gate keeps what boot gave it (see the arming above).
-        Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
-    }
-
-    // The live graphics-mode switch on this process's sun, Environment and session
-    // (EnhancedLook.Switch). It stalls a few frames, so a flying world takes it under RequestGraphicsSwitch.
-    private void SwitchGraphicsMode(bool enhanced, string why) =>
-        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _session, why);
-
-    // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
-    // With no world up it runs at once. Returns whether a switch runs. ⚠ Refuse it in a network
-    // session. Its shared world has no pause to hold it in, and the stall would halt one seat in a
-    // live match.
-    private bool RequestGraphicsSwitch(bool enhanced, string why, bool save)
-    {
-        if (_session is { InSession: true, Wire.Link: not null })
-        {
-            Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
-            return false;
-        }
-        if (_switchCover != null)
-        {
-            Log.Info("world", $"graphics mode: {why} ignored, a switch is already under way");
-            return false;
-        }
-        void Run()
-        {
-            SwitchGraphicsMode(enhanced, why);
-            if (save)
-                SaveGraphicsMode();
-        }
-        if (_session is not { InSession: true } session)
-        {
-            Run();
-            return true;
-        }
-        string subject = enhanced ? "SWITCHING TO ENHANCED GRAPHICS" : "SWITCHING TO ORIGINAL GRAPHICS";
-        var board = UI.Screens.LoadBoard.Build(_dataRoot, _zrdrPath, _messagesPath, false, subject, null);
-        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
-        _switchCover = SwitchCover.Begin(this, board, session.Pause, GameClock.Current, Run, why);
-        return true;
-    }
-
-    // A cover over a session being torn down: off at once, its hold released.
-    private void DropSwitchCover()
-    {
-        _switchCover?.Drop();
-        _switchCover = null;
-    }
-
-    // G's save, the one field it changes. Never under --det, whose runs must not write the player's
-    // options (the same rule the startup read keeps).
-    private void SaveGraphicsMode()
-    {
-        if (_spec.Det)
-            return;
-        var store = OptionsStore.UserOptions();
-        var options = store.Load();
-        options.GraphicsMode = GraphicsMode.Enhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default;
-        store.Save(options);
     }
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
     // own rebinding feature means a rebind over the pause edits the keymap the menu edits, saved
-    // through the one writer. PersistOptions is the apply. ⚠ No ShowMenu: the flight returns to
+    // through the one writer. LiveSettings.Persist is the apply. ⚠ No ShowMenu: the flight returns to
     // the sheet over its own world, not tearing down what the pause stands on. Null where no
     // layout reads.
     private UI.Screens.PausePreferences? BuildPauseOptions()
@@ -2274,7 +1872,8 @@ public partial class Launcher : Node3D
         var controls = _menuHost != null && _menuHost.Features.TryGet<ControlsFeature>(out var feature)
             ? feature
             : null;
-        return UI.Screens.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
+        return UI.Screens.PausePreferences.Build(_dataRoot, _originalLayout, controls,
+            applied => _settings.Persist(applied, _spec, _session), _menuAudio);
     }
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
@@ -2457,7 +2056,7 @@ public partial class Launcher : Node3D
         if (_session != null)
         {
             // Freed at the end of THIS frame, so the build owed for the next one finds it gone.
-            DropSwitchCover();
+            _settings.DropCover();
             _session.QueueFree();
             _session = null;
         }
@@ -2558,7 +2157,7 @@ public partial class Launcher : Node3D
 
         if (_session != null)
         {
-            DropSwitchCover();
+            _settings.DropCover();
             _session.QueueFree();
             _session = null;
         }

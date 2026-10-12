@@ -372,7 +372,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     }
 
     // The graphics row's description. The apply switches the running world
-    // (Launcher.RequestGraphicsSwitch), over a paused flight as well, so no restart is owed. A network
+    // (Launch/LiveSettings.cs), over a paused flight as well, so no restart is owed. A network
     // session refuses it, and the row draws dead.
     private static string GraphicsDescription() => CSVM.Utils.GraphicsMode.SwitchLocked
         ? "Select the lit world. A network game keeps the one it started with."

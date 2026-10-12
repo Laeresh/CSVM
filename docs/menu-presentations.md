@@ -343,7 +343,7 @@ set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`, and each word setting's own descr
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
 keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
-the running world at once (`Launcher.SwitchGraphicsMode`), so neither description owes a restart.
+the running world at once (`Launch/LiveSettings.cs`), so neither description owes a restart.
 Built-in's screen shows one row per registered word setting, which adds a View Distance row under
 its chooser (`Utils/ViewDistance.cs`), live the same way and marked as Enhanced only, and a Water
 Quality row under its shadow quality (`Utils/WaterQualitySetting.cs`), dead under Original, whose

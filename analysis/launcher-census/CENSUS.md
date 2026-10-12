@@ -2,7 +2,8 @@
 
 `CSVM/src/Launch/Launcher.cs` is the composition root (Main.tscn's root). This census groups its
 fields and the members that use them by the reason they change, names the module each group
-becomes, and records which groups this pass moved out and which wait for a later pass.
+becomes, and records which groups have moved out and which stay. Two passes have moved five groups:
+the first took groups 1 to 3, the second groups 7 and 8.
 
 ## How the counts were taken
 
@@ -15,10 +16,17 @@ cannot shed them.
 | | file lines | class lines | fields | constants | public/internal members |
 |---|---|---|---|---|---|
 | Launcher, before | 3852 | 3731 | 99 | 5 | 21 |
-| Launcher, after | 2751 | 2630 | 62 | 1 | 5 |
+| Launcher, after the first pass | 2751 | 2630 | 62 | 1 | 5 |
 | FrameInstruments (new) | 401 | 401 | 31 | 3 | 7 |
 | NetFlight (new) | 516 | 516 | 11 | 1 | 23 |
 | SeatFields (new) | 368 | 368 | 0 | 0 | 11 |
+| Launcher, before the second pass | 2745 | 2579 | 62 | 1 | 5 |
+| Launcher, after the second pass | 2344 | 2178 | 60 | 1 | 5 |
+| LiveSettings (new) | 231 | 216 | 7 | 0 | 7 |
+| LaunchBoards (new) | 282 | 262 | 0 | 0 | 3 |
+
+The second pass's class lines run from the class declaration to its closing brace, so they read
+lower than the first pass's for the same file; its file lines and field counts compare directly.
 
 The 37 fields that left are 29 instrument fields and 10 network fields, less the two that compose
 them (`_instruments`, `_net`). Two new fields in `FrameInstruments` (`_spec`, `_counters`) carry
@@ -105,12 +113,14 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
   `_pendingWrapup`, `_pendingLobbyLanding`, `_loadLayer`, `_launchFramesWaited`, `_loadStepsRun`,
   `_startHeldFrames`, `_startFade`.
 - Members: `BeginLaunch`, `RunOwedLaunch`, `TryLaunchSession`, `LaunchSession`, `RaiseStartCover`,
-  `DropStartCover`, `ShowLoadScreen`, `HideLoadScreen`, `LaunchBriefing`, `LaunchSubject`,
-  `CampaignLoadSheet`, `StartSessionFromMenu`, `StartCampaignFromMenu`, `Unpack`,
-  `BindMenuPads`, `OpenDebrief`, `RestartSession`, `ExitSession`, `ReturnToMenu`, `BlankAndQuit`,
-  `LaunchedFrom`.
+  `DropStartCover`, `ShowLoadScreen`, `HideLoadScreen`, `StartSessionFromMenu`,
+  `StartCampaignFromMenu`, `Unpack`, `BindMenuPads`, `OpenDebrief`, `RestartSession`, `ExitSession`,
+  `ReturnToMenu`, `BlankAndQuit`, `LaunchedFrom`.
 - Reason to change: how a session starts and ends. This is what the composition root is for, and
-  every other group hangs off it, so it stays.
+  every other group hangs off it, so it stays. What the load screen draws (`LaunchBriefing`,
+  `LaunchSubject`, `CampaignLoadSheet`) changes with the decoded screens rather than with the
+  lifecycle, so the second pass moved it with group 8; `ShowLoadScreen` keeps the layer and its
+  timing.
 
 ### 6. Menu host, presentation and menu input: stays (later pass)
 
@@ -123,32 +133,43 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
 - Reason to change: the menu presentations and their seat (Steam's on-screen keyboard, the
   stamp's messagebox, the pointer seat).
 - Why it waits: `ShowMenu` is entangled with the lifecycle (it is the end of every
-  `ReturnToMenu`) and with the board aids below, and `OnMenuExit` is the sink that starts sessions.
-  Splitting it means a callback surface as wide as the group. A later pass should first move the
-  board aids out (group 8), then see whether the host's construction alone is a module.
+  `ReturnToMenu`), and `OnMenuExit` is the sink that starts sessions. With the board aids gone,
+  `BuildMenuHost` is the remaining candidate, but it reads 14 launcher fields and hands the
+  presentations the node itself, so a module would carry a callback surface as wide as the group.
 
-### 7. Options apply and the graphics switch: stays (next candidate)
+### 7. Options apply and the graphics switch: moved to `LiveSettings.cs`
 
 - Fields (3): `_pendingGraphicsToggle`, `_switchCover`, `_debugSwitchesDone`; it also dresses the
-  sun and Environment of group 9.
-- Members: `ApplyOptions`, `PersistOptions`, `SwitchGraphicsMode`, `RequestGraphicsSwitch`,
-  `DropSwitchCover`, `ApplyShadowQuality`, `SaveGraphicsMode`, `ApplyViewDistance`,
-  `BuildPauseOptions`, and the display and graphics resolution block of `_Ready`.
-- Reason to change: the Options page's settings and how each applies live.
-- Why it waits: the seam is fair (it needs the sun, the Environment, the session and the data
-  paths), but the startup resolution in `_Ready` resolves the same settings a second way, and the
-  two should move together, which is a larger change than this pass. Docs and suites cite
-  `Launcher.ApplyOptions` and `Launcher.PersistOptions` by name in several places.
+  sun and Environment of group 9, which it is handed at construction.
+- Members: `PersistOptions` (now `Persist`), `SwitchGraphicsMode` and `RequestGraphicsSwitch`
+  (now the private `Request`), `DropSwitchCover` (now `DropCover`), `SaveGraphicsMode`, the
+  switch block of `_Process` (now `Tick`), and the two startup blocks of `_Ready`: the pacing
+  and window (`ApplyWindowAtLaunch`) and the graphics mode and word settings
+  (`ResolveGraphicsAtLaunch`).
+- Reason to change: the Options page's settings and how each reaches the process, at launch and
+  on an apply. The word settings registry, the water quality row and the four graphics settings'
+  shared resolver each changed `Launcher` for this reason.
+- What stays: `ApplyOptions` (it ends the presentation and shows the menu again) and
+  `BuildPauseOptions` (it reads the menu host's layout, controls and audio). Both hand the
+  choices to `Persist`. The two startup calls stay at their own points in `_Ready`, since the
+  vsync read must follow the options directory and the graphics resolution must follow the
+  `--det` block. The audio mix, haptics and three remake-only toggles read at launch stay in
+  `_Ready` too: each is one line among the process-wide reads of group 4.
 
-### 8. Screenshot board aids: stays (next candidate, clearest remaining seam)
+### 8. Load and pause boards: moved to `LaunchBoards.cs`
 
 - Fields: none. Members: `ShowPauseSheet`, `ShowInstantActionPauseSheet`,
-  `ShowMultiplayerPauseSheet`, `PauseAidReadout`, `CampaignMissionAt`, `SeatedMemento` (shared with
-  the load screen's chart sheet), and the `loadboard`/`pauseboard` branches of `ShowMenu`.
-- Reason to change: the decoded pause and load screens (the Dogfight pause strips).
-- Why it waits: it holds no state and reads only the data paths and the spec, so it is the
-  cleanest remaining split; it was left out only to keep this pass to the three groups whose state
-  moved. Its module would build each aid's layer and hand it to the launcher to parent.
+  `ShowMultiplayerPauseSheet`, `PauseAidReadout`, `CampaignMissionAt`, `SeatedMemento`, the
+  `pauseboard` branches of `ShowMenu` (now `ShowPauseAid`), the board half of `ShowLoadScreen`
+  with `LaunchBriefing`, `LaunchSubject` and `CampaignLoadSheet` (now `LoadScreen`), and the
+  switch cover's blackboard (now `SwitchScreen`).
+- Reason to change: the decoded pause and load screens (the Dogfight briefing on both, the
+  campaign chart sheet, the Instant Action dialog, the load bar's fractions).
+- Seam: clean. It holds no state; it reads the live spec and the three data paths, built per use
+  because an extraction's hand-back re-resolves them. `SeatedMemento` and `CampaignMissionAt` are
+  shared by the load screen's chart sheet and the pause door, which is why the load screen's
+  content moved with the aids. The `loadboard` branches stay in `ShowMenu`, since they stand the
+  launcher's own load layer.
 
 ### 9. Persistent rendering nodes and shader globals: stays
 
@@ -190,6 +211,7 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
 
 ## Order for a later pass
 
-Group 8 (board aids) first, since it holds no state. Then group 7 (options apply and graphics
-switch) together with the startup resolution it duplicates. Group 4's base paths go with any
-change to `LauncherContext`.
+Group 4's base paths, with group 11's extraction hand-back that re-resolves them, go with any
+change to `LauncherContext`, which `GameSession` and five suites construct. Group 6's
+`BuildMenuHost` and group 10's music are the next candidates; each needs its callers' sites
+reshaped (the presentations take the launcher node, and the cinemas call `PlayCinema` on it).

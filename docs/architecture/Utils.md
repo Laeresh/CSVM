@@ -314,7 +314,7 @@ fog instead of ending at the authored metres. Enhanced mode scales it by
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
-resolved by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every scene builder
+resolved at launch by `Launch/LiveSettings.cs` into the single boolean `GraphicsMode.Enhanced` every scene builder
 reads. `Set` is the live switch (`EnhancedLook.Switch`), and `SwitchLocked`, true in a network
 session, refuses one. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
 beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
@@ -334,7 +334,7 @@ anti-aliasing method. `SourceName` spells a source, or the fallback's rule, for 
 ## src/Utils/WordSettings.cs
 The registry of word settings, in Built-in row order, and `WordValues`, one word per registered setting with value equality: the options
 file's, a screen's staged ones, an apply's and a command line's. `OptionsStore`, `Spec/SessionSpec.cs`, `UI/Menu/OptionsChoices.cs`, the
-VIDEO page's word rows, `Launch/Launcher.cs` (`ResolveLaunch` at startup, `ResolveAll` on an apply, then `ApplyAll`), `Launch/EnhancedLook.cs`
+VIDEO page's word rows, `Launch/LiveSettings.cs` (`ResolveLaunch` at startup, `ResolveAll` on an apply, then `ApplyAll`), `Launch/EnhancedLook.cs`
 (`FollowMode` on a live switch) and `Launch/GameSession.cs` (`FollowPanes`) walk it. `ReadSaved` is the words' `--det` guard. A new setting
 is its own file, one line in `All` and an authored VIDEO row where it shows there; one that changes a session build adds it to
 `EnhancedLook.FollowWordSettings`.
@@ -345,7 +345,7 @@ The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAl
 key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
 written whichever mode won, since only the default follows the mode. The resolve runs at launch after `GraphicsMode.Resolve`, and again
 on a live mode switch or an Options apply, landing in the static `Method` and `Word`, whose one reader is `ViewportQuality.Apply`;
-`Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2 refuses a render scale above native, which
+`LiveSettings`' `[world] graphics mode:` line announces the word and its source. FSR 2.2 refuses a render scale above native, which
 `RenderScaleSetting.ClampFor` applies; its registry `Take` has the stored scale taken again under the new method.
 
 ## src/Utils/ShadowQualitySetting.cs
@@ -364,7 +364,7 @@ The Enhanced sea's water quality: `flat`, the sea-level sheet the faithful path 
 the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, otherwise `FallbackFor(linux, integrated)`,
 which is `flat` on Linux or on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`), so the Steam Deck runs flat, under
 the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store.
-`Launcher` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
+`Launch/LiveSettings.cs` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
 `Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. Only Built-in's Options screen shows a row.
 
 ## src/Utils/ViewportQuality.cs
@@ -399,8 +399,8 @@ the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the
 config key (true turns it on), then off and uncapped; a word outside `DisplayWords.VSyncChoices`
 reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
 `--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
-called, by `Launcher`'s startup and its Options apply, and logs the source that won. The cap is a
-render rate and reaches no simulation. Read `Launch/Launcher.cs` next for both call sites.
+called, by `Launch/LiveSettings.cs` at startup and on an Options apply, and logs the source that won. The cap is a
+render rate and reaches no simulation. Read `Launch/LiveSettings.cs` next for both call sites.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
@@ -430,7 +430,7 @@ over that: this is the one display setting whose saved value can name something 
 screen answers to is dropped like an unknown word, and the standing screen (the primary on a launch that has
 moved nothing) leaves a window where the player is looking. `SavedWord` holds the `--det` guard. `Apply` is
 the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a window already there; both of
-`Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
+`LiveSettings`' call sites make it before the mode and the size, a mode applied first filling the old screen.
 
 ## src/Utils/RenderScaleSetting.cs
 The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at. Above native the
@@ -439,7 +439,7 @@ without it. The words are `DisplayWords.RenderScaleChoices`, percentages of nati
 `WordSetting` over the saved `renderScale` word, then the `graphics.renderScale` config key, then native. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
 to 100. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
-reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
+reader is `ViewportQuality.Apply`; `LiveSettings`' `[world] graphics mode:` line announces it and any clamp.
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
