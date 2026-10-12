@@ -1002,11 +1002,12 @@ member, and it does not go here.
   it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
   suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
   only its C# wrapper, so a test node is freed with `Free()`.
-- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out: the
-  world's animation and the cutscene host advance in the frame, so the film holds until a skip and
-  whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
-  the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
-  3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
+- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out and never
+  runs a death's staggered `CALL_ANIMATION` chain: the world's animation and the cutscene host
+  advance in the frame, so the film holds until a skip and a chain kill never lands. Advance the
+  world runtime and tick the cutscene beside each step.** With both added, CM09's opening film handed
+  off by itself after 3193 steps on host and guest, and CM01's fuel-truck kill went from 1 destroyed
+  pool, the truck's, to 8 with the bridge among them.
 - **INSTR-98**, **Before calling a scripted trace a fault, read the same definition's own timed
   events against it: an effect the data fires at a node at a given instant says where the author
   put that node then.** C1/M05's attack-balloon trace reaches the sea at 57 s, which reads as a

@@ -436,6 +436,77 @@ public readonly record struct CoopWingmanMessage(byte Airframe, CoopFit Fit)
 }
 
 /// <summary>
+/// One object of the co-op host's persist log: its chapter, capturing story position, gamez node
+/// index and state. The host sends one per object to every guest before a launch's opener. A guest
+/// has no profile, so this is what opens its world on the host's wreckage. The lobby keeps them,
+/// and the word marked <see cref="Opens"/> replaces whatever an earlier launch left there.
+/// </summary>
+public readonly record struct CoopPersistMessage(byte Chapter, bool Destroyed, short Seq, int Node, float Health,
+    bool Opens = false)
+    : INetMessage<CoopPersistMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 12;
+
+    /// <summary>The node of the word that opens an empty log and carries no object.</summary>
+    public const int NoNode = -1;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopPersist;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopPersistMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte chapter = reader.ReadByte();
+        byte flags = reader.ReadByte();
+        short seq = reader.ReadInt16();
+        int node = reader.ReadInt32();
+        message = new CoopPersistMessage(chapter, (flags & 1) != 0, seq, node, reader.ReadSingle(), (flags & 2) != 0);
+        return reader.Valid;
+    }
+
+    /// <summary>A launch's whole log as it goes on the wire, its first word marked as opening it. An
+    /// empty log is one opening word with no object, so a guest never keeps an earlier launch's.
+    /// </summary>
+    public static List<CoopPersistMessage> Batch(IReadOnlyList<CoopPersistMessage> log)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+        var words = new List<CoopPersistMessage>(Math.Max(1, log.Count));
+        for (int i = 0; i < log.Count; i++)
+        {
+            words.Add(log[i] with { Opens = i == 0 });
+        }
+
+        if (words.Count == 0)
+        {
+            words.Add(new CoopPersistMessage(0, false, -1, NoNode, 0f, Opens: true));
+        }
+
+        return words;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Chapter);
+        writer.WriteByte((byte)((Destroyed ? 1 : 0) | (Opens ? 2 : 0)));
+        writer.WriteInt16(Seq);
+        writer.WriteInt32(Node);
+        writer.WriteSingle(Health);
+        return writer.Close();
+    }
+}
+
+/// <summary>
 /// A campaign film a co-op host started or ended. The ordinal counts the host's films, so a guest
 /// tells a new film from the end of the one it plays. Each guest plays the named film and ends it
 /// when the host's ends. Kept in the lobby like the flow, and never reaches a session.

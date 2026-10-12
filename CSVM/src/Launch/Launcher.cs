@@ -2284,6 +2284,10 @@ public sealed record LauncherContext
     /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>
     public System.Func<Net.CoopWingmanMessage?>? NetCoopWingman { get; init; }
 
+    /// <summary>The persist log as a co-op guest's host named it. Set on a co-op guest only, whose
+    /// director opens its world on it.</summary>
+    public System.Func<IReadOnlyCollection<Net.CoopPersistMessage>?>? NetCoopPersisted { get; init; }
+
     /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
     /// them at the launch. A host reads its own book and a guest the names its host sent. Null
     /// names each team by its number.</summary>

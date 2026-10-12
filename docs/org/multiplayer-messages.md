@@ -397,7 +397,7 @@ above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
 the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
-line and race call at `0x67` to `0x6A` ("Stunt race" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
+line and race call at `0x67` to `0x6A` ("Stunt race" below), and the lobby's co-op persisted object at `0x6B`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -1116,9 +1116,9 @@ The remake follows the original where it speaks and fills in what DirectPlay did
 
 ### Campaign co-op boards
 
-A co-op guest follows the host's boards through six more lobby messages, minted at `0x50` to
-`0x52`, `0x59`, `0x5A` and `0x5F` since the original has no campaign across a link. None reaches a
-session.
+A co-op guest follows the host's boards through seven more lobby messages, minted at `0x50` to
+`0x52`, `0x59`, `0x5A`, `0x5F` and `0x6B` since the original has no campaign across a link. None
+reaches a session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
@@ -1128,6 +1128,7 @@ session.
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
 | `0x5F` | Co-op hangar plane | reliable, host to each guest | the plane's place in the hangar at 4, the hangar's plane count at 5, the seat holding it at 6 (`0xFF` none), airframe at 7, flags at 8 (bit 0 a custom build), the stored fit at 9, the 26 build bytes and 16-byte build name as `0x5D`'s at 21, the plane's name in 33 bytes at 63 (96 bytes) |
+| `0x6B` | Co-op persisted object | reliable, host to each guest | chapter at 4, flags at 5 (bit 0 destroyed, bit 1 the launch's first word), the capturing story position as a signed 16-bit word at 6 (-1 for none), the gamez node index at 8 (-1 for the one word of an empty log), health as a float at 12 (16 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
 each, each the profile's stored value plus one so that zero reads as unset (stock).
@@ -1160,6 +1161,16 @@ the campaign's `wingman_1` from that word, and both machines build the host-owne
 same def with the same damage parts. A guest with no word flies the block's own def and says so in
 a warning; it never substitutes its own default. `0xFF` names no pick, which also flies the block's
 def. A guest a patch older drops `0x59` as unknown and flies the old default.
+Beside the wingman the host sends one co-op persisted object per state of its profile's
+cross-mission persist log, every chapter, as the profile file stores them. The launch's first word
+is marked, and an empty log goes as one marked word with no object. The guest's lobby drops what it
+held on the marked word and keeps one state per chapter and node, so a host that seats another
+profile leaves no earlier wreckage behind on its guests. The guest's director takes
+them into its in-memory profile, so its world opens the mission on the host's wreckage silently,
+before its first step, as the host's does. Nothing reaches the guest's disk. Every launch sends the
+whole log, so a guest that joined between missions has it, and a guest joining while the host
+flies waits in the cabin for the next launch. A guest a patch older drops `0x6B` and opens on the
+bootstrap world.
 A co-op film names the campaign film the host's board has up: a chapter's opening film before the
 cabin, or the closing film before the book. The host sends it playing when the film starts and
 again with the same ordinal and playing clear when it ends, played out or skipped, and it goes

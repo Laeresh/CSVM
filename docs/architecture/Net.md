@@ -373,13 +373,14 @@ key and ordinal) and `WorldEventMessage`, whose `NetWorldEvent` code says what i
 Ids and phase mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetCoopMessages.cs
-The campaign co-op boards' six messages, all reliable and all kept in `NetLobby`, not a session.
+The campaign co-op boards' seven messages, all reliable and all kept in `NetLobby`, not a session.
 `CoopFlowMessage` is the host's boards as one guest follows them: the screen, the mission, the
 round of picks (`Epoch`), the guest's player number and further seats (`Extra`), the Ready mask, the hangar and the debrief's
 result. `CoopPickMessage` is one seat's airframe, `CoopFit`, name, Ready, Left and hangar `Plane`
 under its round, with its `Local` place at the guest's machine and whether `More` follow. `CoopHangarMessage` is one host hangar plane with its fit, build, name and holding
-seat. Before the opener `CoopSeatFitMessage` gives a seat's fit and `CoopWingmanMessage` the
-wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
+seat. Before the opener `CoopSeatFitMessage` gives a seat's fit, `CoopWingmanMessage` the wingman's
+and `CoopPersistMessage` one host persist-log object, a launch's first replacing the lobby's whole
+set; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.

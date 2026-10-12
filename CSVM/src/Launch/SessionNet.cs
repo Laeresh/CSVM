@@ -96,6 +96,7 @@ internal sealed class SessionNet
         TeamNames = ctx.NetTeamNames;
         // Every guest binds the wingman from its host's word, and one with no word says so loudly.
         CoopWingman = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopWingman ?? (() => null) : null;
+        CoopPersisted = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopPersisted : null;
         Clock = ctx.NetHandshake is { } handshake
             ? new Net.NetClockSlew(handshake.HostClock)
             : null;
@@ -123,6 +124,9 @@ internal sealed class SessionNet
 
     /// <summary>A guest's word of the host's co-op wingman, null on a host and offline.</summary>
     public Func<Net.CoopWingmanMessage?>? CoopWingman { get; }
+
+    /// <summary>A guest's word of the host's persist log, null on a host and offline.</summary>
+    public Func<IReadOnlyCollection<Net.CoopPersistMessage>?>? CoopPersisted { get; }
 
     /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
     /// them.</summary>

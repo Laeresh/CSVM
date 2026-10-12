@@ -1650,7 +1650,8 @@ internal static class NetCombatSuites
             Func<CoopWingmanMessage?>? coopWingman = null,
             Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
             IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null,
-            Action? lobbyLanding = null, UI.Menu.PresentationId? presentation = null)
+            Action? lobbyLanding = null, UI.Menu.PresentationId? presentation = null,
+            Func<IReadOnlyCollection<CoopPersistMessage>?>? coopPersisted = null)
         {
             var pane = new SubViewport
             {
@@ -1699,6 +1700,7 @@ internal static class NetCombatSuites
                 NetAirframes = transport == null ? null : airframes ?? AirframesFor(spec),
                 NetSeatFit = seatFit,
                 NetCoopWingman = coopWingman,
+                NetCoopPersisted = coopPersisted,
                 NetSeatBuild = seatBuild,
                 NetTeamNames = teamNames,
             });

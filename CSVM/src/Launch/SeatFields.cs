@@ -45,6 +45,14 @@ internal static class SeatFields
         return CampaignDirector.CoopWingmanOf(def);
     }
 
+    /// <summary>The persist log a co-op host's launch names to its guests, read off
+    /// <paramref name="profile"/> as the host's own director loads it. Empty with no profile or an
+    /// unreadable one, whose director carries nothing either.</summary>
+    internal static List<Net.CoopPersistMessage> CoopPersistedFor(string profile, string? profilesDir) =>
+        profile.Length > 0 && CampaignProfileStore.ForSession(profilesDir).Load(profile) is { } def
+            ? CampaignDirector.CoopPersistedOf(def)
+            : new List<Net.CoopPersistMessage>();
+
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
     /// the fits its launch carried, the first named by the door's callsign. Then comes every seat a
     /// guest still on the wire was given, in the plane, fit and name its pick carried. A machine's

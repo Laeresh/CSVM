@@ -75,6 +75,17 @@ internal static class NetCoopMissionSuites
     // (read-behind and link), some 12 m at cruise.
     private const float SeatReplicaM = StartGrid.SlotSpacingDefault * 0.5f;
 
+    // The persist-log suite's host profile, and C3's suspension bridge: CM01 (M01) drops it and CM02
+    // (M05) opens on it. In CM01 its fuel truck's chain reaction drops it by animation, given until
+    // well past the chain's EVENT_OFFSET stagger.
+    private const string LogHost = "LogHost";
+    private const string BridgeChapter = "C3";
+    private const string BridgeEarlierMission = "M01";
+    private const string BridgeLaterMission = "M05";
+    private const string BridgeDef = "susp_bridge";
+    private const string BridgeTruckDef = "bridge_truck01";
+    private const int ChainSteps = 60 * 4;
+
     // The wingman suite's host profile and its wingman pick, the Fury, which no profile-less director
     // binds. The armour-piercing ammunition rides the wire and outranks the Fury's AI def's guns.
     private const string WingHost = "WingHost";
@@ -336,6 +347,140 @@ internal static class NetCoopMissionSuites
             {
                 Directory.Delete(store, recursive: true);
             }
+        }
+    }
+
+    [Suite("net-coop-persist-log",
+        "CM02 (C3/M05) flown by a host whose profile's persist log holds CM01's dropped suspension "
+        + "bridge, and two guests over a lossy loopback: the host's launch names the log to each guest, "
+        + "the guest that takes it opens its world with the bridge down in the dropped pose before its "
+        + "first step, as the host's opens, with no profile store of its own, while a guest built "
+        + "without the log stands the bridge whole")]
+    internal static void CCoopGuestOpensOnTheHostsPersistLog(TestContext ctx)
+    {
+        var mission = BridgeMission(ctx, BridgeLaterMission);
+        var stock = StockLoadouts.Load();
+        string store = Path.Combine(Path.GetTempPath(), $"csvm-coop-persist-{System.Environment.ProcessId}");
+        var profile = CampaignProfileDef.NewProfile(LogHost);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, BridgeChapter);
+        var bridgeNodes = (ctx.Decode?.Gamez(gamezPath) ?? GameZ.Load(gamezPath)).Nodes
+            .Where(n => n.Name.Equals(BridgeDef, StringComparison.OrdinalIgnoreCase)).Select(n => n.Index).ToArray();
+        int? carriedSeq = CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(ctx.ZrdrPath), mission.Seq)?.Seq;
+        ctx.Check(bridgeNodes.Length > 0 && carriedSeq != null,
+            $"the chapter gamez names the bridge and {BridgeChapter}/{BridgeLaterMission} has an earlier mission to carry it from (nodes {string.Join(",", bridgeNodes)}, seq {carriedSeq})");
+        if (bridgeNodes.Length == 0 || carriedSeq is not { } earlier)
+        {
+            return;
+        }
+
+        profile.PersistLog.Merge(mission.Campaign, earlier,
+            bridgeNodes.Select(n => new PersistedObject(n, BridgeDef, BridgeDef, true, 0f)));
+        new CampaignProfileStore(store).Save(profile);
+
+        var mesh = LoopbackTransport.Mesh(3, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2407));
+        mesh[1].Disconnect(2);
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var bare = Door(mesh[2]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        Ends? bareEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, LogHost, 1);
+            guest.OpenJoin();
+            bare.OpenJoin();
+            Pump(SettleSteps, host, guest, bare);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest, bare);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            bare.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest, bare);
+            if (!guest.IsCoopGuest || !bare.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"both guests join the host's campaign door and are Ready ({guest.Stage}, {bare.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, host.BuildLaunch()!, HostAmmo, out _, LogHost, store);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host);
+            bareEnd = Follow(ctx, mission, stock, bare, default, hostEnd, host, hostLog: false);
+            if (!hostEnd.Built || !guestEnd.Built || !bareEnd.Built)
+            {
+                ctx.Check(false, $"all three campaign sessions build (host {hostEnd.Built}, guest {guestEnd.Built}, control {bareEnd.Built})");
+                return;
+            }
+
+            ctx.Check(guest.CoopPersisted?.Count(s => s.Destroyed && bridgeNodes.Contains(s.Node)) == bridgeNodes.Length,
+                $"the host's launch names the carried bridge to the guest ({guest.CoopPersisted?.Count ?? -1} state(s))");
+            BridgeOpensDown(ctx, hostEnd, guestEnd, bareEnd);
+        }
+        finally
+        {
+            bareEnd?.Close();
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            bare.Discard();
+            guest.Discard();
+            host.Discard();
+            if (Directory.Exists(store))
+            {
+                Directory.Delete(store, recursive: true);
+            }
+        }
+    }
+
+    [Suite("net-coop-chain-kill",
+        "CM01 (C3/M01) flown by a host and one guest over a lossy loopback: the host's kill of the "
+        + "fuel truck parked on the suspension bridge crosses as a pool event, and the bridge its chain "
+        + "reaction drops by animation, which no pool event carries, falls on the guest too in its own "
+        + "replay of the truck's death, so both machines end with the same pools destroyed")]
+    internal static void CCoopChainKillFallsOnEveryMachine(TestContext ctx)
+    {
+        var mission = BridgeMission(ctx, BridgeEarlierMission);
+        var stock = StockLoadouts.Load();
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2408));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, "Host", 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            if (!guest.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"the guest joins the host's campaign door and is Ready ({guest.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, HostAmmo, out _);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both campaign sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            ChainKillMatches(ctx, new[] { hostEnd, guestEnd }, new[] { host, guest });
+        }
+        finally
+        {
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
         }
     }
 
@@ -722,6 +867,99 @@ internal static class NetCoopMissionSuites
         return mission;
     }
 
+    private static CampaignMission BridgeMission(TestContext ctx, string folder)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
+        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+            .FirstOrDefault(m => m!.Value.ChapterFolder.Equals(BridgeChapter, StringComparison.OrdinalIgnoreCase)
+                                 && m.Value.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))
+            ?? throw new SuiteSkippedException($"cm_sequence carries no {BridgeChapter}/{folder}");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, BridgeChapter), $"{BridgeChapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, BridgeChapter), $"{BridgeChapter} gamez");
+        return mission;
+    }
+
+    // Read as the sessions stand built, before any machine has stepped its world once.
+    private static void BridgeOpensDown(TestContext ctx, Ends host, Ends guest, Ends bare)
+    {
+        var (hostBridge, hostDown) = Bridge(host);
+        var (guestBridge, guestDown) = Bridge(guest);
+        var (bareBridge, bareDown) = Bridge(bare);
+        string reading = $"host {hostBridge?.Status}/down {hostDown}, guest {guestBridge?.Status}/down {guestDown}, control {bareBridge?.Status}/down {bareDown}";
+        ctx.Check(hostBridge is { Status: DestructibleRegistry.State.Destroyed } && hostDown,
+            $"the host opens {BridgeLaterMission} with the bridge down off its own profile's log ({reading})");
+        ctx.Check(guestBridge is { Status: DestructibleRegistry.State.Destroyed, Health: <= 0f } && guestDown,
+            $"the guest opens {BridgeLaterMission} with the bridge down in the dropped pose before its first step ({reading})");
+        ctx.Check(bareBridge is { Status: DestructibleRegistry.State.Healthy } && !bareDown,
+            $"ABLE-TO-FAIL CONTROL: a guest built without the host's log stands the bridge whole ({reading})");
+        ctx.Check(guest.Session.Campaign is { HasStore: false },
+            $"the guest's director takes the log with no profile store to write it to");
+    }
+
+    // The bridge's live pool, the chapter's one, and whether the deck's dropped pieces are hidden.
+    private static (DestructibleRegistry.Instance? Pool, bool Down) Bridge(Ends end)
+    {
+        if (end.Session.Wire.World?.World is not { } runtime)
+        {
+            return (null, false);
+        }
+
+        var pool = runtime.Destructibles.All.FirstOrDefault(i => i.Def.Name.Equals(BridgeDef, StringComparison.OrdinalIgnoreCase));
+        if (pool == null)
+        {
+            return (null, false);
+        }
+
+        bool Hidden(string piece) => runtime.FindNodes(piece, pool.Anchor).Any(n => !n.Visible);
+        return (runtime.Destructibles.Resolve(pool.Anchor) ?? pool, Hidden("rope1") && Hidden("part5"));
+    }
+
+    // The live path. The truck's death crosses as a pool event. No pool event carries the bridge kill
+    // its chain reaction makes by animation, so the guest's bridge falls only in its own replay.
+    private static void ChainKillMatches(TestContext ctx, Ends[] ends, NetPlayFeature[] doors)
+    {
+        Fly(SettleSteps, ends, doors);
+        var runtimes = ends.Select(e => e.Session.Wire.World?.World).ToArray();
+        if (runtimes[0] is not { } hostWorld || runtimes[1] is not { } guestWorld)
+        {
+            ctx.Check(false, $"both machines carry a world runtime");
+            return;
+        }
+
+        var (standing, _) = Bridge(ends[1]);
+        ctx.Check(standing is { Status: DestructibleRegistry.State.Healthy },
+            $"ABLE-TO-FAIL CONTROL: the guest's bridge stands before the host's kill ({standing?.Status})");
+        var truck = hostWorld.Destructibles.All.FirstOrDefault(i => i.Def.Name.Equals(BridgeTruckDef, StringComparison.OrdinalIgnoreCase));
+        int before = DestroyedPools(hostWorld).Count;
+        bool struck = truck != null && hostWorld.DamageAt(truck.Anchor, truck.MaxHealth + 1f);
+        // The chain's calls are staggered in the world's animation, which a frame steps (INSTR-97).
+        for (int i = 0; i < ChainSteps; i++)
+        {
+            FlyAnimated(ends, doors, runtimes);
+        }
+
+        var hostDead = DestroyedPools(hostWorld);
+        var guestDead = DestroyedPools(guestWorld);
+        var (hostBridge, hostDown) = Bridge(ends[0]);
+        var (guestBridge, guestDown) = Bridge(ends[1]);
+        string reading = $"host {hostDead.Count} destroyed ({before} before), guest {guestDead.Count}; host only [{string.Join(", ", hostDead.Except(guestDead))}], guest only [{string.Join(", ", guestDead.Except(hostDead))}]; bridge host {hostBridge?.Status}/down {hostDown}, guest {guestBridge?.Status}/down {guestDown}";
+        ctx.Check(struck && hostBridge is { Status: DestructibleRegistry.State.Destroyed },
+            $"the host's kill of {BridgeTruckDef} drops the bridge by its chain reaction ({reading})");
+        ctx.Check(guestBridge is { Status: DestructibleRegistry.State.Destroyed } && guestDown == hostDown,
+            $"the guest's bridge drops too, in its own replay of the truck's death, in the host's pose ({reading})");
+        ctx.Check(hostDead.SetEquals(guestDead),
+            $"both machines end the chain with the same pools destroyed ({reading})");
+        ctx.Note($"live chain kill: {reading}");
+    }
+
+    private static HashSet<string> DestroyedPools(AnimRuntime world) =>
+        world.Destructibles.All
+            .Where(i => (world.Destructibles.Resolve(i.Anchor) ?? i).Status == DestructibleRegistry.State.Destroyed)
+            .Select(i => $"{i.Def.Name}@{i.Anchor.Name}")
+            .ToHashSet();
+
     // The host's restart in the launcher's order: its session freed, the door's relaunch, the new
     // field on the same carrier. The guest then flies on until the new round reaches it, and
     // follows the way its menu does.
@@ -1092,6 +1330,7 @@ internal static class NetCoopMissionSuites
         (var roster, seatFits) = SeatFields.CoopLaunchField(door, launch.Transport, planes, new[] { own }, stock);
         door.TellSeatFits(seatFits);
         door.TellCoopWingman(SeatFields.CoopWingmanFor(profile, profilesDir));
+        door.TellCoopPersisted(SeatFields.CoopPersistedFor(profile, profilesDir));
         var fits = seatFits;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir), launch.Transport,
             isHost: true, HostSeed, roster, Flight.Hangar.StockAirframes.Nodes,
@@ -1100,8 +1339,9 @@ internal static class NetCoopMissionSuites
 
     // A guest's launch: its door waits for the host's opener while the host flies. It then builds a
     // session with no profile, its own fit on its own seat and the host's word on every other.
+    // Without hostLog it builds as a guest that never heard the host's persist log, a suite's control.
     private static Ends Follow(TestContext ctx, CampaignMission mission, StockLoadouts stock,
-        NetPlayFeature door, CoopFit fit, NetCombatSuites.Ends host, NetPlayFeature hostDoor)
+        NetPlayFeature door, CoopFit fit, NetCombatSuites.Ends host, NetPlayFeature hostDoor, bool hostLog = true)
     {
         for (int i = 0; i < OpenerSteps && !door.CoopLaunchDue; i++)
         {
@@ -1118,7 +1358,8 @@ internal static class NetCoopMissionSuites
         var launch = door.BuildLaunch()!;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock)), launch.Transport,
             isHost: false, HostSeed + 1, null, Flight.Hangar.StockAirframes.Nodes,
-            seat => SeatFields.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman);
+            seat => SeatFields.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman,
+            coopPersisted: hostLog ? () => door.CoopPersisted : null);
     }
 
     // A guest flying several seats launches as a guest with one: one pane per seat its host gave it.
@@ -1139,7 +1380,7 @@ internal static class NetCoopMissionSuites
             Enumerable.Repeat(plane, seats).ToArray(), seats, Enumerable.Repeat<LoadoutChoice?>(null, seats).ToArray());
         return NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: false, HostSeed + 1, null,
             Flight.Hangar.StockAirframes.Nodes, seat => SeatFields.CoopSeatFitFor(seat, null, door, stock),
-            () => door.CoopWingman);
+            () => door.CoopWingman, coopPersisted: () => door.CoopPersisted);
     }
 
     // The guest's two seats on both machines: flown by the guest, chased from samples on the host.

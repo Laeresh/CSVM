@@ -676,7 +676,7 @@ public partial class GameSession : Node3D
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
-        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath, _wire.CoopWingman);
+        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath, _wire.CoopWingman, _wire.CoopPersisted);
         if (_campaign is { } campaign)
         {
             // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the

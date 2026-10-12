@@ -1295,6 +1295,31 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void ACoopPersistedObjectRoundTripsItsChapterSeqNodeAndStateInSixteenBytes()
+    {
+        Assert.Equal(16, CoopPersistMessage.Size);
+        Assert.Equal(0x6B, (int)NetMessageType.CoopPersist);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopPersist));
+        Span<byte> buffer = stackalloc byte[CoopPersistMessage.Size];
+        foreach (var sent in new[]
+        {
+            new CoopPersistMessage(6, true, 0, 3021, 0f),
+            new CoopPersistMessage(2, false, -1, 70000, 12.5f, Opens: true),
+            new CoopPersistMessage(0, false, -1, CoopPersistMessage.NoNode, 0f, Opens: true),
+        })
+        {
+            Assert.Equal(CoopPersistMessage.Size, sent.Write(buffer));
+            Assert.True(CoopPersistMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        // ABLE-TO-FAIL CONTROL: a film word is not a persisted object.
+        Span<byte> film = stackalloc byte[CoopFilmMessage.Size];
+        new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2).Write(film);
+        Assert.False(CoopPersistMessage.TryRead(film, out _));
+    }
+
+    [Fact]
     public void ACoopHangarPlaneRoundTripsItsPlaceHolderFitBuildAndName()
     {
         Assert.Equal(96, CoopHangarMessage.Size);
