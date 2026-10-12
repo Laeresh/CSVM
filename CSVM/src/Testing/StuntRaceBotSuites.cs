@@ -43,7 +43,8 @@ internal static class StuntRaceBotSuites
     [Suite("stunt-race-bot",
         "a local stunt race of one pane and one ace bot over the run chapter's IA1 course: the launch seats "
         + "the bot, which carries no weapons and races under its callsign; the bot flies every Danger Zone "
-        + "through its own gate test, steering between them and running each on its ribbon; crashed "
+        + "through its own gate test, steering between them and running each on its ribbon, locking on no "
+        + "faster than the rail check's top lock speed; crashed "
         + "once after its second zone it returns unattended to that zone's exit with its zones and clock "
         + "kept; it completes the run inside the window and the race board shows its time under its "
         + "callsign; once done it starts another run while the window is open; and the ABLE-TO-FAIL "
@@ -244,6 +245,8 @@ internal static class StuntRaceBotSuites
             var racer = race.Of(BotSeat);
             ctx.Check(racer?.Callsign == Callsign && bot.Loadout == null && pilot.Gunner == null && pilot.Rocketeer == null,
                 $"[{cell}] the bot races as '{racer?.Callsign}' and carries no weapons (loadout {bot.Loadout != null}, gunner {pilot.Gunner != null})");
+            ctx.Check(bots.RunsSawWorld,
+                $"ABLE-TO-FAIL CONTROL: [{cell}] the run table's world ray, at fill time, strikes the built world below {run.Zones[0].PathName}'s entry");
             bots.BotObjective = objective;
             int steps = limit ?? Steps(race.WindowSeconds + StuntRace.FinalRunCap);
             return objective ? Completes(ctx, session, race, bot, steps) : Idles(ctx, race, run, session, steps);
@@ -266,19 +269,37 @@ internal static class StuntRaceBotSuites
         run.ZoneCompleted += zone => cleared.Add($"{zone.DzName}@{zone.CompletedAt:0.0}");
         int steps = 0;
         bool crashed = false;
+        bool approaching = false;
+        float lastMps = 0f;
+        float fastestLockMps = 0f;
+        int locks = 0;
         while (racer.RunsFinished == 0 && steps < limit)
         {
             Step(session, ++steps);
+
+            // The approach locks on at the speed the step before it left.
+            var mode = bot.Pilot!.Machine?.Mode;
+            if (approaching && mode == AiMode.NavigatingDangerZone)
+            {
+                locks++;
+                fastestLockMps = Mathf.Max(fastestLockMps, lastMps);
+            }
+
+            approaching = mode == AiMode.ApproachingDangerZone;
+            lastMps = bot.WorldVelocity.Length();
             if (!crashed && run.CompletedCount == 2 && !bot.Crashed)
             {
                 crashed = true;
                 steps += CrashAndReturn(ctx, session, bot, run);
+                approaching = false;
             }
         }
 
-        ctx.Note($"[{cell}] {session.Spec.Chapter}: zones in the order cleared {string.Join(", ", cleared)}, best {Time(racer)} ({steps} steps)");
+        ctx.Note($"[{cell}] {session.Spec.Chapter}: zones in the order cleared {string.Join(", ", cleared)}, best {Time(racer)} ({steps} steps), fastest of {locks} locks {fastestLockMps:0.0} m/s");
         ctx.Check(racer.RunsFinished == 1 && racer.BestTime is > 0f && cleared.Count >= run.TotalCount,
             $"[{cell}] the bot completes a run of all {run.TotalCount} zones (best {Time(racer)}, {racer.MostZones} zones at most, {steps} steps)");
+        ctx.Check(locks > 0 && fastestLockMps <= StuntBotObjective.TopLockSpeedMps,
+            $"[{cell}] the bot locks onto each ribbon no faster than the rail check's top lock speed ({locks} locks, fastest {fastestLockMps:0.0} m/s, top {StuntBotObjective.TopLockSpeedMps:0} m/s)");
         var row = RaceRows.Of(race.Standings(), race.ZoneCount).FirstOrDefault(r => r.Racer.Index == BotSeat);
         ctx.Check(row != null && row.Name == Callsign && row.Best == Time(racer),
             $"[{cell}] the race board shows its time under its callsign ({row?.Place} {row?.Name} {row?.Best} {row?.Runs})");

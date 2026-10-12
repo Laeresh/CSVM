@@ -18,44 +18,61 @@ namespace CSVM.Session.World;
 /// </summary>
 internal sealed class StuntRaceBots
 {
+    // How far below a zone's entry the fill-time probe looks for the built world, metres.
+    private const float WorldProbeM = 3000f;
+
     private readonly StuntRace _race;
     private readonly IReadOnlyList<PlayerRig> _seats;
     private readonly List<(int Seat, StuntBotObjective Objective)> _bots;
     private readonly BotOrderLog _log = new();
     private readonly Dictionary<int, int> _respawns = new();
 
-    private StuntRaceBots(StuntRace race, IReadOnlyList<PlayerRig> seats, List<(int, StuntBotObjective)> bots)
+    private StuntRaceBots(StuntRace race, IReadOnlyList<PlayerRig> seats, List<(int, StuntBotObjective)> bots, bool runsSawWorld)
     {
         _race = race;
         _seats = seats;
         _bots = bots;
+        RunsSawWorld = runsSawWorld;
     }
 
     /// <summary>Whether the bots take their objectives. Off, each holds its course and flies no zone;
     /// a suite's control turns it off.</summary>
     public bool BotObjective { get; set; } = true;
 
+    /// <summary>Whether the world ray the run table was decided with struck the built world below the
+    /// first zone's entry when the table was filled. A ray that strikes nothing refuses no end.</summary>
+    public bool RunsSawWorld { get; }
+
     /// <summary>One objective per bot seat flown here with a run of the course, its tier read off
-    /// <paramref name="roster"/>, every fluff drawn on one seeded stream. Null with none.</summary>
+    /// <paramref name="roster"/>, every fluff drawn on one seeded stream. Null with none. Every zone
+    /// end's run is decided here, once for every bot, against the built world.</summary>
     public static StuntRaceBots? For(StuntRace race, IReadOnlyList<PlayerRig> seats, IReadOnlyList<NetSeat> roster)
     {
         var rng = new Random(Rng.IntSeedFor(Rng.StuntBots));
         var bots = new List<(int, StuntBotObjective)>();
+        StuntBotObjective.RunTable? runs = null;
+        bool sawWorld = false;
         for (int seat = 0; seat < seats.Count && seat < roster.Count; seat++)
         {
-            if (seats[seat].Controller is { IsBotSeat: true, Pilot: { } pilot, Stunt: not null })
+            if (seats[seat].Controller is { IsBotSeat: true, Pilot: { } pilot, Stunt: { } run } bot)
             {
-                var rig = seats[seat];
-                var objective = new StuntBotObjective(roster[seat].Skill, rng)
+                // Every run's zones share the course's routes, so one bot's run keys the table for all.
+                if (runs == null)
                 {
-                    Blocked = (from, to) => rig.Controller is { } bot && GodotObject.IsInstanceValid(bot) && bot.WorldBlocksLine(from, to),
-                };
+                    Func<Vector3, Vector3, bool> blocked = bot.WorldBlocksLine;
+                    long mark = StartupProfile.Mark();
+                    runs = StuntBotObjective.RunsFrom(run.Zones, blocked);
+                    StartupProfile.Record("lead_ins", mark);
+                    sawWorld = SeesWorld(run.Zones, blocked);
+                }
+
+                var objective = new StuntBotObjective(roster[seat].Skill, rng) { Runs = runs };
                 pilot.CruiseThrottle = objective.CruiseThrottle;
                 bots.Add((seat, objective));
             }
         }
 
-        return bots.Count == 0 ? null : new StuntRaceBots(race, seats, bots);
+        return bots.Count == 0 ? null : new StuntRaceBots(race, seats, bots, sawWorld);
     }
 
     /// <summary>One step of every bot, before the seats step. A bot behind its count, down, or in a
@@ -108,6 +125,28 @@ internal sealed class StuntRaceBots
                 Log.Info("flight", $"stunt race: bot seat {seat} {order.Why}{zone}");
             }
         }
+    }
+
+    // The table's own ray, cast down from the first zone's entry. A world missing from the physics
+    // space refuses no lead-in, and the table would still look sound.
+    private static bool SeesWorld(IReadOnlyList<StuntZone> zones, Func<Vector3, Vector3, bool> blocked)
+    {
+        foreach (var zone in zones)
+        {
+            if (zone.Route is { } route)
+            {
+                var entry = route.End(false);
+                if (blocked(entry, entry + (Vector3.Down * WorldProbeM)))
+                {
+                    return true;
+                }
+
+                Log.Warn("flight", $"stunt race: the run table's world ray strikes nothing {WorldProbeM:0} m below {zone.PathName}'s entry, so it refused no lead-in");
+                return false;
+            }
+        }
+
+        return false;
     }
 
     // A crash's return puts the bot on the route of the zone it cleared last, often low between

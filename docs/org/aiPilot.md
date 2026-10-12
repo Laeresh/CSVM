@@ -1630,8 +1630,8 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
 
 1. The zones are taken nearest first, not in the mission's `dzones`
    order. The next zone is the one not yet cleared in the run whose lead-in point (2 below) is
-   nearest the bot, measured on the zone's own route from its nearer end, so the pick runs no rail
-   check. The pick holds until a try at the zone ends, a crash's return or a rerun: picking each step would
+   nearest the bot, measured on the run a try at it would fly: from its nearer end, or the other
+   where that one is refused, with any lead-in straight (3 below). The pick holds until a try at the zone ends, a crash's return or a rerun: picking each step would
    flip between two zones at about the same distance, and a fluffed zone keeps its pick. It is a
    greedy route, not the shortest tour. A zone whose route builds no ribbon is passed over, so its
    course is never completed.
@@ -1651,11 +1651,15 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its route. A zone needs one when the rail alone, locked just inside 105 m of the entry, misses
    a gate from any of 30 lock states (`StuntBotObjective.RailClears`): five bearings within the
    cone's 30 degrees of the ribbon's line, each level and 20 degrees down, at 60, 90 and 135 m/s
-   (an ace locks at about 131). The lead-in is then the shortest whole step of 50 m, up to 300 m
+   (`TopLockSpeedMps`; an ace locks at about 131, and the `stunt-race-bot` suite fails a lock
+   faster than 135). The lead-in is then the shortest whole step of 50 m, up to 300 m
    (`LeadInStepM`, `MaxLeadInM`), that passes; the added vertices are spaced at the first chord's
    length, so the straight is at least that long. A straight the world blocks along its length,
    probed by one ray, refuses that end, and the bot takes the zone from the other; with both ends
-   refused it flies the nearer end's own route. A campaign racer and a person fly the route as it is.
+   refused it flies the nearer end's own route. The decision does not depend on the bot, so it is
+   made once for every zone end at session start, against the built world, and shared by all the
+   session's bots (`StuntBotObjective.RunsFrom`); no race frame pays for it. A campaign racer and a
+   person fly the route as it is.
 4. Its tier sets its lever between zones and on the approach (`AiPilot.CruiseThrottle`: 1.0 ace,
    0.85 veteran, 0.7 novice) and the odds that a try is fluffed (0.05, 0.2, 0.35). A fluffed try passes 100 m over
    the entry (`FluffAboveM`) and comes round for another, from whichever end is nearer then. The rail

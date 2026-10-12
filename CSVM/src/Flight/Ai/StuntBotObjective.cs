@@ -67,8 +67,13 @@ public sealed class StuntBotObjective
     /// straight before a zone's entry on its first chord's line (<see cref="LeadInFor"/>).</summary>
     public const float LeadInStepM = 50f;
 
-    /// <summary>The remake's own: the longest straight a bot's run may add before an entry, metres.</summary>
+    /// <summary>The remake's own: the longest straight a bot's run may add before an entry, metres.
+    /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float MaxLeadInM = 300f;
+
+    /// <summary>The remake's own: the fastest lock state <see cref="RailClears"/> flies from, m/s. A bot
+    /// must lock no faster, or it outruns the check. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float TopLockSpeedMps = 135f;
 
     // The remake's own: how far below level the diving lock state RailClears flies points, degrees.
     private const float LockPitchDeg = 20f;
@@ -77,17 +82,17 @@ public sealed class StuntBotObjective
     private const int RailCheckSteps = 3600;
 
     // The remake's own lock states RailClears flies from. The bearings off the ribbon's line stay in
-    // the cone's half angle. The speeds, m/s, reach past an ace's 131 at the lock.
+    // the cone's half angle.
     private static readonly float[] LockBearingsDeg = { -30f, -15f, 0f, 15f, 30f };
-    private static readonly float[] LockSpeedsMps = { 60f, 90f, 135f };
+    private static readonly float[] LockSpeedsMps = { 60f, 90f, TopLockSpeedMps };
 
     private readonly Random _rng;
-    private readonly Dictionary<(DangerZoneRibbon, bool), float?> _leadIns = new();
     private int _zone = -1;
     private bool _farEnd;
     private DangerZoneRibbon? _route;
     private bool _fluffing;
     private bool _running;
+    private HashSet<(DangerZoneRibbon, bool)>? _unlisted;
 
     /// <summary>A bot of tier <paramref name="tier"/> whose fluffs draw on <paramref name="rng"/>.</summary>
     public StuntBotObjective(NetBotSkill tier, Random rng)
@@ -98,9 +103,9 @@ public sealed class StuntBotObjective
 
     public NetBotSkill Tier { get; }
 
-    /// <summary>Whether the world blocks the segment between two points, or null to test nothing. A
-    /// lead-in whose straight it blocks is refused.</summary>
-    public Func<Vector3, Vector3, bool>? Blocked { get; set; }
+    /// <summary>The run from each zone end, <see cref="RunsFrom"/>'s table, shared by every bot of a
+    /// session. Without one every end runs its own route.</summary>
+    public RunTable? Runs { get; init; }
 
     /// <summary>The bot's lever between zones: the remake's own, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
@@ -143,6 +148,33 @@ public sealed class StuntBotObjective
         }
 
         return null;
+    }
+
+    /// <summary>The ribbon a run flies from each end of each routed zone in <paramref name="zones"/>.
+    /// It is the route with <see cref="LeadInFor"/>'s lead-in, or null where that end is refused. The
+    /// decision does not depend on the bot, so a session makes it once for every bot.</summary>
+    public static RunTable RunsFrom(IEnumerable<StuntZone> zones, Func<Vector3, Vector3, bool>? blocked)
+    {
+        var ends = new RunTable();
+        foreach (var zone in zones)
+        {
+            if (zone.Route is not { } ribbon)
+            {
+                continue;
+            }
+
+            foreach (bool far in new[] { false, true })
+            {
+                ends[(ribbon, far)] = LeadInFor(zone, far, blocked) switch
+                {
+                    null => null,
+                    > 0f and var metres => ribbon.WithLeadIn(far, metres),
+                    _ => ribbon,
+                };
+            }
+        }
+
+        return ends;
     }
 
     /// <summary>Whether the rail alone carries a pilot through both of <paramref name="zone"/>'s gates
@@ -252,31 +284,6 @@ public sealed class StuntBotObjective
     private static bool NearerEnd(DangerZoneRibbon ribbon, Vector3 at)
         => at.DistanceSquaredTo(ribbon.End(true)) < at.DistanceSquaredTo(ribbon.End(false));
 
-    // The open zone whose lead-in point is nearest, short of its nearer end on its own route. That
-    // skips the rail check: a lead-in straight moves the point up to 300 m back, a refused end to the far end.
-    private static int Nearest(IReadOnlyList<StuntZone> zones, Vector3 at)
-    {
-        int best = -1;
-        float bestSq = float.PositiveInfinity;
-        for (int i = 0; i < zones.Count; i++)
-        {
-            if (zones[i].Completed || zones[i].Route is not { } ribbon)
-            {
-                continue;
-            }
-
-            bool far = NearerEnd(ribbon, at);
-            float sq = at.DistanceSquaredTo(ribbon.End(far) - (Into(ribbon, far) * LeadInM));
-            if (sq < bestSq)
-            {
-                best = i;
-                bestSq = sq;
-            }
-        }
-
-        return best;
-    }
-
     private static Vector3 Into(DangerZoneRibbon ribbon, bool farEnd)
     {
         var into = Flat(ribbon.EndTangentInto(farEnd));
@@ -318,30 +325,71 @@ public sealed class StuntBotObjective
         return green && red;
     }
 
-    // The ribbon end nearer the bot, or the other when that one is refused, and the route its run
-    // flies from there. With both refused it is the nearer end's own route.
-    private void PickEnd(StuntZone zone, Vector3 at)
+    // The open zone whose lead-in point is nearest, on the end and run a pick of it would take.
+    private int Nearest(IReadOnlyList<StuntZone> zones, Vector3 at)
     {
-        var ribbon = zone.Route!;
+        int best = -1;
+        float bestSq = float.PositiveInfinity;
+        for (int i = 0; i < zones.Count; i++)
+        {
+            if (zones[i].Completed || zones[i].Route is not { } ribbon)
+            {
+                continue;
+            }
+
+            var (far, route) = EndFrom(ribbon, at);
+            float sq = at.DistanceSquaredTo(route.End(far) - (Into(route, far) * LeadInM));
+            if (sq < bestSq)
+            {
+                best = i;
+                bestSq = sq;
+            }
+        }
+
+        return best;
+    }
+
+    private void PickEnd(StuntZone zone, Vector3 at) => (_farEnd, _route) = EndFrom(zone.Route!, at);
+
+    // The ribbon end nearer `at`, or the other when that one is refused, and the route its run flies
+    // from there. With both refused it is the nearer end's own route.
+    private (bool Far, DangerZoneRibbon Route) EndFrom(DangerZoneRibbon ribbon, Vector3 at)
+    {
         bool far = NearerEnd(ribbon, at);
-        if (LeadIn(zone, far) == null && LeadIn(zone, !far) != null)
+        if (RunFrom(ribbon, far) == null && RunFrom(ribbon, !far) != null)
         {
             far = !far;
         }
 
-        _farEnd = far;
-        _route = LeadIn(zone, far) is > 0f and var metres ? ribbon.WithLeadIn(far, metres) : ribbon;
+        return (far, RunFrom(ribbon, far) ?? ribbon);
     }
 
-    private float? LeadIn(StuntZone zone, bool far)
+    // The run from one end, null where it is refused.
+    private DangerZoneRibbon? RunFrom(DangerZoneRibbon ribbon, bool far)
     {
-        var key = (zone.Route!, far);
-        if (!_leadIns.TryGetValue(key, out var metres))
+        if (Runs == null)
         {
-            metres = LeadInFor(zone, far, Blocked);
-            _leadIns[key] = metres;
+            return ribbon;
         }
 
-        return metres;
+        if (Runs.TryGetValue((ribbon, far), out var run))
+        {
+            return run;
+        }
+
+        // ⚠ Do not let an unlisted end pass quietly. It is a wiring fault that drops the lead-in.
+        _unlisted ??= new();
+        if (_unlisted.Add((ribbon, far)))
+        {
+            Log.Warn("flight", $"stunt race bot: '{ribbon.Name}' {(far ? "far" : "near")} end is not in the session's run table, so it runs its own route");
+        }
+
+        return ribbon;
+    }
+
+    /// <summary>The run from each zone end, keyed by the zone's route and the end:
+    /// <see cref="RunsFrom"/>'s table.</summary>
+    public sealed class RunTable : Dictionary<(DangerZoneRibbon Route, bool Far), DangerZoneRibbon?>
+    {
     }
 }

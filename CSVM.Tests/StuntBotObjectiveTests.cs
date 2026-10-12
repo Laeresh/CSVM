@@ -215,11 +215,42 @@ public class StuntBotObjectiveTests
         Assert.Null(StuntBotObjective.LeadInFor(zones[0], far: false, blocked: (_, to) => to == FirstNear));
 
         // Nearer the first vertex, but its straight is blocked: the run enters from the last.
-        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Blocked = (_, to) => to == FirstNear };
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Runs = StuntBotObjective.RunsFrom(zones, (_, to) => to == FirstNear) };
         Assert.True(bot.Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
 
         // ABLE-TO-FAIL CONTROL: with nothing blocked it enters from the nearer first vertex.
-        Assert.False(new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)).Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
+        var open = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Runs = StuntBotObjective.RunsFrom(zones, blocked: null) };
+        Assert.False(open.Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
+    }
+
+    [Fact]
+    public void AnEndMissingFromTheTableRunsItsOwnRoute()
+    {
+        // A table without the second zone: the bot warns and flies that zone's route as it is.
+        var zones = Course();
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Runs = StuntBotObjective.RunsFrom(zones.Take(1), blocked: null) };
+        var run = bot.Decide(zones, SecondNear + new Vector3(0, 0, 500), North, zoneRun: false);
+        Assert.True(run is { Leg: StuntBotLeg.Run, Zone: 1 });
+        Assert.Same(zones[1].Route, run.Ribbon);
+    }
+
+    [Fact]
+    public void NearestReadsTheRunAPickTakesARefusedEndIncluded()
+    {
+        // The first zone's nearer end is refused, so its run enters from the far end, whose lead-in
+        // point is some 1500 m off. The second zone's is 500 m off.
+        var zones = new List<StuntZone>
+        {
+            Zone("dzpath1", 1, FirstNear, FirstFar, gateHalfM: 4f, gateAtM: 30f),
+            Zone("dzpath2", 2, new Vector3(300, 100, -300), new Vector3(300, 100, -500)),
+        };
+        var at = new Vector3(0, 100, 700);
+        var refused = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Runs = StuntBotObjective.RunsFrom(zones, (_, to) => to == FirstNear) };
+        Assert.Equal(1, refused.Decide(zones, at, North, zoneRun: false).Zone);
+
+        // ABLE-TO-FAIL CONTROL: with that end open, the first zone's lead-in point is the nearer.
+        var open = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Runs = StuntBotObjective.RunsFrom(zones, blocked: null) };
+        Assert.Equal(0, open.Decide(zones, at, North, zoneRun: false).Zone);
     }
 
     /// <summary>On every shipped course each zone has an end the rail check passes, with the shortest
