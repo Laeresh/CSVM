@@ -724,8 +724,14 @@ gate's anchor, its episode owner (`AnimRuntime.RangeTriggerOwner`, wired by
 A guest never reads such a gate against its own field: it starts the definition on the unread pass
 and claims it for the same seat. C1/M02's hangar drop is one, so the pilot who flies into the
 hangar owns the drop and its 965 on every end. A start made inside a mission trigger's own start
-names no seat, and keeps that trigger's claim. A `PlayerRange` gate's verdict names no seat, so the
-episode it starts is claimed by nobody. Every other `EXECUTION_BY_RANGE` gate stays each end's own
+names no seat, and keeps that trigger's claim. Of the shipped `EXECUTION_BY_RANGE` definitions,
+C1/M02's `hangar_drop` (75 m on `hangar_3`) is the only one whose closure raises a code. The
+episode's `Anim` is already the definition that raises its codes, so the claim does not lengthen
+it. In C1/M02 its one caller, `hangar3_doors`, is called 5 s into either fuel depot's chain
+reaction and invalidates itself first, so the gate is armed once per world, never inside a
+trigger's start, and one pass is all a guest ever holds for it. ⚠ Do not make a code-raising
+range gate re-armable within one world: a guest would start it on the earlier, unread pass. A
+`PlayerRange` gate's verdict names no seat, so the episode it starts is claimed by nobody. Every other `EXECUTION_BY_RANGE` gate stays each end's own
 read over its whole field.
 
 A `PlayerRange` gate is the host's when its definition, or one it starts through

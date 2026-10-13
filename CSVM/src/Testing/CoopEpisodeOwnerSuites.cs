@@ -59,6 +59,14 @@ internal static class CoopEpisodeOwnerSuites
 
     private static readonly string[] HangarAirframes = HangarPlanes.Split(',');
 
+    // How a two-end leg joins its ends: the shipped link, that link with the host's seat dropped, or none.
+    private enum EndLink
+    {
+        Linked,
+        SeatDropped,
+        None,
+    }
+
     [Suite("campaign-coop-episode-owner",
         "the episode owner over CM02's own capture with two humans flying: the mission's swap "
         + "rebuilds the rig whose trigger claimed the episode, on the record the code names, "
@@ -105,7 +113,12 @@ internal static class CoopEpisodeOwnerSuites
         + "player, the reported fault; and over two BUILT worlds joined by a 30 ms, 25 per cent "
         + "lossy loopback, with each end's field putting a different seat nearest the hangar, the "
         + "host decides the owner and the guest starts the drop on the host's word for that same "
-        + "seat; CONTROL: the same two fields with no link make the two ends' owners differ")]
+        + "seat, P1 where the host's field puts P1 nearest and P2 where it puts P2 nearest and the "
+        + "guest's own field does not; CONTROL: the same two fields with no link make the two ends' "
+        + "owners differ, and the P2 crossing with the host's seat dropped on the wire leaves the "
+        + "guest's episode to the scripted player, P1; and a trigger's own start that calls the drop "
+        + "with P1 already in its band keeps the episode for the trigger's pilot, P2; CONTROL: the "
+        + "same claim and call outside the trigger's bracket hand it to P1")]
     internal static void CampaignCoopHangarOwner(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -250,10 +263,26 @@ internal static class CoopEpisodeOwnerSuites
                     new HangarLeg(name, wired, onGuest), report));
         }
 
-        // Two machines whose fields disagree on the nearest seat: the host's word, then no link.
+        // Two machines whose fields disagree on the nearest seat: the host's word for either seat,
+        // that word without its seat, then no link.
         var ends = new[] { (world, anchor), (guestWorld, guestAnchor) };
-        CrossOnTwoEnds(ctx, ends, drop.Anim, caller, linked: true, report);
-        CrossOnTwoEnds(ctx, ends, drop.Anim, caller, linked: false, report);
+        foreach (var leg in new[]
+        {
+            new EndsLeg("two ends, linked", EndLink.Linked, 0),
+            new EndsLeg("two ends, linked, P2 nearest on the host", EndLink.Linked, 1),
+            new EndsLeg("CONTROL, two ends, the host's seat dropped on the wire", EndLink.SeatDropped, 1),
+            new EndsLeg("CONTROL, two ends, no link", EndLink.None, 0),
+        })
+        {
+            CrossOnTwoEnds(ctx, ends, drop.Anim, caller, leg, report);
+        }
+
+        // Last: a trigger's start marks its closure on the runtime for the rest of the world's life.
+        foreach (bool inTrigger in new[] { true, false })
+        {
+            WithTwoHumans(ctx, chapter, HangarPlanes, null,
+                staged => CallInsideTrigger(ctx, world, staged, caller, anchor, inTrigger, report));
+        }
     }
 
     private static Node3D? DropAnchor(TestWorld world, string anim)
@@ -263,13 +292,15 @@ internal static class CoopEpisodeOwnerSuites
         return anchors.Count > 0 ? anchors[0] : null;
     }
 
-    // Both humans inside the drop's band at once, each end's field putting a different seat nearest.
-    // The host sees its own seat nearer, since the guest's copy lags; the guest sees its own. Linked,
-    // the host's word names the owner on both; unlinked, each end names its own.
+    // Both humans inside the drop's band at once, each end's field putting a different seat nearest,
+    // as a lagging copy makes it. Linked, the host's word names the owner on both, which the guest's
+    // own field would not. With the seat dropped, the guest falls back to the scripted player.
+    // Unlinked, each end names its own.
     private static void CrossOnTwoEnds(TestContext ctx, (TestWorld World, Node3D Anchor)[] ends, string anim,
-        string caller, bool linked, StringBuilder report)
+        string caller, EndsLeg legSpec, StringBuilder report)
     {
-        string leg = linked ? "two ends, linked" : "CONTROL, two ends, no link";
+        string leg = legSpec.Name;
+        int named = legSpec.HostNearest;
         var pane = new SubViewport();
         ctx.Host.AddChild(pane);
         var seats = new PlayerRig[2][];
@@ -319,10 +350,17 @@ internal static class CoopEpisodeOwnerSuites
                 guestNet.Step(StepDt);
             }
 
-            if (linked)
+            if (legSpec.Link != EndLink.None)
             {
                 NetPositionalStartLink.Open(hostNet, () => seats[0], triggers[0], null, ends[0].World.Runtime);
                 NetPositionalStartLink.Open(guestNet, () => seats[1], triggers[1], null, ends[1].World.Runtime);
+            }
+
+            if (legSpec.Link == EndLink.SeatDropped)
+            {
+                var hostGates = ends[0].World.Runtime.RangeGates;
+                var send = hostGates.Decided!;
+                hostGates.Decided = (gate, passed, _) => send(gate, passed, null);
             }
 
             float now = 0f;
@@ -363,12 +401,13 @@ internal static class CoopEpisodeOwnerSuites
 
             ctx.Check(!played[0] && !played[1], $"{leg}: '{caller}' arms '{anim}' on both ends and starts nothing while both humans wait out of its band");
 
-            // In the band on both ends at once: the host's seat nearer on the host, the guest's on the guest.
+            // In the band on both ends at once: the leg's seat nearer on the host, the other on the guest.
             for (int e = 0; e < 2; e++)
             {
                 var site = AnimRuntime.VisualOriginOf(ends[e].Anchor);
-                fields[e][0] = site + (Vector3.Right * (e == 0 ? HangarNearM : HangarFarM));
-                fields[e][1] = site + (Vector3.Left * (e == 0 ? HangarFarM : HangarNearM));
+                int nearest = e == 0 ? named : 1 - named;
+                fields[e][0] = site + (Vector3.Right * (nearest == 0 ? HangarNearM : HangarFarM));
+                fields[e][1] = site + (Vector3.Left * (nearest == 1 ? HangarNearM : HangarFarM));
             }
 
             for (float t = 0f; t < PlayBudgetS && !Step(); t += StepDt)
@@ -377,17 +416,26 @@ internal static class CoopEpisodeOwnerSuites
 
             string Seat(PlayerRig? rig) => rig == null ? "-" : $"P{rig.Index + 1}";
             report.AppendLine($"{leg}: host owner={Seat(owners[0])} at {started[0]:0.000}s, guest owner={Seat(owners[1])} at {started[1]:0.000}s");
-            if (linked)
+            switch (legSpec.Link)
             {
-                ctx.Check(ReferenceEquals(owners[0], seats[0][0]) && ReferenceEquals(owners[1], seats[1][0]),
-                    $"{leg}: the host decides the drop for its nearest seat, P1, and the guest's episode belongs to that same seat (host {Seat(owners[0])}, guest {Seat(owners[1])})");
-                ctx.Check(!float.IsNaN(started[1]) && started[1] > started[0],
-                    $"…and the guest starts the drop on the host's word, after the host, rather than on its own field");
+                case EndLink.Linked:
+                    ctx.Check(ReferenceEquals(owners[0], seats[0][named]) && ReferenceEquals(owners[1], seats[1][named]),
+                        $"{leg}: the host decides the drop for its nearest seat, P{named + 1}, and the guest's episode belongs to that same seat, which its own field does not put nearest (host {Seat(owners[0])}, guest {Seat(owners[1])})");
+                    break;
+                case EndLink.SeatDropped:
+                    ctx.Check(ReferenceEquals(owners[0], seats[0][named]) && ReferenceEquals(owners[1], seats[1][0]),
+                        $"{leg}: the host owns the drop for P{named + 1}, and the guest, told no seat, leaves it to the scripted player, P1 (host {Seat(owners[0])}, guest {Seat(owners[1])})");
+                    break;
+                default:
+                    ctx.Check(owners[0] != null && owners[1] != null && owners[0]!.Index != owners[1]!.Index,
+                        $"{leg}: each end names its own nearest seat, so the owners differ (host {Seat(owners[0])}, guest {Seat(owners[1])})");
+                    break;
             }
-            else
+
+            if (legSpec.Link != EndLink.None)
             {
-                ctx.Check(owners[0] != null && owners[1] != null && owners[0]!.Index != owners[1]!.Index,
-                    $"{leg}: each end names its own nearest seat, so the owners differ (host {Seat(owners[0])}, guest {Seat(owners[1])})");
+                ctx.Check(!float.IsNaN(started[1]) && started[1] > started[0],
+                    $"…and the guest starts the drop on the host's pass, after the host, rather than on its own field");
             }
         }
         finally
@@ -498,6 +546,84 @@ internal static class CoopEpisodeOwnerSuites
                 $"…the film stages {who} on the player marker ({hangar.StagedFrames} frame(s), at most {hangar.OwnerOffM:0.###} m off it) and stages its airframe as the flown one");
             ctx.Check(hangar.OtherMovedM <= StageToleranceM,
                 $"…and P{other.Index + 1} stays where it was held rather than riding the marker ({hangar.OtherMovedM:0.###} m)");
+        }
+        finally
+        {
+            runtime.CallbackHost = savedHost;
+            runtime.PlayerPositions = savedPositions;
+            runtime.MissionTriggerOwner = savedTrigger;
+            runtime.RangeTriggerOwner = savedRange;
+            trigger.Free();
+            GameClock.Current = savedClock;
+        }
+    }
+
+    // The drop's caller started as a mission trigger, its claim naming P2 as the trigger's pilot, with
+    // P1 already inside the drop's band. The in-band range start inside that start names no seat, so
+    // P2 keeps the episode. The control makes the same claim and the same call outside the bracket.
+    private static void CallInsideTrigger(TestContext ctx, TestWorld world, Staged staged, string caller,
+        Node3D anchor, bool inTrigger, StringBuilder report)
+    {
+        var (roster, rigs, _, cutscene, _) = staged;
+        var scripted = rigs[0];
+        var pilot = rigs[1];
+        var expected = inTrigger ? pilot : scripted;
+        string leg = inTrigger ? "inside the trigger's start" : "CONTROL, the same claim and call outside the trigger's bracket";
+        var runtime = world.Runtime;
+        var savedClock = GameClock.Current;
+        var savedHost = runtime.CallbackHost;
+        var savedPositions = runtime.PlayerPositions;
+        var savedTrigger = runtime.MissionTriggerOwner;
+        var savedRange = runtime.RangeTriggerOwner;
+        var trigger = new LandingApproachRuntime();
+        try
+        {
+            var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+            GameClock.Current = clock;
+            cutscene.BindWorld(runtime, world.Session.Aircraft);
+            cutscene.HostDefinitions(world.Session.LandingCutsceneAnims);
+            cutscene.BindRigs(new[] { scripted }, () => roster.AiAircraft);
+            cutscene.SwapAirframe = order => roster.RunSwap(order.Owner ?? scripted, order, handsOver: false);
+            runtime.CallbackHost = cutscene.Host;
+            trigger.Bind(runtime, world.Session.Landings, cutscene, () => rigs);
+
+            // The claim a landing row's start makes for the human who flew it.
+            Action<string> claim = anim => cutscene.Own(anim, pilot);
+            runtime.MissionTriggerOwner = claim;
+            runtime.PlayerPositions = () => new[] { scripted.Controller!.GlobalPosition, pilot.Controller!.GlobalPosition };
+            var site = AnimRuntime.VisualOriginOf(anchor);
+            scripted.Controller!.Activate(site, site + (Vector3.Forward * 100f));
+            pilot.Controller!.Activate(site + (Vector3.Left * HangarAwayM), site);
+            if (inTrigger)
+            {
+                runtime.PlayMissionTrigger(caller);
+            }
+            else
+            {
+                claim(caller);
+                runtime.Play(caller);
+            }
+
+            PlayerRig? owner = null;
+            string? episode = null;
+            bool ended = false;
+            for (int i = 0; i < (int)(PlayBudgetS / StepDt) && !ended; i++)
+            {
+                clock.BeginFrame(StepDt);
+                runtime.Advance(StepDt);
+                cutscene.Tick();
+                if (cutscene.Playing && owner == null)
+                {
+                    owner = cutscene.EpisodeOwner;
+                    episode = cutscene.Anim;
+                }
+
+                ended = owner != null && !cutscene.Playing;
+            }
+
+            report.AppendLine($"{leg}: owner=P{(owner?.Index ?? -1) + 1}, episode '{episode ?? "-"}', ended={ended}");
+            ctx.Check(ReferenceEquals(owner, expected),
+                $"{leg}: '{caller}' calls the drop with P1 in its band, and the episode belongs to P{expected.Index + 1}");
         }
         finally
         {
@@ -785,6 +911,10 @@ internal static class CoopEpisodeOwnerSuites
 
     // One hangar leg: whose machine binds the cutscene host, and whether the range claim is wired.
     private readonly record struct HangarLeg(string Name, bool Wired, bool OnGuest);
+
+    // One two-end leg: how the ends are joined, and the seat the host's field puts nearest the hangar.
+    // The guest's field puts the other seat nearest.
+    private readonly record struct EndsLeg(string Name, EndLink Link, int HostNearest);
 
     // The actors one staged episode hands its leg: the session-shaped roster and its two rigs, what
     // each was flying before, the host, and the pool the registrations are counted in.
