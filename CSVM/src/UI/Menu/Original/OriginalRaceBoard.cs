@@ -38,6 +38,14 @@ public sealed partial class OriginalRaceBoard : Control
     private int _scoresTop;
     private int _splitsTop;
 
+    // A held thumb: which list, where the pointer took it and the window's top then.
+    private (bool Splits, float StartY, int StartTop)? _drag;
+    private bool _wasPressed;
+
+    // Wheel steps turned since the board last read them, positive toward a list's foot. The wheel is
+    // an event and never a held state, so it is counted rather than polled.
+    private int _wheel;
+
     /// <summary>A new window in place, chosen from Restart (R and pad Y reach it without the board).
     /// </summary>
     public Action? Restart { get; set; }
@@ -56,6 +64,13 @@ public sealed partial class OriginalRaceBoard : Control
     /// <summary>The pointer in the board's authored 800x600 space and whether its button is down, or
     /// null for none this frame. Defaults to player 1's mouse; a suite replaces it.</summary>
     public Func<(float X, float Y, bool Pressed)?> PointerSource { get; set; } = () => null;
+
+    /// <summary>The wheel steps turned since the last frame, positive toward a list's foot. Defaults
+    /// to the board's own count of the mouse wheel; a suite replaces it.</summary>
+    public Func<int> WheelSource { get; set; } = () => 0;
+
+    /// <summary>The first row each list shows, the standings' and the splits', for the suites.</summary>
+    internal (int Scores, int Splits) Tops => (_scoresTop, _splitsTop);
 
     /// <summary>The ranked rows as text, one line per pilot, for the suites and the log.</summary>
     internal IReadOnlyList<string> Rows => _rows;
@@ -91,6 +106,7 @@ public sealed partial class OriginalRaceBoard : Control
             Visible = false,
         };
         board.PointerSource = board.SeatPointer;
+        board.WheelSource = board.TakeWheel;
         board.SetAnchorsPreset(LayoutPreset.FullRect);
         race.RaceCompleted += board.OnRaceCompleted;
         return board;
@@ -109,6 +125,16 @@ public sealed partial class OriginalRaceBoard : Control
 
     /// <inheritdoc/>
     public override void _ExitTree() => _race.RaceCompleted -= OnRaceCompleted;
+
+    /// <inheritdoc/>
+    public override void _Input(InputEvent @event)
+    {
+        if (Visible && @event is InputEventMouseButton { Pressed: true } button)
+        {
+            _wheel += button.ButtonIndex == MouseButton.WheelDown ? 1
+                : button.ButtonIndex == MouseButton.WheelUp ? -1 : 0;
+        }
+    }
 
     /// <inheritdoc/>
     public override void _Process(double delta)
@@ -133,7 +159,10 @@ public sealed partial class OriginalRaceBoard : Control
         bool changed = _menu.Handle(Math.Sign(_input.Move + _input.MoveX), _input.Accept, false);
         if (Visible)
         {
-            changed |= _pointer.Step(_menu, PointerSource(), (x, y) => _sheet is { } sheet ? OriginalRaceResults.MenuRowAt(sheet, x, y) : -1);
+            var pointer = PointerSource();
+            bool dragging = ScrollByPointer(pointer, WheelSource(), ref changed);
+            changed |= _pointer.Step(_menu, pointer,
+                (x, y) => !dragging && _sheet is { } sheet ? OriginalRaceResults.MenuRowAt(sheet, x, y) : -1);
         }
 
         if (changed && Visible)
@@ -173,12 +202,15 @@ public sealed partial class OriginalRaceBoard : Control
 
         _scoresTop = 0;
         _splitsTop = 0;
+        _drag = null;
+        _wheel = 0;
         var menu = new BoardMenu(dismissable: false, items.ToArray());
         menu.Activated += OnActivated;
         _menu = menu;
         _input = _inputFor(0);
         _input.Prime();
-        _pointer.Prime(PointerSource()?.Pressed ?? false);
+        _wasPressed = PointerSource()?.Pressed ?? false;
+        _pointer.Prime(_wasPressed);
         Visible = true;
         _state.Raise(HaltReason.Ended);
         Compose();
@@ -211,6 +243,69 @@ public sealed partial class OriginalRaceBoard : Control
         _menu = null;
         _input = null;
         _state.Clear(HaltReason.Ended);
+    }
+
+    // The thumb and the wheel, the Original shell's rule on each list's ListWindow. A click on a
+    // thumb holds it while the button stays down, the window following the pointer down the track.
+    // A wheel step over a list moves it by rows. True while a thumb holds.
+    private bool ScrollByPointer((float X, float Y, bool Pressed)? pointer, int wheel, ref bool changed)
+    {
+        bool clicked = pointer is { Pressed: true } && !_wasPressed;
+        _wasPressed = pointer is { Pressed: true };
+        if (pointer is not { } at || _sheet == null)
+        {
+            _drag = null;
+            return false;
+        }
+
+        if (_drag is { } drag)
+        {
+            if (!at.Pressed)
+            {
+                _drag = null;
+                return false;
+            }
+
+            var held = OriginalRaceResults.Window(_sheet, drag.Splits, drag.Splits ? _splitsTop : _scoresTop);
+            changed |= ScrollTo(drag.Splits, held.TopAfterDrag(drag.StartTop, at.Y - drag.StartY));
+            return true;
+        }
+
+        foreach (bool splits in new[] { false, true })
+        {
+            var window = OriginalRaceResults.Window(_sheet, splits, splits ? _splitsTop : _scoresTop);
+            if (clicked && window.OnThumb(at.X, at.Y))
+            {
+                _drag = (splits, at.Y, window.Top);
+                return true;
+            }
+
+            if (wheel != 0 && window.Contains(at.X, at.Y))
+            {
+                changed |= ScrollTo(splits, window.TopAfterWheel(wheel));
+            }
+        }
+
+        return false;
+    }
+
+    private bool ScrollTo(bool splits, int top)
+    {
+        ref int at = ref splits ? ref _splitsTop : ref _scoresTop;
+        if (at == top)
+        {
+            return false;
+        }
+
+        at = top;
+        return true;
+    }
+
+    private int TakeWheel()
+    {
+        int steps = _wheel;
+        _wheel = 0;
+        return steps;
     }
 
     // Player 1's mouse in authored pixels.
