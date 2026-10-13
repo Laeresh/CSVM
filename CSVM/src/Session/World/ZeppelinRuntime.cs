@@ -321,12 +321,18 @@ public sealed partial class ZeppelinRuntime : Node
 
     /// <summary>Wakes every emplacement standing on the hull <paramref name="node"/>, the subtree
     /// walk <see cref="TurretEmplacementRuntime.SetActivatedUnder"/>, logged with
-    /// <paramref name="by"/>. Returns how many woke.</summary>
+    /// <paramref name="by"/>. Under <see cref="NamesHullRounds"/> their rounds carry the hull's
+    /// <see cref="Flight.Modes.ZeppelinVersus.TurretShooter"/> id. Returns how many woke.</summary>
     public int WakeTurrets(string node, string by)
     {
         if (Find(node) is not { } zep || Turrets() is not { } turrets)
         {
             return 0;
+        }
+
+        if (NamesHullRounds)
+        {
+            turrets.NameRoundsUnder(zep.Host, Flight.Modes.ZeppelinVersus.TurretShooter(_live.IndexOf(zep)));
         }
 
         int woken = turrets.SetActivatedUnder(zep.Host, true);

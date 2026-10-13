@@ -159,12 +159,13 @@ internal sealed class ZeppelinVersusRuntime
 
         // FUN_00496490 writes every hull's engage byte, so both broadsides fire on every machine.
         // Only the host's rounds spend anything: a guest's world pools and aircraft wait for its word.
-        zeppelins.NamesBroadsideRounds = true;
+        zeppelins.NamesHullRounds = true;
         zeppelins.SetCannonsEngaged(hull0, true, "Zeppelin vs Zeppelin");
         zeppelins.SetCannonsEngaged(hull1, true, "Zeppelin vs Zeppelin");
 
         // A remake-only rule: the original wakes no hull turret in this mode. Each machine runs its own
         // copy, and the host decides their hits, as for the broadsides. The team above aims them.
+        // Their rounds are named for the hull, so a pilot they down is no suicide.
         zeppelins.WakeTurrets(hull0, "Zeppelin vs Zeppelin");
         zeppelins.WakeTurrets(hull1, "Zeppelin vs Zeppelin");
         int localTeam = 0;

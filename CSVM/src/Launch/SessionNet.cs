@@ -670,13 +670,16 @@ internal sealed class SessionNet
         }
 
         int killerSeat = killer is int shooter ? SeatOfShooter(shooter) : -1;
-        int hull = killer is int fired ? ZeppelinVersus.HullOfShooter(fired) : -1;
+        int round = killer is int fired ? ZeppelinVersus.HullOfShooter(fired) : -1;
+        bool turret = round >= ZeppelinVersus.TurretRound;
+        int hull = turret ? round - ZeppelinVersus.TurretRound : round;
         // Cause 2 is every death with no seat to charge, a roster AI's kill included; a bot is a
-        // seat and is charged. The decode credits no last damager, so the pilot pays. Cause 3 is
-        // a hull's broadside round, named by the hull's placement index.
+        // seat and is charged. The decode credits no last damager, so the pilot pays. Causes 3 and
+        // 4 with no killer are a hull's broadside and turret rounds, named by the hull's placement index.
         var death = new Net.DeathMessage(
             (byte)seat, killerSeat >= 0 ? (byte)killerSeat : Net.NetMessage.NoSeat,
             killerSeat >= 0 ? Net.NetDeathCause.Killer
+            : turret ? Net.NetDeathCause.TurretOwner
             : hull >= 0 ? Net.NetDeathCause.ZeppelinPart
             : Net.NetDeathCause.Suicide,
             hull >= 0 ? (uint)hull : 0u);

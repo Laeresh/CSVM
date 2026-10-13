@@ -181,8 +181,12 @@ game's, not the host's, and never names a seat. A second local seat keeps its ta
 each, so it has no counterpart there. Cause 3 is a Zeppelin vs Zeppelin hull's broadside: the dying
 client names the hull by placement index in the report's source field, and the notice carries that
 hull's lobby team in its ninth byte, which names the line and sets the team's term on every guest
-([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). The host's `0x22` hit names
-the hull in the byte after the part, where a round no seat fired came from a broadside.
+([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). Cause 4 with no killer is
+a hull's turret, a remake-only rule: the report's source field names the hull the same way, the
+notice carries the hull's lobby team in its ninth byte, which names the "Killed by %1 Turret" line,
+and no guest sets a term from it. The host's `0x22` hit names the hull in the byte after the part
+when a round no seat fired came from a hull: the placement index for a broadside, and `0x40` plus
+the index for a turret (`ZeppelinVersus.TurretRound`).
 Splitscreen Dogfight posts the same lines in every pane, named by player tag.
 
 ## The zeppelin state packet

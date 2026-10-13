@@ -615,8 +615,8 @@ public readonly record struct FireMessage(
 /// a direct strike and the blast falloff otherwise. The struck collision shape is
 /// <see cref="Part"/>, or -1 for a shapeless one. The <see cref="LocalImpact"/> point is in the
 /// victim's own body space, so the victim resolves the same zone however far it has flown since.
-/// The <see cref="Hull"/> byte names the zeppelin whose broadside fired an unowned round, by
-/// placement index, and is <see cref="NetMessage.NoSeat"/> otherwise.</summary>
+/// The <see cref="Hull"/> byte names the zeppelin whose broadside or turret fired an unowned round,
+/// as <c>ZeppelinVersus.HullOfShooter</c> gives it, and is <see cref="NetMessage.NoSeat"/> otherwise.</summary>
 public readonly record struct HitMessage(
     byte VictimSeat, byte ShooterSeat, ushort Weapon, float Damage, short Part, Vector3 LocalImpact,
     byte Hull = NetMessage.NoSeat)
@@ -819,8 +819,8 @@ public readonly record struct DeathMessage(
 /// A match death as the host decided it, sent to every guest so each posts the kill lines once.
 /// The owner's <see cref="DeathMessage"/> is relayed to everyone but its reporter, so it cannot
 /// be the post. Reliable. The cause is the one the host scored, so a death with no seat to charge
-/// reads <see cref="NetDeathCause.Suicide"/>. A zeppelin's kill names the lobby team of the hull
-/// that fired in <see cref="Team"/>, 0 for every other cause.</summary>
+/// reads <see cref="NetDeathCause.Suicide"/>. A hull's kill, broadside or turret, names the lobby
+/// team of the hull that fired in <see cref="Team"/>, 0 for every other kill.</summary>
 public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause, byte Team = 0)
     : INetMessage<DeathNoticeMessage>
 {

@@ -813,6 +813,20 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    /// <summary>Appends every live round's shooter id, in slot order. The seam a scripted run reads
+    /// who a round is charged to through, as a hit would.</summary>
+    public void CollectLiveShooters(List<int> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive)
+            {
+                into.Add(p.Shooter);
+            }
+        }
+    }
+
     /// <summary>Appends every live round's path length so far and whether the
     /// <c>RANGE_MINIMUM</c> gate is still holding its intersect bit clear, in slot order. The seam
     /// a scripted run reads the gate through without firing at the round.</summary>

@@ -214,8 +214,20 @@ hull's round destroys is spent and scores nobody, since no seat fired it.
 remake wakes every turret on both hulls at the match's start on every machine
 (`ZeppelinRuntime.WakeTurrets`), after the side setup has put each on its side's team, so each
 ring fires at the other side's aircraft and never its own. Like the broadsides, every machine runs
-its own copy and the host decides each hit, sending it to the machine that flies the victim. A
-turret's round carries no shooter, so a pilot it downs is a death with no seat to charge.
+its own copy and the host decides each hit, sending it to the machine that flies the victim.
+
+**Remake-only rule, a turret's kill.** The original never fires these turrets in this mode, so it
+has no scoring for them. A pilot a hull's turret downs takes a death and nothing else: no
+`score_suicide`, no kill for any seat, and no side term. The death still counts toward Limited
+Lives and the pilot returns as from any death. Each turret's rounds carry its hull's
+`ZeppelinVersus.TurretShooter` id, so the hit the host sends names the hull past every broadside's
+index (`ZeppelinVersus.TurretRound`), and the victim's machine reports cause 4 with no killer and
+the hull's placement index. The host counts the death without the penalty
+(`VersusMatch.RegisterDeath` with `suicide: false`) and sends the victim's line as for any death.
+The death notice carries cause 4 and the hull's side's team, so every machine posts the victim's
+name over row 7065, "Killed by %1 Turret", filled with that team's name (for example "Killed by
+Blue Angels Turret"). Cause 4 with a killer seat is still a turret owner's kill, and every other
+mode's emplacements stay unowned. A broadside's kill is unchanged: event 9 for the hull's side.
 
 **Remake-only rule, bots.** The original seats no bots. The remake's bots fly Zeppelin vs Zeppelin
 on a host, and each step the host re-decides each bot's target (`Flight/Ai/ZvzBotObjective.cs`).

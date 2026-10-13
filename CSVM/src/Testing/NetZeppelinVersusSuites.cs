@@ -137,7 +137,11 @@ internal static class NetZeppelinVersusSuites
         + "start on every machine, each on its hull's side's team; with a seat of multiplayer1zep's own "
         + "team held under that hull, no turret of it fires (the control), and with a seat of the other "
         + "team held there, the host's turrets fire and the guests' copies fire too; a turret round's "
-        + "strike on that seat is spent only where the host claims it, on the guest that flies it")]
+        + "strike on that seat is spent only where the host claims it, on the guest that flies it; "
+        + "every turret's rounds carry its hull's turret id, and a pilot they down takes a death and no "
+        + "suicide charge, no seat or side is credited, and every machine posts Killed by the hull's "
+        + "side's Turret; the same seat's own crash still costs score_suicide, and the hull's broadside "
+        + "still sets its side's term")]
     internal static void HullTurretsFireAtTheOtherSide(TestContext ctx)
     {
         var spec = Spec(ctx);
@@ -155,6 +159,7 @@ internal static class NetZeppelinVersusSuites
             Park(peers);
             Lockstep(SettleSteps, peers);
             HullTurrets(ctx, peers);
+            TurretKill(ctx, peers);
         }
         finally
         {
@@ -171,13 +176,6 @@ internal static class NetZeppelinVersusSuites
     // multiplayer1zep, team 2's hull. Only the second draws its fire, on every machine.
     private static void HullTurrets(TestContext ctx, GameSession[] peers)
     {
-        List<TurretController> Rings(GameSession peer, int hull)
-        {
-            var parts = new List<HullPart>();
-            peer.ZeppelinHulls!.CollectHullParts(hull, parts);
-            return parts.Select(p => p.Source).OfType<TurretController>().ToList();
-        }
-
         int team2 = AimAssist.LobbyTeam(2)!.Value, team1 = AimAssist.LobbyTeam(1)!.Value;
         var census = peers.Select(p => $"{Rings(p, 0).Count(t => t.Activated && t.Team == team2)}/{Rings(p, 0).Count} {Rings(p, 1).Count(t => t.Activated && t.Team == team1)}/{Rings(p, 1).Count}").ToArray();
         ctx.Check(peers.All(p => Rings(p, 0) is { Count: 14 } a && a.All(t => t.Activated && t.Team == team2)
@@ -202,6 +200,9 @@ internal static class NetZeppelinVersusSuites
         int[] Shots() => peers.Select(p => Rings(p, 0).Sum(t => t.ShotsFired)).ToArray();
 
         // Held still where the hull will be at mid-leg, so the hull passes over it.
+        // Every shooter id the host's pool flies during a hold, as a hit would charge it.
+        var hostShooters = new HashSet<int>();
+        var live = new List<int>();
         void HoldUnder(int seat, int steps)
         {
             var pilot = peers[seat].SeatRigs[seat].Controller!;
@@ -210,7 +211,15 @@ internal static class NetZeppelinVersusSuites
             var at = Bait() + ((hull.GlobalPosition - from) * (steps * 0.5f));
             pilot.Held = true;
             pilot.PlaceHeld(at, at + (Vector3.Forward * 100f));
-            Lockstep(steps, peers);
+            hostShooters.Clear();
+            for (int step = 0; step < steps; step++)
+            {
+                Lockstep(1, peers);
+                live.Clear();
+                peers[0].SeatRigs[0].Controller!.Projectiles?.CollectLiveShooters(live);
+                hostShooters.UnionWith(live);
+            }
+
             var away = new Vector3(ParkX - (ParkSpacing * seat), ParkHeight, ParkZ);
             pilot.PlaceHeld(away, away + (Vector3.Right * 100f));
             Lockstep(PartSteps, peers);
@@ -238,18 +247,20 @@ internal static class NetZeppelinVersusSuites
                 $"a seat of the other team held under the hull draws its turrets' fire on the host (shots {friendly[0]} -> {hostile[0]})");
             ctx.Check(hostile[1] > friendly[1] && hostile[2] > friendly[2],
                 $"and each guest's copy of those turrets fires too, so the guests see the shots ({string.Join(",", friendly)} -> {string.Join(",", hostile)})");
+            ctx.Check(hostShooters.Contains(ZeppelinVersus.TurretShooter(0)),
+                $"and the host's pool flies those turrets' rounds under multiplayer1zep's turret id {ZeppelinVersus.TurretShooter(0)}, so a pilot they down is charged to no seat (live shooter ids {string.Join(",", hostShooters.Order())})");
 
             // ⚠ Claim a turret round's strike here, never fly it: a moved aeroplane's collider stays
             // where it was built (docs/verification.md INSTR-13).
             var round = Rings(peers[0], 0)[0].Weapon;
             var owned = peers[2].SeatRigs[2].Controller!;
             float integrity = Integrity(owned);
-            owned.Body!.TakeProjectileHit(round, owned.WorldPosition, 0, ProjectilePool.NoShooter);
+            owned.Body!.TakeProjectileHit(round, owned.WorldPosition, 0, ZeppelinVersus.TurretShooter(0));
             Lockstep(PartSteps, peers);
             ctx.Check(Integrity(owned) == integrity,
                 $"ABLE-TO-FAIL CONTROL: the guest's own copy of a turret round striking its seat spends nothing there ({integrity:0.##} -> {Integrity(owned):0.##})");
             var copy = peers[0].SeatRigs[2].Controller!;
-            copy.Body!.TakeProjectileHit(round, copy.WorldPosition, 0, ProjectilePool.NoShooter);
+            copy.Body!.TakeProjectileHit(round, copy.WorldPosition, 0, ZeppelinVersus.TurretShooter(0));
             Lockstep(PartSteps, peers);
             ctx.Check(Integrity(owned) < integrity,
                 $"and the host's strike by the same round reaches the seat on the guest that flies it ({integrity:0.##} -> {Integrity(owned):0.##} with {round.Id})");
@@ -261,6 +272,74 @@ internal static class NetZeppelinVersusSuites
                 (defs[i].BoredMin, defs[i].BoredMax) = saved[i];
             }
         }
+    }
+
+    // Seat 2 of team 1 downed by multiplayer1zep's turret rounds, then by its own crash, then by the
+    // hull's broadside. Only the crash costs it score, and only the broadside credits a side.
+    private static void TurretKill(TestContext ctx, GameSession[] peers)
+    {
+        var scores = peers[0].Dogfight!.Match.Scores;
+        ctx.Check(peers.All(p => Rings(p, 0).All(t => t.RoundShooter == ZeppelinVersus.TurretShooter(0))
+                                 && Rings(p, 1).All(t => t.RoundShooter == ZeppelinVersus.TurretShooter(1))),
+            $"every machine names each hull's turret rounds for that hull ({string.Join(" | ", peers.Select(p => $"{Rings(p, 0).FirstOrDefault()?.RoundShooter}/{Rings(p, 1).FirstOrDefault()?.RoundShooter}"))})");
+
+        string Board(GameSession p) => string.Join(",", Enumerable.Range(0, 3).Select(s => $"{p.Dogfight!.Match.ScoreOf(s)}:{p.Dogfight!.Match.KillsOf(s)}K/{p.Dogfight!.Match.DeathsOf(s)}D"))
+            + $" terms {p.Dogfight!.Match.TeamTermOf(1)}/{p.Dogfight!.Match.TeamTermOf(2)}";
+        string Boards() => string.Join(" | ", peers.Select(Board));
+        var stacks = peers.Select((p, i) => p.SeatRigs[i].Controller?.MessageStack).ToArray();
+        foreach (var stack in stacks)
+        {
+            stack?.Clear();
+        }
+
+        var match = peers[0].Dogfight!.Match;
+        int deathsBefore = match.DeathsOf(2);
+        var points = Enumerable.Range(0, 3).Select(s => (match.ScoreOf(s), match.KillsOf(s))).ToArray();
+        string before = Boards();
+        DownSeatTwo(peers, Rings(peers[0], 0)[0].Weapon, ZeppelinVersus.TurretShooter(0), Overkill);
+        ctx.Check(peers.All(p => p.Dogfight!.Match.DeathsOf(2) == deathsBefore + 1 && p.Dogfight!.Match.ScoreOf(2) == points[2].Item1),
+            $"a pilot downed by multiplayer1zep's turret takes a death and no suicide charge on every machine ({before} -> {Boards()})");
+        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(s => (p.Dogfight!.Match.ScoreOf(s), p.Dogfight!.Match.KillsOf(s)) == points[s])
+                                 && p.Dogfight!.Match.TeamTermOf(1) == 0 && p.Dogfight!.Match.TeamTermOf(2) == 0),
+            $"and no seat gains a kill or a point and neither side's term moves ({Boards()})");
+
+        var strings = Messages.Load(ctx.MessagesPath);
+        var turretLines = HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Turret, "guest2", TeamNames[2]);
+        var suicideLines = HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.NoKiller, "guest2", null);
+        string[] Read(HudMessages? stack) => stack == null ? new[] { "no stack" }
+            : Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt).OfType<string>().Where(l => l.Length > 0).ToArray();
+        var reads = stacks.Select(Read).ToArray();
+        ctx.Check(reads.All(r => r.Contains(turretLines.Top) && r.Contains(turretLines.Under!) && !r.Contains(suicideLines.Top)),
+            $"every machine posts {turretLines.Top} / {turretLines.Under}, never {suicideLines.Top} ({string.Join(" | ", reads.Select(r => string.Join(" / ", r)))})");
+
+        BackInTheAir(peers);
+        ctx.Check(peers.All(p => !p.SeatRigs[2].Controller!.Crashed),
+            $"and the seat returns to the fight on every machine ({string.Join(",", peers.Select(p => p.SeatRigs[2].Controller!.Crashed))})");
+
+        int scoreBefore = match.ScoreOf(2);
+        peers[2].SeatRigs[2].Controller!.DebugForceCrash();
+        Lockstep(PartSteps, peers);
+        ctx.Check(scores.Suicide != 0 && peers.All(p => p.Dogfight!.Match.ScoreOf(2) == scoreBefore + scores.Suicide),
+            $"ABLE-TO-FAIL CONTROL: the same seat's own crash still costs it score_suicide {scores.Suicide} on every machine ({Boards()})");
+        BackInTheAir(peers);
+
+        var broadside = WeaponDefs.Load(ctx.ZrdrPath).Get(ZeppelinRuntime.BroadsideWeaponId);
+        scoreBefore = match.ScoreOf(2);
+        if (broadside != null)
+        {
+            DownSeatTwo(peers, broadside, ZeppelinVersus.BroadsideShooter(0));
+        }
+
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(2) == scoreBefore && p.Dogfight!.Match.TeamTermOf(2) == scores.ZeppelinKill),
+            $"ABLE-TO-FAIL CONTROL: the hull's broadside still sets team 2's term to {scores.ZeppelinKill} on every machine ({Boards()})");
+        BackInTheAir(peers);
+    }
+
+    private static List<TurretController> Rings(GameSession peer, int hull)
+    {
+        var parts = new List<HullPart>();
+        peer.ZeppelinHulls!.CollectHullParts(hull, parts);
+        return parts.Select(p => p.Source).OfType<TurretController>().ToList();
     }
 
     private static float Integrity(Flight.Airframe.FlightController pilot) =>
@@ -389,7 +468,7 @@ internal static class NetZeppelinVersusSuites
     {
         var got = peers.Select(p => string.Join(",", new[] { "multiplayer1zep", "multiplayer2zep" }
             .Select(n => p.ZeppelinHulls!.BroadsideOf(n) is { } b ? $"{n}:{b.CannonsEngaged}/{b.Cannons.Count}" : $"{n}:none"))).ToArray();
-        ctx.Check(peers.All(p => p.ZeppelinHulls!.NamesBroadsideRounds
+        ctx.Check(peers.All(p => p.ZeppelinHulls!.NamesHullRounds
                                  && p.ZeppelinHulls.BroadsideOf("multiplayer1zep") is { CannonsEngaged: true, Cannons.Count: 6 }
                                  && p.ZeppelinHulls.BroadsideOf("multiplayer2zep") is { CannonsEngaged: true, Cannons.Count: 6 }),
             $"both hulls' six broadsides are engaged on every machine, their rounds named for the hull ({string.Join(" | ", got)})");
@@ -453,15 +532,7 @@ internal static class NetZeppelinVersusSuites
 
         int scoreBefore = peers[0].Dogfight!.Match.ScoreOf(2);
         int deathsBefore = peers[0].Dogfight!.Match.DeathsOf(2);
-        var copy = peers[0].SeatRigs[2].Controller!;
-        var owned = peers[2].SeatRigs[2].Controller!;
-        for (int shot = 0; shot < BroadsideShots && !owned.Crashed; shot++)
-        {
-            copy.Body!.TakeProjectileHit(round, copy.WorldPosition, 0, ZeppelinVersus.BroadsideShooter(0), BroadsideScale);
-            Lockstep(2, peers);
-        }
-
-        Lockstep(PartSteps, peers);
+        DownSeatTwo(peers, round, ZeppelinVersus.BroadsideShooter(0));
         ctx.Check(peers.All(p => p.Dogfight!.Match.DeathsOf(2) == deathsBefore + 1 && p.Dogfight!.Match.ScoreOf(2) == scoreBefore),
             $"a pilot downed by multiplayer1zep's broadside takes a death and no score on every machine ({Scores(peers)})");
         ctx.Check(peers.All(p => p.Dogfight!.Match.TeamTermOf(2) == scores.ZeppelinKill && p.Dogfight!.Match.TeamScoreOf(2) == p.Dogfight!.Match.TeamTotalOf(2) - scores.ZeppelinKill),
@@ -470,6 +541,28 @@ internal static class NetZeppelinVersusSuites
             $"ABLE-TO-FAIL CONTROL: the victim's own side's term stays 0 ({Scores(peers)})");
 
         // Back in the air before the last bag, so the ending finds every seat flying.
+        BackInTheAir(peers);
+    }
+
+    // Seat 2 (team 1, flown on guest 2) shot down on the host's copy by rounds carrying `shooter`.
+    // The host claims each strike and sends it to the guest, which reports the death.
+    private static void DownSeatTwo(GameSession[] peers, WeaponDef round, int shooter, float scale = BroadsideScale)
+    {
+        var copy = peers[0].SeatRigs[2].Controller!;
+        var owned = peers[2].SeatRigs[2].Controller!;
+        for (int shot = 0; shot < BroadsideShots && !owned.Crashed; shot++)
+        {
+            copy.Body!.TakeProjectileHit(round, copy.WorldPosition, 0, shooter, scale);
+            Lockstep(2, peers);
+        }
+
+        Lockstep(PartSteps, peers);
+    }
+
+    // Seat 2 returned to the fight and settled on every machine.
+    private static void BackInTheAir(GameSession[] peers)
+    {
+        var owned = peers[2].SeatRigs[2].Controller!;
         for (int step = 0; step < GrantSteps && owned.Crashed; step++)
         {
             Lockstep(1, peers);

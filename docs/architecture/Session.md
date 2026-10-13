@@ -500,10 +500,10 @@ The broadside half of `ZeppelinRuntime`, the second file of that partial class. 
 resolves the hardcoded `wep_28` round and each cannon's node and damage pool; per step the runtime
 resolves the record's authored `targets`, gates on the authored fire range and the decoded arc,
 plays the deploy and retract anims scoped to the hull, and fires real rounds scattered by the
-record's inaccuracy, unowned unless `NamesBroadsideRounds` names them for their hull. The broadside
-stays off until a script arms it through the `COMPLETED_ZEPCANNONS` seam or Zeppelin vs Zeppelin
-arms both hulls, and a destroyed cannon thins the volley. Decode:
-[../formats/mission-entities.md](../formats/mission-entities.md), "Broadside firing".
+record's inaccuracy. `NamesHullRounds` names the broadside's and turrets' rounds for their hull;
+otherwise they are unowned. The broadside stays off until a script arms it through the
+`COMPLETED_ZEPCANNONS` seam or Zeppelin vs Zeppelin arms both hulls, and a destroyed cannon thins
+the volley. Decode: [../formats/mission-entities.md](../formats/mission-entities.md), "Broadside firing".
 
 ## src/Session/World/TurretEmplacementRuntime.cs
 The world AA emplacements: the standalone `ai.zrd` turret family resolved against the built chapter

@@ -844,8 +844,8 @@ hull 0 flying the first and hull 1 the second, and `SpawnBlocks` opens each side
 block round its own hull. `Counts` lets each gas bag score once, at its own death or its bound
 cannon's, and `Points` is `score_gas_kill` to an enemy and `score_my_gas_kill` on the killer's
 own hull. `RespawnPoint` is the return by the pilot's hull, `HullSide` labels a hull's marker by
-side and `RearmSide` its rearm base's, and `BroadsideShooter` is the shooter id a hull's rounds
-carry. `VersusMatch.EndOnHullLoss` ends the match on the hull loss, and
+side and `RearmSide` its rearm base's, and `BroadsideShooter` and `TurretShooter` are the shooter
+ids a hull's rounds carry. `VersusMatch.EndOnHullLoss` ends the match on the hull loss, and
 `Session/World/ZeppelinVersusRuntime.cs` runs it. Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
 
 ## src/Flight/Modes/RearmBases.cs
