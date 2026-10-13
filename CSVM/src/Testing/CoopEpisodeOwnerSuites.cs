@@ -23,7 +23,8 @@ namespace CSVM.Testing;
 /// the mission raises rebuilds the rig whose trigger started the episode, not player 1's. The
 /// definition is played both ways, which is the able-to-fail control. Claimed by nobody, it swaps
 /// the scripted player; claimed by the guest, it swaps the guest alone. The second suite reads the
-/// same over CM07's hangar drop, which a range gate starts rather than a trigger row.</summary>
+/// same over CM07's hangar drop, which a range gate starts rather than a trigger row. The third reads
+/// C4/M03's Blacke drop, which a looping <c>PLAYER_RANGE</c> gate starts.</summary>
 internal static class CoopEpisodeOwnerSuites
 {
     // CM02's story position, and the two airframes the humans fly in on. Different records on
@@ -56,6 +57,12 @@ internal static class CoopEpisodeOwnerSuites
 
     // How far a staged aeroplane may sit off the marker it rides, and a held one off where it was.
     private const float StageToleranceM = 1f;
+
+    // C4/M03's Blacke drop: the definition polling the 64 m PLAYER_RANGE gate, and the marker it polls on.
+    private const string BlackeChapter = "C4";
+    private const string BlackeMission = "M03";
+    private const string BlackeGate = "blacke_drop";
+    private const string BlackeMarker = "blacke_marker";
 
     private static readonly string[] HangarAirframes = HangarPlanes.Split(',');
 
@@ -154,6 +161,76 @@ internal static class CoopEpisodeOwnerSuites
 
         ctx.WriteArtifact($"test-campaign-coop-hangar-owner-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"{chapter}/{folder}: the hangar drop follows the human who crossed its range gate");
+    }
+
+    [Suite("campaign-coop-blacke-owner",
+        "the episode owner over C4/M03's Blacke drop, which a looping 64 m PLAYER_RANGE gate on its "
+        + "marker starts, over two BUILT worlds joined by a 30 ms, 25 per cent lossy loopback with "
+        + "both humans inside the gate and each end's field putting a different seat nearest: the "
+        + "host's field puts the guest's seat, P2, nearest, so the host owns the drop for P2 and the "
+        + "guest starts it on the host's pass for P2, a seat its own field does not put nearest; "
+        + "each end claims the drop once, for that owner, while the gate's own loop keeps reading "
+        + "the open verdict, and the owner holds through the film; CONTROL: the same crossing with the "
+        + "host's seat dropped on the wire leaves the guest's episode to the scripted player, P1; "
+        + "and over a looping code-raising gate built from definitions, which the shipped drop's "
+        + "self-stopping gate cannot show, a host that closes and reopens the gate for the other "
+        + "seat between two guest polls is matched by the guest claiming that reopening for the "
+        + "same seat; CONTROL: with the host's openings uncounted the guest claims the first "
+        + "opening alone")]
+    internal static void CampaignCoopBlackeOwner(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, BlackeChapter, BlackeMission), $"{BlackeChapter}/{BlackeMission} zrdr");
+        var report = new StringBuilder();
+        ctx.CutsceneRoots = true;
+        try
+        {
+            foreach (var leg in new[]
+            {
+                new EndsLeg("two ends, linked, P2 nearest on the host", EndLink.Linked, 1, Loops: true),
+                new EndsLeg("CONTROL, two ends, the host's seat dropped on the wire", EndLink.SeatDropped, 1),
+            })
+            {
+                // Fresh worlds per leg. The gate's definition loops through the film until `bdplayer`
+                // stops and invalidates it, and nothing in the mission re-arms it.
+                ctx.WithWorld(BlackeChapter, collision: false, BlackeMission, hostWorld =>
+                    ctx.WithWorld(BlackeChapter, collision: false, BlackeMission, guestWorld =>
+                    {
+                        if (ReferenceEquals(hostWorld.Runtime, guestWorld.Runtime))
+                        {
+                            throw new SuiteSkippedException($"{BlackeChapter}/{BlackeMission} is this run's cached world, so a second build is the same one");
+                        }
+
+                        var hostMarker = First(hostWorld.Runtime.FindNodes(BlackeMarker));
+                        var guestMarker = First(guestWorld.Runtime.FindNodes(BlackeMarker));
+                        ctx.Check(hostMarker != null && guestMarker != null, $"both worlds build the drop's '{BlackeMarker}'");
+                        if (hostMarker == null || guestMarker == null)
+                        {
+                            return;
+                        }
+
+                        // Where the gate measures from: the marker's own origin.
+                        var ends = new[]
+                        {
+                            (hostWorld, AnimRuntime.WorldTransform(hostMarker, out _).Origin),
+                            (guestWorld, AnimRuntime.WorldTransform(guestMarker, out _).Origin),
+                        };
+                        CrossOnTwoEnds(ctx, ends, BlackeGate, null, leg, report);
+                    }));
+            }
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        foreach (bool counted in new[] { true, false })
+        {
+            ReopenBetweenPolls(ctx, counted, report);
+        }
+
+        ctx.WriteArtifact($"test-campaign-coop-blacke-owner-{BlackeChapter}-{BlackeMission}.txt", report.ToString());
+        ctx.Note($"{BlackeChapter}/{BlackeMission}: the Blacke drop follows the human the host's gate pass named");
     }
 
     internal static FlightController StageAi(FlightRoster roster, string name, string planeNode, Vector3 at)
@@ -265,7 +342,7 @@ internal static class CoopEpisodeOwnerSuites
 
         // Two machines whose fields disagree on the nearest seat: the host's word for either seat,
         // that word without its seat, then no link.
-        var ends = new[] { (world, anchor), (guestWorld, guestAnchor) };
+        var ends = new[] { (world, AnimRuntime.VisualOriginOf(anchor)), (guestWorld, AnimRuntime.VisualOriginOf(guestAnchor)) };
         foreach (var leg in new[]
         {
             new EndsLeg("two ends, linked", EndLink.Linked, 0),
@@ -295,9 +372,9 @@ internal static class CoopEpisodeOwnerSuites
     // Both humans inside the drop's band at once, each end's field putting a different seat nearest,
     // as a lagging copy makes it. Linked, the host's word names the owner on both, which the guest's
     // own field would not. With the seat dropped, the guest falls back to the scripted player.
-    // Unlinked, each end names its own.
-    private static void CrossOnTwoEnds(TestContext ctx, (TestWorld World, Node3D Anchor)[] ends, string anim,
-        string caller, EndsLeg legSpec, StringBuilder report)
+    // Unlinked, each end names its own. A null caller is a gate the bootstrap already has polling.
+    private static void CrossOnTwoEnds(TestContext ctx, (TestWorld World, Vector3 Site)[] ends, string anim,
+        string? caller, EndsLeg legSpec, StringBuilder report)
     {
         string leg = legSpec.Name;
         int named = legSpec.HostNearest;
@@ -307,6 +384,9 @@ internal static class CoopEpisodeOwnerSuites
         var cutscenes = new CutsceneController[2];
         var triggers = new LandingApproachRuntime[2];
         var fields = new Vector3[2][];
+        // Each end's range claims by seat, and the guest's reads of the host's verdict after its own claim.
+        var claims = new[] { new List<int>(), new List<int>() };
+        int pollsAfterClaim = 0;
         var saved = new (Func<int, string?, string?, bool>? Host, Func<IReadOnlyList<Vector3>>? Positions,
             Action<string>? Trigger, Action<string, int>? Range)[2];
         var savedClock = GameClock.Current;
@@ -331,7 +411,14 @@ internal static class CoopEpisodeOwnerSuites
                 runtime.CallbackHost = cutscene.Host;
                 triggers[e] = new LandingApproachRuntime();
                 triggers[e].Bind(runtime, ends[e].World.Session.Landings, cutscene, () => own);
-                var away = AnimRuntime.VisualOriginOf(ends[e].Anchor) + (Vector3.Up * HangarAwayM);
+                var claim = runtime.RangeTriggerOwner!;
+                var claimed = claims[e];
+                runtime.RangeTriggerOwner = (name, seat) =>
+                {
+                    claimed.Add(seat);
+                    claim(name, seat);
+                };
+                var away = ends[e].Site + (Vector3.Up * HangarAwayM);
                 var field = fields[e] = new[] { away, away };
                 runtime.PlayerPositions = () => field;
             }
@@ -354,6 +441,13 @@ internal static class CoopEpisodeOwnerSuites
             {
                 NetPositionalStartLink.Open(hostNet, () => seats[0], triggers[0], null, ends[0].World.Runtime);
                 NetPositionalStartLink.Open(guestNet, () => seats[1], triggers[1], null, ends[1].World.Runtime);
+                var guestGates = ends[1].World.Runtime.RangeGates;
+                var read = guestGates.HostVerdict!;
+                guestGates.HostVerdict = gate =>
+                {
+                    pollsAfterClaim += claims[1].Count > 0 ? 1 : 0;
+                    return read(gate);
+                };
             }
 
             if (legSpec.Link == EndLink.SeatDropped)
@@ -367,6 +461,7 @@ internal static class CoopEpisodeOwnerSuites
             var started = new[] { float.NaN, float.NaN };
             var owners = new PlayerRig?[2];
             var played = new bool[2];
+            var moved = new bool[2];
             bool Step()
             {
                 now += StepDt;
@@ -383,13 +478,15 @@ internal static class CoopEpisodeOwnerSuites
                         started[e] = now;
                         owners[e] = cutscenes[e].EpisodeOwner;
                     }
+
+                    moved[e] |= cutscenes[e].Playing && !ReferenceEquals(cutscenes[e].EpisodeOwner, owners[e]);
                 }
 
                 // Done once both have played and handed off.
                 return played[0] && played[1] && !cutscenes[0].Playing && !cutscenes[1].Playing;
             }
 
-            for (int e = 0; e < 2; e++)
+            for (int e = 0; e < 2 && caller != null; e++)
             {
                 ends[e].World.Runtime.Play(caller);
             }
@@ -399,12 +496,12 @@ internal static class CoopEpisodeOwnerSuites
                 Step();
             }
 
-            ctx.Check(!played[0] && !played[1], $"{leg}: '{caller}' arms '{anim}' on both ends and starts nothing while both humans wait out of its band");
+            ctx.Check(!played[0] && !played[1], $"{leg}: '{caller ?? anim}' arms '{anim}' on both ends and starts nothing while both humans wait out of its band");
 
             // In the band on both ends at once: the leg's seat nearer on the host, the other on the guest.
             for (int e = 0; e < 2; e++)
             {
-                var site = AnimRuntime.VisualOriginOf(ends[e].Anchor);
+                var site = ends[e].Site;
                 int nearest = e == 0 ? named : 1 - named;
                 fields[e][0] = site + (Vector3.Right * (nearest == 0 ? HangarNearM : HangarFarM));
                 fields[e][1] = site + (Vector3.Left * (nearest == 1 ? HangarNearM : HangarFarM));
@@ -415,7 +512,22 @@ internal static class CoopEpisodeOwnerSuites
             }
 
             string Seat(PlayerRig? rig) => rig == null ? "-" : $"P{rig.Index + 1}";
-            report.AppendLine($"{leg}: host owner={Seat(owners[0])} at {started[0]:0.000}s, guest owner={Seat(owners[1])} at {started[1]:0.000}s");
+            string Claims(int e) => $"[{string.Join(",", claims[e].ConvertAll(s => $"P{s + 1}"))}]";
+            report.AppendLine($"{leg}: host owner={Seat(owners[0])} at {started[0]:0.000}s, guest owner={Seat(owners[1])} at {started[1]:0.000}s; "
+                + $"claims host {Claims(0)}, guest {Claims(1)}; guest reads of the verdict after its claim {pollsAfterClaim}");
+            for (int e = 0; e < 2; e++)
+            {
+                var owner = owners[e];
+                ctx.Check(!moved[e] && claims[e].Count <= 1 && claims[e].TrueForAll(s => s == owner?.Index),
+                    $"{leg}: the {(e == 0 ? "host" : "guest")} claims the range start at most once, for its episode's owner, {Seat(owner)}, and the owner holds through the film (claims {Claims(e)})");
+            }
+
+            if (legSpec.Loops)
+            {
+                ctx.Check(pollsAfterClaim > 0,
+                    $"{leg}: the gate's own loop reads the host's verdict {pollsAfterClaim} more time(s) after the guest's claim, and none of them claims again");
+            }
+
             switch (legSpec.Link)
             {
                 case EndLink.Linked:
@@ -447,11 +559,144 @@ internal static class CoopEpisodeOwnerSuites
                 runtime.RangeGates.Decided = null;
                 runtime.RangeGates.HostVerdict = null;
                 runtime.RangeGates.HostSeat = null;
+                runtime.RangeGates.HostOpenings = null;
                 triggers[e]?.Free();
                 cutscenes[e]?.Free();
             }
 
             pane.Free();
+            GameClock.Current = savedClock;
+        }
+    }
+
+    // A looping code-raising gate built from definitions, since the shipped drop stops its own gate
+    // after one film. Its callee ends at once, so a second opening finds it free to start. The host
+    // opens it for P2, then closes and reopens it for P1 while the guest's runtime stands still.
+    // Counted, the guest claims the reopening for P1 as the host does; uncounted, the guest's
+    // name-only memory of the open gate is the control.
+    private static void ReopenBetweenPolls(TestContext ctx, bool counted, StringBuilder report)
+    {
+        const string Marker = "reopen_marker";
+        const string Gate = "reopen_gate";
+        const string Film = "reopen_film";
+        const float RadiusM = 50f;
+        string leg = counted ? "a reopening between two guest polls" : "CONTROL, the same reopening with the host's openings uncounted on the guest";
+        AnimEvent Ev(string kind, Dictionary<string, object?> data, string? offset = null, float time = 0f) =>
+            new() { Kind = kind, StartOffset = offset, StartTime = time, Data = new AnimData(data) };
+        AnimProgram Program()
+        {
+            var gate = new AnimDefinition { Name = Marker, AnimName = Gate };
+            var poll = new AnimSequence { Name = "poll" };
+            poll.Events.Add(Ev("If", new() { ["condition"] = new Dictionary<string, object?> { ["PlayerRange"] = (double)(RadiusM * RadiusM) } }));
+            poll.Events.Add(Ev("CallAnimation", new() { ["name"] = Film }));
+            poll.Events.Add(Ev("Endif", new()));
+            poll.Events.Add(Ev("Loop", new() { ["Count"] = -1.0 }, "Sequence", 0.2f));
+            gate.Sequences.Add(poll);
+            var film = new AnimDefinition { AnimName = Film };
+            var shot = new AnimSequence { Name = "shot" };
+            shot.Events.Add(Ev("Callback", new() { ["value"] = 11.0 }));
+            film.Sequences.Add(shot);
+            return AnimProgram.FromDefinitions(new[] { gate, film });
+        }
+
+        var inside = Vector3.Up * 10f;
+        var far = Vector3.Up * 2000f;
+        var fields = new[] { new[] { far, far }, new[] { far, far } };
+        var claims = new[] { new List<int>(), new List<int>() };
+        var stages = new Node3D[2];
+        var ends = new AnimRuntime[2];
+        var savedClock = GameClock.Current;
+        try
+        {
+            GameClock.Current = new GameClock { Mode = GameClock.RunMode.FixedStep };
+            for (int e = 0; e < 2; e++)
+            {
+                var stage = stages[e] = new Node3D { Name = $"ReopenStage{e}" };
+                stage.AddChild(new Node3D { Name = Marker });
+                ctx.Host.AddChild(stage);
+                var runtime = ends[e] = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+                ctx.Host.AddChild(runtime);
+                runtime.Bind(stage, Program());
+                var field = fields[e];
+                var claimed = claims[e];
+                runtime.PlayerPositions = () => field;
+                runtime.CallbackHost = (_, _, _) => true;
+                runtime.RangeTriggerOwner = (_, seat) => claimed.Add(seat);
+            }
+
+            var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(1970));
+            var roster = new Net.NetSeat[]
+            {
+                new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = HangarAirframes[0] },
+                new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = HangarAirframes[1] },
+            };
+            var hostNet = NetSession.Host(mesh[0], roster, HangarNetSeed, null, HangarAirframes);
+            var guestNet = NetSession.Guest(mesh[1], HangarAirframes);
+            for (int i = 0; i < 200 && !guestNet.Joined; i++)
+            {
+                hostNet.Step(StepDt);
+                guestNet.Step(StepDt);
+            }
+
+            NetPositionalStartLink.Open(hostNet, Array.Empty<PlayerRig>, null, null, ends[0]);
+            NetPositionalStartLink.Open(guestNet, Array.Empty<PlayerRig>, null, null, ends[1]);
+            if (!counted)
+            {
+                ends[1].RangeGates.HostOpenings = null;
+            }
+
+            void Run(float seconds, bool guestPolls)
+            {
+                for (float t = 0f; t < seconds; t += StepDt)
+                {
+                    GameClock.Current!.BeginFrame(StepDt);
+                    hostNet.Step(StepDt);
+                    guestNet.Step(StepDt);
+                    ends[0].Advance(StepDt);
+                    if (guestPolls)
+                    {
+                        ends[1].Advance(StepDt);
+                    }
+                }
+            }
+
+            foreach (var runtime in ends)
+            {
+                runtime.Play(Gate);
+            }
+
+            // P2 opens it on the host and both ends claim. With the guest standing still, P2 leaves
+            // and P1 comes in. The guest polls again only after the reopening.
+            fields[0][1] = inside;
+            Run(1f, guestPolls: true);
+            fields[0][1] = far;
+            Run(0.6f, guestPolls: false);
+            fields[0][0] = inside;
+            Run(0.6f, guestPolls: false);
+            Run(1f, guestPolls: true);
+
+            string Seats(List<int> seats) => $"[{string.Join(",", seats.ConvertAll(s => $"P{s + 1}"))}]";
+            report.AppendLine($"{leg}: claims host {Seats(claims[0])}, guest {Seats(claims[1])}");
+            bool hostRight = claims[0].Count == 2 && claims[0][0] == 1 && claims[0][1] == 0;
+            if (counted)
+            {
+                ctx.Check(hostRight && claims[1].Count == 2 && claims[1][0] == 1 && claims[1][1] == 0,
+                    $"{leg}: the host claims P2's opening and then P1's, and the guest, polling only after the reopening, claims the same two (host {Seats(claims[0])}, guest {Seats(claims[1])})");
+            }
+            else
+            {
+                ctx.Check(hostRight && claims[1].Count == 1 && claims[1][0] == 1,
+                    $"{leg}: the guest never sees the gate close, so it claims P2's opening alone while the host claims P1's too (host {Seats(claims[0])}, guest {Seats(claims[1])})");
+            }
+        }
+        finally
+        {
+            for (int e = 0; e < 2; e++)
+            {
+                ends[e]?.Free();
+                stages[e]?.Free();
+            }
+
             GameClock.Current = savedClock;
         }
     }
@@ -883,6 +1128,8 @@ internal static class CoopEpisodeOwnerSuites
         return names;
     }
 
+    private static Node3D? First(IReadOnlyList<Node3D> nodes) => nodes.Count > 0 ? nodes[0] : null;
+
     private static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)
     {
         foreach (var mission in missions)
@@ -912,9 +1159,9 @@ internal static class CoopEpisodeOwnerSuites
     // One hangar leg: whose machine binds the cutscene host, and whether the range claim is wired.
     private readonly record struct HangarLeg(string Name, bool Wired, bool OnGuest);
 
-    // One two-end leg: how the ends are joined, and the seat the host's field puts nearest the hangar.
-    // The guest's field puts the other seat nearest.
-    private readonly record struct EndsLeg(string Name, EndLink Link, int HostNearest);
+    // One two-end leg: how the ends are joined, and the seat the host's field puts nearest the gate.
+    // The guest's field puts the other seat nearest. Loops: the gate's definition keeps polling it.
+    private readonly record struct EndsLeg(string Name, EndLink Link, int HostNearest, bool Loops = false);
 
     // The actors one staged episode hands its leg: the session-shaped roster and its two rigs, what
     // each was flying before, the host, and the pool the registrations are counted in.

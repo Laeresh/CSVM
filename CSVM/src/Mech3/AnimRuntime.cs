@@ -195,10 +195,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// switch. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Action<string>? MissionTriggerOwner;
 
-    /// <summary>Told the name of every definition an <c>EXECUTION_BY_RANGE</c> gate starts, before
-    /// it starts, with the seat that is its episode owner. ⚠ <see cref="PlayerPositions"/> must list every seat, in
-    /// seat order: the seat is an index into it. Not told
-    /// inside a mission trigger's own start, or where the host's verdict names no seat.</summary>
+    /// <summary>Told the episode owner's seat and the definition that owns the episode, before it
+    /// starts. That is what an <c>EXECUTION_BY_RANGE</c> gate starts, or a code-raising
+    /// <c>PLAYER_RANGE</c> pass's first callee that raises a code. ⚠ <see cref="PlayerPositions"/> must list every seat, in seat order: the
+    /// seat is an index into it. Not told inside a mission trigger's own start, or where the host's
+    /// verdict names no seat.</summary>
     public Action<string, int>? RangeTriggerOwner;
 
     /// <summary>The rate one cutscene episode's definitions run at while the player holds a key
@@ -582,6 +583,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // The subset deferred from the mission startanim list because their call target is library
     // content. Ordinary ON_STARTUP range defs must retain their old call-resolution behavior.
     private readonly HashSet<AnimDefinition> _rangeLibraryCallDefs = new();
+
+    // Host-decided PLAYER_RANGE gates that opened in this advance, by gate name: the definition, the
+    // anchor and the opening's seat. The branch's first call whose closure raises a code spends one.
+    // ⚠ Cleared at each advance; a pass left armed would claim a later, unrelated start.
+    private readonly Dictionary<string, (AnimDefinition Def, Node3D Anchor, int Seat)> _rangePasses =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly List<Vector3I> _rangeCheckCells = new();
 
@@ -1539,6 +1546,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // both clock paths (realtime physics, parent-driven frame) reach the runtime through here.
         FastForward?.Ramp(dt);
         _elapsed += dt;
+        _rangePasses.Clear();
         SampleRangePositions();
         // Motions advance ONCE per frame, here, not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4× speed.
@@ -2256,6 +2264,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _program = program;
         _callTargets = null;
         RangeGates.Bind(program.ByAnimName);
+        _rangePasses.Clear();
         // ⚠ Hand these flags over before the first Add/Anchors call; they are construction-time
         // facts about this runtime. The census covers the bootstrap passes only.
         _resolver.NameResolveFallback = NameResolveFallback;
@@ -2493,6 +2502,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         if (owner is { } claimed && def.AnimName is { } name)
             RangeTriggerOwner?.Invoke(name, claimed);
+    }
+
+    // A gate opening's claim, spent on the first callee of the opening definition whose closure
+    // raises a code. It names that callee, never the gate's own definition, which may loop forever
+    // and so would never end its episode.
+    private void ClaimRangePass(AnimDefinition caller, Node3D? anchor, AnimDefinition target)
+    {
+        if (target.AnimName is not { } name || !RangeGates.HostDecides(target))
+            return;
+        foreach (var (gate, pass) in _rangePasses)
+        {
+            if (!ReferenceEquals(pass.Def, caller) || pass.Anchor != anchor)
+                continue;
+            _rangePasses.Remove(gate);
+            RangeTriggerOwner?.Invoke(name, pass.Seat);
+            return;
+        }
     }
 
     private bool CallsUnplacedDefinition(AnimDefinition caller)
@@ -3119,6 +3145,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     _templateStage.PlaceAt(target, callAnchor!, siteOffset, follow: rides, orient: placeOrient);
                                 }
                             }
+                            if (!instant && _rangePasses.Count > 0)
+                                ClaimRangePass(def, anchor, target);
                             Start(target, startAnchor);
                             // ⚠ Reveal the mesh too, after Start. On a stage that hides its
                             // templates, an unrevealed callee shows its particles and none of its
@@ -3914,9 +3942,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
 
         string gate = RangeGateAuthority.GateName(def, anchor.Name, radiusSq);
-        return RangeGates.HostVerdict is { } host
-            ? host(gate)
-            : RangeGates.Decide(gate, NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq);
+        bool passed;
+        int? seat;
+        if (RangeGates.HostVerdict is { } host)
+        {
+            passed = host(gate);
+            seat = RangeGates.HostSeat?.Invoke(gate);
+        }
+        else
+        {
+            bool inside = NearestPlayerDistanceSquared(WorldPos(anchor), out int nearest) <= radiusSq;
+            passed = RangeGates.Decide(gate, inside, _missionCallDepth == 0 && nearest >= 0 ? nearest : null);
+            seat = RangeGates.PassSeat(gate);
+        }
+
+        // Armed once per opening, with the seat named then. The definition's own loop re-polls an
+        // open gate, and each poll's calls must not claim again.
+        if (!passed)
+            _rangePasses.Remove(gate);
+        else if (RangeGates.NewOpening(gate) && seat is { } owner)
+            _rangePasses[gate] = (def, anchor, owner);
+        return passed;
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)

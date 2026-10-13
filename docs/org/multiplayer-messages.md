@@ -702,7 +702,7 @@ The kinds are `NetPositionalStart`:
 | 1 Landing row | host to all | the row the host's trigger started, and the seat whose flying started it |
 | 2 Ladder holder | host to all | the seat now holding the switch, or no seat |
 | 3 Auto-land held | guest to host | the guest's own seat has the auto-land button down while offered the prompt, or has let it go |
-| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` or `EXECUTION_BY_RANGE` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, and the seat the episode owner, where a range start names one |
+| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` or `EXECUTION_BY_RANGE` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, and the seat the episode owner, where the start or pass names one |
 
 A guest starts the named row for the named seat's rig, which makes that seat the episode's owner
 on the guest as on the host. An `auto` row's prompt is per pane, so a guest still tests its own
@@ -733,9 +733,8 @@ episode's `Anim` is already the definition that raises its codes, so the claim d
 it. In C1/M02 its one caller, `hangar3_doors`, is called 5 s into either fuel depot's chain
 reaction and invalidates itself first, so the gate is armed once per world, never inside a
 trigger's start, and one pass is all a guest ever holds for it. ⚠ Do not make a code-raising
-range gate re-armable within one world: a guest would start it on the earlier, unread pass. A
-`PlayerRange` gate's verdict names no seat, so the episode it starts is claimed by nobody. Every other `EXECUTION_BY_RANGE` gate stays each end's own
-read over its whole field.
+range gate re-armable within one world: a guest would start it on the earlier, unread pass. Every
+other `EXECUTION_BY_RANGE` gate stays each end's own read over its whole field.
 
 A `PlayerRange` gate is the host's when its definition, or one it starts through
 `CALL_ANIMATION`, raises a `CALLBACK` (`Mech3/Anim/RangeGateAuthority.cs`). The host tests it
@@ -744,6 +743,20 @@ host's last verdict and never tests it against its own field. A pass the guest's
 yet is held until it is read, so a host pass shorter than the gate's poll still starts the
 definition once on the guest. The gate is named by its definition, anchor and radius in metres
 squared (`blacke_drop/blacke_marker/4096`), and the wire carries that name's FNV-1a hash.
+
+A pass names the seat nearest the gate's anchor as the gate opened, and that seat holds while the
+gate stays open, however the definition's own loop re-polls it. On each end, the first callee of
+the opening branch whose closure raises a code claims the episode for that opening's seat
+(`AnimRuntime.RangeTriggerOwner`). The gate's definition is never claimed: it may loop forever, and
+so would never end its episode. In C4/M03 that callee is `bdplayer`, which raises the drop's first
+code and is the episode's `Anim` already, so the claim leaves the episode's length as it was. The
+pilot who flies into the drop marker owns the Blacke drop on every machine, and only that pilot's
+aeroplane rides the player marker. Each end claims once per opening, within the advance the gate
+opened in: the loop's later polls of an open gate re-issue the branch's calls and claim nothing,
+and `CutsceneController.Own` refuses any claim while an episode plays. A guest counts the host's
+openings in wire order, so a close and reopen between two of its polls is still a new opening for
+the new seat. A pass made inside a mission trigger's own start names no seat, and an episode with
+no seat belongs to the scripted player.
 
 Of the 216 shipped animation names carrying a `PlayerRange` condition (1016 definitions over the
 shared, chapter and mission sources), C4/M03's `blacke_drop` is the only one whose closure raises a

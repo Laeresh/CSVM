@@ -26,8 +26,9 @@ internal sealed class NetPositionalStartLink
     // A guest's own seats whose held button the host was last told about.
     private readonly HashSet<int> _told = new();
     // A guest's copy of the host's gate verdicts by name hash. Each holds the last verdict sent,
-    // whether a pass arrived that this end's gate has not read yet, and the seat that pass named.
-    private readonly Dictionary<int, (bool Passed, bool Unread, int? Seat)> _gates = new();
+    // whether a pass arrived that this end's gate has not read yet, and the seat that pass named. It
+    // also counts the passes that opened the gate.
+    private readonly Dictionary<int, (bool Passed, bool Unread, int? Seat, int Opens)> _gates = new();
 
     private NetPositionalStartLink(NetSession net, Func<IReadOnlyList<PlayerRig>> seats,
         LandingApproachRuntime? landings)
@@ -143,6 +144,8 @@ internal sealed class NetPositionalStartLink
             world.RangeGates.HostVerdict = HostVerdict;
             world.RangeGates.HostSeat = gate =>
                 _gates.TryGetValue(NetWorldLink.NameKey(gate), out var verdict) ? verdict.Seat : null;
+            world.RangeGates.HostOpenings = gate =>
+                _gates.TryGetValue(NetWorldLink.NameKey(gate), out var verdict) ? verdict.Opens : 0;
         }
 
         _net.On<PositionalStartMessage>((_, message) =>
@@ -153,7 +156,8 @@ internal sealed class NetPositionalStartLink
                     _gates.TryGetValue(message.Row, out var was);
                     // A withdrawal keeps the seat its pass named, which an unread pass still needs.
                     int? seat = message.Held ? (message.Seat == NetMessage.NoSeat ? null : message.Seat) : was.Seat;
-                    _gates[message.Row] = (message.Held, was.Unread || (message.Held && !was.Passed), seat);
+                    bool opens = message.Held && !was.Passed;
+                    _gates[message.Row] = (message.Held, was.Unread || opens, seat, was.Opens + (opens ? 1 : 0));
                     GateVerdicts++;
                     break;
                 case NetPositionalStart.LandingRow when _landings != null && SeatRig(message.Seat) is { } by:

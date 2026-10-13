@@ -28,8 +28,15 @@ public sealed class RangeGateAuthority
     /// null where it named none.</summary>
     public Func<string, int?>? HostSeat;
 
+    /// <summary>Set on a network guest only: how many times the host's passes have opened a gate.
+    /// It is counted from the wire in order, so a close and reopen between two polls reads as new.
+    /// </summary>
+    public Func<string, int>? HostOpenings;
+
     private readonly Dictionary<AnimDefinition, bool> _raisesCode = new();
-    private readonly Dictionary<string, bool> _told = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (bool Passed, int? Seat, int Opens)> _told = new(StringComparer.OrdinalIgnoreCase);
+    // The opening each gate's claim was last armed for on this end.
+    private readonly Dictionary<string, int> _armed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
     private Func<string, IReadOnlyList<AnimDefinition>> _byName = _ => Array.Empty<AnimDefinition>();
 
@@ -49,6 +56,7 @@ public sealed class RangeGateAuthority
         _byName = byName ?? throw new ArgumentNullException(nameof(byName));
         _raisesCode.Clear();
         _told.Clear();
+        _armed.Clear();
     }
 
     /// <summary>Does <paramref name="def"/>'s range gate belong to the host? True when a
@@ -70,14 +78,35 @@ public sealed class RangeGateAuthority
     public bool Decide(string gate, bool passed, int? seat = null)
     {
         ArgumentNullException.ThrowIfNull(gate);
-        _told.TryGetValue(gate, out bool last);
-        if (passed != last)
+        _told.TryGetValue(gate, out var last);
+        if (passed != last.Passed)
         {
-            _told[gate] = passed;
+            _told[gate] = (passed, seat, last.Opens + (passed ? 1 : 0));
             Decided?.Invoke(gate, passed, seat);
         }
 
         return passed;
+    }
+
+    /// <summary>The seat this end's standing pass of <paramref name="gate"/> named when it opened,
+    /// or null while the gate is closed or its pass named none.</summary>
+    public int? PassSeat(string gate) =>
+        _told.TryGetValue(gate, out var told) && told.Passed ? told.Seat : null;
+
+    /// <summary>Is this read of an open <paramref name="gate"/> the first since it opened? True once
+    /// per opening: this end's own on the host, the host's on a guest (<see cref="HostOpenings"/>).
+    /// </summary>
+    public bool NewOpening(string gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        int opening = HostOpenings?.Invoke(gate) ?? (_told.TryGetValue(gate, out var told) ? told.Opens : 0);
+        if (_armed.TryGetValue(gate, out int last) && last == opening)
+        {
+            return false;
+        }
+
+        _armed[gate] = opening;
+        return true;
     }
 
     // Reset states are left out: a RESET_STATE raises no CALLBACK, and it starts nothing.

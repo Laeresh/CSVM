@@ -219,6 +219,7 @@ internal static class NetRangeGateSuites
                 ends[e].RangeGates.Decided = null;
                 ends[e].RangeGates.HostVerdict = null;
                 ends[e].RangeGates.HostSeat = null;
+                ends[e].RangeGates.HostOpenings = null;
             }
         }
 

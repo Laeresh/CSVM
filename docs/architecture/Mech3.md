@@ -551,7 +551,7 @@ The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON
 event playback; an unhandled event kind is counted, never fatal. It owns the live definition instances and their condition evaluation, the
 destructible-damage entries and the sinks callers configure (`DamageAt`, `ApplyDamageStages`, `CarryState`, `ResetDestructible`, `ApplyReplicatedHealth`; `DestructibleKilled`, `DestructibleDamaged`, `DestructibleChipped`, `DamageReplicated`), which forward to `Anim/DestructibleDamage.cs`, the world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
 with a frame budget, which never splits one def), the range-deferred start sweep (a range start,
-from that sweep or from a call made inside the band, names its episode owner's seat to `RangeTriggerOwner`) and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
+from that sweep or from a call made inside the band, names its episode owner's seat to `RangeTriggerOwner`, as does a code-raising `PLAYER_RANGE` pass for its first code-raising callee) and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
@@ -658,9 +658,9 @@ docs/formats/anim-definitions/cutscenes.md, "Handoff and skip".
 ## src/Mech3/Anim/RangeGateAuthority.cs
 Which machine answers a `PLAYER_RANGE` gate. `HostDecides` walks a definition's `CALL_ANIMATION`
 closure once per world and answers true when it reaches a `CALLBACK`; `Decide` records the deciding
-end's verdict and raises `Decided` on a change; a set `HostVerdict` replaces the local read on a
+end's verdict and raises `Decided` on a change, `PassSeat` is the seat its standing pass named, and `NewOpening` answers true once per opening; a set `HostVerdict` replaces the local read on a
 guest. Engine-free: `AnimRuntime.RangeGates` holds one per runtime and binds it to the program at
-bootstrap, and `Session/Campaign/NetPositionalStartLink.cs` wires the two seams in network co-op.
+bootstrap, and `Session/Campaign/NetPositionalStartLink.cs` wires the guest seams in network co-op.
 The census of shipped gates and the wire kind: docs/org/multiplayer-messages.md, "Positional starts".
 
 ## src/Mech3/Anim/TemplateStage.cs

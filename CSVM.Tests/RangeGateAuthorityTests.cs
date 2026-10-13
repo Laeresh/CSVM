@@ -75,6 +75,52 @@ public class RangeGateAuthorityTests
     }
 
     [Fact]
+    public void AStandingPassKeepsTheSeatItOpenedWith()
+    {
+        var gates = Bound();
+        const string gate = "blacke_drop/blacke_marker/4096";
+
+        Assert.Null(gates.PassSeat(gate));
+        gates.Decide(gate, true, seat: 1);
+        gates.Decide(gate, true, seat: 0);
+        Assert.Equal(1, gates.PassSeat(gate));
+        gates.Decide(gate, false, seat: 0);
+        Assert.Null(gates.PassSeat(gate));
+        gates.Decide(gate, true, seat: 0);
+        Assert.Equal(0, gates.PassSeat(gate));
+    }
+
+    [Fact]
+    public void EachOpeningIsNewOnceOnTheHost()
+    {
+        var gates = Bound();
+        const string gate = "blacke_drop/blacke_marker/4096";
+
+        gates.Decide(gate, true, seat: 1);
+        Assert.True(gates.NewOpening(gate));
+        Assert.False(gates.NewOpening(gate));
+        gates.Decide(gate, false);
+        gates.Decide(gate, true, seat: 0);
+        Assert.True(gates.NewOpening(gate));
+        Assert.False(gates.NewOpening(gate));
+    }
+
+    [Fact]
+    public void AGuestTakesAReopeningItNeverSawClose()
+    {
+        var gates = Bound();
+        const string gate = "blacke_drop/blacke_marker/4096";
+        int openings = 1;
+        gates.HostOpenings = _ => openings;
+
+        Assert.True(gates.NewOpening(gate));
+        Assert.False(gates.NewOpening(gate));
+        openings = 2;
+        Assert.True(gates.NewOpening(gate));
+        Assert.False(gates.NewOpening(gate));
+    }
+
+    [Fact]
     public void TheGateNameCarriesDefinitionAnchorAndRadius()
     {
         var def = Def("blacke_drop");
