@@ -284,6 +284,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const float DescriptionPitch = 16f;
     private const float BotsY = PageY + 205f;
 
+    // The Teams heading's top. The own-flag-home box and label stand on its baseline.
+    private const float TeamsY = PageY + 110f;
+
     // The lines' column in the chat pane, ending 4 px clear of the pane's scroll control at x 757.
     // That control stands over the bar the background paints at the pane's right.
     private const float ChatTextWidth = ChatWidth - ChatNameColumn - 16f;
@@ -482,6 +485,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private float ChatSize => _text.Regular(10575)?.Pixels ?? MultiplayerBoardText.TextFallback;
 
     private float ChatPitch => ChatSize + 2f;
+
+    // The view draws a plain line's baseline at its top plus its size.
+    private float TeamsBaseline => TeamsY + (_text.Regular(10099)?.Pixels ?? MultiplayerBoardText.TextFallback);
 
     // The lobby while the outlaw list stands over its tab page, else null.
     private DogfightLobby? Outlawing => _outlaw.IsOpen ? Lobby : null;
@@ -1560,14 +1566,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, rules && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
         // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
         // mail(5) and mail(1109) do. The remake-only own-flag-home option stands beside the Teams
-        // heading, the column's one clear line, and runs to the page's right edge.
+        // heading, the column's one clear line, on its baseline, and runs to the page's right edge.
         bool ctf = DogfightLobby.IsCtf(options);
         bool fixedTeams = DogfightLobby.FixesTeams(options);
         rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, rules && !fixedTeams));
         bool counts = rules && options.RestrictTeams && !fixedTeams;
         if (ctf)
         {
-            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 290f, PageY + 114f, 168f, 11f, live));
+            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 290f, TeamsBaseline - 11f, 168f, 11f, live));
         }
 
         rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
@@ -2240,8 +2246,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     : TabDisabled);
 
             // A pixel under its siblings, the own-flag-home label ends inside the page beside the
-            // Teams heading. A fixed size, so it scales with the window as its siblings do.
-            layers.Lines.Add(row.Key == FlagHomeKey ? line with { Size = line.Size - 1f } : line);
+            // Teams heading, on its baseline. A fixed size, so it scales with the window as its siblings do.
+            layers.Lines.Add(row.Key == FlagHomeKey ? line with { Size = line.Size - 1f, Y = TeamsBaseline - line.Size + 1f } : line);
         }
     }
 
@@ -2355,7 +2361,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         layers.Lines.Add(_text.Line(10098, "Victory Conditions", PageX + 241f, PageY + 46f, 0f, Black));
-        layers.Lines.Add(_text.Line(10099, "Teams", PageX + 241f, PageY + 110f, 0f, Black));
+        layers.Lines.Add(_text.Line(10099, "Teams", PageX + 241f, TeamsY, 0f, Black));
         layers.Lines.Add(_text.Line(10100, "Lives", PageX + 241f, PageY + 170f, 0f, Black));
         layers.Lines.Add(_text.Line(10101, "Planes", PageX + 241f, PageY + 227f, 0f, Black));
 

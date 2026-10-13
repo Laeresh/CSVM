@@ -569,7 +569,10 @@ constants rather than reading a layout.
   and the rows show from its top (`HO`). Mission Options
   carries the Environment and Type boxes (`MP_B_LISTBOXARROW.PNG`), the victory radios
   (`MP_B_RADIO8STATESSM.PNG`) with their Time and Score boxes, and the teams, lives and planes
-  checkboxes (`MP_B_CHECKBOX8STATES.PNG`); Select Plane the Default and Custom sub-tabs
+  checkboxes (`MP_B_CHECKBOX8STATES.PNG`). Its two columns' headings stand at different heights in
+  `MULTIPLAYERLOBBY_MISSION.SCRIPT`: Mission Environment (10096, TREB11B) 20 above its box at
+  (+25, +63), so at +43, and Victory Conditions (10098, TREB12B) at (+241, +46), a face a point
+  larger, so the right column's text sits lower; Select Plane the Default and Custom sub-tabs
   (`MP_LOBBY_TABLARGE.PNG`), the plane box and the plane's icons (`MP_PLANEICONSTOPFRONT.PNG`) and
   ratings; Select Ammo the Guns and Rockets sub-tabs (`MP_LOBBY_TABSMALL.PNG`), a box per gun slot
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
@@ -578,7 +581,7 @@ constants rather than reading a layout.
   Restrict Number of Teams at two and grey it, and Capture the Flag also greys Above the Clouds and
   NW Lighthouse and shows an Own Flag Home to Capture checkbox beside the Teams heading, the
   remake's own option drawn in the checkbox art, its label a pixel under its siblings' so it ends
-  inside the page. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
+  inside the page, standing on the heading's baseline with the box ending on it. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
   and is live while its pilot is not Ready; Create Team stands the CREATE TEAM box
   (`MP_CREATETEAMBACKGROUND.PNG`). The player list draws each team's row in its team colour with
   its members under it, then the players on no team. Restrict Number of Teams and its two count

@@ -2646,6 +2646,21 @@ internal static class MenuOriginalConnectionSuites
             ctx.Check(crossed.Length == 0, $"{who}'s own-flag-home box and label at {footprint} cross nothing ({crossed})");
             string old = Crossed(new Godot.Rect2(footprint.Position + new Godot.Vector2(lives.X - box.X, lives.Y - 15f - box.Y), footprint.Size));
             ctx.Check(old.Length > 0, $"ABLE-TO-FAIL CONTROL: the same box at its old place under the team boxes crosses {old}");
+
+            // The view draws a plain line's baseline at its top plus its rounded size. The label
+            // shares the Teams heading's baseline and the box ends on it, as each sibling's box
+            // ends on its own label's. The control is the label's former top, 2 under the heading's.
+            var teams = board.Lines.FirstOrDefault(line => line.Text == "Teams");
+            ctx.Check(teams != null, $"{who}'s page draws the Teams heading");
+            if (teams != null)
+            {
+                float Baseline(BoardLine line, float y) => y + Godot.Mathf.RoundToInt(fit.Length(ComposedBoardView.Fitted(fit, FontOf(line), line).Size));
+                float heading = Baseline(teams, teams.Y);
+                ctx.Check(Math.Abs(Baseline(label, label.Y) - heading) < 0.5f && Math.Abs(box.Y + box.Height - heading) <= 1f,
+                    $"{who}'s label stands on the Teams heading's baseline at {heading:0.0} ({Baseline(label, label.Y):0.0}) and the box ends on it ({box.Y + box.Height:0.0})");
+                ctx.Check(Math.Abs(Baseline(label, teams.Y + 2f) - heading) >= 0.5f,
+                    $"ABLE-TO-FAIL CONTROL: the label at its former place has its baseline at {Baseline(label, teams.Y + 2f):0.0}, off the heading's {heading:0.0}");
+            }
         }
         finally
         {
