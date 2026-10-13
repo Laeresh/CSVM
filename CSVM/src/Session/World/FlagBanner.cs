@@ -30,6 +30,7 @@ public sealed partial class FlagBanner : Node3D
     private const float RippleWaves = 1.5f;
     private const float RippleRadPerMetre = 0.25f;
     private const float MinRippleSpeed = 20f;
+    private const float RightingDegPerS = 90f;
 
     // The leading edge rides its pole and the free edge flaps hardest. UV.x is -1 on the tow line,
     // which takes the rope colour and no ripple. The phase arrives accumulated, never as rate times
@@ -73,6 +74,7 @@ public sealed partial class FlagBanner : Node3D
     private MeshInstance3D? _drawn;
     private ImmediateMesh? _mesh;
     private ShaderMaterial? _material;
+    private bool _hullSearched;
     private bool _primed;
     private bool _billboardShown = true;
 
@@ -125,6 +127,7 @@ public sealed partial class FlagBanner : Node3D
         _mount = mount;
         _pilot = pilot;
         _hull = null;
+        _hullSearched = false;
         _primed = false;
     }
 
@@ -173,7 +176,7 @@ public sealed partial class FlagBanner : Node3D
             _points[i] = _points[i - 1] + (along * SegmentLength(i));
         }
 
-        Orient(tow.Basis.X.Normalized());
+        Orient(dt);
         Phase = Mathf.PosMod(Phase + (Mathf.Max(speed, MinRippleSpeed) * RippleRadPerMetre * dt), Mathf.Tau);
         if (_mesh != null)
         {
@@ -243,9 +246,16 @@ public sealed partial class FlagBanner : Node3D
     // hides the aircraft from a camera hides its banner too. Layer 1, the shared world's, otherwise.
     private uint ZoneLayers()
     {
-        if (_hull == null || !IsInstanceValid(_hull))
+        if (_hull != null && !IsInstanceValid(_hull))
         {
             _hull = null;
+            _hullSearched = false;
+        }
+
+        // Once per tow: a local carrier's airframe sits on its seat's own layer and has no match.
+        if (!_hullSearched)
+        {
+            _hullSearched = true;
             foreach (var node in _pilot?.PlaneModel?.FindChildren("*", nameof(GeometryInstance3D), true, false) ?? new())
             {
                 if (node is GeometryInstance3D surface && !_billboard.IsAncestorOf(surface)
@@ -261,23 +271,27 @@ public sealed partial class FlagBanner : Node3D
         return zone != 0 ? zone : 1u;
     }
 
-    // Each point's side is carried down the chain from the carrier's right, so it never flips between
-    // neighbours. Away from vertical it is pulled toward the horizontal. The banner then hangs upright
-    // in a bank short of 90 degrees and stays untwisted through a loop or a vertical climb.
-    private void Orient(Vector3 carrierRight)
+    // Point 0's side is carried from its own last frame, every other point's from the point ahead.
+    // No side flips between frames or neighbours, and the carrier's roll never reaches them. Point 0
+    // alone turns toward the face whose top edge is up, at a bounded rate fading near vertical.
+    // ⚠ Do not pull the later points toward a face of their own: through a righting the trailing
+    // edge then flips in one frame.
+    private void Orient(float dt)
     {
         for (int i = 0; i < Points; i++)
         {
             var tangent = Tangent(i);
-            var ahead = i == 0 ? carrierRight : _sides[i - 1];
+            var ahead = _sides[System.Math.Max(i - 1, 0)];
             var side = ahead - (tangent * ahead.Dot(tangent));
             side = side.LengthSquared() > 1e-8f ? side.Normalized() : ahead;
-            var level = tangent.Cross(Vector3.Up);
-            float flat = level.Length();
-            if (flat > 1e-4f)
+            var upright = Vector3.Up.Cross(tangent);
+            float flat = upright.Length();
+            if (i == 0 && flat > 1e-4f)
             {
-                level = (level / flat) * (level.Dot(side) < 0f ? -1f : 1f);
-                side = side.Lerp(level, Mathf.SmoothStep(0.1f, 0.4f, flat)).Normalized();
+                upright /= flat;
+                float off = Mathf.Atan2(tangent.Dot(side.Cross(upright)), side.Dot(upright));
+                float most = Mathf.DegToRad(RightingDegPerS) * dt * Mathf.SmoothStep(0.1f, 0.4f, flat);
+                side = side.Rotated(tangent, Mathf.Clamp(off, -most, most)).Normalized();
             }
 
             _sides[i] = side;
@@ -287,9 +301,13 @@ public sealed partial class FlagBanner : Node3D
     private Vector3 Tangent(int i) =>
         (_points[System.Math.Min(i + 1, Points - 1)] - _points[System.Math.Max(i - 1, 0)]).Normalized();
 
+    // Laid out straight behind with its top edge up, or across the carrier's right where the chain
+    // stands vertical. Orient carries that side on from here.
     private void Prime(Transform3D tow)
     {
         var back = tow.Basis.Z.Normalized();
+        var upright = Vector3.Up.Cross(back);
+        _sides[0] = upright.LengthSquared() > 1e-8f ? upright.Normalized() : tow.Basis.X.Normalized();
         _points[0] = tow.Origin;
         for (int i = 1; i < Points; i++)
         {

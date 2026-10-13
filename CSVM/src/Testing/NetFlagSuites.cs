@@ -59,9 +59,45 @@ internal static class NetFlagSuites
     private const float LoopDegPerS = 60f;
     private const int LoopSteps = 420;
 
+    // Aerobatics posed by hand: rolls at 180 deg/s, half loops at 90 deg/s, and a knife-edge turn
+    // whose bank wanders 3 degrees.
+    private const float RollDegPerS = 180f;
+    private const float HalfLoopDegPerS = 90f;
+    private const float KnifeEdgeWanderDeg = 3f;
+
+    // How long after a half loop's roll-out or pull-out the banner must hang upright again. It is a
+    // half turn at the 90 deg/s righting rate, and half a second to spare.
+    private const float RightingBound = 2.5f;
+
+    // Banner frames timed on the guest's own carrier.
+    private const int LocalFrames = 600;
+
     private static readonly int[] Teams = { 1, 1, 2 };
 
     private static readonly Dictionary<int, string> TeamNames = new() { [1] = "Red Squadron", [2] = "Blue Angels" };
+
+    // An Immelmann, then an aileron roll held inverted between its halves, then a knife-edge turn.
+    private static readonly Leg[] ImmelmannAndRoll =
+    {
+        new("level", 1f, 0f, 0f),
+        new("half loop up", 2f, HalfLoopDegPerS, 0f),
+        new("roll-out", 1f, 0f, RollDegPerS),
+        new("righting", RightingBound, 0f, 0f),
+        new("half roll", 1f, 0f, RollDegPerS),
+        new("inverted", 1f, 0f, 0f),
+        new("half roll back", 1f, 0f, RollDegPerS),
+        new("to knife-edge", 1f, 0f, 0.5f * RollDegPerS),
+        new("knife-edge turn", 3f, TrailYawDegPerS, 0f, KnifeEdgeWanderDeg),
+    };
+
+    // A half roll to inverted, then a half loop pulled down through the vertical.
+    private static readonly Leg[] SplitS =
+    {
+        new("level", 1f, 0f, 0f),
+        new("half roll", 1f, 0f, RollDegPerS),
+        new("half loop down", 2f, HalfLoopDegPerS, 0f),
+        new("righting", RightingBound, 0f, 0f),
+    };
 
     // The rows every flag marker reads, by the keys FlagMarkers names. The side words come first,
     // then each marker's line for the flag's own side and for the other.
@@ -157,7 +193,10 @@ internal static class NetFlagSuites
         + "banner into that zone; on the host, whose carrier is a replicated "
         + "copy, the banner trails straight behind the tail in level flight and swings off its axis in a "
         + "turn; the same flight repeats the chain bit for bit; the ripple runs faster with airspeed; through "
-        + "a vertical loop no point's side turns over against its neighbour; a live "
+        + "a vertical loop no point's side turns over against its neighbour; through an Immelmann, an aileron "
+        + "roll, a knife-edge turn and a split-S the banner's top edge never turns over between frames, and it "
+        + "hangs upright again soon after each half loop; the guest's own carrier tows its banner on the "
+        + "shared layer; a live "
         + "switch back to Original swaps the billboard back; and a floating flag tows no banner")]
     internal static void TheCarriedFlagTowsABannerUnderEnhanced(TestContext ctx)
     {
@@ -199,9 +238,11 @@ internal static class NetFlagSuites
 
             BannerSwap(ctx, peers, banners, spec.EmptyStage);
             BannerZone(ctx, peers[0], banners[0]);
+            BannerLocal(ctx, peers[1], banners[1]);
             BannerTrail(ctx, ends[0], banners[0], peers[0].SeatRigs[1].Controller!);
             BannerRepeats(ctx);
             BannerLoop(ctx);
+            BannerAerobatics(ctx);
 
             GraphicsMode.Set(true);
             Down(peers, victim: 1, killer: 0);
@@ -457,6 +498,123 @@ internal static class NetFlagSuites
         var tangent = (chain[Math.Min(i + 1, chain.Length - 1)] - chain[Math.Max(i - 1, 0)]).Normalized();
         var side = tangent.Cross(Vector3.Up);
         return side.LengthSquared() > 1e-6f ? side.Normalized() : Vector3.Right;
+    }
+
+    // Two posed flights. The first is an Immelmann, then an aileron roll held inverted between its
+    // halves, then a knife-edge turn; the second a split-S. No frame may turn the banner's top edge
+    // over, and after each half loop it must hang upright again within the righting bound.
+    private static void BannerAerobatics(TestContext ctx)
+    {
+        var (roll, rollFlips, rollWorst, rollSignedFlips) = Aerobatics(ImmelmannAndRoll);
+        var (splitS, splitFlips, splitWorst, _) = Aerobatics(SplitS);
+        Framed End(Framed[] frames, string leg) => frames.Last(f => f.Leg == leg);
+        var held = roll.Where(f => f.Leg == "inverted").ToArray();
+        float Righted(Framed[] frames) => frames.SkipWhile(f => f.Leg != "righting").TakeWhile(f => f.Top <= 0.9f).Count() * GameClock.FixedDt;
+        ctx.Note($"aerobatics (Immelmann, split-S): top edge at the half loop's end {End(roll, "half loop up").Top:0.000}, {End(splitS, "half loop down").Top:0.000}; upright {Righted(roll):0.00} s, {Righted(splitS):0.00} s after the roll-out or pull-out; nearer-face control's end tops {End(roll, "righting").Kept:0.000}, {End(splitS, "righting").Kept:0.000}; carrier-signed control {rollSignedFlips} flips");
+        ctx.Check(rollFlips == 0 && splitFlips == 0,
+            $"through an Immelmann, an aileron roll, a knife-edge turn and a split-S no frame turns the banner's top edge over against the frame before ({rollFlips} and {splitFlips} frames, worst dots {rollWorst:0.000} and {splitWorst:0.000})");
+        ctx.Check(End(roll, "righting").Top > 0.9f && End(splitS, "righting").Top > 0.9f,
+            $"and within {RightingBound:0.0} s of the roll-out from an Immelmann, or of the pull-out from a split-S, the banner hangs upright again (lowest top edge {End(roll, "righting").Top:0.000} and {End(splitS, "righting").Top:0.000})");
+        ctx.Check(held.All(f => f.Top > 0.9f),
+            $"and after the Immelmann it hangs upright through the held inverted second ({held.Count(f => f.Top > 0.9f)} of {held.Length} frames)");
+        ctx.Check(End(roll, "righting").Kept < 0f && End(splitS, "righting").Kept < 0f,
+            $"ABLE-TO-FAIL CONTROL: point 0 carried from its last frame and pulled to its nearer face ends both half loops top-down ({End(roll, "righting").Kept:0.000} and {End(splitS, "righting").Kept:0.000})");
+        ctx.Check(rollSignedFlips > 0 && held.All(f => f.Signed < 0f),
+            $"ABLE-TO-FAIL CONTROL: point 0 signed by the carrier's right each frame turns over in the roll flight ({rollSignedFlips} frames) and hangs top-down held inverted");
+    }
+
+    // One posed flight through a fresh banner, with the frames that turned some point's top edge
+    // over against the frame before. Two control rules for point 0 run beside it. One carries the
+    // side from its last frame and pulls it to its nearer face; one signs it by the carrier's right.
+    private static (Framed[] Frames, int Flips, float Worst, int SignedFlips) Aerobatics(Leg[] legs)
+    {
+        var flag = new Node3D();
+        var banner = FlagBanner.For(flag);
+        try
+        {
+            var frames = new List<Framed>();
+            Vector3[]? before = null;
+            Vector3 kept = Vector3.Zero;
+            Vector3 signedBefore = Vector3.Zero;
+            int flips = 0;
+            int signedFlips = 0;
+            float worst = 1f;
+            foreach (var (pose, leg) in Aerobatic(legs))
+            {
+                banner.Follow(pose, TrailSpeed, GameClock.FixedDt);
+                var tops = Enumerable.Range(0, banner.Chain.Length).Select(banner.TopOf).ToArray();
+                var chain = banner.Chain.ToArray();
+                var tangent = (chain[1] - chain[0]).Normalized();
+                var level = tangent.Cross(Vector3.Up);
+                float flat = level.Length();
+                level = flat > 1e-4f ? level / flat : Vector3.Zero;
+                kept = before == null ? -level : kept;
+                var side = kept - (tangent * kept.Dot(tangent));
+                kept = side.LengthSquared() > 1e-8f ? side.Normalized() : kept;
+                float lying = level.Dot(kept);
+                kept = kept.Lerp(level * Mathf.Sign(lying), Mathf.Abs(lying) * Mathf.SmoothStep(0.1f, 0.4f, flat)).Normalized();
+                var signed = tangent.Cross(level * (level.Dot(pose.Basis.X) < 0f ? -1f : 1f));
+                if (before != null)
+                {
+                    float dot = tops.Zip(before, (a, b) => a.Dot(b)).Min();
+                    worst = Mathf.Min(worst, dot);
+                    flips += dot <= 0f ? 1 : 0;
+                    signedFlips += signed.Dot(signedBefore) < 0f ? 1 : 0;
+                }
+
+                frames.Add(new Framed(leg, tops.Min(t => t.Y), tangent.Cross(kept).Y, signed.Y));
+                before = tops;
+                signedBefore = signed;
+            }
+
+            return (frames.ToArray(), flips, worst, signedFlips);
+        }
+        finally
+        {
+            banner.Free();
+            flag.Free();
+        }
+    }
+
+    // The flight's poses from level along -Z, each leg flown in body rates at the trail's speed. A
+    // leg's wander rocks the bank by that many degrees once a second.
+    private static IEnumerable<(Transform3D Pose, string Leg)> Aerobatic(Leg[] legs)
+    {
+        var basis = Basis.Identity;
+        var at = Vector3.Up * ParkHeight;
+        foreach (var leg in legs)
+        {
+            float rocked = 0f;
+            for (int i = 0; i < Mathf.RoundToInt(leg.Seconds / GameClock.FixedDt); i++)
+            {
+                float rock = leg.WanderDeg * Mathf.Sin(Mathf.Tau * i * GameClock.FixedDt);
+                float roll = Mathf.DegToRad((leg.RollDegPerS * GameClock.FixedDt) + rock - rocked);
+                rocked = rock;
+                basis = (basis * new Basis(Vector3.Right, Mathf.DegToRad(leg.PitchDegPerS * GameClock.FixedDt))
+                    * new Basis(Vector3.Forward, roll)).Orthonormalized();
+                at += -basis.Z * (TrailSpeed * GameClock.FixedDt);
+                yield return (new Transform3D(basis, at), leg.Name);
+            }
+        }
+    }
+
+    // The guest's own carrier, whose airframe its seat stamps onto the seat's own layer, so no surface
+    // carries a cloud zone. The banner draws on the shared layer, and the note times its frame.
+    private static void BannerLocal(TestContext ctx, GameSession guest, FlagBanner banner)
+    {
+        var model = guest.SeatRigs[1].Controller!.PlaneModel;
+        var flag = guest.Dogfight!.Flags!.CarriedFlag(1);
+        int zoned = Surfaces(model).Count(s => flag?.IsAncestorOf(s) != true && (s.Layers & (ZoneGate.LayerBand | 1u)) != 0);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < LocalFrames; i++)
+        {
+            banner.Draw(GameClock.FixedDt);
+        }
+
+        watch.Stop();
+        ctx.Check(zoned == 0 && banner.Drawn && banner.DrawnLayers == 1u,
+            $"the guest's own carrier, none of its airframe's surfaces on a zone or the shared layer ({zoned} of {Surfaces(model).Length}), tows its banner on the shared layer ({banner.DrawnLayers})");
+        ctx.Note($"local carrier draw cost: {watch.Elapsed.TotalMilliseconds * 1000.0 / LocalFrames:0.0} us of CPU per banner frame over {LocalFrames} frames");
     }
 
     private static string Swap(GameSession[] peers, FlagBanner[] banners) =>
@@ -878,4 +1036,11 @@ internal static class NetFlagSuites
     private static string Scores(GameSession[] peers) =>
         string.Join(" | ", peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf))
             + $" teams {p.Dogfight!.Match.TeamScoreOf(1)}/{p.Dogfight!.Match.TeamScoreOf(2)}"));
+
+    // One leg of a posed flight: its length, and its pitch and roll rates in the aircraft's own axes.
+    private readonly record struct Leg(string Name, float Seconds, float PitchDegPerS, float RollDegPerS, float WanderDeg = 0f);
+
+    // One frame of a posed flight: the lowest top edge over the chain, and point 0's top under each
+    // control rule.
+    private readonly record struct Framed(string Leg, float Top, float Kept, float Signed);
 }

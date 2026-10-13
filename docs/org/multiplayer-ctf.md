@@ -236,9 +236,14 @@ at the controls:
   so the banner trails the path the tow point flew and lags into a turn. The rule has no physics
   body, no cloth and no time constant. A tow point that jumps further than the whole chain lays it
   out straight behind again.
-- Each point's side, the axis across the banner, is carried down the chain from the carrier's right
-  and pulled toward the horizontal wherever the chain is not near vertical. The banner hangs upright
-  in a bank short of 90 degrees and does not turn over through a loop or a vertical climb.
+- Each point's side, the axis across the banner, is carried down the chain from the point ahead, and
+  the first point's from its own side on the frame before; the banner is hung with its top edge up.
+  The carrier's roll does not reach the banner, so it stays as it was through a knife-edge turn or
+  an aileron roll, and no side flips between frames or between neighbours. The first point turns
+  about the chain toward the face whose top edge is up at no more than 90 deg/s, a rate that fades
+  to nothing as the chain nears vertical. A half loop leaves the banner partly or fully top-down (an Immelmann's
+  climb, a split-S's dive, the top of a loop); it then rights itself over about two seconds, the
+  whole banner turning with its first point.
 - The vertex shader ripples the banner across its plane, 0.4 m at the free edge and 1.5 waves
   along it, its phase advancing 0.25 rad per metre flown (never below 20 m/s), accumulated on the
   CPU so a change of speed never jumps it.
