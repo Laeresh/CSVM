@@ -1042,6 +1042,11 @@ member, and it does not go here.
   objects, never on the first drop, which returns only part.** 128 drawn shaders a round: the first
   free returned 0.43 of 0.83 GB, later rounds held a 1.31 to 1.36 GB plateau, and the keeping control
   grew 0.62 to 0.71 GB a round.
+- **INSTR-104**, **Before a suite aims a round at a destructible, ray-test a point whose collider
+  resolves to that pool: an object's drawn geometry can answer for no pool, and a miss spends
+  nothing or kills a neighbour.** On C3's `susp_bridge` only `rope1`'s collider resolves to the pool,
+  and rounds aimed along the cable at it flew past into `bridge_truck01`, whose chain then dropped the
+  bridge with no shooter credited.
 
 ## SRC, sources and documents
 

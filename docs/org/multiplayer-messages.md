@@ -608,9 +608,12 @@ leave the guest's copy high until the next hit.
 
 A hit on an AI is decided once: by the host for its own rounds and for every round no seat fired,
 and by a guest for its own seat's rounds, which it claims with `0x47`. A world pool is spent only
-on the host, which simulates every round, a guest's included, from the fire events; a guest's
-world runtime reports a struck pool as hit and spends nothing. A ram on an aeroplane flown
-elsewhere spends nothing on it either, since its owner's own sweep resolves that half.
+on the host, which simulates every round, a guest's included, from the fire events; a guest's world
+runtime reports a struck pool as hit and spends nothing. A break that spends no pool, a
+`CALL_ANIMATION` chain kill or an objective's `WAKE_ANIM` running a death definition, sends no code
+3: each guest makes it in its own replay of the pool event or the director transition behind it. A
+ram on an aeroplane flown elsewhere spends nothing on it either, since its owner's own sweep
+resolves that half.
 
 The debug kill key (F17) on a guest kills nothing locally. On an aeroplane it offers the victim's
 hit router one lethal round from the guest's own fit, so an AI is claimed with `0x47` and another
