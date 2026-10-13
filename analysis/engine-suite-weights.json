@@ -361,6 +361,7 @@
     "net-player-voice": 6.738,
     "net-ai-world": 6.151,
     "net-aircraft-replication": 5.772,
+    "net-admission-over-cap": 0.04,
     "net-blacke-warp": 2.137,
     "net-bot-seat": 5.706,
     "net-bot-seat-lossy": 5.572,

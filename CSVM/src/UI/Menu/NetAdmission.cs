@@ -5,8 +5,8 @@ using CSVM.Net;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// Who a host seats. It refuses a guest of another version, one past the player cap, and one the
-/// lobby turned away for a wrong password or a boot. Each is told why and hung up on after a grace.
+/// Who a host seats. It refuses a guest of another version, and one the lobby turned away for a
+/// wrong password, a boot or the player cap. Each is told why and hung up on after a grace.
 /// In co-op it seats guests in arrival order and grants each further seats from the room the first
 /// seats leave. The door hands it the wire, its own seat count and the cap on every call.
 /// </summary>
@@ -55,8 +55,9 @@ public sealed class NetAdmission
         return true;
     }
 
-    // A Dogfight host seats guests up to its chosen cap in arrival order, and refuses one past it
-    // as a campaign host does. The lobby never lists a refused guest.
+    // A Dogfight host seats guests up to its chosen cap in arrival order and turns one past it away,
+    // as a campaign host does. ⚠ Do not leave a refused guest on the peer lists until its hang-up.
+    // A launch's field reads them, and ENet's hang-up lands a step later.
     internal void RefuseOverCap(NetLobby lobby, int localPlayers, int cap)
     {
         int seated = localPlayers;
@@ -73,14 +74,15 @@ public sealed class NetAdmission
                 continue;
             }
 
-            lobby.Farewell(peer, NetCloseReason.Full);
-            _refused.Add((peer, 0.0));
+            lobby.TurnAway(peer, NetCloseReason.Full);
         }
+
+        RefuseTurnedAway(lobby);
     }
 
     // A campaign host seats guests in arrival order while the cap has a seat free, every seat a
-    // guest was given counting. One past it is told the game is full, and is hung up on if it has
-    // not left by the end of the grace.
+    // guest was given counting. One past it is turned away as full, off every peer list at once, so
+    // a bind inside its grace never seats it.
     internal void Admit(NetLobby lobby, int localPlayers, int cap)
     {
         var peers = lobby.AllPeers;
@@ -109,10 +111,10 @@ public sealed class NetAdmission
                 continue;
             }
 
-            lobby.Farewell(peer, NetCloseReason.Full);
-            _refused.Add((peer, 0.0));
+            lobby.TurnAway(peer, NetCloseReason.Full);
         }
 
+        RefuseTurnedAway(lobby);
         Grant(lobby, seats);
     }
 
@@ -130,8 +132,8 @@ public sealed class NetAdmission
         }
     }
 
-    // A peer the lobby turned away, booted or answering the password wrongly, is told why and hung
-    // up on after the same grace.
+    // A peer the lobby turned away (booted, a wrong password, past the cap) is told why and hung up
+    // on after the same grace.
     internal void RefuseTurnedAway(NetLobby lobby)
     {
         foreach (var (peer, why) in lobby.TurnedAway)

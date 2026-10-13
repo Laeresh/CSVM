@@ -1562,7 +1562,7 @@ The door's LAN discovery, its `Lan`, over the socket factory the door was built 
 A host answers other machines' searches with its advert through a `Net/LanResponder.cs` (`Answering`); a second door on one machine finds the port taken and goes unanswered. Coverage: `CSVM.Tests/LanDiscoveryTests.cs`.
 
 ## src/UI/Menu/NetAdmission.cs
-Who a host seats, private to the door. It refuses a guest of another version, one past the player cap and one the lobby turned away (a wrong password, a boot), says why with the lobby's farewell, and hangs up after `RefuseGraceSeconds`; a refused guest is off the door's `Peers` and off the launch.
+Who a host seats, private to the door. It refuses a guest of another version and one the lobby turned away (a wrong password, a boot, the player cap), says why with the lobby's farewell, and hangs up after `RefuseGraceSeconds`. A refused guest is off the door's `Peers`, the wire's peer lists and the launch from the step that refuses it, before ENet's hang-up lands.
 A co-op host seats guests in arrival order and grants each its further seats only from the room the first seats leave. The door hands it the wire, its own seat count and the cap on every call. Coverage: `CSVM.Tests/NetPlayFeatureBootTests.cs`, `CSVM.Tests/NetPlayFeatureTests.cs`.
 
 ## src/UI/Menu/NetPlayerInfo.cs

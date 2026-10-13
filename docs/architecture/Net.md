@@ -302,8 +302,8 @@ messages stay here (a host's `Picks`, each seat's by `PickAt` with `SeatsWanted`
 rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
-address after `Boot`, a wrong password) stand off every peer list. Read `NetLobbyTests.cs` and
-`NetLobbyAdmissionTests.cs`.
+address after `Boot`, a wrong password, a full game) stand off every peer list at once, before the
+carrier's hang-up lands. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
 
 ## src/Net/NetBuildVersion.cs
 MAJOR.MINOR of the build's SemVer string, which two peers compare before they play: builds a patch
