@@ -1573,7 +1573,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         bool counts = rules && options.RestrictTeams && !fixedTeams;
         if (ctf)
         {
-            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 290f, TeamsBaseline - 11f, 168f, 11f, live));
+            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 293f, TeamsBaseline - 11f, 165f, 11f, live));
         }
 
         rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
@@ -2245,9 +2245,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     ? Black
                     : TabDisabled);
 
-            // A pixel under its siblings, the own-flag-home label ends inside the page beside the
-            // Teams heading, on its baseline. A fixed size, so it scales with the window as its siblings do.
-            layers.Lines.Add(row.Key == FlagHomeKey ? line with { Size = line.Size - 1f, Y = TeamsBaseline - line.Size + 1f } : line);
+            // A pixel under its siblings, the own-flag-home label ends inside the page on the Teams heading's
+            // baseline. It sits 3 px nearer its box than theirs, so the box reads as its own, not the heading's.
+            // A fixed size, so it scales with the window as its siblings do.
+            layers.Lines.Add(row.Key == FlagHomeKey ? line with { X = row.X + 17f, Size = line.Size - 1f, Y = TeamsBaseline - line.Size + 1f } : line);
         }
     }
 
