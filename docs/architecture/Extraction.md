@@ -158,7 +158,7 @@ the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 ## src/Extraction/ExtractionStamp.cs
 Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version
 line, exe hash, fork commit, schema integer) and compares its schema against this class's own
-`Schema` const, in `Launcher._Ready` right after the base paths settle, with at most one warning line
+`Schema` const, in `Launcher._Ready` right after the data root settles, with at most one warning line
 per boot naming the fix. An unstamped tree only warns, since a dev tree holds valid extractions older
 than the stamp. `Standing` (unstamped, current, older, newer) is what stops a menu launch at the
 extraction screen on another schema (`UI/Screens/ExtractionFlow.cs`); `Behind` is the read for a

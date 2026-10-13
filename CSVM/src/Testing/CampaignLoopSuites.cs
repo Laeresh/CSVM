@@ -771,7 +771,7 @@ internal static class CampaignLoopSuites
         return null;
     }
 
-    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
+    // The stand-in for LaunchAudio.PlayCinema. It records what it was asked for and hands the film's
     // end back, so the arm decides when the cinema stops.
     private sealed class FilmRecorder
     {

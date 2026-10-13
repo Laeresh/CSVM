@@ -472,7 +472,7 @@ and `Voice` sending into it. A resource rather than an `AudioServer.AddBus` call
 bus exists before the first node enters the tree. Every site that builds an `AudioStreamPlayer` or
 `AudioStreamPlayer3D` sets `Bus` from here at construction, because Godot resolves an unknown or
 unset bus name to Master with no error and a misplaced player is therefore silent about it. Bus 0
-carries the developer `--volume=` gain and the focus mute (`Launch/Launcher.cs`); the three
+carries the developer `--volume=` gain and the focus mute (`Launch/LaunchAudio.cs`); the three
 children carry the player's mix, written by `AudioMix`. The `audio-buses` suite holds both.
 
 ## src/Utils/AudioMix.cs
@@ -489,7 +489,7 @@ the AUDIO page's preview, which owes back the mix it opened over. The arithmetic
 The developer output gain, the whole of what bus 0 carries: `Resolve` takes the command line's `--volume=` over the
 `audio.volume` config key over a default that is silence in a repo run and the resting gain in an exported one, and
 `VolumeDb` converts it with the same -80 dB floor `AudioMix` uses. The config key is read even where the flag beats it,
-so it self-registers for `--dump-config`. Resolution only: `Launch/Launcher.cs` is the one caller that writes the bus,
+so it self-registers for `--dump-config`. Resolution only: `Launch/LaunchAudio.cs` is the one caller that writes the bus,
 and is where a launch resolving to the resting gain writes nothing at all, keeping a full-volume launch byte-identical
 in output and console log. ⚠ The player's four saved levels are no part of this gain. They multiply on the three child
 buses underneath it (`AudioMix`), so the two reach the output as a product and a level saved at the controls cannot

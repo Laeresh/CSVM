@@ -112,9 +112,9 @@ public class BootSequenceTests
         Assert.False(stage.HandedOff);
     }
 
-    /// <summary>A film this install does not carry runs its continuation at once, which is the
-    /// shape <c>Launcher.PlayCinema</c> takes for an unreadable file, so the block still reaches
-    /// its end and the card is still put up first.</summary>
+    /// <summary>A film this install does not carry runs its continuation at once, the shape
+    /// <c>LaunchAudio.PlayCinema</c> takes for an unreadable file. The block still reaches its end,
+    /// and the card is still put up first.</summary>
     [Fact]
     public void AnInstallMissingEveryFilmStillReachesTheHandoff()
     {

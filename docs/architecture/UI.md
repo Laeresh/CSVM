@@ -292,7 +292,7 @@ for a film, one that puts up a still and one that takes the card down as the fir
 name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
 is also where the card's one showing, the unseen fade and the films running back to back are
 settled; `Held` is the one member that says how much of an authored hold reaches the screen.
-`BootCard` supplies the stills, `Launch/Launcher.cs`'s `PlayCinema` the films.
+`BootCard` supplies the stills, `Launch/LaunchAudio.cs`'s `PlayCinema` the films.
 
 ## src/UI/Screens/BootCard.cs
 The boot sequence's engine half, and the only file that knows a boot still is drawn at all: the
@@ -1484,7 +1484,7 @@ mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left bu
 while the right button is down. `Prime` reads the primary button and drains the wheel, which also
 drains every frame whether or not a pointer is on screen, so input from before the menu showed never
 arrives as one jump. The four device reads are injected delegates, so the seat is engine-free and
-`Launcher` supplies the mouse position, both button reads and the wheel it counts in `_Input`.
+`Launch/ProcessMenu.cs` supplies the mouse position, both button reads and the wheel `Launcher` counts in `_Input`.
 Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs

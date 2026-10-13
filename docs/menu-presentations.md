@@ -52,8 +52,8 @@ listed under [What blocks Built-in's deletion](#what-blocks-built-ins-deletion).
 ## Registration
 
 `PresentationRegistry` (`CSVM/src/UI/Menu/PresentationRegistry.cs`) holds one factory per
-`PresentationId`, a non-empty ordinal token, the word `--presentation=` names. `Launcher.BuildMenuHost`
-(`CSVM/src/Launch/Launcher.cs`) fills the registry once per process:
+`PresentationId`, a non-empty ordinal token, the word `--presentation=` names. `ProcessMenu.Build`
+(`CSVM/src/Launch/ProcessMenu.cs`) fills the registry once per process:
 
 ```
 registry.Register(PresentationId.BuiltIn,  () => new BuiltInPresentation(...));
@@ -336,7 +336,7 @@ names what was asked for even when `MenuHost.Selected` fell back to Built-in.
 
 `MenuHost.Select(forceBuiltIn, cliOverride)` answers availability as registration plus
 the owner's `Availability` delegate, a function from `PresentationId` to a reason or null. Built-in
-is never asked. `Launcher.OriginalAvailable` is the shipped delegate: it loads the decoded layout
+is never asked. `ProcessMenu.OriginalAvailable` is the shipped delegate: it loads the decoded layout
 through `OriginalAvailability.Load`, which refuses a tree stamped behind
 `OriginalAssetManifest.StampSchema`, a missing or unreadable layout, a layout with no `[MainMenu]`,
 and any required file the manifest names as missing or unreadable, each with one reason the host
@@ -680,10 +680,10 @@ In order. Each step names the file it touches and the test that proves it.
    option the store carries bar the unread `menuPresentation`, and leaves through
    `OptionsApplyExit`.
 7. **Register it.** One `registry.Register(PresentationId.<Name>, () => new <Name>Presentation(...))`
-   in `Launcher.BuildMenuHost`, reading `_menuAid` for the cold start's aid as the two shipped
+   in `ProcessMenu.Build`, reading `_aid` for the cold start's aid as the two shipped
    factories do.
 8. **Answer availability.** If the presentation needs extracted files, add its check to the
-   `Availability` delegate `Launcher` installs (`OriginalAvailable` is the shipped one; extend it or
+   `Availability` delegate `ProcessMenu` installs (`OriginalAvailable` is the shipped one; extend it or
    compose a second), deriving the required set from what the screens draw and reconciling it in
    the coverage test as `OriginalCoverageTests` does. If it needs nothing, registration alone is its
    availability.
@@ -748,10 +748,11 @@ Built-in has, and what takes its place.
 `OriginalAvailability.Load`'s over a tree that is present and current (a missing or unreadable
 layout, no `[MainMenu]`, a required file the manifest names missing or unreadable): a missing or
 stale tree already stops at the extraction screen (`UI/Screens/NoGameDataScreen.cs` over
-`ExtractionFlow`) before any menu stands. The error screen replaces this path. In `Launcher`, the
-pieces that go with it are `BuildMenuHost`'s `registry.Register(PresentationId.BuiltIn, ...)`,
-the `ForceBuiltInPresentation` branch of `SessionPresentation` (which hands a command-line flight
-the chrome boards), and the `BuiltInMenu` door (the failed-build note and the one-shot debug aids).
+`ExtractionFlow`) before any menu stands. The error screen replaces this path. The pieces that go
+with it are `ProcessMenu.Build`'s `registry.Register(PresentationId.BuiltIn, ...)`, and in
+`Launcher` the `ForceBuiltInPresentation` branch of `SessionPresentation` (which hands a
+command-line flight the chrome boards) and the `BuiltInMenu` door (the failed-build note and the
+one-shot debug aids).
 
 **The command line.** `--force-builtin`, `--presentation=built-in`, the `--menu=` values `cli.md`
 lists as Built-in's (the `x` press of a campaign aid among them), `--debug-waves=`,

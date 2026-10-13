@@ -5,8 +5,6 @@ using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
-using CSVM.Flight.Hangar;
-using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
@@ -17,7 +15,6 @@ using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
-using CSVM.UI.Menu.Original;
 using CSVM.UI.Overlays;
 using CSVM.UI.Screens;
 using CSVM.Utils;
@@ -39,17 +36,17 @@ namespace CSVM.Launch;
 /// </summary>
 public partial class Launcher : Node3D
 {
-    // Master-bus index. default_bus_layout.tres sends Music, Effects and Voice into Master, so a
-    // gain or a mute written here still reaches every sound while leaving a player's own mix on the
-    // three child buses alone.
-    private const int MasterBus = 0;
-
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists, the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
 
     // The multiplayer door and the wire a flight carries, across every session this process builds.
     private readonly NetFlight _net;
+    // The score, the cinemas over it and the master bus, across every session this process builds.
+    private readonly LaunchAudio _audio;
+    // The process's one menu. Its host is built on the first show of the menu (a no-content-arg
+    // launch) and hands every typed exit to OnMenuExit.
+    private readonly ProcessMenu _menu;
 
     // Everything the command line settled, parsed and resolved once (see SessionSpec). _cli is what
     // the user typed; _spec is what the LIVE session was built from, the launchscreen's pick
@@ -104,49 +101,17 @@ public partial class Launcher : Node3D
     // GameSession node, freed again by ReturnToMenu or RestartSession. The camera, lights and
     // global shader params live on `this` and persist across sessions.
     private GameSession? _session; // the current session node (null at the launchscreen)
-    // The process-lifetime menu host and its audio service, built on the first show of the menu
-    // (a no-content-arg launch): the host owns the shared features, the first seat and the active
-    // presentation, and hands every typed exit to OnMenuExit.
-    private MenuHost? _menuHost;
-    // Wheel steps turned since the menu seat last read them, positive toward a list's foot.
-    private int _menuWheel;
-    private MenuAudioService? _menuAudio;
-    // The decoded menu layout the Original presentation composes from, loaded once by the
-    // availability check and handed to every Original instance the registry creates.
-    private MenuLayout? _originalLayout;
     // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
     // presentation's own tick, which is no place to free it.
     private OptionsApplyExit? _pendingApply;
     // The Options settings on the window and the world, and the live graphics switch. Built beside
     // the sun it dresses.
     private LiveSettings _settings = null!;
-    // The --menu= aid, held for the cold start alone: the first presentation created reads it and
-    // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
-    private string? _menuAid;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
     // Where a flight left early lands, settled by the launch that started it rather than by the
     // exit press: the menu's own launch paths write it (MenuReturnDestination.ForLaunch) and a
     // restart keeps it, since a restarted mission was launched from the same screen.
     private MenuReturnDestination _exitDestination = MenuReturnDestination.TopLevel;
-    // The process's one chapter cinema, so a chapter's film plays once per program run. Entering
-    // the campaign plays it; leaving to the main menu and coming back does not. A restart plays the
-    // current chapter's film again until that chapter's first mission has been flown. This is a
-    // chosen behaviour, not a decoded one: the original's rule sits behind GUI callback 2151, which
-    // nothing here decodes. Do not replace it with a latch persisted in the profile.
-    private ChapterCinema? _chapterCinema;
-    // The process's one closing cinema, so the campaign's last film plays once per program run
-    // however often the player reopens the book afterwards. Its gate is the seated profile's own
-    // completion, not a flag stored anywhere, so a second profile that finishes in the same run
-    // does not get it again. Do not replace it with a latch persisted in the profile.
-    private ClosingCinema? _closingCinema;
-    // The cinema last put up, which StopCinema ends when a co-op host's film ends before the guest's.
-    private UI.Screens.CinemaScreen? _cinemaShown;
-    // The score, and the archive it streams from. Both are process-lifetime, unlike the
-    // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
-    // cabin track would restart every time the player left a board. See docs/org/music.md.
-    private MusicPlayer? _music;
-    private SoundArchive? _musicArchive;
-    private System.Random _musicRng = new();
     // The profile a just-ended campaign mission belongs to, acted on at the top of the next frame:
     // the mission ends inside the session's own physics step, which is no place to free it.
     private (string Profile, CampaignMissionResult Result)? _pendingDebrief;
@@ -187,43 +152,29 @@ public partial class Launcher : Node3D
     // opt-in --perf, --debug-mem and --hitch-inject. Built in three steps across _Ready.
     private FrameInstruments _instruments = null!;
 
-    // Base (chapter-independent) paths + parse state, set once in _Ready; each session node
-    // receives them via LauncherContext and recomputes the chapter-dependent gamez/texture/mission
-    // paths from its spec. In the editor (and editor-run builds) _repoRoot is the repo checkout
-    // root (res://'s parent on disk); in an exported build it is the exe's own directory, since
-    // GlobalizePath("res://") only maps to a real directory inside the editor.
-    private string _repoRoot = "";
-    // Set beside the root above, by the same editor check. The log directory is all that reads it
+    // The base paths, resolved once _Ready has settled both roots and again by the extraction
+    // screen's hand-back. Each session node receives them through LauncherContext.
+    private BasePaths _paths = null!;
+    // Set beside the repo root, by the same editor check. The log directory is all that reads it
     // (Log.DirectoryFor): a recipient's log must not land in a hidden developer folder.
     private bool _exported;
-    // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
-    // so a git worktree can run the game, /extracted/, /CrimsonSkiesGame/ and /tools/ are
-    // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
-    private string _dataRoot = "";
     // Why --synthetic-data could not write its tree, or null. The run quits on it once the log is
     // open. Until then the data root names the unwritten tree, so nothing real is read.
     private string? _syntheticError;
-    private string _planesGamezPath = "";  // extracted/planes.zip, the aircraft models (always this)
-    private string _zrdrPath = "";
-    private string _soundsPath = "";
-    private string _interpPath = "";
-    private string _messagesPath = "";
-    private string _rofPath = "";          // the extracted UI archive (paint patterns)
     // Constructed once the base paths above are settled; every --dump-*/--run-tests/--*-test/
     // --destroy= probe wrapper delegates to it (see src/Tooling/ProbeRunner.cs).
     private Tooling.ProbeRunner _probeRunner = null!;
     // The screen a menu launch stops at over missing or stale data, null once it hands back.
     private UI.Screens.NoGameDataScreen? _extractionScreen;
 
-    // Alt-tabbing away silences the game; alt-tabbing back restores it, via an AudioServer
-    // master-bus mute rather than a factor threaded through the audio code. See this file's
-    // docs/architecture.md entry for why (FlightAudio vs WorldSounds gain plumbing).
-    // ⚠ `--mute` cannot be reused for this: it is load-time and never constructs the audio
-    // players, so there is nothing here to toggle.
-    private bool _focusMuted;
-
-    // The flight's two exits are this node's, so the network state is built over them here.
-    public Launcher() => _net = new NetFlight(ReturnToMenu, ExitSession);
+    // The flight's two exits are this node's, so the network state is built over them here. The
+    // sound is built with the node, since a focus change can arrive before _Ready settles anything.
+    public Launcher()
+    {
+        _net = new NetFlight(ReturnToMenu, ExitSession);
+        _audio = new LaunchAudio(this);
+        _menu = new ProcessMenu(this, _audio, _net, () => _paths, OnMenuExit);
+    }
 
     // The screen ExitSession takes a flight back to, as the last launch settled it. The setter is
     // the launch-return suite's way of putting the live node's own destination back afterwards.
@@ -241,18 +192,18 @@ public partial class Launcher : Node3D
     // The launchscreen while the Built-in presentation is the active one, else null: the door for
     // what is Built-in's alone (its one-shot debug aids, its failed-build note). Null-safe under
     // Original, where both are absent by design; every other reading of the menu goes through the host.
-    private LaunchMenu? BuiltInMenu => (_menuHost?.Active as BuiltInPresentation)?.Menu;
+    private LaunchMenu? BuiltInMenu => (_menu.Host?.Active as BuiltInPresentation)?.Menu;
 
     // The presentation a session's boards take. A menu launch has already settled it on the host,
     // availability included. A CLI launch builds no host, so only the flags speak for it there.
     private PresentationId SessionPresentation =>
-        _menuHost is { } host ? host.Selected
+        _menu.Host is { } host ? host.Selected
         : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
         : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride));
 
     // The boards stood with no flight in front of them, over the live spec and the current paths.
     // Built per use, since an extraction's hand-back re-resolves the paths.
-    private LaunchBoards Boards => new(_spec, _dataRoot, _zrdrPath, _messagesPath);
+    private LaunchBoards Boards => new(_spec, _paths);
 
     public override void _Ready()
     {
@@ -275,19 +226,20 @@ public partial class Launcher : Node3D
         // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
         Config.Load();
 
+        string repoRoot;
         if (OS.HasFeature("editor"))
         {
             // res:// is the CSVM/ project dir on disk only while the editor (or an editor-run
             // build) hosts the game; the repo root is its parent.
             var projectDir = ProjectSettings.GlobalizePath("res://");
-            _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
+            repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
         }
         else
         {
             // Exported build: res:// lives inside the pck, so the root is the exe's own folder,
             // extracted/ ships beside the exe, and logs/ and .scratch/ output land there too.
             _exported = true;
-            _repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
+            repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
         }
 
         // Everything the command line settles is parsed and resolved in one place; see
@@ -309,42 +261,35 @@ public partial class Launcher : Node3D
             }
         }
 
-        // Every base path derives from the data root, so it is settled first.
-        // Precedence: --data-root= beats CSVM_DATA_ROOT beats the repo root.
-        _dataRoot = _repoRoot;
+        // Every base path derives from the data root, so it is settled first. Precedence:
+        // --data-root= beats CSVM_DATA_ROOT beats the repo root. The overrides exist because a git
+        // worktree has no extracted/, which is git-ignored, and cannot otherwise build or verify.
+        string dataRoot = repoRoot;
         var dataRootEnv = OS.GetEnvironment("CSVM_DATA_ROOT");
-        if (!string.IsNullOrEmpty(dataRootEnv)) _dataRoot = Path.GetFullPath(dataRootEnv);
-        if (_spec.DataRoot is { } dataRootArg) _dataRoot = Path.GetFullPath(dataRootArg);
-        if (_dataRoot != _repoRoot)
-            Log.Info("core", $"data root: {_dataRoot} (repo root {_repoRoot})");
-        ResolveSyntheticData();
-
-        // An override is used verbatim; everything else derives from the data root.
-        var planesGamezPath = Path.Combine(_dataRoot, "extracted", "planes.zip");
-        _zrdrPath = _spec.Zrdr ?? Path.Combine(_dataRoot, "extracted", "zrdr.zip");
-        _soundsPath = _spec.Sounds ?? Path.Combine(_dataRoot, "extracted", "soundsh.zip");
-        _interpPath = _spec.Interp ?? Path.Combine(_dataRoot, "extracted", "interp.json");
-        _messagesPath = _spec.Messages ?? Path.Combine(_dataRoot, "extracted", "messages.json");
-        _rofPath = _spec.Rof ?? Path.Combine(_dataRoot, "extracted", "rof");
+        if (!string.IsNullOrEmpty(dataRootEnv)) dataRoot = Path.GetFullPath(dataRootEnv);
+        if (_spec.DataRoot is { } dataRootArg) dataRoot = Path.GetFullPath(dataRootArg);
+        if (dataRoot != repoRoot)
+            Log.Info("core", $"data root: {dataRoot} (repo root {repoRoot})");
+        dataRoot = ResolveSyntheticData(repoRoot, dataRoot);
 
         // The extraction tree's provenance check, at most one warning line, never a block. An
         // --extract run is about to write that tree, and a missing one has no stamp to read. A
         // warning about either would only mislead.
-        if (_spec.ExtractInstall == null && !UI.Screens.NoGameDataScreen.Missing(_dataRoot))
+        if (_spec.ExtractInstall == null && !UI.Screens.NoGameDataScreen.Missing(dataRoot))
         {
-            ExtractionStamp.Check(_dataRoot);
+            ExtractionStamp.Check(dataRoot);
         }
 
         // The drop-in writes statics every material built afterwards reads, so it is applied here
         // rather than carried as a session value.
         foreach (string name in _spec.TexOverrides)
         {
-            TextureDropIn.SetScratchDir(_repoRoot);
+            TextureDropIn.SetScratchDir(repoRoot);
             TextureDropIn.AddOverride(name);
         }
         if (_spec.TexCensus)
         {
-            TextureDropIn.SetScratchDir(_repoRoot);
+            TextureDropIn.SetScratchDir(repoRoot);
             TextureDropIn.EnableCensus(_spec.TexCensusFilter);
         }
         // Read by every archive built afterwards, for the same reason the drop-in's state is a
@@ -423,7 +368,7 @@ public partial class Launcher : Node3D
         // Opened under the session shape's name (it names the file) and before anything else can
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
-        Log.Open(_repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
+        Log.Open(repoRoot, _spec.ModeName, BuildVersion.Current, _exported);
         // Every persisted store resolves against this root (profiles, hangar planes, bindings,
         // options), and it is derived from the project name alone, so a worktree run shares it with
         // the main checkout. Printed so a "not found" against a file on disk is answered, not guessed.
@@ -443,11 +388,11 @@ public partial class Launcher : Node3D
         }
         // Ahead of --dump-config, same reason as the instruments: registers the two
         // hitchSidecar.* keys. After Log.Open, since its path derives from the log's.
-        _instruments.OpenSidecar(_repoRoot, _exported);
+        _instruments.OpenSidecar(repoRoot, _exported);
 
         // Before anything heavy loads: a scripted launch below the memory floor ends here. A
         // release build has no ledger to join.
-        if (!_exported && Tooling.MemoryAdmission.Refuses(OS.GetCmdlineUserArgs(), _repoRoot))
+        if (!_exported && Tooling.MemoryAdmission.Refuses(OS.GetCmdlineUserArgs(), repoRoot))
         {
             GetTree().Quit(Tooling.MemoryAdmission.TripwireExitCode);
             return;
@@ -465,7 +410,7 @@ public partial class Launcher : Node3D
         // --extract builds no world and no menu: it writes the data root's extracted/ and quits.
         if (_spec.ExtractInstall is { } extractInstall)
         {
-            StartHeadlessExtraction(extractInstall);
+            StartHeadlessExtraction(extractInstall, repoRoot, dataRoot);
             return;
         }
 
@@ -507,7 +452,7 @@ public partial class Launcher : Node3D
         // After the --det block, so a deterministic run reads the flag but not the tuning file that
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
         // --dump-* wrappers are covered by the same gain an interactive launch gets.
-        ApplyMasterVolume();
+        _audio.ApplyMasterVolume(_spec.Volume, _exported);
         // After it, so the two are read in the order they multiply: the developer gain on bus 0,
         // then the player's mix on the three buses under it. ⚠ --det reads no saved level, the same
         // rule the saved graphics word below follows; SavedLevels owns that drop.
@@ -544,14 +489,10 @@ public partial class Launcher : Node3D
         {
             Log.Info("core", $"assets: --zip-assets, reading .zip archives, ignoring unpacked folders");
         }
-        // Prefer the unpacked sibling folder from --extract-unzip when it exists (loose
-        // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
-        // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
-        _planesGamezPath = SessionPaths.PreferUnzipped(planesGamezPath);
-        if (_spec.Zrdr == null) { _zrdrPath = SessionPaths.PreferUnzipped(_zrdrPath); }
-        if (_spec.Sounds == null) { _soundsPath = SessionPaths.PreferUnzipped(_soundsPath); }
-        _probeRunner = new Tooling.ProbeRunner(_repoRoot, _dataRoot, _zrdrPath, _soundsPath,
-            _interpPath, _messagesPath, _planesGamezPath);
+        // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
+        // gamez/texture/mission paths resolve per session in StartSession.
+        _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec);
+        _probeRunner = new Tooling.ProbeRunner(_paths);
 
         // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
         // no-op until --fly's weather.json overrides them.
@@ -664,7 +605,7 @@ public partial class Launcher : Node3D
         }
         // --dump-sticks: the SDL2 stick roster with each stick's counts and resting reads; fails
         // only when no SDL2 loads, since zero sticks is a valid answer.
-        string? sdlRepoRoot = _exported ? null : _repoRoot;
+        string? sdlRepoRoot = _exported ? null : repoRoot;
         string? sdlDataRoot = string.IsNullOrEmpty(dataRootEnv) ? null : dataRootEnv;
         if (_spec.DumpSticks)
         {
@@ -680,7 +621,7 @@ public partial class Launcher : Node3D
         // nested by block) to the scratch folder and quit, the copy-and-edit source for config.json.
         if (_spec.DumpConfig)
         {
-            string dumpPath = Path.Combine(_repoRoot, ".scratch", "config.dump.json");
+            string dumpPath = Path.Combine(repoRoot, ".scratch", "config.dump.json");
             Config.DumpConfig(dumpPath);
             Log.Info("core", $"config: wrote {Config.RegisteredCount}-key tuning template to ./.scratch/config.dump.json");
             GetTree().Quit();
@@ -748,10 +689,10 @@ public partial class Launcher : Node3D
 
         // The version stamp on the menu, process-wide for the same reason and built beside it: the
         // build a capture came from is a fact about the binary, not about a presentation.
-        _buildStamp = new UI.Screens.BuildStamp(_repoRoot, _exported);
+        _buildStamp = new UI.Screens.BuildStamp(repoRoot, _exported);
         AddChild(_buildStamp);
         // A Game Mode refusal stands in the Original menu's own warning box, the stamp's dialog elsewhere.
-        _buildStamp.Messagebox = words => _menuHost?.Active is UI.Menu.Original.OriginalPresentation original && original.RaiseWarning(words);
+        _buildStamp.Messagebox = words => _menu.Host?.Active is UI.Menu.Original.OriginalPresentation original && original.RaiseWarning(words);
 
         // The strip over Steam's on-screen keyboard, process-wide because the menus, the extraction
         // screen and the flight chat all raise it. It draws nothing on any other machine.
@@ -770,9 +711,9 @@ public partial class Launcher : Node3D
 
         // Only on the path a recipient takes. Every other entry carries a content arg, which is a
         // developer's launch, and the log is where that reader already looks. ⚠ Keep this ahead of
-        // BuildMusic: a stale tree is rewritten by the screen, and an open sound archive would hold it.
+        // the music's build: a stale tree is rewritten by the screen, and an open sound archive would hold it.
         if (_spec.ShowsMenu && _spec.MovieName == null
-            && UI.Screens.ExtractionFlow.ProblemAt(_dataRoot) is var problem && problem != UI.Screens.DataProblem.None)
+            && UI.Screens.ExtractionFlow.ProblemAt(dataRoot) is var problem && problem != UI.Screens.DataProblem.None)
         {
             ShowExtractionScreen(problem);
             return;
@@ -781,13 +722,13 @@ public partial class Launcher : Node3D
         // The music channel, once per process and after every early-quit probe: one player that
         // outlives every session, over a sound archive of its own for the same reason (D37's
         // wiring contract, step 1).
-        BuildMusic();
+        _audio.Build(_paths, _masterSeed);
 
         // --movie=: one cinema, then quit. No world, no menu, and no session behind it, which is
         // what makes the audio sync judgeable at the controls before any flow plays a cinema.
         if (_spec.MovieName is { } cinemaName)
         {
-            PlayCinema(cinemaName, () => GetTree().Quit());
+            _audio.PlayCinema(cinemaName, () => GetTree().Quit());
             return;
         }
 
@@ -809,8 +750,8 @@ public partial class Launcher : Node3D
         }
 
         // Before the build, because the session reads its wire in its own constructor.
-        _net.OpenCli(_spec, _messagesPath);
-        _net.SeatLocalField(_spec, _messagesPath);
+        _net.OpenCli(_spec, _paths.MessagesPath);
+        _net.SeatLocalField(_spec, _paths.MessagesPath);
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -825,11 +766,11 @@ public partial class Launcher : Node3D
         // measured against. Godot 4's constants are longs; _Notification hands us an int.
         if (what == (int)NotificationApplicationFocusOut)
         {
-            SetFocusMuted(true);
+            _audio.SetFocusMuted(true);
         }
         else if (what == (int)NotificationApplicationFocusIn)
         {
-            SetFocusMuted(false);
+            _audio.SetFocusMuted(false);
         }
     }
 
@@ -855,8 +796,7 @@ public partial class Launcher : Node3D
 
         DrainLowPriorityTasks();
         _instruments.Exit();
-        _musicArchive?.Dispose();
-        _musicArchive = null;
+        _audio.Exit();
         SettleFinalizers();
         MirrorEngineLog();
     }
@@ -876,7 +816,7 @@ public partial class Launcher : Node3D
             {
                 // A hosting door is the one thing on a menu with something to copy: its join code,
                 // else its address.
-                if (_menuHost is { Shown: true })
+                if (_menu.Host is { Shown: true })
                 {
                     _net.CopyForGuests();
                 }
@@ -889,15 +829,15 @@ public partial class Launcher : Node3D
 
         // The wheel is an event, never a held state, so it is counted here and handed to the
         // menu seat's poll; nothing else about it is read while the menu is up.
-        if (_menuHost is { Shown: true } && @event is InputEventMouseButton { Pressed: true } wheel)
+        if (_menu.Host is { Shown: true } && @event is InputEventMouseButton { Pressed: true } wheel)
         {
             switch (wheel.ButtonIndex)
             {
                 case MouseButton.WheelDown:
-                    _menuWheel++;
+                    _menu.TurnWheel(1);
                     break;
                 case MouseButton.WheelUp:
-                    _menuWheel--;
+                    _menu.TurnWheel(-1);
                     break;
             }
         }
@@ -908,7 +848,7 @@ public partial class Launcher : Node3D
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
             // While the menu is up it owns Esc (back / quit from the Mode screen).
-            if (_menuHost is { Shown: true })
+            if (_menu.Host is { Shown: true })
                 return;
             // ⚠ Esc no longer leaves a live flight; it opens the pause board, whose Exit item does.
             // FlightController polls it as a pause toggle, so nothing is done here.
@@ -959,15 +899,15 @@ public partial class Launcher : Node3D
         // The main menu only: deeper screens have plaques along the bottom edge that the stamp
         // overlaps at a Steam Deck's aspect. The
         // extraction screen too, since a player whose extraction failed needs the logs icon most.
-        _buildStamp?.Tick(_menuHost is { OnMainMenu: true } || _extractionScreen != null);
+        _buildStamp?.Tick(_menu.Host is { OnMainMenu: true } || _extractionScreen != null);
         TickNetReadout(delta);
         _instruments.EndFrame(delta, ClockNow);
         // Wall time, like the instruments above: the score is not part of the simulation, and a
         // paused or stepped session must not stall a fade halfway.
-        _music?.Tick((float)delta, _musicRng);
+        _audio.Tick((float)delta);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menuHost is { Shown: true } || _extractionScreen != null);
+            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
@@ -1029,62 +969,7 @@ public partial class Launcher : Node3D
         // After everything above, which is where the launchscreen's own process callback ran when
         // it was a child ticking itself: the capture director reads the menu as it stood before
         // this frame's presses, as it always did.
-        _menuHost?.Tick(MenuStep(delta));
-    }
-
-    /// <summary>Plays one cinema over the whole window and runs <paramref name="then"/> on the
-    /// frame it stops, whether it played out or was skipped. A name that resolves to no readable
-    /// file runs the continuation straight away, so a flow costs a screen rather than stalling on
-    /// a cinema this install does not carry. This is the seam every movie sequence goes
-    /// through.</summary>
-    public void PlayCinema(string name, System.Action then, Video.CinemaSkip skip = UI.Screens.CinemaScreen.BootKeys)
-    {
-        if (UI.Screens.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
-        {
-            Log.Warn("ui", $"cinema {name} not played; looked under {SessionPaths.CinemaFolder(_dataRoot)}");
-            then();
-            return;
-        }
-
-        // A repo run's developer gain defaults to zero, and a cinema whose whole point is its
-        // sound track is the one place that reads as a defect rather than as a quiet run.
-        if (MasterVolume.Resolve(_spec.Volume, _exported) <= 0f)
-        {
-            Log.Warn("sound", $"cinema {name} is playing at master volume 0, pass --volume=1.0 to hear it");
-        }
-
-        Log.Info("ui", $"cinema {name} playing skip={skip}");
-
-        // Every film carries its own sound track, so the score must not play under it. The track
-        // waits where it stopped and resumes under the screen the film hands to.
-        if (_music != null)
-        {
-            _music.Paused = true;
-        }
-
-        cinema.Ended = () =>
-        {
-            if (_music != null)
-            {
-                _music.Paused = false;
-            }
-
-            then();
-        };
-        _cinemaShown = cinema;
-        AddChild(cinema);
-    }
-
-    /// <summary>Ends the cinema <see cref="PlayCinema"/> last put up, as a skip does, when it is
-    /// still showing. A co-op guest's film stops this way when its host's does.</summary>
-    public void StopCinema()
-    {
-        if (_cinemaShown is { } cinema && IsInstanceValid(cinema) && !cinema.Finished)
-        {
-            cinema.Stop();
-        }
-
-        _cinemaShown = null;
+        _menu.Host?.Tick(MenuStep(delta));
     }
 
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
@@ -1095,47 +980,49 @@ public partial class Launcher : Node3D
 
     // --synthetic-data replaces the data root, whatever it held, with a tree written into scratch.
     // The switch alone opts in, and a synthetic tree is named in the log on every run that reads one.
-    // ⚠ Do not fall back to the resolved root when the tree fails; see _syntheticError.
-    private void ResolveSyntheticData()
+    // Answers the data root this run reads. ⚠ Do not fall back to the resolved root when the tree
+    // fails; see _syntheticError.
+    private string ResolveSyntheticData(string repoRoot, string dataRoot)
     {
         if (!_spec.SyntheticData)
         {
-            if (Tooling.SyntheticData.Marks(_dataRoot))
+            if (Tooling.SyntheticData.Marks(dataRoot))
             {
-                Log.Warn("core", $"SYNTHETIC DATA: the data root {_dataRoot} holds an invented test tree, not an extraction; every asset this run reads is invented");
+                Log.Warn("core", $"SYNTHETIC DATA: the data root {dataRoot} holds an invented test tree, not an extraction; every asset this run reads is invented");
             }
-            return;
+            return dataRoot;
         }
-        string replaced = _dataRoot;
+        string replaced = dataRoot;
         bool installThere = !UI.Screens.NoGameDataScreen.Missing(replaced);
-        _dataRoot = Tooling.SyntheticData.ScratchRoot(_repoRoot);
+        string synthetic = Tooling.SyntheticData.ScratchRoot(repoRoot);
         try
         {
-            Tooling.SyntheticData.Build(Tooling.SyntheticData.FixturesUnder(_repoRoot), _dataRoot, UI.Menu.Original.SyntheticShell.TreeFamilies);
+            Tooling.SyntheticData.Build(Tooling.SyntheticData.FixturesUnder(repoRoot), synthetic, UI.Menu.Original.SyntheticShell.TreeFamilies);
         }
         catch (System.Exception e)
         {
             // Every failure alike, a malformed record included: each one leaves the tree unusable.
             _syntheticError = $"{e.GetType().Name}: {e.Message}";
-            return;
+            return synthetic;
         }
         Flight.Weapons.StockLoadouts.Supplement =
-            Tooling.SyntheticPlane.LoadoutsUnder(Tooling.SyntheticData.FixturesUnder(_repoRoot));
+            Tooling.SyntheticPlane.LoadoutsUnder(Tooling.SyntheticData.FixturesUnder(repoRoot));
         SessionSpec.DefaultPlane = Tooling.SyntheticPlane.Plane;
         string families = string.Join(",", System.Linq.Enumerable.Select(UI.Menu.Original.SyntheticShell.TreeFamilies, f => f.Name));
-        Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {_dataRoot} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
+        Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {synthetic} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
+        return synthetic;
     }
 
     // Runs on a worker thread, since the extraction must not hold the main thread. The per-frame
     // callbacks are switched off until the quit, because _Ready returned before building what they read.
-    private void StartHeadlessExtraction(string install)
+    private void StartHeadlessExtraction(string install, string repoRoot, string dataRoot)
     {
         SetProcess(false);
         SetPhysicsProcess(false);
         SetProcessInput(false);
         SetProcessUnhandledInput(false);
-        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(_repoRoot, _exported);
-        var request = new Extraction.ExtractionRequest(install, _dataRoot, unzbd, _spec.ExtractForce, _spec.ExtractUnzip);
+        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(repoRoot, _exported);
+        var request = new Extraction.ExtractionRequest(install, dataRoot, unzbd, _spec.ExtractForce, _spec.ExtractUnzip);
         System.Threading.Tasks.Task.Run(() =>
         {
             int code;
@@ -1198,22 +1085,12 @@ public partial class Launcher : Node3D
         Log.Info("core", $"exit finalizers: settled in {watch.Elapsed.TotalMilliseconds:0.0} ms, no-collection region {region}");
     }
 
-    // The boot sequence in fmv.zrd's own order, its card and waits and fade included: the reader's
-    // eight actions live in BootSequence and not one of them is written down here. A press ends the
-    // action it lands in and the next begins. Whether the original abandoned the rest of the block
-    // instead is not decoded (docs/formats/cinemas.md).
-    private void PlayBootSequence(System.Action then) =>
-        UI.Screens.BootCard.Play(this, _dataRoot, PlayCinema, then);
-
     // The step the menus advance on. A deterministic run gives them the sim's own, for the reason
     // the sim takes it: what a capture shows must be a function of the frame count and nothing
     // else, and the screens that animate (the briefing's reveal, a board's background movie)
     // otherwise land wherever this machine's frame times put them.
     private float MenuStep(double delta) => _spec.Det ? GameClock.FixedDt : (float)delta;
 
-    // The process's one music channel and the archive it streams from. Everything here is
-    // optional: an install without soundsh or without a readable sounds.json leaves the game
-    // silent, which is what a missing extraction has always meant.
     /// <summary>Copies Godot's own log next to ours in <c>.scratch/logs/</c> on an ordinary quit,
     /// so one folder is the whole bug report. The file sink takes <see cref="Log"/> calls only, so
     /// a managed exception escaping a callback reaches the engine's log and NOT ours.
@@ -1244,26 +1121,6 @@ public partial class Launcher : Node3D
                                              or System.NotSupportedException)
         {
             Log.Warn("core", $"engine log mirror failed from={source} error={e.GetType().Name}: {e.Message}");
-        }
-    }
-
-    private void BuildMusic()
-    {
-        try
-        {
-            _musicArchive = new SoundArchive(_soundsPath);
-            _music = new MusicPlayer(SoundDefs.Load(_zrdrPath), SoundDefs.LoadGroups(_zrdrPath))
-            {
-                Loader = (def, looped) => _musicArchive.Find(def.WavName, looped, warn: false),
-            };
-            AddChild(_music);
-            _musicRng = new System.Random((int)(_masterSeed & 0x7fffffff));
-        }
-        catch (System.Exception e)
-        {
-            _music = null;
-            _musicArchive = null;
-            Log.Warn("sound", $"music: no channel this process ({e.GetType().Name}: {e.Message})");
         }
     }
 
@@ -1335,9 +1192,9 @@ public partial class Launcher : Node3D
         ReturnToMenu(MenuReturnDestination.TopLevel);
         // Each presentation says so in its own chrome, Built-in on its error line and Original in
         // its warning box. Without the box Original's top level shows bare, which reads as a misclick.
-        Log.Warn("ui", $"menu: the build failed, back at the top level of {_menuHost?.Selected}");
+        Log.Warn("ui", $"menu: the build failed, back at the top level of {_menu.Host?.Selected}");
         BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)}, see the log.");
-        if (_menuHost?.Active is UI.Menu.Original.OriginalPresentation original)
+        if (_menu.Host?.Active is UI.Menu.Original.OriginalPresentation original)
         {
             original.RaiseWarning(FailedBuildWarning());
         }
@@ -1345,7 +1202,7 @@ public partial class Launcher : Node3D
 
     // The words of Original's failed-build box. An extraction with no chapter world fails every
     // flight the same way, so it names the fix; anything else is the log's to explain.
-    private string FailedBuildWarning() => SessionPaths.HasAnyChapterWorld(_dataRoot)
+    private string FailedBuildWarning() => SessionPaths.HasAnyChapterWorld(_paths.DataRoot)
         ? $"The mission could not be loaded. The log says why: open it with the \"{UI.Screens.BuildStamp.LogsTooltip}\" icon beside the version number."
         : "The extracted game data holds no chapter worlds, so no mission can be flown. "
             + $"Extract again from a full install of Crimson Skies, {Extraction.InstallLocator.ExpectedFolder}.";
@@ -1374,7 +1231,7 @@ public partial class Launcher : Node3D
         // The one place the session leaves the boards for a mission, so the one place the menu
         // score stops. What plays next is the mission's own business: a campaign mission cues
         // prebattle from its objectives graph, and Instant Action ships silent (docs/org/music.md).
-        _music?.Stop();
+        _audio.StopMusic();
         RaiseStartCover();
         ShowLoadScreen(_spec.CampaignProfile != null, _spec.IaDef?.MissionType);
         _launchFramesWaited = 0;
@@ -1444,20 +1301,13 @@ public partial class Launcher : Node3D
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
-        float mipBias = Mech3.TextureArchive.MipBias(_interpPath, _spec.Chapter);
+        float mipBias = Mech3.TextureArchive.MipBias(_paths.InterpPath, _spec.Chapter);
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         LoadProgress.Report(LoadStep.ChapterPaths);
         _session = new GameSession(_spec, _net.WithNet(new LauncherContext
         {
-            RepoRoot = _repoRoot,
-            DataRoot = _dataRoot,
-            PlanesGamezPath = _planesGamezPath,
-            ZrdrPath = _zrdrPath,
-            SoundsPath = _soundsPath,
-            InterpPath = _interpPath,
-            MessagesPath = _messagesPath,
-            RofPath = _rofPath,
+            Paths = _paths,
             ProbeRunner = _probeRunner,
             CaptureDirector = _captureDirector,
             MasterSeed = _masterSeed,
@@ -1477,7 +1327,7 @@ public partial class Launcher : Node3D
                 : null,
             InstantActionWrapup = _menuDriven ? snapshot => _pendingWrapup = snapshot : null,
 
-            Music = _music,
+            Music = _audio.Music,
         }, _menuDriven ? () => _pendingLobbyLanding = true : null));
         AddChild(_session);
         bool built = _session.StartSession();
@@ -1557,7 +1407,7 @@ public partial class Launcher : Node3D
         _menuDriven = true;
         if (_spec.PlaysBootSequence)
         {
-            PlayBootSequence(() => ShowMenu(MenuReturnDestination.TopLevel));
+            _audio.PlayBoot(() => ShowMenu(MenuReturnDestination.TopLevel));
             return;
         }
 
@@ -1569,7 +1419,7 @@ public partial class Launcher : Node3D
     // which quits with neither a menu nor a session up; the screen keeps Esc while a run is going.
     private void ShowExtractionScreen(UI.Screens.DataProblem problem)
     {
-        string extracted = Path.Combine(_dataRoot, Extraction.ExtractionRun.ExtractedFolder);
+        string extracted = Path.Combine(_paths.DataRoot, Extraction.ExtractionRun.ExtractedFolder);
         if (problem == UI.Screens.DataProblem.Missing)
         {
             Log.Error("core", $"no extracted game data path={extracted}, {UI.Screens.NoGameDataScreen.Instruction}");
@@ -1580,12 +1430,12 @@ public partial class Launcher : Node3D
         }
         else
         {
-            ExtractionStamp.Standing(_dataRoot, out int? found);
+            ExtractionStamp.Standing(_paths.DataRoot, out int? found);
             Log.Warn("core", $"extraction stamp schema={found} but this build reads schema={ExtractionStamp.Schema} path={extracted}, asking to re-extract ({problem})");
         }
 
         // The screen honours --unzbd= as --extract does, which is how a worktree names a tool.
-        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(_repoRoot, _exported);
+        string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(_paths.RepoRoot, _exported);
         string? remembered = Extraction.RememberedInstall.Get();
         var candidates = Extraction.InstallLocator.Candidates(Extraction.InstallSearchRoots.ForThisMachine(), remembered);
         string preFill = UI.Screens.ExtractionFlow.PreFill(remembered, candidates);
@@ -1595,7 +1445,7 @@ public partial class Launcher : Node3D
         System.Action<string> remember = _spec.IsScripted
             ? _ => { }
         : Extraction.RememberedInstall.Set;
-        var flow = new UI.Screens.ExtractionFlow(problem, _dataRoot, unzbd, preFill,
+        var flow = new UI.Screens.ExtractionFlow(problem, _paths.DataRoot, unzbd, preFill,
             (request, progress, cancel) => RunExtraction(request, progress, cancel), remember);
         _extractionScreen = UI.Screens.NoGameDataScreen.Build(flow, LeaveExtractionScreen, BlankAndQuit);
         AddChild(_extractionScreen);
@@ -1644,10 +1494,8 @@ public partial class Launcher : Node3D
             _extractionScreen = null;
         }
 
-        _planesGamezPath = SessionPaths.PreferUnzipped(Path.Combine(_dataRoot, "extracted", "planes.zip"));
-        if (_spec.Zrdr == null) { _zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(_dataRoot, "extracted", "zrdr.zip")); }
-        if (_spec.Sounds == null) { _soundsPath = SessionPaths.PreferUnzipped(Path.Combine(_dataRoot, "extracted", "soundsh.zip")); }
-        BuildMusic();
+        _paths = BasePaths.Resolve(_paths.RepoRoot, _paths.DataRoot, _spec);
+        _audio.Build(_paths, _masterSeed);
         EnterMenu();
     }
 
@@ -1689,10 +1537,7 @@ public partial class Launcher : Node3D
         // stands over the environment in between, so the menu owns a black background from its
         // first show until a launch takes it back (Utils/WorldBackdrop.cs).
         WorldBackdrop.Black(_env);
-        _menuHost ??= BuildMenuHost();
-        string aid = _menuAid ?? string.Empty;
-        _menuHost.Show(destination);
-        _menuAid = null;
+        string aid = _menu.Show(_cli, _spec, _buildStamp, destination);
         // The load screen is up for two frames during a build and torn down before anything
         // renders, so a shot of it needs a door of its own that leaves it standing. The campaign
         // door's argument names the mission, the blackboard's the Instant Action mission type.
@@ -1715,9 +1560,8 @@ public partial class Launcher : Node3D
 
         Boards.ShowPauseAid(aid, this);
 
-        // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
-        // what the original's own mail(11004) does (docs/org/music.md).
-        _music?.Enter(MusicState.Menu, _musicRng);
+        // Safe on every entry: a cue for the track already playing is a no-op.
+        _audio.CueMenu();
         // The launchscreen's own screenshot aids, one-shot: a return to the menu keeps whoever
         // really joined. Built-in's alone, so they reach it through the presentation's door.
         if (BuiltInMenu is { } menu)
@@ -1726,155 +1570,26 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The menu host: both presentations registered under their ids, the shared Free Flight and
-    // player-setup features, the first seat (keyboard plus every unclaimed pad behind the
-    // launchscreen's own poller, the mouse as its pointer), the audio service over the process's music, archive and
-    // the rof tree's menu sounds, and OnMenuExit as the sink. The active presentation is settled
-    // through PresentationResolution: the force flag, --presentation=, then Original;
-    // availability is registration plus, for Original, OriginalAvailable below.
-    private MenuHost BuildMenuHost()
-    {
-        // ⚠ No live mix preview in a run that drives itself, or a scripted walk across the AUDIO page
-        // would make that run's mix a function of the walk; --no-det with a scripted flag is still
-        // such a run, which is why both halves are read rather than Det alone.
-        _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false),
-            Extraction.RofTree.Member(_rofPath, "ASSETS/SOUNDS"), previews: !_spec.Det && _spec.ScriptedBy.Length == 0);
-        AddChild(_menuAudio);
-        var seatInput = new MenuInput { Keyboard = true };
-        // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
-        seatInput.LoadSavedKeymap(1);
-        var builtInSeat = new BuiltInSeat(seatInput);
-        var seat = new PointerSeat(
-            builtInSeat, MousePosition, MenuPrimaryPressed, TakeMenuWheel,
-            () => Input.IsMouseButtonPressed(MouseButton.Right));
-        var registry = new PresentationRegistry();
-        // The factories read the aid when they run, which is inside a Show: the cold start's
-        // instance gets it, and the fresh instance a switch creates gets none.
-        _menuAid = _cli.MenuStartScreen;
-        // --profiles= names the cabin's store as well as the flight's. A cabin launch carries the
-        // flag into the flight, and the profile the cabin seated must load there.
-        var profiles = _cli.ProfilesDir is { } profilesDir ? CampaignProfileStore.ForSession(profilesDir) : null;
-        registry.Register(PresentationId.BuiltIn,
-            () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _menuAid ?? string.Empty, builtInSeat.Input)
-            {
-                CampaignProfiles = profiles,
-            });
-        registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _menuAid ?? string.Empty, builtInSeat.Input, _spec.DebugJoin)
-            {
-                DebugPointer = _spec.DebugPointer,
-                CampaignProfiles = profiles,
-            });
-        var host = new MenuHost(registry, _menuAudio, OnMenuExit);
-        host.Availability = OriginalAvailable;
-        host.Held = () => _buildStamp?.DesktopModeNotice?.Visible == true;
-        host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(InstantActionFeature.ForDataRoot(_dataRoot));
-        // Before the seat: the host lends the setup feature's seat list once the feature is in,
-        // so seat 0 has to be joined through it.
-        host.Features.Add(new PlayerSetupFeature());
-        var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), _zrdrPath));
-        // The campaign feature carries both cinemas because both presentations already read that
-        // one feature, and neither of them can reach a Launcher to play a film through.
-        _chapterCinema ??= new ChapterCinema(PlayCinema, StopCinema);
-        _closingCinema ??= new ClosingCinema(PlayCinema, StopCinema);
-        host.Features.Add(new CampaignFeature(
-            strings, StockAirframes.Node, _chapterCinema, _closingCinema));
-        // The keymap editor writes through C21's per-player store, with player 1's stick rows split
-        // off to the profile files. A reset takes them from the stick defaults. Injected so the
-        // feature stays engine-free for a suite.
-        host.Features.Add(new ControlsFeature(
-            (player, profile) => CSVM.Sticks.StickScreens.Save(player, profile, CSVM.Sticks.StickProfiles.Live,
-                (who, keymap) => CSVM.Bindings.BindingStore.UserBindings().Save(who, keymap)),
-            CSVM.Sticks.StickScreens.OpenUserFolder,
-            () => CSVM.Sticks.StickProfiles.Live));
-        // The multiplayer door, built over the carrier and the master server the spec settles.
-        host.Features.Add(_net.OpenDoor(_spec));
-        host.AddSeat(seat);
-        string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride);
-        string why = reason == null ? "" : $" reason={reason}";
-        Log.Info("ui", $"menu presentation active={host.Selected} requested={host.Requested}{why}");
-        return host;
-    }
-
-    // The host's availability answer: Original needs the decoded layout and every file its asset
-    // manifest classes required; the layout it loads is kept for the presentation itself. Asked
-    // again on every switch, so a tree repaired between the two answers is seen. Every other id is
-    // available once registered.
-    private string? OriginalAvailable(PresentationId id)
-    {
-        if (id != PresentationId.Original)
-        {
-            return null;
-        }
-
-        var layout = OriginalAvailability.Load(_dataRoot, out var reason, out var degraded);
-        if (layout != null)
-        {
-            _originalLayout = layout;
-        }
-
-        if (degraded != null)
-        {
-            Log.Info("ui", $"original presentation: {degraded}");
-        }
-
-        return reason;
-    }
-
-    // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,
-    // which the Original presentation maps into its authored space.
-    private (float X, float Y)? MousePosition()
-    {
-        var at = GetViewport().GetMousePosition();
-        return (at.X, at.Y);
-    }
-
-    // The primary button, the press half of seat 0's pointer. ⚠ Keep the stamp's check. Original
-    // polls the button instead of taking GUI events, so a folder icon's click would also press the
-    // plaque under it.
-    private bool MenuPrimaryPressed() =>
-        Input.IsMouseButtonPressed(MouseButton.Left) && _buildStamp?.HoldsPointer(GetViewport().GetMousePosition()) != true;
-
-    // The wheel steps counted since the last read, the wheel half of seat 0's pointer.
-    private int TakeMenuWheel()
-    {
-        int steps = _menuWheel;
-        _menuWheel = 0;
-        return steps;
-    }
-
     // The Options route's apply from the menu: persist and apply every choice, then end the active
     // presentation (discarding every feature's transient state) and show the same one again at its
     // top level. No re-select: the presentation is the command line's alone, settled once.
     private void ApplyOptions(OptionsApplyExit applied)
     {
-        if (_menuHost == null)
+        if (_menu.Host is not { } host)
         {
             return;
         }
 
         _settings.Persist(applied, _spec, _session);
-        _menuHost.Deactivate();
+        host.Deactivate();
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
-    // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
-    // Original presentation composes from, and the menu's audio service for its cues. The host's
-    // own rebinding feature means a rebind over the pause edits the keymap the menu edits. Its
-    // options apply is LiveSettings.Persist, as the menu's is. ⚠ No ShowMenu: the flight returns to
-    // the sheet over its own world, not tearing down what the pause stands on. Null where no
-    // layout reads.
-    private UI.Screens.PausePreferences? BuildPauseOptions()
-    {
-        OriginalAvailable(PresentationId.Original);
-        var controls = _menuHost != null && _menuHost.Features.TryGet<ControlsFeature>(out var feature)
-            ? feature
-            : null;
-        return UI.Screens.PausePreferences.Build(_dataRoot, _originalLayout, controls,
-            applied => _settings.Persist(applied, _spec, _session), _menuAudio);
-    }
+    // The in-flight Preferences leaf both pause boards open, composed by ProcessMenu. Its options
+    // apply is LiveSettings.Persist, as the menu's is. ⚠ No ShowMenu: the flight returns to the sheet
+    // over its own world, not tearing down what the pause stands on.
+    private UI.Screens.PausePreferences? BuildPauseOptions() =>
+        _menu.PauseOptions(applied => _settings.Persist(applied, _spec, _session));
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
     // can be screenshot on a one-controller machine; --debug-waves=/--debug-wingmen=/--debug-preset=
@@ -1934,7 +1649,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        _net.TakeLaunch(launch.Net, planes, fits, customs, _messagesPath);
+        _net.TakeLaunch(launch.Net, planes, fits, customs, _paths.MessagesPath);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
@@ -1945,7 +1660,7 @@ public partial class Launcher : Node3D
         StepSortieSeed();
         // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
         // one does. It follows the seed step, since its draws read the master.
-        _net.SeatLocalField(_spec, _messagesPath);
+        _net.SeatLocalField(_spec, _paths.MessagesPath);
         BindMenuPads(pads);
         BeginLaunch();
     }
@@ -2170,50 +1885,6 @@ public partial class Launcher : Node3D
         _instruments.Rearm();
         ShowMenu(destination);
     }
-
-    // Writes the master output gain Utils/MasterVolume.cs resolves, and is its only caller.
-    // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
-    // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one,
-    // see this file's docs/architecture.md entry. ⚠ Bus 0 alone: the player's four levels are
-    // written on the three buses under it by Utils/AudioMix.cs, so neither gain can stand in for
-    // the other and a saved level cannot lift a run this silenced.
-    private void ApplyMasterVolume()
-    {
-        // The exported switch is the one that settles the log directory, so an export's audible
-        // default and its logs\ folder are decided together.
-        float volume = MasterVolume.Resolve(_spec.Volume, _exported);
-        string source = _spec.Volume.HasValue ? "--volume" : "config";
-        // Full volume is the bus's own resting state, so leaving it alone keeps a full-volume
-        // launch byte-identical in both output and console log.
-        if (Mathf.IsEqualApprox(volume, MasterVolume.Unattenuated))
-        {
-            return;
-        }
-        AudioServer.SetBusVolumeDb(MasterBus, MasterVolume.VolumeDb(volume));
-        string note = volume <= 0f ? ", sounds still load, play, count and log" : "";
-        Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
-    }
-
-    // Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent,
-    // the notification can arrive more than once, and it only ever clears a mute it set itself,
-    // so it cannot stomp on a mute from anywhere else.
-    private void SetFocusMuted(bool muted)
-    {
-        if (_focusMuted == muted)
-        {
-            return;
-        }
-        _focusMuted = muted;
-        AudioServer.SetBusMute(MasterBus, muted);
-        // Pad reads follow focus (Pads.For), so a stick drifting while alt-tabbed cannot fly
-        // the plane. The roster deliberately does not, see Pads.cs's docs/architecture.md
-        // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
-        Pads.Focused = !muted;
-        if (muted)
-            Log.Info("sound", $"focus: lost, audio muted, pad reads gated");
-        else
-            Log.Info("sound", $"focus: regained, audio restored, pad reads live");
-    }
 }
 
 /// <summary>What a session node needs from the launcher: the settled base paths, the persistent
@@ -2223,14 +1894,7 @@ public partial class Launcher : Node3D
 /// context field.</summary>
 public sealed record LauncherContext
 {
-    public required string RepoRoot { get; init; }
-    public required string DataRoot { get; init; }
-    public required string PlanesGamezPath { get; init; }
-    public required string ZrdrPath { get; init; }
-    public required string SoundsPath { get; init; }
-    public required string InterpPath { get; init; }
-    public required string MessagesPath { get; init; }
-    public required string RofPath { get; init; }
+    public required BasePaths Paths { get; init; }
     public required Tooling.ProbeRunner ProbeRunner { get; init; }
     public required Tooling.CaptureDirector CaptureDirector { get; init; }
     public required ulong MasterSeed { get; init; }

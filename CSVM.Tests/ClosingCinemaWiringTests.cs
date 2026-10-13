@@ -249,7 +249,7 @@ public class ClosingCinemaWiringTests : IDisposable
             planes: _planes, campaign: campaign, profiles: () => store);
     }
 
-    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
+    // The stand-in for LaunchAudio.PlayCinema. It records what it was asked for and hands the film's
     // end back to the caller, so a test decides when the cinema stops.
     private sealed class Recorder
     {

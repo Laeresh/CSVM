@@ -710,6 +710,8 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/SeatFields.cs`, who sits where at a launch: the co-op, lobby Dogfight, command-line and local-bot seat rosters, with each seat's fit and custom plane.
 - `src/Launch/LiveSettings.cs`, the Options page's settings on the running process: the pacing, window, graphics mode and word settings at launch, the Options apply's save, and the live graphics switch.
 - `src/Launch/LaunchBoards.cs`, the boards the launcher stands with no flight in front of them: the load screen, the graphics switch's blackboard and the `--menu=pauseboard` doors.
+- `src/Launch/LaunchAudio.cs`, the process's sound outside a flight: the music channel, the cinemas and boot sequence over it, and the master bus's gain and focus mute.
+- `src/Launch/ProcessMenu.cs`, the process's one menu: its host with both presentations and the shared features, seat 0's pointer, the menu's audio, the Original layout and the pause Preferences leaf.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
 - `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.
@@ -995,6 +997,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 ### `src/Spec/`, the launch spec
 
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
+- `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
 
 ### `CSVM.Tests/`, the unit tests
 

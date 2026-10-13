@@ -31,9 +31,9 @@ public enum BootHold
 /// <c>fmv.zrd</c>'s boot block, engine-free: the copyright card it opens with, and the eight
 /// actions in the reader's own order. The card, its five-second hold, the publisher logo, a wait,
 /// the fade, the developer logo, another wait, then <c>CHAP0</c>'s opening cinema. Every name,
-/// position and duration here is that reader's own (docs/formats/cinemas.md), and the three calls
-/// that change what is on screen are supplied by the caller, so the order runs with no engine
-/// present. <see cref="BootCard"/> is the engine half and <c>Launcher.PlayCinema</c> the films.
+/// position and duration here is that reader's own (docs/formats/cinemas.md). The caller supplies
+/// the three calls that change what is on screen, so the order runs with no engine present. The
+/// engine half is <see cref="BootCard"/>, and the films are <c>LaunchAudio.PlayCinema</c>'s.
 /// </summary>
 public sealed class BootSequence
 {

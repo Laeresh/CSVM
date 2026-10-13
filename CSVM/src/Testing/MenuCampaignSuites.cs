@@ -1025,7 +1025,7 @@ internal static class MenuCampaignSuites
         ctx.Check(actual.Contains(expected, StringComparison.Ordinal),
             $"{what}: expected '{expected}' in '{actual}'");
 
-    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
+    // The stand-in for LaunchAudio.PlayCinema. It records what it was asked for and hands the film's
     // end back, so the arm decides which frame the film stops on.
     private sealed class FilmRecorder
     {

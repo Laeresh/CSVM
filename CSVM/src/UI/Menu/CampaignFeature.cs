@@ -115,13 +115,13 @@ public sealed class CampaignFeature : IMenuFeature
 
     /// <summary>The chapter cinema every cabin door runs its handoff through, or null when the
     /// caller has none and a cabin door simply opens the cabin. One instance serves both
-    /// presentations, and its latch is what stops a film replaying (<c>Launch/Launcher.cs</c>).
+    /// presentations, and its latch is what stops a film replaying (<c>Launch/ProcessMenu.cs</c>).
     /// </summary>
     public ChapterCinema? ChapterCinema { get; }
 
     /// <summary>The closing cinema a flown mission's scrapbook door runs its handoff through. It is
     /// null when the caller has none, and that door then simply opens the book. One instance
-    /// serves both presentations (<c>Launch/Launcher.cs</c>), and the flown mission's own result
+    /// serves both presentations (<c>Launch/ProcessMenu.cs</c>), and the flown mission's own result
     /// is what decides whether it plays.</summary>
     public ClosingCinema? ClosingCinema { get; }
 

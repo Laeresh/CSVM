@@ -7,11 +7,11 @@ namespace CSVM.Session.Campaign;
 /// <summary>
 /// Which cinema plays before a campaign chapter, and the one handoff to the passenger cabin that
 /// follows it. The chapter is the profile's own story position and nothing else, so a chapter
-/// number is never passed in from a screen; the mapping from chapter to film is the identity
+/// number is never passed in from a screen. The mapping from chapter to film is the identity
 /// <c>CAMPAIGNINTRO.SCRIPT</c> builds, chapter N playing <c>chapN.mpg</c>
 /// (docs/formats/cinemas.md). Playing is a delegate the caller supplies, which keeps the whole
 /// decision testable with no engine present and leaves the film itself to
-/// <c>Launcher.PlayCinema</c>.
+/// <c>LaunchAudio.PlayCinema</c>.
 /// </summary>
 public sealed class ChapterCinema
 {
