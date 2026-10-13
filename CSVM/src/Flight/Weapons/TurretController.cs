@@ -750,7 +750,7 @@ public sealed class TurretController
             TargetSource = c.Source;
         }
 
-        // The aircraft-first preference, the same departure the aeroplane picker takes, so a
+        // The aircraft-first preference, the same remake-only rule the aeroplane picker takes, so a
         // zeppelin's guns and the wingmen beside them go after the same enemies.
         if (AiTargetRanking.AircraftFirst && aircraftInReach)
         {

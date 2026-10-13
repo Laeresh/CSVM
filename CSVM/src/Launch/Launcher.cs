@@ -513,8 +513,8 @@ public partial class Launcher : Node3D
         // rule the saved graphics word below follows; SavedLevels owns that drop.
         var savedMix = AudioMix.SavedLevels(_spec.Det);
         AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
-        // Logged on every launch, not only when a flag moved it. The shipped factor is a departure
-        // from the decoded radii, so a run's record has to say what reach it played at.
+        // Logged on every launch, not only when a flag moved it. The shipped factor is a remake-only
+        // rule over the decoded radii, so a run's record has to say what reach it played at.
         Mech3.SoundFalloff.SetRangeScale(_spec.SoundRangeScale);
         string rangeVia = Mech3.SoundFalloff.RangeScale == Mech3.SoundFalloff.ShippedRangeScale
             ? "shipped" : "--sound-range-scale";
@@ -1862,8 +1862,8 @@ public partial class Launcher : Node3D
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
-    // own rebinding feature means a rebind over the pause edits the keymap the menu edits, saved
-    // through the menu's apply. LiveSettings.Persist is the apply. ⚠ No ShowMenu: the flight returns to
+    // own rebinding feature means a rebind over the pause edits the keymap the menu edits. Its
+    // options apply is LiveSettings.Persist, as the menu's is. ⚠ No ShowMenu: the flight returns to
     // the sheet over its own world, not tearing down what the pause stands on. Null where no
     // layout reads.
     private UI.Screens.PausePreferences? BuildPauseOptions()

@@ -97,10 +97,10 @@ public sealed partial class TargetHud : Control
     private const int DiscSegments = 48;
 
     // The selected target's marker: the original's own absolute pixel constants (0x00607a0c /
-    // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor), read at the 1440p reference and
-    // scaled by HudMetrics like every other CSVM HUD element. The original never scales its box;
-    // scaling it is the deliberate divergence docs/org/targeting.md records, because 20 x 16 fixed
-    // pixels is nearly invisible on a modern display.
+    // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor). They are read at the 1440p
+    // reference and scaled by HudMetrics like every other CSVM HUD element. The original never
+    // scales its box. Scaling it is the remake-only rule docs/org/targeting.md records, because
+    // 20 x 16 fixed pixels is nearly invisible on a modern display.
     private const float RefBracketHalfW = 10f;
     private const float RefBracketHalfH = 8f;
     private const float RefBracketArm = 4f;

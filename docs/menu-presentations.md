@@ -213,6 +213,20 @@ The arrows and the keyboard do not go through any of this, so the wheel is an ad
 decoded screens rather than a change to them. Original's mouse is the only one that reaches a list
 this way; Built-in's rows are Godot controls and take the wheel through `gui_input`, as above.
 
+Original's arrows and pad step by where the rows are drawn (`CSVM/src/UI/Boards/SpatialFocus.cs`),
+never by the order they were built in. Three parts of that rule are remake-only rules, each kept
+for the walks it gives. A stop lies ahead only when it stands wholly past the focus's middle, by
+centre only where the two overlap: with centre alone, a sweep of every stop and all four presses
+over the fixture and the install moves about 70 walks, many onto a row a little to one side in the
+same column (Right from a lower Instant Action contents row onto View Story below it, Right from the
+Video page's Monitor dropdown onto Display Mode a row below, Left from Credits, Preferences and Quit
+onto Campaign), and the fixture's scrapbook strands its previous-page arrow. Outside the band the
+gap across a press counts double the gap along it (`AcrossGapWeight`): at weight 1, Right from
+Instant Action's lower contents rows drops onto Change Weapons 90 px below rather than the dropdown
+level with them. A press out of a column of values (`SpatialFocus.Leave`) decides which stops lie
+ahead by centre: by the middle, Down from the Video page's Enhanced Graphics checkbox passes over
+ACCEPT CHANGES, whose top stands level with the box and whose centre lies below it.
+
 The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
 drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and
 Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the

@@ -467,8 +467,8 @@ internal static class TargetingCandidateSuites
         var enemyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
         var stock = StockLoadouts.Load().All.Values.First(d => d.Model == allyStats.NodeName);
 
-        // Read off vehicle.json, never typed in: the departure only means anything against the
-        // arithmetic these two numbers make.
+        // Read off vehicle.json, never typed in: the remake-only rule only means anything against
+        // the arithmetic these two numbers make.
         ctx.Check(allyStats.AiTargetBias < 0f && allyStats.AiStructBias < 0f,
             $"the wingman def authors both biases: target_bias={allyStats.AiTargetBias:0} struct_bias={allyStats.AiStructBias:0}");
 

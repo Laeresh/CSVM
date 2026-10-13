@@ -7,7 +7,7 @@ using CSVM.Sticks;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>How the KEYS AND BUTTONS page splits a row's bindings between its authored Control A and
-/// Control B cells and the port's own Stick column. A stick binding is one on a stick model's identity
+/// Control B cells and the remake-only Stick column. A stick binding is one on a stick model's identity
 /// (<see cref="StickModel.Device"/>), and everything else stays with the two authored columns. So a
 /// stick never shows twice and a capture on A or B never replaces one.</summary>
 internal static class KeysStickColumn

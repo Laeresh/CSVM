@@ -81,8 +81,8 @@ public sealed class DogfightLobby
     /// <summary>How many types the Type box lists: the string table's three and Stunt Race.</summary>
     public const int TypeCount = 4;
 
-    /// <summary>The Type box's word for Stunt Race. Remake-only, so no string table id names it.
-    /// </summary>
+    /// <summary>The Type box's word for Stunt Race, a remake-only mode, so no string table id
+    /// names it.</summary>
     public const string StuntRaceName = "Stunt Race";
 
     /// <summary>The Time box's value when the Type turns to Stunt Race, the race window's default.

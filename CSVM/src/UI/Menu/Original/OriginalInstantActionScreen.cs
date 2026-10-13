@@ -871,7 +871,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         AddStrip(screen, rows, ExitKey, OriginalRowKind.Button, true, 1);
     }
 
-    // The lives box, this port's own control in the screen's dropdown idiom. It is no enemy
+    // The lives box, a remake-only control in the screen's dropdown idiom. It is no enemy
     // control, so the ace duel leaves it live where it blanks the wave boxes. No preset carries a
     // lives value, so a contents row leaves it alone. A race spends no lives, so this box hides
     // while the race time box shows. It hides the race time box's way, its count kept.
@@ -885,7 +885,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             shown, shown ? 1 : -1, LivesArrow(screen), shown));
     }
 
-    // The race time box and the race toggle, this port's own controls in the lives box's idiom.
+    // The race time box and the race toggle, remake-only controls in the lives box's idiom.
     // Each row stands where its line falls, before the first box standing below it. Hidden, a row
     // keeps that place unseen, unhit and in no column, so no other row's index moves when a seat
     // joins or leaves.

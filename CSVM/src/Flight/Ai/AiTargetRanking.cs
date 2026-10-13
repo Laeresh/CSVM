@@ -164,11 +164,11 @@ public static class AiTargetRanking
     public const float TurretBiasFlat = 37.5f;
 
     /// <summary>Whether a picker ranks live enemy aircraft ahead of every turret and structure
-    /// candidate, fighting a structure only when no aircraft is in reach. A deliberate departure
-    /// from the decoded picker, which has no class priority; <c>--ai-targeting=decoded</c> turns it
-    /// off and leaves the biases alone, so the original's arithmetic can be flown against this one.
-    /// It settles once per launch and no consumer chooses it, which is why it is a static and not a
-    /// per-pilot value.</summary>
+    /// candidate, fighting a structure only when no aircraft is in reach. A remake-only rule over
+    /// the decoded picker, which has no class priority. The flag <c>--ai-targeting=decoded</c> turns
+    /// it off and leaves the biases alone, so the original's arithmetic can be flown against this
+    /// one. It settles once per launch and no consumer chooses it, which is why it is a static and
+    /// not a per-pilot value.</summary>
     public static bool AircraftFirst { get; set; } = true;
 
     /// <summary>One candidate's rank and its inputs, the decoded arithmetic term for term.

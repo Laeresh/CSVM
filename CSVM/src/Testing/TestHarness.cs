@@ -981,8 +981,8 @@ public sealed class TestContext
     /// <summary>Reads every positional sound level and cull at the data's own <c>RANGE</c> radii
     /// until the returned handle is disposed, whatever factor the session carries. A suite that
     /// pins the decoded law's numbers has to say which factor it reads them at. The shipped
-    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/> is a departure from the radii the law was
-    /// decoded against. The session's factor comes back on dispose.</summary>
+    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/> is a remake-only rule over the radii the
+    /// law was decoded against. The session's factor comes back on dispose.</summary>
     public static IDisposable AtAuthoredSoundRadii() => new SoundRangeScope(1f);
 
     /// <summary>The counterpart of <see cref="AtAuthoredSoundRadii"/>: reads every positional sound

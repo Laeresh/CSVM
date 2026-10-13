@@ -134,8 +134,9 @@ public enum InputAction
     SmoothLookMode,
     TrackTarget,
 
-    // The absolute throttle, a lever or wheel whose whole travel is the commanded setting. This
-    // port's own action: the original reads no axis at all. Appended because the enum is positional.
+    // The absolute throttle, a lever or wheel whose whole travel is the commanded setting. A
+    // remake-only action: the original reads no axis at all. Appended because the enum is
+    // positional.
     ThrottleLever,
 
     // Skipping a cutscene or cinema, or fast-forwarding one the player may not skip. Read from the
@@ -143,7 +144,7 @@ public enum InputAction
     // enum is positional.
     SkipCutscene,
 
-    // The external camera's zoom axis, numpad + and - by default. This port's own pair; appended
+    // The external camera's zoom axis, numpad + and - by default. A remake-only pair; appended
     // because the enum is positional.
     ZoomIn,
     ZoomOut,
@@ -153,8 +154,8 @@ public enum InputAction
     ChatEveryone,
     ChatTeam,
 
-    // The live switch between the original and the enhanced graphics mode, G by default. This
-    // port's own action, a flight one so the steal rule keeps G off every other flight action.
+    // The live switch between the original and the enhanced graphics mode, G by default. A
+    // remake-only action, a flight one so the steal rule keeps G off every other flight action.
     // Appended because the enum is positional.
     ToggleGraphicsMode,
 

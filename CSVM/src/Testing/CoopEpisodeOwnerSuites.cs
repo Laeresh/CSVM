@@ -188,7 +188,7 @@ internal static class CoopEpisodeOwnerSuites
             foreach (var leg in new[]
             {
                 new EndsLeg("two ends, linked, P2 nearest on the host", EndLink.Linked, 1, Loops: true),
-                new EndsLeg("CONTROL, two ends, the host's seat dropped on the wire", EndLink.SeatDropped, 1),
+                new EndsLeg("CONTROL: two ends, the host's seat dropped on the wire", EndLink.SeatDropped, 1),
             })
             {
                 // Fresh worlds per leg. The gate's definition loops through the film until `bdplayer`
@@ -332,7 +332,7 @@ internal static class CoopEpisodeOwnerSuites
         {
             ("the host's machine", true, false),
             ("the guest's machine", true, true),
-            ("CONTROL, the range claim unwired, the host's machine", false, false),
+            ("CONTROL: the range claim unwired, the host's machine", false, false),
         })
         {
             WithTwoHumans(ctx, chapter, HangarPlanes, null,
@@ -347,8 +347,8 @@ internal static class CoopEpisodeOwnerSuites
         {
             new EndsLeg("two ends, linked", EndLink.Linked, 0),
             new EndsLeg("two ends, linked, P2 nearest on the host", EndLink.Linked, 1),
-            new EndsLeg("CONTROL, two ends, the host's seat dropped on the wire", EndLink.SeatDropped, 1),
-            new EndsLeg("CONTROL, two ends, no link", EndLink.None, 0),
+            new EndsLeg("CONTROL: two ends, the host's seat dropped on the wire", EndLink.SeatDropped, 1),
+            new EndsLeg("CONTROL: two ends, no link", EndLink.None, 0),
         })
         {
             CrossOnTwoEnds(ctx, ends, drop.Anim, caller, leg, report);
@@ -580,7 +580,7 @@ internal static class CoopEpisodeOwnerSuites
         const string Gate = "reopen_gate";
         const string Film = "reopen_film";
         const float RadiusM = 50f;
-        string leg = counted ? "a reopening between two guest polls" : "CONTROL, the same reopening with the host's openings uncounted on the guest";
+        string leg = counted ? "a reopening between two guest polls" : "CONTROL: the same reopening with the host's openings uncounted on the guest";
         AnimEvent Ev(string kind, Dictionary<string, object?> data, string? offset = null, float time = 0f) =>
             new() { Kind = kind, StartOffset = offset, StartTime = time, Data = new AnimData(data) };
         AnimProgram Program()
@@ -813,7 +813,7 @@ internal static class CoopEpisodeOwnerSuites
         var scripted = rigs[0];
         var pilot = rigs[1];
         var expected = inTrigger ? pilot : scripted;
-        string leg = inTrigger ? "inside the trigger's start" : "CONTROL, the same claim and call outside the trigger's bracket";
+        string leg = inTrigger ? "inside the trigger's start" : "CONTROL: the same claim and call outside the trigger's bracket";
         var runtime = world.Runtime;
         var savedClock = GameClock.Current;
         var savedHost = runtime.CallbackHost;

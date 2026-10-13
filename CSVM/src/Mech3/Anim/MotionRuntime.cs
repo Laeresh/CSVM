@@ -477,12 +477,12 @@ internal sealed class MotionRuntime : IAnimMotion
         return rids;
     }
 
-    // The default contact tier: reads the body's own column and ends the flight once the next step
-    // would put it under whatever is there (docs/org/objectMotion.md, "Contact is the default").
-    // ⚠ Departs from the decode on purpose: a pair of rays instead of a cell-record pick, and
-    // `intersect_surface` colliders without the original's `altitude_surface` filter, see that
-    // page's divergence table for why. ⚠ No ArmDistance/ArmSeconds epsilon, unlike the sweep: a
-    // launch climbs before it falls, so it cannot contact what it left on its first frame.
+    // The default contact tier. It reads the body's own column, and ends the flight once a step
+    // would put the body under it (docs/org/objectMotion.md, "Contact is the default").
+    // ⚠ Two remake-only rules: a pair of rays instead of a cell-record pick, and `intersect_surface`
+    // colliders without the original's `altitude_surface` filter. That page's table says why.
+    // ⚠ No ArmDistance/ArmSeconds epsilon, unlike the sweep: a launch climbs before it falls, so it
+    // cannot contact what it left on its first frame.
     private bool TryGroundColumn(float dt)
     {
         if (_landed || !_hasBallistic)

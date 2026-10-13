@@ -23,7 +23,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     public const string PlayerKey = "CP_D_Fly";
 
     /// <summary>The page's flying-scheme chooser, on the Mouse Sensitivity panel's title line.
-    /// Remake-only, so the layout names no widget for it.</summary>
+    /// A remake-only chooser, so the layout names no widget for it.</summary>
     public const string MouseKey = "MOUSESCHEME";
 
     /// <summary>The page's Mouse Sensitivity slider, the authored one, which sets the Fly scheme's

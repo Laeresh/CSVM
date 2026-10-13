@@ -2604,8 +2604,8 @@ internal static class MenuOriginalConnectionSuites
     }
 
     // Capture the Flag's own-flag-home box and label, measured as the view sets them, cross no
-    // other control or line on Mission Options. The control is the box's old place under
-    // the team boxes, 15 above Limited Lives, where the label ran into the Lives heading.
+    // other control or line on Mission Options. The control is the same footprint under the team
+    // boxes, 15 px above Limited Lives, where the label runs into the Lives heading.
     private static void FlagHomeStandsClear(TestContext ctx, End end, string who)
     {
         var board = end.Shell.Compose();
@@ -2645,11 +2645,11 @@ internal static class MenuOriginalConnectionSuites
             string crossed = Crossed(footprint);
             ctx.Check(crossed.Length == 0, $"{who}'s own-flag-home box and label at {footprint} cross nothing ({crossed})");
             string old = Crossed(new Godot.Rect2(footprint.Position + new Godot.Vector2(lives.X - box.X, lives.Y - 15f - box.Y), footprint.Size));
-            ctx.Check(old.Length > 0, $"ABLE-TO-FAIL CONTROL: the same box at its old place under the team boxes crosses {old}");
+            ctx.Check(old.Length > 0, $"ABLE-TO-FAIL CONTROL: the same footprint 15 px above Limited Lives crosses {old}");
 
             // The view draws a plain line's baseline at its top plus its rounded size. The label
             // shares the Teams heading's baseline and the box ends on it, as each sibling's box
-            // ends on its own label's. The control is the label's former top, 2 under the heading's.
+            // ends on its own label's. The control is a label topped 2 px under the heading's top.
             var teams = board.Lines.FirstOrDefault(line => line.Text == "Teams");
             ctx.Check(teams != null, $"{who}'s page draws the Teams heading");
             if (teams != null)
@@ -2659,7 +2659,7 @@ internal static class MenuOriginalConnectionSuites
                 ctx.Check(Math.Abs(Baseline(label, label.Y) - heading) < 0.5f && Math.Abs(box.Y + box.Height - heading) <= 1f,
                     $"{who}'s label stands on the Teams heading's baseline at {heading:0.0} ({Baseline(label, label.Y):0.0}) and the box ends on it ({box.Y + box.Height:0.0})");
                 ctx.Check(Math.Abs(Baseline(label, teams.Y + 2f) - heading) >= 0.5f,
-                    $"ABLE-TO-FAIL CONTROL: the label at its former place has its baseline at {Baseline(label, teams.Y + 2f):0.0}, off the heading's {heading:0.0}");
+                    $"ABLE-TO-FAIL CONTROL: the label topped 2 px under the heading's top has its baseline at {Baseline(label, teams.Y + 2f):0.0}, off the heading's {heading:0.0}");
             }
         }
         finally

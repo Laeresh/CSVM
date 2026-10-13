@@ -41,8 +41,8 @@ public static class SpatialFocus
 
     /// <summary>The stop a press leaving a band moves to. The centre decides which stops lie
     /// ahead, the edge gap ranks the nearest as in <see cref="Step"/>, else the farthest behind by
-    /// centre. Remake-only rule: past the middle, the Video page's Down from its checkbox skipped
-    /// ACCEPT CHANGES level with it. The caller drops the band's own stops first.</summary>
+    /// centre. A remake-only rule, so a press out of a column reaches a button level with its foot
+    /// (docs/menu-presentations.md). The caller drops the band's own stops first.</summary>
     public static int Leave(
         IReadOnlyList<(float X, float Y, float Width, float Height)?> stops, int from,
         (float X, float Y, float Width, float Height) at, int moveX, int moveY)
@@ -81,9 +81,9 @@ public static class SpatialFocus
     public static (float X, float Y) Centre((float X, float Y, float Width, float Height) box) =>
         (box.X + (box.Width / 2f), box.Y + (box.Height / 2f));
 
-    // Whether to lies dir-ward of at along the axis: wholly past at's middle, or by centre where
-    // they overlap or byCentre asks. Remake-only rule: by centre alone, about 70 walks over the
-    // fixture and the install moved. Many went onto a row a little to one side in one column.
+    // Whether rectangle to stands ahead of rectangle at in direction dir: wholly past at's middle,
+    // or by centre where the two overlap or byCentre asks. A remake-only rule: the middle keeps a
+    // press off a row a little to one side in the same column (docs/menu-presentations.md).
     private static bool Lies(
         (float X, float Y, float Width, float Height) at, (float X, float Y, float Width, float Height) to,
         bool vertical, int dir, bool byCentre)

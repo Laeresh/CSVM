@@ -656,11 +656,12 @@ choices rather than decoded figures. Read `Session/World/CutsceneController.cs` 
 docs/formats/anim-definitions/cutscenes.md, "Handoff and skip".
 
 ## src/Mech3/Anim/RangeGateAuthority.cs
-Which machine answers a `PLAYER_RANGE` gate. `HostDecides` walks a definition's `CALL_ANIMATION`
+Which machine answers a `PLAYER_RANGE` or `EXECUTION_BY_RANGE` gate. `HostDecides` walks a definition's `CALL_ANIMATION`
 closure once per world and answers true when it reaches a `CALLBACK`; `Decide` records the deciding
 end's verdict and raises `Decided` on a change, `PassSeat` is the seat its standing pass named, and `NewOpening` answers true once per opening; a set `HostVerdict` replaces the local read on a
 guest. Engine-free: `AnimRuntime.RangeGates` holds one per runtime and binds it to the program at
-bootstrap, and `Session/Campaign/NetPositionalStartLink.cs` wires the guest seams in network co-op.
+bootstrap, and `Session/Campaign/NetPositionalStartLink.cs` wires the host's `Decided` and the guest seams in
+network co-op.
 The census of shipped gates and the wire kind: docs/org/multiplayer-messages.md, "Positional starts".
 
 ## src/Mech3/Anim/TemplateStage.cs

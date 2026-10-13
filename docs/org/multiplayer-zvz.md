@@ -226,8 +226,8 @@ the hull's placement index. The host counts the death without the penalty
 (`VersusMatch.RegisterDeath` with `suicide: false`) and sends the victim's line as for any death.
 The death notice carries cause 4 and the hull's side's team, so every machine posts the victim's
 name over row 7065, "Killed by %1 Turret", filled with that team's name (for example "Killed by
-Blue Angels Turret"). Cause 4 with a killer seat is still a turret owner's kill, and every other
-mode's emplacements stay unowned. A broadside's kill is unchanged: event 9 for the hull's side.
+Blue Angels Turret"). Cause 4 with a killer seat is a turret owner's kill, and every other mode's
+emplacements are unowned. A broadside's kill is event 9 for the hull's side.
 
 **Remake-only rule, bots.** The original seats no bots. The remake's bots fly Zeppelin vs Zeppelin
 on a host, and each step the host re-decides each bot's target (`Flight/Ai/ZvzBotObjective.cs`).

@@ -196,8 +196,9 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private const int PaintNameString = 1152;
 
     // What the wallet-free inventory calls removing a plane, on the button, over the page and in
-    // the confirm. Remake-only, as the hub's export strips are. Nothing is paid for a wallet-free
-    // build, so the shipped Sell words all read wrong, and the table carries no delete word.
+    // the confirm. A remake-only word, as the hub's export strips are. Nothing is paid for a
+    // wallet-free build, so the shipped Sell words all read wrong, and the table carries no delete
+    // word.
     private const string DeleteLabel = "Delete";
     private const string DeletePrompt = "Delete a Plane";
     private const string DeleteQuestion = "Are you sure you want to delete it?";

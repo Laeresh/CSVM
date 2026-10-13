@@ -2509,9 +2509,10 @@ internal static class CombatSuites
         }
     }
 
-    // The cockpit loop's pitch option on a real FlightAudio, both states in one process. The rule is
-    // remake-only: docs/formats/vehicle.md, "The cockpit loop's pitch is a remake-only rule". Off
-    // must be the original's flat loop, and on must be the exterior curve rather than a new one.
+    // The cockpit loop's pitch option on a real FlightAudio, both states in one process. It is a
+    // remake-only rule (docs/formats/vehicle.md, "The cockpit loop's pitch is a remake-only
+    // rule"). Off must be the original's flat loop, and on must be the exterior curve rather than a
+    // new one.
     [Suite("engine-cockpit-pitch",
         "the cockpit engine loop's pitch option: off, the cockpit loop plays at its own rate at idle " +
         "and at full throttle, as the original's refused frequency write leaves it; on, it takes " +
@@ -3000,7 +3001,7 @@ internal static class CombatSuites
             // old any-critical-part rule this plane would be down. The decoded rule keeps it
             // flying until the whole vehicle's health is gone.
             ctx.Check(!target.Crashed,
-                $"a lone dead critical part no longer downs the plane (the retired divergence)");
+                $"a lone dead critical part does not down the plane");
             ExhaustPart("tail", BoxMuzzle("tail", leftSide: false, Vector3.Forward));
             ExhaustPart("leftwing", BoxMuzzle("wing", leftSide: true, Vector3.Right));
             ctx.Check(!target.Crashed, $"three of four zones dead still flies");
@@ -3512,7 +3513,7 @@ internal static class CombatSuites
             $"…with no ramp above it, {over:0.0000} a fifth of the way past against {at:0.0000}");
 
         // The original hands both loops the same 1.0. The port plays the rattle 1.3x the engine
-        // slot's gain, a chosen departure, so nothing about the rattle is quieter than the engine.
+        // slot's gain, a remake-only rule, so nothing about the rattle is quieter than the engine.
         float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f, true).Volume;
         ctx.Check(Mathf.IsEqualApprox(at, engine * 1.3f),
             $"…and sits 1.3x the engine slot's own gain, {at:0.0000} against {engine:0.0000}");

@@ -2245,9 +2245,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     ? Black
                     : TabDisabled);
 
-            // A pixel under its siblings, the own-flag-home label ends inside the page on the Teams heading's
-            // baseline. It sits 3 px nearer its box than theirs, so the box reads as its own, not the heading's.
-            // A fixed size, so it scales with the window as its siblings do.
+            // A pixel under its siblings, the own-flag-home label ends inside the page on the Teams
+            // heading's baseline. It sits 3 px nearer its box than theirs, so the box reads as its
+            // own, not the heading's. A fixed size, so it scales with the window as its siblings do.
             layers.Lines.Add(row.Key == FlagHomeKey ? line with { X = row.X + 17f, Size = line.Size - 1f, Y = TeamsBaseline - line.Size + 1f } : line);
         }
     }

@@ -261,8 +261,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
     }
 
     // Every settings page's ACCEPT CHANGES. A page writes the settings it shows and hands the rest
-    // back as ReadSavedOptions read them, which keeps LiveSettings.Persist the options file's one
-    // writer.
+    // back as ReadSavedOptions read them. LiveSettings.Persist writes the options file for the
+    // apply, and keeps every setting the page does not show.
     OptionsApplyExit IOriginalOptionsForm.Apply() => _choices.ToExit();
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
