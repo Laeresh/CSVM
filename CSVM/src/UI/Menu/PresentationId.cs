@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu;
 /// </summary>
 public readonly record struct PresentationId
 {
-    /// <summary>The Built-in presentation: permanent, asset-independent, the fallback.</summary>
+    /// <summary>The Built-in presentation: frozen, asset-independent, the fallback.</summary>
     public static readonly PresentationId BuiltIn = new("built-in");
 
     /// <summary>The Original presentation over the player's extracted menu data.</summary>

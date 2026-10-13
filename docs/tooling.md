@@ -81,7 +81,7 @@ never `CSVM_DATA_ROOT`, so a worktree run cannot overwrite the primary tree's `e
 ## Launch scripts
 
 **`RunGame.ps1`, the play entry point.** `dotnet build`, then Godot with **no user args**, so the
-launchscreen (`src/UI/Screens/LaunchMenu.cs`, Mode → Chapter → Plane) shows. Args are forwarded verbatim,
+main menu (the Original presentation, `src/UI/Menu/Original/`) shows. Args are forwarded verbatim,
 so a content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/`--screenshot=`) bypasses it.
 
 **`RunDev.ps1`, the dev helper**, same build step but with console prompts: no args gives

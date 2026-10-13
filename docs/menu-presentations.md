@@ -25,6 +25,7 @@ format is [`formats/menu-layout.md`](formats/menu-layout.md).
 - [What a new presentation does not inherit from Original](#what-a-new-presentation-does-not-inherit-from-original)
 - [The extension checklist](#the-extension-checklist)
 - [The verification layers](#the-verification-layers)
+- [What blocks Built-in's deletion](#what-blocks-built-ins-deletion)
 
 ## What a presentation is, and is not
 
@@ -45,7 +46,8 @@ request resolves to and needs no extracted menu artwork, but no change owes it p
 lobby, options or board change lands for Original alone, and Built-in keeps what it already draws.
 A gap on Built-in is not a bug, and no issue, suite or playtest check is filed for one. #196
 removes it once Original covers every screen it draws, and replaces the fallback with a plain
-error screen naming the fault and the re-extract instruction.
+error screen naming the fault and the re-extract instruction. What only Built-in has is
+listed under [What blocks Built-in's deletion](#what-blocks-built-ins-deletion).
 
 ## Registration
 
@@ -724,3 +726,121 @@ Five layers, each catching what the others cannot:
 - **At the controls.** The launcher's leg and everything a suite cannot hear or hold: the flown
   launch and its return in every mode on Original, a cold start under each flag, a real
   pad, the sounds, the pointer's rollover and pressed frames.
+
+## What blocks Built-in's deletion
+
+Built-in can be deleted once every entry below is resolved. Each entry names something only
+Built-in has, and what takes its place.
+
+**What a player can only reach through Built-in.**
+
+- Dogfight's match rules, which only Built-in's Dogfight screen steps (see [Launch](#launch)).
+- View Distance and Water Quality. Only Built-in's Options screen has a row for either
+  (`Utils/ViewDistance.cs`, `Utils/WaterQualitySetting.cs`); the VIDEO page hands both saved words
+  back unchanged, and the one authored line it leaves blank is Clutter Detail's.
+- More than one local seat in a network Dogfight. Built-in's Multiplayer door launches every seat
+  joined on its machine through `PlayerSetupFeature.BuildExit`; Original's lobby launches seat 0
+  alone (`OriginalLobbyScreen`'s `Exit`).
+
+**The fallback.** `MenuHost.Select` answers a forced, unknown or unavailable request with
+`PresentationId.BuiltIn` through `PresentationResolution.Resolve`, and `MenuHost.Selected` and
+`Requested` start on it. In a shipped build the only refusal that reaches it is
+`OriginalAvailability.Load`'s over a tree that is present and current (a missing or unreadable
+layout, no `[MainMenu]`, a required file the manifest names missing or unreadable): a missing or
+stale tree already stops at the extraction screen (`UI/Screens/NoGameDataScreen.cs` over
+`ExtractionFlow`) before any menu stands. The error screen replaces this path. In `Launcher`, the
+pieces that go with it are `BuildMenuHost`'s `registry.Register(PresentationId.BuiltIn, ...)`,
+the `ForceBuiltInPresentation` branch of `SessionPresentation` (which hands a command-line flight
+the chrome boards), and the `BuiltInMenu` door (the failed-build note and the one-shot debug aids).
+
+**The command line.** `--force-builtin`, `--presentation=built-in`, the `--menu=` values `cli.md`
+lists as Built-in's (the `x` press of a campaign aid among them), `--debug-waves=`,
+`--debug-wingmen=` and `--debug-preset=`, and the Built-in halves of `--debug-join=` and
+`--debug-scores` go with Built-in; `cli.md`'s flag index and the parser's count drop together.
+Only `--force-builtin` leaves a gap: it is the startup recovery (see [Options, selection and
+availability](#options-selection-and-availability)) for an Original menu that a saved option
+makes unusable, which the error screen does not cover, since it answers unusable data only.
+Without the flag, the recovery is removing `user://options.json`, which the store reads as empty,
+so every option falls back to its default.
+
+**The persisted word.** `OptionsStore` accepts `menuPresentation` as `built-in` or `original`,
+writes it back, and nothing reads it, so a file carrying `built-in` already opens on Original. Once
+the word leaves the accepted set the store drops that one field, and the file keeps loading.
+
+**Shared code in Built-in's files.** These move rather than go: `BuiltInSeat`, which is seat 0
+under both presentations (`Launcher` wraps it in `PointerSeat`), every pad seat `MenuSeatDevices`
+joins, and the in-flight Preferences leaf's seat; `LaunchMenu.ReadyChipMark` and `RemoteChipMark`,
+which `OriginalSeats` draws; `LaunchMenu.CanLaunch` and `ChapterCodesFor`, which the feature tests
+assert against; `PlaneFit` and `PlaneRatings` in `UI/Hangar/`, which the per-seat aircraft, bot and
+lobby screens read. The campaign pages are Original's too, through `CampaignBoards.For`. Only
+Built-in uses `UI/Hangar/HangarFlow.cs` and its pages, `OptionsChoices`' row table,
+`WordSetting`'s Built-in row fields, `DogfightLobby.CheckBuiltInLaunch`, and the
+guest-without-a-pick rule in `Launch/SeatFields.cs`.
+
+**The in-flight boards.** The chrome boards on `ResultsBoard`'s shell and `PauseBoard` are drawn
+under Original too, and they stay. An Original flight draws `PauseBoard` in Free Flight and wherever
+its sheet does not read, `VersusBoard` at the end of every Dogfight but a lobby match that lands on
+Game Scores (a split-screen Dogfight, any `--vs` run), `IaWrapupBoard` on an `--ia` run,
+`StuntScoreboard` on a solo stunt run outside Instant Action, and `StuntRaceBoard` over an
+install missing the lobby-scores art or the string table. Only Built-in uses the branches
+`Launch/SessionBoards.cs` and `Launch/GameSession.cs` take for a presentation other than Original,
+and the chrome table `ScoresOverlay` draws from `ScoresTable` under a held Display
+Scores.
+
+**The suites.** A Built-in suite is deleted once its feature has an Original walk in the same
+tier, never skipped. The lists below are derived, and drift as suites land. To rebuild them,
+search `CSVM/src/Testing` for `LaunchMenu.Build`, `MenuSuiteHost.Build`, `MenuSuiteHost.Menu`,
+`BuiltInPresentation` and `PresentationId.BuiltIn`, trace each hit through its helpers to the
+`[Suite(` that calls it, and read the tier from `SuiteCatalog.CiTier`. A hit in a suite's
+`PresentationRegistry` alone is the fallback registration and walks nothing.
+
+- Walk Built-in's screens and are in `SuiteCatalog.CiTier`, headless over the `--synthetic-data`
+  tree: `campaign-layout-core`, `menu-backdrop`, `menu-controls-seats`, `menu-coop-door`,
+  `menu-free-flight-journey`, `menu-hangar-journey-core`, `menu-host-address`, `menu-host-pointer`,
+  `menu-host-tracer`, `menu-instant-action-journey-core`, `menu-net-door`,
+  `menu-original-builtin-host`, `menu-player-setup-journey` and `menu-zone-layout`, plus the
+  Built-in cases of `menu-launch-return`, `menu-player-setup-seats` and `menu-original-lobby` (a
+  Built-in host's and a Built-in guest's ending). Original's walks of the same features
+  (`menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
+  `menu-original-campaign`, `menu-original-wrapup`) are outside that tier, while other Original
+  suites (`menu-join-board`, `menu-original-cheats`, `menu-original-controls`,
+  `menu-original-connection`) already pass on the synthetic tree. Each of the five joins the tier
+  before the Built-in walk it replaces goes.
+- Walk Built-in's screens outside the tier: `campaign-briefing-repaint`, `campaign-layout-parity`,
+  `menu-builtin-join-board`, `menu-campaign-journey`, `menu-hangar-journey`,
+  `menu-instant-action-journey`, `menu-mixed-coop-builtin-host`, `menu-mixed-coop-original-host`,
+  `menu-net-dogfight-launch`, `menu-screen-keyboard` and `menu-screenshot-key`, plus the Built-in
+  cases of `display-resolution` (the custom size row) and `menu-original-tracer` (the switch, the
+  Options route and the `--force-builtin` recovery).
+- Set a session's presentation to `PresentationId.BuiltIn` (some of them only when no lobby
+  landing is wired), which picks the chrome boards and keeps the flight off the menu's landing
+  pages. In the tier: `graphics-switch-cover`, `net-aircraft-replication`, `net-combat-events`,
+  `net-enet-join`, `net-kill-line`, `net-match-state`, `net-pause-overlay`, `net-relay-star`,
+  `net-spawn-rotation`, `net-two-session` and `net-versus-lives`. Outside it: `graphics-live-switch`,
+  `graphics-ocean-switch`, `graphics-retext-compiles`, `graphics-shader-twins`,
+  `graphics-twins-world-release`, `graphics-view-distance`, `graphics-water-quality`,
+  `net-ai-voice`, `net-ai-world`, `ocean-harbour-ramp`, `ocean-lab`, `ocean-wake`, `spyglass-sun`,
+  `stunt-race-boards` and `world-merge`. The boards stay, so these move to Original with the board
+  fallbacks above.
+- Drive the chrome boards, which stay, so the suites stay: `pause-board` (which its description
+  calls the Built-in pause board), `results-board-shell`, `net-capture-the-flag` and
+  `net-team-deathmatch` in the tier, and `instant-action-end`, `instant-action-wrapup`,
+  `net-stunt-race-end`, `net-zeppelin-vs-zeppelin`, `stunt-capture`, `stunt-race-no-lives`,
+  `stunt-race-time-attack` and `stunt-scores-scripted` outside it.
+- Every Original suite registers the Built-in factory beside its own, as the host's fallback;
+  that registration goes and nothing replaces it.
+- Unit tests: `LaunchMenuWizardTests`, `HangarFlowTests` and the `Hangar*PageTests`, the wallet and
+  custom-plane cases that reach `HangarFeature` through `HangarFlow` (`CampaignWalletTests`,
+  `CustomPlaneBuildTests`), and the Built-in cases of `MenuHostTests`, `PresentationResolutionTests`,
+  `SessionSpecMenuTests`, `OptionsStoreTests` and `OriginalOptionsTests`. The wallet's coverage
+  moves onto the feature or Original's hub before `HangarFlow` goes.
+
+**Steam Deck and Linux.** No launch script, packaging file or config key in the repository names
+Built-in or `--force-builtin`, so the Deck and Linux builds open on Original by the same default and
+reach Built-in only through the fallback above. Controller-only navigation does not depend on
+Built-in either. Original's pad and arrows step every screen by where its rows are drawn
+(`UI/Boards/SpatialFocus.cs`), a pad signs on at Original's own join board, and a text field raises
+Steam's on-screen keyboard in Game Mode from Original's shell as from the launchscreen
+(`Utils/ScreenKeyboard.cs`, the `menu-original-screen-keyboard` suite). Only the original's own
+keyboard and mouse extras stay off the pad: the typed cheats and the credits screen's right-button
+line.
