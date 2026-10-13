@@ -1133,13 +1133,6 @@ on the unchanged build (METHOD-8); green alone, the landing carries a `Waiver:` 
 owner. An entry leaves when its owner closes. A `DEFERRED` result (`memory`, `rebuild`, `quiet`, `gaming mode`) is
 not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs/tooling.md`).
 
-- **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
-  or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
-  `.scratch\goldens-failures\<stamp>\`. Rerun the goldens once before re-pinning or waiving the
-  moved shot: `.\RunTests.ps1 -SkipUnits -SkipEngine`, which renders every shot, since the runner
-  has no single-shot selector. CPU load and other golden workers' GPU contention did not reproduce
-  the flips.
-
 ## The standing checklist
 
 - [ ] `.\RunTests.ps1` exits 0; every `SKIP` is understood as not checked.

@@ -52,7 +52,9 @@ splits the instance list by the pool size, so a different size can reorder draws
 render list's sort. That is the same kind of difference as the rare Enhanced flips (a pixel or a
 handful, one level each), but a fixed machine never changes its pool size. A process affinity mask
 (gaming mode's) leaves the pool at the processor count and moves no shot, and CPU load, a second
-render on the same GPU, `--frame-delay` and `--time-scale` move no Enhanced shot either.
+render on the same GPU, `--frame-delay` and `--time-scale` move no Enhanced shot either. A moved
+Enhanced shot is therefore re-rendered once and, back on its pin, reported as `FLAKE` rather than
+red (`docs/tooling.md`).
 
 One shot depends on the machine in a second way: `campaign-4p-grid` names a campaign profile,
 `csvm-golden`, that lives in `user://Profiles/` and that no checkout carries, so it is pinned as a
@@ -79,7 +81,7 @@ go to the headless instruments: `--tex-census` / `--tex-override` for "is this s
 `--debug-anim` for pose, condition and emitter state, `--perf` for the frame split, the mesh lab for
 shading and normals. The saved `.scratch/goldens/<shot>.png` is for eyeballing *which* thing moved so
 you know which instrument to reach for. The next run deletes it, so a moved shot's PNG and logs are
-also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL line names.
+also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL or FLAKE line names.
 
 ## What the set does and does not cover
 

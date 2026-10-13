@@ -276,6 +276,19 @@ registry-order batches, each with its own watchdog, process, log and PNG. The de
 the fastest worker count that stayed bit-identical on the one machine measured, and
 **`-GoldenWorkers 1`** is the serial reference path.
 
+**A moved Enhanced shot is re-rendered once before it counts.** An Enhanced shot is one whose
+manifest args carry `--graphics=enhanced`. Those shots occasionally move by a pixel or one level
+under conditions no probe has reproduced (`analysis/goldens/README.md`), so the stage re-renders
+each moved one, serially, after the batch. Back on its pin, it prints a `FLAKE` line and the stage
+row reads `FLAKE`, which leaves the exit code at 0. Off its pin again, it is `MOVED` and the stage
+fails. Either way `.scratch/goldens-failures/<stamp>/` keeps both attempts' PNGs and logs, and its
+`report.txt` holds the frames' diff (pixel count, largest level, bounding box) and the machine as
+read after the batch: gaming mode, the memory ledger's live reservations, the scripted CSVM
+Godots running and, when `nvidia-smi` is on PATH, its process table. A move whose re-render a
+deferral stopped is named in the stage row and in `report.txt`. A Faithful shot's move, and any
+move under `-RegenGoldens`, is never re-rendered. The cause of these moves is unknown; #210 owns
+finding it from the kept frames.
+
 **The hitch stage is opt-in (`-Hitch`), not part of the landing gate**, because it never changes
 the exit code: run it when landing a change to `HitchMonitor.cs`, `HitchSidecar.cs` or the hitch
 tick in `Launch/FrameInstruments.cs`. **`-SkipHitch`** forces it off even when `-Hitch` is given, and `-Quick`
@@ -1078,8 +1091,9 @@ slower than budget, leaving the rest of the machine to the game.
   69 s unthrottled; past 240 s in gaming mode the gate prints one warning on stderr.
 - **Not covered:** `RunGame.ps1` and `RunDev.ps1` (the user plays through them), `ExportRelease.ps1`,
   `Extract.ps1`. `-WaitQuiet` is separate: it waits for scripted Godots whatever the mode.
-- **Goldens that move under the game's GPU load are a determinism defect**, owned by #114; gaming
-  mode reduces contention between test runs and is not a fix for one.
+- **Goldens that move under the game's GPU load are a determinism defect**, owned by #210; gaming
+  mode reduces contention between test runs and is not a fix for one. How the goldens stage reports
+  such a move is in the goldens stage's own paragraph above.
 - **Off Windows** it is a no-op and says so once.
 - `.\GamingMode.ps1 -SelfTest` checks expiry, tunable parsing and the lock across processes
   (waiting, naming the holder, DEFERRED past `maxWaitSec`, switching off mid-wait, a killed
