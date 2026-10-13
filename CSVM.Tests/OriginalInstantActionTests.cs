@@ -6,6 +6,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Spec;
+using CSVM.Testing;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -19,9 +20,9 @@ namespace CSVM.Tests;
 /// pages, the ace duel's blanking and the radio pair. Weapon Loadout opens the loadout screen for
 /// the seat the radio names. Fly Mission is the feature's exit, leaving with the pilot's fit on the
 /// seat. No <see cref="OriginalShell"/> stands behind these: the host records what the module asks
-/// of one, the screen, focus, pointer, hangar door and seat walk. The top level's door and the
-/// keyboard's column walk are the shell's, in <see cref="OriginalShellTests"/>; every rectangle
-/// here is the fixture's geometry.
+/// of one, the screen, focus, pointer, hangar door and seat walk. The top level's door is the
+/// shell's, in <see cref="OriginalShellTests"/>, and the cursor's walk runs here through the host
+/// over the fixture's geometry.
 /// </summary>
 public class OriginalInstantActionTests
 {
@@ -102,6 +103,76 @@ public class OriginalInstantActionTests
         Assert.Contains(board.Fills, f => f.X == 70f && f.Y == 170f && f.Border);
         Assert.Contains(board.Pictures, p => p.Art.Name == "PI_B_ScrollBar.png");
         Assert.Empty(board.Overlays);
+    }
+
+    /// <summary>The cursor walks the page as drawn: the radio pair under Weapon Loadout, then Build
+    /// Custom Plane and Exit as one footer row. Left and Right wrap along that row. The old row-order
+    /// walk took Down from Weapon Loadout onto Fly Mission, the next row built.</summary>
+    [Fact]
+    public void TheCursorWalksTheRadiosUnderWeaponLoadoutAndBuildAndExitAsTheFooterRow()
+    {
+        var host = Open(out _);
+        host.CanBuildPlane = true;
+        host.FocusKey(OriginalInstantActionScreen.WeaponLoadoutKey);
+
+        Assert.Equal(OriginalInstantActionScreen.PlayerRadioKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.BuildKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.ExitKey, host.Press(1, 0));
+        Assert.Equal(OriginalInstantActionScreen.BuildKey, host.Press(1, 0));
+        Assert.Equal(OriginalInstantActionScreen.ExitKey, host.Press(-1, 0));
+        Assert.Equal(OriginalInstantActionScreen.FlyMissionKey, host.Press(0, -1));
+    }
+
+    /// <summary>Right from the contents' first row crosses to the right page's first dropdown.
+    /// View Story lies inside the row's own span, so it is not to its right. Build Custom Plane
+    /// starts past the row's middle but far below its line.</summary>
+    [Fact]
+    public void RightFromTheFirstContentsRowLandsOnThePilotPlaneDropdown()
+    {
+        var host = Open(out _);
+        host.CanBuildPlane = true;
+        Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:0", host.FocusedKey);
+        Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, host.Press(1, 0));
+    }
+
+    /// <summary>The enemy page's paging arrows stay cursor stops, the keyboard's one door to the
+    /// second page. A planned walk of arrow presses reaches the down one from the contents.</summary>
+    [Fact]
+    public void TheKeyboardReachesThePagingArrowWhichTurnsThePage()
+    {
+        var host = Open(out _);
+        for (int i = 0; i < 24 && host.FocusedKey != OriginalInstantActionScreen.PageDownKey; i++)
+        {
+            var rows = host.Rows;
+            int target = rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.PageDownKey);
+            var press = OriginalWalk.NextPress(rows, Lists(host), host.Focus, target);
+            Assert.NotNull(press);
+            host.Press(press!.MoveX, press.MoveY);
+        }
+
+        Assert.Equal(OriginalInstantActionScreen.PageDownKey, host.FocusedKey);
+        Accept(host);
+        Assert.Contains(host.Rows, r => r.Key == "IA_D_NENEMY1");
+    }
+
+    /// <summary>The contents window's arrows take no cursor. Down past the window's last row
+    /// scrolls the list a row under the cursor, and at the list's end the press leaves it.</summary>
+    [Fact]
+    public void DownPastTheContentsWindowScrollsItAndTheArrowsAreNoStops()
+    {
+        var host = Open(out _);
+        int window = host.Rows.Count(r => r.Kind == OriginalRowKind.ListRow);
+        int presets = InstantActionFeature.Presets.Count;
+        Assert.True(presets > window, $"the fixture's contents outrun the window ({presets} presets, {window} rows)");
+
+        for (int i = 1; i < presets; i++)
+        {
+            Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:{i}", host.Press(0, 1));
+            Assert.NotEqual(OriginalInstantActionScreen.ContentsDownKey, host.FocusedKey);
+        }
+
+        Assert.Equal(presets - window, host.Module.ContentsTop);
+        Assert.Equal(OriginalInstantActionScreen.ViewStoryKey, host.Press(0, 1));
     }
 
     [Fact]

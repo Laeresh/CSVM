@@ -1459,7 +1459,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             BoardLine.CapsBoxTop(ChatY, ChatSize, ChatPitch), ChatTextWidth, ChatPitch, true, 0, null);
     }
 
-    // Every widget of the showing tab and its frame, in focus order. The tabs and the page come
+    // Every widget of the showing tab and its frame, in row order. The tabs and the page come
     // first, then the player list's plaques, the chat line and Leave Game. The outlaw list stands
     // in the page's place with the tabs greyed, as the Select... press's mail(1) to each does.
     private void Widgets(List<OriginalRow> rows)

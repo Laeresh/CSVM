@@ -32,7 +32,7 @@ internal interface IOriginalOptionsPage
     /// <summary>The page's CANCEL CHANGES row key.</summary>
     string CancelKey { get; }
 
-    /// <summary>The page's rows, in focus order, its plaques included.</summary>
+    /// <summary>The page's rows, its plaques included.</summary>
     void BuildRows(List<OriginalRow> rows);
 
     /// <summary>The page's scrolling lists for the pointer.</summary>
@@ -161,7 +161,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
         screen is OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video
             or OriginalScreen.ControlsPrefs or OriginalScreen.Keys;
 
-    /// <summary>The showing page's rows, in focus order.</summary>
+    /// <summary>The showing page's rows.</summary>
     public void BuildRows(List<OriginalRow> rows) => Showing?.BuildRows(rows);
 
     /// <summary>The showing page's scrolling lists for the pointer: an open option list where one
@@ -170,7 +170,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
 
     /// <summary>A sideways step on the focused row where it changes a value there. That is an
     /// option's next word with wrap, the next registered seat, or the other flying scheme. False on
-    /// anything else, so the step crosses columns. The sliders are the shell's own step.</summary>
+    /// anything else, so the step moves the focus. The sliders are the shell's own step.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>
         Showing?.StepSideways(rows, focus, direction) ?? false;
 

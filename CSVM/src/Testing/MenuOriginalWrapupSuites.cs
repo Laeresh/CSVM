@@ -276,9 +276,9 @@ internal static class MenuOriginalWrapupSuites
         ctx.Check(shell.FocusedKey == OriginalWrapupScreen.ContinueKey,
             $"the cursor rests on CONTINUE ({shell.FocusedKey})");
 
-        shell.Step(new MenuCommands { MoveY = 1 });
+        OriginalWalk.WalkTo(shell, OriginalWrapupScreen.PrintKey(0), frame => shell.Step(frame));
         ctx.Check(shell.FocusedKey == OriginalWrapupScreen.PrintKey(0),
-            $"down from CONTINUE reaches the first print ({shell.FocusedKey})");
+            $"the keyboard walks from CONTINUE onto the first print ({shell.FocusedKey})");
         ctx.Check(shell.Compose().Fills.Any(f => f.Border && f.X == prints[0].X && f.Y == prints[0].Y),
             $"…which draws the focus box round it");
         shell.Step(new MenuCommands { Accept = true });
@@ -295,10 +295,19 @@ internal static class MenuOriginalWrapupSuites
                 && viewer?.IsOpen == false && shell.FocusedKey == OriginalWrapupScreen.PrintKey(0),
             $"Back closes it, on the page still, with the cursor back on its print ({shell.Screen}, {shell.FocusedKey})");
 
-        shell.Step(new MenuCommands { MoveY = -1 });
-        shell.Step(new MenuCommands { MoveY = -1 });
-        ctx.Check(shell.FocusedKey == OriginalWrapupScreen.PrintKey(pending - 1),
-            $"up past CONTINUE wraps to the last landed print, passing over the pending one ({shell.FocusedKey})");
+        var walk = new List<string>();
+        for (int i = 0; i < 2; i++)
+        {
+            shell.Step(new MenuCommands { MoveY = -1 });
+            walk.Add(shell.FocusedKey);
+        }
+
+        // The prints stand as a grid. Up from the first print wraps to the foot of its own column and
+        // climbs it, passing over the print still on its way.
+        var column = Enumerable.Range(0, prints.Count).Where(i => i != pending && prints[i].X == prints[0].X)
+            .OrderByDescending(i => prints[i].Y).Select(OriginalWrapupScreen.PrintKey).ToList();
+        ctx.Check(column.Count >= 3 && walk.SequenceEqual(column.Take(2)),
+            $"up from the first print wraps to the foot of its column and climbs it ({string.Join(" -> ", walk)}, column {string.Join(",", column)})");
 
         var held = prints[pending];
         Click(host, seat, fit, held.X + (held.Width / 2f), held.Y + (held.Height / 2f));

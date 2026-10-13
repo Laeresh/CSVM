@@ -163,7 +163,7 @@ internal sealed class OriginalBotPanel
         return rows[1].Id;
     }
 
-    /// <summary>The panel's rows in focus order, or the open list's items alone while one stands.
+    /// <summary>The panel's rows, or the open list's items alone while one stands.
     /// </summary>
     internal bool BuildRows(List<OriginalRow> rows)
     {

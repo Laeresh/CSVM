@@ -135,10 +135,8 @@ internal static class MenuOriginalScoresSuites
         board = shell.Compose();
         ctx.Check(Lines(board).Contains($"{prefix}1") && !Draws(board, $"{prefix}16"), $"{prefix}: the wheel over the page scrolls back to the top");
 
-        for (int i = 0; i < 80 && shell.FocusedKey != OriginalLobbyScreen.ScoresDownKey; i++)
-        {
-            Press(host, seat, new MenuCommands { MoveY = 1, OnPad = true });
-        }
+        OriginalWalk.WalkTo(shell, OriginalLobbyScreen.ScoresDownKey,
+            frame => Press(host, seat, new MenuCommands { MoveX = frame.MoveX, MoveY = frame.MoveY, OnPad = true }));
 
         ctx.Check(shell.FocusedKey == OriginalLobbyScreen.ScoresDownKey, $"{prefix}: the pad's walk reaches the down arrow ({shell.FocusedKey})");
         Press(host, seat, new MenuCommands { Accept = true, KeylessAccept = true, OnPad = true });
@@ -184,10 +182,8 @@ internal static class MenuOriginalScoresSuites
         ctx.Check(Lines(board).Contains("C1") && !Lines(board).Contains("C33") && Row(shell, OriginalLobbyScreen.ChatUpKey) is { Enabled: false },
             $"the wheel reaches the oldest kept line, which holds still as a new line arrives");
 
-        for (int i = 0; i < 80 && shell.FocusedKey != OriginalLobbyScreen.ChatDownKey; i++)
-        {
-            Press(host, seat, new MenuCommands { MoveY = 1, OnPad = true });
-        }
+        OriginalWalk.WalkTo(shell, OriginalLobbyScreen.ChatDownKey,
+            frame => Press(host, seat, new MenuCommands { MoveX = frame.MoveX, MoveY = frame.MoveY, OnPad = true }));
 
         Press(host, seat, new MenuCommands { Accept = true, KeylessAccept = true, OnPad = true });
         board = shell.Compose();

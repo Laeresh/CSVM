@@ -135,7 +135,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     }
 
     // A sideways step on the seat chooser picks the next player and one on the scheme row flips it;
-    // anything else crosses columns. The slider is the shell's own step and never reaches here. The
+    // anything else moves the focus. The slider is the shell's own step and never reaches here. The
     // text-button page drawn without the section has no slider, so its sensitivity row steps here.
     bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {

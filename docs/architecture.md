@@ -378,6 +378,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/MenuZones.cs`, how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.
 - `src/UI/Boards/LanguiFace.cs`, a langui `[FONTID]` tag read as a typeface: the Windows family it abbreviates, its size in board pixels, bold and italic.
 - `src/UI/Boards/ListWindow.cs`, a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
+- `src/UI/Boards/SpatialFocus.cs`, the one cursor rule over rectangles as drawn: the nearest stop ahead in the band, else the band's far end, else the nearest ahead anywhere.
 - `src/UI/Boards/SliderTrack.cs`, a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/Boards/BoardFit.cs`, how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
 - `src/UI/Boards/AuthoredPointer.cs`, a keyboard seat's mouse mapped back into a board's authored 800x600 pixels, the Original race and pause boards' pointer.
@@ -554,6 +555,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalWidgets.cs`, the layout-widget readings two screen modules share: a numbered widget key's slot, a section's background pane, a strip's size, a board page's rows.
 - `src/UI/Menu/Original/OriginalDropList.cs`, the one open-dropdown window rule every Original page stands on: the authored window, the hidden rows outside it, the arrows and the thumb.
 - `src/UI/Menu/Original/SliderControl.cs`, the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
+- `src/UI/Menu/Original/OriginalFocus.cs`, where a cursor press moves the focus on an Original screen: the spatial step over the rows on screen, scroll arrows skipped, a list scrolled where the press runs off it.
 - `src/UI/Menu/Original/OriginalOptionsScreen.cs`, the form behind the Options hub's doors: the frame, each page's ACCEPT and CANCEL plaques, the page switch and the one apply exit, over five page modules.
 - `src/UI/Menu/Original/KeysStickColumn.cs`, the KEYS AND BUTTONS page's split of a row's bindings between Control A/B and the port's Stick column.
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
@@ -666,6 +668,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Testing/SuiteRender.cs`, the `render:<kind>` term: which suites run windowed, headless or on synthetic data, from `analysis/headless-limits.json`.
 - `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/ScreenKeyboardRecorder.cs`, a suite's stand-in for the on-screen keyboard: available, its URLs recorded, the detected state put back on dispose.
+- `src/Testing/OriginalWalk.cs`, the shortest cursor walk onto one row of an Original screen, planned over the shell's own spatial step.
 - `src/Testing/LoopbackMaster.cs`, the master server's socket side in one process: codes, guest numbers and signal routing, with no ICE servers, for the WebRTC suites.
 - `src/Testing/PhaseAttribution.cs`, buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
 - `src/Testing/CountingEmitterFactory.cs`, the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.

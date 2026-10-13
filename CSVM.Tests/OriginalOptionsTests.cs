@@ -143,7 +143,7 @@ public class OriginalOptionsTests
         Assert.False(host.Module.GameOptions.RumbleChoice);
 
         Down(host);
-        Down(host);
+        MoveX(host, 1);
         Assert.Equal(OriginalGameOptionsPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
@@ -239,7 +239,7 @@ public class OriginalOptionsTests
         Down(host);
         Down(host);
         Down(host);
-        Down(host);
+        MoveX(host, 1);
         Assert.Equal(OriginalAudioPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
@@ -406,6 +406,11 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
 
+        // Enhanced brings the shadow row live under the checkbox. Below it the column holds only
+        // rows that take a sideways value, so Down leaves the column. Nothing lies wholly below, so
+        // it wraps to ACCEPT CHANGES, the farthest row behind.
+        Down(host);
+        Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
@@ -449,11 +454,15 @@ public class OriginalOptionsTests
         StepX(host, -1);
         Assert.Equal(DisplayWords.Windowed, host.Module.Video.DisplayModeChoice);
 
+        // The checkbox is the column's last live row. Down leaves the value column for CANCEL
+        // CHANGES, the one row wholly below it, and Up takes ACCEPT CHANGES over it.
         Down(host);
         Down(host);
         Down(host);
         Down(host);
         Down(host);
+        Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
+        MoveY(host, -1);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(DisplayWords.Windowed, exit.DisplayMode);
@@ -592,7 +601,11 @@ public class OriginalOptionsTests
         Down(host);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
+        // Enhanced brings the shadow row live under the checkbox. Below it the column holds only value
+        // rows, so Down leaves for ACCEPT CHANGES, beside the column's foot, and then CANCEL CHANGES.
         Down(host);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
@@ -680,7 +693,7 @@ public class OriginalOptionsTests
         Assert.Equal(ShadowQualitySetting.High, host.Module.Video.Choice(ShadowQualitySetting.Lookup));
         Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
-        Down(host);
+        // Nothing lies wholly below the shadow row, so Down wraps out of the value column.
         Down(host);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
@@ -1435,37 +1448,25 @@ public class OriginalOptionsTests
     private static (float X, float Y, float Width, float Height) Rect(OriginalRow row) =>
         (row.X, row.Y, row.Width, row.Height);
 
-    // The cursor's walk down and up a column, the shell's own rule restated: within the focused
-    // row's column, enabled rows only, wrapping at either end.
+    // The cursor's walk down and up, the shell's own spatial step.
     private static void Down(OptionsHost host) => MoveY(host, 1);
 
     private static void MoveY(OptionsHost host, int direction)
     {
-        var rows = host.Rows;
-        int focus = host.Focus;
-        if (focus >= 0)
-        {
-            int column = rows[focus].Column;
-            int i = focus;
-            for (int n = 0; n < rows.Count; n++)
-            {
-                i = (i + direction + rows.Count) % rows.Count;
-                if (rows[i].Column == column && rows[i].Enabled)
-                {
-                    focus = i;
-                    break;
-                }
-            }
+        host.Press(0, direction);
+        EndFrame(host);
+    }
 
-            host.FocusedRow = focus;
-        }
-
+    // A sideways press on a row that takes no value, which moves the focus.
+    private static void MoveX(OptionsHost host, int direction)
+    {
+        host.Press(direction, 0);
         EndFrame(host);
     }
 
     // A sideways step, the shell's own cascade restated as far as this module reaches. A slider
     // comes first, since it belongs to no one screen, then the page's own row. Where neither takes
-    // it the shell crosses columns, which is its business and not the module's.
+    // it the shell moves the focus, which is its business and not the module's.
     private static bool StepX(OptionsHost host, int direction)
     {
         var rows = host.Rows;

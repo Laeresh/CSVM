@@ -176,6 +176,15 @@ thumb's length says how much is in view and a longer one shortens the run the dr
 list widget builds one from its own geometry and the presentation that owns the pointer decides what
 a new top writes back, so the arrows and the keyboard keep their own rules.
 
+## src/UI/Boards/SpatialFocus.cs
+The one cursor rule the Original presentation steps by, over rectangles as drawn rather than the
+order they were built in. `Step` takes the nearest stop ahead in the focus's band (the stops
+overlapping it across the press), else the band's far end, else the nearest ahead anywhere, else the
+farthest behind. `Ahead` holds a stop in the pressed direction when it lies wholly past the focus's
+middle, or, for overlapping rectangles, when its centre does. Outside the band the nearest is the
+smallest edge gap, the gap across counted double. A null stop takes no cursor. `PauseScreens.Step` hands it the strips' plates and `Menu/Original/OriginalFocus.cs` a
+screen's rows. Off-engine coverage: `CSVM.Tests/SpatialFocusTests.cs` and `PauseScreensTests.cs`.
+
 ## src/UI/Boards/SliderTrack.cs
 A continuous control's track as a pointer sees it, the list window's opposite number: the slot a
 thumb slides along, the thumb's own size, and the whole numbers the slot spans. `ValueAt` reads a
@@ -361,7 +370,7 @@ objectives parchment, the memento, and the labelled button strips, the block's f
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the five 132x28 plates, `Step` moves the pad and arrow cursor to the strip drawn in the pressed direction, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, `Step` moves the pad and arrow cursor to the strip drawn in the pressed direction by `Boards/SpatialFocus.cs`'s rule, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Screens/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,
@@ -1124,7 +1133,7 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box is the one `OriginalShellDialog` it holds beside its `OriginalCheats`; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action, join-board and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door) and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box is the one `OriginalShellDialog` it holds beside its `OriginalCheats`; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action, join-board and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door) and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, a cursor press that changes no value moving the focus through `OriginalFocus.cs`, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -1195,6 +1204,15 @@ refusal each frame and consults this one only when no list holds, so neither dra
 as the other. `Drive` reports a slider holding the pointer, which is how the shell knows a click was
 spent and activates nothing under it. A row declares its slider through `OriginalShell.cs`'s
 `OriginalSlider`; this class knows a track and a value and nothing about the setting behind them.
+
+## src/UI/Menu/Original/OriginalFocus.cs
+Where a pad or arrow press moves the focus on any Original screen, once no slider, network box or
+module took it as a value. `Step` hands the live rows on screen to `Boards/SpatialFocus.cs`, so
+neither row order nor `Column` decides a walk. `IsStop` names the rows that take the cursor: a
+list's scroll arrows, the rows on its `ListWindow`'s bar, take none where the window holds rows to
+walk. A band of value rows alone (`TakesValue`: dropdowns, radios, sliders) lets a wrapping press
+out. `Move` adds the scroll: a vertical press running off a list with more rows that way moves its
+window one row and lands on the row now standing where the focus stood. The shell steps through it.
 
 ## src/UI/Menu/Original/OriginalOptionsScreen.cs
 The form behind the Options hub's four doors, one standalone `IOriginalScreenModule` standing five page modules (below) over the decoded

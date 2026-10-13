@@ -1221,12 +1221,14 @@ internal static class MenuInstantActionSuites
         ctx.Check(ia.RaceWindowMinutes == 10 && Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label == "10 minutes",
             $"a sideways step picks the next window ({ia.RaceWindowMinutes})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.PageDownKey,
-            $"and Down leaves it past the blank enemy count for the paging button ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.FlyMissionKey,
+            $"and Down leaves it past the blank enemy boxes for Fly Mission, drawn under it ({shell.FocusedKey})");
 
         Press(host, seat, Up);
         Press(host, seat, Up);
         Press(host, seat, Up);
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.MissionKey,
+            $"Up climbs back over the race time box and the environment onto the mission type ({shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.MissionType.Key == "zeppelin_run" && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false }
             && !HasLine(shell, "Race Time:"),

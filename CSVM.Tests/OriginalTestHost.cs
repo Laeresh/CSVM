@@ -222,6 +222,16 @@ internal abstract class OriginalTestHost<TModule> : IOriginalScreenHost
     public BoardFill FocusMark(OriginalRow row) =>
         new(row.X, row.Y, row.Width, row.Height, 188, 188, 188, 0.75f, Border: true);
 
+    // One cursor press the module took as no value change, moved the shell's way. It steps over the
+    // rows on screen and scrolls a list the press runs off. Answers the key it lands on.
+    internal string Press(int moveX, int moveY)
+    {
+        var lists = new List<OriginalList>();
+        Module.Lists(lists);
+        _focus[(int)Screen] = OriginalFocus.Move(() => Rows, lists, Focus, moveX, moveY);
+        return FocusedKey;
+    }
+
     // One answer taken, the way the shell takes one. The box goes first, the focus behind it comes
     // back, then the answer runs over the bare screen.
     internal void Answer(string key)

@@ -425,7 +425,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The showing screen's rows, in focus order.</summary>
+    /// <summary>The showing screen's rows.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         if (_flow is { } flow)

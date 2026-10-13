@@ -291,7 +291,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     {
     }
 
-    /// <summary>A sideways step crosses columns on both pages.</summary>
+    /// <summary>Nothing on either page takes a sideways step, so it moves the focus.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) => false;
 
     /// <summary>Neither page opens a list.</summary>

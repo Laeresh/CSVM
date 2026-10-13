@@ -232,7 +232,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     }
 
     // A sideways step on a focused option picks the next value with wrap, as the hangar's and the
-    // Instant Action screen's dropdowns do. False on anything else, so the step crosses columns.
+    // Instant Action screen's dropdowns do. False on anything else, so the step moves the focus.
     bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count || OptionFor(rows[focus].Key) is not { } option)

@@ -445,8 +445,9 @@ in the data. Built-in walks them linearly, which is a divergence, not a decode.
 
 `CSVM.Tests/OriginalCoverageTests.cs` is the machine check of this page against the Original
 presentation: it drives `OriginalShell` from the top level to every screen and back by three input
-families (pointer clicks on the rows' rectangles, keyboard cursor commands walking down and right,
-pad cursor commands walking up and left), once over the hand-authored fixture layout and once over
+families (pointer clicks on the rows' rectangles, keyboard and pad cursor commands walking the
+shell's own spatial step, the keyboard trying down and right first and the pad up and left), once
+over the hand-authored fixture layout and once over
 the install's own `menu_layout.json` and art. Every `ScriptToExe` edge of an in-scope section must
 have an entry saying how Original realises it, and the entry is checked against the shell. The
 tally over the install: 35 screens (every `OriginalScreen`) reached and left with no open campaign,
@@ -630,7 +631,7 @@ constants rather than reading a layout.
   alone. The first pinned row, the one
   naming the code or the address, is a remake-only COPY control: a 48-wide box at the row's right
   end, the row spanning the line so a click or a tap on the code copies it as the box does, and a
-  stop in the cursor's left column between Ready and the chat box. The line names Ctrl+C only after
+  cursor stop between Ready and the chat box. The line names Ctrl+C only after
   a key last moved the cursor. A Built-in Dogfight host serves
   an Original guest too: its launch waits for that guest's Ready and flies its pick on one of the
   seven lobby environments.
@@ -991,7 +992,7 @@ the row the pointer is on and the cream a closed box's outline takes under the p
 off the film, no layout row authoring any of them. It opens the page and names the preset
 differently by the user's decision, a deliberate departure recorded here, not a defect. Still
 unfilmed: VIEW STORY; whether keyboard or pad input reaches the screen at all (Original walks the
-widgets in two columns and steps a dropdown's value sideways, a remake equivalence); and every
+widgets as they are drawn and steps a dropdown's value sideways, a remake equivalence); and every
 sound.
 
 The plane-construction screens are built from what the layout and the stills evidence: the
@@ -1029,7 +1030,7 @@ question as the script's own three-button box. Still
 unfilmed: tabs visited out of order (both walks ran 1 to 6); Purchase and whether leaving a tab
 commits (Original commits only on `PUR_B_PURCHASE`); the cleared default box (Original starts on
 a bare airframe); string 203; and whether keyboard or pad input reaches the hub at all
-(Original walks the page's rows then the tab bar and steps a dropdown's value sideways, a remake
+(Original walks the page's rows and the tab bar as they are drawn and steps a dropdown's value sideways, a remake
 equivalence).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's
   environment dropdown; there is no standalone chapter list. Dogfight's kill target and time limit

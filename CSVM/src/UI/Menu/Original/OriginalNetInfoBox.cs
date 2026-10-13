@@ -218,7 +218,7 @@ public sealed class OriginalNetInfoBox
         _done = null;
     }
 
-    /// <summary>The standing box's rows in the scripts' focus order, or the Voice list's rows
+    /// <summary>The standing box's rows in the scripts' order, or the Voice list's rows
     /// alone while it stands open.</summary>
     public void Rows(List<OriginalRow> rows)
     {

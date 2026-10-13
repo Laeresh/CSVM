@@ -144,7 +144,7 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     {
     }
 
-    /// <summary>Nothing on the page changes a value, so a sideways step crosses columns instead.</summary>
+    /// <summary>Nothing on the page changes a value, so a sideways step moves the focus instead.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) => false;
 
     /// <summary>The page opens no list.</summary>

@@ -746,7 +746,7 @@ internal static class MenuPlayerSetupSuites
                 $"a return keeps both seats and drops every pick ({host.Seats.Count})");
             Press(host, seat0, Up);
             Press(host, seat0, Accept);
-            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.FreeFlight, $"Up onto the Free Flight door and Accept opens Free Flight ({shell.Screen})");
+            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.FreeFlight, $"Up onto the Free Flight door and Accept opens Free Flight ({shell.Screen}, {shell.FocusedKey})");
             Press(host, seat0, Right);
             Press(host, seat0, Accept);
             Press(host, s2, Accept);
@@ -822,21 +822,13 @@ internal static class MenuPlayerSetupSuites
             $"the cursor walks back onto the list field ({shell.FocusedKey})");
     }
 
-    // Steps a seat's cursor onto the row keyed <paramref name="key"/>, one lap at most.
+    // Steps a seat's cursor onto the row keyed <paramref name="key"/> by the shortest walk of
+    // arrow presses over the shell's own spatial step.
     private static bool WalkTo(
         MenuHost host, ScriptedSeat seat, CSVM.UI.Menu.Original.OriginalShell shell, string key)
     {
-        for (int i = 0; i <= shell.Rows.Count; i++)
-        {
-            if (shell.FocusedKey == key)
-            {
-                return true;
-            }
-
-            Press(host, seat, Down);
-        }
-
-        return false;
+        OriginalWalk.WalkTo(shell, key, frame => Press(host, seat, frame));
+        return shell.FocusedKey == key;
     }
 
     private static CSVM.UI.Menu.Original.OriginalRow? Row(CSVM.UI.Menu.Original.OriginalShell shell, string key)

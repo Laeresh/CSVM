@@ -131,14 +131,14 @@ public interface IOriginalScreenModule
     /// <summary>Whether a screen is one of this module's.</summary>
     bool Owns(OriginalScreen screen);
 
-    /// <summary>The showing screen's rows, in focus order.</summary>
+    /// <summary>The showing screen's rows.</summary>
     void BuildRows(List<OriginalRow> rows);
 
     /// <summary>The showing screen's scrolling lists as the pointer sees them, the topmost first.</summary>
     void Lists(List<OriginalList> lists);
 
     /// <summary>A sideways step on the focused row where it changes a value there; false where it
-    /// does not, so the step crosses columns instead.</summary>
+    /// does not, so the step moves the focus instead.</summary>
     bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction);
 
     /// <summary>Closes an open list of this module's and puts the focus back on its box; false when

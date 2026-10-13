@@ -15,13 +15,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Original hangar module over the hand-authored layout fixture and a hand-written host: the
-/// name screen's typing and its two exits, the hub's tab bar as siblings, the dropdowns binding to
-/// the shared feature, the defaults ask as a dialog, the totals page committing into a scratch
-/// store, the inventory selling, and the cancel that leaves no residue. No <see cref="OriginalShell"/>
+/// The Original hangar module over the hand-authored layout fixture and a hand-written host. It
+/// covers the name screen's typing and its two exits, the hub's tab bar as siblings and the
+/// dropdowns binding to the shared feature. It also covers the defaults ask as a dialog, the totals
+/// page committing to a scratch store, selling, and a cancel leaving no residue. No <see cref="OriginalShell"/>
 /// stands behind these; what the module asks of one (the screen, the focus, a dialog, a roster
-/// re-read) the host records. The door from Instant Action and the keyboard's column walk are the
-/// shell's and are in <see cref="OriginalShellTests"/>. Every rectangle here is the fixture's
+/// re-read) the host records. The door from Instant Action is the shell's and is in
+/// <see cref="OriginalShellTests"/>. Every rectangle here is the fixture's
 /// invented geometry; the original's is read the same way.
 /// </summary>
 public class OriginalHangarTests : IDisposable
@@ -322,22 +322,25 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(new GunChoice(1, true), hangar.Scratch.Guns[3]);
     }
 
+    /// <summary>The tab bar is one row of plaques, so Left and Right walk along it as drawn and
+    /// wrap at its ends. The standing tab is a sibling like the other five. A tab takes no sideways
+    /// value, so the step is the shell's. The old module walk took Right from PAINT onto SELL
+    /// PLANES, the next row built.</summary>
     [Fact]
-    public void ASidewaysStepOnTheTabBarWalksAlongItAndABoxTakesNone()
+    public void LeftAndRightWalkTheTabBarAsDrawnAndWrapAndABoxTakesNoSidewaysStep()
     {
         var host = Host(out _);
         OpenHub(host, "Ace");
 
-        // The standing tab is a sibling like the other five, so the walk steps onto it too, and
-        // past the last tab it reaches the buttons beside the bar.
         host.FocusKey("PX_B_AIRFRAME");
-        Right(host);
-        Assert.Equal("PX_B_ENGINE", host.FocusedKey);
+        Assert.False(host.Module.StepSideways(host.Rows, host.Focus, 1));
+        Assert.Equal("PX_B_ENGINE", host.Press(1, 0));
         host.FocusKey("PX_B_PAINT");
-        Right(host);
-        Assert.Equal(OriginalHangarScreen.SellPlanesKey, host.FocusedKey);
-        Assert.True(host.Module.StepSideways(host.Rows, host.Focus, -1));
-        Assert.Equal("PX_B_PAINT", host.FocusedKey);
+        Assert.Equal("PX_B_AIRFRAME", host.Press(1, 0));
+        Assert.Equal("PX_B_PAINT", host.Press(-1, 0));
+        Assert.Equal("PX_B_Cancel", host.Press(0, 1));
+        Assert.Equal(OriginalHangarScreen.ReadyKey, host.Press(-1, 0));
+        Assert.Equal("PX_B_GUNS", host.Press(0, -1));
 
         host.FocusKey(OriginalHangarScreen.HubNameFieldKey);
         Assert.False(host.Module.StepSideways(host.Rows, host.Focus, 1));

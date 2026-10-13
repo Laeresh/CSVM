@@ -90,7 +90,7 @@ internal sealed class OriginalTeamBox
     /// <summary>Forgets the box, for a lobby that left the screen under it.</summary>
     public void Drop() => IsOpen = false;
 
-    /// <summary>The box's rows in the script's focus order.</summary>
+    /// <summary>The box's rows in the script's order.</summary>
     public void Rows(List<OriginalRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);

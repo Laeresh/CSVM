@@ -771,7 +771,10 @@ internal static class MenuHangarSuites
         ctx.Check(tabPlaques.Count == 6 && tabPlaques.TrueForAll(p => Math.Abs(p.LabelBaseline - 28f) < 0.01f),
             $"all six tab labels take one baseline eight pixels clear of the strip's bottom ({tabPlaques.Count} tabs, {tabPlaques.FirstOrDefault()?.LabelBaseline})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == "PX_B_AIRFRAME", $"Down from the dropdown lands on the first tab ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == "PX_B_HARDPOINTS", $"Down from the dropdown lands on the tab drawn under it ({shell.FocusedKey})");
+        Press(host, seat, Right);
+        Press(host, seat, Right);
+        ctx.Check(shell.FocusedKey == "PX_B_AIRFRAME", $"Right walks the bar and wraps at its end onto the first tab ({shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(shell.FocusedKey == "PX_B_ENGINE", $"Right walks the bar onto the standing tab, which is a sibling ({shell.FocusedKey})");
         Press(host, seat, Right);
@@ -1169,11 +1172,8 @@ internal static class MenuHangarSuites
         board = shell.Compose();
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine && board.Lines.Any(l => l.Text == title) && board.Lines.Any(l => l.Text == figure),
             $"the engine tab draws the same note ({shell.Screen})");
-        // The click leaves the focus on the tab bar; Up walks it onto the page's one dropdown.
-        for (int i = 0; i < 8 && shell.FocusedKey != OriginalHangarScreen.EngineDropKey; i++)
-        {
-            Press(host, seat, Up);
-        }
+        // The click leaves the focus on the tab bar; the keyboard walks it onto the page's one dropdown.
+        OriginalWalk.WalkTo(shell, OriginalHangarScreen.EngineDropKey, frame => Press(host, seat, frame));
 
         int engine = hangar.Scratch.Engine;
         Press(host, seat, Right);

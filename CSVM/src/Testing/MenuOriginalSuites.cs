@@ -1119,14 +1119,9 @@ internal static class MenuOriginalSuites
         return -1f;
     }
 
-    // Walks the focus down onto a row by key, the keyboard's own way there.
-    private static void WalkTo(MenuHost host, ScriptedSeat seat, OriginalShell shell, string key)
-    {
-        for (int guard = 0; guard < 32 && shell.FocusedKey != key; guard++)
-        {
-            Press(host, seat, Down);
-        }
-    }
+    // Walks the focus onto a row by key, the shortest keyboard walk there over the shell's own step.
+    private static void WalkTo(MenuHost host, ScriptedSeat seat, OriginalShell shell, string key) =>
+        OriginalWalk.WalkTo(shell, key, frame => Press(host, seat, frame));
 
     private static OriginalShell? SwitchBackToOriginal(TestContext ctx, MenuHost host)
     {

@@ -403,7 +403,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// stand on does.</summary>
     public void ClearLoadoutSeat() => _loadoutSeat = null;
 
-    /// <summary>The showing screen's rows, in focus order.</summary>
+    /// <summary>The showing screen's rows.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         if (_host.Screen == OriginalScreen.InstantActionLoadout)
@@ -444,8 +444,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     /// <summary>A sideways step on the focused dropdown picks the next allowed value with wrap; on a
-    /// radio it moves the mark. False when the focused row is neither, so the step crosses
-    /// columns.</summary>
+    /// radio it moves the mark. False when the focused row is neither, so the step moves the
+    /// focus.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (rows == null || focus < 0 || focus >= rows.Count)
@@ -760,9 +760,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             : null;
     }
 
-    // The screen's widgets in focus order. Column 0 is the left page: the contents window, its
-    // arrows, View Story and Build. Column 1 is the right page: the dropdowns of the shown enemy
-    // page, the paging button, the radio pair, Weapon Loadout, Fly Mission and Exit.
+    // The screen's widgets. Column 0 is the left page: the contents window, its arrows, View Story
+    // and Build. Column 1 is the right page: the dropdowns of the shown enemy page, the paging
+    // button, the radio pair, Weapon Loadout, Fly Mission and Exit.
     private void BuildInstantActionWidgets(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         var presets = InstantActionFeature.Presets;
@@ -848,9 +848,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The race time box, this port's own control for the race window in the lives box's idiom. Its
-    // place in focus order is where its line falls, before the first box standing below it, so the
-    // walk follows the page. Hidden, it keeps that place unseen, unhit and in no column, so no
-    // other row's index moves when a seat joins or leaves.
+    // row stands where its line falls, before the first box standing below it. Hidden, it keeps
+    // that place unseen, unhit and in no column, so no other row's index moves when a seat joins
+    // or leaves.
     private void AddRaceTime(MenuLayoutScreen screen, List<OriginalRow> rows, int setup)
     {
         var list = RaceTimeDropdown();

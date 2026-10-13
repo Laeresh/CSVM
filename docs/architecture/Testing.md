@@ -150,3 +150,9 @@ A suite's stand-in for Steam's on-screen keyboard: `Utils/ScreenKeyboard.cs` rea
 and every URL it would open is recorded instead. Disposing it lowers whatever is still up and puts
 back the detected state and the real handler. Used by `menu-screen-keyboard` and
 `menu-original-screen-keyboard`.
+
+## src/Testing/OriginalWalk.cs
+The presses a suite or a unit test makes to reach one row of an Original screen. The screen's walk
+is spatial (`UI/Menu/Original/OriginalFocus.cs`), so `NextPress` plans the shortest walk over the
+shell's own step, breadth first, and `WalkTo` presses it through the caller's own frame. The
+Original menu suites and `CSVM.Tests/OriginalCoverageTests.cs` reach their rows through it.
