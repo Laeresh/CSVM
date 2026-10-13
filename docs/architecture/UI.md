@@ -177,13 +177,14 @@ list widget builds one from its own geometry and the presentation that owns the 
 a new top writes back, so the arrows and the keyboard keep their own rules.
 
 ## src/UI/Boards/SpatialFocus.cs
-The one cursor rule the Original presentation steps by, over rectangles as drawn rather than the
-order they were built in. `Step` takes the nearest stop ahead in the focus's band (the stops
-overlapping it across the press), else the band's far end, else the nearest ahead anywhere, else the
-farthest behind. `Ahead` holds a stop in the pressed direction when it lies wholly past the focus's
-middle, or, for overlapping rectangles, when its centre does. Outside the band the nearest is the
-smallest edge gap, the gap across counted double. A null stop takes no cursor. `PauseScreens.Step` hands it the strips' plates and `Menu/Original/OriginalFocus.cs` a
-screen's rows. Off-engine coverage: `CSVM.Tests/SpatialFocusTests.cs` and `PauseScreensTests.cs`.
+The one cursor rule the Original presentation steps by, over rectangles as drawn. `Step` takes the
+nearest stop ahead in the focus's band (the stops overlapping it across the press), else the band's
+far end, else the nearest ahead anywhere, else the farthest behind. `Ahead` holds a stop ahead when
+it lies wholly past the focus's middle, or, for overlapping rectangles, when its centre does.
+Outside the band the nearest is the smallest edge gap, the gap across weighted by `AcrossGapWeight`.
+`Leave` is the press out of a band: the centre decides which stops lie ahead, the edge gap the
+nearest. All three are Remake-only rules. `PauseScreens.Step` hands it the strips' plates and
+`Menu/Original/OriginalFocus.cs` a screen's rows. Tests: `SpatialFocusTests`, `PauseScreensTests`.
 
 ## src/UI/Boards/SliderTrack.cs
 A continuous control's track as a pointer sees it, the list window's opposite number: the slot a
@@ -1211,8 +1212,9 @@ module took it as a value. `Step` hands the live rows on screen to `Boards/Spati
 neither row order nor `Column` decides a walk. `IsStop` names the rows that take the cursor: a
 list's scroll arrows, the rows on its `ListWindow`'s bar, take none where the window holds rows to
 walk. A band of value rows alone (`TakesValue`: dropdowns, radios, sliders) lets a wrapping press
-out. `Move` adds the scroll: a vertical press running off a list with more rows that way moves its
-window one row and lands on the row now standing where the focus stood. The shell steps through it.
+out through `SpatialFocus.Leave`. `Move` adds the scroll: a vertical press running off a list
+with more rows that way moves its window one row and lands on the row now standing where the focus
+stood. The shell steps through it.
 
 ## src/UI/Menu/Original/OriginalOptionsScreen.cs
 The form behind the Options hub's four doors, one standalone `IOriginalScreenModule` standing five page modules (below) over the decoded

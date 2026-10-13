@@ -10,6 +10,11 @@ namespace CSVM.UI.Boards;
 /// </summary>
 public static class SpatialFocus
 {
+    // Remake-only rule: ahead outside the band, the gap across a press counts double the gap
+    // along it. A row level with the cursor then beats a nearer one far off its line. Right from
+    // Instant Action's lower contents rows takes the dropdown beside them, not Change Weapons below.
+    private const float AcrossGapWeight = 2f;
+
     /// <summary>The stop a press moves to from <paramref name="from"/>, which stands at
     /// <paramref name="at"/>. A null stop takes no focus. Vertical wins a diagonal. The nearest
     /// stop ahead in the same band, else the band's far end, else the nearest ahead anywhere, else
@@ -34,13 +39,35 @@ public static class SpatialFocus
             ?? from;
     }
 
+    /// <summary>The stop a press leaving a band moves to. The centre decides which stops lie
+    /// ahead, the edge gap ranks the nearest as in <see cref="Step"/>, else the farthest behind by
+    /// centre. Remake-only rule: past the middle, the Video page's Down from its checkbox skipped
+    /// ACCEPT CHANGES level with it. The caller drops the band's own stops first.</summary>
+    public static int Leave(
+        IReadOnlyList<(float X, float Y, float Width, float Height)?> stops, int from,
+        (float X, float Y, float Width, float Height) at, int moveX, int moveY)
+    {
+        ArgumentNullException.ThrowIfNull(stops);
+        if (moveX == 0 && moveY == 0)
+        {
+            return from;
+        }
+
+        bool vertical = moveY != 0;
+        int dir = Math.Sign(vertical ? moveY : moveX);
+        return Nearest(stops, from, at, vertical, dir, banded: false, ahead: true, byCentre: true)
+            ?? Nearest(stops, from, at, vertical, dir, banded: false, ahead: false, byCentre: true)
+            ?? from;
+    }
+
     /// <summary>Whether <paramref name="to"/> lies in the pressed direction from
     /// <paramref name="at"/>: wholly past its middle, or, for two rectangles that overlap, with its
-    /// centre past (the scrapbook's photographs). Vertical wins a diagonal.</summary>
+    /// centre past (the scrapbook's photographs). Vertical wins a diagonal. A row below the cursor
+    /// and a little to one side is then not beside it.</summary>
     public static bool Ahead(
         (float X, float Y, float Width, float Height) at, (float X, float Y, float Width, float Height) to,
         int moveX, int moveY) =>
-        Lies(at, to, moveY != 0, Math.Sign(moveY != 0 ? moveY : moveX));
+        Lies(at, to, moveY != 0, Math.Sign(moveY != 0 ? moveY : moveX), byCentre: false);
 
     /// <summary>Whether two rectangles overlap across a press, which puts them in one band.</summary>
     public static bool InBand(
@@ -54,18 +81,20 @@ public static class SpatialFocus
     public static (float X, float Y) Centre((float X, float Y, float Width, float Height) box) =>
         (box.X + (box.Width / 2f), box.Y + (box.Height / 2f));
 
-    // Whether to lies dir-ward of at along the axis: past at's middle, or by centre where they overlap.
+    // Whether to lies dir-ward of at along the axis: wholly past at's middle, or by centre where
+    // they overlap or byCentre asks. Remake-only rule: by centre alone, about 70 walks over the
+    // fixture and the install moved. Many went onto a row a little to one side in one column.
     private static bool Lies(
         (float X, float Y, float Width, float Height) at, (float X, float Y, float Width, float Height) to,
-        bool vertical, int dir)
+        bool vertical, int dir, bool byCentre)
     {
-        var (min, max) = Span(to, vertical);
         float mid = Mid(at, vertical);
-        if (InBand(at, to, vertical) && InBand(at, to, !vertical))
+        if (byCentre || (InBand(at, to, vertical) && InBand(at, to, !vertical)))
         {
             return (Mid(to, vertical) - mid) * dir > 0f;
         }
 
+        var (min, max) = Span(to, vertical);
         return dir > 0 ? min > mid : max < mid;
     }
 
@@ -79,13 +108,14 @@ public static class SpatialFocus
     private static float Gap((float Min, float Max) a, (float Min, float Max) b) =>
         Math.Max(0f, Math.Max(a.Min, b.Min) - Math.Min(a.Max, b.Max));
 
-    // One pass of Step's search. In a band and on the wraps the signed centre distance ranks, so
-    // the nearest ahead and the farthest behind are both its minimum. Ahead outside
-    // the band, the gap between edges ranks with the gap across counted double. A row level with the
-    // cursor then beats a nearer one far off its line. Across, then index, settle a tie.
+    // One pass of Step's or Leave's search. In a band and on the wraps the signed centre distance
+    // ranks, so the nearest ahead and the farthest behind are both its minimum. Ahead outside the
+    // band, the gap between edges ranks, the gap across weighted by AcrossGapWeight. Across, then
+    // index, settle a tie.
     private static int? Nearest(
         IReadOnlyList<(float X, float Y, float Width, float Height)?> stops, int from,
-        (float X, float Y, float Width, float Height) at, bool vertical, int dir, bool banded, bool ahead)
+        (float X, float Y, float Width, float Height) at, bool vertical, int dir, bool banded, bool ahead,
+        bool byCentre = false)
     {
         int? best = null;
         (float Rank, float Across) bestKey = default;
@@ -96,14 +126,14 @@ public static class SpatialFocus
                 continue;
             }
 
-            if (!Lies(at, stop, vertical, ahead ? dir : -dir) || (banded && !InBand(at, stop, vertical)))
+            if (!Lies(at, stop, vertical, ahead ? dir : -dir, byCentre) || (banded && !InBand(at, stop, vertical)))
             {
                 continue;
             }
 
             float across = Math.Abs(Mid(stop, !vertical) - Mid(at, !vertical));
             float rank = !banded && ahead
-                ? Gap(Span(at, vertical), Span(stop, vertical)) + (2f * Gap(Span(at, !vertical), Span(stop, !vertical)))
+                ? Gap(Span(at, vertical), Span(stop, vertical)) + (AcrossGapWeight * Gap(Span(at, !vertical), Span(stop, !vertical)))
                 : (Mid(stop, vertical) - Mid(at, vertical)) * dir;
             if (best is null || rank < bestKey.Rank || (rank == bestKey.Rank && across < bestKey.Across))
             {

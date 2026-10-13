@@ -7,9 +7,10 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// Where a pad or arrow press moves the focus on an Original screen, the shell's one stepper. The
 /// live rows drawn on screen are the stops, read through <see cref="SpatialFocus.Step"/>, so
-/// neither row order nor a row's column decides a walk. A list with rows to walk takes no stop on its
-/// scroll arrows. A press leaving a list with more rows that way scrolls it instead. A band of value rows alone lets a wrapping press out. A sideways step that changes a
-/// value is the shell's business and never reaches this engine-free stepper.
+/// neither row order nor a row's column decides a walk. A list with rows to walk takes no stop on
+/// its scroll arrows. A press leaving a list with more rows that way scrolls it instead. A band of
+/// value rows alone lets a wrapping press out. A sideways step that changes a value is the shell's
+/// business and never reaches this engine-free stepper.
 /// </summary>
 internal static class OriginalFocus
 {
@@ -79,7 +80,8 @@ internal static class OriginalFocus
         }
 
         // The press wrapped within its column band. Left and Right change a value row's value, so a
-        // band of value rows alone would trap the cursor. There the press leaves the band, ahead first.
+        // band of value rows alone would trap the cursor. There the press leaves the band: the
+        // centre decides which stops lie ahead, the edge gap the nearest.
         if (!TakesValue(rows[focus]))
         {
             return to;
@@ -98,11 +100,12 @@ internal static class OriginalFocus
             }
         }
 
-        int away = SpatialFocus.Step(stops, focus, at, 0, moveY);
+        int away = SpatialFocus.Leave(stops, focus, at, 0, moveY);
         return away != focus ? away : to;
     }
 
-    /// <summary>Whether a row takes the cursor: live, on screen, and no arrow on the bar of a list that has rows to walk.</summary>
+    /// <summary>Whether a row takes the cursor: live, on screen, and no arrow on the bar of a list
+    /// that has rows to walk.</summary>
     internal static bool IsStop(OriginalRow row, IReadOnlyList<OriginalRow> rows, IReadOnlyList<OriginalList> lists) =>
         row.Enabled && row.Visible && !OnScrollBar(row, rows, lists);
 

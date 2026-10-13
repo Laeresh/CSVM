@@ -287,9 +287,9 @@ public static class PauseScreens
         return -1;
     }
 
-    /// <summary>The strip a pad or arrow press moves the cursor to. Both blocks stand as a grid, so
-    /// this is the rule every Original screen steps by (<see cref="SpatialFocus.Step"/>). A cursor
-    /// on no strip steps in row order. Pure, so testable off engine.
+    /// <summary>The strip a pad or arrow press moves the cursor to, measured over the strips' plates
+    /// by every Original screen's rule (<see cref="SpatialFocus.Step"/>). A cursor on no strip
+    /// steps in row order. Pure, so testable off engine.
     /// ⚠ Do not renumber the rows to change a walk; <see cref="RowAt"/> reads walk order.</summary>
     public static int Step(IReadOnlyList<EscapeButton?> strips, int from, int moveX, int moveY)
     {

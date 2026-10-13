@@ -407,11 +407,13 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
 
         // Enhanced brings the shadow row live under the checkbox. Below it the column holds only
-        // rows that take a sideways value, so Down leaves the column. Nothing lies wholly below, so
-        // it wraps to ACCEPT CHANGES, the farthest row behind.
+        // value rows, so Down leaves for CANCEL CHANGES, whose centre lies below the shadow row's.
+        // ACCEPT CHANGES stands over that.
         Down(host);
         Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
         Down(host);
+        Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
+        MoveY(host, -1);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
@@ -454,12 +456,14 @@ public class OriginalOptionsTests
         StepX(host, -1);
         Assert.Equal(DisplayWords.Windowed, host.Module.Video.DisplayModeChoice);
 
-        // The checkbox is the column's last live row. Down leaves the value column for CANCEL
-        // CHANGES, the one row wholly below it, and Up takes ACCEPT CHANGES over it.
+        // The checkbox is the column's last live row. Down leaves the value column for ACCEPT
+        // CHANGES, whose centre lies below the checkbox's though its top stands level with it.
         Down(host);
         Down(host);
         Down(host);
         Down(host);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         MoveY(host, -1);
@@ -602,10 +606,9 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
         // Enhanced brings the shadow row live under the checkbox. Below it the column holds only value
-        // rows, so Down leaves for ACCEPT CHANGES, beside the column's foot, and then CANCEL CHANGES.
+        // rows, so Down leaves for CANCEL CHANGES, whose centre lies below the column's foot.
         Down(host);
-        Down(host);
-        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
@@ -693,8 +696,11 @@ public class OriginalOptionsTests
         Assert.Equal(ShadowQualitySetting.High, host.Module.Video.Choice(ShadowQualitySetting.Lookup));
         Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
-        // Nothing lies wholly below the shadow row, so Down wraps out of the value column.
+        // The shadow row is the column's foot. Down leaves the value column for CANCEL CHANGES, whose
+        // centre lies below the row's, and ACCEPT CHANGES stands over that.
         Down(host);
+        Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
+        MoveY(host, -1);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(ShadowQualitySetting.High, exit.Words[ShadowQualitySetting.Lookup]);

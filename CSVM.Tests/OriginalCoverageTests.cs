@@ -58,6 +58,14 @@ public class OriginalCoverageTests : IDisposable
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
 
+    // The radios a screen moves the focus off sideways, taking no value from the press. The
+    // lobby's StepSideways takes a dropdown's alone, so Right from the time radio reaches the
+    // MPL_E_TIME box and Left from Ready reaches MPL_B_TEAM. Every other radio is a value.
+    private static readonly Dictionary<OriginalScreen, HashSet<string>> RadiosThatMove = new()
+    {
+        [OriginalScreen.Lobby] = [OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ReadyKey],
+    };
+
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
     private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey };
     private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey, TypeStep + BuildName, OriginalHangarScreen.NameOkKey };
@@ -362,7 +370,7 @@ public class OriginalCoverageTests : IDisposable
             return;
         }
 
-        var seen = OriginalWalk.Reachable(rows, lists, focus);
+        var seen = OriginalWalk.Reachable(rows, lists, focus, RadiosThatMove.GetValueOrDefault(shell.Screen, []));
         var stranded = Enumerable.Range(0, rows.Count)
             .Where(i => !seen.Contains(i) && OriginalFocus.IsStop(rows[i], rows, lists)).Select(i => rows[i].Key).ToList();
         Assert.True(stranded.Count == 0,

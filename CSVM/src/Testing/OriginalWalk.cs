@@ -76,29 +76,32 @@ internal static class OriginalWalk
         }
 
         // A radio may take a sideways press as a value too, so a walk round it is tried first.
-        var first = Search(rows, lists, from, moves, valued, radios: false);
+        var first = Search(rows, lists, from, moves, valued, OriginalFocus.TakesValue);
         if (!first.ContainsKey(goal))
         {
-            first = Search(rows, lists, from, moves, valued, radios: true);
+            first = Search(rows, lists, from, moves, valued, row => OriginalFocus.TakesValue(row) && row.Kind != OriginalRowKind.Radio);
         }
 
         return goal != from && first.TryGetValue(goal, out var press) ? new MenuCommands { MoveX = press.X, MoveY = press.Y } : null;
     }
 
-    /// <summary>The rows arrow presses reach from <paramref name="from"/>. A dropdown or a slider
-    /// takes its sideways press as a value. A radio's counts as a move, since only some screens
-    /// take one as a value.</summary>
-    internal static IReadOnlyCollection<int> Reachable(IReadOnlyList<OriginalRow> rows, IReadOnlyList<OriginalList> lists, int from)
+    /// <summary>The rows arrow presses reach from <paramref name="from"/>. A dropdown, a slider or
+    /// a radio takes its sideways press as a value. The radios in <paramref name="radiosThatMove"/>
+    /// are the exception: their screen moves the focus off them sideways.</summary>
+    internal static IReadOnlyCollection<int> Reachable(
+        IReadOnlyList<OriginalRow> rows, IReadOnlyList<OriginalList> lists, int from, IReadOnlySet<string> radiosThatMove)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        return Search(rows, lists, from, new[] { (0, 1), (1, 0), (0, -1), (-1, 0) }, null, radios: true).Keys;
+        ArgumentNullException.ThrowIfNull(radiosThatMove);
+        return Search(rows, lists, from, new[] { (0, 1), (1, 0), (0, -1), (-1, 0) }, null,
+            row => OriginalFocus.TakesValue(row) && !radiosThatMove.Contains(row.Key)).Keys;
     }
 
     // Every row the shell's own step reaches from one, breadth first, each with the first press of
     // its shortest walk.
     private static Dictionary<int, (int X, int Y)> Search(
         IReadOnlyList<OriginalRow> rows, IReadOnlyList<OriginalList> lists, int from,
-        (int X, int Y)[] moves, ISet<(string Key, int MoveX)>? valued, bool radios)
+        (int X, int Y)[] moves, ISet<(string Key, int MoveX)>? valued, Func<OriginalRow, bool> takesValue)
     {
         var first = new Dictionary<int, (int X, int Y)> { [from] = (0, 0) };
         var queue = new Queue<int>();
@@ -108,10 +111,8 @@ internal static class OriginalWalk
             int at = queue.Dequeue();
             foreach (var move in moves)
             {
-                // A dropdown or a slider takes a sideways press as a value, and the first pass
-                // treats a radio so. So does any row a sideways press has already left the focus on.
-                if (move.X != 0 && ((OriginalFocus.TakesValue(rows[at]) && (!radios || rows[at].Kind != OriginalRowKind.Radio))
-                    || (valued?.Contains((rows[at].Key, move.X)) ?? false)))
+                // A value row takes a sideways press, as does a row a sideways press already left the focus on.
+                if (move.X != 0 && (takesValue(rows[at]) || (valued?.Contains((rows[at].Key, move.X)) ?? false)))
                 {
                     continue;
                 }

@@ -1245,6 +1245,20 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
+        // The install draws the checkbox under the shadow row, the column's foot. Both buttons'
+        // centres stand above the checkbox's, so Down from it wraps out of the value column.
+        var walk = new List<string> { shell.FocusedKey };
+        for (int i = 0; i < 3; i++)
+        {
+            Press(host, seat, Down);
+            walk.Add(shell.FocusedKey);
+        }
+
+        ctx.Check(walk.SequenceEqual(new[]
+            {
+                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
+            }),
+            $"Down walks the shadow row, the checkbox at the column's foot, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
