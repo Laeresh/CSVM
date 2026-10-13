@@ -22,8 +22,9 @@ that grew Godot's heap, which cuts the six shards' summed peak from 48 to 50 GB 
 shader cache also keeps every material any suite's world made, which accounts for about 3 GB more,
 but releasing those materials is unsafe while a cached world crosses suites, which it does in
 every shard; that release and the rest of the shader cache's memory are filed as a new issue. A
-freed shader does return its variants' memory, and the harness now drops the cache's unworn shaders
-between suites ("A freed shader returns its variants' memory" below).
+freed shader does return its variants' memory, and dropping the cache's unworn shaders between
+suites lowers the peaks by about 9 %, but the harness does not, since the release costs about as
+much wall time ("A freed shader returns its variants' memory" below).
 
 ## Instrument
 
@@ -225,10 +226,11 @@ peak is its run's largest `peak_priv_mb` over 1024.
 **Answer.** Yes. A drawn shader costs about 5 MB of private bytes with its base variants and about
 20 MB with the TAA pass's advanced ones, and freeing it returns that memory for reuse. Godot keeps
 none of it per shader: across rounds of fresh shaders a process that frees them holds a flat
-plateau, while one that keeps them unworn grows by the full cost every round. The harness now
-drops the shader cache's unworn shaders between suites, which lowers each windowed shard's mean peak by
-0.23 to 0.80 GB (2.8 GB summed over five shards, 9 %) for about 7 % more summed shard wall time,
-a cost the runs support in sign and rough size only.
+plateau, while one that keeps them unworn grows by the full cost every round. Dropping the shader cache's unworn shaders between suites
+lowers each windowed shard's mean peak by 0.23 to 0.80 GB (2.8 GB summed over five shards, 9 %) for
+about 7 % more summed shard wall time, a cost the runs support in sign and rough size only. The
+harness keeps its shaders: the wall time was judged the dearer of the two, and the release stays for
+tests and probes.
 
 ### The probe
 
@@ -263,10 +265,10 @@ held per shader.
 `ShaderTwins.ReleaseUnworn` drops every shader in the cache whose reference count shows no wearer
 from the text table, the family table and every key's slots; a key whose shader went makes it again
 on next use. It refuses while a test world builds, since a build holds shaders no material wears
-yet. The harness calls it at a suite's end after its collection, which now also runs after a suite
-that made a shader in a drawing process, syncs the render thread first, and collects again when
-anything was dropped, so the dropped wrappers are finalized at once. A headless process skips it,
-since it builds no variant. The game never calls it. The other mode's twins a warm-up made go too
+yet. The measured harness form called it at a suite's end after its collection, which then also ran
+after a suite that made a shader in a drawing process, synced the render thread first, and collected
+again when anything was dropped, so the dropped wrappers were finalized at once, and skipped a
+headless process, which builds no variant. The harness does not call it. The game never calls it. The other mode's twins a warm-up made go too
 once nothing wears them; the one suite that asserts a switch compiles nothing,
 `graphics-shader-twins`, warms them itself first.
 

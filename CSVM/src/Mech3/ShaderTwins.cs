@@ -190,10 +190,10 @@ internal static class ShaderTwins
     }
 
     /// <summary>Drops every shader no material wears, and the collector then frees its variants. A key
-    /// whose shader went makes it again on next use. Returns how many went. ⚠ Test harness only,
-    /// between suites: the game keeps every shader to spare a compile. The other mode's warmed twins
-    /// go too, so a suite that needs them warm warms them itself. Safe with compiles still queued,
-    /// since Godot's free of a drawn shader waits for them (analysis/shard-memory/FINDINGS.md).</summary>
+    /// whose shader went makes it again on next use. Returns how many went. ⚠ Tests and probes only:
+    /// the game keeps every shader to spare a compile, and so does the harness between suites, for
+    /// wall time. The other mode's warmed twins go too. Safe with compiles still queued, since Godot's
+    /// free of a drawn shader waits for them (analysis/shard-memory/FINDINGS.md).</summary>
     public static int ReleaseUnworn()
     {
         // A build holds a shader before any material wears it, so it would read as unworn.

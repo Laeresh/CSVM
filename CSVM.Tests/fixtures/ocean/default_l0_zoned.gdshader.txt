@@ -41,11 +41,18 @@ float shore_look(float g) {
     return smoothstep(0.075, 0.4, g);
 }
 
-// Two hashes in [0, 1] per integer cell, without sin, so it costs little per wave sum.
+// Two hashes in [0, 1] per integer cell (a PCG2D mix). It hashes the cell's integer coordinates
+// exactly, so every cell sharing a corner hashes it alike. A float hash of a large coordinate rounds
+// differently per call site and cuts the noise along straight lattice lines.
 vec2 sea_hash(vec2 c) {
-    vec3 p3 = fract(c.xyx * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
+    uvec2 v = uvec2(ivec2(c)) * 1664525u + 1013904223u;
+    v.x += v.y * 1664525u;
+    v.y += v.x * 1664525u;
+    v ^= v >> 16u;
+    v.x += v.y * 1664525u;
+    v.y += v.x * 1664525u;
+    v ^= v >> 16u;
+    return vec2(v) * (1.0 / 4294967295.0);
 }
 
 // Two smooth value-noise channels in [-1, 1].
@@ -185,10 +192,31 @@ float ship_calm(vec2 p) {
     return a;
 }
 
-// The ships' Kelvin wakes and foam trails at p: x the height, yz its slope, w the foam. A wave
-// under fade.x metres long is left out, one over fade.y kept. The nearest point on a hull's track
-// gives the metres behind the bow, the side, the age and the speed there.
-vec4 ship_wake(vec2 p, vec2 fade) {
+// A wake's foam at p, about 0 to 1, where the trail's density is cover. The water's age churns the
+// lumps and holes, and the foam thins as it ages. Read spread metres nearer the track, the pattern
+// widens with the trail. Up close it breaks into the whitecaps' lace.
+float wake_foam(vec2 p, vec2 spread, float age, float cover, float cell, float footprint) {
+    vec2 q = (p - spread) / cell;
+    float churn = age * 0.12;
+    vec2 w = vec2(foam_noise(q * 0.5 + vec2(churn, 3.0), 65536.0), foam_noise(q * 0.5 + vec2(-7.0, -churn), 65536.0));
+    float lumps = 0.5 + foam_noise(q + 1.6 * w, 65536.0) + 0.6 * foam_noise(q * 2.7 + 2.4 * w + vec2(13.0, 7.0), 65536.0);
+    float fresh = exp(-age / 8.0);
+    float c = cover * mix(0.6, 1.0, fresh);
+    float foam = smoothstep(0.75 - c, 1.05 - 0.6 * c, lumps) * min(c * 3.0, 1.0);
+    float near = smoothstep(4.0, 9.0, 1.4 / footprint);
+    if (near > 0.0 && foam > 0.0) {
+        float s = foam_holes((p - spread) * 0.714286 + w * 2.0 + vec2(31.0, -17.0));
+        float hole = 1.3 - 1.6 * foam;
+        float edge = max(0.04, 1.428571 * footprint);
+        foam = mix(foam, smoothstep(hole - edge, hole + edge + 0.35, s), near);
+    }
+    return foam * mix(0.6, 1.0, fresh);
+}
+
+// The ships' Kelvin wakes and foam trails at p: x the height, yz its slope, w the foam. The foam is
+// drawn for a pixel of footprint metres, none at 0. A wave under fade.x metres long is left out, one over fade.y
+// kept. The nearest point on a track gives the metres behind the bow, the side, age and speed.
+vec4 ship_wake(vec2 p, vec2 fade, float footprint) {
     vec4 sum = vec4(0.0);
     for (int i = 0; i < 16; i++) {
         vec4 bounds = wake_bounds[i];
@@ -200,7 +228,8 @@ vec4 ship_wake(vec2 p, vec2 fade) {
         float s = 0.0;
         float side = 0.0;
         float age = 0.0;
-        float speed = 0.0;
+        int at = 0;
+        float at_t = 0.0;
         vec2 back = vec2(1.0, 0.0);
         vec2 half_size = calm_sizes[i].xy;
         int base = i * 12;
@@ -222,9 +251,17 @@ vec4 ship_wake(vec2 p, vec2 fade) {
                 s = mix(a.z, c.z, t);
                 side = dot(p - q, vec2(-back.y, back.x));
                 age = mix(a.w, c.w, max(t, 0.0));
-                speed = (c.z - a.z) / max(c.w - a.w, 1e-3);
+                at = k;
+                at_t = max(t, 0.0);
             }
         }
+        // The speed runs on across segments: the chord speed over this one and the one behind, blended
+        // into this one and the one ahead. A step would step the waves' length, a seam.
+        vec4 e0 = wake_track[base + max(at - 1, 0)];
+        vec4 e1 = wake_track[base + at];
+        vec4 e2 = wake_track[base + at + 1];
+        vec4 e3 = wake_track[base + min(at + 2, 11)];
+        float speed = mix((e2.z - e0.z) / max(e2.w - e0.w, 1e-3), (e3.z - e1.z) / max(e3.w - e1.w, 1e-3), at_t);
         float x = s + half_size.x;
         float life = 1.0 - clamp(age / 40.0, 0.0, 1.0);
         float gain = smoothstep(0.5, 1.5, speed)
@@ -233,52 +270,78 @@ vec4 ship_wake(vec2 p, vec2 fade) {
             continue;
         }
         float hull = max(2.0 * half_size.x, 10.0);
-        float height = 0.6 * gain * sqrt(hull / (hull + x));
+        float scale = sqrt(hull / 250.0);
+        // The field that breaks the crests into groups, fixed on the water: x scales a crest's height,
+        // y shifts its phase. Its cells scale with the hull, so a small hull's V breaks up as well.
+        float group_cell = max(40.0 * scale, 15.0);
+        vec2 grp = 0.65 * sea_noise(p / group_cell + vec2(23.0, -41.0))
+            + 0.35 * sea_noise(p * 2.7 / group_cell + vec2(-5.0, 19.0));
+        // The transverse waves fall off as the inverse of the distance behind the bow, the diverging
+        // ones slower. Both calm with the water's age.
+        float reach = 400.0 * scale;
+        float near_bow = reach / (reach + x);
+        float calm = exp(-age / 20.0);
+        float height = 1.6 * min(sqrt(scale), 1.0) * gain * max(1.0 + 0.9 * grp.x, 0.0);
+        // A finer field warps each crest's phase, so the spacing varies from crest to crest, and breaks
+        // each crest into separate lengths along its line.
+        vec2 jit = sea_noise(p / max(40.0 * scale, 12.0) + vec2(-37.0, 11.0));
+        float shift = 2.5 * grp.y + 3.0 * jit.x;
+        float unbroken = smoothstep(-0.4, 0.4, jit.y + 0.05);
         float ay = abs(side);
         float sy = side < 0.0 ? -1.0 : 1.0;
         // Kelvin's transverse and diverging directions here, as tan(theta): the roots t of
         // tan(alpha) = t / (1 + 2 t^2). Alpha is the point's angle off the track, real under 19.47 degrees.
         float ta = ay / x;
         float disc = 1.0 - 8.0 * ta * ta;
-        float edge = smoothstep(0.0, 0.12, disc);
-        float k0 = 9.81 / (max(speed * speed, 0.25) * 0.3);
-        // The diverging crests break into foam along the cusp lines, the V's arms. Both families meet
-        // there at tan(theta) = 1 / sqrt(2), with the phase k0 x sqrt(1.5) * 1.25.
+        float edge = smoothstep(0.0, 0.05, disc);
+        float k0 = 9.81 / (max(speed * speed, 0.25) * 0.6);
+        // Foam along the cusp lines, the V's arms, where both families meet. It does not follow the crests,
+        // which would lay it in an evenly spaced row; the trail's noise breaks it up instead.
         float arm = 1.0 - smoothstep(0.0, 0.35, abs(disc));
-        if (arm > 0.0) {
-            float crest = smoothstep(0.0, 1.0, cos(k0 * x * 1.5309311));
-            sum.w = max(sum.w, gain * arm * crest * exp(-x / (4.0 * hull)));
-        }
+        float arm_foam = gain * arm * 0.9 * smoothstep(-0.3, 0.3, grp.x) * sqrt(calm)
+            * exp(-x / (4.0 * hull));
         vec2 grad = vec2(0.0);
-        if (edge > 0.0) {
+        if (false) {
             float sq = sqrt(max(disc, 0.0));
             float tt = 2.0 * ta / (1.0 + sq);
             float td = (1.0 + sq) / max(4.0 * ta, 1e-3);
             float cusp = 1.0 + 1.5 * (1.0 - smoothstep(0.0, 0.4, disc));
             vec2 tans = vec2(tt, td);
-            vec2 shares = vec2(0.4, 0.7 * cusp);
+            vec2 shares = vec2(0.35 * near_bow * calm, 0.7 * cusp * sqrt(near_bow * calm));
             for (int f = 0; f < 2; f++) {
                 float tn = tans[f];
                 float sec2 = 1.0 + tn * tn;
                 float kn = k0 * sec2;
-                float keep = smoothstep(fade.x, fade.y, 6.2831853 / kn);
+                // The diverging waves shorten toward the track and fade past the cusp's wavenumber. The
+                // V's middle then carries the transverse waves alone, not a fine grain.
+                float keep = smoothstep(fade.x, fade.y, 6.2831853 / kn)
+                    * (f == 0 ? 1.0 : 1.0 - smoothstep(1.5, 4.0, sec2));
                 if (keep <= 0.0) {
                     continue;
                 }
                 float sec = sqrt(sec2);
-                float ph = k0 * x * sec * (1.0 + tn * ta);
-                float amp = height * edge * shares[f] * keep;
+                float ph = k0 * x * sec * (1.0 + tn * ta) + shift;
+                float amp = height * edge * shares[f] * keep * unbroken;
                 sum.x += amp * cos(ph);
                 // The phase's slope is the wavenumber vector, along the track and to the side.
                 grad -= amp * sin(ph) * kn * vec2(1.0, tn * sy) / sec;
             }
         }
-        sum.yz += grad.x * back + grad.y * vec2(-back.y, back.x);
-        float behind = s - half_size.x;
-        float width = half_size.y + max(behind, 0.0) * 0.06;
-        float trail = (1.0 - smoothstep(0.55 * width, width, ay))
-            * smoothstep(-0.25 * half_size.x, 0.0, behind);
-        sum.w = max(sum.w, trail * gain * sqrt(life));
+        vec2 across = vec2(-back.y, back.x);
+        sum.yz += grad.x * back + grad.y * across;
+        if (footprint > 0.0) {
+            float behind = s - half_size.x;
+            float width = half_size.y + max(behind, 0.0) * 0.06 * scale;
+            float trail = (1.0 - smoothstep(0.55 * width, width, ay))
+                * smoothstep(-0.25 * half_size.x, 0.0, behind) * gain * sqrt(life)
+                * exp(-max(behind, 0.0) / (600.0 * scale));
+            float cover = max(trail, arm_foam);
+            if (cover > 0.0) {
+                // The foam's age counts from the stern's passing, not the hull's middle.
+                float churned = max(age - half_size.x / max(speed, 0.5), 0.0);
+                sum.w = max(sum.w, wake_foam(p, across * side * (1.0 - half_size.y / width), churned, cover, max(8.0 * scale, 2.0), footprint));
+            }
+        }
     }
     return sum;
 }
@@ -296,7 +359,7 @@ void vertex() {
         float amp = shore * ship_calm(p) * wave_scale;
         // The wakes ride on the swell whatever the sea's height. The hulls calm only the swell, so
         // a wake stands tallest beside its own hull.
-        vec3 disp = vec3(0.0, shore * ship_wake(p, vec2(4.0, 8.0) * spacing).x, 0.0);
+        vec3 disp = vec3(0.0, shore * ship_wake(p, vec2(4.0, 8.0) * spacing, 0.0).x, 0.0);
         vec2 group = sea_group(p);
         mat2 dwarp;
         vec4 warp = sea_warp(p, dwarp);
@@ -391,8 +454,8 @@ void fragment() {
         float f = amp * fade * 0.08 * clamp(1.0 + dot(DETAIL_G[i], group), 0.2, 1.8);
         n.xz -= (l.xy * nd.y + side * nd.z) * f;
     }
-    vec4 wake = ship_wake(p, vec2(4.0, 9.0) * footprint);
-    n.xz -= wake.yz;
+    vec4 wake = ship_wake(p, vec2(4.0, 9.0) * footprint, footprint);
+    n.xz -= wake.yz * 3.0;
     float fog_amt = csky_fog_amount(world, CAMERA_POSITION_WORLD);
     // How fully this fragment shades as the flat sheet does. Wholly at the shore, so no edge shows
     // against a coplanar coast tile. Rising with the fog, so the far sea fogs as the sheet does
@@ -433,12 +496,7 @@ void fragment() {
             foam = mix(crest, lump * 3.333333, near);
         }
     }
-    // A wake's foam breaks into patches that ride the water and thin out as it ages.
-    float wake_foam = 0.0;
-    if (wake.w > 0.0) {
-        float lumps = 0.5 + foam_noise(p * 0.125, 65536.0) + 0.6 * foam_noise(p * 0.3375 + vec2(13.0, 7.0), 65536.0);
-        wake_foam = 0.85 * smoothstep(0.75 - wake.w, 1.05 - 0.6 * wake.w, lumps) * min(wake.w * 3.0, 1.0);
-    }
+    float wake_foam = 0.85 * wake.w;
     float foam_mix = max(min(foam * foam_strength, 1.0), wake_foam) * (1.0 - sheet);
     col = mix(col, vec3(0.6, 0.65, 0.68), foam_mix);
     ALBEDO = col;

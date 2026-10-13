@@ -639,7 +639,7 @@ internal static class GraphicsSwitchSuites
 
     [Suite("ocean-wake",
         "under Enhanced at water quality waves the C1B M03 freighter's wake sheets move onto the flat-sea "
-        + "layer, which no pane draws and a spyglass disc does, while the hull holds a wake slot on the sim "
+        + "layer, its turbulence sheet with them, which no pane draws and a spyglass disc does, while the hull holds a wake slot on the sim "
         + "clock, and with no sim clock every sheet keeps its own drawn layers; the ocean draws the wake from "
         + "the hull's track: held still for 20 s of sim time the hull draws none, moved at 10 m/s for 20 s it "
         + "draws one, and a rebuilt ocean driven over the same sim times on a fresh clock publishes the "
@@ -676,6 +676,9 @@ internal static class GraphicsSwitchSuites
                 ocean._Process(0.0);
                 ctx.Check(sheets.All(SteppedAside),
                     $"on the sim clock, with '{hull.Name}' holding a wake slot, its {sheets.Count} drawn wake sheets sit on the flat-sea layer alone, which no pane draws ({SheetLayers(sheets)})");
+                var turbulence = sheets.Where(s => s.GetParent()?.Name.ToString().Contains("turb", StringComparison.OrdinalIgnoreCase) == true).ToList();
+                ctx.Check(turbulence.Count > 0 && turbulence.All(SteppedAside),
+                    $"…its turbulence sheet steps aside with them ({turbulence.Count} sheet(s): {SheetLayers(turbulence)})");
 
                 var start = hull.GlobalPosition;
                 var first = DriveWake(ocean, hull, start);
@@ -713,12 +716,12 @@ internal static class GraphicsSwitchSuites
                 Walk(original.Session, node =>
                 {
                     if (node is MeshInstance3D mi && mi.IsVisibleInTree() && Materials(mi).Any(m => names.TryGetValue(m, out var t)
-                            && (t.Contains("wakefront", StringComparison.OrdinalIgnoreCase) || t.Contains("wakeback", StringComparison.OrdinalIgnoreCase))))
+                            && (t.Contains("wakefront", StringComparison.OrdinalIgnoreCase) || t.Contains("wakeback", StringComparison.OrdinalIgnoreCase) || t.Contains("turb", StringComparison.OrdinalIgnoreCase))))
                         sheets.Add(mi);
                 });
-                ctx.Check(original.Built && FirstOcean(original.Session) == null && sheets.Count > 0
+                ctx.Check(original.Built && FirstOcean(original.Session) == null && sheets.Count > 0 && sheets.Any(s => s.GetParent()?.Name.ToString().Contains("turb", StringComparison.OrdinalIgnoreCase) == true)
                         && sheets.All(PaneDraws),
-                    $"ABLE-TO-FAIL CONTROL: an Original {OceanChapter}/{WakeMission} build stands no ocean and draws its {sheets.Count} wake sheet(s) on their own layers ({SheetLayers(sheets)})");
+                    $"ABLE-TO-FAIL CONTROL: an Original {OceanChapter}/{WakeMission} build stands no ocean and draws its {sheets.Count} wake and turbulence sheet(s) on their own layers ({SheetLayers(sheets)})");
             }
             finally
             {

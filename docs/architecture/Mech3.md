@@ -48,7 +48,7 @@ material wears, `Copy` and `FadeCopy` the key a duplicate wears, and `Regenerate
 the standing mode with no text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
 (`EnhancedDrawn`) a first switch to Enhanced rewrites in place through `Rewrite` (the ocean's too). `Pooled` also serves
 per-instance constant texts (plane flare, light sprites, ground shadow). A test harness names the world it builds
-(`BuildingWorld`), drops its materials when it destroys it (`Untrack`) and unworn shaders (`ReleaseUnworn`). Read `Launch/EnhancedLook.cs`.
+(`BuildingWorld`) and drops its materials when it destroys it (`Untrack`); a test or probe drops unworn shaders (`ReleaseUnworn`). Read `Launch/EnhancedLook.cs`.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
