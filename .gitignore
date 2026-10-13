@@ -100,3 +100,6 @@ analysis/capture-rigs/*-log.txt
 .claude/settings.local.json
 # The webrtc-native GDExtension, fetched by InstallWebRtc.ps1 (binaries are never committed)
 /CSVM/addons/webrtc_native/
+
+# Per-app Caddy site blocks of other services on the VPS (see server/Caddyfile)
+/server/sites/
