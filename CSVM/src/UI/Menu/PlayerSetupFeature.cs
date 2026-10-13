@@ -81,9 +81,9 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>How many seats may join, the splitscreen rig's own maximum.</summary>
     public const int MaxSeats = 4;
 
-    /// <summary>The kill target a screen may step up to. Remake-only: the original's Multiplayer
-    /// is network play and authors no such box, so the ceiling is this port's, picked to keep the
-    /// row one press per kill rather than a ladder of invented round numbers.</summary>
+    /// <summary>The kill target a screen may step up to. Remake-only rule: the original's Multiplayer
+    /// is network play and authors no such box. The ceiling is picked to keep the row one press
+    /// per kill rather than a ladder of invented round numbers.</summary>
     public const int MaxKillTarget = 20;
 
     /// <summary>The match clock a screen may step up to, in minutes, remake-only for the same
@@ -207,8 +207,8 @@ public sealed class PlayerSetupFeature : IMenuFeature
     public static int MinimumSeats(MenuMode mode) => mode == MenuMode.Versus ? 2 : 1;
 
     /// <summary>The pilots <paramref name="mode"/> counts against <see cref="MinimumSeats"/>: the
-    /// seats and, for a Dogfight, the bot rows. A Stunt Flying run carries the rows too, through its own
-    /// exit (<see cref="InstantActionFeature.BuildExit"/>), but needs none to launch.</summary>
+    /// seats and, for a Dogfight, the bot rows. A Stunt Flying run carries the rows too once its race
+    /// toggle is on (<see cref="InstantActionFeature.RaceBots"/>), but needs none to launch.</summary>
     public int Pilots(MenuMode mode) => mode == MenuMode.Versus ? FieldPilots : _seats.Count;
 
     /// <summary>Adds a bot row on a Random plane at veteran, refused on a full field.</summary>

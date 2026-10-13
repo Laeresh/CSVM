@@ -184,14 +184,14 @@ public sealed record PauseReadout(
 }
 
 /// <summary>
-/// What the Original presentation's pause screen is made of, engine-free: the mission's chart at
-/// its authored crop, the pins and icons the dialog's script places, the objectives parchment, the
-/// profile's memento and the button strips, the four the block authors plus the remake's own photo
-/// strip. Composed the way the load and briefing screens are, through
+/// What the Original presentation's pause screen is made of, engine-free. It holds the mission's
+/// chart at its authored crop, the pins and icons the dialog's script places, the objectives
+/// parchment and the profile's memento. Its button strips are the four the block authors plus the
+/// remake-only photo strip. Composed the way the load and briefing screens are, through
 /// <see cref="ComposedBoard"/>, and sharing <see cref="MissionMap"/> with both.
 ///
-/// An Instant Action sortie pauses on the same screen over a dialog that carries none of
-/// that: the load screen's blackboard, its three photographs, its four texts and the strips.
+/// An Instant Action sortie pauses on the same screen over a dialog that carries none of that. It
+/// shows the load screen's blackboard, its three photographs, its four texts and the strips.
 /// </summary>
 public static class PauseScreens
 {
@@ -218,11 +218,11 @@ public static class PauseScreens
     /// <summary>A strip's plate in authored pixels down (docs/org/pause-screen.md).</summary>
     public const float StripHeight = 28f;
 
-    /// <summary>What the remake's own strip reads. The authored four are set in title case, so this
+    /// <summary>What the remake-only strip reads. The authored four are set in title case, so this
     /// one is too rather than shouting beside them.</summary>
     public const string PhotoLabel = "Photo Mode";
 
-    // The widget names the shared BUTTONS block authors, and the name the remake's own strip
+    // The widget names the shared BUTTONS block authors, and the name the remake-only strip
     // carries, which no shipped file holds.
     private const string ResumeKey = "RESUME_MISSION_BTN";
     private const string RestartKey = "RESTART_MISSION_BTN";
@@ -238,9 +238,10 @@ public static class PauseScreens
         ResumeKey, RestartKey, PreferencesKey, QuitKey,
     };
 
-    /// <summary>The remake's own strip, in the authored plates and label offset the block's own
-    /// RESUME carries, at the one place that block leaves room for a fifth: the channel between two
-    /// columns of strips, or the cell under RESTART where they stand three across. Null where the
+    /// <summary>The remake-only strip, in the authored plates and label offset the block's own
+    /// RESUME carries, where that block leaves room for a fifth. That place is the
+    /// channel between two columns of strips, or the cell under RESTART where they stand three
+    /// across. Null where the
     /// block authors too few strips to stand one against.</summary>
     public static EscapeButton? PhotoStrip(EscapeShared shared)
     {
@@ -286,9 +287,9 @@ public static class PauseScreens
         return -1;
     }
 
-    /// <summary>The strip a pad or arrow press moves the cursor to. Read off where the strips are
-    /// drawn, not their row order, since both blocks stand as a grid. Vertical wins a diagonal. The nearest strip ahead in the same column (or row) band, else the band's far end,
-    /// else the nearest ahead anywhere, else the farthest behind. Pure, so testable off engine.
+    /// <summary>The strip a pad or arrow press moves the cursor to, measured over the strips' plates
+    /// by every Original screen's rule (<see cref="SpatialFocus.Step"/>). A cursor on no strip
+    /// steps in row order. Pure, so testable off engine.
     /// ⚠ Do not renumber the rows to change a walk; <see cref="RowAt"/> reads walk order.</summary>
     public static int Step(IReadOnlyList<EscapeButton?> strips, int from, int moveX, int moveY)
     {
@@ -298,18 +299,19 @@ public static class PauseScreens
             return from;
         }
 
-        bool vertical = moveY != 0;
-        int dir = Math.Sign(vertical ? moveY : moveX);
         if (from < 0 || from >= strips.Count || strips[from] is not { } current)
         {
+            int dir = Math.Sign(moveY != 0 ? moveY : moveX);
             return ((from + dir) % strips.Count + strips.Count) % strips.Count;
         }
 
-        return Nearest(strips, from, current.At, vertical, dir, banded: true, ahead: true)
-            ?? Nearest(strips, from, current.At, vertical, dir, banded: true, ahead: false)
-            ?? Nearest(strips, from, current.At, vertical, dir, banded: false, ahead: true)
-            ?? Nearest(strips, from, current.At, vertical, dir, banded: false, ahead: false)
-            ?? from;
+        var plates = new (float X, float Y, float Width, float Height)?[strips.Count];
+        for (int row = 0; row < strips.Count; row++)
+        {
+            plates[row] = strips[row] is { } strip ? (strip.At.X, strip.At.Y, StripWidth, StripHeight) : null;
+        }
+
+        return SpatialFocus.Step(plates, from, plates[from]!.Value, moveX, moveY);
     }
 
     /// <summary>Composes the screen for one pause. <paramref name="focusedRow"/> is the strip the
@@ -415,39 +417,6 @@ public static class PauseScreens
                 marked,
                 Italic: true, Shrink: true),
         };
-    }
-
-    // One pass of Step's search. Distance along the move is signed. So the nearest strip ahead and
-    // the farthest behind (the wrap) are both its minimum, and the row index settles a tie.
-    private static int? Nearest(
-        IReadOnlyList<EscapeButton?> strips, int from, BriefingPoint at, bool vertical, int dir,
-        bool banded, bool ahead)
-    {
-        int? best = null;
-        (float Along, float Across) bestKey = default;
-        for (int row = 0; row < strips.Count; row++)
-        {
-            if (row == from || strips[row] is not { } strip)
-            {
-                continue;
-            }
-
-            float along = (vertical ? strip.At.Y - at.Y : strip.At.X - at.X) * dir;
-            float across = Math.Abs(vertical ? strip.At.X - at.X : strip.At.Y - at.Y);
-            if ((ahead ? along <= 0f : along >= 0f)
-                || (banded && across >= (vertical ? StripWidth : StripHeight)))
-            {
-                continue;
-            }
-
-            if (best is null || along < bestKey.Along || (along == bestKey.Along && across < bestKey.Across))
-            {
-                best = row;
-                bestKey = (along, across);
-            }
-        }
-
-        return best;
     }
 
     // How much of the authored plates a strip standing at this point would cover, in square pixels.

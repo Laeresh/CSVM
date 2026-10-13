@@ -141,9 +141,9 @@ internal sealed class LiveSettings
         GraphicsMode.SwitchLocked = session is { InSession: true, Wire.Link: not null };
     }
 
-    /// <summary>The options file's one writer, shared by the menu's apply and the pause leaf's. The
-    /// display settings, the mix, the word settings and the graphics mode apply now. A headset that
-    /// paces the frames (<paramref name="headsetPaces"/>) keeps its own pacing over the V-Sync word.
+    /// <summary>The options file's writer for an Options apply, shared by the menu's apply and the
+    /// pause leaf's. The display settings, the mix, the word settings and the graphics mode apply now.
+    /// A headset pacing the frames (<paramref name="headsetPaces"/>) keeps its pacing over V-Sync.
     /// ⚠ The opening view, the difficulty and VR mode are saved and no more, so do not rebuild
     /// anything for them here. The pause leaf puts the head turn and targeting switch on the seats
     /// flying now (PausePreferences.FeedGameOptions).</summary>

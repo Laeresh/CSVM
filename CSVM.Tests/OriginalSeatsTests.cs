@@ -446,7 +446,10 @@ public class OriginalSeatsTests
         Assert.Equal("WEAPON LOADOUT", shell.Rows.Single(r => r.Key == LoadoutRow).Label);
 
         // The row opens the loadout screen on the picking seat's own fit and its own aeroplane.
+        // The row stands right of the pick over ACCEPT SELECTIONS, so the cursor reaches it from below.
         shell.StepSeat(1, Down);
+        Assert.Equal("AcceptSelections", shell.FocusedKey);
+        shell.StepSeat(1, Up);
         Assert.Equal(LoadoutRow, shell.FocusedKey);
         shell.StepSeat(1, Accept);
         Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
@@ -502,6 +505,7 @@ public class OriginalSeatsTests
         shell.Step(None);
         shell.StepSeat(1, Accept);
         shell.StepSeat(1, Down);
+        shell.StepSeat(1, Up);
         shell.StepSeat(1, Accept);
         Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
 
@@ -554,11 +558,11 @@ public class OriginalSeatsTests
         Assert.Contains(shell.Compose().Lines, l => l.Text == "Custom 7");
         Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == "▼");
 
-        // FLY is disabled with nothing picked, so Down wraps past it onto the first row and the
-        // window follows.
+        // At the list's end Down leaves it. FLY is disabled with nothing picked, so the press wraps
+        // to the band's far end, the window's top row, and the window stays.
         shell.Step(Down);
-        Assert.Equal(OriginalShell.AirframeKey(0), shell.FocusedKey);
-        Assert.Equal(0, shell.AirframeTop);
+        Assert.Equal(OriginalShell.AirframeKey(7), shell.FocusedKey);
+        Assert.Equal(7, shell.AirframeTop);
     }
 
     [Fact]

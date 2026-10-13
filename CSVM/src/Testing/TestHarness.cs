@@ -165,7 +165,6 @@ public static class TestHarness
             // thread the run gate holds, and the process hangs.
             var gate = ctx.AuditFinalizers && runGate == null ? FinalizerGate.Hold() : null;
             double staticAtStart = Performance.GetMonitor(Performance.Monitor.MemoryStatic);
-            int madeAtStart = ShaderTwins.Made;
             ShaderCensus.Begin();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
@@ -195,26 +194,13 @@ public static class TestHarness
                 ctx.EvictCollidableWorlds();
                 ctx.FreeQueuedNodes();
                 // A dead wrapper holds its Godot object until finalized, so sessions ride into the
-                // next suite. A collection costs 0.1 to 0.6 s, so only after Godot's heap grew or a
-                // drawing process made a shader.
-                bool draws = RenderingServer.GetRenderingDevice() != null;
+                // next suite. A collection costs 0.1 to 0.6 s, so only after Godot's heap grew.
                 // ⚠ Never under a finalizer gate: its parked thread never finishes the wait.
                 if (gate == null && runGate == null
-                    && (Performance.GetMonitor(Performance.Monitor.MemoryStatic) - staticAtStart > CollectAfterStaticGrowth
-                        || (draws && ShaderTwins.Made > madeAtStart)))
+                    && Performance.GetMonitor(Performance.Monitor.MemoryStatic) - staticAtStart > CollectAfterStaticGrowth)
                 {
                     GC.Collect();
                     GC.WaitForPendingFinalizers();
-                    // An unworn shader holds its compiled variants until finalized; a headless process builds
-                    // none. No worker-pool drain: freeing a drawn shader waits for its queued pipeline
-                    // compiles (analysis/shard-memory/FINDINGS.md). The sync lands the suite's last draws first.
-                    if (draws)
-                        RenderingServer.ForceSync();
-                    if (draws && ShaderTwins.ReleaseUnworn() > 0)
-                    {
-                        GC.Collect();
-                        GC.WaitForPendingFinalizers();
-                    }
                 }
                 // A suite ticking two weather rigs in different zones leaves the fog table
                 // published, and the next suite's render would search those freed cameras.
@@ -981,8 +967,8 @@ public sealed class TestContext
     /// <summary>Reads every positional sound level and cull at the data's own <c>RANGE</c> radii
     /// until the returned handle is disposed, whatever factor the session carries. A suite that
     /// pins the decoded law's numbers has to say which factor it reads them at. The shipped
-    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/> is a departure from the radii the law was
-    /// decoded against. The session's factor comes back on dispose.</summary>
+    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/> is a remake-only rule over the radii the
+    /// law was decoded against. The session's factor comes back on dispose.</summary>
     public static IDisposable AtAuthoredSoundRadii() => new SoundRangeScope(1f);
 
     /// <summary>The counterpart of <see cref="AtAuthoredSoundRadii"/>: reads every positional sound

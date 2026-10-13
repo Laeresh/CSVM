@@ -56,7 +56,7 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
 grid (Gerstner swell, drifting noise normals) replaces the sea-level base sheet, which steps aside through
 `csky_ocean.gdshaderinc` only where the ocean draws; its colliders stay flat. One grid per zone-gate group, a priority
-level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake sheets,
+level below the lowest base sheet; a spyglass disc (`SceneBuilder.FlatSeaEye`) sees the flat sheet and the wake and turbulence sheets,
 which no pane draws while their hull holds a wake slot on the sim clock. Owns up to 16 ship slots, nearest the eye first: a calm zone over each
 waterline (`OceanCalmZone.cs`, `OceanMovers.cs`) and the track its wake rides (`OceanWakeTrack.cs`). The shader text is
 `OceanShader.cs`'s, from the chapter's `SeaState.cs`, on `csky_time`; `Apply` takes a new sea live, recompiling only on
@@ -72,11 +72,13 @@ key and its order, skipping comments as the read does, and refusing a file it ca
 
 ## src/Effects/OceanShader.cs
 The wave ocean's shader text from one `SeaState`, with no engine object touched: the swell, detail and foam patch
-tables, the bending field, the coast ramps and the open sea's tint, written as literals. At the defaults the text is
-byte-identical to the ocean's tune (`OceanShaderTests` against hashes and a fixture), so nothing moves until a sea
-is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
-setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`. `ship_wake` draws each moving hull's
-Kelvin V and foam trail from its track uniforms; `WakeSamples` is the track's sample count.
+tables, the bending field, the coast ramps and the open sea's tint, written as literals; at the defaults it is the
+ocean's tune byte for byte (`OceanShaderTests`), so nothing moves until a sea is saved. Every swell omega, detail drift and patch drift is rounded to whole cycles per `csky_time` wrap at any
+setting. Height, foam strength and roughness stay uniforms, set by `Ocean.cs`. Every noise reads `sea_hash`, an integer
+hash of the cell, so no lattice line cuts it. `ship_wake` draws each moving hull's foam trail and the foam along its
+V's arms from its track uniforms, its lengths scaled by the square root of the hull's length; the V's Kelvin waves sit
+behind `WakeWaves`, which is off. `wake_foam` churns the trail's foam with the water's age, thins it with distance
+and laces it up close. `WakeSamples` is the track's sample count.
 
 ## src/Effects/SeaState.cs
 One chapter's sea as a record: every tunable of the wave ocean (swell, bending and detail, foam, coast and colour)
@@ -105,7 +107,7 @@ The wave ocean's shore mask at 8 m texels, baked once per built world (keyed on 
 rebuild. Owns sea coverage, the distance to the nearest shore, surf or solid texel, the sheet's baked tint, each texel's
 zone group where the sheet spans zone-gate layers, and the ramps: base-sheet triangles rising from sea level to under
 `RampTop` (C2's harbour 1.03 m, C5's 3.03 m under the steinmann ship; C3's 13.17 m chute to its raised lake is no ramp). A ramp is
-open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wakes, tile size and
+open sea the hide clears whole, and the grid rises with it to its quay. The walk also finds the wake sheets (and the turbulence sheets under the same ships), tile size and
 lowest priority; hulls (`OceanMovers.cs`) stay out. `Publish` hands mask, zones and rect to the `csky_ocean_*` globals
 the hide reads (`SeaThreshold`); `Withdraw` restores the defaults. `--dump-ocean-mask=` writes the mask and the tint.
 Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.

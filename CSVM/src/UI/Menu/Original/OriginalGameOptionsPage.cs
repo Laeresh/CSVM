@@ -103,7 +103,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     // The page's options in their authored row order. Each is a title, a control, a description
     // and the words of the store field it reads and writes. A page never saves. The apply exit
-    // carries every choice, and LiveSettings.Persist is the options file's one writer.
+    // carries every choice, and LiveSettings.Persist writes the options file for it.
     // The difficulty row's title and description are IDS_GO_DIFFICULTY_TITLE and _DESC as authored.
     // The setting scales enemy armour and health at spawn and nothing about how the enemy flies.
     private static readonly GameOption[] Options =
@@ -232,7 +232,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     }
 
     // A sideways step on a focused option picks the next value with wrap, as the hangar's and the
-    // Instant Action screen's dropdowns do. False on anything else, so the step crosses columns.
+    // Instant Action screen's dropdowns do. False on anything else, so the step moves the focus.
     bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count || OptionFor(rows[focus].Key) is not { } option)

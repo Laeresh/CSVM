@@ -304,7 +304,7 @@ internal sealed class SurfaceGunner
             }
         }
 
-        // aircraftFirst: false, because the aircraft-first departure is scoped to the two pickers
+        // aircraftFirst: false, because the aircraft-first rule is scoped to the two pickers
         // an ally flies behind, the aeroplane's and the turret's. A hull keeps the decoded order,
         // which is also what leaves one picker in the build running the original's own priority.
         int best = AiTargetRanking.SelectBest(_vessel.Position, -_vessel.Body.GlobalTransform.Basis.Z,

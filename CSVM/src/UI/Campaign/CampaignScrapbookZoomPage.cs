@@ -193,7 +193,7 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
     // key is anything else. The words take the face their langui row names, one line per face
     // height as the original pitches them. They also take the box row's own colour and
     // justification, and its authored height. A block too tall for that height is fitted down, a
-    // departure the original does not make (campaign-screens.md, "Fitting a block to its box").
+    // remake-only rule (campaign-screens.md, "Fitting a block to its box").
     private void AddIfPresent(
         List<BoardLine> lines, string key, string box, (float X, float Y, float Width, float Height) at,
         float size, BoardInk ink)

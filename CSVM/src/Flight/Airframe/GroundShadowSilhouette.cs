@@ -325,9 +325,9 @@ public sealed class GroundShadowSilhouette
             Fill(projected[indices[i]], projected[indices[i + 1]], projected[indices[i + 2]]);
     }
 
-    // One flattened triangle into the coverage mask: a texel is covered when its own centre lies
+    // One flattened triangle into the coverage mask. A texel is covered when its own centre lies
     // inside, so the union over a model's triangles is exactly its silhouette. ⚠ Both windings are
-    // filled where the original culls one, a departure docs/org/shadows.md records.
+    // filled where the original culls one, a remake-only rule docs/org/shadows.md records.
     // ⚠ Keep the bounds and the edge walk written out. This runs per triangle per aircraft per
     // frame, and a debug build pays for every Mathf call: hoisting them out halved the pass.
     private void Fill(Vector2 a, Vector2 b, Vector2 c)

@@ -417,9 +417,9 @@ public sealed class VersusDirector
     }
 
     /// <summary>The one place a network match's numbers move, and it runs on the host alone. Cause
-    /// 4 names the turret's owner in the killer field and scores it score_turret_kill. Cause 3 is a
-    /// hull's broadside, named by placement index in the source field: event 9 sets the hull's
-    /// side's term.</summary>
+    /// 4 names the turret's owner in the killer field and scores it score_turret_kill. Causes 3 and
+    /// 4 with no killer are a hull's broadside and turret, named by placement index in the source
+    /// field. Event 9 sets the broadside's side's term; a turret's kill credits nobody.</summary>
     internal void ScoreDeath(in Net.DeathMessage death)
     {
         if (_field.Net is not { IsHost: true } net)
@@ -430,11 +430,18 @@ public sealed class VersusDirector
         var match = Match;
         int victim = death.VictimSeat;
         int killer = death.KillerSeat < match.PlayerCount ? death.KillerSeat : -1;
-        int hullTeam = death.Cause == Net.NetDeathCause.ZeppelinPart && ZvzPlay is { } zvz && death.SourceId < 2
+        bool fromHull = killer < 0 && death.Cause is Net.NetDeathCause.ZeppelinPart or Net.NetDeathCause.TurretOwner;
+        int hullTeam = fromHull && ZvzPlay is { } zvz && death.SourceId < 2
             ? zvz.Rules.TeamOfHull((int)death.SourceId)
             : 0;
         bool charged = killer >= 0 && death.Cause != Net.NetDeathCause.Suicide;
-        if (hullTeam > 0)
+        if (hullTeam > 0 && death.Cause == Net.NetDeathCause.TurretOwner)
+        {
+            // Remake-only rule: a hull turret's kill is a death with no credit. The original never
+            // fires these turrets in this mode, so it scores nothing for them (docs/org/multiplayer-zvz.md).
+            match.RegisterDeath(victim, suicide: false);
+        }
+        else if (hullTeam > 0)
         {
             killer = -1;
             charged = false;
@@ -459,7 +466,7 @@ public sealed class VersusDirector
         // the lives line, the kill lines and the ending in the original's order.
         var notice = new Net.DeathNoticeMessage((byte)victim,
             charged ? (byte)killer : Net.NetMessage.NoSeat,
-            hullTeam > 0 ? Net.NetDeathCause.ZeppelinPart : charged ? death.Cause : Net.NetDeathCause.Suicide,
+            hullTeam > 0 || charged ? death.Cause : Net.NetDeathCause.Suicide,
             (byte)Math.Clamp(hullTeam, 0, byte.MaxValue));
         net.Broadcast(notice, Net.NetChannels.Events);
         PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause, notice.Team);

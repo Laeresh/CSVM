@@ -160,6 +160,11 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>The picked race window's row within <see cref="RaceWindows"/>.</summary>
     public int RaceWindowIndex => Array.IndexOf(RaceWindowRows, RaceWindowMinutes);
 
+    /// <summary>Whether the join board's bots race a Stunt Flying run. With it off, a solo run stays
+    /// solo whatever bot rows the board holds. It is kept as the other fields are, and no file
+    /// stores it. Remake-only rule: the original has no race, so no toggle for one.</summary>
+    public bool RaceBots { get; set; }
+
     /// <summary>The four waves as configured.</summary>
     public IReadOnlyList<InstantActionWaveSetup> Waves => _waves;
 
@@ -298,8 +303,12 @@ public sealed class InstantActionFeature : IMenuFeature
         RaceWindowMinutes = RaceWindowRows[Index(index, RaceWindowRows.Length, nameof(index))];
 
     /// <summary>Whether the setup offers the race window: stunt flying with more than one pilot, the
-    /// one setup that launches a race. The join board's bots count as pilots.</summary>
+    /// one setup that launches a race. A presentation counts the pilots with <see cref="Pilots"/>.</summary>
     public bool OffersRaceWindow(int joinedSeats) => MissionType.Key == StuntKey && joinedSeats > 1;
+
+    /// <summary>The pilots a launch flies: the joined seats, and the join board's
+    /// <paramref name="bots"/> on a Stunt Flying run with <see cref="RaceBots"/> on.</summary>
+    public int Pilots(int seats, int bots) => seats + (MissionType.Key == StuntKey && RaceBots ? bots : 0);
 
     /// <summary>Whether the setup takes no waves and no wingmen with <paramref name="joinedSeats"/>
     /// joined: the ace duel, and the race, whose weapons-off rule the AI would not keep. The wave
@@ -484,7 +493,8 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>The typed exit for the confirmed seats, in seat order. It carries the environment's
     /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. A Stunt Flying
-    /// run carries the join board's <paramref name="bots"/>, which race it. Throws when the gate is
+    /// run with <see cref="RaceBots"/> on carries the join board's <paramref name="bots"/>, which race
+    /// it; with it off they stay on the board. Throws when the gate is
     /// closed or a seat names no plane, so a half-built launch cannot leave the menu.</summary>
     public LaunchExit BuildExit(IReadOnlyList<MenuSeatChoice> seats, string? playerPlane = null,
         IReadOnlyList<VsBotEntry>? bots = null)
@@ -503,15 +513,14 @@ public sealed class InstantActionFeature : IMenuFeature
             }
         }
 
-        // The bots fly a stunt run alone, and they make it a race, so they count as pilots there.
-        var racers = MissionType.Key == StuntKey && bots is { Count: > 0 } ? bots : null;
-        int pilots = seats.Count + (racers?.Count ?? 0);
+        int pilots = Pilots(seats.Count, bots?.Count ?? 0);
+        var racers = pilots > seats.Count ? bots : null;
         return new LaunchExit(Environment.Code, seats, Mode, BuildDef(pilots, playerPlane),
             WingmanLoadout: LaunchWingmanFit(pilots), Bots: racers);
     }
 
     /// <summary>Puts every field back to the screen's opening state. That is the first
-    /// environment, the ace duel, one life and the five-minute race window. The four waves are
+    /// environment, the ace duel, one life, the five-minute race window and no bots racing. The four waves are
     /// empty with their cursors on the first rows, and there are no wingmen, on the first airframe
     /// with the stock fit. The player takes the first airframe, with no preset and no base def.
     /// The option sets are not state and stay.</summary>
@@ -521,6 +530,7 @@ public sealed class InstantActionFeature : IMenuFeature
         MissionTypeIndex = 0;
         Lives = 1;
         RaceWindowMinutes = InstantActionDef.DefaultRaceWindowMinutes;
+        RaceBots = false;
         NumWingmen = 0;
         WingmanPlaneIndex = 0;
         WingmanFit = new LoadoutChoice();

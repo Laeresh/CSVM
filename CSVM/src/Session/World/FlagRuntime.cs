@@ -142,7 +142,14 @@ internal sealed class FlagRuntime
             // The carried flag is a library root outside the world tree, which flg_on_n adds to
             // the carrier's cf_light, so this machine builds its own copy.
             var carried = Find(inputs, "cs_flg_light" + n) ?? inputs.BuildLoose?.Invoke("cs_flg_light" + n);
-            props[team] = new FlagProps(flag, carried, carried?.GetParent(), "turnon_flite" + n, "turnoff_flite" + n);
+            FlagBanner? banner = null;
+            if (carried?.GetParent() is { } world)
+            {
+                banner = FlagBanner.For(carried);
+                world.AddChild(banner);
+            }
+
+            props[team] = new FlagProps(flag, carried, carried?.GetParent(), "turnon_flite" + n, "turnoff_flite" + n, banner);
             homes.Add((team, flag.GlobalPosition));
         }
 
@@ -244,7 +251,7 @@ internal sealed class FlagRuntime
             if (seat is { Bot: true, Live: true, Source: FlightController { Pilot: { } pilot } bot } && _in.IsLocal(seat.Seat))
             {
                 var order = BotObjective ? CtfBotObjective.Decide(seat.Seat, _flags, _pilots)
-                    : new CtfBotOrder(CtfBotRole.None, null, null, "has its objective off");
+                    : new CtfBotOrder(CtfBotRole.None, null, null, BotOrderLog.ObjectiveOff);
                 Steer(seat.Seat, bot, pilot, order);
             }
         }
@@ -253,6 +260,10 @@ internal sealed class FlagRuntime
     /// <summary>The node <paramref name="team"/>'s flag is carried and floats as, the mission's
     /// <c>cs_flg_lightn</c>, or null for a team with none. For a suite to read.</summary>
     public Node3D? CarriedFlag(int team) => _props.TryGetValue(team, out var prop) ? prop.Carried : null;
+
+    /// <summary>The banner <paramref name="team"/>'s carried flag tows under Enhanced, or null for a
+    /// team with no carried flag. For a suite to read.</summary>
+    public FlagBanner? Banner(int team) => _props.TryGetValue(team, out var prop) ? prop.Banner : null;
 
     /// <summary>How one of a flag's three target markers reads now, for the mission's site feed,
     /// labelled by side (<see cref="FlagMarkers"/>). Null for a key naming no marker of a flag
@@ -615,6 +626,7 @@ internal sealed class FlagRuntime
         flag.Reparent(mount, false);
         flag.Position = Vector3.Zero;
         flag.Visible = true;
+        prop.Banner?.Tow(mount, pilot);
     }
 
     // The carrier's name tag, row 198 by the reading pane's side. Team 0 clears it once the flag
@@ -674,6 +686,7 @@ internal sealed class FlagRuntime
     // player-flg_throw_n's reparent to the world, kept where it hung.
     private void Loose(FlagProps prop)
     {
+        prop.Banner?.Tow(null, null);
         if (prop.Carried is not { } flag || prop.World is not { } world || flag.GetParent() == world)
         {
             return;
@@ -726,6 +739,8 @@ internal sealed class FlagRuntime
     }
 
     // One team's flag props: the flag at its base, and the flag carried and floating with the world
-    // node it lives under when loose. The base light's two animations stand beside them.
-    private sealed record FlagProps(Node3D Home, Node3D? Carried, Node? World, string LightOn, string LightOff);
+    // node it lives under when loose. The base light's two animations and the towed banner stand
+    // beside them.
+    private sealed record FlagProps(Node3D Home, Node3D? Carried, Node? World, string LightOn, string LightOff,
+        FlagBanner? Banner);
 }

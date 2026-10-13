@@ -66,13 +66,20 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat pane's scroll bar's down arrow.</summary>
     public const string ChatDownKey = "MPL_B_CHATDOWN";
 
+    /// <summary>The player list's scroll bar's up arrow, a row while the list outgrows its rows.
+    /// </summary>
+    public const string PlayersUpKey = "MPL_B_PLAYERSUP";
+
+    /// <summary>The player list's scroll bar's down arrow.</summary>
+    public const string PlayersDownKey = "MPL_B_PLAYERSDOWN";
+
     /// <summary>The Mission Environment box.</summary>
     public const string EnvironmentKey = "MPL_D_ENVIRONMENT";
 
     /// <summary>The Mission Type box.</summary>
     public const string TypeKey = "MPL_D_TYPE";
 
-    /// <summary>The line under the Type box for a Stunt Race, the remake's own type, so no string
+    /// <summary>The line under the Type box for a Stunt Race, the remake-only type, so no string
     /// table id carries it. It is written in the register of the original's three.</summary>
     public const string StuntRaceDescription =
         "Race the chapter's Danger Zone course against the clock. Fly as many runs as the time allows. The fastest complete run wins.";
@@ -177,7 +184,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// </summary>
     public const string CopyKey = "MPL_B_COPY";
 
-    /// <summary>Add Bot on Mission Options, the remake's own: one bot row (<see cref="DogfightLobby.AddBot"/>).
+    /// <summary>Add Bot on Mission Options, remake-only: one bot row (<see cref="DogfightLobby.AddBot"/>).
     /// </summary>
     public const string AddBotKey = "MPL_B_ADDBOT";
 
@@ -211,16 +218,27 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public const string BotDoneKey = "MPL_BOT_B_DONE";
 
     /// <summary>The line pinned over a guest's chat while its host flies a match the guest joined
-    /// too late for. The remake's own: no langui line says what happens next.</summary>
+    /// too late for. Remake-only rule: no langui line says what happens next.</summary>
     public const string MatchInProgress = "The host's match is under way. You take a seat when it ends.";
 
     /// <summary>The tag a bot's row carries in the player list's Ready column, where a person's
-    /// Ready mark stands, and beside its name on Game Scores. The remake's own: the original has no
+    /// Ready mark stands, and beside its name on Game Scores. Remake-only rule: the original has no
     /// bots.</summary>
     public const string BotTag = "BOT";
 
+    /// <summary>The bot team box's first item, which hands the bot to the lobby's balancing.</summary>
+    public const string AutoTeam = "Auto";
+
     /// <summary>How many rows the player list shows.</summary>
     public const int VisiblePlayers = 11;
+
+    /// <summary>Where a player row's plane column starts, remake-only: the original's list names
+    /// no plane. The column ends <see cref="PlaneWidth"/> on, clear of the bot tag and the Ready mark.
+    /// </summary>
+    internal const float PlaneX = ListX + 136f;
+
+    /// <summary>The plane column's width, ending 4 px short of the bot tag's box.</summary>
+    internal const float PlaneWidth = NameWidth - 14f - 136f - 4f;
 
     private const string GunKeyPrefix = "MPL_D_GUN_";
     private const string CellKeyPrefix = "MPL_D_CELL_";
@@ -266,6 +284,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const float DescriptionPitch = 16f;
     private const float BotsY = PageY + 205f;
 
+    // The Teams heading's top. The own-flag-home box and label stand on its baseline.
+    private const float TeamsY = PageY + 110f;
+
     // The lines' column in the chat pane, ending 4 px clear of the pane's scroll control at x 757.
     // That control stands over the bar the background paints at the pane's right.
     private const float ChatTextWidth = ChatWidth - ChatNameColumn - 16f;
@@ -298,6 +319,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     // The scores page's scroll bar over the landed match's lines.
     private static readonly OriginalScrollBar ScoresBar = OriginalRaceTable.ScrollBar(PageX, PageY);
+
+    // The player list's bar, remake-only: the original's sixteen people and no bots fit its rows.
+    // It wears the chat's track inside the pane's right border, clear of the Ready marks.
+    private static readonly OriginalScrollBar PlayersBar =
+        new(292f, ListY - 2f, VisiblePlayers * ListPitch, VisiblePlayers, new BoardTint(0x20, 0x24, 0x18));
 
     // The scripts' colours beyond the plaque labels' four: the tab ink, the picked sub-tab's red,
     // the Ready? label, the LAUNCH! blink and the own name.
@@ -336,6 +362,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private string _lastTeamName = string.Empty;
     private int _listTop;
     private int _scoresTop;
+    private int _playersTop;
 
     // The chat window's first line, and whether the reader scrolled it up off the newest line.
     private int _chatTop;
@@ -458,6 +485,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private float ChatSize => _text.Regular(10575)?.Pixels ?? MultiplayerBoardText.TextFallback;
 
     private float ChatPitch => ChatSize + 2f;
+
+    // The view draws a plain line's baseline at its top plus its size.
+    private float TeamsBaseline => TeamsY + (_text.Regular(10099)?.Pixels ?? MultiplayerBoardText.TextFallback);
 
     // The lobby while the outlaw list stands over its tab page, else null.
     private DogfightLobby? Outlawing => _outlaw.IsOpen ? Lobby : null;
@@ -627,6 +657,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     top => _scoresTop = top));
             }
 
+            if (!_outlaw.IsOpen && Lobby is { } listed && ListEntries(listed).Count is var entries && PlayersBar.Scrolls(entries))
+            {
+                lists.Add(new OriginalList("MPL_L_PLAYERS", PlayersBar.Window(ListX, entries, _playersTop),
+                    top => _playersTop = PlayersBar.Clamp(top, entries)));
+            }
+
             if (Lobby is { } talk && ChatWindow(talk.Chat.Count) is var (bar, _, first) && bar.Scrolls(talk.Chat.Count))
             {
                 lists.Add(new OriginalList("MPL_L_CHAT", bar.Window(ChatX, talk.Chat.Count, first),
@@ -782,6 +818,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 if (lobby != null)
                 {
                     _scoresTop = ScoresBar.Clamp(_scoresTop + (row.Key == ScoresUpKey ? -1 : 1), ScoreCount(lobby));
+                }
+
+                return null;
+            case PlayersUpKey:
+            case PlayersDownKey:
+                if (lobby != null)
+                {
+                    _playersTop = PlayersBar.Clamp(_playersTop + (row.Key == PlayersUpKey ? -1 : 1), ListEntries(lobby).Count);
                 }
 
                 return null;
@@ -1013,6 +1057,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public MenuExit? GuestLaunch() =>
         _net() is { DogfightLaunchDue: true } net && net.Dogfight is { } lobby ? Exit(net, lobby) : null;
 
+    /// <summary>What a player row's plane column reads: the custom plane's name, else the stock
+    /// airframe's, Random on a bot's Random plane. A person's row whose pick the host has not heard
+    /// reads nothing.</summary>
+    internal static string PlaneText(DogfightLobbySeat seat) =>
+        seat.Plane is { Length: > 0 } custom ? custom
+        : seat.Airframe < ShortNames.Length ? ShortNames[seat.Airframe]
+        : seat.IsBot ? MultiplayerBoardText.RandomPlaneWord : string.Empty;
+
     /// <summary>Typed characters and Backspace into the focused box. The chat box takes printable
     /// characters up to its width. The number boxes take digits, and a value inside the box's range
     /// is set as it is typed.</summary>
@@ -1114,7 +1166,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return false;
     }
 
-    // No langui row words a bot on no team, so that word is the remake's own.
+    // No langui row words a bot on no team, so that word is remake-only.
     private static string TeamWord(DogfightLobby lobby, byte team)
     {
         foreach (var named in lobby.Teams)
@@ -1413,7 +1465,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             BoardLine.CapsBoxTop(ChatY, ChatSize, ChatPitch), ChatTextWidth, ChatPitch, true, 0, null);
     }
 
-    // Every widget of the showing tab and its frame, in focus order. The tabs and the page come
+    // Every widget of the showing tab and its frame, in row order. The tabs and the page come
     // first, then the player list's plaques, the chat line and Leave Game. The outlaw list stands
     // in the page's place with the tabs greyed, as the Select... press's mail(1) to each does.
     private void Widgets(List<OriginalRow> rows)
@@ -1459,15 +1511,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (lobby != null && !_outlaw.IsOpen)
         {
             var entries = ListEntries(lobby);
-            for (int slot = 0; slot < entries.Count && slot < VisiblePlayers; slot++)
+            _playersTop = PlayersBar.Clamp(_playersTop, entries.Count);
+            for (int slot = 0; _playersTop + slot < entries.Count && slot < VisiblePlayers; slot++)
             {
-                var entry = entries[slot];
+                var entry = entries[_playersTop + slot];
                 string key = entry.Player < 0 ? TeamRowKey(entry.Team) : PlayerKey(entry.Player);
                 if (entry.Player < 0 || (lobby.IsHost && entry.Player >= 1))
                 {
                     rows.Add(new OriginalRow(key, entry.Text, OriginalRowKind.ListRow, ListX, ListY + (slot * ListPitch),
                         NameWidth + ListPitch, ListPitch, true, 0, null));
                 }
+            }
+
+            if (PlayersBar.Scrolls(entries.Count))
+            {
+                rows.Add(PlayersBar.ArrowRow(PlayersUpKey, down: false, entries.Count, _playersTop));
+                rows.Add(PlayersBar.ArrowRow(PlayersDownKey, down: true, entries.Count, _playersTop));
             }
         }
 
@@ -1506,14 +1565,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, rules));
         rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, rules && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
         // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
-        // mail(5) and mail(1109) do. The remake's own-flag-home option stands under the boxes.
+        // mail(5) and mail(1109) do. The remake-only own-flag-home option stands beside the Teams
+        // heading, the column's one clear line, on its baseline, and runs to the page's right edge.
         bool ctf = DogfightLobby.IsCtf(options);
         bool fixedTeams = DogfightLobby.FixesTeams(options);
         rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, rules && !fixedTeams));
         bool counts = rules && options.RestrictTeams && !fixedTeams;
         if (ctf)
         {
-            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 241f, PageY + 177f, 180f, 11f, live));
+            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 293f, TeamsBaseline - 11f, 165f, 11f, live));
         }
 
         rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
@@ -1550,7 +1610,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Box(BotNameKey, BoxText(BotNameKey, lobby), PageX + 11f, PageY + 88f, 195f, 22f, live));
         rows.Add(Drop(BotPlaneKey, plane, PageX + 11f, PageY + 134f, 195f, 22f, live));
         rows.Add(Drop(BotSkillKey, _text.SkillWord(bot.Skill), PageX + 11f, PageY + 180f, 195f, 22f, live));
-        rows.Add(Drop(BotTeamKey, TeamWord(lobby, bot.Team), PageX + 11f, PageY + 226f, 195f, 22f, live));
+        rows.Add(Drop(BotTeamKey, bot.Placed ? TeamWord(lobby, bot.Team) : AutoTeam, PageX + 11f, PageY + 226f, 195f, 22f, live));
         rows.Add(_text.Strip(RemoveBotKey, MediumArt, PageX + 11f, PageY + 262f, live, 1, 96f, 37f));
         rows.Add(_text.Strip(BotDoneKey, MediumArt, PageX + 110f, PageY + 262f, true, 1, 96f, 37f));
     }
@@ -1668,12 +1728,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 {
                     var teams = lobby.Teams;
                     var items = new string[teams.Count + 1];
-                    items[0] = TeamWord(lobby, 0);
+                    items[0] = AutoTeam;
                     int current = 0;
                     for (int i = 0; i < teams.Count; i++)
                     {
                         items[i + 1] = teams[i].Name;
-                        current = teams[i].Number == bot.Team ? i + 1 : current;
+                        current = bot.Placed && teams[i].Number == bot.Team ? i + 1 : current;
                     }
 
                     return new DropdownList(items, current, _ => true,
@@ -1857,9 +1917,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         var mark = new BoardArt(BoardArtLibrary.Ui, MarkArt, 4);
         var entries = lobby != null ? ListEntries(lobby) : new List<ListEntry>();
-        for (int slot = 0; slot < entries.Count && slot < VisiblePlayers; slot++)
+        int top = PlayersBar.Clamp(_playersTop, entries.Count);
+        if (!_outlaw.IsOpen)
         {
-            var entry = entries[slot];
+            PlayersBar.Compose(ListX, entries.Count, top, layers);
+        }
+
+        for (int slot = 0; top + slot < entries.Count && slot < VisiblePlayers; slot++)
+        {
+            var entry = entries[top + slot];
             float y = ListY + (slot * ListPitch);
             if (entry.Player < 0)
             {
@@ -1873,8 +1939,20 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
             float indent = entry.Team != 0 ? MemberIndent : 0f;
             var colour = lobby != null && entry.Player == lobby.You ? OwnName : Black;
-            layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f + indent, y + ((ListPitch - size) / 2f), NameWidth - 4f - indent, size,
-                BoardInk.Row, -1, Face: face, Colour: colour));
+            float textY = y + ((ListPitch - size) / 2f);
+
+            // A plain line wider than its box would wrap onto the row below. A marquee line stays on
+            // its row, clipped to the box, and scrolls through its whole text.
+            layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f + indent, textY, PlaneX - ListX - 6f - indent, size,
+                BoardInk.Row, -1, Face: face, Colour: colour)
+            { Marquee = true });
+            if (PlaneText(players[entry.Player]) is { Length: > 0 } plane)
+            {
+                layers.Lines.Add(new BoardLine(plane, PlaneX, textY, PlaneWidth, size, BoardInk.Row, -1, Face: face, Colour: colour)
+                {
+                    Marquee = true,
+                });
+            }
 
             // A bot gives no consent to stand Ready, so its column carries the bot tag in place of
             // a mark that would always read ticked.
@@ -2162,10 +2240,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         else if (id != 0)
         {
             float lift = row.Key == AutoRespawnKey ? 3f : 2f;
-            layers.Lines.Add(_text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
+            var line = _text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
                 row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or TeamsKey or FlagHomeKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
                     ? Black
-                    : TabDisabled));
+                    : TabDisabled);
+
+            // A pixel under its siblings, the own-flag-home label ends inside the page on the Teams
+            // heading's baseline. It sits 3 px nearer its box than theirs, so the box reads as its
+            // own, not the heading's. A fixed size, so it scales with the window as its siblings do.
+            layers.Lines.Add(row.Key == FlagHomeKey ? line with { X = row.X + 17f, Size = line.Size - 1f, Y = TeamsBaseline - line.Size + 1f } : line);
         }
     }
 
@@ -2195,7 +2278,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             LeaveKey => (10062, "Leave Game"),
             BotDoneKey => (10540, "Accept"),
 
-            // The bot plaques are the remake's own, so no langui row words them.
+            // The bot plaques are remake-only, so no langui row words them.
             AddBotKey => (-1, "Add Bot"),
             FillKey => (-1, "Fill to"),
             RemoveBotKey => (-1, "Remove"),
@@ -2265,7 +2348,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var options = lobby.Options;
         if (DogfightLobby.IsStuntRace(options))
         {
-            // The remake's own line, in the face the string table's three are drawn in.
+            // The remake-only line, in the face the string table's three are drawn in.
             layers.Lines.Add(_text.Line(10123, string.Empty, PageX + 25f, DescriptionY, 200f, Black, text: StuntRaceDescription)
                 with
             { Leading = DescriptionPitch, Height = BotsY - DescriptionY - 4f });
@@ -2279,7 +2362,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         layers.Lines.Add(_text.Line(10098, "Victory Conditions", PageX + 241f, PageY + 46f, 0f, Black));
-        layers.Lines.Add(_text.Line(10099, "Teams", PageX + 241f, PageY + 110f, 0f, Black));
+        layers.Lines.Add(_text.Line(10099, "Teams", PageX + 241f, TeamsY, 0f, Black));
         layers.Lines.Add(_text.Line(10100, "Lives", PageX + 241f, PageY + 170f, 0f, Black));
         layers.Lines.Add(_text.Line(10101, "Planes", PageX + 241f, PageY + 227f, 0f, Black));
 

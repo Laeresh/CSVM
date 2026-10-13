@@ -125,6 +125,8 @@ public sealed partial class LandingApproachRuntime : Node
         // definition writes it, and a suite binding a trigger onto a bare world runtime gets the
         // wiring a session's world build gives it. See `_startingFor` for the human half.
         runtime.MissionTriggerOwner = anim => cutscene.Own(anim, _startingFor);
+        // A range gate names its episode owner by seat, an index into this same human field.
+        runtime.RangeTriggerOwner = (anim, seat) => cutscene.Own(anim, SeatRig(seat));
         _humans = humans;
         _bound.Clear();
         _approaches.Clear();
@@ -261,6 +263,10 @@ public sealed partial class LandingApproachRuntime : Node
 
         return presser != null && _latched.Add(bound.Id) ? presser : null;
     }
+
+    // The human at a seat of the field, or null (the scripted player's) for a seat it does not hold.
+    private PlayerRig? SeatRig(int seat) =>
+        _humans?.Invoke() is { } humans && seat >= 0 && seat < humans.Count ? humans[seat] : null;
 
     private int RefreshBindings()
     {

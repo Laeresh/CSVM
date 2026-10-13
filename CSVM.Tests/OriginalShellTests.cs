@@ -28,6 +28,7 @@ public class OriginalShellTests
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Left = new() { MoveX = -1 };
 
     [Fact]
     public void TheTopLevelIsTheSixDecodedRowsPlusTheThreeRemakeDoorsAndOpensFocusedOnFreeFlight()
@@ -130,8 +131,12 @@ public class OriginalShellTests
         Assert.Equal("passivepointerz.png", PointerArt(shell));
     }
 
+    /// <summary>The top level's walk follows where its rows are drawn: the three doors in the left
+    /// margin, the decoded column beside them. Down wraps within a column, skipping disabled rows,
+    /// and Right crosses to the row level with the cursor. The old row-order walk took Down from
+    /// JOIN BOARD onto INSTANT ACTION, the next row built.</summary>
     [Fact]
-    public void KeyboardFocusWalksEnabledRowsWithinAColumnAndWrapsAndSkipsDisabledOnes()
+    public void KeyboardFocusFollowsTheDrawnRowsAndWrapsWithinTheirColumnSkippingDisabledOnes()
     {
         var shell = Shell(out _);
 
@@ -140,6 +145,10 @@ public class OriginalShellTests
         shell.Step(Down);
         Assert.Equal(OriginalShell.JoinBoardKey, shell.FocusedKey);
         shell.Step(Down);
+        Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
+        shell.Step(Up);
+        Assert.Equal(OriginalShell.JoinBoardKey, shell.FocusedKey);
+        shell.Step(Right);
         Assert.Equal("MM_B_INSTANTACTION", shell.FocusedKey);
         shell.Step(Down);
         Assert.Equal("MM_B_PREFERENCES", shell.FocusedKey);
@@ -148,9 +157,11 @@ public class OriginalShellTests
         shell.Step(Down);
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         shell.Step(Down);
-        Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
+        Assert.Equal("MM_B_INSTANTACTION", shell.FocusedKey);
         shell.Step(Up);
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
+        shell.Step(Left);
+        Assert.Equal(OriginalShell.JoinBoardKey, shell.FocusedKey);
     }
 
     [Fact]
@@ -221,12 +232,9 @@ public class OriginalShellTests
         step = shell.Step(Back);
         Assert.IsType<QuitExit>(step.Exit);
 
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
+        // QUIT stands at the decoded column's foot, so Up from its head wraps onto it.
+        shell.Step(Right);
+        shell.Step(Up);
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.IsType<QuitExit>(shell.Step(Accept).Exit);
     }
@@ -336,7 +344,7 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
         Assert.Equal(OriginalGameOptionsPage.DifficultyKey, shell.FocusedKey);
 
-        // Down is the shell's own column walk over the page's rows. Right is the module's own
+        // Down is the shell's own step over the page's rows. Right is the module's own
         // sideways step, which changes the value there and keeps the focus.
         shell.Step(Down);
         Assert.Equal(OriginalGameOptionsPage.DefaultViewKey, shell.FocusedKey);
@@ -589,19 +597,17 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheKeyboardsColumnWalkLandsOnTheInstantActionModulesOwnRows()
+    public void TheKeyboardsWalkLandsOnTheInstantActionModulesOwnRows()
     {
         var shell = Shell(out _);
         Click(shell, "MM_B_INSTANTACTION");
 
-        // Down is the shell's own column walk down the contents window. Right is its crossing into
-        // the module's second column, landing on the dropdown level with the row it left. A further
-        // Right is the module's own sideways step, changing that value and keeping the focus.
+        // Down is the shell's own step down the contents window. Right crosses onto the module's
+        // page, landing on the dropdown drawn level with the row it left. A further Right is the
+        // module's own sideways step, changing that value and keeping the focus.
         shell.Step(Down);
         Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:1", shell.FocusedKey);
         shell.Step(Right);
-        Assert.Equal(OriginalInstantActionScreen.WingmenKey, shell.FocusedKey);
-        shell.Step(Up);
         Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, shell.FocusedKey);
         shell.Step(Right);
         Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, shell.FocusedKey);
@@ -670,21 +676,20 @@ public class OriginalShellTests
             shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace");
             Assert.Equal(OriginalHangarScreen.AirframeDropKey, shell.FocusedKey);
 
-            // Down is the shell's own column walk, and Right along the bar is the module's sideways
-            // step. The standing tab is a sibling like the other five, so the walk steps onto it.
+            // Down lands on the tab drawn under the dropdown, and Right walks along the bar, wrapping
+            // at its end. The standing tab is a sibling like the other five, so the walk steps onto it.
             shell.Step(Down);
+            Assert.Equal("PX_B_HARDPOINTS", shell.FocusedKey);
+            shell.Step(Right);
+            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+            shell.Step(Right);
             Assert.Equal("PX_B_AIRFRAME", shell.FocusedKey);
             shell.Step(Right);
             Assert.Equal("PX_B_ENGINE", shell.FocusedKey);
-            shell.Step(Right);
-            shell.Step(Right);
-            shell.Step(Right);
-            shell.Step(Right);
-            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
-            shell.Step(Right);
+            shell.Step(Down);
             Assert.Equal(OriginalHangarScreen.SellPlanesKey, shell.FocusedKey);
             shell.Step(Up);
-            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+            Assert.Equal("PX_B_ENGINE", shell.FocusedKey);
         });
     }
 
@@ -715,19 +720,17 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheKeyboardsColumnWalkLandsOnTheCampaignModulesOwnRows()
+    public void TheKeyboardsWalkLandsOnTheCampaignModulesOwnRows()
     {
         WithCampaignShell((shell, campaign, _, _, _) =>
         {
+            // The cabin's plaques stand about its painting, so Right steps from each to the one
+            // drawn level with it. The door it ends on is the module's own way out of the campaign.
             Seat(shell, "Zachary");
-
-            // Down is the shell's own column walk over the cabin's plaques. The door it ends on
-            // is the module's own way out of the campaign.
             Assert.Equal("NextMission", shell.FocusedKey);
-            shell.Step(Down);
+            shell.Step(Right);
             Assert.Equal("PreviousMissions", shell.FocusedKey);
-            shell.Step(Down);
-            shell.Step(Down);
+            shell.Step(Right);
             Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
             shell.Step(Accept);
             Assert.Equal(OriginalScreen.TopLevel, shell.Screen);

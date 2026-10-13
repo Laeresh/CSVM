@@ -16,7 +16,7 @@ internal sealed class MultiplayerBoardText
     internal const float TextFallback = 12f;
 
     /// <summary>The word a bot row shows for a Random plane. No langui row words one, so it is the
-    /// remake's own.</summary>
+    /// remake-only word.</summary>
     internal const string RandomPlaneWord = "Random";
 
     // The scripts' label colours on the plaques and radios: greyed, normal, rollover and pressed.

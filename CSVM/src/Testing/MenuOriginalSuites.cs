@@ -1163,14 +1163,9 @@ internal static class MenuOriginalSuites
         return -1f;
     }
 
-    // Walks the focus down onto a row by key, the keyboard's own way there.
-    private static void WalkTo(MenuHost host, ScriptedSeat seat, OriginalShell shell, string key)
-    {
-        for (int guard = 0; guard < 32 && shell.FocusedKey != key; guard++)
-        {
-            Press(host, seat, Down);
-        }
-    }
+    // Walks the focus onto a row by key, the shortest keyboard walk there over the shell's own step.
+    private static void WalkTo(MenuHost host, ScriptedSeat seat, OriginalShell shell, string key) =>
+        OriginalWalk.WalkTo(shell, key, frame => Press(host, seat, frame));
 
     private static OriginalShell? SwitchBackToOriginal(TestContext ctx, MenuHost host)
     {
@@ -1294,6 +1289,25 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
+        // The install draws the checkbox under the shadow row, the column's foot, with VR Mode's between
+        // them where it is live. Both buttons' centres stand above the checkbox's, so Down from it
+        // wraps out of the value column.
+        var expected = new List<string> { OriginalVideoPage.ShadowQualityKey };
+        if (System.OperatingSystem.IsWindows())
+        {
+            expected.Add(OriginalVideoPage.VrModeKey);
+        }
+
+        expected.AddRange(new[] { OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey });
+        var walk = new List<string> { shell.FocusedKey };
+        while (walk.Count < expected.Count)
+        {
+            Press(host, seat, Down);
+            walk.Add(shell.FocusedKey);
+        }
+
+        ctx.Check(walk.SequenceEqual(expected),
+            $"Down walks the shadow row, VR Mode where it is live, the checkbox at the column's foot, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit

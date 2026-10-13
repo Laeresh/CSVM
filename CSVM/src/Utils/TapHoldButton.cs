@@ -24,7 +24,7 @@ public enum TapHold
 public sealed class TapHoldButton(float holdSeconds)
 {
     /// <summary>The threshold every pad control carrying two actions splits on: down longer than
-    /// this is a hold, shorter is a tap. ⚠ TUNE, ours and not the original's, which needs no
+    /// this is a hold, shorter is a tap. ⚠ Remake-only rule, not the original's, which needs no
     /// threshold at all because it gives each direction its own key.</summary>
     public const float PadHoldSeconds = 0.25f;
 

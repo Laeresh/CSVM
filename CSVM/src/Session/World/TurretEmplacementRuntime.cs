@@ -137,6 +137,20 @@ public sealed partial class TurretEmplacementRuntime : Node
         return changed;
     }
 
+    /// <summary>Names the rounds of every emplacement standing on <paramref name="root"/> or anywhere
+    /// under it for <paramref name="shooter"/> (<see cref="TurretController.RoundShooter"/>), the
+    /// subtree walk of <see cref="SetActivatedUnder"/>.</summary>
+    public void NameRoundsUnder(Node3D root, int shooter)
+    {
+        foreach (var t in _turrets)
+        {
+            if (t.Site is { } site && GodotObject.IsInstanceValid(site) && (site == root || root.IsAncestorOf(site)))
+            {
+                t.RoundShooter = shooter;
+            }
+        }
+    }
+
     /// <summary>Writes <paramref name="team"/> on every emplacement standing on
     /// <paramref name="root"/> or anywhere under it, and reports how many changed. The subtree walk
     /// is <see cref="SetActivatedUnder"/>'s, because it is the same primitive: the original fans a

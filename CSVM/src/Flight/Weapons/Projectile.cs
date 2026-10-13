@@ -61,10 +61,10 @@ public sealed partial class ProjectilePool : Node3D
     /// hurt a gasbag); null gates nothing.</summary>
     public System.Func<Node?, WeaponDef, bool>? WorldDamageGate;
 
-    /// <summary>Where a ground strike that passed <see cref="CraterGate"/> goes: given the impact
-    /// point and the struck collider, carve the bowl and flatten the decorations in it, returning
-    /// whether the carve landed. The faithful rule asks only for a collider whose node carries
-    /// <see cref="SceneBuilder.CanModifyMeta"/>, which no shipped node does; the remake's own
+    /// <summary>Where a ground strike that passed <see cref="CraterGate"/> goes. Given the impact
+    /// point and the struck collider, it carves the bowl and flattens the decorations in it. It
+    /// returns whether the carve landed. The faithful rule asks only for a collider whose node carries
+    /// <see cref="SceneBuilder.CanModifyMeta"/>, which no shipped node does; the remake-only
     /// option asks for any rocket. Wired to <c>CraterField.TryCarve</c> in a collidable flight.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
@@ -809,6 +809,20 @@ public sealed partial class ProjectilePool : Node3D
             if (p.Alive)
             {
                 into.Add((p.Pos, WorldVelocity(in p)));
+            }
+        }
+    }
+
+    /// <summary>Appends every live round's shooter id, in slot order. The seam a scripted run reads
+    /// who a round is charged to through, as a hit would.</summary>
+    public void CollectLiveShooters(List<int> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive)
+            {
+                into.Add(p.Shooter);
             }
         }
     }

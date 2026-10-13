@@ -37,57 +37,62 @@ public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 P
 
 /// <summary>
 /// One stunt race bot's way round the course, a remake-only rule, since the original seats no bots.
-/// It takes the zones in course order. Between zones it steers freely for a lead-in point short of
-/// the next zone's nearer ribbon end. Inside the approach cone it hands the zone to the pilot, which
-/// runs it on its <c>dzpathN</c> ribbon as a campaign racer does. Its tier sets its cruise throttle
-/// and the odds of fluffing a zone, passing over its entry and coming round again. Values:
-/// docs/org/aiPilot.md "Stunt race bots".
+/// It takes next the open zone whose lead-in point is nearest, and holds it until a try ends or a
+/// return. Between zones it steers freely for that point, short of the zone's nearer ribbon end.
+/// Inside the approach cone it hands the zone to the pilot, which runs it on its <c>dzpathN</c>
+/// ribbon as a campaign racer does. Its tier sets its cruise throttle and the odds of fluffing a
+/// zone, passing over its entry and coming round again. Values: docs/org/aiPilot.md "Stunt race bots".
 /// </summary>
 public sealed class StuntBotObjective
 {
-    /// <summary>The remake's own: how far short of a zone's entry, along its ribbon, the lead-in
+    /// <summary>Remake-only rule: how far short of a zone's entry, along its ribbon, the lead-in
     /// point stands, metres.</summary>
     public const float LeadInM = 600f;
 
-    /// <summary>The remake's own: how far out from the entry the approach cone reaches, metres.</summary>
+    /// <summary>Remake-only rule: how far out from the entry the approach cone reaches, metres.</summary>
     public const float ConeReachM = 900f;
 
-    /// <summary>The remake's own: the cone's half angle about the ribbon's line into the entry, degrees.
+    /// <summary>Remake-only rule: the cone's half angle about the ribbon's line into the entry, degrees.
     /// The bot's track must also point within it of the entry.</summary>
     public const float ConeHalfAngleDeg = 30f;
 
-    /// <summary>The remake's own: how far above the entry the bot cruises while far from the lead-in
+    /// <summary>Remake-only rule: how far above the entry the bot cruises while far from the lead-in
     /// point, metres. It comes down to the entry's height over the last <see cref="LeadInM"/>.</summary>
     public const float CruiseAboveM = 150f;
 
-    /// <summary>The remake's own: how far above a fluffed zone's entry the bot passes, metres.</summary>
+    /// <summary>Remake-only rule: how far above a fluffed zone's entry the bot passes, metres.</summary>
     public const float FluffAboveM = 100f;
 
-    /// <summary>The remake's own: the step and first length of a bot's lead-in, metres. A lead-in is a
+    /// <summary>Remake-only rule: the step and first length of a bot's lead-in, metres. A lead-in is a
     /// straight before a zone's entry on its first chord's line (<see cref="LeadInFor"/>).</summary>
     public const float LeadInStepM = 50f;
 
-    /// <summary>The remake's own: the longest straight a bot's run may add before an entry, metres.</summary>
+    /// <summary>Remake-only rule: the longest straight a bot's run may add before an entry, metres.
+    /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float MaxLeadInM = 300f;
 
-    // The remake's own: how far below level the diving lock state RailClears flies points, degrees.
+    /// <summary>Remake-only rule: the fastest lock state <see cref="RailClears"/> flies from, m/s. A bot
+    /// must lock no faster, or it outruns the check. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float TopLockSpeedMps = 135f;
+
+    // Remake-only rule: how far below level the diving lock state RailClears flies points, degrees.
     private const float LockPitchDeg = 20f;
 
     // How long one checked rail run may last before it counts as a miss, sim steps.
     private const int RailCheckSteps = 3600;
 
-    // The remake's own lock states RailClears flies from. The bearings off the ribbon's line stay in
-    // the cone's half angle. The speeds, m/s, reach past an ace's 131 at the lock.
+    // Remake-only rule: the lock states RailClears flies from. The bearings off the ribbon's line stay in
+    // the cone's half angle.
     private static readonly float[] LockBearingsDeg = { -30f, -15f, 0f, 15f, 30f };
-    private static readonly float[] LockSpeedsMps = { 60f, 90f, 135f };
+    private static readonly float[] LockSpeedsMps = { 60f, 90f, TopLockSpeedMps };
 
     private readonly Random _rng;
-    private readonly Dictionary<(DangerZoneRibbon, bool), float?> _leadIns = new();
     private int _zone = -1;
     private bool _farEnd;
     private DangerZoneRibbon? _route;
     private bool _fluffing;
     private bool _running;
+    private HashSet<(DangerZoneRibbon, bool)>? _unlisted;
 
     /// <summary>A bot of tier <paramref name="tier"/> whose fluffs draw on <paramref name="rng"/>.</summary>
     public StuntBotObjective(NetBotSkill tier, Random rng)
@@ -98,11 +103,11 @@ public sealed class StuntBotObjective
 
     public NetBotSkill Tier { get; }
 
-    /// <summary>Whether the world blocks the segment between two points, or null to test nothing. A
-    /// lead-in whose straight it blocks is refused.</summary>
-    public Func<Vector3, Vector3, bool>? Blocked { get; set; }
+    /// <summary>The run from each zone end, <see cref="RunsFrom"/>'s table, shared by every bot of a
+    /// session. Without one every end runs its own route.</summary>
+    public RunTable? Runs { get; init; }
 
-    /// <summary>The bot's lever between zones: the remake's own, full for an ace, 0.85 for a
+    /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
     public float CruiseThrottle => Tier switch
     {
@@ -111,7 +116,7 @@ public sealed class StuntBotObjective
         _ => 0.7f,
     };
 
-    /// <summary>The odds of fluffing each try at a zone: the remake's own, 0.05 for an ace, 0.2 for a
+    /// <summary>The odds of fluffing each try at a zone: a remake-only rule, 0.05 for an ace, 0.2 for a
     /// veteran and 0.35 for a novice.</summary>
     public float FluffChance => Tier switch
     {
@@ -143,6 +148,33 @@ public sealed class StuntBotObjective
         }
 
         return null;
+    }
+
+    /// <summary>The ribbon a run flies from each end of each routed zone in <paramref name="zones"/>.
+    /// It is the route with <see cref="LeadInFor"/>'s lead-in, or null where that end is refused. The
+    /// decision does not depend on the bot, so a session makes it once for every bot.</summary>
+    public static RunTable RunsFrom(IEnumerable<StuntZone> zones, Func<Vector3, Vector3, bool>? blocked)
+    {
+        var ends = new RunTable();
+        foreach (var zone in zones)
+        {
+            if (zone.Route is not { } ribbon)
+            {
+                continue;
+            }
+
+            foreach (bool far in new[] { false, true })
+            {
+                ends[(ribbon, far)] = LeadInFor(zone, far, blocked) switch
+                {
+                    null => null,
+                    > 0f and var metres => ribbon.WithLeadIn(far, metres),
+                    _ => ribbon,
+                };
+            }
+        }
+
+        return ends;
     }
 
     /// <summary>Whether the rail alone carries a pilot through both of <paramref name="zone"/>'s gates
@@ -182,15 +214,11 @@ public sealed class StuntBotObjective
     public StuntBotOrder Decide(IReadOnlyList<StuntZone> zones, Vector3 at, Vector3 velocity, bool zoneRun)
     {
         ArgumentNullException.ThrowIfNull(zones);
-        int next = -1;
-        for (int i = 0; i < zones.Count && next < 0; i++)
-        {
-            if (!zones[i].Completed && zones[i].Route != null)
-            {
-                next = i;
-            }
-        }
 
+        // ⚠ Do not pick again while the held zone is open and no try at it ended. Two zones about as
+        // near would flip the pick each step, and a fluff would hand its zone over.
+        bool pick = _running || _zone < 0 || _zone >= zones.Count || zones[_zone].Completed;
+        int next = pick ? Nearest(zones, at) : _zone;
         if (next < 0)
         {
             _zone = -1;
@@ -203,9 +231,8 @@ public sealed class StuntBotObjective
             return new StuntBotOrder(StuntBotLeg.Run, _zone, at, _farEnd, "flies the zone");
         }
 
-        var ribbon = zones[next].Route!;
-        // A new zone, or a try that ended, picks its entry afresh: the ribbon end nearer the bot.
-        if (next != _zone || _running)
+        // Each pick, including one after a try ends, takes its entry afresh: the ribbon end nearer the bot.
+        if (pick)
         {
             _zone = next;
             _running = false;
@@ -248,7 +275,14 @@ public sealed class StuntBotObjective
         return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, "steers for the zone");
     }
 
+    /// <summary>A crash's return, or a rerun's: the next order picks its zone afresh, after any ride
+    /// the return starts.</summary>
+    public void Returned() => _zone = -1;
+
     private static Vector3 Flat(Vector3 v) => new(v.X, 0f, v.Z);
+
+    private static bool NearerEnd(DangerZoneRibbon ribbon, Vector3 at)
+        => at.DistanceSquaredTo(ribbon.End(true)) < at.DistanceSquaredTo(ribbon.End(false));
 
     private static Vector3 Into(DangerZoneRibbon ribbon, bool farEnd)
     {
@@ -291,30 +325,71 @@ public sealed class StuntBotObjective
         return green && red;
     }
 
-    // The ribbon end nearer the bot, or the other when that one is refused, and the route its run
-    // flies from there. With both refused it is the nearer end's own route.
-    private void PickEnd(StuntZone zone, Vector3 at)
+    // The open zone whose lead-in point is nearest, on the end and run a pick of it would take.
+    private int Nearest(IReadOnlyList<StuntZone> zones, Vector3 at)
     {
-        var ribbon = zone.Route!;
-        bool far = at.DistanceSquaredTo(ribbon.End(true)) < at.DistanceSquaredTo(ribbon.End(false));
-        if (LeadIn(zone, far) == null && LeadIn(zone, !far) != null)
+        int best = -1;
+        float bestSq = float.PositiveInfinity;
+        for (int i = 0; i < zones.Count; i++)
+        {
+            if (zones[i].Completed || zones[i].Route is not { } ribbon)
+            {
+                continue;
+            }
+
+            var (far, route) = EndFrom(ribbon, at);
+            float sq = at.DistanceSquaredTo(route.End(far) - (Into(route, far) * LeadInM));
+            if (sq < bestSq)
+            {
+                best = i;
+                bestSq = sq;
+            }
+        }
+
+        return best;
+    }
+
+    private void PickEnd(StuntZone zone, Vector3 at) => (_farEnd, _route) = EndFrom(zone.Route!, at);
+
+    // The ribbon end nearer `at`, or the other when that one is refused, and the route its run flies
+    // from there. With both refused it is the nearer end's own route.
+    private (bool Far, DangerZoneRibbon Route) EndFrom(DangerZoneRibbon ribbon, Vector3 at)
+    {
+        bool far = NearerEnd(ribbon, at);
+        if (RunFrom(ribbon, far) == null && RunFrom(ribbon, !far) != null)
         {
             far = !far;
         }
 
-        _farEnd = far;
-        _route = LeadIn(zone, far) is > 0f and var metres ? ribbon.WithLeadIn(far, metres) : ribbon;
+        return (far, RunFrom(ribbon, far) ?? ribbon);
     }
 
-    private float? LeadIn(StuntZone zone, bool far)
+    // The run from one end, null where it is refused.
+    private DangerZoneRibbon? RunFrom(DangerZoneRibbon ribbon, bool far)
     {
-        var key = (zone.Route!, far);
-        if (!_leadIns.TryGetValue(key, out var metres))
+        if (Runs == null)
         {
-            metres = LeadInFor(zone, far, Blocked);
-            _leadIns[key] = metres;
+            return ribbon;
         }
 
-        return metres;
+        if (Runs.TryGetValue((ribbon, far), out var run))
+        {
+            return run;
+        }
+
+        // ⚠ Do not let an unlisted end pass quietly. It is a wiring fault that drops the lead-in.
+        _unlisted ??= new();
+        if (_unlisted.Add((ribbon, far)))
+        {
+            Log.Warn("flight", $"stunt race bot: '{ribbon.Name}' {(far ? "far" : "near")} end is not in the session's run table, so it runs its own route");
+        }
+
+        return ribbon;
+    }
+
+    /// <summary>The run from each zone end, keyed by the zone's route and the end:
+    /// <see cref="RunsFrom"/>'s table.</summary>
+    public sealed class RunTable : Dictionary<(DangerZoneRibbon Route, bool Far), DangerZoneRibbon?>
+    {
     }
 }

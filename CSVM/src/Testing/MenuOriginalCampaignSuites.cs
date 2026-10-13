@@ -199,7 +199,7 @@ internal static class MenuOriginalCampaignSuites
         var keys = shell.Rows.Select(row => row.Key).ToList();
         ctx.Check(keys.Count == cabin.Length && cabin.All(keys.Contains) && shell.FocusedKey == nameof(BoardButton.NextMission),
             $"the cabin's five plaques and HOST CO-OP, focus on NEXT MISSION ({string.Join(",", keys)}; {shell.FocusedKey})");
-        Press(host, seat, Down);
+        OriginalWalk.WalkTo(shell, nameof(BoardButton.PreviousMissions), frame => Press(host, seat, frame));
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions && shell.Rows.Count == 5,
             $"PREVIOUS MISSIONS opens the contents, the career row over four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
@@ -332,7 +332,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(briefing.Reveal.Elements.Count > freshElements || briefing.Reveal.RevealedObjectives.Count > 0,
             $"a minute after REPLAY at most places more on the map than a fresh reveal or reveals an objective ({briefing.Reveal.Clock:0.0}s, {freshElements} to {briefing.Reveal.Elements.Count} elements, {briefing.Reveal.RevealedObjectives.Count} objectives)");
 
-        Press(host, seat, Down);
+        OriginalWalk.WalkTo(shell, "ReturnToCabin", frame => Press(host, seat, frame));
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && audio.Ends == 1,
             $"RETURN TO CABIN mid-narration ends it, which lifts the duck ({shell.Screen}, ends {audio.Ends})");

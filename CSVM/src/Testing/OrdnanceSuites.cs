@@ -223,8 +223,8 @@ internal static class OrdnanceSuites
         "a LOCK_ON round carries its launcher's velocity and sheds it linearly over LOCK_ON " +
         "seconds (BL-290): wep_14 launched at 120 m/s leaves at 180, reads 120 at half the " +
         "window and holds its authored 60 from 2.5 s on, while a slow launch barely changes; " +
-        "the decay runs for a LOCK_ON round holding NO target too (the recorded divergence " +
-        "from the original's target-gated step); and a gun and a motorless rocket both carry " +
+        "the decay runs for a LOCK_ON round holding NO target too (the recorded remake-only rule " +
+        "over the original's target-gated step); and a gun and a motorless rocket both carry " +
         "their launcher's velocity undecayed, since the gate is the MOTOR round's alone")]
     internal static void LaunchVelocityDecay(TestContext ctx)
     {
@@ -303,8 +303,8 @@ internal static class OrdnanceSuites
             ctx.Check(Mathf.Abs(slow0 - (cruise + 10f)) < 0.5f && Mathf.Abs(slowEnd - cruise) < 0.5f,
                 $"a torpedo launched at 10 m/s barely slows at all launch={slow0:0.##} settled={slowEnd:0.##}");
 
-            // ⚠ The recorded divergence: the original's decay lives inside its target-gated
-            // steering step, ours runs for every LOCK_ON round, so a torpedo fired with nothing
+            // ⚠ The recorded remake-only rule: the original's decay lives inside its target-gated
+            // steering step, and ours runs for every LOCK_ON round. A torpedo fired with nothing
             // selected still settles onto its authored 60 rather than flying at 180 forever.
             float untargeted = SpeedAt(torpedo, 120f, null, 4f);
             ctx.Check(Mathf.Abs(untargeted - cruise) < 0.5f,
@@ -1306,8 +1306,8 @@ internal static class OrdnanceSuites
             ctx.Check(dumb != null && dumbTurn > 0.75f * dumbExpected && dumbTurn < 1.25f * dumbExpected,
                 $"a sentinel-rate round with a target flies effectively straight, turning only its {torpedo.TurnRate:0.###} rad/s turned={Mathf.RadToDeg(dumbTurn):0.###}° in 4 s");
 
-            // 3. No target: the launcher's velocity still decays (the recorded divergence) and the
-            // heading never moves.
+            // 3. No target: the launcher's velocity still decays (the recorded remake-only rule)
+            // and the heading never moves.
             live.Clear();
             live.Spawn(torpedo, muzzle, Vector3.Forward * 120f);
             for (int i = 0; i < Mathf.RoundToInt((torpedo.LockOn ?? 0f) / dt); i++)

@@ -181,8 +181,12 @@ game's, not the host's, and never names a seat. A second local seat keeps its ta
 each, so it has no counterpart there. Cause 3 is a Zeppelin vs Zeppelin hull's broadside: the dying
 client names the hull by placement index in the report's source field, and the notice carries that
 hull's lobby team in its ninth byte, which names the line and sets the team's term on every guest
-([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). The host's `0x22` hit names
-the hull in the byte after the part, where a round no seat fired came from a broadside.
+([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). Cause 4 with no killer is
+a hull's turret, a remake-only rule: the report's source field names the hull the same way, the
+notice carries the hull's lobby team in its ninth byte, which names the "Killed by %1 Turret" line,
+and no guest sets a term from it. The host's `0x22` hit names the hull in the byte after the part
+when a round no seat fired came from a hull: the placement index for a broadside, and `0x40` plus
+the index for a turret (`ZeppelinVersus.TurretRound`).
 Splitscreen Dogfight posts the same lines in every pane, named by player tag.
 
 ## The zeppelin state packet
@@ -397,7 +401,7 @@ above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
 the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
-line and race call at `0x67` to `0x6A` ("Stunt race" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
+line and race call at `0x67` to `0x6A` ("Stunt race" below), and the lobby's co-op persisted object at `0x6B`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -608,9 +612,12 @@ leave the guest's copy high until the next hit.
 
 A hit on an AI is decided once: by the host for its own rounds and for every round no seat fired,
 and by a guest for its own seat's rounds, which it claims with `0x47`. A world pool is spent only
-on the host, which simulates every round, a guest's included, from the fire events; a guest's
-world runtime reports a struck pool as hit and spends nothing. A ram on an aeroplane flown
-elsewhere spends nothing on it either, since its owner's own sweep resolves that half.
+on the host, which simulates every round, a guest's included, from the fire events; a guest's world
+runtime reports a struck pool as hit and spends nothing. A break that spends no pool, a
+`CALL_ANIMATION` chain kill or an objective's `WAKE_ANIM` running a death definition, sends no code
+3: each guest makes it in its own replay of the pool event or the director transition behind it. A
+ram on an aeroplane flown elsewhere spends nothing on it either, since its owner's own sweep
+resolves that half.
 
 The debug kill key (F17) on a guest kills nothing locally. On an aeroplane it offers the victim's
 hit router one lethal round from the guest's own fit, so an AI is claimed with `0x47` and another
@@ -699,7 +706,7 @@ The kinds are `NetPositionalStart`:
 | 1 Landing row | host to all | the row the host's trigger started, and the seat whose flying started it |
 | 2 Ladder holder | host to all | the seat now holding the switch, or no seat |
 | 3 Auto-land held | guest to host | the guest's own seat has the auto-land button down while offered the prompt, or has let it go |
-| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, no seat |
+| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` or `EXECUTION_BY_RANGE` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, and the seat the episode owner, where the start or pass names one |
 
 A guest starts the named row for the named seat's rig, which makes that seat the episode's owner
 on the guest as on the host. An `auto` row's prompt is per pane, so a guest still tests its own
@@ -717,6 +724,22 @@ the world, so it names an ordinal both ends already hold, and the host's samples
 guest. A guest's scripted player, which an episode claimed by nobody
 belongs to, is the host's first seat.
 
+An `EXECUTION_BY_RANGE` gate whose definition reaches a `CALLBACK` is the host's too. The host
+reads it over its whole field and claims the start for the seat whose aeroplane is nearest the
+gate's anchor, its episode owner (`AnimRuntime.RangeTriggerOwner`, wired by
+`LandingApproachRuntime.Bind`). It sends kind 4 as one pass carrying that seat and its withdrawal.
+A guest never reads such a gate against its own field: it starts the definition on the unread pass
+and claims it for the same seat. C1/M02's hangar drop is one, so the pilot who flies into the
+hangar owns the drop and its 965 on every end. A start made inside a mission trigger's own start
+names no seat, and keeps that trigger's claim. Of the shipped `EXECUTION_BY_RANGE` definitions,
+C1/M02's `hangar_drop` (75 m on `hangar_3`) is the only one whose closure raises a code. The
+episode's `Anim` is already the definition that raises its codes, so the claim does not lengthen
+it. In C1/M02 its one caller, `hangar3_doors`, is called 5 s into either fuel depot's chain
+reaction and invalidates itself first, so the gate is armed once per world, never inside a
+trigger's start, and one pass is all a guest ever holds for it. ⚠ Do not make a code-raising
+range gate re-armable within one world: a guest would start it on the earlier, unread pass. Every
+other `EXECUTION_BY_RANGE` gate stays each end's own read over its whole field.
+
 A `PlayerRange` gate is the host's when its definition, or one it starts through
 `CALL_ANIMATION`, raises a `CALLBACK` (`Mech3/Anim/RangeGateAuthority.cs`). The host tests it
 over its whole field and sends kind 4 when the verdict changes; a guest answers the gate with the
@@ -724,6 +747,20 @@ host's last verdict and never tests it against its own field. A pass the guest's
 yet is held until it is read, so a host pass shorter than the gate's poll still starts the
 definition once on the guest. The gate is named by its definition, anchor and radius in metres
 squared (`blacke_drop/blacke_marker/4096`), and the wire carries that name's FNV-1a hash.
+
+A pass names the seat nearest the gate's anchor as the gate opened, and that seat holds while the
+gate stays open, however the definition's own loop re-polls it. On each end, the first callee of
+the opening branch whose closure raises a code claims the episode for that opening's seat
+(`AnimRuntime.RangeTriggerOwner`). The gate's definition is never claimed: it may loop forever, and
+so would never end its episode. In C4/M03 that callee is `bdplayer`, which raises the drop's first
+code and is the episode's `Anim` already, so the claim leaves the episode's length as it was. The
+pilot who flies into the drop marker owns the Blacke drop on every machine, and only that pilot's
+aeroplane rides the player marker. Each end claims once per opening, within the advance the gate
+opened in: the loop's later polls of an open gate re-issue the branch's calls and claim nothing,
+and `CutsceneController.Own` refuses any claim while an episode plays. A guest counts the host's
+openings in wire order, so a close and reopen between two of its polls is still a new opening for
+the new seat. A pass made inside a mission trigger's own start names no seat, and an episode with
+no seat belongs to the scripted player.
 
 Of the 216 shipped animation names carrying a `PlayerRange` condition (1016 definitions over the
 shared, chapter and mission sources), C4/M03's `blacke_drop` is the only one whose closure raises a
@@ -1105,9 +1142,9 @@ The remake follows the original where it speaks and fills in what DirectPlay did
 
 ### Campaign co-op boards
 
-A co-op guest follows the host's boards through six more lobby messages, minted at `0x50` to
-`0x52`, `0x59`, `0x5A` and `0x5F` since the original has no campaign across a link. None reaches a
-session.
+A co-op guest follows the host's boards through seven more lobby messages, minted at `0x50` to
+`0x52`, `0x59`, `0x5A`, `0x5F` and `0x6B` since the original has no campaign across a link. None
+reaches a session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
@@ -1117,6 +1154,7 @@ session.
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
 | `0x5F` | Co-op hangar plane | reliable, host to each guest | the plane's place in the hangar at 4, the hangar's plane count at 5, the seat holding it at 6 (`0xFF` none), airframe at 7, flags at 8 (bit 0 a custom build), the stored fit at 9, the 26 build bytes and 16-byte build name as `0x5D`'s at 21, the plane's name in 33 bytes at 63 (96 bytes) |
+| `0x6B` | Co-op persisted object | reliable, host to each guest | chapter at 4, flags at 5 (bit 0 destroyed, bit 1 the launch's first word), the capturing story position as a signed 16-bit word at 6 (-1 for none), the gamez node index at 8 (-1 for the one word of an empty log), health as a float at 12 (16 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
 each, each the profile's stored value plus one so that zero reads as unset (stock).
@@ -1149,6 +1187,16 @@ the campaign's `wingman_1` from that word, and both machines build the host-owne
 same def with the same damage parts. A guest with no word flies the block's own def and says so in
 a warning; it never substitutes its own default. `0xFF` names no pick, which also flies the block's
 def. A guest a patch older drops `0x59` as unknown and flies the old default.
+Beside the wingman the host sends one co-op persisted object per state of its profile's
+cross-mission persist log, every chapter, as the profile file stores them. The launch's first word
+is marked, and an empty log goes as one marked word with no object. The guest's lobby drops what it
+held on the marked word and keeps one state per chapter and node, so a host that seats another
+profile leaves no earlier wreckage behind on its guests. The guest's director takes
+them into its in-memory profile, so its world opens the mission on the host's wreckage silently,
+before its first step, as the host's does. Nothing reaches the guest's disk. Every launch sends the
+whole log, so a guest that joined between missions has it, and a guest joining while the host
+flies waits in the cabin for the next launch. A guest a patch older drops `0x6B` and opens on the
+bootstrap world.
 A co-op film names the campaign film the host's board has up: a chapter's opening film before the
 cabin, or the closing film before the book. The host sends it playing when the film starts and
 again with the same ordinal and playing clear when it ends, played out or skipped, and it goes
@@ -1197,7 +1245,7 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture, bit 6 the host lands on Game Scores at the end, a remake bit), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch), team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 36 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 16 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (584 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
@@ -1229,6 +1277,11 @@ pick against its rules before counting it Ready, which the original does not. An
 ammunition or rocket refuses Ready once and resets the fit, as the original does; the hardpoint
 counts are kept, since the pylons stay empty either way. A co-op launch sends the host's own custom
 planes, and its guests fly stock.
+
+The roster names each row's custom plane so every end's player list can show it, where the build
+itself reaches only the host before the launch. The roster is 584 bytes, and a reader refuses any
+other width. Two builds share a lobby only on the same MAJOR.MINOR, so a change to the roster's
+width must not reach a patch release.
 
 ### Lobby teams
 
@@ -1279,7 +1332,8 @@ no name. The launch refusals, in order:
 3. A team match with one team: 10519.
 4. A player on no team in a team match: the remake's own line.
 5. Two teams whose sizes differ by more than one player: the remake's own line. A machine's
-   splitscreen seats fly on its team and count as players.
+   splitscreen seats fly on its team and count as players. A field with bots is never refused on
+   this line: the host sets the odds, as four people against eight bots.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|

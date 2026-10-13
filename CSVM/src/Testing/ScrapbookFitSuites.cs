@@ -16,8 +16,8 @@ namespace CSVM.Testing;
 /// <c>SCRAPBOOK.CSV</c> rows are opened one at a time through a real
 /// <see cref="CampaignScrapbookZoomPage"/>. Each block is wrapped in the installed Windows face
 /// its langui <c>[FONTID]</c> names. Ten blocks are taller than their box at the authored point
-/// size. The renderer steps such a block down a point at a time until it fits. That departure is
-/// recorded in <c>docs/formats/campaign-screens.md</c>, "Fitting a block to its box".
+/// size. The renderer steps such a block down a point at a time until it fits. That remake-only
+/// rule is recorded in <c>docs/formats/campaign-screens.md</c>, "Fitting a block to its box".
 /// </summary>
 internal static class ScrapbookFitSuites
 {

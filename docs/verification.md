@@ -1069,11 +1069,12 @@ member, and it does not go here.
   it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
   suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
   only its C# wrapper, so a test node is freed with `Free()`.
-- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out: the
-  world's animation and the cutscene host advance in the frame, so the film holds until a skip and
-  whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
-  the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
-  3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
+- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out and never
+  runs a death's staggered `CALL_ANIMATION` chain: the world's animation and the cutscene host
+  advance in the frame, so the film holds until a skip and a chain kill never lands. Advance the
+  world runtime and tick the cutscene beside each step.** With both added, CM09's opening film handed
+  off by itself after 3193 steps on host and guest, and CM01's fuel-truck kill went from 1 destroyed
+  pool, the truck's, to 8 with the bridge among them.
 - **INSTR-98**, **Before calling a scripted trace a fault, read the same definition's own timed
   events against it: an effect the data fires at a node at a given instant says where the author
   put that node then.** C1/M05's attack-balloon trace reaches the sea at 57 s, which reads as a
@@ -1108,6 +1109,11 @@ member, and it does not go here.
   objects, never on the first drop, which returns only part.** 128 drawn shaders a round: the first
   free returned 0.43 of 0.83 GB, later rounds held a 1.31 to 1.36 GB plateau, and the keeping control
   grew 0.62 to 0.71 GB a round.
+- **INSTR-104**, **Before a suite aims a round at a destructible, ray-test a point whose collider
+  resolves to that pool: an object's drawn geometry can answer for no pool, and a miss spends
+  nothing or kills a neighbour.** On C3's `susp_bridge` only `rope1`'s collider resolves to the pool,
+  and rounds aimed along the cable at it flew past into `bridge_truck01`, whose chain then dropped the
+  bridge with no shooter credited.
 
 ## SRC, sources and documents
 

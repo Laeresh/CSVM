@@ -14,13 +14,13 @@ namespace CSVM.Mech3.Anim;
 /// </summary>
 public sealed class CutsceneFastForward
 {
-    /// <summary>The held rate. TUNE: nothing in the original sets it, so this is fast enough to be
-    /// worth holding the key for and slow enough to still read the scene.</summary>
+    /// <summary>The held rate. Remake-only rule: nothing in the original sets it. It is fast enough
+    /// to be worth holding the key for and slow enough to still read the scene.</summary>
     public const float Target = 4f;
 
-    /// <summary>Seconds the rate takes to cross the whole span, either way. TUNE on the same
-    /// standing as <see cref="Target"/>: short enough to answer the key, long enough that the
-    /// picture and its sound step up rather than jump.</summary>
+    /// <summary>Seconds the rate takes to cross the whole span, either way. A remake-only
+    /// rule on the same standing as <see cref="Target"/>. It is short enough to answer the key and
+    /// long enough that the picture and its sound step up rather than jump.</summary>
     public const float RampSeconds = 0.25f;
 
     /// <summary>Is the key down? The caller decides what an input means and whether this episode

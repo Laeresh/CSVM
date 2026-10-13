@@ -31,9 +31,10 @@ public sealed partial class ZeppelinRuntime
 
     /// <summary>Whether a broadside round carries its hull's
     /// <see cref="Flight.Modes.ZeppelinVersus.BroadsideShooter"/> id rather than
-    /// <see cref="ProjectilePool.NoShooter"/>, so a pilot it downs is charged to that hull. Set by
+    /// <see cref="ProjectilePool.NoShooter"/>, so a pilot it downs is charged to that hull. A turret
+    /// woken on the hull takes its <see cref="Flight.Modes.ZeppelinVersus.TurretShooter"/> id. Set by
     /// Zeppelin vs Zeppelin alone; every other mission's rounds stay unowned.</summary>
-    public bool NamesBroadsideRounds { get; set; }
+    public bool NamesHullRounds { get; set; }
 
     /// <summary>The live broadside machine, for the suite's state assertions; null for an
     /// unknown node or a record without cannons.</summary>
@@ -255,7 +256,7 @@ public sealed partial class ZeppelinRuntime
         var sideNormal = ZeppelinBroadside.SideNormal(zep.Motion.YawRad, zep.Motion.PitchRad,
             side, broadside.RightSign);
         zep.LastVolleyDirs.Clear();
-        int shooter = NamesBroadsideRounds
+        int shooter = NamesHullRounds
             ? Flight.Modes.ZeppelinVersus.BroadsideShooter(_live.IndexOf(zep))
             : ProjectilePool.NoShooter;
         int fired = 0;

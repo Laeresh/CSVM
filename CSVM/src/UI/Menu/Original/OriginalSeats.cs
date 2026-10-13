@@ -294,8 +294,8 @@ public sealed partial class OriginalShell
     }
 
     // The sortie screen's rows: the chapters and BACK in column 0, the aircraft window and FLY in
-    // column 1. Rows outside the window keep their place in the column for the keyboard but are
-    // neither drawn nor hit; the window slides so the focused row is always inside it.
+    // column 1. Rows outside the window keep their index but are neither drawn, hit nor stepped
+    // onto. The window slides so the focused row is always inside it.
     private void SortieRows(List<OriginalRow> rows)
     {
         var roster = _setup.Roster;
@@ -449,7 +449,7 @@ public sealed partial class OriginalShell
 
     // FLY: seat 0's confirmation and the launch, reached by its own press and by the per-seat
     // walk's last confirm. Free Flight leaves through its feature with the chapter handed over;
-    // Dogfight, the remake's own mode with no feature of its own, leaves through the setup's exit.
+    // Dogfight, remake-only with no feature of its own, leaves through the setup's exit.
     private MenuExit? Fly()
     {
         if (!FlyEnabled() || Seat0 is not { } seat)

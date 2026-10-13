@@ -72,6 +72,25 @@ This page read the directive's absence as both broadsides staying off in every s
 so called event 9 unreachable. The side setup engages them itself, above. Do not read a
 `COMPLETED_ZEPCANNONS` census as the whole of the engage flag's writers again.
 
+## Turrets
+
+[Evidence: decoded] The side setup hands each hull's team to its turrets and wakes none of them.
+`FUN_004bf030` is one call, `FUN_004bee80(zep+0x1c, zep+0xe0)`, a recursive walk of the hull's
+node that calls slot `+8` of the target entry (`FUN_004a2850`) and of the turret (`FUN_004a9890`)
+found on each node with the team; it writes no `ACTIVATED` byte. The subtree walk that does write
+turret byte `+0x6e` is `FUN_004bef70` ([`../formats/turrets.md`](../formats/turrets.md), "Waking a
+whole subtree"), reached only from the script op `FUN_00469af0` (four sites in the script dispatcher
+`FUN_0046a490`) and, through `FUN_004bf060`, from the Instant Action builder `FUN_0045a390`
+(`0x45b8f1`, `0x45b943`) and the hull's death `FUN_004bf0b0` (`0x4bf0e3`, with 0). The host-only
+tail of `FUN_00496490`, `FUN_004bd370`, writes 1 to every zeppelin record's `+4`, not to a turret.
+[Evidence: data] Both `MP3` hulls carry 14 rings each, every one shipped `ACTIVATED 0`, and the
+`MP3` scripts carry no rules, so in the original a Zeppelin vs Zeppelin hull's turrets never fire.
+
+[Evidence: decoded] A turret's target pick reads the team: the gun update `FUN_004aabb0` builds its
+query with its own `+0x8` team and the picker rejects a candidate the hostility predicate does not
+pass ([`targeting.md`](targeting.md), "The turret gunner runs the same predicate"). With the side
+setup's team on it, a ring would take only the other side's aircraft.
+
 ## Scoring
 
 [Evidence: decoded] A gas bag's record keeps two bytes: `+0x10`, its death sent, and `+0x11`, its
@@ -190,6 +209,25 @@ a death and no score, and the side's term is set to `score_zep_kill`. The death 
 carries that side's team, so every guest sets the same term and posts "Killed by %1 Zeppelin" with
 the team's name. A broadside cannon a seat destroys scores its bound gas bag, as above; a gas bag a
 hull's round destroys is spent and scores nobody, since no seat fired it.
+
+**Remake-only rule, the hulls' turrets.** The original never wakes them in this mode (above). The
+remake wakes every turret on both hulls at the match's start on every machine
+(`ZeppelinRuntime.WakeTurrets`), after the side setup has put each on its side's team, so each
+ring fires at the other side's aircraft and never its own. Like the broadsides, every machine runs
+its own copy and the host decides each hit, sending it to the machine that flies the victim.
+
+**Remake-only rule, a turret's kill.** The original never fires these turrets in this mode, so it
+has no scoring for them. A pilot a hull's turret downs takes a death and nothing else: no
+`score_suicide`, no kill for any seat, and no side term. The death still counts toward Limited
+Lives and the pilot returns as from any death. Each turret's rounds carry its hull's
+`ZeppelinVersus.TurretShooter` id, so the hit the host sends names the hull past every broadside's
+index (`ZeppelinVersus.TurretRound`), and the victim's machine reports cause 4 with no killer and
+the hull's placement index. The host counts the death without the penalty
+(`VersusMatch.RegisterDeath` with `suicide: false`) and sends the victim's line as for any death.
+The death notice carries cause 4 and the hull's side's team, so every machine posts the victim's
+name over row 7065, "Killed by %1 Turret", filled with that team's name (for example "Killed by
+Blue Angels Turret"). Cause 4 with a killer seat is a turret owner's kill, and every other mode's
+emplacements are unowned. A broadside's kill is event 9 for the hull's side.
 
 **Remake-only rule, bots.** The original seats no bots. The remake's bots fly Zeppelin vs Zeppelin
 on a host, and each step the host re-decides each bot's target (`Flight/Ai/ZvzBotObjective.cs`).

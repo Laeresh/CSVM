@@ -276,9 +276,9 @@ internal static class MenuOriginalWrapupSuites
         ctx.Check(shell.FocusedKey == OriginalWrapupScreen.ContinueKey,
             $"the cursor rests on CONTINUE ({shell.FocusedKey})");
 
-        shell.Step(new MenuCommands { MoveY = 1 });
+        OriginalWalk.WalkTo(shell, OriginalWrapupScreen.PrintKey(0), frame => shell.Step(frame));
         ctx.Check(shell.FocusedKey == OriginalWrapupScreen.PrintKey(0),
-            $"down from CONTINUE reaches the first print ({shell.FocusedKey})");
+            $"the keyboard walks from CONTINUE onto the first print ({shell.FocusedKey})");
         ctx.Check(shell.Compose().Fills.Any(f => f.Border && f.X == prints[0].X && f.Y == prints[0].Y),
             $"…which draws the focus box round it");
         shell.Step(new MenuCommands { Accept = true });
@@ -295,10 +295,39 @@ internal static class MenuOriginalWrapupSuites
                 && viewer?.IsOpen == false && shell.FocusedKey == OriginalWrapupScreen.PrintKey(0),
             $"Back closes it, on the page still, with the cursor back on its print ({shell.Screen}, {shell.FocusedKey})");
 
-        shell.Step(new MenuCommands { MoveY = -1 });
-        shell.Step(new MenuCommands { MoveY = -1 });
-        ctx.Check(shell.FocusedKey == OriginalWrapupScreen.PrintKey(pending - 1),
-            $"up past CONTINUE wraps to the last landed print, passing over the pending one ({shell.FocusedKey})");
+        var walk = new List<string>();
+        for (int i = 0; i < 2; i++)
+        {
+            shell.Step(new MenuCommands { MoveY = -1 });
+            walk.Add(shell.FocusedKey);
+        }
+
+        // The prints stand as a grid. Up from the first print wraps to the foot of its own column and
+        // climbs it.
+        var column = Enumerable.Range(0, prints.Count).Where(i => i != pending && prints[i].X == prints[0].X)
+            .OrderByDescending(i => prints[i].Y).Select(OriginalWrapupScreen.PrintKey).ToList();
+        ctx.Check(column.Count >= 3 && walk.SequenceEqual(column.Take(2)),
+            $"up from the first print wraps to the foot of its column and climbs it ({string.Join(" -> ", walk)}, column {string.Join(",", column)})");
+
+        // The press that would land on the print still on its way, were it live, is read off the
+        // page. So the check holds whichever column that print stands in.
+        string heldKey = OriginalWrapupScreen.PrintKey(pending);
+        var live = shell.Rows.Select(r => r.Key == heldKey ? r with { Enabled = true } : r).ToList();
+        int heldRow = live.FindIndex(r => r.Key == heldKey);
+        var toward = Enumerable.Range(0, live.Count).Where(i => live[i].Enabled && i != heldRow)
+            .SelectMany(i => new[] { (Row: i, X: 0, Y: 1), (Row: i, X: 0, Y: -1), (Row: i, X: 1, Y: 0), (Row: i, X: -1, Y: 0) })
+            .FirstOrDefault(m => OriginalFocus.Step(live, shell.Lists, m.Row, m.X, m.Y) == heldRow, (Row: -1, X: 0, Y: 0));
+        string start = toward.Row >= 0 ? live[toward.Row].Key : "none";
+        bool reached = false;
+        if (toward.Row >= 0)
+        {
+            OriginalWalk.WalkTo(shell, start, frame => shell.Step(frame));
+            reached = shell.FocusedKey == start;
+            shell.Step(new MenuCommands { MoveX = toward.X, MoveY = toward.Y });
+        }
+
+        ctx.Check(reached && shell.FocusedKey != heldKey && shell.FocusedKey != start,
+            $"a press towards the print still on its way passes over it ({start} by ({toward.X}, {toward.Y}) onto {shell.FocusedKey})");
 
         var held = prints[pending];
         Click(host, seat, fit, held.X + (held.Width / 2f), held.Y + (held.Height / 2f));

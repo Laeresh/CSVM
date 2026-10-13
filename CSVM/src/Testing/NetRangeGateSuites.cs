@@ -159,14 +159,14 @@ internal static class NetRangeGateSuites
             };
             float firstSent = float.NaN;
             var send = host.RangeGates.Decided!;
-            host.RangeGates.Decided = (gate, passed) =>
+            host.RangeGates.Decided = (gate, passed, seat) =>
             {
                 if (passed && float.IsNaN(firstSent))
                 {
                     firstSent = now;
                 }
 
-                send(gate, passed);
+                send(gate, passed, seat);
             };
 
             // ABLE-TO-FAIL CONTROL: the guest's own human sits inside the gate, where its own read
@@ -218,6 +218,8 @@ internal static class NetRangeGateSuites
                 ends[e].OnInstanceStarted = saved[e].OnInstanceStarted;
                 ends[e].RangeGates.Decided = null;
                 ends[e].RangeGates.HostVerdict = null;
+                ends[e].RangeGates.HostSeat = null;
+                ends[e].RangeGates.HostOpenings = null;
             }
         }
 

@@ -70,9 +70,9 @@ public sealed class OriginalKeysPage : IOriginalOptionsPage
     private const float PlateWidth = 788f;
     private const float ArrowWidth = 16f;
 
-    // The Stick column is this port's own, so no widget authors it. The plate paints two dividers,
-    // leaving three panels, and the Control A panel's right half is the one space its keys leave
-    // empty. The column stands there, ending short of the divider before Control B.
+    // The Stick column is a remake-only column, so no widget authors it. The plate paints two
+    // dividers, leaving three panels, and the Control A panel's right half is the one space its keys
+    // leave empty. The column stands there, ending short of the divider before Control B.
     private const string StickHead = "Stick";
     private const float StickX = 535f;
     private const float StickWidth = 77f;

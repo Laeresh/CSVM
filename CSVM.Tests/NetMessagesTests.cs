@@ -1040,12 +1040,13 @@ public class NetMessagesTests
         {
             new DogfightLobbySeat("Host", 5, true, true, 2, true),
             new DogfightLobbySeat("Lucy", 1, false, false, 2),
-            new DogfightLobbySeat("Red Baron Jr", 10, true, false),
+            new DogfightLobbySeat("Red Baron Jr", 10, true, false, Plane: "Flying Dutchman"),
         });
+        Assert.Equal(584, DogfightRosterMessage.Size);
         Assert.Equal(DogfightRosterMessage.Size, sent.Write(buffer));
         Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
-        Assert.Equal("Red Baron Jr", got.Rows[2].Name);
+        Assert.Equal(("Red Baron Jr", "Flying Dutchman", ""), (got.Rows[2].Name, got.Rows[2].Plane, got.Rows[1].Plane));
         Assert.Equal((2, true), (got.Rows[0].Team, got.Rows[0].Captain));
         Assert.Equal((2, false), (got.Rows[1].Team, got.Rows[1].Captain));
         Assert.Equal(0x54, (int)NetMessageType.DogfightRoster);
@@ -1055,7 +1056,7 @@ public class NetMessagesTests
         {
             new DogfightLobbySeat("Host", 5, true, true, 2, true),
             new DogfightLobbySeat("Lucy", 1, true, false, 2),
-            new DogfightLobbySeat("Red Baron Jr", 10, true, false),
+            new DogfightLobbySeat("Red Baron Jr", 10, true, false, Plane: "Flying Dutchman"),
         });
         Assert.NotEqual(sent, other);
         Assert.False(DogfightRosterMessage.TryRead(buffer.AsSpan(0, DogfightRosterMessage.Size - 1), out _));
@@ -1292,6 +1293,31 @@ public class NetMessagesTests
         Span<byte> seatFit = stackalloc byte[CoopSeatFitMessage.Size];
         new CoopSeatFitMessage(7, sent.Fit).Write(seatFit);
         Assert.False(CoopWingmanMessage.TryRead(seatFit, out _));
+    }
+
+    [Fact]
+    public void ACoopPersistedObjectRoundTripsItsChapterSeqNodeAndStateInSixteenBytes()
+    {
+        Assert.Equal(16, CoopPersistMessage.Size);
+        Assert.Equal(0x6B, (int)NetMessageType.CoopPersist);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopPersist));
+        Span<byte> buffer = stackalloc byte[CoopPersistMessage.Size];
+        foreach (var sent in new[]
+        {
+            new CoopPersistMessage(6, true, 0, 3021, 0f),
+            new CoopPersistMessage(2, false, -1, 70000, 12.5f, Opens: true),
+            new CoopPersistMessage(0, false, -1, CoopPersistMessage.NoNode, 0f, Opens: true),
+        })
+        {
+            Assert.Equal(CoopPersistMessage.Size, sent.Write(buffer));
+            Assert.True(CoopPersistMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        // ABLE-TO-FAIL CONTROL: a film word is not a persisted object.
+        Span<byte> film = stackalloc byte[CoopFilmMessage.Size];
+        new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2).Write(film);
+        Assert.False(CoopPersistMessage.TryRead(film, out _));
     }
 
     [Fact]

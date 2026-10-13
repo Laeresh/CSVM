@@ -1628,8 +1628,13 @@ aeroplane's live nose, so a drop's first leg is the best-aligned one rather than
 it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
 `Session/World/StuntRaceBots.cs` on the machine that flies them) go round the course this way:
 
-1. The zones are taken in course order, the mission's `dzones` order, the first not yet cleared in
-   the run. A zone whose route builds no ribbon is passed over, so its course is never completed.
+1. The zones are taken nearest first, not in the mission's `dzones`
+   order. The next zone is the one not yet cleared in the run whose lead-in point (2 below) is
+   nearest the bot, measured on the run a try at it would fly: from its nearer end, or the other
+   where that one is refused, with any lead-in straight (3 below). The pick holds until a try at the zone ends, a crash's return or a rerun: picking each step would
+   flip between two zones at about the same distance, and a fluffed zone keeps its pick. It is a
+   greedy route, not the shortest tour. A zone whose route builds no ribbon is passed over, so its
+   course is never completed.
 2. Each try at a zone enters from the ribbon end nearer the bot. A stunt course authors no `aiv`
    net between its zones, so between them the bot steers freely, on bare heading and altitude
    orders, for a lead-in point 600 m short of that end along the ribbon's line into it
@@ -1646,11 +1651,15 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its route. A zone needs one when the rail alone, locked just inside 105 m of the entry, misses
    a gate from any of 30 lock states (`StuntBotObjective.RailClears`): five bearings within the
    cone's 30 degrees of the ribbon's line, each level and 20 degrees down, at 60, 90 and 135 m/s
-   (an ace locks at about 131). The lead-in is then the shortest whole step of 50 m, up to 300 m
+   (`TopLockSpeedMps`; an ace locks at about 131, and the `stunt-race-bot` suite fails a lock
+   faster than 135). The lead-in is then the shortest whole step of 50 m, up to 300 m
    (`LeadInStepM`, `MaxLeadInM`), that passes; the added vertices are spaced at the first chord's
    length, so the straight is at least that long. A straight the world blocks along its length,
    probed by one ray, refuses that end, and the bot takes the zone from the other; with both ends
-   refused it flies the nearer end's own route. A campaign racer and a person fly the route as it is.
+   refused it flies the nearer end's own route. The decision does not depend on the bot, so it is
+   made once for every zone end at session start, against the built world, and shared by all the
+   session's bots (`StuntBotObjective.RunsFrom`); no race frame pays for it. A campaign racer and a
+   person fly the route as it is.
 4. Its tier sets its lever between zones and on the approach (`AiPilot.CruiseThrottle`: 1.0 ace,
    0.85 veteran, 0.7 novice) and the odds that a try is fluffed (0.05, 0.2, 0.35). A fluffed try passes 100 m over
    the entry (`FluffAboveM`) and comes round for another, from whichever end is nearer then. The rail
@@ -1659,14 +1668,15 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its best. A crash returns it to its last zone after `AircraftLifecycle.AutoRespawnDelay`, the
    unattended return, since nobody presses R for it. The return stands it on that zone's route,
    often low between walls, so it locks straight onto the ribbon there and rides it out
-   (`AiPilot.RejoinDangerZone`) rather than flying free from it.
+   (`AiPilot.RejoinDangerZone`) rather than flying free from it. The next pick is made where that
+   ride ends, not at the return point.
 6. On the rail a bot sweeps one origin point, as every AI def does (`ContactConditions.OnRail`),
    never its person's hull or its person def's wing probes. C2's `dzpath2` arch, the 9.7 m slot in
    the warning above, is narrower than a wingspan at the rail's roll, so a hull or wing probe meets
    its front face at `(-6038, 23, -3848)` on every pass; an origin point clears it.
 
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
-join board's bot rows on a menu Stunt Flying run, which they make a race.
+join board's bot rows on a menu Stunt Flying run with its race toggle on, which they make a race.
 
 A race seat carries no weapons, so a race bot's pilot has no gunner and no ordnance and takes no
 quarry. Every value above is the remake's own.
@@ -1677,12 +1687,12 @@ returned to that zone's exit every time):
 
 | Course | Zones cleared | Finish | Zone ends with a lead-in |
 |---|---|---|---|
-| C1 | 5 of 5 | 4:08.0 | none |
-| C1B | 5 of 5 | 3:08.6 | `dzpath6`, `dzpath7` |
-| C2 | 9 of 9 | 5:54.2 | `dzpath4` |
-| C3 | 4 of 4 | 4:10.5 | `dzpath4` from either end |
-| C4 | 14 of 14 | 10:21.3 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
-| C5 | 17 of 17 | 15:42.7 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
+| C1 | 5 of 5 | 3:22.0 | none |
+| C1B | 5 of 5 | 3:03.9 | `dzpath6`, `dzpath7` |
+| C2 | 9 of 9 | 4:29.3 | `dzpath4` |
+| C3 | 4 of 4 | 3:14.8 | `dzpath4` from either end |
+| C4 | 14 of 14 | 8:19.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
+| C5 | 17 of 17 | 10:41.3 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
 
 Every lead-in in the table probes clear of the world in that suite. A zone end not listed keeps its
 own entry (`StuntBotObjectiveTests` pins the list).

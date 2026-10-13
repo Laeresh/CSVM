@@ -116,9 +116,9 @@ public static class DefaultBindings
         // stick bound here would drop to half throttle whenever its spring centred it.
         b.Leave(InputAction.ThrottleLever);
 
-        // The two weapons sit under the mouse hand as well, the left button firing the guns and the
-        // right the rockets, which is where a pilot flying with the mouse reaches for them. This
-        // port's own rows: the original binds no mouse button to anything.
+        // The two weapons sit under the mouse hand as well, the left button on the guns and the right
+        // on the rockets. That is where a pilot flying with the mouse reaches for them. These are
+        // remake-only rows: the original binds no mouse button to anything.
         b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B)
             .Mouse(InputAction.FireGuns, MouseButton.Left);
         b.Keys(InputAction.FireRockets, Key.X).Buttons(InputAction.FireRockets, JoyButton.A)
@@ -133,9 +133,9 @@ public static class DefaultBindings
         b.Keys(InputAction.SelectOrdnancePrev, Key.F6);
         b.Keys(InputAction.Nitro, Key.N).Buttons(InputAction.Nitro, JoyButton.X);
 
-        // Respawn is this port's own action and the original binds nothing to Backspace, so it sits
-        // out of the flying hand's reach: it throws the airframe away and must not be brushed in a
-        // manoeuvre. The original's Ctrl+X stays free for the bail-out this port does not have.
+        // Respawn is a remake-only action on Backspace, which the original binds to nothing. It sits
+        // out of the flying hand's reach because it throws the airframe away and must not be brushed
+        // in a manoeuvre. The original's Ctrl+X stays free for the bail-out this port does not have.
         b.Keys(InputAction.Respawn, Key.Backspace).Buttons(InputAction.Respawn, JoyButton.Y);
         b.Keys(InputAction.AutoLand, Key.A).Buttons(InputAction.AutoLand, JoyButton.LeftStick);
         b.Keys(InputAction.Pause, Key.Escape).Buttons(InputAction.Pause, JoyButton.Start);
@@ -156,7 +156,7 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetClear, Key.T);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
 
-        // Selecting the chase view without walking the cycle is this port's own action, and it
+        // Selecting the chase view without walking the cycle is a remake-only action, and it
         // ships unbound. The cycle on F8 reaches that view already, so a default here would spend a
         // control on a second way in. It stays rebindable, which is what Leave keeps.
         b.Leave(InputAction.SelectChaseView);
@@ -203,7 +203,7 @@ public static class DefaultBindings
         b.Keys(InputAction.ChatEveryone, Key.Quoteleft);
         b.Mod(InputAction.ChatTeam, KeyModifiers.Shift, Key.Quoteleft);
 
-        // The graphics-mode switch, this port's own action. Keyboard only: it is a comparison
+        // The graphics-mode switch, a remake-only action. Keyboard only: it is a comparison
         // tool, and the pad has no free control to spend on it.
         b.Keys(InputAction.ToggleGraphicsMode, Key.G);
 

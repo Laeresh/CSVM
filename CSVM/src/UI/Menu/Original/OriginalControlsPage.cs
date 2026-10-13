@@ -23,7 +23,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     public const string PlayerKey = "CP_D_Fly";
 
     /// <summary>The page's flying-scheme chooser, on the Mouse Sensitivity panel's title line.
-    /// Remake-only, so the layout names no widget for it.</summary>
+    /// A remake-only chooser, so the layout names no widget for it.</summary>
     public const string MouseKey = "MOUSESCHEME";
 
     /// <summary>The page's Mouse Sensitivity slider, the authored one, which sets the Fly scheme's
@@ -135,7 +135,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     }
 
     // A sideways step on the seat chooser picks the next player and one on the scheme row flips it;
-    // anything else crosses columns. The slider is the shell's own step and never reaches here. The
+    // anything else moves the focus. The slider is the shell's own step and never reaches here. The
     // text-button page drawn without the section has no slider, so its sensitivity row steps here.
     bool IOriginalOptionsPage.StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {

@@ -394,6 +394,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/MenuZones.cs`, how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.
 - `src/UI/Boards/LanguiFace.cs`, a langui `[FONTID]` tag read as a typeface: the Windows family it abbreviates, its size in board pixels, bold and italic.
 - `src/UI/Boards/ListWindow.cs`, a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
+- `src/UI/Boards/SpatialFocus.cs`, the one cursor rule over rectangles as drawn: the nearest stop ahead in the band, else the band's far end, else the nearest ahead anywhere.
 - `src/UI/Boards/SliderTrack.cs`, a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/Boards/BoardFit.cs`, how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
 - `src/UI/Boards/AuthoredPointer.cs`, a keyboard seat's mouse mapped back into a board's authored 800x600 pixels, the Original race and pause boards' pointer.
@@ -581,6 +582,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalWidgets.cs`, the layout-widget readings two screen modules share: a numbered widget key's slot, a section's background pane, a strip's size, a board page's rows.
 - `src/UI/Menu/Original/OriginalDropList.cs`, the one open-dropdown window rule every Original page stands on: the authored window, the hidden rows outside it, the arrows and the thumb.
 - `src/UI/Menu/Original/SliderControl.cs`, the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
+- `src/UI/Menu/Original/OriginalFocus.cs`, where a cursor press moves the focus on an Original screen: the spatial step over the rows on screen, scroll arrows skipped, a list scrolled where the press runs off it.
 - `src/UI/Menu/Original/OriginalOptionsScreen.cs`, the form behind the Options hub's doors: the frame, each page's ACCEPT and CANCEL plaques, the page switch and the one apply exit, over five page modules.
 - `src/UI/Menu/Original/KeysStickColumn.cs`, the KEYS AND BUTTONS page's split of a row's bindings between Control A/B and the port's Stick column.
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
@@ -696,6 +698,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Testing/SuiteRender.cs`, the `render:<kind>` term: which suites run windowed, headless or on synthetic data, from `analysis/headless-limits.json`.
 - `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/ScreenKeyboardRecorder.cs`, a suite's stand-in for the on-screen keyboard: available, its URLs recorded, the detected state put back on dispose.
+- `src/Testing/OriginalWalk.cs`, the shortest cursor walk onto one row of an Original screen, planned over the shell's own spatial step.
 - `src/Testing/LoopbackMaster.cs`, the master server's socket side in one process: codes, guest numbers and signal routing, with no ICE servers, for the WebRTC suites.
 - `src/Testing/PhaseAttribution.cs`, buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
 - `src/Testing/CountingEmitterFactory.cs`, the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
@@ -735,7 +738,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/FrameInstruments.cs`, the process's frame instruments on wall time: the hitch monitor and sidecar, the rate line, the F14 readout, and the opt-in `--perf`, `--debug-mem` and `--hitch-inject`.
 - `src/Launch/NetFlight.cs`, the multiplayer door and the wire a flight carries: the command line's socket, a menu launch's wire and field, the in-flight door upkeep, the lobby landing and the wire's end.
 - `src/Launch/SeatFields.cs`, who sits where at a launch: the co-op, lobby Dogfight, command-line and local-bot seat rosters, with each seat's fit and custom plane.
-- `src/Launch/LiveSettings.cs`, the Options page's settings on the running process: the pacing, window, graphics mode and word settings at launch, the options file's one writer, and the live graphics switch.
+- `src/Launch/LiveSettings.cs`, the Options page's settings on the running process: the pacing, window, graphics mode and word settings at launch, the Options apply's save, and the live graphics switch.
 - `src/Launch/LaunchBoards.cs`, the boards the launcher stands with no flight in front of them: the load screen, the graphics switch's blackboard and the `--menu=pauseboard` doors.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
@@ -831,6 +834,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/NetWorldLink.cs`, the host-owned world over the wire: AI aircraft as launch, pose, fire, hit, presence and death messages, zeppelin and surface-vehicle paths as periodic samples, destructible health, stage changes and deaths as events, and warp picks.
 - `src/Session/World/VersusDirector.cs`, the engine side of one Dogfight: the match and its scoring, the respawn rotation and grants, the host's match state, the rematch and the team modes.
 - `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
+- `src/Session/World/FlagBanner.cs`, the carried flag under Enhanced: a banner towed behind the carrier in the flag's art, in place of the billboard.
 - `src/Session/World/BotOrderLog.cs`, which bot order changes a team mode's host logs, a capped line per seat.
 - `src/Session/World/StuntRaceBots.cs`, the stunt race bots a machine flies, stepped on their objectives and rerun while the window is open.
 - `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.

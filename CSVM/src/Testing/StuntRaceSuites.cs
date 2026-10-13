@@ -278,7 +278,7 @@ internal static class StuntRaceSuites
         + "the field on the scores page with each pilot's splits, rests on Photo Mode and offers "
         + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
         + "Photo Mode, and a sixteen-pilot field scrolls the scores page and the splits to the sixteenth "
-        + "pilot by their arrows under the pointer and the pad; Built-in keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
+        + "pilot by their arrows under the pointer and the pad, and by the wheel and a thumb drag; Built-in keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
@@ -701,6 +701,54 @@ internal static class StuntRaceSuites
 
         ctx.Check(board.Shown?.Lines.Any(l => l.Text == "P16" && l.X == 38f && l.Y == 373f + (7 * 20f)) == true,
             $"and Accept on the chat pane's down arrow brings P16's splits onto its last line");
+        WheelAndDragTheWideField(ctx, board, menu);
+    }
+
+    // Both lists at their foot. A wheel notch over each moves that list one row up and a notch over
+    // the zone key moves neither. A thumb dragged a third of its free run moves a third of the rows.
+    // An arrow still moves a list one row after the drags.
+    private static void WheelAndDragTheWideField(TestContext ctx, OriginalRaceBoard board, BoardMenu menu)
+    {
+        var sheet = board.Sheet!;
+        var start = board.Tops;
+        var tops = new List<(int Scores, int Splits)>();
+        foreach (var (x, y) in new[] { (400f, 150f), (200f, 450f), (100f, 150f) })
+        {
+            board.PointerSource = () => (x, y, false);
+            board.WheelSource = () => -1;
+            board._Process(Dt);
+            board.WheelSource = () => 0;
+            tops.Add(board.Tops);
+        }
+
+        ctx.Check(start == (6, 9) && tops.SequenceEqual(new[] { (5, 9), (5, 8), (5, 8) }),
+            $"a wheel notch moves the scores page, then the splits, one row each, and one over the zone key neither: from {start} to {string.Join(", ", tops)}");
+
+        var dragged = new List<int>();
+        foreach (bool splits in new[] { false, true })
+        {
+            foreach (float share in new[] { -1f, 1f / 3f })
+            {
+                var w = OriginalRaceResults.Window(sheet, splits, splits ? board.Tops.Splits : board.Tops.Scores);
+                float x = w.ThumbX + (w.ThumbWidth / 2f), y = w.ThumbY + (w.ThumbHeight / 2f);
+                float dy = share * (w.TrackHeight - w.ThumbHeight);
+                foreach (var (at, pressed) in new[] { (y, false), (y, true), (y + dy, true), (y + dy, false) })
+                {
+                    board.PointerSource = () => (x, at, pressed);
+                    board._Process(Dt);
+                }
+
+                dragged.Add(splits ? board.Tops.Splits : board.Tops.Scores);
+            }
+        }
+
+        ctx.Check(dragged.SequenceEqual(new[] { 0, 2, 0, 3 }) && board.Visible,
+            $"each thumb dragged to the track's head shows the first row, and a third of its run down a third of the rows (6 and 9): {string.Join(", ", dragged)}");
+
+        board.PointerSource = () => null;
+        menu.MoveTo(OriginalRaceResults.Slots(sheet).ToList().IndexOf(OriginalRaceResults.SplitsDownRow));
+        menu.Handle(0, accept: true, back: false);
+        ctx.Check(board.Tops == (2, 4), $"the splits' down arrow still moves its list one row after the drags: {board.Tops}");
     }
 
     // Two starts well above C1's terrain, clear of every zone and of each other.

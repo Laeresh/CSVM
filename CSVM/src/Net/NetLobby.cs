@@ -43,6 +43,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly Dictionary<int, NetPlaneBuild?> _seatBuilds = new();
     private readonly List<int> _unpicked = new();
     private readonly List<CoopHangarMessage?> _hangar = new();
+    private readonly Dictionary<(byte Chapter, int Node), CoopPersistMessage> _persisted = new();
 
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
     private readonly List<(int Peer, LobbyTeamActionMessage Action)> _teamActions = new();
@@ -158,6 +159,11 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>The campaign wingman's aeroplane as the co-op host last launched it, or null while
     /// no host has named one. Every launch names it again before its opener.</summary>
     public CoopWingmanMessage? Wingman { get; private set; }
+
+    /// <summary>The co-op host's persist log as its latest launch named it, one state per chapter and
+    /// node. A launch's opening word drops the earlier launch's whole log, whatever profile flew it.
+    /// </summary>
+    public IReadOnlyCollection<CoopPersistMessage> Persisted => _persisted.Values;
 
     /// <summary>The co-op host's latest film word, a start or an end, or null while none has
     /// arrived.</summary>
@@ -600,6 +606,21 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (CoopWingmanMessage.TryRead(payload, out var wingman))
         {
             Wingman = wingman;
+            return true;
+        }
+
+        if (CoopPersistMessage.TryRead(payload, out var persisted))
+        {
+            if (persisted.Opens)
+            {
+                _persisted.Clear();
+            }
+
+            if (persisted.Node != CoopPersistMessage.NoNode)
+            {
+                _persisted[(persisted.Chapter, persisted.Node)] = persisted with { Opens = false };
+            }
+
             return true;
         }
 

@@ -179,7 +179,7 @@ the `aiv` blocks through `CampaignRoster.cs`, seating each netted one's walk whe
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path; `WarpDrawn` raises the world stream's `WARP_VEHICLE` pick, and `TakeWarpsFromHost` makes a guest director wait for the host's instead of drawing; 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name, and a `TRAVELERS ... DELETE_ON_SUCCESS` takes the aircraft it counted out for good (`Removed`); `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones photograph into the profile through `CampaignSnapshot`, raise the flight's praise line through `WorldInputs.DangerZoneSpoken` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The
-nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.Screens.MissionEndFade` paints. A replicated graph's end builds the result and holds the world the same way but records nothing, since the attempt is the host's; `HasStore` says whether this director writes a profile at all, which a co-op guest's never does. A guest's `TryCreate` binds `wingman_1` from the host's co-op wingman word (`CoopWingmanOf` writes it), never from its own default profile. A human's death under the loss rule pins that aircraft `CrashIsFinal`, so neither the respawn button nor its prompt reaches the wreck. `WakeGenerators` is `--wake-generators`' whole-credit grant and `TraceObjectives` the parent-driven clock's objective trace. Debrief: [../org/debrief.md](../org/debrief.md).
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.Screens.MissionEndFade` paints. A replicated graph's end builds the result and holds the world the same way but records nothing, since the attempt is the host's; `HasStore` says whether this director writes a profile at all, which a co-op guest's never does. A guest's `TryCreate` binds `wingman_1` from the host's co-op wingman word (`CoopWingmanOf` writes it), never from its own default profile, and takes the host's persist log (`CoopPersistedOf` writes it) into its in-memory profile, so its world opens on the host's wreckage. A human's death under the loss rule pins that aircraft `CrashIsFinal`, so neither the respawn button nor its prompt reaches the wreck. `WakeGenerators` is `--wake-generators`' whole-credit grant and `TraceObjectives` the parent-driven clock's objective trace. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/Objectives/NetDirectorLink.cs
 The objectives graph over the wire, a static pair of calls with no state of its own. `Publish`
@@ -222,11 +222,20 @@ own seats and asks the host (`FlagRequestMessage`); the host decides, scores thr
 changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
 the flag rows. A death, a drop or `Eject` (the console's `ejectflag`, relayed by the host) floats a
 flag everywhere, and the host sends it home when the throw runs out. `SideOf` labels the three
-markers, and the carrier carries its tag. `StepBots` hands the host's bots `Flight/Ai/CtfBotObjective.cs`'s orders (`BotObjective` turns it off). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+markers, and the carrier carries its tag. `StepBots` hands the host's bots `Flight/Ai/CtfBotObjective.cs`'s orders (`BotObjective` turns it off). Each carried flag has a `FlagBanner.cs` it hangs on the carrier. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+
+## src/Session/World/FlagBanner.cs
+The carried flag under `GraphicsMode.Enhanced`, one per team's carried flag, built by `FlagRuntime`
+and towed by its `Carry` and `Loose`. Each frame after the flight rigs it reads the mount's drawn
+pose: a chain trails the tow point, each point one segment behind the one ahead, drawn as a tow line
+and a banner in the billboard's texture whose shader ripples faster with airspeed. Under Original,
+or with the flag not carried, it draws nothing and the billboard draws. `Follow` is the chain step a
+suite drives. Rule: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md), "Towed banner".
 
 ## src/Session/World/StuntRaceBots.cs
 The stunt race bots a machine flies, built by `GameSession` beside the race: one
 `Flight/Ai/StuntBotObjective.cs` per bot seat with a run of the course, stepped ahead of the seats.
+It decides every zone end's run once at build, against the built world, for every bot.
 It steers each bot for its next zone, starts the ribbon run, and starts a completed run again while
 the window is open. The run's own gate test counts every zone, so the race and a network host hear a
 bot as any seat. `BotObjective` turns it off. Rule: [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots".
@@ -235,12 +244,15 @@ bot as any seat. `BotObjective` turns it off. Rule: [../org/aiPilot.md](../org/a
 Which bot order changes a team mode's host step logs: `Admit` notes a bot seat's reason each step
 and answers true when it changed and the seat still has one of its `LinesPerSeat` lines left, so a
 long match does not log every run. `FlagRuntime.StepBots`, `ZeppelinVersusRuntime.StepBots` and
-`StuntRaceBots.Step` share it, each writing its own line.
+`StuntRaceBots.Step` share it in one shape: only the host steps a bot (the two team runtimes guard
+on the host, and a guest builds no `StuntRaceBots`, since only the host gives a bot a pilot), a
+loop over the bot seats the machine flies, each runtime's own `BotObjective` switch (a suite control turns it off), and one
+"bot seat {seat} {why}" line, the switched-off reason being `ObjectiveOff`.
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `VersusDirector.WireZeppelinVersus` for a `--zvz`
 launch over the `MP3` world's `ZeppelinRuntime`: hull 0 goes to the first side's lobby team and
-hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull. Off
+hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull and both hulls' turrets awake. Off
 `PartDestroyed` the host scores each gas bag to the seat whose hit killed it; every machine speaks
 the gas bag line. `ZeppelinKilled` ends the match on the host. `RespawnPoint` is the host's return
 and `SideOf` labels each hull's marker and rearm base. `StepBots` notes each hull's last attacker
@@ -422,8 +434,8 @@ The mid-mission cutscene trigger: a story mission's resolved `LandingApproaches`
 frame against every flying human (arming gate, speed band, attitude cone, condition volume), and
 the first passing row is started as an explicit mission trigger with `CutsceneController.Own` given
 both the row and the human who flew it. A row fires once per entry into its volume; an `auto` row
-lights the auto-land prompt in each passing human's pane instead of starting anything. Rows staged
-later bind when their nodes appear. `Started` reports each start; a `Replicate`d trigger on a
+lights the auto-land prompt in each passing human's pane instead of starting anything. Its bind also
+claims a range-gated start for the seat the runtime names as episode owner. `Started` reports each start; a `Replicate`d trigger on a
 network guest starts only what `StartRow` names, still offering its own humans the prompt and
 recording a held button (`Pressing`). Next: `CutsceneController.cs`, [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
@@ -479,7 +491,7 @@ switched on, placed at its authored pose and flown by `ZeppelinMotion`; an anima
 neither placed nor stepped. `WireDamage` builds the part pools, `PollDamage` owns the kill (and
 `PartDestroyed`, each part's with its killing shooter), the Instant Action engine count and the
 generator disable; `CollectTargetParts` makes a structure selectable under `TargetPool`'s torpedo
-gate, and `CollectHullParts` lists one hull's parts for the Zeppelin vs Zeppelin bots. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. Networked, the host sends
+gate, and `CollectHullParts` lists one hull's parts for the Zeppelin vs Zeppelin bots. A def with no net is held; `--zep=` grafts one on. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` and `SetTeam`. `WakeTurrets` wakes a hull's turrets, for Zeppelin vs Zeppelin. Networked, the host sends
 `TryReadPath` and a guest's `Replicate` gives each hull a `ZeppelinReplica` that `TakePath` feeds in
 place of the follower. Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 
@@ -488,10 +500,10 @@ The broadside half of `ZeppelinRuntime`, the second file of that partial class. 
 resolves the hardcoded `wep_28` round and each cannon's node and damage pool; per step the runtime
 resolves the record's authored `targets`, gates on the authored fire range and the decoded arc,
 plays the deploy and retract anims scoped to the hull, and fires real rounds scattered by the
-record's inaccuracy, unowned unless `NamesBroadsideRounds` names them for their hull. The broadside
-stays off until a script arms it through the `COMPLETED_ZEPCANNONS` seam or Zeppelin vs Zeppelin
-arms both hulls, and a destroyed cannon thins the volley. Decode:
-[../formats/mission-entities.md](../formats/mission-entities.md), "Broadside firing".
+record's inaccuracy. `NamesHullRounds` names the broadside's and turrets' rounds for their hull;
+otherwise they are unowned. The broadside stays off until a script arms it through the
+`COMPLETED_ZEPCANNONS` seam or Zeppelin vs Zeppelin arms both hulls, and a destroyed cannon thins
+the volley. Decode: [../formats/mission-entities.md](../formats/mission-entities.md), "Broadside firing".
 
 ## src/Session/World/TurretEmplacementRuntime.cs
 The world AA emplacements: the standalone `ai.zrd` turret family resolved against the built chapter

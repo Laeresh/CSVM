@@ -158,7 +158,7 @@ public sealed class ClutterBuilder
     public ClutterActivation? Activation { get; private set; }
 
     /// <summary>Of <see cref="SolidCollisionTriangles"/>, those from a polygon clearing
-    /// <c>SHOW_BACKFACE</c>: the size of the divergence left by these shapes staying two-sided while
+    /// <c>SHOW_BACKFACE</c>: the reach of the remake-only rule keeping these two-sided while
     /// the world's honour the flag. The reason they do is on <c>BuildSolidCollision</c>.</summary>
     public int SolidCollisionOneSidedTriangles { get; private set; }
 

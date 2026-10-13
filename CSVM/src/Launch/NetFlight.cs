@@ -265,9 +265,9 @@ internal sealed class NetFlight
     }
 
     /// <summary>A co-op campaign launch's wire. The host's roster is its own seats and then each
-    /// guest the door seated, under its name. Every seat's fit and build, and the campaign
-    /// wingman's aeroplane, go to every guest before the session's opener. The wingman given here
-    /// is the cabin's, when it kept one off its saved plane.
+    /// guest the door seated, under its name. Every seat's fit and build, the campaign wingman's
+    /// aeroplane and the persist log go to every guest before the session's opener. The wingman
+    /// given here is the cabin's, when it kept one off its saved plane.
     /// </summary>
     public void TakeCoopLaunch(MenuNetLaunch? net, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string profile,
@@ -289,6 +289,7 @@ internal sealed class NetFlight
         Door.TellSeatFits(_seatFits);
         Door.TellSeatBuilds(_seatBuilds);
         Door.TellCoopWingman(wingman ?? SeatFields.CoopWingmanFor(profile, profilesDir));
+        Door.TellCoopPersisted(SeatFields.CoopPersistedFor(profile, profilesDir));
         Log.Info("core", $"net: co-op launch with {_roster.Length - planes.Count} guest(s)");
     }
 
@@ -343,6 +344,7 @@ internal sealed class NetFlight
         NetSeatFit = _coopFlight || _lobbyFlight ? SeatFit : null,
         NetSeatBuild = _coopFlight || _lobbyFlight ? SeatBuild : null,
         NetCoopWingman = _coopFlight && !_isHost && Door is { } coopDoor ? () => coopDoor.CoopWingman : null,
+        NetCoopPersisted = _coopFlight && !_isHost && Door is { } logDoor ? () => logDoor.CoopPersisted : null,
         NetTeamNames = _lobbyFlight && Door?.Dogfight is { } teamLobby ? SeatFields.TeamNames(teamLobby.Teams) : null,
         VersusLobbyLanding = _lobbyFlight && LandsOnScores(_isHost, Door?.Dogfight) ? lobbyLanding : null,
     };

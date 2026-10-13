@@ -32,7 +32,7 @@ internal interface IOriginalOptionsPage
     /// <summary>The page's CANCEL CHANGES row key.</summary>
     string CancelKey { get; }
 
-    /// <summary>The page's rows, in focus order, its plaques included.</summary>
+    /// <summary>The page's rows, its plaques included.</summary>
     void BuildRows(List<OriginalRow> rows);
 
     /// <summary>The page's scrolling lists for the pointer.</summary>
@@ -67,8 +67,7 @@ internal interface IOriginalOptionsPage
 /// <c>[@ControlsPrefs@]</c> and <c>[@Keys@]</c> sections. It keeps the frame every page stands in,
 /// each page's ACCEPT CHANGES and CANCEL CHANGES, and the switch to the page showing. The settings
 /// pages read the saved options once per entry and leave through one apply exit carrying them all.
-/// <see cref="CSVM.Utils.OptionsStore"/>'s one writer so stays the only writer, while the rebinding
-/// pages stage their edits in the shared <see cref="ControlsFeature"/>.
+/// The rebinding pages stage their edits in the shared <see cref="ControlsFeature"/>.
 /// </summary>
 public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOptionsForm
 {
@@ -161,7 +160,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
         screen is OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video
             or OriginalScreen.ControlsPrefs or OriginalScreen.Keys;
 
-    /// <summary>The showing page's rows, in focus order.</summary>
+    /// <summary>The showing page's rows.</summary>
     public void BuildRows(List<OriginalRow> rows) => Showing?.BuildRows(rows);
 
     /// <summary>The showing page's scrolling lists for the pointer: an open option list where one
@@ -170,7 +169,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
 
     /// <summary>A sideways step on the focused row where it changes a value there. That is an
     /// option's next word with wrap, the next registered seat, or the other flying scheme. False on
-    /// anything else, so the step crosses columns. The sliders are the shell's own step.</summary>
+    /// anything else, so the step moves the focus. The sliders are the shell's own step.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>
         Showing?.StepSideways(rows, focus, direction) ?? false;
 
@@ -262,8 +261,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
     }
 
     // Every settings page's ACCEPT CHANGES. A page writes the settings it shows and hands the rest
-    // back as ReadSavedOptions read them, which keeps LiveSettings.Persist the options file's one
-    // writer.
+    // back as ReadSavedOptions read them. LiveSettings.Persist writes the options file for the
+    // apply, and keeps every setting the page does not show.
     OptionsApplyExit IOriginalOptionsForm.Apply() => _choices.ToExit();
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.

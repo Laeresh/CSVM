@@ -425,7 +425,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The showing screen's rows, in focus order.</summary>
+    /// <summary>The showing screen's rows.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         if (_flow is { } flow)
@@ -1384,7 +1384,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     // BOOT asks about each seated guest in player order: Yes boots that one, No asks about the
     // next, and Cancel asks no more. The original has no campaign across a link, so the question is
-    // the remake's own; the boot itself is the Dogfight lobby's.
+    // remake-only; the boot itself is the Dogfight lobby's.
     private void AskBoot(int from)
     {
         if (_net() is not { IsCoopHost: true } net)

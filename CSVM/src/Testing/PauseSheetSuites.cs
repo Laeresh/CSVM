@@ -658,7 +658,7 @@ internal static class PauseSheetSuites
         report.AppendLine($"pointer: walked {walked} strips, fired PREFERENCES {fired} time(s)");
     }
 
-    // The remake's own strip on either sheet: pressed and released on its own plate, it opens photo
+    // The remake-only strip on either sheet: pressed and released on its own plate, it opens photo
     // mode. The halt and the sheet stand exactly as they were. The mode is a still frame over the
     // halted world rather than a resume, which is what returns a player to the sheet.
     private static void FirePhotoStrip(

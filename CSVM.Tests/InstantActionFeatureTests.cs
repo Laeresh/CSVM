@@ -230,17 +230,27 @@ public class InstantActionFeatureTests
     }
 
     [Fact]
-    public void AStuntRunCarriesTheJoinBoardsBotsWhichMakeItARace()
+    public void AStuntRunCarriesTheJoinBoardsBotsOnlyWithTheRaceToggleOn()
     {
         var ia = Feature();
         ia.ApplyPreset(0);
         ia.ConfirmEnvironment();
         var seats = new[] { new MenuSeatChoice("player_fury", Array.Empty<int>()) };
         var bots = new[] { new VsBotEntry("player_bhawk", Net.NetBotSkill.Ace, 0, "Racer") };
+        ia.RaceBots = true;
         var squadron = ia.BuildExit(seats, bots: bots);
         ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
 
-        // One seat and a bot make a race: the bots ride the exit, and the def flies no wingmen.
+        // With the toggle off the board's bots stay out: a solo run, its wingmen kept.
+        ia.RaceBots = false;
+        var solo = ia.BuildExit(seats, bots: bots);
+        Assert.Null(solo.Bots);
+        Assert.Equal(1, ia.Pilots(1, bots.Length));
+        Assert.Equal(ia.NumWingmen, solo.InstantAction!.NumWingmen);
+
+        // One seat and a bot make a race once it is on: the bots ride the exit, and the def flies no wingmen.
+        ia.RaceBots = true;
+        Assert.Equal(2, ia.Pilots(1, bots.Length));
         var stunt = ia.BuildExit(seats, bots: bots);
         Assert.Same(bots, stunt.Bots);
         Assert.Equal(0, stunt.InstantAction!.NumWingmen);
@@ -364,10 +374,12 @@ public class InstantActionFeatureTests
         ia.ApplyPreset(3);
         ia.ConfirmEnvironment();
         ia.StepLives(3);
+        ia.RaceBots = true;
         ia.WingmanFit.SetGunAmmo(1, "test");
 
         ia.Discard();
 
+        Assert.False(ia.RaceBots);
         Assert.Equal(0, ia.EnvironmentIndex);
         Assert.Equal(0, ia.MissionTypeIndex);
         Assert.Equal(1, ia.Lives);

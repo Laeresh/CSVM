@@ -30,6 +30,10 @@ public sealed class ZeppelinVersus
     /// <summary>The respawn's yaw is this less the bearing, the double at <c>0x608160</c>.</summary>
     public const float HeadingBase = 1.5708f;
 
+    /// <summary>What a hull turret's round adds to its hull's placement index, past every broadside's.
+    /// A turret kill credits nobody (docs/org/multiplayer-zvz.md, "What the remake takes").</summary>
+    public const int TurretRound = 0x40;
+
     private readonly int[] _teams;
     private readonly MatchScores _scores;
     private readonly HashSet<(int Hull, string Gasbag)> _scored = new();
@@ -48,8 +52,11 @@ public sealed class ZeppelinVersus
     /// seat and AI id, and by placement index.</summary>
     public static int BroadsideShooter(int hull) => ProjectilePool.NoShooter - 1 - hull;
 
-    /// <summary>The hull whose broadside fired a round carrying <paramref name="shooter"/>, or -1 for
-    /// any other shooter id.</summary>
+    /// <summary>The shooter id a hull's turret rounds carry in a match, below every broadside's.</summary>
+    public static int TurretShooter(int hull) => BroadsideShooter(TurretRound + hull);
+
+    /// <summary>The index a hull's round carries for <paramref name="shooter"/>, -1 for any other
+    /// shooter id: the broadside's hull, or <see cref="TurretRound"/> past it for a turret's.</summary>
     public static int HullOfShooter(int shooter) =>
         shooter < ProjectilePool.NoShooter ? ProjectilePool.NoShooter - 1 - shooter : -1;
 

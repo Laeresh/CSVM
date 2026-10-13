@@ -45,7 +45,7 @@ public static class NetSeats
     /// original's authored dwords in order. The remake's index is 0-based where the original's was
     /// 1-based, so its eighth pilot read past the table and ours does not. Seats 8 to 15 take the
     /// channel-wise complement of seat minus 8, a light twin of a dark authored colour. It collides
-    /// with none of them. The derived eight are the remake's own; the original has no colour past
+    /// with none of them. The derived eight are remake-only; the original has no colour past
     /// its table.</summary>
     public static uint SeatColor(int seat)
     {

@@ -6,6 +6,7 @@ using CSVM.Bindings;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Testing;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -30,7 +31,6 @@ public class OriginalCoverageTests : IDisposable
     private const string SecondPilot = "Nathan";
     private const string SparePlane = "Spare";
     private const string BuildName = "Ace";
-    private const int WalkGuard = 96;
     private const int BackGuard = 12;
 
     // The route steps: a row key to press, or a directive.
@@ -56,6 +56,14 @@ public class OriginalCoverageTests : IDisposable
         "PassengerCabin", "MomentoSelection", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
+    };
+
+    // The radios a screen moves the focus off sideways, taking no value from the press. The
+    // lobby's StepSideways takes a dropdown's alone, so Right from the time radio reaches the
+    // MPL_E_TIME box and Left from Ready reaches MPL_B_TEAM. Every other radio is a value.
+    private static readonly Dictionary<OriginalScreen, HashSet<string>> RadiosThatMove = new()
+    {
+        [OriginalScreen.Lobby] = [OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ReadyKey],
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
@@ -350,14 +358,29 @@ public class OriginalCoverageTests : IDisposable
         _ => null,
     };
 
+    // Every cursor stop on the screen is reached from the focus by arrow presses
+    // (OriginalWalk.Reachable), the shell's own step searched breadth first.
+    private static void AssertReachable(OriginalShell shell)
+    {
+        var rows = shell.Rows;
+        var lists = shell.Lists;
+        int focus = shell.Focus;
+        if (focus < 0)
+        {
+            return;
+        }
+
+        var seen = OriginalWalk.Reachable(rows, lists, focus, RadiosThatMove.GetValueOrDefault(shell.Screen, []));
+        var stranded = Enumerable.Range(0, rows.Count)
+            .Where(i => !seen.Contains(i) && OriginalFocus.IsStop(rows[i], rows, lists)).Select(i => rows[i].Key).ToList();
+        Assert.True(stranded.Count == 0,
+            $"on {shell.Screen} arrow presses from {rows[focus].Key} never reach {string.Join(", ", stranded)}");
+    }
+
     // A click lands on the row's centre, since two authored plaques may share an edge pixel. The
     // press arms the row and the release on it fires, so a click is two of these frames.
     private static MenuCommands Pointer(OriginalRow row, bool pressed = false) =>
         new() { Pointer = new MenuPointer(row.X + (row.Width / 2f), row.Y + (row.Height / 2f), pressed, pressed) };
-
-    private static MenuCommands Move(Family family, bool vertical) => family == Family.Keyboard
-        ? (vertical ? new MenuCommands { MoveY = 1 } : new MenuCommands { MoveX = 1 })
-        : (vertical ? new MenuCommands { MoveY = -1 } : new MenuCommands { MoveX = -1 });
 
     // Which seat's device the screen showing answers to: the picking seat on the per-seat aircraft
     // screen, seat 0 everywhere else. The pointer stays seat 0's, the mouse being one desk device.
@@ -456,6 +479,10 @@ public class OriginalCoverageTests : IDisposable
         Assert.Equal(journey.Target, shell.Screen);
         screens.Add(shell.Screen);
         Collect(shell.Compose());
+        if (family != Family.Pointer)
+        {
+            AssertReachable(shell);
+        }
         foreach (string key in journey.Expect ?? Array.Empty<string>())
         {
             Assert.True(Row(shell, key) is { Enabled: true }, $"{key} stands on {shell.Screen}");
@@ -545,9 +572,8 @@ public class OriginalCoverageTests : IDisposable
     }
 
     // One press by one family: the pointer clicks inside the row's rectangle; the cursor
-    // families walk the focus onto the row (keyboard down and right, pad up and left, so both
-    // wraps are taken) and Accept. A dropdown or radio under the cursor steps its value sideways,
-    // so a column is only crossed from a row that does not.
+    // families walk the focus onto the row and Accept. OriginalWalk.WalkTo plans the walk, the
+    // keyboard trying down and right first and the pad up and left.
     private MenuExit? Press(OriginalShell shell, Family family, string key)
     {
         var target = Row(shell, key);
@@ -563,17 +589,8 @@ public class OriginalCoverageTests : IDisposable
             return step.Exit;
         }
 
-        for (int guard = 0; guard < WalkGuard && shell.FocusedKey != key; guard++)
-        {
-            var rows = shell.Rows;
-            int focus = shell.Focus;
-            Assert.True(focus >= 0, $"nothing on {shell.Screen} takes focus");
-            int index = rows.ToList().FindIndex(r => r.Key == key);
-            Assert.True(index >= 0, $"{key} left {shell.Screen}'s rows while walking");
-            bool cross = rows[focus].Column != rows[index].Column && rows[focus].Kind is not (OriginalRowKind.Dropdown or OriginalRowKind.Radio);
-            shell.StepSeat(Driver(shell), Move(family, !cross));
-        }
-
+        Assert.True(shell.Focus >= 0, $"nothing on {shell.Screen} takes focus");
+        OriginalWalk.WalkTo(shell, key, frame => shell.StepSeat(Driver(shell), frame), family == Family.Pad);
         Assert.True(shell.FocusedKey == key, $"the {family} walk reached {shell.FocusedKey}, not {key}, on {shell.Screen}");
         return shell.StepSeat(Driver(shell), Accept).Exit;
     }

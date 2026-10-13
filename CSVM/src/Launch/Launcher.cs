@@ -532,8 +532,8 @@ public partial class Launcher : Node3D
         // rule the saved graphics word below follows; SavedLevels owns that drop.
         var savedMix = AudioMix.SavedLevels(_spec.Det);
         AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
-        // Logged on every launch, not only when a flag moved it. The shipped factor is a departure
-        // from the decoded radii, so a run's record has to say what reach it played at.
+        // Logged on every launch, not only when a flag moved it. The shipped factor is a remake-only
+        // rule over the decoded radii, so a run's record has to say what reach it played at.
         Mech3.SoundFalloff.SetRangeScale(_spec.SoundRangeScale);
         string rangeVia = Mech3.SoundFalloff.RangeScale == Mech3.SoundFalloff.ShippedRangeScale
             ? "shipped" : "--sound-range-scale";
@@ -2040,9 +2040,9 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The options file's one writer for the menu's apply above and the pause leaf's: the settings
-    // (LiveSettings.Persist), then a live headset's comfort settings. VR mode is saved and no more;
-    // the menu's ApplyOptions restarts for it.
+    // The Options apply for the menu above and the pause leaf: the settings (LiveSettings.Persist),
+    // then a live headset's comfort settings. VR mode is saved and no more; the menu's ApplyOptions
+    // restarts for it.
     private void PersistOptions(OptionsApplyExit applied)
     {
         _settings.Persist(applied, _spec, _session, headsetPaces: _xr is { PacesFrames: true });
@@ -2054,8 +2054,8 @@ public partial class Launcher : Node3D
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
-    // own rebinding feature means a rebind over the pause edits the keymap the menu edits, saved
-    // through the one writer. PersistOptions is the apply. ⚠ No ShowMenu: the flight returns to
+    // own rebinding feature means a rebind over the pause edits the keymap the menu edits. Its
+    // options apply is PersistOptions, as the menu's is. ⚠ No ShowMenu: the flight returns to
     // the sheet over its own world, not tearing down what the pause stands on. Null where no
     // layout reads.
     private UI.Screens.PausePreferences? BuildPauseOptions()
@@ -2480,6 +2480,10 @@ public sealed record LauncherContext
     /// <summary>The campaign wingman's aeroplane as a co-op guest's host named it, null while the
     /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>
     public System.Func<Net.CoopWingmanMessage?>? NetCoopWingman { get; init; }
+
+    /// <summary>The persist log as a co-op guest's host named it. Set on a co-op guest only, whose
+    /// director opens its world on it.</summary>
+    public System.Func<IReadOnlyCollection<Net.CoopPersistMessage>?>? NetCoopPersisted { get; init; }
 
     /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
     /// them at the launch. A host reads its own book and a guest the names its host sent. Null

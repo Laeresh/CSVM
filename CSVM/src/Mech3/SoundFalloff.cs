@@ -33,7 +33,7 @@ public static class SoundFalloff
     public const float EdgeDb = -30f;
 
     /// <summary>The factor every positional <c>RANGE</c> pair ships multiplied by, unless
-    /// <c>--sound-range-scale=</c> says otherwise. It is a remake-only departure with nothing
+    /// <c>--sound-range-scale=</c> says otherwise. It is a remake-only rule with nothing
     /// decoded behind it. The decode found no listener-side distance term, and at the authored
     /// radii the world emitters come in far closer than the original's. ⚠ Do not move the law's
     /// own numbers to chase it. The reading is in docs/formats/sounds.md.</summary>

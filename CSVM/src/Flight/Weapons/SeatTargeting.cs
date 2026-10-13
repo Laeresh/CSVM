@@ -160,7 +160,7 @@ public sealed class SeatTargeting
         }
 
         // The keyboard set: every one of the original's eleven targeting keys collides with our
-        // flight scheme, so the shipped keys are this port's own. All eleven actions are here, one
+        // flight scheme, so the shipped keys are remake-only. All eleven actions are here, one
         // per class per direction plus the two class-less ones, and each is rebindable.
         DispatchKey(0, InputAction.TargetNextEnemy, () => sel.NextEnemy());
         DispatchKey(1, InputAction.TargetNextAlly, () => sel.Next(TargetClass.Ally));

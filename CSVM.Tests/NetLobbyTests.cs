@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Net;
 using Xunit;
 
@@ -175,6 +176,39 @@ public class NetLobbyTests
     }
 
     [Fact]
+    public void EachLaunchsPersistLogReplacesTheLastOneAndNeverMergesIntoIt()
+    {
+        var guest = new RecordingTransport(localPeer: 2);
+        var lobby = new NetLobby(guest);
+        guest.Connect(0);
+        void Launch(params CoopPersistMessage[] log)
+        {
+            foreach (var word in CoopPersistMessage.Batch(log))
+            {
+                guest.Deliver(0, Bytes(word));
+            }
+        }
+
+        // One profile's log: two objects, kept by chapter and node.
+        var bridge = new CoopPersistMessage(6, true, 0, 3021, 0f);
+        var tower = new CoopPersistMessage(6, false, 0, 3040, 4f);
+        Launch(bridge, tower);
+        Assert.Equal(new[] { bridge, tower }, lobby.Persisted.OrderBy(s => s.Node));
+
+        // ABLE-TO-FAIL CONTROL: a word that does not open a launch merges into what is held.
+        var yacht = new CoopPersistMessage(2, true, 1, 77, 0f);
+        guest.Deliver(0, Bytes(yacht));
+        Assert.Equal(3, lobby.Persisted.Count);
+
+        // Another profile's launch replaces the whole set, and an empty log empties it.
+        var other = new CoopPersistMessage(6, true, 0, 3051, 0f);
+        Launch(other);
+        Assert.Equal(new[] { other }, lobby.Persisted);
+        Launch();
+        Assert.Empty(lobby.Persisted);
+    }
+
+    [Fact]
     public void CoopFlowsAndPicksAreKeptByTheLobbyAndNeverPassedOn()
     {
         var host = new RecordingTransport(localPeer: 1);
@@ -202,6 +236,7 @@ public class NetLobbyTests
         host.Deliver(3, Bytes(new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2)));
         host.Deliver(3, Bytes(new CoopFilmMessage(1, false, NetCoopFilm.Chapter, 2)));
         Assert.Equal(new CoopFilmMessage(1, false, NetCoopFilm.Chapter, 2), lobby.Film);
+
         Assert.Empty(session.Payloads);
 
         // A departing guest's pick goes with it, and its leaving reaches the session it flew in.

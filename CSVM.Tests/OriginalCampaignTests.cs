@@ -256,17 +256,25 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal("ROW:0", host.FocusedKey); // the career row, a fresh profile's one list row
         Back(host);
         Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
+        Assert.Equal("PreviousMissions", host.FocusedKey);
 
-        Down(host);
+        // The plaques stand about the painting, so the walk follows where each is drawn. Nothing
+        // stands under RETURN TO MAIN MENU in its band, so Down wraps to the band's far end. The
+        // old row-order walk took that Down onto CHANGE MEMENTO, the next row built.
         Down(host);
         Assert.Equal("ReturnToMainMenu", host.FocusedKey);
         Down(host);
+        Assert.Equal("PlaneConstruction", host.FocusedKey);
+        Up(host);
+        Assert.Equal("ReturnToMainMenu", host.FocusedKey);
+        Assert.Equal("PreviousMissions", host.Press(-1, 0));
+        Assert.Equal("NextMission", host.Press(-1, 0));
+        Up(host);
         Assert.Equal("ChangeMemento", host.FocusedKey);
         Down(host);
         Assert.Equal("NextMission", host.FocusedKey);
-        Up(host);
-        Up(host);
-        Assert.Equal("ReturnToMainMenu", host.FocusedKey);
+        Assert.Equal("PreviousMissions", host.Press(1, 0));
+        Assert.Equal("ReturnToMainMenu", host.Press(1, 0));
         Accept(host);
         Assert.Equal(OriginalScreen.TopLevel, host.Screen);
         Assert.False(campaign.IsOpen);
@@ -306,7 +314,8 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(0, host.Module.NarrationStarts);
         Assert.False(host.Module.AdvanceBriefing(1.0 / 60.0));
 
-        Down(host);
+        // The three plaques stand in one line, so Right walks them.
+        Assert.Equal("ReturnToCabin", host.Press(1, 0));
         Accept(host);
         Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
         Accept(host);
@@ -343,8 +352,8 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal("ReturnToBriefing", host.FocusedKey);
         Accept(host);
         Assert.Equal(OriginalScreen.CampaignBriefing, host.Screen);
-        Down(host);
-        Down(host);
+        host.Press(1, 0);
+        Assert.Equal("GoToFlightCheck", host.Press(1, 0));
         Accept(host);
         Assert.Equal(OriginalScreen.CampaignFlightCheck, host.Screen);
 
@@ -425,7 +434,7 @@ public class OriginalCampaignTests : IDisposable
         _store.Save(profile);
         var host = Host(out var campaign);
         Seat(host, "Zachary");
-        Down(host);
+        host.Press(1, 0);
         Accept(host);
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, host.Screen);
         // The career row and two mission rows at the fixture's list box, then the buttons.
@@ -524,8 +533,8 @@ public class OriginalCampaignTests : IDisposable
         host.Module.RunAidScript("b");
         Assert.Equal(closed, host.Rows.Count);
 
-        // A count with no verb is that many rows down, and the button word is that plaque's press.
-        host.Module.RunAidScript("2");
+        // A count with no verb is that many presses down, and the button word is that plaque's press.
+        host.Module.RunAidScript("1");
         Assert.Equal("AcceptSelections", host.Rows[host.Focus].Key);
         host.Module.RunAidScript(CampaignAidProfiles.ExportArgument);
         Assert.NotNull(host.Dialog);
@@ -723,9 +732,8 @@ public class OriginalCampaignTests : IDisposable
             return cues;
         }
 
-        // The cursor's walk, the shell's own rule restated. Inside an open list the axis walks the
-        // list's entries, and over a box its answers. Otherwise it steps within the focused row's
-        // column over enabled rows, wrapping at either end.
+        // The cursor's vertical walk, the shell's own rule. Inside an open list the axis walks the
+        // list's entries, and over a box its answers. Otherwise it is the shell's spatial step.
         internal void Walk(int direction)
         {
             _cues.Clear();
@@ -740,23 +748,7 @@ public class OriginalCampaignTests : IDisposable
                 return;
             }
 
-            var rows = Rows;
-            int focus = Focus;
-            if (focus < 0)
-            {
-                return;
-            }
-
-            int i = focus;
-            for (int n = 0; n < rows.Count; n++)
-            {
-                i = (i + direction + rows.Count) % rows.Count;
-                if (rows[i].Column == rows[focus].Column && rows[i].Enabled)
-                {
-                    FocusedRow = i;
-                    return;
-                }
-            }
+            Press(0, direction);
         }
 
         internal MenuExit? AcceptPress()

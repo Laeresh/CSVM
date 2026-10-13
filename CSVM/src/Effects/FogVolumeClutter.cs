@@ -22,7 +22,7 @@ namespace CSVM.Effects;
 public sealed partial class FogVolumeClutter : Node3D
 {
     /// <summary>The X/Z offset every lattice card ships displaced by, in metres, unless
-    /// <c>--cloud-jitter=</c> says otherwise. A remake-only departure with nothing decoded behind
+    /// <c>--cloud-jitter=</c> says otherwise. A remake-only rule with nothing decoded behind
     /// it: the original's own perturbation leaves its lattice standing. Flown along the deck, the
     /// undisplaced field reads as rows. ⚠ Do not widen the decoded perturbation to chase it; the
     /// reading is in docs/org/cloudCards.md.</summary>

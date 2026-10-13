@@ -54,7 +54,8 @@ internal sealed class ZeppelinVersusInputs
 /// mission's two hulls. Each hull takes its side's lobby team, so aim and friend-or-foe follow it.
 /// The host scores each dead gas bag or cannon to the seat whose hit killed it, and ends the match
 /// on a lost hull. Both hulls' broadsides are engaged, their rounds named for the hull
-/// that fired. Every machine speaks the gas bag lines and posts the ending.
+/// that fired, and both hulls' turrets are awake. Every machine speaks the gas bag lines and posts
+/// the ending.
 /// Decode: docs/org/multiplayer-zvz.md.
 /// </summary>
 internal sealed class ZeppelinVersusRuntime
@@ -158,9 +159,15 @@ internal sealed class ZeppelinVersusRuntime
 
         // FUN_00496490 writes every hull's engage byte, so both broadsides fire on every machine.
         // Only the host's rounds spend anything: a guest's world pools and aircraft wait for its word.
-        zeppelins.NamesBroadsideRounds = true;
+        zeppelins.NamesHullRounds = true;
         zeppelins.SetCannonsEngaged(hull0, true, "Zeppelin vs Zeppelin");
         zeppelins.SetCannonsEngaged(hull1, true, "Zeppelin vs Zeppelin");
+
+        // A remake-only rule: the original wakes no hull turret in this mode. Each machine runs its own
+        // copy, and the host decides their hits, as for the broadsides. The team above aims them.
+        // Their rounds are named for the hull, so a pilot they down is no suicide.
+        zeppelins.WakeTurrets(hull0, "Zeppelin vs Zeppelin");
+        zeppelins.WakeTurrets(hull1, "Zeppelin vs Zeppelin");
         int localTeam = 0;
         for (int seat = 0; seat < inputs.SeatTeams.Count && localTeam == 0; seat++)
         {
@@ -233,16 +240,20 @@ internal sealed class ZeppelinVersusRuntime
     /// </summary>
     public void StepBots(double now)
     {
-        if (!_in.Net.IsHost || !BotObjective || _in.Match.Completed || !FliesBots())
+        if (!_in.Net.IsHost || _in.Match.Completed || !FliesBots())
         {
             return;
         }
 
-        for (int hull = 0; hull < 2; hull++)
+        // With the objective off no hull is read, so no attacker is noted while the control runs.
+        if (BotObjective)
         {
-            _hullParts[hull].Clear();
-            _in.Zeppelins.CollectHullParts(hull, _hullParts[hull]);
-            NoteAttacker(hull, now);
+            for (int hull = 0; hull < 2; hull++)
+            {
+                _hullParts[hull].Clear();
+                _in.Zeppelins.CollectHullParts(hull, _hullParts[hull]);
+                NoteAttacker(hull, now);
+            }
         }
 
         for (int seat = 0; seat < _in.SeatRigs.Count && seat < _in.SeatTeams.Count; seat++)
@@ -251,6 +262,16 @@ internal sealed class ZeppelinVersusRuntime
             if (own < 0 || _in.SeatRigs[seat].Controller is not { IsBotSeat: true, Crashed: false, Pilot.Gunner: { AutoTarget: true, Disengaged: false } gunner } bot
                 || !GodotObject.IsInstanceValid(bot))
             {
+                continue;
+            }
+
+            if (!BotObjective)
+            {
+                if (_botLog.Admit(seat, BotOrderLog.ObjectiveOff))
+                {
+                    Log.Info("flight", $"zvz: bot seat {seat} {BotOrderLog.ObjectiveOff}");
+                }
+
                 continue;
             }
 

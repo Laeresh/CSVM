@@ -421,6 +421,10 @@ public sealed class NetPlayFeature : IMenuFeature
     /// while the host has named none.</summary>
     public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
 
+    /// <summary>The persist log as this co-op guest's host launched it, or null off a co-op guest.
+    /// </summary>
+    public IReadOnlyCollection<CoopPersistMessage>? CoopPersisted => IsCoopGuest ? _transport?.Persisted : null;
+
     /// <summary>This co-op guest's host's latest film word, a start or an end, or null while the
     /// host has shared no film.</summary>
     public CoopFilmMessage? CoopFilm => IsCoopGuest ? _transport?.Film : null;
@@ -620,6 +624,27 @@ public sealed class NetPlayFeature : IMenuFeature
         foreach (int peer in _admission.Admitted)
         {
             _transport.Tell(peer, wingman);
+        }
+    }
+
+    /// <summary>Sends every seated co-op guest each object of the campaign's persist log. A host
+    /// calls this at its launch, before the session's opener, beside <see cref="TellCoopWingman"/>.
+    /// </summary>
+    public void TellCoopPersisted(IReadOnlyList<CoopPersistMessage> log)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+        if (_transport == null || !IsCoopHost)
+        {
+            return;
+        }
+
+        var words = CoopPersistMessage.Batch(log);
+        foreach (int peer in _admission.Admitted)
+        {
+            foreach (var word in words)
+            {
+                _transport.Tell(peer, word);
+            }
         }
     }
 

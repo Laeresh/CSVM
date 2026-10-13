@@ -276,7 +276,7 @@ the snap, free-look, padlock, the centre key and autohead all reach the eye thro
 `LookMode` is the original's own mode byte (0 snap, 1 free-look, 2 padlock) and `SelectMode` writes it exactly once a frame: the `K`, `L` and `J` selectors on their press edge, then `HeadLookInput.ForceSnap` (the cockpit look-back); no device writes it, so both the numpad and the mouse obey the mode the keys chose, and padlock is left only by its own exit scan, which `Step` runs after the frame's bearing so the frame a direction arrives on still aims at the target and the snap state owns the next one.
 A snap frame with no direction and no held pan zeroes the targets, and it and a padlock frame with nothing offered are the only kinds that consult `IdleAim`, the no-input hook `AutoheadTarget` fills; a free-look frame holds the pose the pan reached until a selector, a further pan or the centre key moves it.
 `HeadLookInput.Looking` claims the pan with no motion on it, in either mode, so a held control over a still mouse holds the pose. `Nearest` wraps the padlock target onto the near side of the shown angle, the original's own crossing of the tail, and is scoped to that arm alone so the clamped relative paths still swing back through the front.
-`StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head, where snap aims by it and free-look turns at the 2 rad/s pan rate times it while `Active` (`PadRates`), and one in `SeatLook` for the chase swing, which eases its released pair home at the head's rates; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
+`StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head, where snap aims by it and free-look turns at the 2 rad/s pan rate times it while `Active` (`PadRates`), both reaching below a level floor to the aim's lower edge, and one in `SeatLook` for the chase swing, which eases its released pair home at the head's rates; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
 
 ## src/Flight/Camera/SeatLook.cs
 One flight seat's look controls, read once a frame into `HeadLookInput`: the snap cluster, the mouse
@@ -694,11 +694,11 @@ fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host.
 
 ## src/Flight/Ai/StuntBotObjective.cs
 One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
-zones in course order, a free steer for a lead-in point short of the next zone's nearer ribbon end,
+nearest open zone first, a free steer for a lead-in point short of that zone's nearer ribbon end,
 and inside the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers'
-approach and rail. Where the rail alone misses the zone's gates (`RailClears`) the route gains a
-straight lead-in before its entry (`LeadInFor`), refused where the world blocks it, so the rail has
-closed the lock's offset by the zone. Its tier sets `CruiseThrottle` and the odds of a fluff.
+approach and rail. Where the rail misses the gates (`RailClears`) the route gains a straight
+lead-in (`LeadInFor`), refused where the world blocks it; `RunsFrom` decides every zone end once, a
+table the session's bots share. Its tier sets `CruiseThrottle` and the odds of a fluff.
 `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
 [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots"; read `StuntBotObjectiveTests.cs`.
 
@@ -930,8 +930,8 @@ hull 0 flying the first and hull 1 the second, and `SpawnBlocks` opens each side
 block round its own hull. `Counts` lets each gas bag score once, at its own death or its bound
 cannon's, and `Points` is `score_gas_kill` to an enemy and `score_my_gas_kill` on the killer's
 own hull. `RespawnPoint` is the return by the pilot's hull, `HullSide` labels a hull's marker by
-side and `RearmSide` its rearm base's, and `BroadsideShooter` is the shooter id a hull's rounds
-carry. `VersusMatch.EndOnHullLoss` ends the match on the hull loss, and
+side and `RearmSide` its rearm base's, and `BroadsideShooter` and `TurretShooter` are the shooter
+ids a hull's rounds carry. `VersusMatch.EndOnHullLoss` ends the match on the hull loss, and
 `Session/World/ZeppelinVersusRuntime.cs` runs it. Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
 
 ## src/Flight/Modes/RearmBases.cs

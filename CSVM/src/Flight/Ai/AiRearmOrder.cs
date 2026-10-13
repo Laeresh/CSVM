@@ -99,7 +99,7 @@ public sealed class AiRearmOrder
     public Vector3 Base { get; private set; }
 
     /// <summary>How far above the node this run's gate stands, metres: <see cref="GateAboveM"/>. A
-    /// flag run raises it, a remake value, by up to <see cref="GateRaises"/> steps where every leg
+    /// flag run raises it, a remake-only rule, by up to <see cref="GateRaises"/> steps where every leg
     /// meets the ground.</summary>
     public float GateAbove { get; private set; } = GateAboveM;
 

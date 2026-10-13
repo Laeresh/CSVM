@@ -4,7 +4,7 @@ namespace CSVM.Flight.Airframe;
 
 /// <summary>Which rule, if either, hands one ground strike to the crater sink.
 /// <c>Faithful</c> is the original's own. A carve taken through it suppresses the weapon's impact
-/// animation, as the original's AND does. <c>Optional</c> is the remake's own carve, which adds a
+/// animation, as the original's AND does. <c>Optional</c> is the remake-only carve, which adds a
 /// bowl and takes nothing away.</summary>
 public enum CraterAsk
 {
@@ -21,7 +21,7 @@ public enum CraterAsk
 /// <summary>
 /// Whether a round's ground strike asks for a crater. The original's rule is the struck node's
 /// <c>CAN_MODIFY</c> flag over a <c>CRATER</c> weapon. No shipped node carries the flag, so a
-/// played round never carves (docs/org/craters.md). The remake's own carve opens a second door,
+/// played round never carves (docs/org/craters.md). The remake-only carve opens a second door,
 /// off unless it is asked for, under which every rocket warhead's ground burst carves. The
 /// decision is a pure function of the two rules, so a unit reaches it with no scene behind it.
 /// The run's answer to the option is <see cref="Enabled"/>, which <c>ProjectilePool</c> passes in.

@@ -88,8 +88,8 @@ public static class EngineAudioCurves
     private const float BoostPitchParam = 1.25f;
 
     // The gain the rattle loop plays at once its gate opens. The original's keep-alive call
-    // hardcodes 1.0, level with the engine slot's flat volume curve; this port plays it 1.3x that,
-    // a chosen departure judged at the controls, where the decoded level read audible but low.
+    // hardcodes 1.0, level with the engine slot's flat volume curve. This port plays it 1.3x that,
+    // a remake-only rule judged at the controls, where the decoded level read audible but low.
     // Decode: docs/org/shakes.md, "The rattle SOUND is a gate at full level".
     private const float RattleGain = 1.3f;
 

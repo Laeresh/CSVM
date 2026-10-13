@@ -158,6 +158,7 @@ public sealed class DogfightLobbyTests
         guest.Pick(3, default);
         Settle(host, guests);
         Assert.Empty(hostWire.Picks);
+        Assert.Equal(DogfightLobbySeat.NoPick, host.Players[1].Airframe);
 
         // ABLE-TO-FAIL CONTROL: once a lobby screen stands on it, the same guest's pick arrives.
         guest.Show();
@@ -989,7 +990,7 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
-    public void AnAddedBotJoinsTheSmallestTeamAndStaysWhereTheHostPutsIt()
+    public void AnAddedBotIsBalancedAcrossTheTeamsUntilTheHostPlacesIt()
     {
         var (host, guests, _) = Lobbies(3);
         Settle(host, guests);
@@ -1017,21 +1018,77 @@ public sealed class DogfightLobbyTests
         Assert.True(host.AddBot());
         Assert.Equal(home, host.Bots[1].Team);
 
-        // The host moves a bot, and nothing moves it back when the teams change after.
+        // The host places a bot, and the other rebalances around it: three Home against one Away.
         Assert.True(host.SetBotTeam(host.Bots[0].Id, home));
+        Assert.Equal((home, true), (host.Bots[0].Team, host.Bots[0].Placed));
+        Assert.Equal(away, host.Bots[1].Team);
+
+        // Nothing moves the placed bot when the teams change after.
         Assert.True(guests[1].LeaveTeam());
         Settle(host, guests);
         Assert.Equal(home, host.Bots[0].Team);
 
-        // ABLE-TO-FAIL CONTROL: a team that does not stand is refused. A disbanded team's bots go
-        // teamless rather than joining whatever team takes its number next.
+        // ABLE-TO-FAIL CONTROL: a team that does not stand is refused. Auto hands the bot back to the
+        // balancing, which now puts one bot on each side.
         Assert.False(host.SetBotTeam(host.Bots[0].Id, 9));
+        Assert.True(host.SetBotTeam(host.Bots[0].Id, 0));
+        Assert.False(host.Bots[0].Placed);
+        Assert.Equal(new[] { home, away }, host.Bots.Select(bot => bot.Team));
+    }
+
+    [Fact]
+    public void ASoloHostsBotsOpenASecondTeamAndTheHostSetsTheOdds()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.True(host.CreateTeam("Me"));
+        byte me = host.OwnTeam;
+        Assert.Equal(4, host.FillTo(5));
+        byte bots = host.Teams.Single(team => team.Name == DogfightLobby.BotTeamName).Number;
+        Assert.Equal(2, host.Teams.Count);
+        Assert.Equal(new[] { bots, me, bots, me }, host.Bots.Select(bot => bot.Team));
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // The host puts every bot against itself: one against four launches, the odds being its own.
+        foreach (var bot in host.Bots.ToList())
+        {
+            Assert.True(host.SetBotTeam(bot.Id, bots));
+        }
+
+        Assert.Equal(new byte[] { me, bots, bots, bots, bots }, host.Players.Select(player => player.Team));
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: with nobody on a team and every bot on Auto, the bots fly the
+        // free-for-all and their team is gone.
         Assert.True(host.LeaveTeam());
+        foreach (var bot in host.Bots.ToList())
+        {
+            Assert.True(host.SetBotTeam(bot.Id, 0));
+        }
+
+        Assert.Empty(host.Teams);
+        Assert.False(host.Teamed);
+    }
+
+    [Fact]
+    public void ABotsTeamGivesWayOncePeopleFormTwoTeams()
+    {
+        var (host, guests, _) = Lobbies(2);
         Settle(host, guests);
-        Assert.All(host.Bots, bot => Assert.NotEqual(home, bot.Team));
-        Assert.True(host.CreateTeam("Again"));
-        Assert.Equal(home, host.OwnTeam);
-        Assert.All(host.Bots, bot => Assert.NotEqual(home, bot.Team));
+        Assert.True(host.CreateTeam("Home"));
+        Assert.Equal(2, host.FillTo(4));
+        Settle(host, guests);
+        Assert.Contains(host.Teams, team => team.Name == DogfightLobby.BotTeamName);
+
+        // The guest's own team makes two sides of people, so the bots join them and theirs goes.
+        Assert.True(guests[0].CreateTeam("Away"));
+        Settle(host, guests);
+        Assert.Equal(new[] { "Home", "Away" }, host.Teams.Select(team => team.Name));
+        Assert.Equal(new[] { host.OwnTeam, host.Players[1].Team }, host.Bots.Select(bot => bot.Team));
+
+        // ABLE-TO-FAIL CONTROL: a Stunt Race flies no teams, so it puts no bot on one.
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Settle(host, guests);
+        Assert.All(host.Bots, bot => Assert.Equal(0, bot.Team));
     }
 
     [Fact]
@@ -1156,22 +1213,23 @@ public sealed class DogfightLobbyTests
         Assert.True(host.CreateTeam("Solo"));
         Assert.Equal(TeamLaunchRefusal.NotEnoughPlayers, host.LaunchRefusal);
 
-        // The bot joins the one team standing, which makes two players on one team: langui 10519.
+        // The host places the bot on its own team, two players on one team: langui 10519.
         Assert.True(host.AddBot());
-        Assert.Equal(host.OwnTeam, host.Bots[0].Team);
+        Assert.True(host.SetBotTeam(host.Bots[0].Id, host.OwnTeam));
+        Assert.Single(host.Teams);
         Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
         Assert.True(host.Teamed);
 
-        // Off the team it is still one standing team, now with a teamless player beside it.
+        // ABLE-TO-FAIL CONTROL: on Auto the bot opens a second team, and with no team standing the
+        // two fly a free-for-all.
         Assert.True(host.SetBotTeam(host.Bots[0].Id, 0));
-        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
-
-        // ABLE-TO-FAIL CONTROL: with no team standing the two fly a free-for-all.
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
         Assert.True(host.LeaveTeam());
         Assert.False(host.Teamed);
         Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
 
-        // And bots on two people's teams balance them.
+        // Bots on two people's teams balance them. A host placing both on its own team still launches,
+        // since with bots in the field the host sets the odds.
         var (mixed, others, _) = Lobbies(2);
         Settle(mixed, others);
         mixed.CreateTeam("Home");
@@ -1179,8 +1237,9 @@ public sealed class DogfightLobbyTests
         Settle(mixed, others);
         Assert.Equal(2, mixed.FillTo(4));
         Assert.Equal(TeamLaunchRefusal.None, mixed.LaunchRefusal);
+        Assert.True(mixed.SetBotTeam(mixed.Bots[0].Id, mixed.OwnTeam));
         Assert.True(mixed.SetBotTeam(mixed.Bots[1].Id, mixed.OwnTeam));
-        Assert.Equal(TeamLaunchRefusal.Unbalanced, mixed.LaunchRefusal);
+        Assert.Equal(TeamLaunchRefusal.None, mixed.LaunchRefusal);
     }
 
     [Fact]
@@ -1219,7 +1278,7 @@ public sealed class DogfightLobbyTests
         var guest = guests[0];
         var row = guest.Players[2];
         Assert.True(row.IsBot);
-        Assert.Equal((host.Bots[0].Callsign, DogfightLobbySeat.RandomAirframe, NetBotSkill.Novice, host.OwnTeam, true),
+        Assert.Equal((host.Bots[0].Callsign, DogfightLobbySeat.RandomAirframe, NetBotSkill.Novice, host.Bots[0].Team, true),
             (row.Name, row.Airframe, row.Skill, row.Team, row.Ready));
         Assert.False(guest.Players[1].IsBot);
         Assert.Empty(guest.Bots);

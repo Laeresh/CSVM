@@ -200,6 +200,17 @@ public static class OriginalRaceResults
             : (ScoresBar.Clamp(scoresTop + step, sheet.Standings.Count), splitsTop);
     }
 
+    /// <summary>One list's window at <paramref name="top"/> as the wheel and the thumb see it, read
+    /// as the lobby reads that list. It is the splits under <see cref="SplitsBar"/>, else the
+    /// standings under <see cref="ScoresBar"/>.</summary>
+    public static ListWindow Window(RaceResultsSheet sheet, bool splits, int top)
+    {
+        ArgumentNullException.ThrowIfNull(sheet);
+        return splits
+            ? SplitsBar.Window(ChatX, sheet.Splits.Count, top)
+            : ScoresBar.Window(PageX + OriginalRaceTable.RowX, sheet.Standings.Count, top);
+    }
+
     /// <summary>The menu row whose plaque or arrow stands at an authored point, or -1 for none.</summary>
     public static int MenuRowAt(RaceResultsSheet sheet, float x, float y)
     {

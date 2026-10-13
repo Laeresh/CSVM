@@ -12,7 +12,7 @@ namespace CSVM.Effects;
 /// </summary>
 internal sealed class OceanWakeTrack
 {
-    /// <summary>Remake-only rule, set by the look. The sim seconds between two samples. The trail
+    /// <summary>Remake-only rule: set by the look. The sim seconds between two samples. The trail
     /// lasts this times two less than <see cref="OceanShader.WakeSamples"/>; a turn bends at the samples.</summary>
     public const float SampleSecs = 4f;
 

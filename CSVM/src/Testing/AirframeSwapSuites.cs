@@ -316,6 +316,28 @@ internal static class AirframeSwapSuites
         ctx.Note($"drove the Warhawk swap {chapter}/{folder} authors and read the livery it rebuilds in");
     }
 
+    // The definition whose CALL_ANIMATION arms the named one.
+    internal static string? CallerOf(TestWorld world, string called)
+    {
+        foreach (var def in world.Session.Program.Defs)
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } name
+                        && name.Equals(called, StringComparison.OrdinalIgnoreCase)
+                        && def.AnimName is { Length: > 0 } caller)
+                    {
+                        return caller;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     // Fires the captured aircraft's carried gunners until one round leaves, holds its own gun loop,
     // and runs the swap on that same frame. ⚠ Never swap with the turret idle: an expired lease
     // passes this check with no fix at all.
@@ -691,28 +713,6 @@ internal static class AirframeSwapSuites
         probe = site;
         rig.Controller?.Activate(site, site + (Vector3.Forward * 100f));
         return site;
-    }
-
-    // The definition whose CALL_ANIMATION arms the named one.
-    private static string? CallerOf(TestWorld world, string called)
-    {
-        foreach (var def in world.Session.Program.Defs)
-        {
-            foreach (var seq in def.Sequences)
-            {
-                foreach (var ev in seq.Events)
-                {
-                    if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } name
-                        && name.Equals(called, StringComparison.OrdinalIgnoreCase)
-                        && def.AnimName is { Length: > 0 } caller)
-                    {
-                        return caller;
-                    }
-                }
-            }
-        }
-
-        return null;
     }
 
     // Exactly one leg of each pair, the one whose prerequisite the sensor's state satisfies, plus

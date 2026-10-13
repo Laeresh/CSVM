@@ -369,14 +369,33 @@ public sealed class CampaignDirector
         return new Net.CoopWingmanMessage((byte)plane.Airframe, Net.CoopFit.Of(plane.Ammo, plane.Ordnance));
     }
 
+    /// <summary>What a co-op host tells its guests its persist log holds: every chapter's states as
+    /// its profile file stores them. A guest's director then carries the same
+    /// <see cref="CampaignPersistLog.Through"/> into its world as the host's.</summary>
+    public static List<Net.CoopPersistMessage> CoopPersistedOf(CampaignProfileDef profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var log = new List<Net.CoopPersistMessage>();
+        foreach (int chapter in profile.PersistLog.Chapters)
+        {
+            foreach (var state in profile.PersistLog.For(chapter))
+            {
+                log.Add(new Net.CoopPersistMessage((byte)chapter, state.Destroyed, (short)state.Seq, state.Node, state.Health));
+            }
+        }
+
+        return log;
+    }
+
     /// <summary>Construction, the shape <see cref="InstantAction.InstantActionDirector.TryCreate"/> has.
-    /// It is null outside a campaign launch. A profile that cannot be loaded warns and flies without
-    /// a director rather than aborting the launch. Only a co-op guest passes
-    /// <paramref name="hostWingman"/>, so its wingman flies the aeroplane its host named. A host
-    /// whose humans hold the saved wingman plane flies the one the cabin settled instead
-    /// (<see cref="SessionSpec.CampaignWingman"/>).</summary>
+    /// Null outside a campaign launch; an unloadable profile warns and flies without a director. Only
+    /// a co-op guest passes <paramref name="hostWingman"/> (its wingman flies the host's pick) and
+    /// <paramref name="hostPersisted"/> (its world opens on the host's persist log). A host whose
+    /// humans hold the saved wingman plane flies the cabin's (<see cref="SessionSpec.CampaignWingman"/>).
+    /// </summary>
     public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath,
-        Func<Net.CoopWingmanMessage?>? hostWingman = null)
+        Func<Net.CoopWingmanMessage?>? hostWingman = null,
+        Func<IReadOnlyCollection<Net.CoopPersistMessage>?>? hostPersisted = null)
     {
         if (spec.CampaignProfile == null || spec.CampaignMissionSeq is not { } seq)
         {
@@ -401,6 +420,18 @@ public sealed class CampaignDirector
         if (MissionFor(zrdrPath, seq) is not { } mission)
         {
             return null;
+        }
+
+        if (guest && hostPersisted?.Invoke() is { } persisted)
+        {
+            foreach (var state in persisted)
+            {
+                // Empty names: a log matches by node alone, and the wire carries no names.
+                profile.PersistLog.Merge(state.Chapter, state.Seq,
+                    new[] { new PersistedObject(state.Node, "", "", state.Destroyed, state.Health) });
+            }
+
+            Log.Info("core", $"campaign: co-op guest takes {persisted.Count} object(s) of its host's persist log");
         }
 
         var script = ObjectiveScript.Load(missionZrdrPath);

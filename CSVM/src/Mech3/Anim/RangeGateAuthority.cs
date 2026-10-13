@@ -5,7 +5,7 @@ using System.Globalization;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>
-/// Which machine answers a <c>PLAYER_RANGE</c> gate. A gate is a mission decision when its
+/// Which machine answers a <c>PLAYER_RANGE</c> or <c>EXECUTION_BY_RANGE</c> gate. A gate is a mission decision when its
 /// definition, or one it starts through <c>CALL_ANIMATION</c>, raises a <c>CALLBACK</c>. In network
 /// co-op the host answers such a gate over its whole human field and a guest replays the verdict.
 /// Every other gate, the ordnance washes among them, stays each machine's own read, since each
@@ -15,16 +15,28 @@ namespace CSVM.Mech3.Anim;
 /// </summary>
 public sealed class RangeGateAuthority
 {
-    /// <summary>Set on a deciding end: raised with a host-decided gate's name and its new verdict
-    /// each time that verdict changes. A gate never passed has told nobody anything.</summary>
-    public Action<string, bool>? Decided;
+    /// <summary>Set on a deciding end: raised each time a host-decided gate's verdict changes. It
+    /// carries the gate's name, the verdict, and the seat a pass names as episode owner, or null.
+    /// A gate never passed has told nobody anything.</summary>
+    public Action<string, bool, int?>? Decided;
 
     /// <summary>Set on a network guest only: the host's verdict for a gate, by name. While it is
     /// set, a host-decided gate is never read against this machine's own field.</summary>
     public Func<string, bool>? HostVerdict;
 
+    /// <summary>Set on a network guest only: the seat the host's last pass of a gate named, or
+    /// null where it named none.</summary>
+    public Func<string, int?>? HostSeat;
+
+    /// <summary>Set on a network guest only: how many times the host's passes have opened a gate.
+    /// It is counted from the wire in order, so a close and reopen between two polls reads as new.
+    /// </summary>
+    public Func<string, int>? HostOpenings;
+
     private readonly Dictionary<AnimDefinition, bool> _raisesCode = new();
-    private readonly Dictionary<string, bool> _told = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (bool Passed, int? Seat, int Opens)> _told = new(StringComparer.OrdinalIgnoreCase);
+    // The opening each gate's claim was last armed for on this end.
+    private readonly Dictionary<string, int> _armed = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
     private Func<string, IReadOnlyList<AnimDefinition>> _byName = _ => Array.Empty<AnimDefinition>();
 
@@ -44,6 +56,7 @@ public sealed class RangeGateAuthority
         _byName = byName ?? throw new ArgumentNullException(nameof(byName));
         _raisesCode.Clear();
         _told.Clear();
+        _armed.Clear();
     }
 
     /// <summary>Does <paramref name="def"/>'s range gate belong to the host? True when a
@@ -62,17 +75,38 @@ public sealed class RangeGateAuthority
 
     /// <summary>Records this end's own verdict on a host-decided gate and answers it unchanged,
     /// raising <see cref="Decided"/> when it differs from the last one.</summary>
-    public bool Decide(string gate, bool passed)
+    public bool Decide(string gate, bool passed, int? seat = null)
     {
         ArgumentNullException.ThrowIfNull(gate);
-        _told.TryGetValue(gate, out bool last);
-        if (passed != last)
+        _told.TryGetValue(gate, out var last);
+        if (passed != last.Passed)
         {
-            _told[gate] = passed;
-            Decided?.Invoke(gate, passed);
+            _told[gate] = (passed, seat, last.Opens + (passed ? 1 : 0));
+            Decided?.Invoke(gate, passed, seat);
         }
 
         return passed;
+    }
+
+    /// <summary>The seat this end's standing pass of <paramref name="gate"/> named when it opened,
+    /// or null while the gate is closed or its pass named none.</summary>
+    public int? PassSeat(string gate) =>
+        _told.TryGetValue(gate, out var told) && told.Passed ? told.Seat : null;
+
+    /// <summary>Is this read of an open <paramref name="gate"/> the first since it opened? True once
+    /// per opening: this end's own on the host, the host's on a guest (<see cref="HostOpenings"/>).
+    /// </summary>
+    public bool NewOpening(string gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        int opening = HostOpenings?.Invoke(gate) ?? (_told.TryGetValue(gate, out var told) ? told.Opens : 0);
+        if (_armed.TryGetValue(gate, out int last) && last == opening)
+        {
+            return false;
+        }
+
+        _armed[gate] = opening;
+        return true;
     }
 
     // Reset states are left out: a RESET_STATE raises no CALLBACK, and it starts nothing.

@@ -319,6 +319,27 @@ public sealed partial class ZeppelinRuntime : Node
         return true;
     }
 
+    /// <summary>Wakes every emplacement standing on the hull <paramref name="node"/>, the subtree
+    /// walk <see cref="TurretEmplacementRuntime.SetActivatedUnder"/>, logged with
+    /// <paramref name="by"/>. Under <see cref="NamesHullRounds"/> their rounds carry the hull's
+    /// <see cref="Flight.Modes.ZeppelinVersus.TurretShooter"/> id. Returns how many woke.</summary>
+    public int WakeTurrets(string node, string by)
+    {
+        if (Find(node) is not { } zep || Turrets() is not { } turrets)
+        {
+            return 0;
+        }
+
+        if (NamesHullRounds)
+        {
+            turrets.NameRoundsUnder(zep.Host, Flight.Modes.ZeppelinVersus.TurretShooter(_live.IndexOf(zep)));
+        }
+
+        int woken = turrets.SetActivatedUnder(zep.Host, true);
+        Log.Info("flight", $"zep: '{zep.Def.Node}' {woken} turret(s) woken by {by}");
+        return woken;
+    }
+
     /// <summary>Hands every hull's path to the host: from here each is a <see cref="ZeppelinReplica"/>
     /// started where it stands, and its follower and steer law no longer run. A zeppelin is named
     /// by its index in placement order, which both ends build from the same records. Idempotent.

@@ -82,7 +82,7 @@ public readonly record struct OriginalScrollBar(float X, float Y, float Height, 
             Height: window.ThumbHeight));
     }
 
-    /// <summary>An arrow as a shell row in the cursor's right column, live while it can move a
+    /// <summary>An arrow as a shell row, live while it can move a
     /// window at <paramref name="top"/>.</summary>
     public OriginalRow ArrowRow(string key, bool down, int count, int top) =>
         new(key, string.Empty, OriginalRowKind.Button, X, down ? DownY : Y, ArrowWidth, ArrowHeight,

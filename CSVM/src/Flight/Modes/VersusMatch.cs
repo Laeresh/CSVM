@@ -305,9 +305,9 @@ public sealed class VersusMatch
     }
 
     /// <summary>A death with no killer, terrain or mid-air: +1 death and <see cref="MatchScores.Suicide"/>
-    /// to the pilot who died, the original's own penalty. Never completes the match by itself, a
-    /// falling score cannot reach the target. No-op once <see cref="Completed"/>.</summary>
-    public void RegisterDeath(int victim)
+    /// to the pilot who died, the original's own penalty, unless <paramref name="suicide"/> is false.
+    /// Never completes the match by itself. No-op once <see cref="Completed"/>.</summary>
+    public void RegisterDeath(int victim, bool suicide = true)
     {
         if (Completed)
             return;
@@ -315,7 +315,7 @@ public sealed class VersusMatch
         if (victimRow != null)
         {
             victimRow.Deaths++;
-            victimRow.Score += Scores.Suicide;
+            victimRow.Score += suicide ? Scores.Suicide : 0;
         }
         CheckAlone();
     }

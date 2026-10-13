@@ -195,6 +195,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// switch. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Action<string>? MissionTriggerOwner;
 
+    /// <summary>Told the episode owner's seat and the definition that owns the episode, before it
+    /// starts. That is what an <c>EXECUTION_BY_RANGE</c> gate starts, or a code-raising
+    /// <c>PLAYER_RANGE</c> pass's first callee that raises a code. ⚠ <see cref="PlayerPositions"/> must list every seat, in seat order: the
+    /// seat is an index into it. Not told inside a mission trigger's own start, or where the host's
+    /// verdict names no seat.</summary>
+    public Action<string, int>? RangeTriggerOwner;
+
     /// <summary>The rate one cutscene episode's definitions run at while the player holds a key
     /// through a scene that offers no skip, or null on a runtime nobody fast-forwards (every one
     /// but the world's). Set by <c>CutsceneController</c>, which owns both the scope and the key.
@@ -576,6 +583,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // The subset deferred from the mission startanim list because their call target is library
     // content. Ordinary ON_STARTUP range defs must retain their old call-resolution behavior.
     private readonly HashSet<AnimDefinition> _rangeLibraryCallDefs = new();
+
+    // Host-decided PLAYER_RANGE gates that opened in this advance, by gate name: the definition, the
+    // anchor and the opening's seat. The branch's first call whose closure raises a code spends one.
+    // ⚠ Cleared at each advance; a pass left armed would claim a later, unrelated start.
+    private readonly Dictionary<string, (AnimDefinition Def, Node3D Anchor, int Seat)> _rangePasses =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly List<Vector3I> _rangeCheckCells = new();
 
@@ -1533,6 +1546,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // both clock paths (realtime physics, parent-driven frame) reach the runtime through here.
         FastForward?.Ramp(dt);
         _elapsed += dt;
+        _rangePasses.Clear();
         SampleRangePositions();
         // Motions advance ONCE per frame, here, not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4× speed.
@@ -2100,6 +2114,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Mathf.FloorToInt(pos.Y / RangeCheckCellSize),
         Mathf.FloorToInt(pos.Z / RangeCheckCellSize));
 
+    // The index of the position nearest `point`, and its squared distance; -1 for an empty field.
+    private static int NearestOf(IReadOnlyList<Vector3> positions, Vector3 point, out float d2)
+    {
+        int nearest = -1;
+        d2 = float.MaxValue;
+        for (int i = 0; i < positions.Count; i++)
+        {
+            float d = point.DistanceSquaredTo(positions[i]);
+            if (d < d2)
+            {
+                d2 = d;
+                nearest = i;
+            }
+        }
+        return nearest;
+    }
+
     // The AT_NODE and condition-node sentinels for "the node this definition was invoked on"; both
     // resolve to the anchor. The compiled u32 form and why it is matched by magnitude rather than
     // equality: docs/formats/anim-definitions.md.
@@ -2233,6 +2264,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _program = program;
         _callTargets = null;
         RangeGates.Bind(program.ByAnimName);
+        _rangePasses.Clear();
         // ⚠ Hand these flags over before the first Add/Anchors call; they are construction-time
         // facts about this runtime. The census covers the bootstrap passes only.
         _resolver.NameResolveFallback = NameResolveFallback;
@@ -2429,14 +2461,64 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         foreach (var (deferred, at) in _rangeDeferred)
             if (ReferenceEquals(deferred, target) && ReferenceEquals(at, anchor))
                 return true;
-        float d2 = NearestPlayerDistanceSquared(RangeOriginOf(anchor));
-        if (d2 >= target.RangeMin && d2 <= target.RangeMax)
+        // A guest never reads a host-decided band against its own field: it waits for the host's word.
+        bool followsHost = FollowsHost(target);
+        int seat = -1;
+        float d2 = followsHost ? float.MaxValue : NearestPlayerDistanceSquared(RangeOriginOf(anchor), out seat);
+        if (!followsHost && d2 >= target.RangeMin && d2 <= target.RangeMax)
+        {
+            // Already in the band: the call runs it now, and the seat standing there owns it.
+            ClaimRangeStart(target, anchor, seat);
             return false;
+        }
         _rangeDeferred.Add((target, anchor));
         _rangeLibraryCallDefs.Add(target);
         _rangeCheckCells.Clear(); // force a sweep on the next Advance
-        Log.Info("anim", $"anim: '{name}' armed by call at {Mathf.Sqrt(d2):0} m, waiting for EXECUTION_BY_RANGE ({Mathf.Sqrt(target.RangeMax):0} m)");
+        if (followsHost)
+            Log.Info("anim", $"anim: '{name}' armed by call, waiting for the host's EXECUTION_BY_RANGE verdict");
+        else
+            Log.Info("anim", $"anim: '{name}' armed by call at {Mathf.Sqrt(d2):0} m, waiting for EXECUTION_BY_RANGE ({Mathf.Sqrt(target.RangeMax):0} m)");
         return true;
+    }
+
+    // Is this end a network guest waiting on the host's verdict for a code-raising range gate?
+    private bool FollowsHost(AnimDefinition def) => RangeGates.HostVerdict != null && RangeGates.HostDecides(def);
+
+    private string RangeGateName(AnimDefinition def, Node3D anchor) =>
+        RangeGateAuthority.GateName(def, anchor.Name, def.RangeMax);
+
+    // The deciding end's claim on a range start, made ahead of the start. The episode owner is the
+    // seat nearest the anchor, and a code-raising gate sends that seat on with its verdict.
+    // ⚠ Do not claim inside a mission trigger's own start; that start's claim already names its pilot.
+    private void ClaimRangeStart(AnimDefinition def, Node3D anchor, int seat)
+    {
+        int? owner = _missionCallDepth == 0 && seat >= 0 ? seat : null;
+        if (RangeGates.HostDecides(def))
+        {
+            // One pass and its withdrawal: the guest holds an unread pass, and a re-armed gate can pass again.
+            string gate = RangeGateName(def, anchor);
+            RangeGates.Decide(gate, true, owner);
+            RangeGates.Decide(gate, false);
+        }
+        if (owner is { } claimed && def.AnimName is { } name)
+            RangeTriggerOwner?.Invoke(name, claimed);
+    }
+
+    // A gate opening's claim, spent on the first callee of the opening definition whose closure
+    // raises a code. It names that callee, never the gate's own definition, which may loop forever
+    // and so would never end its episode.
+    private void ClaimRangePass(AnimDefinition caller, Node3D? anchor, AnimDefinition target)
+    {
+        if (target.AnimName is not { } name || !RangeGates.HostDecides(target))
+            return;
+        foreach (var (gate, pass) in _rangePasses)
+        {
+            if (!ReferenceEquals(pass.Def, caller) || pass.Anchor != anchor)
+                continue;
+            _rangePasses.Remove(gate);
+            RangeTriggerOwner?.Invoke(name, pass.Seat);
+            return;
+        }
     }
 
     private bool CallsUnplacedDefinition(AnimDefinition caller)
@@ -2482,11 +2564,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         bool moved = positions.Count != _rangeCheckCells.Count;
         for (int i = 0; !moved && i < positions.Count; i++)
             moved = CheckCellOf(positions[i]) != _rangeCheckCells[i];
-        if (!moved)
+        // A guest polls the host's verdicts every frame, since they arrive whether or not anyone moved.
+        if (!moved && RangeGates.HostVerdict == null)
             return;
-        _rangeCheckCells.Clear();
-        foreach (var p in positions)
-            _rangeCheckCells.Add(CheckCellOf(p));
+        if (moved)
+        {
+            _rangeCheckCells.Clear();
+            foreach (var p in positions)
+                _rangeCheckCells.Add(CheckCellOf(p));
+        }
         for (int i = _rangeDeferred.Count - 1; i >= 0; i--)
         {
             var (def, anchor) = _rangeDeferred[i];
@@ -2496,14 +2582,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _rangeOriginLocal.Remove(anchor);
                 continue;
             }
-            var anchorPos = RangeOriginOf(anchor);
-            float d2 = float.MaxValue;
-            foreach (var p in positions)
-                d2 = Mathf.Min(d2, anchorPos.DistanceSquaredTo(p));
-            if (d2 < def.RangeMin || d2 > def.RangeMax)
-                continue;
-            _rangeDeferred.RemoveAt(i);
-            Log.Info("anim", $"anim: EXECUTION_BY_RANGE reached - starting {def.AnimName ?? def.Name} at {Mathf.Sqrt(d2):0} m (range {Mathf.Sqrt(def.RangeMax):0} m)");
+            if (FollowsHost(def))
+            {
+                string gate = RangeGateName(def, anchor);
+                if (!RangeGates.HostVerdict!(gate))
+                    continue;
+                _rangeDeferred.RemoveAt(i);
+                int? seat = RangeGates.HostSeat?.Invoke(gate);
+                Log.Info("anim", $"anim: EXECUTION_BY_RANGE passed by the host - starting {def.AnimName ?? def.Name} for seat {seat ?? -1}");
+                // Before the start, for PlayMissionTrigger's reason: the first CALLBACK can land inside it.
+                if (seat is { } owner && def.AnimName is { } name)
+                    RangeTriggerOwner?.Invoke(name, owner);
+            }
+            else
+            {
+                if (!moved)
+                    continue;
+                int nearest = NearestOf(positions, RangeOriginOf(anchor), out float d2);
+                if (d2 < def.RangeMin || d2 > def.RangeMax)
+                    continue;
+                _rangeDeferred.RemoveAt(i);
+                Log.Info("anim", $"anim: EXECUTION_BY_RANGE reached - starting {def.AnimName ?? def.Name} at {Mathf.Sqrt(d2):0} m (range {Mathf.Sqrt(def.RangeMax):0} m)");
+                ClaimRangeStart(def, anchor, nearest);
+            }
             bool libraryCalls = _rangeLibraryCallDefs.Contains(def);
             if (libraryCalls)
                 _rangeCallDepth++;
@@ -3044,6 +3145,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     _templateStage.PlaceAt(target, callAnchor!, siteOffset, follow: rides, orient: placeOrient);
                                 }
                             }
+                            if (!instant && _rangePasses.Count > 0)
+                                ClaimRangePass(def, anchor, target);
                             Start(target, startAnchor);
                             // ⚠ Reveal the mesh too, after Start. On a stage that hides its
                             // templates, an unrevealed callee shows its particles and none of its
@@ -3819,12 +3922,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // the same nearest-of-every-player rule TickDeferredByRange's EXECUTION_BY_RANGE
     // gate already uses, so a wash or door gated by a burst near player 4 fires even while player 1
     // sits kilometres off. Falls back to PlayerPos when no PlayerPositions seam is wired.
-    private float NearestPlayerDistanceSquared(Vector3 point)
+    private float NearestPlayerDistanceSquared(Vector3 point) => NearestPlayerDistanceSquared(point, out _);
+
+    // `seat` is the nearest position's index in the range field, or -1 on the PlayerPos fallback.
+    private float NearestPlayerDistanceSquared(Vector3 point, out int seat)
     {
-        float d2 = float.MaxValue;
-        foreach (var p in RangePositions())
-            d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
-        return d2 == float.MaxValue ? point.DistanceSquaredTo(PlayerPos()) : d2;
+        seat = NearestOf(RangePositions(), point, out float d2);
+        return seat >= 0 ? d2 : point.DistanceSquaredTo(PlayerPos());
     }
 
     // A PLAYER_RANGE gate's answer, from whichever machine RangeGates says owns it. C4/M03's
@@ -3838,9 +3942,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
 
         string gate = RangeGateAuthority.GateName(def, anchor.Name, radiusSq);
-        return RangeGates.HostVerdict is { } host
-            ? host(gate)
-            : RangeGates.Decide(gate, NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq);
+        bool passed;
+        int? seat;
+        if (RangeGates.HostVerdict is { } host)
+        {
+            passed = host(gate);
+            seat = RangeGates.HostSeat?.Invoke(gate);
+        }
+        else
+        {
+            bool inside = NearestPlayerDistanceSquared(WorldPos(anchor), out int nearest) <= radiusSq;
+            passed = RangeGates.Decide(gate, inside, _missionCallDepth == 0 && nearest >= 0 ? nearest : null);
+            seat = RangeGates.PassSeat(gate);
+        }
+
+        // Armed once per opening, with the seat named then. The definition's own loop re-polls an
+        // open gate, and each poll's calls must not claim again.
+        if (!passed)
+            _rangePasses.Remove(gate);
+        else if (RangeGates.NewOpening(gate) && seat is { } owner)
+            _rangePasses[gate] = (def, anchor, owner);
+        return passed;
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)

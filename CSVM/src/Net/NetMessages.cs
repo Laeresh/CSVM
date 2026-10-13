@@ -188,6 +188,10 @@ public enum NetMessageType : ushort
     /// <summary>A stunt race's window decided for the field: the host's new window or its return to the
     /// lobby, or a guest leaving.</summary>
     RaceCall = 0x006A,
+
+    /// <summary>One object of a co-op host's persist log, sent to every guest at a launch so its
+    /// world opens on the host's wreckage.</summary>
+    CoopPersist = 0x006B,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -611,8 +615,8 @@ public readonly record struct FireMessage(
 /// a direct strike and the blast falloff otherwise. The struck collision shape is
 /// <see cref="Part"/>, or -1 for a shapeless one. The <see cref="LocalImpact"/> point is in the
 /// victim's own body space, so the victim resolves the same zone however far it has flown since.
-/// The <see cref="Hull"/> byte names the zeppelin whose broadside fired an unowned round, by
-/// placement index, and is <see cref="NetMessage.NoSeat"/> otherwise.</summary>
+/// The <see cref="Hull"/> byte names the zeppelin whose broadside or turret fired an unowned round,
+/// as <c>ZeppelinVersus.HullOfShooter</c> gives it, and is <see cref="NetMessage.NoSeat"/> otherwise.</summary>
 public readonly record struct HitMessage(
     byte VictimSeat, byte ShooterSeat, ushort Weapon, float Damage, short Part, Vector3 LocalImpact,
     byte Hull = NetMessage.NoSeat)
@@ -815,8 +819,8 @@ public readonly record struct DeathMessage(
 /// A match death as the host decided it, sent to every guest so each posts the kill lines once.
 /// The owner's <see cref="DeathMessage"/> is relayed to everyone but its reporter, so it cannot
 /// be the post. Reliable. The cause is the one the host scored, so a death with no seat to charge
-/// reads <see cref="NetDeathCause.Suicide"/>. A zeppelin's kill names the lobby team of the hull
-/// that fired in <see cref="Team"/>, 0 for every other cause.</summary>
+/// reads <see cref="NetDeathCause.Suicide"/>. A hull's kill, broadside or turret, names the lobby
+/// team of the hull that fired in <see cref="Team"/>, 0 for every other kill.</summary>
 public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause, byte Team = 0)
     : INetMessage<DeathNoticeMessage>
 {
@@ -1627,8 +1631,8 @@ public static class NetMessage
     /// no spawn list, so the seat comes back on the one pose it was given.</summary>
     public const ushort NoSpawnEntry = 0xFFFF;
 
-    /// <summary>The highest type word the original itself uses. Anything above it is this
-    /// remake's own and has no counterpart in <c>crimson.exe</c>.</summary>
+    /// <summary>The highest type word the original itself uses. Anything above it is a
+    /// remake-only message type and has no counterpart in <c>crimson.exe</c>.</summary>
     public const ushort OriginalIdCeiling = 0x27;
 
     /// <summary>The ceiling <see cref="AircraftStateMessage.Size"/> may not pass. It is the
@@ -1689,6 +1693,7 @@ public static class NetMessage
         NetMessageType.RaceState => RaceStateMessage.Reliability,
         NetMessageType.RaceStanding => RaceStandingMessage.Reliability,
         NetMessageType.RaceCall => RaceCallMessage.Reliability,
+        NetMessageType.CoopPersist => CoopPersistMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

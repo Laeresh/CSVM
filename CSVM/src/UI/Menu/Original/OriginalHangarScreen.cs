@@ -196,8 +196,9 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private const int PaintNameString = 1152;
 
     // What the wallet-free inventory calls removing a plane, on the button, over the page and in
-    // the confirm. Remake-only, as the hub's export strips are. Nothing is paid for a wallet-free
-    // build, so the shipped Sell words all read wrong, and the table carries no delete word.
+    // the confirm. A remake-only word, as the hub's export strips are. Nothing is paid for a
+    // wallet-free build, so the shipped Sell words all read wrong, and the table carries no delete
+    // word.
     private const string DeleteLabel = "Delete";
     private const string DeletePrompt = "Delete a Plane";
     private const string DeleteQuestion = "Are you sure you want to delete it?";
@@ -969,8 +970,8 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         return true;
     }
 
-    // A sideways step inside the hangar. On a dropdown it picks the next value with wrap, and on
-    // the tab bar and the buttons it walks along them. A text field or a checkbox takes none.
+    // A sideways step inside the hangar picks a dropdown's next value with wrap. Anywhere else it
+    // changes nothing, so the shell moves the focus, along the tab bar among other places.
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count)
@@ -979,35 +980,19 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         }
 
         var row = rows[focus];
-        if (row.Kind == OriginalRowKind.Dropdown && HangarListFor(row.Key) is { } list && list.Items.Count > 0)
-        {
-            int next = ((list.Current + direction) % list.Items.Count + list.Items.Count) % list.Items.Count;
-            if (next != list.Current)
-            {
-                list.Select(next);
-            }
-
-            _host.FocusKey(row.Key);
-            RaisePendingDefaultsAsk();
-            return true;
-        }
-
-        if (row.Kind is not (OriginalRowKind.Button or OriginalRowKind.TextButton))
+        if (row.Kind != OriginalRowKind.Dropdown || HangarListFor(row.Key) is not { } list || list.Items.Count == 0)
         {
             return false;
         }
 
-        int i = focus;
-        for (int n = 0; n < rows.Count; n++)
+        int next = ((list.Current + direction) % list.Items.Count + list.Items.Count) % list.Items.Count;
+        if (next != list.Current)
         {
-            i = (i + direction + rows.Count) % rows.Count;
-            if (rows[i].Enabled && rows[i].Kind is OriginalRowKind.Button or OriginalRowKind.TextButton)
-            {
-                _host.FocusedRow = i;
-                return true;
-            }
+            list.Select(next);
         }
 
+        _host.FocusKey(row.Key);
+        RaisePendingDefaultsAsk();
         return true;
     }
 
@@ -1070,7 +1055,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         Relocate(rows, first, PaneOrigin(screen, PlaneNamePaneKey));
     }
 
-    // The hub's rows in focus order: the page's dropdowns (or the totals page's Purchase Now),
+    // The hub's rows: the page's dropdowns (or the totals page's Purchase Now),
     // then the six tabs, then SELL PLANES, READY and CANCEL. No tab is gated. The hub's script
     // latches the standing one and never deactivates any of them, so all six stay hittable. The
     // standing one is told apart by the frame it draws in.

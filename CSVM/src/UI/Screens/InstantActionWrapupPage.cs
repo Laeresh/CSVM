@@ -379,7 +379,7 @@ public static class InstantActionWrapupPage
 
     /// <summary>The tick box drawn in strokes: the outline in graphite, and on a won mission the
     /// tick through it in the brushstroke red. A lost mission leaves the box empty; the original
-    /// never lost an Instant Action, so that state is the remake's own.</summary>
+    /// never lost an Instant Action, so that state is remake-only.</summary>
     public static IReadOnlyList<BoardStroke> TickStrokes(bool won, CampaignLayout? layout = null)
     {
         var (x, y, side) = TickBox(layout);

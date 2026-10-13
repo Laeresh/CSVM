@@ -154,6 +154,11 @@ public sealed class TurretController
 
     public int ShotsFired { get; private set; }
 
+    /// <summary>The shooter id a world emplacement's rounds carry. It is <see cref="ProjectilePool.NoShooter"/>
+    /// unless Zeppelin vs Zeppelin names a hull's turrets for that hull. A carried gunner's rounds
+    /// are its aeroplane's.</summary>
+    public int RoundShooter { get; set; } = ProjectilePool.NoShooter;
+
     /// <summary>True in a firing spell, false in the bored pause between spells (a duty cycle, not
     /// two moods: bored suppresses firing only, the aim solution keeps running). The windows are
     /// redrawn uniform(min,max) at every transition, so no two turrets stay in phase.</summary>
@@ -597,11 +602,11 @@ public sealed class TurretController
         // INACCURACY perturbs the SHOT after the pose is written: the turret aims true and the
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
-        // ⚠ Pass team explicitly. A world emplacement has no shooter id, so the shooter-id default
+        // ⚠ Pass team explicitly. A world emplacement has no seat's shooter id, so the shooter-id default
         // reads its rounds as neutral in the aim assist's ordnance candidate list. Its own mount
         // rides along as the round's owner: the flak must not strike or splash the gun firing it.
         _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
-            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team,
+            _host?.PlayerIndex ?? RoundShooter, fp, dir, team: _team,
             ownerBodies: _host == null ? PlatformColliderRids() : null);
         // A carried gunner's round belongs to the aeroplane carrying it, so it crosses the wire
         // with that aeroplane's own fire. A world emplacement has no host and reports nothing:
@@ -745,7 +750,7 @@ public sealed class TurretController
             TargetSource = c.Source;
         }
 
-        // The aircraft-first preference, the same departure the aeroplane picker takes, so a
+        // The aircraft-first preference, the same remake-only rule the aeroplane picker takes, so a
         // zeppelin's guns and the wingmen beside them go after the same enemies.
         if (AiTargetRanking.AircraftFirst && aircraftInReach)
         {

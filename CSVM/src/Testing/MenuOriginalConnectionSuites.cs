@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Flight.Hangar;
@@ -414,7 +415,8 @@ internal static class MenuOriginalConnectionSuites
         + "greyed and its list holding no row it can pick. Fill to, its count stepped down to five, "
         + "fills the field to five pilots and then greys. A press on a bot's row opens Select Plane "
         + "on that bot, whose plane, skill, team and callsign boxes edit it and reach the guest, and "
-        + "Remove takes a row out. With the host, the guest and both bots on one team, LAUNCH! "
+        + "Remove takes a row out. A full field outgrows the player list's eleven rows and its scroll "
+        + "bar reaches every row below them. With the host, the guest and both bots on one team, LAUNCH! "
         + "raises langui 10519 and hands nothing out. With no team standing it launches, the "
         + "host's field seats the bots after the guest, the Random plane drawn on the host, and "
         + "the guest joins that match reading both bots on real stock planes")]
@@ -470,6 +472,7 @@ internal static class MenuOriginalConnectionSuites
             var pool = CSVM.Session.Roster.BotSeats.CallsignPool(CSVM.Mech3.Messages.Load(ctx.MessagesPath));
             AddAndFillBots(ctx, host, guest, ends, pool);
             EditTheBots(ctx, host, guest, ends);
+            ScrollTheList(ctx, host, ends);
             LaunchWithBots(ctx, host, guest, ends, hostExits, guestExits);
         }
         finally
@@ -481,6 +484,107 @@ internal static class MenuOriginalConnectionSuites
 
             hostDoor.Discard();
             guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-lobby-planes",
+        "The Multiplayer Lobby's player list names each pilot's plane between the name and the Ready "
+        + "mark, a column of the remake's own, read on one Original session standing in for a host and "
+        + "two guests in turn. Before the guests show their lobbies the host's list names no plane on a "
+        + "guest's row. Then the host's stock pick, one guest's stock pick and the other's custom plane, "
+        + "named in full, reach every end's list, and the bot rows name the Fury and Random. Every plane "
+        + "box is a marquee line ending clear of the bot tag, the Ready marks and the list's scroll bar, "
+        + "and every name box ends before the column. A sixteen-character callsign in wide capitals on a "
+        + "team row, which drawn plain wraps onto the row below, is a marquee line inside its box")]
+    internal static void TheLobbyPlanes(TestContext ctx)
+    {
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string custom = "Flying Dutchman";
+        const string wide = "WWW MMM WWW MMMM";
+        var (door, guests) = NetDoorAid.DogfightDoors();
+        door.Identity.PlayerName = wide;
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-planes");
+        try
+        {
+            if (Open(ctx, layout, door, ends) is not { Shell: var shell })
+            {
+                return;
+            }
+
+            shell.StandInNetDoor(door);
+            shell.Lobby.OpenHost();
+            foreach (var guest in guests)
+            {
+                guest.OpenJoin();
+            }
+
+            NetDoorAid.SettleDogfight(door, guests);
+            if (door.Dogfight is not { } lobby || guests[0].Dogfight is not { } nathan || guests[1].Dogfight is not { } sheila)
+            {
+                ctx.Check(false, $"the host and both guests hold a Dogfight lobby");
+                return;
+            }
+
+            lobby.Pick(3, lobby.Fit);
+            var unpicked = PlaneColumn(shell, door);
+            ctx.Check(lobby.Players.Count == 3 && unpicked.Select(l => l.Text).SequenceEqual(new[] { "Bloodhawk" }),
+                $"ABLE-TO-FAIL CONTROL: before a guest's pick its row names no plane ({lobby.Players.Count} rows; {Texts(unpicked)})");
+
+            foreach (var guest in guests)
+            {
+                guest.Dogfight!.Show();
+            }
+
+            nathan.Pick(8, nathan.Fit);
+            sheila.PickCustom(new NetPlaneBuild { Name = custom, Airframe = 4, Engine = NetPlaneBuild.StockEngine }, sheila.Fit);
+            lobby.AddBot();
+            lobby.AddBot();
+            lobby.SetBotAirframe(lobby.Bots[0].Id, 7);
+            NetDoorAid.SettleDogfight(door, guests);
+            var expected = new[] { "Bloodhawk", "Kestrel", custom, "Fury", MultiplayerBoardText.RandomPlaneWord };
+            foreach (var (end, who) in new[] { (guests[0], "Nathan"), (guests[1], "Sheila"), (door, "host") })
+            {
+                var column = PlaneColumn(shell, end);
+                ctx.Check(column.Select(l => l.Text).SequenceEqual(expected),
+                    $"the {who}'s list names every row's plane, the guests' picks and the bots' included ({Texts(column)})");
+            }
+
+            // The shell stands on the host's door, whose bot tags and Ready marks bound the column.
+            var board = shell.Compose();
+            var planes = PlaneColumn(shell, door);
+            float tag = board.Lines.Where(l => l.Text == OriginalLobbyScreen.BotTag && l.X < 314f).Select(l => l.X).DefaultIfEmpty(0f).Min();
+            float mark = board.Pictures.Where(p => p.Art.Name == "MP_B_CHECKBOX.PNG").Select(p => p.X).DefaultIfEmpty(0f).Min();
+            var names = board.Lines.Where(l => l.Text is wide or "Nathan" or "Sheila").ToList();
+            ctx.Check(tag > 0f && mark > 0f && planes.All(l => l.Marquee && l.X + l.Width < Math.Min(tag, mark) && l.X + l.Width < 292f)
+                      && names.Count == 3 && names.All(l => l.X + l.Width <= OriginalLobbyScreen.PlaneX),
+                $"every plane box is a marquee line ending clear of the bot tag at {tag}, the Ready marks at {mark} and the bar at 292, and the names end before it ({Boxes(planes)}; {Boxes(names)})");
+
+            ctx.Check(lobby.CreateTeam("Aces"), $"the host creates a team");
+            WideCallsignStaysOnItsRow(ctx, shell.Compose().Lines.FirstOrDefault(l => l.Text == wide));
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            door.Discard();
+            foreach (var guest in guests)
+            {
+                guest.Discard();
+            }
+
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
@@ -2474,6 +2578,12 @@ internal static class MenuOriginalConnectionSuites
                 ctx.Check(boards.All(b => Draws(b, shipped) && !Draws(b, Deathmatch)),
                     $"{type} is described on both ends with its own line and not the Deathmatch's ({guest.Door.Dogfight!.Options.MissionType})");
             }
+
+            if (type == DogfightMissionType.CaptureTheFlag)
+            {
+                FlagHomeStandsClear(ctx, host, "the host");
+                FlagHomeStandsClear(ctx, guest, "the guest");
+            }
         }
 
         host.Door.Dogfight!.SetMissionType(DogfightMissionType.Deathmatch);
@@ -2492,6 +2602,114 @@ internal static class MenuOriginalConnectionSuites
                 $"and back on a Deathmatch without teams the guest reads 10123 again ({back.MissionType}, {back.RestrictTeams})");
         }
     }
+
+    // Capture the Flag's own-flag-home box and label, measured as the view sets them, cross no
+    // other control or line on Mission Options. The control is the same footprint under the team
+    // boxes, 15 px above Limited Lives, where the label runs into the Lives heading.
+    private static void FlagHomeStandsClear(TestContext ctx, End end, string who)
+    {
+        var board = end.Shell.Compose();
+        var box = Row(end.Shell, OriginalLobbyScreen.FlagHomeKey);
+        var lives = Row(end.Shell, OriginalLobbyScreen.LimitedLivesKey);
+        var label = board.Lines.FirstOrDefault(line => line.Text == "Own Flag Home to Capture");
+        ctx.Check(box != null && lives != null && label != null,
+            $"{who}'s Capture the Flag page draws the own-flag-home box and its label ({box != null}, {label != null})");
+        if (box == null || lives == null || label == null)
+        {
+            return;
+        }
+
+        // At the authored page size: the suite's own viewport is no window a pilot sizes.
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            Godot.Font FontOf(BoardLine line) => (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            Godot.Rect2 Drawn(BoardLine line)
+            {
+                var font = FontOf(line);
+                var set = ComposedBoardView.Fitted(fit, font, line);
+                var wide = ComposedBoardView.MeasureBox(fit, font, set.Size)(set.Text, set.Width > 0f ? set.Width : 100000f);
+                return new Godot.Rect2(line.X, line.Y, wide.X, wide.Y);
+            }
+
+            var footprint = Drawn(label).Merge(new Godot.Rect2(box.X, box.Y, box.Height, box.Height));
+            ctx.Check(footprint.End.X <= box.X + box.Width,
+                $"{who}'s label ends inside its row, which ends at the page's edge ({footprint.End.X:0.0} against {box.X + box.Width:0}, {label.Size:0.0} px)");
+            var others = end.Shell.Rows.Where(row => row.Key != box.Key && row.Visible)
+                .Select(row => (row.Key, Rect: new Godot.Rect2(row.X, row.Y, row.Width, row.Height)))
+                .Concat(board.Lines.Where(line => line != label && line.Text.Length > 0).Select(line => (Key: line.Text, Rect: Drawn(line))))
+                .ToList();
+            string Crossed(Godot.Rect2 at) => string.Join(", ", others.Where(other => other.Rect.Intersects(at)).Select(other => other.Key));
+
+            string crossed = Crossed(footprint);
+            ctx.Check(crossed.Length == 0, $"{who}'s own-flag-home box and label at {footprint} cross nothing ({crossed})");
+            string old = Crossed(new Godot.Rect2(footprint.Position + new Godot.Vector2(lives.X - box.X, lives.Y - 15f - box.Y), footprint.Size));
+            ctx.Check(old.Length > 0, $"ABLE-TO-FAIL CONTROL: the same footprint 15 px above Limited Lives crosses {old}");
+
+            // The view draws a plain line's baseline at its top plus its rounded size. The label
+            // shares the Teams heading's baseline and the box ends on it, as each sibling's box
+            // ends on its own label's. The control is a label topped 2 px under the heading's top.
+            var teams = board.Lines.FirstOrDefault(line => line.Text == "Teams");
+            ctx.Check(teams != null, $"{who}'s page draws the Teams heading");
+            if (teams != null)
+            {
+                float Baseline(BoardLine line, float y) => y + Godot.Mathf.RoundToInt(fit.Length(ComposedBoardView.Fitted(fit, FontOf(line), line).Size));
+                float heading = Baseline(teams, teams.Y);
+                ctx.Check(Math.Abs(Baseline(label, label.Y) - heading) < 0.5f && Math.Abs(box.Y + box.Height - heading) <= 1f,
+                    $"{who}'s label stands on the Teams heading's baseline at {heading:0.0} ({Baseline(label, label.Y):0.0}) and the box ends on it ({box.Y + box.Height:0.0})");
+                ctx.Check(Math.Abs(Baseline(label, teams.Y + 2f) - heading) >= 0.5f,
+                    $"ABLE-TO-FAIL CONTROL: the label topped 2 px under the heading's top has its baseline at {Baseline(label, teams.Y + 2f):0.0}, off the heading's {heading:0.0}");
+            }
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    // The host's callsign on its team row, indented under the team. Measured in the board's face, it
+    // is wider than its box, so a plain line would wrap onto the row below. A marquee line keeps it
+    // on one line clipped to the box.
+    private static void WideCallsignStaysOnItsRow(TestContext ctx, BoardLine? line)
+    {
+        ctx.Check(line != null, $"the host's list draws its callsign");
+        if (line == null)
+        {
+            return;
+        }
+
+        // At the authored page size: the suite's own viewport is no window a pilot sizes.
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            var font = (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            var measure = ComposedBoardView.MeasureBox(fit, font, line.Size);
+            var one = measure(line.Text, 100000f);
+            var wrapped = measure(line.Text, line.Width);
+            ctx.Check(one.X > line.Width && wrapped.Y > one.Y,
+                $"ABLE-TO-FAIL CONTROL: drawn plain, the callsign is wider than its box ({one.X:0.0} against {line.Width:0}) and wraps to {wrapped.Y:0.0} px against one line's {one.Y:0.0}");
+            ctx.Check(line.Marquee && line.X == 36f + 12f && line.X + line.Width <= OriginalLobbyScreen.PlaneX && one.Y <= 20f,
+                $"the team row draws it as a marquee line, one line inside the row's 20 px pitch, its box from {line.X} ending at {line.X + line.Width} before the plane column");
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    // The plane column of the list as one door's lobby draws it, top row first.
+    private static List<BoardLine> PlaneColumn(OriginalShell shell, NetPlayFeature door)
+    {
+        shell.StandInNetDoor(door);
+        return shell.Compose().Lines.Where(l => l.X == OriginalLobbyScreen.PlaneX).OrderBy(l => l.Y).ToList();
+    }
+
+    private static string Texts(IEnumerable<BoardLine> lines) => string.Join(", ", lines.Select(l => l.Text));
+
+    private static string Boxes(IEnumerable<BoardLine> lines) =>
+        string.Join(", ", lines.Select(l => string.Create(CultureInfo.InvariantCulture, $"{l.X}+{l.Width}")));
 
     // The guest's second stock plane and a shell of its own on its first gun, picked while Ready,
     // which the change clears on both ends. Returns that gun's slot.
@@ -3470,7 +3688,8 @@ internal static class MenuOriginalConnectionSuites
             $"the boxes set the Fury, ace, the typed callsign and the host's team ({bot})");
         ctx.Check(row is { IsBot: true, Airframe: 7, Skill: NetBotSkill.Ace, Name: "Red Ace" } && row.Team == lobby.OwnTeam,
             $"and the guest's row reads them ({row})");
-        ctx.Check(lobby.Bots[1].Team == 0, $"ABLE-TO-FAIL CONTROL: a bot added before the team stood stays off it ({lobby.Bots[1].Team})");
+        ctx.Check(lobby.Bots[1] is { Placed: false, Team: not 0 } other && other.Team != lobby.OwnTeam,
+            $"ABLE-TO-FAIL CONTROL: a bot left on Auto opens the bots' own team against the host's ({lobby.Bots[1].Team})");
 
         int third = lobby.Bots[2].Id;
         ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(4));
@@ -3478,6 +3697,37 @@ internal static class MenuOriginalConnectionSuites
         SettleEnds(ends);
         ctx.Check(lobby.Bots.Count == 2 && lobby.BotById(third) == null && guest.Door.Dogfight!.Players.Count == 4 && host.Shell.Lobby.PickedBot == -1,
             $"Remove takes the picked bot's row out on both ends ({lobby.Bots.Count}, {guest.Door.Dogfight!.Players.Count})");
+    }
+
+    // A full field outgrows the list's eleven rows, and its scroll bar brings the last bot's row into
+    // reach. The extra bots go again, and with them the bar.
+    private static void ScrollTheList(TestContext ctx, End host, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        int kept = lobby.Bots.Count;
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) == null,
+            $"ABLE-TO-FAIL CONTROL: a list that fits its rows stands no scroll bar");
+        lobby.FillTo(NetSeats.MaxPlayers);
+        SettleEnds(ends);
+        var below = Enumerable.Range(1, lobby.Players.Count - 1).Where(i => Row(host.Shell, OriginalLobbyScreen.PlayerKey(i)) == null).ToList();
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.PlayersUpKey) is { Enabled: false } && Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) is { Enabled: true }
+                  && below.Count > 0,
+            $"a field of {lobby.Players.Count} stands the list's scroll bar with {below.Count} row(s) below its window");
+        for (int press = 0; press < NetSeats.MaxPlayers && Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) is { Enabled: true }; press++)
+        {
+            ClickRow(ctx, host, OriginalLobbyScreen.PlayersDownKey);
+        }
+
+        ctx.Check(below.All(i => Row(host.Shell, OriginalLobbyScreen.PlayerKey(i)) != null) && Row(host.Shell, OriginalLobbyScreen.PlayersUpKey) is { Enabled: true },
+            $"the down arrow scrolls every row below the window into the list, where a press can pick it");
+        foreach (var bot in lobby.Bots.Skip(kept).ToList())
+        {
+            lobby.RemoveBot(bot.Id);
+        }
+
+        SettleEnds(ends);
+        ctx.Check(lobby.Bots.Count == kept && Row(host.Shell, OriginalLobbyScreen.PlayersDownKey) == null && Row(host.Shell, OriginalLobbyScreen.PlayerKey(2)) != null,
+            $"and with the extra bots removed the bar goes and the list shows from its top ({lobby.Bots.Count})");
     }
 
     // Every pilot on one team refuses LAUNCH! with langui 10519. With no team the launch goes, the
@@ -3502,6 +3752,9 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalShell.DialogOkKey);
 
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+
+        // A team its placed bots fly on outlives its captain, so the bots go back to Auto first.
+        ctx.Check(lobby.Bots.ToList().All(b => lobby.SetBotTeam(b.Id, 0)), $"the host hands both bots back to Auto");
         ctx.Check(lobby.LeaveTeam(), $"the host's leave disbands the team");
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
         SettleEnds(ends);

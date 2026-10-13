@@ -6,6 +6,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Spec;
+using CSVM.Testing;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -19,9 +20,9 @@ namespace CSVM.Tests;
 /// pages, the ace duel's blanking and the radio pair. Weapon Loadout opens the loadout screen for
 /// the seat the radio names. Fly Mission is the feature's exit, leaving with the pilot's fit on the
 /// seat. No <see cref="OriginalShell"/> stands behind these: the host records what the module asks
-/// of one, the screen, focus, pointer, hangar door and seat walk. The top level's door and the
-/// keyboard's column walk are the shell's, in <see cref="OriginalShellTests"/>; every rectangle
-/// here is the fixture's geometry.
+/// of one, the screen, focus, pointer, hangar door and seat walk. The top level's door is the
+/// shell's, in <see cref="OriginalShellTests"/>, and the cursor's walk runs here through the host
+/// over the fixture's geometry.
 /// </summary>
 public class OriginalInstantActionTests
 {
@@ -44,8 +45,9 @@ public class OriginalInstantActionTests
                 OriginalInstantActionScreen.PlayerPlaneKey, OriginalInstantActionScreen.WingmenKey,
                 OriginalInstantActionScreen.WingmanPlaneKey,
                 OriginalInstantActionScreen.LivesKey, OriginalInstantActionScreen.MissionKey,
-                OriginalInstantActionScreen.EnvironmentKey, "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
-                OriginalInstantActionScreen.RaceTimeKey,
+                OriginalInstantActionScreen.EnvironmentKey, OriginalInstantActionScreen.RaceTimeKey,
+                "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
+                OriginalInstantActionScreen.RaceBotsKey,
                 OriginalInstantActionScreen.PageUpKey, OriginalInstantActionScreen.PageDownKey,
                 OriginalInstantActionScreen.PlayerRadioKey, OriginalInstantActionScreen.WingmanRadioKey,
                 OriginalInstantActionScreen.WeaponLoadoutKey,
@@ -102,6 +104,76 @@ public class OriginalInstantActionTests
         Assert.Contains(board.Fills, f => f.X == 70f && f.Y == 170f && f.Border);
         Assert.Contains(board.Pictures, p => p.Art.Name == "PI_B_ScrollBar.png");
         Assert.Empty(board.Overlays);
+    }
+
+    /// <summary>The cursor walks the page as drawn: the radio pair under Weapon Loadout, then Build
+    /// Custom Plane and Exit as one footer row. Left and Right wrap along that row. The old row-order
+    /// walk took Down from Weapon Loadout onto Fly Mission, the next row built.</summary>
+    [Fact]
+    public void TheCursorWalksTheRadiosUnderWeaponLoadoutAndBuildAndExitAsTheFooterRow()
+    {
+        var host = Open(out _);
+        host.CanBuildPlane = true;
+        host.FocusKey(OriginalInstantActionScreen.WeaponLoadoutKey);
+
+        Assert.Equal(OriginalInstantActionScreen.PlayerRadioKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.BuildKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.ExitKey, host.Press(1, 0));
+        Assert.Equal(OriginalInstantActionScreen.BuildKey, host.Press(1, 0));
+        Assert.Equal(OriginalInstantActionScreen.ExitKey, host.Press(-1, 0));
+        Assert.Equal(OriginalInstantActionScreen.FlyMissionKey, host.Press(0, -1));
+    }
+
+    /// <summary>Right from the contents' first row crosses to the right page's first dropdown.
+    /// View Story lies inside the row's own span, so it is not to its right. Build Custom Plane
+    /// starts past the row's middle but far below its line.</summary>
+    [Fact]
+    public void RightFromTheFirstContentsRowLandsOnThePilotPlaneDropdown()
+    {
+        var host = Open(out _);
+        host.CanBuildPlane = true;
+        Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:0", host.FocusedKey);
+        Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, host.Press(1, 0));
+    }
+
+    /// <summary>The enemy page's paging arrows stay cursor stops, the keyboard's one door to the
+    /// second page. A planned walk of arrow presses reaches the down one from the contents.</summary>
+    [Fact]
+    public void TheKeyboardReachesThePagingArrowWhichTurnsThePage()
+    {
+        var host = Open(out _);
+        for (int i = 0; i < 24 && host.FocusedKey != OriginalInstantActionScreen.PageDownKey; i++)
+        {
+            var rows = host.Rows;
+            int target = rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.PageDownKey);
+            var press = OriginalWalk.NextPress(rows, Lists(host), host.Focus, target);
+            Assert.NotNull(press);
+            host.Press(press!.MoveX, press.MoveY);
+        }
+
+        Assert.Equal(OriginalInstantActionScreen.PageDownKey, host.FocusedKey);
+        Accept(host);
+        Assert.Contains(host.Rows, r => r.Key == "IA_D_NENEMY1");
+    }
+
+    /// <summary>The contents window's arrows take no cursor. Down past the window's last row
+    /// scrolls the list a row under the cursor, and at the list's end the press leaves it.</summary>
+    [Fact]
+    public void DownPastTheContentsWindowScrollsItAndTheArrowsAreNoStops()
+    {
+        var host = Open(out _);
+        int window = host.Rows.Count(r => r.Kind == OriginalRowKind.ListRow);
+        int presets = InstantActionFeature.Presets.Count;
+        Assert.True(presets > window, $"the fixture's contents outrun the window ({presets} presets, {window} rows)");
+
+        for (int i = 1; i < presets; i++)
+        {
+            Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:{i}", host.Press(0, 1));
+            Assert.NotEqual(OriginalInstantActionScreen.ContentsDownKey, host.FocusedKey);
+        }
+
+        Assert.Equal(presets - window, host.Module.ContentsTop);
+        Assert.Equal(OriginalInstantActionScreen.ViewStoryKey, host.Press(0, 1));
     }
 
     [Fact]
@@ -355,7 +427,7 @@ public class OriginalInstantActionTests
         Assert.Equal(1, lives.Column);
         Assert.Equal("1", lives.Label);
         Assert.Contains(Compose(host).Lines, l => l.Text == "Lives:" && l.X == 420f && l.Y == 310f);
-        Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.LivesKey && Overlaps(r, lives));
+        Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.LivesKey && r.Visible && Overlaps(r, lives));
 
         // A sideways step on the box is the dropdown's own, so it wraps where the feature clamps.
         Hover(host, OriginalInstantActionScreen.LivesKey);
@@ -408,11 +480,10 @@ public class OriginalInstantActionTests
         Assert.Equal(string.Empty, hidden.Label);
         var solo = Compose(host);
         Assert.DoesNotContain(solo.Lines, l => l.Text == "Race Time:");
-        Assert.DoesNotContain(solo.Fills, f => f.X == hidden.X && f.Y == hidden.Y);
+        Assert.DoesNotContain(solo.Fills, f => f.X == hidden.X && f.Y == hidden.Y && f.Width == hidden.Width);
 
-        // A second seat shows it at the same index. The lives box takes this layout's one clear
-        // line, so this box stands under the stack. Its place in the walk follows: after the last
-        // enemy box and before the paging buttons.
+        // A second seat shows it at the same index, on the lives box's line. This layout leaves that
+        // line between the environment row and the enemy block, and the walk follows it.
         var guest = setup.Join(new ScriptedMenuSeat())!;
         Assert.Equal(index, host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.RaceTimeKey));
         var shown = Row(host, OriginalInstantActionScreen.RaceTimeKey);
@@ -420,16 +491,16 @@ public class OriginalInstantActionTests
         Assert.True(shown.Enabled);
         Assert.Equal(1, shown.Column);
         Assert.Equal(OriginalRowKind.Dropdown, shown.Kind);
-        Assert.Equal((520f, 380f, 110f, 20f), Rect(shown));
+        Assert.Equal((520f, 310f, 110f, 20f), Rect(shown));
         Assert.Equal("5 minutes", shown.Label);
-        Assert.Equal("IA_D_PLANEE0", host.Rows[index - 1].Key);
-        Assert.Equal(OriginalInstantActionScreen.PageUpKey, host.Rows[index + 1].Key);
+        Assert.Equal(OriginalInstantActionScreen.EnvironmentKey, host.Rows[index - 1].Key);
+        Assert.Equal("IA_D_NENEMY0", host.Rows[index + 1].Key);
         Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.RaceTimeKey && r.Visible && Overlaps(r, shown));
         var board = Compose(host);
-        Assert.Contains(board.Lines, l => l.Text == "Race Time:" && l.X == 420f && l.Y == 380f);
-        Assert.Contains(board.Fills, f => f.X == 520f && f.Y == 380f && f.Border);
+        Assert.Contains(board.Lines, l => l.Text == "Race Time:" && l.X == 420f && l.Y == 310f);
+        Assert.Contains(board.Fills, f => f.X == 520f && f.Y == 310f && f.Border);
         // The closed box wears the authored dropdowns' own arrow strip, centred on its line.
-        Assert.Contains(board.Pictures, p => p.Art.Name == "PI_B_Down.png" && p.X == 615f && p.Y == 383f);
+        Assert.Contains(board.Pictures, p => p.Art.Name == "PI_B_Down.png" && p.X == 615f && p.Y == 313f);
 
         // A sideways step and a picked row both write the shared feature's window.
         Hover(host, OriginalInstantActionScreen.RaceTimeKey);
@@ -439,7 +510,7 @@ public class OriginalInstantActionTests
         Click(host, OriginalInstantActionScreen.RaceTimeKey);
         Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Module.OpenDropdown);
         Assert.Equal(new[] { "3 minutes", "5 minutes", "10 minutes", "15 minutes" }, host.Rows.Select(r => r.Label));
-        Assert.Equal((520f, 400f, 110f, 20f), Rect(host.Rows[0]));
+        Assert.Equal((520f, 330f, 110f, 20f), Rect(host.Rows[0]));
         Click(host, 3);
         Assert.Null(host.Module.OpenDropdown);
         Assert.Equal(15, ia.RaceWindowMinutes);
@@ -458,10 +529,70 @@ public class OriginalInstantActionTests
         // It never stays on the hidden row, and never jumps to the far page's first row.
         Hover(host, OriginalInstantActionScreen.RaceTimeKey);
         Assert.True(setup.Unjoin(guest));
-        Assert.Equal("IA_D_PLANEE0", host.FocusedKey);
+        Assert.Equal(OriginalInstantActionScreen.EnvironmentKey, host.FocusedKey);
         Assert.False(Row(host, OriginalInstantActionScreen.RaceTimeKey).Enabled);
         Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.RaceTimeKey));
         Assert.Equal(15, ia.BuildDef(1).RaceWindowMinutes);
+    }
+
+    [Fact]
+    public void TheRaceToggleShowsForAStuntRunWithBotRowsAndOnlyItMakesThemRace()
+    {
+        var host = OpenSeated(out var ia, out var setup);
+        Click(host, 1);
+        Assert.Equal("stunt_flying", ia.MissionType.Key);
+
+        // With no bot rows there is nothing to race, so the toggle keeps its place unseen.
+        int index = host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.RaceBotsKey);
+        Assert.False(host.Rows[index].Visible);
+        Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.RaceBotsKey));
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text == "Race Bots:");
+
+        // A row left on the join board shows it at the same index, off. The run stays solo, with its
+        // lives box and no race time box, and its exit leaves the row on the board.
+        Assert.True(setup.AddBot());
+        Assert.Equal(index, host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.RaceBotsKey));
+        var toggle = Row(host, OriginalInstantActionScreen.RaceBotsKey);
+        Assert.True(toggle.Visible);
+        Assert.Equal(1, toggle.Column);
+        Assert.Equal("Off", toggle.Label);
+        Assert.Equal((520f, 380f, 60f, 20f), Rect(toggle));
+        Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.RaceBotsKey && r.Visible && Overlaps(r, toggle));
+        Assert.Contains(Compose(host).Lines, l => l.Text == "Race Bots:" && l.X == 420f && l.Y == 380f);
+        Assert.True(Row(host, OriginalInstantActionScreen.LivesKey).Visible);
+        Assert.False(Row(host, OriginalInstantActionScreen.RaceTimeKey).Visible);
+        Assert.Null(Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey)).Bots);
+
+        // On, the row races: the race time box takes the lives box's line and the exit carries it.
+        Hover(host, OriginalInstantActionScreen.RaceBotsKey);
+        Assert.True(Step(host, 1));
+        Assert.True(ia.RaceBots);
+        Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.FocusedKey);
+        Assert.Equal("On", Row(host, OriginalInstantActionScreen.RaceBotsKey).Label);
+        Assert.True(Row(host, OriginalInstantActionScreen.RaceTimeKey).Visible);
+        Assert.False(Row(host, OriginalInstantActionScreen.LivesKey).Visible);
+        var race = Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey));
+        Assert.Equal(1, race.Bots?.Count);
+
+        // The cursor walks onto it and off it as drawn. This layout stacks it under the enemy
+        // block, which the race blanks, so Down from the environment meets the race time box first.
+        host.FocusKey(OriginalInstantActionScreen.EnvironmentKey);
+        Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Press(0, -1));
+        Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.Press(0, 1));
+        Assert.Equal(OriginalInstantActionScreen.WeaponLoadoutKey, host.Press(0, 1));
+
+        // Another mission type hides it with the pick kept, and its exit carries no row.
+        Hover(host, OriginalInstantActionScreen.MissionKey);
+        Step(host, 1);
+        Assert.False(Row(host, OriginalInstantActionScreen.RaceBotsKey).Visible);
+        Assert.True(ia.RaceBots);
+
+        // The screenshot aid's pose stands it on with the cursor on it.
+        Assert.True(host.Module.PoseRaceBots());
+        Assert.Equal(OriginalInstantActionScreen.RaceBotsKey, host.FocusedKey);
+        Assert.Equal(1, setup.Bots.Count);
     }
 
     [Fact]
@@ -500,7 +631,7 @@ public class OriginalInstantActionTests
         setup.Unjoin(guest);
         Assert.Contains(host.Rows, r => r.Key == OriginalInstantActionScreen.PlayerPlaneKey);
         Assert.Null(host.Module.OpenDropdown);
-        Assert.Equal("IA_D_PLANEE0", host.FocusedKey);
+        Assert.Equal(OriginalInstantActionScreen.EnvironmentKey, host.FocusedKey);
         Assert.Empty(Compose(host).Overlays);
 
         // The window rides the built def whichever door launches, and the menu's session spec
@@ -542,7 +673,7 @@ public class OriginalInstantActionTests
         var race = Compose(host);
         Assert.DoesNotContain(race.Lines, l => l.Text == "Lives:");
         Assert.Contains(race.Lines, l => l.Text == "Race Time:");
-        Assert.DoesNotContain(race.Fills, f => f.X == hidden.X && f.Y == hidden.Y);
+        Assert.DoesNotContain(race.Fills, f => f.X == hidden.X && f.Y == hidden.Y && f.Width == hidden.Width);
         int above = host.Rows.ToList().FindLastIndex(index - 1, r => r.Enabled && r.Column == 1);
         Assert.Equal(host.Rows[above].Key, host.FocusedKey);
         Assert.NotEqual(OriginalInstantActionScreen.LivesKey, host.FocusedKey);

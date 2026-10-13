@@ -307,10 +307,10 @@ public sealed class FlightHud
         return ControlLine.Compose(template == key ? AutoLandFallbackTemplate : template, binding);
     }
 
-    /// <summary>The respawn prompt for a seat holding <paramref name="bindings"/>: the port's own
-    /// wording with the control of the seat's active <paramref name="side"/> in the <c>%1</c> slot,
-    /// "Click" for a mouse button and "Press" otherwise, and empty when nothing that side can reach
-    /// is bound. Which binding a side names, and the fallback to the other side, belong to
+    /// <summary>The respawn prompt for a seat holding <paramref name="bindings"/>, in remake-only
+    /// wording. The control of the seat's active <paramref name="side"/> fills the <c>%1</c> slot,
+    /// "Click" for a mouse button and "Press" otherwise. It is empty when nothing that side can
+    /// reach is bound. Which binding a side names, and the fallback to the other side, belong to
     /// <see cref="ActiveDevice.PromptBinding"/>.</summary>
     public static ControlLine ComposeRespawnPrompt(IReadOnlyList<Binding> bindings, bool readsKeyboard,
         DeviceSide side, bool onStick = false)

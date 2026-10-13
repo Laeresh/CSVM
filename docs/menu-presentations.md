@@ -40,8 +40,12 @@ shared features' operations, and a presentation only decides how to offer them. 
 constructs a session, never names a launcher type, never hides itself, and never reads a device: it
 reads semantic commands from the host's seats and leaves through one typed exit.
 
-Built-in is permanent. It is the fallback every unavailable request resolves to, it needs no
-extracted menu artwork to be usable, and every other presentation is additive beside it.
+Built-in is frozen and slated for removal (#196). It is still the fallback every unavailable
+request resolves to and needs no extracted menu artwork, but no change owes it parity: a menu,
+lobby, options or board change lands for Original alone, and Built-in keeps what it already draws.
+A gap on Built-in is not a bug, and no issue, suite or playtest check is filed for one. #196
+removes it once Original covers every screen it draws, and replaces the fallback with a plain
+error screen naming the fault and the re-extract instruction.
 
 ## Registration
 
@@ -209,6 +213,20 @@ The arrows and the keyboard do not go through any of this, so the wheel is an ad
 decoded screens rather than a change to them. Original's mouse is the only one that reaches a list
 this way; Built-in's rows are Godot controls and take the wheel through `gui_input`, as above.
 
+Original's arrows and pad step by where the rows are drawn (`CSVM/src/UI/Boards/SpatialFocus.cs`),
+never by the order they were built in. Three parts of that rule are remake-only rules, each kept
+for the walks it gives. A stop lies ahead only when it stands wholly past the focus's middle, by
+centre only where the two overlap: with centre alone, a sweep of every stop and all four presses
+over the fixture and the install moves about 70 walks, many onto a row a little to one side in the
+same column (Right from a lower Instant Action contents row onto View Story below it, Right from the
+Video page's Monitor dropdown onto Display Mode a row below, Left from Credits, Preferences and Quit
+onto Campaign), and the fixture's scrapbook strands its previous-page arrow. Outside the band the
+gap across a press counts double the gap along it (`AcrossGapWeight`): at weight 1, Right from
+Instant Action's lower contents rows drops onto Change Weapons 90 px below rather than the dropdown
+level with them. A press out of a column of values (`SpatialFocus.Leave`) decides which stops lie
+ahead by centre: by the middle, Down from the Video page's Enhanced Graphics checkbox passes over
+ACCEPT CHANGES, whose top stands level with the box and whose centre lies below it.
+
 The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
 drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and
 Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the
@@ -248,10 +266,10 @@ the size then means is the display mode's to say, for a hand-written size as for
 windowed takes it as the window's size, exclusive fullscreen as the size the game draws at inside a
 screen-sized window, and borderless ignores it and runs at the desktop's own size.
 
-**An option is a store field plus a row in each presentation's Options screen.** Adding one means
+**An option is a store field plus a row in Original's Options pages.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and
-`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options,
+`Deserialize`, an entry in the table Original's Game Options,
 AUDIO or VIDEO page draws its rows from, a value on `OptionsApplyExit`, and the line in
 `LiveSettings.Persist` that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
@@ -316,7 +334,7 @@ there. A launch that asked for OpenXR and plays flat posts a
 one-button box at the next show.
 
 A screen never writes the store. Both values ride the exit, and `LiveSettings.Persist`, which the
-menu's apply and the pause leaf's both call, is the options file's one writer, so no test or suite that drives an Options screen
+menu's apply and the pause leaf's both call, is the options file's writer for an Options apply, so no test or suite that drives an Options screen
 through Apply can write the player's own file. Nor read it: `--run-tests` points
 `OptionsStore.UserOptions()` at an emptied scratch directory (`OptionsStore.DirectoryOverride`)
 before any suite runs, so every driven Options screen opens on the shipped defaults whatever the
@@ -356,8 +374,8 @@ Controls list's height with its position in the heading. The two presentations r
 display settings through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`, and each word setting's own descriptor) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
-through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
-keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
+through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so no option
+page writes the store itself. Both graphics choosers cover `original` and `enhanced`, and the apply switches
 the running world at once (`Launch/LiveSettings.cs`), so neither description owes a restart.
 Built-in's screen shows one row per registered word setting, which adds a View Distance row under
 its chooser (`Utils/ViewDistance.cs`), live the same way and marked as Enhanced only, and a Water
@@ -424,8 +442,8 @@ clips this port needs, since Music and Master are already audible through the me
 clip that is still running is left to run, its loudness following the bus the level moved, so a drag
 sounds one clip rather than one per frame. `EndMixPreview` puts back the gains that stood when the
 page opened and is called on every door out of the page and on `Hide`, so a preview cannot survive
-the page; an accepted mix is written and reapplied by `LiveSettings.Persist`, which stays the
-options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
+the page; an accepted mix is written and reapplied by `LiveSettings.Persist`, and the page writes
+nothing itself. ⚠ Previews are off in any run that drives itself (`--det`,
 `--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
 
 **A clip on the move is a deliberate departure.** The original's own page
@@ -569,6 +587,8 @@ list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 count and at that count with one (the screen opens on one life, so neither reading is a state a
 plain shot of it can show), `instant-action:race-time` on stunt flying with the remake-only Race
 Time box focused (shown only beside `--debug-join=1` or more, since a solo run has no race),
+`instant-action:race-bots` on stunt flying with a bot row put on the join board and the
+remake-only Race Bots toggle standing on and focused, the Race Time box on the lives box's line,
 `instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
@@ -689,8 +709,8 @@ In order. Each step names the file it touches and the test that proves it.
     `menu-player-setup-seats` stand for Original;
     add the presentation's cases to `menu-launch-return`, which drives every exit and every
     destination at the host's sink. Register each suite in `SuiteCatalog`.
-11. **Prove Built-in unchanged.** Shoot Built-in's aids before and after and compare decoded pixels;
-    a new presentation makes no Built-in change.
+11. **Leave Built-in alone.** It is frozen (#196): a new presentation neither changes nor extends
+    it.
 12. **Document it.** Its `##` entries in `architecture/UI.md` with their index lines in
     `architecture.md`, its remake-only readings where they belong, `cli.md`'s aids, and this
     page's registration paragraph.
@@ -711,12 +731,11 @@ Five layers, each catching what the others cannot:
 - **Hand-authored legal fixtures.** `CSVM.Tests/fixtures/menu-layout/` for the decoder and
   `fixtures/menu-layout-original/` for the shell: invented geometry and file names in the shipped
   file's shape, so no game data is committed and every rule is still exercised.
-- **Local extracted-data comparisons.** Built-in's aids shot before and after a change and compared
-  by decoded pixels; Original's aids shot at 800x600, 1280x720, 1920x1080 and 600x750 to show the
+- **Local extracted-data comparisons.** Original's aids shot at 800x600, 1280x720, 1920x1080 and 600x750 to show the
   fit; the manifest's recovery probes over a scratch copy of the data root, never the player's tree.
 - **Driven suites.** The `menu-*` suites and `campaign-layout-parity` through real hosts and real
   shells over the install's own layout, up to the host's sink. The harness runs a suite before any
   session builds, so no suite flies a launch or performs the frame-deferred Options restart.
 - **At the controls.** The launcher's leg and everything a suite cannot hear or hold: the flown
-  launch and its return in every mode and both presentations, a cold start under each flag, a real
+  launch and its return in every mode on Original, a cold start under each flag, a real
   pad, the sounds, the pointer's rollover and pressed frames.

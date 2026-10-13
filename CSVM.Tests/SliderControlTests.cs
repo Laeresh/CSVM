@@ -84,7 +84,7 @@ public class SliderControlTests
         Assert.True(SliderControl.StepValue(Rows(level), 0, -1));
         Assert.Equal(AudioMix.MinLevel, level.Value);
 
-        // A row that is not a slider takes no step, so the sideways press goes on to cross columns.
+        // A row that is not a slider takes no step, so the sideways press goes on to move the focus.
         var other = new OriginalRow("PLAQUE", "FLY", OriginalRowKind.TextButton, 0f, 0f, 10f, 10f, true, 0, null);
         Assert.False(SliderControl.StepValue(new[] { other }, 0, 1));
     }

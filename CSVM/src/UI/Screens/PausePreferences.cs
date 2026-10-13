@@ -65,9 +65,9 @@ public sealed partial class PausePreferences : Control
 
     /// <summary>Builds the (hidden) leaf over <paramref name="layout"/>, or answers null where the
     /// install carries no decoded layout, which leaves both boards' PREFERENCES with nothing behind
-    /// it. <paramref name="controls"/> is the shared rebinding feature, so an in-flight rebind edits
-    /// the maps the menu edits and saves through the one writer; <paramref name="applied"/> takes
-    /// every accepted page's settings, and <paramref name="audio"/> sounds its cues.</summary>
+    /// it. The shared rebinding feature, <paramref name="controls"/>, lets an in-flight rebind edit
+    /// the maps the menu edits. Every accepted page's settings go to <paramref name="applied"/>, and
+    /// <paramref name="audio"/> sounds its cues.</summary>
     public static PausePreferences? Build(
         string dataRoot,
         MenuLayout? layout,

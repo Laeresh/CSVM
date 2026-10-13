@@ -112,7 +112,7 @@ public sealed class PromptFontGlyphs : ControlGlyphSet
     public const string LeftHandStick = "L";
 
     // Metrics as fractions of the glyph's height, so the set scales with the line it sits on.
-    // All TUNE: nothing in the original fixes them.
+    // All remake-only values: nothing in the original fixes them.
     private const float GlyphScale = 1.0f;
     private const float Stroke = 0.09f;
     private const float LetterHeight = 0.52f;

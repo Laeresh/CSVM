@@ -175,7 +175,7 @@ internal sealed class SkyStage
         {
             _worldRoot.AddChild(cloudField);
             // The jitter is named on every launch, not only when a flag moved it. The shipped
-            // offset is a departure from the decoded lattice, so a run's record has to say
+            // offset is a remake-only rule over the decoded lattice, so a run's record has to say
             // which field it drew.
             string jitterVia = _spec.CloudJitter > 0f
                 ? $", remake jitter {_spec.CloudJitter:0.#} m" : ", decoded lattice, no jitter";

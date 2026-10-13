@@ -66,7 +66,7 @@ public enum DogfightMissionType : byte
     /// <c>MP3</c> map.</summary>
     ZeppelinVsZeppelin = 2,
 
-    /// <summary>Stunt Race, the remake's own: a time-attack race over the chapter's Instant
+    /// <summary>Stunt Race, a remake-only mode: a time-attack race over the chapter's Instant
     /// Action Danger Zone course, its <c>IA1</c> world, with weapons off.</summary>
     StuntRace = 3,
 }
@@ -645,7 +645,7 @@ public sealed record SessionSpec
     /// without any pinned golden ever seeing one.</summary>
     public bool Craters { get; private set; }
 
-    /// <summary><c>--hud-text</c>: draw the flight text block, the remake's own speed, altitude,
+    /// <summary><c>--hud-text</c>: draw the flight text block, the remake-only speed, altitude,
     /// throttle and damage readout in each pilot pane's upper left. Off by default and saved
     /// nowhere. No screen offers the block, so this flag and the options file's own
     /// <c>flightTextBlock</c> key are its two doors. This one survives <c>--det</c>, which reads
@@ -1163,7 +1163,7 @@ public sealed record SessionSpec
 
     /// <summary><c>--sound-range-scale=</c>: the multiplier on every positional sound's <c>RANGE</c>
     /// radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. It is
-    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/>, the remake-only departure that gives the
+    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/>, the remake-only rule that gives the
     /// world emitters the original's reach, when absent; 1 is the data's own radii. A value that is
     /// not a positive number is ignored with a warning.</summary>
     public float SoundRangeScale { get; private set; } = Mech3.SoundFalloff.ShippedRangeScale;

@@ -182,9 +182,9 @@ public enum OriginalRowKind
 public sealed record OriginalSlider(SliderTrack Track, int Value, Action<int> SetValue, BoardArt? Slot);
 
 /// <summary>One interactive element of a screen in authored 800x600 pixels. It carries what it is,
-/// where it is, whether it reacts, and which column it belongs to for the seat's cursor. It also
-/// carries whether it is on screen, and the slider it carries when it is one. A list row outside
-/// its window keeps its place for the keyboard, unseen and unhit.</summary>
+/// where it is, whether it reacts, and which column of its screen it belongs to. It also carries
+/// whether it is on screen, and the slider it carries when it is one. A list row outside its window
+/// keeps its index, unseen, unhit and never a cursor stop (<see cref="OriginalFocus"/>).</summary>
 public sealed record OriginalRow(
     string Key, string Label, OriginalRowKind Kind, float X, float Y, float Width, float Height,
     bool Enabled, int Column, BoardArt? Art, bool Visible = true, OriginalSlider? Slider = null)
@@ -497,7 +497,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// text rather than menu commands while one is being typed.</summary>
     public bool TypingCheat => _box.Standing == null && _cheats.Typing(_screen);
 
-    /// <summary>The current screen's rows, in focus order: a standing dialog's answers alone,
+    /// <summary>The current screen's rows: a standing dialog's answers alone,
     /// else the screen's own.</summary>
     public IReadOnlyList<OriginalRow> Rows => _box.Standing != null ? _box.Rows() : BuildRows();
 
@@ -1092,7 +1092,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             // Inside an open campaign list the axis walks the list's entries.
             if (!MoveCombo(commands.MoveY))
             {
-                focus = StepWithinColumn(rows, focus, commands.MoveY);
+                focus = OriginalFocus.Move(() => Rows, Lists, focus, 0, commands.MoveY);
+                rows = Rows;
             }
 
             changed = true;
@@ -1101,25 +1102,19 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         if (commands.MoveX != 0)
         {
             // A sideways step changes a value where the cursor stands on one. A slider comes first,
-            // belonging to no one screen, then the screen's own module where one owns it.
-            // Otherwise it crosses columns.
-            if (SliderControl.StepValue(rows, focus, commands.MoveX))
-            {
-                rows = Rows;
-                focus = EnsureFocus(rows);
-            }
-            else if (_box.Standing == null && NetInfo.IsOpen)
-            {
-                NetInfo.StepSideways(rows, focus, commands.MoveX);
-            }
-            else if (ModuleFor(_screen) is { } module && module.StepSideways(rows, focus, commands.MoveX))
+            // belonging to no one screen, then the network box or the screen's own module. Only a
+            // step that changes no value moves the focus.
+            if (SliderControl.StepValue(rows, focus, commands.MoveX)
+                || (_box.Standing == null && NetInfo.IsOpen && NetInfo.StepSideways(rows, focus, commands.MoveX))
+                || (_box.Standing == null && !NetInfo.IsOpen && ModuleFor(_screen) is { } module
+                    && module.StepSideways(rows, focus, commands.MoveX)))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
             else
             {
-                focus = StepColumn(rows, focus, commands.MoveX);
+                focus = OriginalFocus.Move(() => Rows, Lists, focus, commands.MoveX, 0);
             }
 
             changed = true;
@@ -1293,82 +1288,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         }
 
         return -1;
-    }
-
-    private static int StepWithinColumn(IReadOnlyList<OriginalRow> rows, int focus, int dir)
-    {
-        if (focus < 0)
-        {
-            return focus;
-        }
-
-        int column = rows[focus].Column;
-        int i = focus;
-        for (int n = 0; n < rows.Count; n++)
-        {
-            i = (i + dir + rows.Count) % rows.Count;
-            if (rows[i].Column == column && rows[i].Enabled)
-            {
-                return i;
-            }
-        }
-
-        return focus;
-    }
-
-    private static int StepColumn(IReadOnlyList<OriginalRow> rows, int focus, int dir)
-    {
-        if (focus < 0)
-        {
-            return focus;
-        }
-
-        int columns = 0;
-        foreach (var row in rows)
-        {
-            columns = Math.Max(columns, row.Column + 1);
-        }
-
-        if (columns < 2)
-        {
-            return focus;
-        }
-
-        int from = rows[focus].Column;
-        int ordinal = OrdinalInColumn(rows, focus);
-        int target = (from + dir + columns) % columns;
-        int best = -1;
-        int bestDistance = int.MaxValue;
-        for (int i = 0; i < rows.Count; i++)
-        {
-            if (rows[i].Column != target || !rows[i].Enabled)
-            {
-                continue;
-            }
-
-            int distance = Math.Abs(OrdinalInColumn(rows, i) - ordinal);
-            if (distance < bestDistance)
-            {
-                best = i;
-                bestDistance = distance;
-            }
-        }
-
-        return best >= 0 ? best : focus;
-    }
-
-    private static int OrdinalInColumn(IReadOnlyList<OriginalRow> rows, int index)
-    {
-        int ordinal = 0;
-        for (int i = 0; i < index; i++)
-        {
-            if (rows[i].Column == rows[index].Column)
-            {
-                ordinal++;
-            }
-        }
-
-        return ordinal;
     }
 
     // A strip's one-frame size from this shell's own measurer, the shared reading.

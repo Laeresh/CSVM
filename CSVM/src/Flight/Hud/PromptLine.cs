@@ -4,13 +4,13 @@ using Godot;
 namespace CSVM.Flight.Hud;
 
 /// <summary>A control prompt's own centred line three tenths of the way down the pane, in the
-/// landings rig's pale yellow: the original's auto-dock offer, and the port's own respawn prompt on
-/// the same footing. A text object of its own in the original rather than a line of the flight
-/// readout block, so the anchor is a fraction of the pane and static, which lets a suite assert the
-/// decode with no <see cref="Control"/> in the process. The wording is
+/// landings rig's pale yellow. It carries the original's auto-dock offer and the remake-only
+/// respawn prompt, which borrows this placement so the two read as one thing. In the original it is
+/// a text object of its own rather than a line of the flight readout block. So the anchor is a
+/// fraction of the pane and static, and a suite can assert the decode with no
+/// <see cref="Control"/> in the process. The wording is
 /// <see cref="FlightHud.ComposeAutoLandPrompt"/>'s and <see cref="FlightHud.ComposeRespawnPrompt"/>'s;
-/// this owns only where it sits. The respawn prompt has no decode of its own to follow, the original
-/// has no such action, so it borrows this placement and the two read as one thing. Decode:
+/// this owns only where it sits. Decode:
 /// docs/formats/anim-definitions/cutscenes.md "The prompt's own placement".</summary>
 public sealed partial class PromptLine : Control
 {

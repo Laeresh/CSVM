@@ -142,8 +142,9 @@ animation and interaction while sharing the state and operations that configure 
 _Avoid_: menu renderer, menu theme, menu skin
 
 **Built-in presentation**:
-The permanently supported menu presentation that ships without depending on extracted menu
-artwork and acts as the fallback when another selected presentation is unavailable.
+The frozen menu presentation that ships without depending on extracted menu artwork and acts as
+the fallback when another selected presentation is unavailable. No change owes it parity with the
+Original presentation, and #196 removes it.
 _Avoid_: current menu, legacy menu, temporary menu, fallback UI
 
 **Original presentation**:

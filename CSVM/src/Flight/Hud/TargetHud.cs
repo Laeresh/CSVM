@@ -23,9 +23,8 @@ namespace CSVM.Flight.Hud;
 public sealed partial class TargetHud : Control
 {
     /// <summary>Extra metres of authored gun range that keep the brackets on once they are on.
-    /// <b>TUNE, and ours rather than the original's</b>, the original re-runs its gate every
-    /// frame with no memory, which strobes the box on a target sitting exactly at the reach
-    /// boundary.</summary>
+    /// Remake-only rule: the original re-runs its gate every frame with no memory. That strobes
+    /// the box on a target sitting exactly at the reach boundary.</summary>
     public const float BracketHysteresis = 50f;
 
     /// <summary>This HUD's frame-callback priority, above every flight rig's default 0.
@@ -96,23 +95,23 @@ public sealed partial class TargetHud : Control
     private const float RefHeadLen = 20f;
     private const float RefHeadHalf = 5f;
     private const float RefEdgeLabelUp = 45f;
-    private const float RefShaftWidth = 2f;    // ours: the original draws a 1 px line sprite
+    private const float RefShaftWidth = 2f;    // remake-only rule: the original draws a 1 px line sprite
 
     // The spyglass disc's own label rule: the three lines plus their 3-pixel gap must still fit
     // under the disc's bottom or the block flips above its top (0x006082d8 and the literal 0x2d).
     private const float RefDiscLabelBlock = 48f;
-    private const float RefDiscRimWidth = 2f;  // ours, like the shaft: the original's is a 1 px circle
+    private const float RefDiscRimWidth = 2f;  // remake-only rule, like the shaft: the original's is a 1 px circle
     private const int DiscSegments = 48;
 
     // The selected target's marker: the original's own absolute pixel constants (0x00607a0c /
-    // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor), read at the 1440p reference and
-    // scaled by HudMetrics like every other CSVM HUD element. The original never scales its box;
-    // scaling it is the deliberate divergence docs/org/targeting.md records, because 20 x 16 fixed
-    // pixels is nearly invisible on a modern display.
+    // 0x00607a14 / 0x00607a10 and FUN_004574d0's label anchor). They are read at the 1440p
+    // reference and scaled by HudMetrics like every other CSVM HUD element. The original never
+    // scales its box. Scaling it is the remake-only rule docs/org/targeting.md records, because
+    // 20 x 16 fixed pixels is nearly invisible on a modern display.
     private const float RefBracketHalfW = 10f;
     private const float RefBracketHalfH = 8f;
     private const float RefBracketArm = 4f;
-    private const float RefBracketWidth = 2f;  // ours: the original draws 1 px line sprites
+    private const float RefBracketWidth = 2f;  // remake-only rule: the original draws 1 px line sprites
     private const float RefLabelGap = 3f;      // anchor = box bottom + 3
     private const float RefLabelPitch = 15f;   // the three lines' spacing
     private const float RefLabelBlock = 33f;   // the flip-above test: box bottom + 33 must still fit

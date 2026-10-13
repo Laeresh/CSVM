@@ -306,6 +306,8 @@ internal static class NetZvzBotSuites
         var bot = host.SeatRigs[GunBot].Controller!;
         var gunner = bot.Pilot!.Gunner!;
         var raider = host.SeatRigs[HostSeat].Controller!;
+        // Set down whole again: the enemy hull's turrets have hurt it, and a hurt bot breaks off.
+        Start(host, bot);
         Lockstep(1, peers);
         bool onHull = gunner.Target is DestructibleRegistry.Instance or TurretController;
         var engine = Parts(host, 1).OfType<DestructibleRegistry.Instance>()

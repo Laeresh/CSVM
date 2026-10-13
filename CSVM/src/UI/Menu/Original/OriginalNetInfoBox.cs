@@ -28,7 +28,7 @@ public enum NetInfoPage
 /// Information Password takes the join's password when the game asks one, and is greyed
 /// otherwise, as the script's callback 5003 opens it. The decode is in
 /// <c>docs/org/multiplayer-messages.md</c>, "Game and Player Information"; the Listing chooser,
-/// opening on the hosted kind's default every time, is the remake's own.
+/// opening on the hosted kind's default every time, is remake-only.
 /// </summary>
 public sealed class OriginalNetInfoBox
 {
@@ -218,7 +218,7 @@ public sealed class OriginalNetInfoBox
         _done = null;
     }
 
-    /// <summary>The standing box's rows in the scripts' focus order, or the Voice list's rows
+    /// <summary>The standing box's rows in the scripts' order, or the Voice list's rows
     /// alone while it stands open.</summary>
     public void Rows(List<OriginalRow> rows)
     {
@@ -565,7 +565,7 @@ public sealed class OriginalNetInfoBox
                 lines.Add(_text.Line(10029, "Maximum # of Players", row.X + LabelDx, row.Y + LabelDy, 0f, Black));
                 break;
             case ListingKey:
-                // The remake's own row, in the cap row's box, faces and label place. Greyed, its
+                // The remake-only row, in the cap row's box, faces and label place. Greyed, its
                 // word takes the plaques' greyed ink and its arrows their dead frame.
                 fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, DisabledFill.R, DisabledFill.G, DisabledFill.B));
                 fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, Border: true));

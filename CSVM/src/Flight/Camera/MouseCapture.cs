@@ -13,9 +13,9 @@ namespace CSVM.Flight.Camera;
 /// </summary>
 public sealed class MouseCapture
 {
-    /// <summary>Mouse counts from the pane's middle to its edge on either axis, so full deflection is
-    /// the same hand movement whatever the pane's pixel size: 32 mm at 1600 dpi. This is the default
-    /// sensitivity's travel; a seat's own divides it (<see cref="DeflectionCounts"/>). Remake-only, since
+    /// <summary>Mouse counts from the pane's middle to its edge on either axis. Full deflection is
+    /// then the same hand movement whatever the pane's pixel size: 32 mm at 1600 dpi. This is the default
+    /// sensitivity's travel; a seat's own divides it (<see cref="DeflectionCounts"/>). A remake-only rule, since
     /// the original read the desktop pointer; the arithmetic is in <c>docs/controls.md</c>, "Flying
     /// with the mouse".</summary>
     public const float FullDeflectionCounts = 2000f;

@@ -368,10 +368,9 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>The wrap-up's "Shot %" row: <c>100 × hits / fired</c>, truncating, the decoded
-    /// <c>ftol(100.0 × snapshot+0x22 / snapshot+0x20)</c>. ⚠ Zero rounds fired is a divergence,
-    /// deliberately taken: the original's unguarded x87 divide yields a large negative number
-    /// there (docs/formats/instant-action.md), which is not behaviour worth copying, so this
-    /// reads 0 instead.</summary>
+    /// <c>ftol(100.0 × snapshot+0x22 / snapshot+0x20)</c>. ⚠ Zero rounds fired reads 0, a
+    /// remake-only rule. The original's unguarded x87 divide yields a large negative number there
+    /// (docs/formats/instant-action.md), which is not behaviour worth copying.</summary>
     public static int ShotPercent(int hits, int fired) => fired > 0 ? (int)(100f * hits / fired) : 0;
 
     /// <summary>One sim step of the mission clock, and of the hold after it. <see cref="Elapsed"/>

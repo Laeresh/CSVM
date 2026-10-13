@@ -311,7 +311,7 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         });
     }
 
-    // The bot plaques' words, the remake's own as the lobby's are, in the board's capitals.
+    // The bot plaques' words, remake-only as the lobby's are, in the board's capitals.
     private static string PlaqueLabel(string key) => key switch
     {
         AddBotKey => "ADD BOT",

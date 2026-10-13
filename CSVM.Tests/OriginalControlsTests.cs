@@ -93,12 +93,15 @@ public class OriginalControlsTests
         Assert.Equal(last, shell.Options.Keys.Tab);
         Assert.Equal(0, shell.Options.Keys.Top);
 
-        // The Other tab outruns the list's window, so a cell past its foot is off screen until the
-        // cursor walks onto it and the window follows.
+        // The Other tab outruns the list's window, so a cell past its foot is off screen. Down
+        // presses past the window's last row scroll it under the cursor.
         int rows = OriginalKeysPage.ControlTabs[last].Rows.Count;
         Assert.True(rows > 11, $"the Other tab outruns the authored window ({rows} rows)");
         Assert.False(Row(shell, OriginalKeysPage.CellKey(rows - 1, second: false))!.Visible);
+        // RESET's plate reaches the Other tab's line, so the cursor crosses from the tab above it.
+        shell.Step(new MenuCommands { MoveY = -1 });
         shell.Step(new MenuCommands { MoveX = 1 });
+        Assert.StartsWith(OriginalKeysPage.CellKey(0, second: false)[..^1], shell.FocusedKey);
         for (int i = 0; i < rows + 4 && shell.FocusedKey != OriginalKeysPage.CellKey(rows - 1, second: false); i++)
         {
             shell.Step(new MenuCommands { MoveY = 1 });

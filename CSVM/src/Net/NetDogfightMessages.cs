@@ -97,13 +97,17 @@ public readonly record struct DogfightOptionsMessage(
 /// <summary>One row of a Dogfight lobby's player list: the pilot's name, its stock airframe, its
 /// Ready and whether it is the host. It also names the team the pilot is on (0 for none) and whether
 /// it captains that team. A bot row is the host's computer pilot, with its skill tier, and its
-/// airframe may be <see cref="RandomAirframe"/>, which the host resolves at launch.</summary>
+/// airframe may be <see cref="RandomAirframe"/>, which the host resolves at launch. The row also
+/// names the custom plane the pilot picked, empty on a stock one.</summary>
 public readonly record struct DogfightLobbySeat(
     string Name, byte Airframe, bool Ready, bool IsHost, byte Team = 0, bool Captain = false,
-    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = default)
+    NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = default, string Plane = "")
 {
     /// <summary>The airframe byte of a bot row whose plane is Random.</summary>
     public const byte RandomAirframe = byte.MaxValue;
+
+    /// <summary>The airframe byte of a person's row whose pick the host has not heard yet.</summary>
+    public const byte NoPick = byte.MaxValue;
 
     /// <summary>Whether a computer pilot flies this row.</summary>
     public bool IsBot => Pilot == NetPilot.Bot;
@@ -121,7 +125,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
     public const int MaxRows = NetSeats.MaxPlayers;
 
     /// <summary>The bytes one row takes.</summary>
-    public const int RowSize = 4 + NameBytes;
+    public const int RowSize = 4 + NameBytes + NetPlaneBuild.NameBytes;
 
     /// <summary>How many name bytes a row carries, the roster's own callsign width.</summary>
     public const int NameBytes = SeatRosterMessage.CallsignBytes;
@@ -204,7 +208,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
                 return false;
 
             rows[i] = new DogfightLobbySeat(reader.ReadText(NameBytes), airframe, (flags & 1) != 0, (flags & 2) != 0,
-                team, (flags & 4) != 0, bot ? NetPilot.Bot : NetPilot.Human, (NetBotSkill)tier);
+                team, (flags & 4) != 0, bot ? NetPilot.Bot : NetPilot.Human, (NetBotSkill)tier, reader.ReadText(NetPlaneBuild.NameBytes));
         }
 
         message = new DogfightRosterMessage(rows, epoch, you);
@@ -230,6 +234,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
             writer.WriteByte(row.Team);
             writer.WriteByte(0);
             writer.WriteText(row.Name ?? "", NameBytes);
+            writer.WriteText(row.Plane ?? "", NetPlaneBuild.NameBytes);
         }
 
         return writer.Close();
