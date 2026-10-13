@@ -59,6 +59,7 @@
     "burst-light": 1.357,
     "burst-light-envelope": 0.033,
     "c1-aa-guns": 4.369,
+    "c3-hit-attribution": 6.2,
     "callback-events": 0.203,
     "called-death-chain": 2.199,
     "campaign-airframe-swap": 4.437,

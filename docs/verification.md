@@ -1047,6 +1047,11 @@ member, and it does not go here.
   nothing or kills a neighbour.** On C3's `susp_bridge` only `rope1`'s collider resolves to the pool,
   and rounds aimed along the cable at it flew past into `bridge_truck01`, whose chain then dropped the
   bridge with no shooter credited.
+- **INSTR-105**, **When no ray reaches a pool whose colliders exist and resolve to it, look for a
+  hidden ancestor before calling it a collision defect: a mission's boot script switches whole areas
+  off, and the original's ray test skips an inactive node's subtree too.** C3's seven guard towers
+  stand in C3/M02 and are switched off in C3/M01 by `m01.gw`'s `WorldPartitionSetActive`, which hides
+  `g28515` and `town_2` above them (`c3-hit-attribution`).
 
 ## SRC, sources and documents
 
