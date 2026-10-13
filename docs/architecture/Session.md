@@ -222,7 +222,15 @@ own seats and asks the host (`FlagRequestMessage`); the host decides, scores thr
 changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
 the flag rows. A death, a drop or `Eject` (the console's `ejectflag`, relayed by the host) floats a
 flag everywhere, and the host sends it home when the throw runs out. `SideOf` labels the three
-markers, and the carrier carries its tag. `StepBots` hands the host's bots `Flight/Ai/CtfBotObjective.cs`'s orders (`BotObjective` turns it off). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+markers, and the carrier carries its tag. `StepBots` hands the host's bots `Flight/Ai/CtfBotObjective.cs`'s orders (`BotObjective` turns it off). Each carried flag has a `FlagBanner.cs` it hangs on the carrier. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+
+## src/Session/World/FlagBanner.cs
+The carried flag under `GraphicsMode.Enhanced`, one per team's carried flag, built by `FlagRuntime`
+and towed by its `Carry` and `Loose`. Each frame after the flight rigs it reads the mount's drawn
+pose: a chain trails the tow point, each point one segment behind the one ahead, drawn as a tow line
+and a banner in the billboard's texture whose shader ripples faster with airspeed. Under Original,
+or with the flag not carried, it draws nothing and the billboard draws. `Follow` is the chain step a
+suite drives. Rule: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md), "Towed banner".
 
 ## src/Session/World/StuntRaceBots.cs
 The stunt race bots a machine flies, built by `GameSession` beside the race: one

@@ -794,6 +794,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/NetWorldLink.cs`, the host-owned world over the wire: AI aircraft as launch, pose, fire, hit, presence and death messages, zeppelin and surface-vehicle paths as periodic samples, destructible health, stage changes and deaths as events, and warp picks.
 - `src/Session/World/VersusDirector.cs`, the engine side of one Dogfight: the match and its scoring, the respawn rotation and grants, the host's match state, the rematch and the team modes.
 - `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
+- `src/Session/World/FlagBanner.cs`, the carried flag under Enhanced: a banner towed behind the carrier in the flag's art, in place of the billboard.
 - `src/Session/World/BotOrderLog.cs`, which bot order changes a team mode's host logs, a capped line per seat.
 - `src/Session/World/StuntRaceBots.cs`, the stunt race bots a machine flies, stepped on their objectives and rerun while the window is open.
 - `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.

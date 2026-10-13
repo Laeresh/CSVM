@@ -222,6 +222,33 @@ shipped). `Session/World/FlagRuntime.cs` runs them in a network match. The diffe
   it and sends the same ask to every guest. The command stays available whenever the chat is, not
   only after a script edit.
 
+**Remake-only rule, towed banner.** The original draws the carried flag as the billboard above under
+every presentation, and the Original presentation keeps it. Under Enhanced the carrier tows a
+banner instead (`Session/World/FlagBanner.cs`), on every machine and for every carrier; the flag at
+its base and the floating flag are unchanged. The original has no banner, so nothing here is
+decoded: the banner answers the owner's request for a flag that reads as an aerial banner and
+reacts to how the carrier flies. Every value below was set by eye and awaits the owner's judgement
+at the controls:
+
+- A tow line of 14 m in 4 segments runs back from `cf_light`, and a banner 9 m long and 3 m high in
+  16 segments follows it.
+- Each chain point is held one segment length behind the point ahead along the line between them,
+  so the banner trails the path the tow point flew and lags into a turn. The rule has no physics
+  body, no cloth and no time constant. A tow point that jumps further than the whole chain lays it
+  out straight behind again.
+- Each point's side, the axis across the banner, is carried down the chain from the carrier's right
+  and pulled toward the horizontal wherever the chain is not near vertical. The banner hangs upright
+  in a bank short of 90 degrees and does not turn over through a loop or a vertical climb.
+- The vertex shader ripples the banner across its plane, 0.4 m at the free edge and 1.5 waves
+  along it, its phase advancing 0.25 rad per metre flown (never below 20 m/s), accumulated on the
+  CPU so a change of speed never jumps it.
+- The banner shows the billboard's own texture, fogged and dimmed as the world's billboards are.
+- It is drawn from the carrier's drawn pose after the flight rigs each frame, so a replicated
+  carrier tows it as smoothly as it is drawn. It takes the cloud-band zone layer the object gate
+  writes on its carrier, so a band that hides the aircraft hides its banner. The billboard's
+  surfaces are hidden by their own visibility, which the gate never writes, and the carried flag
+  node keeps its visibility meaning carried or home.
+
 **Remake-only rule, bots.** The original seats no bots, so nothing here is decoded. A host's bots
 fly Capture the Flag over the wire (`Flight/Ai/CtfBotObjective.cs`, run by `FlagRuntime.StepBots`),
 and every step the host re-decides each bot's order by the first rule that holds:

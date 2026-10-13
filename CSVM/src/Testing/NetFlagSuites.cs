@@ -46,6 +46,19 @@ internal static class NetFlagSuites
     // pilot never descends into the hills.
     private const string TrackedFlight = "--hold=0.3,0,0,1";
 
+    // The banner's flight posed by hand: three seconds level, then two in a level turn at cruise.
+    private const float TrailSpeed = 100f;
+    private const int TrailLevelSteps = 180;
+    private const int TrailTurnSteps = 120;
+    private const float TrailYawDegPerS = 30f;
+
+    // How far above the carrier's own pose that flight starts, clear of every hill it crosses.
+    private const float ClearOfHills = 400f;
+
+    // A vertical loop and a bit more: seven seconds pitching at 60 deg/s.
+    private const float LoopDegPerS = 60f;
+    private const int LoopSteps = 420;
+
     private static readonly int[] Teams = { 1, 1, 2 };
 
     private static readonly Dictionary<int, string> TeamNames = new() { [1] = "Red Squadron", [2] = "Blue Angels" };
@@ -135,6 +148,403 @@ internal static class NetFlagSuites
 
             ambient.Restore();
         }
+    }
+
+    [Suite("ctf-towed-banner",
+        "two sessions on the chapter's MP2 map, the guest on team 2 carrying team 1's flag: under Original "
+        + "every machine draws the carried flag's billboard and no banner; under Enhanced every machine draws "
+        + "a banner in the flag's own art and hides the billboard; a carrier gated into a cloud zone takes its "
+        + "banner into that zone; on the host, whose carrier is a replicated "
+        + "copy, the banner trails straight behind the tail in level flight and swings off its axis in a "
+        + "turn; the same flight repeats the chain bit for bit; the ripple runs faster with airspeed; through "
+        + "a vertical loop no point's side turns over against its neighbour; a live "
+        + "switch back to Original swaps the billboard back; and a floating flag tows no banner")]
+    internal static void TheCarriedFlagTowsABannerUnderEnhanced(TestContext ctx)
+    {
+        var spec = Spec(ctx);
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(4002));
+        var roster = NetCombatSuites.Roster(2, spec).Select((seat, i) => seat with { TeamId = i + 1 }).ToArray();
+        var ambient = NetCombatSuites.Ambient.Save();
+        var ends = new List<NetCombatSuites.Ends>();
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            GraphicsMode.Set(false);
+            for (int i = 0; i < 2; i++)
+            {
+                ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[i], isHost: i == 0, HostSeed + 8 + (ulong)i,
+                    i == 0 ? roster : null, teamNames: TeamNames));
+            }
+
+            var peers = ends.Select(e => e.Session).ToArray();
+            bool built = ends.All(e => e.Built) && peers.All(p => p.Dogfight?.Flags != null);
+            ctx.Check(built, $"two sessions build in one process, each with its flags ({string.Join(", ", ends.Select(e => e.Built))})");
+            if (!built)
+            {
+                return;
+            }
+
+            Lockstep(SettleSteps, peers);
+            Park(peers, 0);
+            Park(peers, 1);
+            Put(peers, seat: 1, peers[1].Dogfight!.Flags!.Flags.HomeOf(1));
+            Lockstep(AskSteps, peers);
+            Held(ctx, peers, "the team 2 guest takes team 1's flag", team: 1, holder: 1);
+            var banners = peers.Select(p => p.Dogfight!.Flags!.Banner(1)).OfType<FlagBanner>().ToArray();
+            ctx.Check(banners.Length == 2, $"and every machine holds a banner for it");
+            if (banners.Length != 2)
+            {
+                return;
+            }
+
+            BannerSwap(ctx, peers, banners, spec.EmptyStage);
+            BannerZone(ctx, peers[0], banners[0]);
+            BannerTrail(ctx, ends[0], banners[0], peers[0].SeatRigs[1].Controller!);
+            BannerRepeats(ctx);
+            BannerLoop(ctx);
+
+            GraphicsMode.Set(true);
+            Down(peers, victim: 1, killer: 0);
+            DrawAll(banners);
+            ctx.Check(peers.All(p => p.Dogfight!.Flags!.Flags.RowOf(1) is { State: FlagState.Floating }) && banners.All(b => !b.Drawn && b.BillboardShown),
+                $"ABLE-TO-FAIL CONTROL: under Enhanced the carrier's death floats the flag, which draws its billboard and tows no banner ({Rows(peers)}; {Swap(peers, banners)})");
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    // Original draws the billboard alone and Enhanced the banner alone, in the flag's own art. A live
+    // switch back swaps them again, on every machine.
+    private static void BannerSwap(TestContext ctx, GameSession[] peers, FlagBanner[] banners, bool emptyStage)
+    {
+        DrawAll(banners);
+        ctx.Check(banners.All(b => !b.Drawn && b.BillboardShown) && peers.All(p => Billboard(p) is var (shown, of) && shown == of),
+            $"under Original every machine draws the billboard and no banner ({Swap(peers, banners)})");
+        GraphicsMode.Set(true);
+        DrawAll(banners);
+        ctx.Check(banners.All(b => b.Drawn && !b.BillboardShown) && peers.All(p => Billboard(p).Drawn == 0),
+            $"under Enhanced every machine draws the banner and hides the billboard ({Swap(peers, banners)})");
+        ctx.Check(banners.All(b => b.Material?.GetShaderParameter("albedo_tex").AsGodotObject() == b.Art),
+            $"and each banner binds the art it took from its flag");
+        if (!emptyStage)
+        {
+            var other = peers[0].Dogfight!.Flags!.Banner(2)?.Art;
+            ctx.Check(banners.All(b => b.Art != null) && other != null,
+                $"which on the MP2 map is each flag billboard's own texture ({banners[0].Art?.ResourcePath}, team 2 {other?.ResourcePath})");
+            var flag = peers[0].Dogfight!.Flags!.CarriedFlag(1);
+            int lights = flag?.FindChildren("*", nameof(Light3D), true, false).Count ?? 0;
+            ctx.Check(Billboard(peers[0]).Of > 0 && lights == 0,
+                $"and the billboard it hides is {Billboard(peers[0]).Of} surface(s) holding no light node ({lights}); its glow is a world light at the flag node, which stays lit");
+            ctx.Note($"team 1's banner art {banners[0].Art?.GetSize()} rid {banners[0].Art?.GetRid()}, team 2's {other?.GetSize()} rid {other?.GetRid()}");
+        }
+
+        GraphicsMode.Set(false);
+        DrawAll(banners);
+        ctx.Check(banners.All(b => !b.Drawn && b.BillboardShown) && peers.All(p => Billboard(p) is var (shown, of) && shown == of),
+            $"a live switch back to Original draws the billboard again and no banner ({Swap(peers, banners)})");
+        GraphicsMode.Set(true);
+        DrawAll(banners);
+    }
+
+    // The host's copy of the guest's carrier, posed by hand through a level run and a level turn. The
+    // banner draws after each pose, as a frame would, and a still of each goes beside the report.
+    private static void BannerTrail(TestContext ctx, NetCombatSuites.Ends host, FlagBanner banner, Flight.Airframe.FlightController carrier)
+    {
+        var mount = banner.Mount!;
+        var watch = new System.Diagnostics.Stopwatch();
+        int frames = 0;
+        void Fly(IEnumerable<Transform3D> poses)
+        {
+            foreach (var pose in poses)
+            {
+                carrier.GlobalTransform = pose;
+                watch.Start();
+                banner.Draw(GameClock.FixedDt);
+                watch.Stop();
+                frames++;
+            }
+        }
+
+        Fly(Flown(carrier.GlobalPosition + (Vector3.Up * ClearOfHills), TrailLevelSteps, 0));
+        var (along, lateral) = Trail(banner, mount);
+        ctx.Note($"level: {along:0.00} m back, {lateral:0.000} m off the axis");
+        ctx.Check(along > 0.99f * FlagBanner.TotalLength && Mathf.Abs(lateral) < 0.05f,
+            $"in level flight the banner trails straight behind the tail ({along:0.00} m back, {lateral:0.000} m off its axis)");
+        var top = banner.TopOf(banner.Chain.Length - 1);
+        ctx.Check(top.Y > 0.99f, $"and hangs upright with the art's top edge up ({top})");
+        Still(ctx, host, banner, mount, "ctf-banner-level.png", behind: false);
+        var view = Eye(ctx, host, mount, behind: false);
+        int callsShown = DrawCalls(view);
+        GraphicsMode.Set(false);
+        banner.Draw(GameClock.FixedDt);
+        int callsHidden = DrawCalls(view);
+        view.Free();
+        GraphicsMode.Set(true);
+        banner.Draw(GameClock.FixedDt);
+
+        Fly(Flown(carrier.GlobalPosition, 0, TrailTurnSteps));
+        (along, lateral) = Trail(banner, mount);
+        ctx.Note($"turn: {along:0.00} m back, {lateral:0.00} m off the axis (negative is the left, the turn's inside)");
+        ctx.Check(Mathf.Abs(lateral) > 1f && along > 0f,
+            $"and in a {TrailYawDegPerS:0} deg/s turn it swings off the tail's axis ({lateral:0.00} m to the {(lateral < 0f ? "left, inside" : "right, outside")}, {along:0.00} m back)");
+        Still(ctx, host, banner, mount, "ctf-banner-turn.png", behind: true);
+        ctx.Note($"draw cost: {watch.Elapsed.TotalMilliseconds * 1000.0 / frames:0.0} us of CPU per banner frame over {frames} frames; draw calls of the side view {callsHidden} with the billboard and {callsShown} with the banner");
+    }
+
+    // A level run along -Z, then a level turn to the left, at the trail's speed.
+    private static IEnumerable<Transform3D> Flown(Vector3 start, int level, int turn)
+    {
+        var at = start;
+        float heading = 0f;
+        for (int i = 0; i < level + turn; i++)
+        {
+            heading += i < level ? 0f : Mathf.DegToRad(TrailYawDegPerS) * GameClock.FixedDt;
+            var basis = new Basis(Vector3.Up, heading);
+            at += -basis.Z * (TrailSpeed * GameClock.FixedDt);
+            yield return new Transform3D(basis, at);
+        }
+    }
+
+    // The chain's trailing edge against the tail's axis: how far back along it, and how far off it
+    // with the aircraft's left negative.
+    private static (float Along, float Lateral) Trail(FlagBanner banner, Node3D mount)
+    {
+        var chain = banner.Chain.ToArray();
+        var pose = mount.GlobalTransform;
+        var rel = chain[^1] - chain[0];
+        return (rel.Dot(pose.Basis.Z.Normalized()), rel.Dot(pose.Basis.X.Normalized()));
+    }
+
+    // Two banners fed one flight end on the same chain and phase to the bit. Over the same steps a
+    // faster flight advances the ripple further.
+    private static void BannerRepeats(TestContext ctx)
+    {
+        var flag = new Node3D();
+        var banners = new[] { FlagBanner.For(flag), FlagBanner.For(flag), FlagBanner.For(flag), FlagBanner.For(flag) };
+        try
+        {
+            foreach (var banner in banners.Take(2))
+            {
+                foreach (var pose in Flown(Vector3.Up * ParkHeight, TrailLevelSteps, TrailTurnSteps))
+                {
+                    banner.Follow(pose, TrailSpeed, GameClock.FixedDt);
+                }
+            }
+
+            ctx.Check(banners[0].Chain.SequenceEqual(banners[1].Chain) && banners[0].Phase == banners[1].Phase,
+                $"the same flight repeats the chain and the ripple phase bit for bit (phase {banners[0].Phase} and {banners[1].Phase})");
+            for (int i = 0; i < 10; i++)
+            {
+                banners[2].Follow(Transform3D.Identity, 40f, GameClock.FixedDt);
+                banners[3].Follow(Transform3D.Identity, 120f, GameClock.FixedDt);
+            }
+
+            ctx.Check(banners[3].Phase > 2f * banners[2].Phase && banners[2].Phase > 0f,
+                $"and the ripple runs faster with airspeed ({banners[2].Phase:0.000} rad at 40 m/s and {banners[3].Phase:0.000} rad at 120 m/s over ten steps)");
+        }
+        finally
+        {
+            foreach (var banner in banners)
+            {
+                banner.Free();
+            }
+
+            flag.Free();
+        }
+    }
+
+    private static void DrawAll(FlagBanner[] banners)
+    {
+        foreach (var banner in banners)
+        {
+            banner.Draw(GameClock.FixedDt);
+        }
+    }
+
+    // How many of the carried flag's surfaces draw on that machine, and how many it has.
+    private static (int Drawn, int Of) Billboard(GameSession peer)
+    {
+        var surfaces = Surfaces(peer.Dogfight!.Flags!.CarriedFlag(1));
+        return (surfaces.Count(s => s.Visible), surfaces.Length);
+    }
+
+    private static GeometryInstance3D[] Surfaces(Node? root) =>
+        root?.FindChildren("*", nameof(GeometryInstance3D), true, false).OfType<GeometryInstance3D>().ToArray()
+            ?? Array.Empty<GeometryInstance3D>();
+
+    // The cloud-band gate's zone layer, written by hand on every surface of the host's copy of the
+    // carrier, the billboard's included. The banner takes the zone, and the billboard stays hidden.
+    private static void BannerZone(TestContext ctx, GameSession host, FlagBanner banner)
+    {
+        uint zone = ZoneGate.LayerFor(2);
+        var hull = Surfaces(host.SeatRigs[1].Controller!.PlaneModel).Where(s => s.Layers == 1u).ToArray();
+        ctx.Check(banner.DrawnLayers == 1u && hull.Length > 0,
+            $"ABLE-TO-FAIL CONTROL: outside any cloud band the banner draws on the shared world layer ({banner.DrawnLayers}, {hull.Length} carrier surfaces on it)");
+        foreach (var surface in hull)
+        {
+            surface.Layers = zone;
+        }
+
+        banner.Draw(GameClock.FixedDt);
+        ctx.Check(banner.DrawnLayers == zone && Billboard(host).Drawn == 0,
+            $"a carrier gated into cloud zone 2 takes its banner into that zone ({banner.DrawnLayers}), and the zone write on the billboard does not draw it again ({Billboard(host).Drawn} drawn)");
+        foreach (var surface in hull)
+        {
+            surface.Layers = 1u;
+        }
+
+        banner.Draw(GameClock.FixedDt);
+    }
+
+    // A vertical loop flown with no bank. Each point's side stays on its neighbour's side all the way
+    // round. The side taken off the world's up turns over as the chain passes vertical.
+    private static void BannerLoop(TestContext ctx)
+    {
+        var flag = new Node3D();
+        var banner = FlagBanner.For(flag);
+        try
+        {
+            var at = Vector3.Up * ParkHeight;
+            float pitch = 0f;
+            int flips = 0;
+            int uprightFlips = 0;
+            float worst = 1f;
+            for (int step = 0; step < LoopSteps; step++)
+            {
+                pitch += Mathf.DegToRad(LoopDegPerS) * GameClock.FixedDt;
+                var basis = new Basis(Vector3.Right, pitch);
+                at += -basis.Z * (TrailSpeed * GameClock.FixedDt);
+                banner.Follow(new Transform3D(basis, at), TrailSpeed, GameClock.FixedDt);
+                var sides = banner.Sides.ToArray();
+                var chain = banner.Chain.ToArray();
+                bool flipped = false;
+                bool uprightFlipped = false;
+                for (int i = 1; i < sides.Length; i++)
+                {
+                    float dot = sides[i].Dot(sides[i - 1]);
+                    worst = Mathf.Min(worst, dot);
+                    flipped |= dot <= 0f;
+                    uprightFlipped |= Upright(chain, i).Dot(Upright(chain, i - 1)) <= 0f;
+                }
+
+                flips += flipped ? 1 : 0;
+                uprightFlips += uprightFlipped ? 1 : 0;
+            }
+
+            ctx.Note($"loop: {flips} frames with a turned-over side, worst neighbour dot {worst:0.000}; the world-up side turns over in {uprightFlips} of {LoopSteps} frames");
+            ctx.Check(flips == 0, $"through a vertical loop no point's side turns over against its neighbour ({flips} frames, worst neighbour dot {worst:0.000})");
+            ctx.Check(uprightFlips > 0, $"ABLE-TO-FAIL CONTROL: the side taken off the world's up does turn over in the same loop ({uprightFlips} frames)");
+        }
+        finally
+        {
+            banner.Free();
+            flag.Free();
+        }
+    }
+
+    // The side a strip took before the banner carried its frame: across the world's up, with a
+    // fixed fallback where the chain stands vertical.
+    private static Vector3 Upright(Vector3[] chain, int i)
+    {
+        var tangent = (chain[Math.Min(i + 1, chain.Length - 1)] - chain[Math.Max(i - 1, 0)]).Normalized();
+        var side = tangent.Cross(Vector3.Up);
+        return side.LengthSquared() > 1e-6f ? side.Normalized() : Vector3.Right;
+    }
+
+    private static string Swap(GameSession[] peers, FlagBanner[] banners) =>
+        string.Join(" | ", banners.Select((b, i) => $"banner={b.Drawn} billboard={b.BillboardShown} billboard surfaces {Billboard(peers[i]).Drawn}/{Billboard(peers[i]).Of}"));
+
+    // A viewport of its own on the host's world, so the seat's cockpit pass stays out of the picture.
+    // Its eye stands beside the carrier, or above and behind it for the turn.
+    private static SubViewport Eye(TestContext ctx, NetCombatSuites.Ends host, Node3D mount, bool behind)
+    {
+        var pose = mount.GlobalTransform;
+        var back = pose.Basis.Z.Normalized();
+        var right = pose.Basis.X.Normalized();
+        var middle = pose.Origin + (back * (0.5f * FlagBanner.TotalLength));
+        var eye = behind ? middle + (Vector3.Up * 22f) + (back * 38f) : middle + (right * 32f) + (Vector3.Up * 6f);
+        var view = new SubViewport
+        {
+            Size = new Vector2I(960, 540),
+            World3D = host.Pane.FindWorld3D(),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+        };
+        // The seat's own camera mask, which keeps its first-person dressing out of any other eye.
+        var seat = host.Pane.GetChildren().OfType<Camera3D>().FirstOrDefault();
+        var camera = new Camera3D
+        {
+            Fov = 60f,
+            Far = 20000f,
+            Current = true,
+            Environment = seat?.Environment,
+            CullMask = seat?.CullMask ?? 1u,
+        };
+        view.AddChild(camera);
+        ctx.Host.AddChild(view);
+        camera.MakeCurrent();
+        camera.LookAtFromPosition(eye, middle, Vector3.Up);
+        return view;
+    }
+
+    // A still of the carrier and its banner, saved as a PNG when the process draws at all.
+    private static void Still(TestContext ctx, NetCombatSuites.Ends host, FlagBanner banner, Node3D mount, string name, bool behind)
+    {
+        var view = Eye(ctx, host, mount, behind);
+        try
+        {
+            Settle(host.Pane);
+            Settle(view);
+            if (Render(view) is not { } image)
+            {
+                ctx.Note($"{name}: no image, the process draws nothing");
+                return;
+            }
+
+            System.IO.Directory.CreateDirectory(ctx.ScratchDir);
+            string path = System.IO.Path.Combine(ctx.ScratchDir, name);
+            image.SavePng(path);
+            ctx.Note($"still {path}, banner drawn={banner.Drawn}");
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    private static Image? Render(SubViewport pane)
+    {
+        pane.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        RenderingServer.ForceDraw();
+        RenderingServer.ForceDraw();
+        var image = pane.GetTexture()?.GetImage();
+        pane.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        return image == null || image.IsEmpty() ? null : image;
+    }
+
+    // A suite never reaches the frame's transform flush, so every pose a render reads is pushed first.
+    private static void Settle(Node node)
+    {
+        (node as Node3D)?.ForceUpdateTransform();
+        foreach (var child in node.GetChildren())
+        {
+            Settle(child);
+        }
+    }
+
+    private static int DrawCalls(SubViewport pane)
+    {
+        Settle(pane);
+        Render(pane);
+        return (int)RenderingServer.ViewportGetRenderInfo(pane.GetViewportRid(),
+            RenderingServer.ViewportRenderInfoType.Visible, RenderingServer.ViewportRenderInfo.DrawCallsInFrame);
     }
 
     // Two captures end it and nothing short of them can: team 2 scores only by its flags.
