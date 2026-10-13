@@ -116,7 +116,8 @@ internal sealed class OceanMask
     /// <summary>Which zone group each texel shows (R8), or null when the sheet is one group.</summary>
     public ImageTexture? ZoneTexture { get; private set; }
 
-    /// <summary>The wake sheets' meshes found in the world, whose ships the ocean calms around.</summary>
+    /// <summary>The wake sheets' meshes found in the world, whose ships the ocean calms around, then the
+    /// turbulence sheets under those same ships.</summary>
     public List<Node3D> Wakes { get; } = new();
 
     /// <summary>The movers the bake found to be hulls on the sea (<see cref="OceanMovers"/>). They stay
@@ -368,6 +369,7 @@ internal sealed class OceanMask
         private readonly ISet<Node> _skip;
         private readonly OceanMask _result;
         private readonly List<Surface> _surfaces = new();
+        private readonly List<MeshInstance3D> _turbulence = new();
         private readonly Dictionary<Node, int> _moverIndex = new();
         private readonly Mover[] _movers;
         private readonly List<int> _moverPath = new();
@@ -410,15 +412,31 @@ internal sealed class OceanMask
         public void Walk()
         {
             Visit(_root, Transform3D.Identity, true);
+            AddTurbulence();
             foreach (var s in _surfaces)
                 Read(s);
             if (_moverIndex.Count > 0)
                 DropMovingHulls();
         }
 
+        private static bool IsTurbulenceTexture(string tex) =>
+            tex.Contains("turb", StringComparison.OrdinalIgnoreCase);
+
         private static bool IsWakeTexture(string tex) =>
             tex.Contains("wakefront", StringComparison.OrdinalIgnoreCase)
             || tex.Contains("wakeback", StringComparison.OrdinalIgnoreCase);
+
+        // A turbulence sheet steps aside with its ship's wake sheets, so it joins the wakes only under a ship
+        // that carries one. The C1B freighter's freighter_turb and its lifeboat's eb_turbulance are such.
+        private void AddTurbulence()
+        {
+            foreach (var sheet in _turbulence)
+            {
+                var ship = sheet.GetParent()?.GetParent();
+                if (ship != null && !_result.Wakes.Contains(sheet) && _result.Wakes.Exists(w => w.GetParent()?.GetParent() == ship))
+                    _result.Wakes.Add(sheet);
+            }
+        }
 
         // How many levels up the ship of a wake below sits: a sheet's mesh is 2, under its own node
         // (1), under the ship. Wakes are found everywhere, skipped subtrees included. The ship gives
@@ -458,6 +476,10 @@ internal sealed class OceanMask
                     {
                         wake = true;
                         _result.Wakes.Add(mi);
+                    }
+                    else if (flat && IsTurbulenceTexture(tex) && !_turbulence.Contains(mi))
+                    {
+                        _turbulence.Add(mi);
                     }
                     if (arrayMesh != null)
                         _surfaces.Add(new Surface(arrayMesh, s, tex, xf, mat, mi.Layers, _pathArray));
