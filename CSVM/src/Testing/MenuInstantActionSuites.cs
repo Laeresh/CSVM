@@ -135,12 +135,14 @@ internal static class MenuInstantActionSuites
         + "Back and Purchase Now both return to the screen, the purchase's plane in the Pilot Plane list, "
         + "and a second pilot joined on the screen is named by the seat strip and walked through its own "
         + "aircraft screen by Fly Mission before the launch carries both seats, the remake-only race time box hidden "
-        + "on a solo stunt run showing once that pilot joins on the clear line over the enemy block, taking the walk "
-        + "between the environment and the enemy count and a sideways step, hiding under another mission type, "
+        + "on a solo stunt run showing once that pilot joins on the lives box's clear line, taking the walk "
+        + "between the pilot plane and the mission type and a sideways step, hiding under another mission type, "
         + "and its pick riding the def into the session spec. The lives box, which a race does not spend, "
         + "hides with its title as the pilot joins and returns with its count under another type, and a "
         + "cursor left on the lives box lifts to the live box above it. The race also blanks the wingman "
-        + "and enemy boxes.")]
+        + "and enemy boxes. A bot row on the join board shows the remake-only race toggle, off, on the clear line "
+        + "over the enemy block, reached by Down from the environment, flipped in place by a sideways press and left "
+        + "by Down for Weapon Loadout, and its removal hides it.")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -719,7 +721,7 @@ internal static class MenuInstantActionSuites
         var box = Row(shell, OriginalInstantActionScreen.LivesKey);
         ctx.Check(box is { Enabled: true, Label: "1", X: 525f, Y: 257.5f, Width: 90f, Height: 18f },
             $"the lives box stands on the clear line the layout leaves over the mission dropdown reading the opening life ({box?.Label}, {box?.X}, {box?.Y})");
-        ctx.Check(!shell.Rows.Any(r => r.Key != OriginalInstantActionScreen.LivesKey && r.Width > 0f && r.Height > 0f
+        ctx.Check(!shell.Rows.Any(r => r.Key != OriginalInstantActionScreen.LivesKey && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < box!.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
             $"and no authored row shares its space, the line being one the section skips ({box?.Y})");
         Press(host, seat, Down);
@@ -1148,6 +1150,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey,
             $"and the cursor left on it lifts to the live box above it, not the far page ({shell.FocusedKey})");
         OriginalRaceTime(ctx, host, seat, shell, ia, livesLabel);
+        OriginalRaceBots(ctx, host, seat, shell, setup, ia);
 
         var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey);
         ctx.Check(fly != null, $"Fly Mission is on screen");
@@ -1179,10 +1182,9 @@ internal static class MenuInstantActionSuites
     }
 
     // The race time box over the install's layout with a second seat joined on a stunt run. It
-    // stands on the clear line above the enemy block, the one the lives box leaves free. The
-    // keyboard walk reaches it between the environment and the enemy count, where its line falls.
-    // A sideways step picks the next window. Another mission type hides it with the pick kept and
-    // brings the lives box back with its count.
+    // stands on the lives box's line, which a race leaves free, between the wingman row and the
+    // mission type. The keyboard walk reaches it there. A sideways step picks the next window.
+    // Another mission type hides it with the pick kept and brings the lives box back with its count.
     private static void OriginalRaceTime(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia, string livesLabel)
     {
         var rows = shell.Rows;
@@ -1196,8 +1198,8 @@ internal static class MenuInstantActionSuites
         }
 
         var box = at >= 0 ? rows[at] : null;
-        ctx.Check(box is { Visible: true, Enabled: true, Column: 1, Label: "5 minutes", X: 525f, Y: 327.5f, Width: 110f, Height: 18f },
-            $"two seats show the race time box on the clear line over the enemy block at five minutes ({box?.Label}, {box?.X}, {box?.Y})");
+        ctx.Check(box is { Visible: true, Enabled: true, Column: 1, Label: "5 minutes", X: 525f, Y: 257.5f, Width: 110f, Height: 18f },
+            $"two seats show the race time box on the lives box's clear line at five minutes ({box?.Label}, {box?.X}, {box?.Y})");
         if (box == null)
         {
             return;
@@ -1206,29 +1208,23 @@ internal static class MenuInstantActionSuites
         ctx.Check(!rows.Any(r => r.Key != box.Key && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < box.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
             $"no other row shares its space ({box.Y})");
-        ctx.Check(at > 0 && at + 1 < rows.Count && rows[at - 1].Key == OriginalInstantActionScreen.EnvironmentKey && rows[at + 1].Key == "IA_D_NENEMY0",
-            $"its place in the walk is between the environment and the enemy count ({(at > 0 ? rows[at - 1].Key : "?")}, {(at + 1 < rows.Count ? rows[at + 1].Key : "?")})");
-        ctx.Check(HasLine(shell, "Race Time:", 420f, 327.5f), $"titled in the column's title ink and place");
+        ctx.Check(at > 0 && at + 1 < rows.Count && rows[at - 1].Key == OriginalInstantActionScreen.LivesKey && rows[at + 1].Key == OriginalInstantActionScreen.MissionKey,
+            $"its row stands with the hidden lives box's, before the mission type ({(at > 0 ? rows[at - 1].Key : "?")}, {(at + 1 < rows.Count ? rows[at + 1].Key : "?")})");
+        ctx.Check(HasLine(shell, "Race Time:", 420f, 257.5f), $"titled in the column's title ink and place");
 
         ctx.Check(shell.InstantAction.PoseRaceTime() && shell.FocusedKey == OriginalInstantActionScreen.RaceTimeKey,
             $"the screenshot aid's pose focuses it ({shell.FocusedKey})");
         Press(host, seat, Up);
-        bool upLands = shell.FocusedKey == OriginalInstantActionScreen.EnvironmentKey;
+        bool upLands = shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey;
         Press(host, seat, Down);
         bool downLands = shell.FocusedKey == OriginalInstantActionScreen.RaceTimeKey;
-        ctx.Check(upLands && downLands, $"Up walks to the environment and Down back onto it ({upLands}, {shell.FocusedKey})");
+        ctx.Check(upLands && downLands, $"Up walks past the blank wingman boxes to the pilot plane and Down back onto it ({upLands}, {shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.RaceWindowMinutes == 10 && Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label == "10 minutes",
             $"a sideways step picks the next window ({ia.RaceWindowMinutes})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.FlyMissionKey,
-            $"and Down leaves it past the blank enemy boxes for Fly Mission, drawn under it ({shell.FocusedKey})");
-
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        Press(host, seat, Up);
         ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.MissionKey,
-            $"Up climbs back over the race time box and the environment onto the mission type ({shell.FocusedKey})");
+            $"and Down leaves it for the mission type, drawn under it ({shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.MissionType.Key == "zeppelin_run" && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false }
             && !HasLine(shell, "Race Time:"),
@@ -1240,6 +1236,43 @@ internal static class MenuInstantActionSuites
         ctx.Check(ia.MissionType.Key == InstantActionFeature.StuntKey && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: true, Label: "10 minutes" }
             && Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false },
             $"and stunt flying brings it back with the pick kept and the lives box gone again ({Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label})");
+    }
+
+    // The race toggle over the install's layout. A bot row left on a stunt run's join board shows it
+    // off on the clear line over the enemy block. The row's removal hides it again.
+    private static void OriginalRaceBots(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, PlayerSetupFeature setup, InstantActionFeature ia)
+    {
+        ctx.Check(Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: false } && !HasLine(shell, "Race Bots:"),
+            $"with no bot row on the join board the race toggle is hidden ({ia.MissionType.Key})");
+        ctx.Check(setup.AddBot(), $"a bot row joins the board");
+        var toggle = Row(shell, OriginalInstantActionScreen.RaceBotsKey);
+        ctx.Check(!ia.RaceBots && toggle is { Visible: true, Enabled: true, Column: 1, Label: "Off", X: 525f, Y: 327.5f, Width: 60f, Height: 18f }
+            && HasLine(shell, "Race Bots:", 420f, 327.5f),
+            $"the race toggle shows off on the clear line over the enemy block ({toggle?.Label}, {toggle?.X}, {toggle?.Y})");
+        ctx.Check(toggle != null && !shell.Rows.Any(r => r.Key != toggle.Key && r.Visible && r.Width > 0f && r.Height > 0f
+            && r.X < toggle.X + toggle.Width && toggle.X < r.X + r.Width && r.Y < toggle.Y + toggle.Height && toggle.Y < r.Y + r.Height),
+            $"no other row shares its space");
+
+        // The walk reaches it under the environment, a sideways press flips it in place, and Down
+        // leaves it past the blank enemy block.
+        Press(host, seat, Down);
+        bool fromMission = shell.FocusedKey == OriginalInstantActionScreen.EnvironmentKey;
+        Press(host, seat, Down);
+        ctx.Check(fromMission && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey,
+            $"Down walks from the mission type over the environment onto the toggle ({fromMission}, {shell.FocusedKey})");
+        Press(host, seat, Right);
+        ctx.Check(ia.RaceBots && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey && Row(shell, OriginalInstantActionScreen.RaceBotsKey)?.Label == "On",
+            $"Right turns it on and keeps the cursor on it ({ia.RaceBots}, {shell.FocusedKey})");
+        Press(host, seat, Left);
+        ctx.Check(!ia.RaceBots && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey && Row(shell, OriginalInstantActionScreen.RaceBotsKey)?.Label == "Off",
+            $"Left turns it off and keeps the cursor on it ({ia.RaceBots}, {shell.FocusedKey})");
+        Press(host, seat, Down);
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.WeaponLoadoutKey,
+            $"Down leaves it past the blank enemy boxes for Weapon Loadout ({shell.FocusedKey})");
+
+        setup.Bots.Remove(setup.Bots.Rows[0].Id);
+        ctx.Check(Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: false }, $"and the row's removal hides it");
     }
 
     // Whether the composed screen writes a line, at a place when one is given.

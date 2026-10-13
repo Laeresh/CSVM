@@ -108,6 +108,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// control, which shows once <c>--debug-join</c> has seated a second pilot.</summary>
     public const string InstantActionRaceTimeAid = "race-time";
 
+    /// <summary>The Instant Action aid's argument that puts a bot row on the join board and picks
+    /// stunt flying. The race toggle stands on, with the cursor on it.</summary>
+    public const string InstantActionRaceBotsAid = "race-bots";
+
     /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
     /// the page a flown mission's ending lands on. Original's own: Built-in shows a board inside
     /// the flight instead and has no menu page to open.</summary>
@@ -647,6 +651,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case InstantActionAid + ":" + InstantActionRaceTimeAid:
                     _shell.InstantAction.OpenInstantAction();
                     _shell.InstantAction.PoseRaceTime();
+                    break;
+                case InstantActionAid + ":" + InstantActionRaceBotsAid:
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.PoseRaceBots();
                     break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));

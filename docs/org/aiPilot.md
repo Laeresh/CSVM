@@ -1676,7 +1676,7 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    its front face at `(-6038, 23, -3848)` on every pass; an origin point clears it.
 
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
-join board's bot rows on a menu Stunt Flying run, which they make a race.
+join board's bot rows on a menu Stunt Flying run with its race toggle on, which they make a race.
 
 A race seat carries no weapons, so a race bot's pilot has no gunner and no ordnance and takes no
 quarry. Every value above is the remake's own.

@@ -69,10 +69,11 @@ internal static class StuntRaceBotSuites
     }
 
     [Suite("stunt-race-bot-menu",
-        "a menu launch of Instant Action Stunt Flying on C1 by one seat, with one bot row on the join board: "
-        + "the exit carries the row, which makes the run a race; the session seats the bot after the pane "
-        + "under the row's callsign, racing on its own run of the course, and it clears a Danger Zone; "
-        + "ABLE-TO-FAIL CONTROL: a squadron mission from the same setup carries no row")]
+        "a menu launch of Instant Action Stunt Flying on C1 by one seat, with one bot row left on the join board: "
+        + "with the race toggle on, the exit carries the row, which makes the run a race; the session seats "
+        + "the bot after the pane under the row's callsign, racing on its own run of the course, and it clears "
+        + "a Danger Zone; ABLE-TO-FAIL CONTROL: with the toggle off, its default, the same exit carries no row "
+        + "and its spec seats no bot, a solo run, and a squadron mission carries no row with the toggle on")]
     internal static void AMenuStuntRunTakesTheJoinBoardsBots(TestContext ctx)
     {
         const string cell = "menu";
@@ -87,15 +88,22 @@ internal static class StuntRaceBotSuites
         ia.SelectEnvironment(InstantActionFeature.Environments.ToList().FindIndex(e => e.Code == chapter));
         ia.ConfirmEnvironment();
         var seats = new[] { new MenuSeatChoice("player_pfighter", Array.Empty<int>()) };
+        ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
+        var solo = ia.BuildExit(seats, bots: setup.Bots.LaunchEntries());
+        var soloSpec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), solo.Chapter,
+            solo.Seats.Select(s => s.PlaneNode).ToArray(), solo.Mode, solo.InstantAction, bots: solo.Bots);
+        ctx.Check(!ia.RaceBots && solo.Bots == null && soloSpec is { Stunt: true, VsBots.Count: 0 },
+            $"ABLE-TO-FAIL CONTROL: [{cell}] with the race toggle off the Stunt Flying exit leaves the row on the board, a solo run ({solo.Bots?.Count ?? 0} row(s), {soloSpec.VsBots.Count} bot(s))");
+        ia.RaceBots = true;
         ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == "dogfight_squadron"));
         ctx.Check(ia.BuildExit(seats, bots: setup.Bots.LaunchEntries()).Bots == null,
-            $"ABLE-TO-FAIL CONTROL: [{cell}] a squadron mission carries no bot row");
+            $"ABLE-TO-FAIL CONTROL: [{cell}] a squadron mission carries no bot row, the toggle on");
         ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
         var exit = ia.BuildExit(seats, bots: setup.Bots.LaunchEntries());
         var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), exit.Chapter,
             exit.Seats.Select(s => s.PlaneNode).ToArray(), exit.Mode, exit.InstantAction, bots: exit.Bots);
         ctx.Check(exit.Bots is { Count: 1 } && spec is { Stunt: true, VsBots.Count: 1 },
-            $"[{cell}] the Stunt Flying exit carries the join board's row into the spec ({exit.Bots?.Count ?? 0} row(s), {spec.VsBots.Count} bot(s))");
+            $"[{cell}] with the race toggle on the Stunt Flying exit carries the join board's row into the spec ({exit.Bots?.Count ?? 0} row(s), {spec.VsBots.Count} bot(s))");
         var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
         ctx.Check(roster is { Length: 2 } && roster[BotSeat] is { IsBot: true, Callsign: Callsign },
             $"[{cell}] the launch seats the pane and then the row's bot '{Callsign}'");

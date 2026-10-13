@@ -558,6 +558,8 @@ list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 count and at that count with one (the screen opens on one life, so neither reading is a state a
 plain shot of it can show), `instant-action:race-time` on stunt flying with the remake-only Race
 Time box focused (shown only beside `--debug-join=1` or more, since a solo run has no race),
+`instant-action:race-bots` on stunt flying with a bot row put on the join board and the
+remake-only Race Bots toggle standing on and focused, the Race Time box on the lives box's line,
 `instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
