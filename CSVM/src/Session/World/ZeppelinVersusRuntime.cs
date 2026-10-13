@@ -239,16 +239,20 @@ internal sealed class ZeppelinVersusRuntime
     /// </summary>
     public void StepBots(double now)
     {
-        if (!_in.Net.IsHost || !BotObjective || _in.Match.Completed || !FliesBots())
+        if (!_in.Net.IsHost || _in.Match.Completed || !FliesBots())
         {
             return;
         }
 
-        for (int hull = 0; hull < 2; hull++)
+        // With the objective off no hull is read, so no attacker is noted while the control runs.
+        if (BotObjective)
         {
-            _hullParts[hull].Clear();
-            _in.Zeppelins.CollectHullParts(hull, _hullParts[hull]);
-            NoteAttacker(hull, now);
+            for (int hull = 0; hull < 2; hull++)
+            {
+                _hullParts[hull].Clear();
+                _in.Zeppelins.CollectHullParts(hull, _hullParts[hull]);
+                NoteAttacker(hull, now);
+            }
         }
 
         for (int seat = 0; seat < _in.SeatRigs.Count && seat < _in.SeatTeams.Count; seat++)
@@ -257,6 +261,16 @@ internal sealed class ZeppelinVersusRuntime
             if (own < 0 || _in.SeatRigs[seat].Controller is not { IsBotSeat: true, Crashed: false, Pilot.Gunner: { AutoTarget: true, Disengaged: false } gunner } bot
                 || !GodotObject.IsInstanceValid(bot))
             {
+                continue;
+            }
+
+            if (!BotObjective)
+            {
+                if (_botLog.Admit(seat, BotOrderLog.ObjectiveOff))
+                {
+                    Log.Info("flight", $"zvz: bot seat {seat} {BotOrderLog.ObjectiveOff}");
+                }
+
                 continue;
             }
 

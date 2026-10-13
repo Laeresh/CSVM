@@ -51,20 +51,20 @@ public readonly record struct CtfBotOrder(CtfBotRole Role, Vector3? Goal, object
 /// </summary>
 public static class CtfBotObjective
 {
-    /// <summary>The remake's own: the fewest pilots, people and bots together, a team needs before
+    /// <summary>Remake-only rule: the fewest pilots, people and bots together, a team needs before
     /// one of its bots stays home to defend.</summary>
     public const int DefenderTeamSize = 3;
 
-    /// <summary>The remake's own: how far above a floating flag a run passes, metres, inside
+    /// <summary>Remake-only rule: how far above a floating flag a run passes, metres, inside
     /// <see cref="FlagMatch.Reach"/>, since a flag at rest lies on the ground. A flag at its base is
     /// passed at its own point, since it stands in the base's hall under a low roof
     /// (docs/org/multiplayer-ctf.md).</summary>
     public const float FloatingPassAboveM = 10f;
 
-    /// <summary>The remake's own: how far above its own flag a defender flies, metres.</summary>
+    /// <summary>Remake-only rule: how far above its own flag a defender flies, metres.</summary>
     public const float DefendAboveM = 150f;
 
-    /// <summary>The remake's own: how far from its own flag a defender may chase, metres, measured
+    /// <summary>Remake-only rule: how far from its own flag a defender may chase, metres, measured
     /// flat. Past it the defender breaks off and flies home (<see cref="AiPilot.Tether"/>).</summary>
     public const float DefendRadiusM = 1000f;
 

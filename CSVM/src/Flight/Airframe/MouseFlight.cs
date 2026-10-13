@@ -48,9 +48,9 @@ public static class MouseFlight
         if (isAutogyro)
         {
             (rollSource, yawSource) = (-yawSource, -rollSource);
-            // ⚠ Remake-only, and NOT the decoded 0.3: the exchange has just put the cursor's own
-            // sideways travel in the yaw slot, so that travel keeps its own dead band rather than
-            // the absent third axis's (docs/controls.md, "Flying with the mouse").
+            // ⚠ A remake-only rule, and NOT the decoded 0.3. The exchange has just put the cursor's own
+            // sideways travel in the yaw slot. That travel keeps its own dead band rather than the
+            // absent third axis's (docs/controls.md, "Flying with the mouse").
             yawDeadzone = AttitudeDeadzone;
         }
 

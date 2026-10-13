@@ -3164,7 +3164,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>Writes one Table of Contents preset over the feature's fields, then mirrors its
     /// player aircraft onto player 1's cursor. Player 1 only: the original has one pilot and one
-    /// aircraft dropdown; players 2-4 are our own divergence and the preset has nothing to say
+    /// aircraft dropdown. Players 2-4 are remake-only and the preset has nothing to say
     /// about them. It is a cursor position, not a lock, since presets are picked back at step 1
     /// and no slot has selected anything yet.</summary>
     private void ApplyPreset(int index)

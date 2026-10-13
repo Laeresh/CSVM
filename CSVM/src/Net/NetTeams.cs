@@ -50,10 +50,10 @@ public enum TeamLaunchRefusal
     /// <summary>More teams than Restrict Number of Teams' maximum (langui 10518).</summary>
     TooManyTeams,
 
-    /// <summary>A team match with a player on no team. The remake's own refusal.</summary>
+    /// <summary>A team match with a player on no team. A remake-only refusal.</summary>
     Teamless,
 
-    /// <summary>Two teams whose sizes differ by more than one player. The remake's own refusal.
+    /// <summary>Two teams whose sizes differ by more than one player. A remake-only refusal.
     /// </summary>
     Unbalanced,
 }

@@ -15,7 +15,7 @@ namespace CSVM.UI.Menu;
 /// Built-in walks it as numbered rows, each defined once in a table (<see cref="Step"/>,
 /// <see cref="Label"/>, <see cref="Detail"/>). Original's three settings pages read and write the
 /// same values from their own authored rows. Both read the saved options through <see cref="Load"/>
-/// and leave through <see cref="ToExit"/>, so <c>LiveSettings.Persist</c> stays the one writer.
+/// and leave through <see cref="ToExit"/>, so an Options apply writes through <c>LiveSettings.Persist</c>.
 /// </summary>
 public sealed class OptionsChoices
 {

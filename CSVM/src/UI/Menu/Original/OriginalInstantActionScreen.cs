@@ -1331,7 +1331,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddText(screen, lines, "IA_T_ENVIRONMENTTITLE", LabelFont);
             if (RaceTimeShown)
             {
-                // Titled the lives box's way, its words the remake's own since no langui row has any.
+                // Titled the lives box's way, its words remake-only since no langui row has any.
                 lines.Add(new BoardLine(RaceTimeLabelText, LivesTitleX(screen), RaceTimeBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
             }
 

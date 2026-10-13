@@ -33,7 +33,7 @@ public sealed class WorldEffectsFactory
     // still burning", so the light ends when the fireball does and not on a clock of its own.
     private const int AnimStateRunning = 2;
 
-    // ⚠ TUNE, not decoded, the original copies templates per call and has no such number.
+    // ⚠ Remake-only rule, not decoded: the original copies templates per call and has no such number.
     // Sizes live in `CSVM/data/effect_pools.json` (EffectPools), not here: per root, scaled by
     // player count. AnimRuntime.PoolRecycles counts wraps onto a live slot.
 

@@ -45,43 +45,43 @@ public readonly record struct StuntBotOrder(StuntBotLeg Leg, int Zone, Vector3 P
 /// </summary>
 public sealed class StuntBotObjective
 {
-    /// <summary>The remake's own: how far short of a zone's entry, along its ribbon, the lead-in
+    /// <summary>Remake-only rule: how far short of a zone's entry, along its ribbon, the lead-in
     /// point stands, metres.</summary>
     public const float LeadInM = 600f;
 
-    /// <summary>The remake's own: how far out from the entry the approach cone reaches, metres.</summary>
+    /// <summary>Remake-only rule: how far out from the entry the approach cone reaches, metres.</summary>
     public const float ConeReachM = 900f;
 
-    /// <summary>The remake's own: the cone's half angle about the ribbon's line into the entry, degrees.
+    /// <summary>Remake-only rule: the cone's half angle about the ribbon's line into the entry, degrees.
     /// The bot's track must also point within it of the entry.</summary>
     public const float ConeHalfAngleDeg = 30f;
 
-    /// <summary>The remake's own: how far above the entry the bot cruises while far from the lead-in
+    /// <summary>Remake-only rule: how far above the entry the bot cruises while far from the lead-in
     /// point, metres. It comes down to the entry's height over the last <see cref="LeadInM"/>.</summary>
     public const float CruiseAboveM = 150f;
 
-    /// <summary>The remake's own: how far above a fluffed zone's entry the bot passes, metres.</summary>
+    /// <summary>Remake-only rule: how far above a fluffed zone's entry the bot passes, metres.</summary>
     public const float FluffAboveM = 100f;
 
-    /// <summary>The remake's own: the step and first length of a bot's lead-in, metres. A lead-in is a
+    /// <summary>Remake-only rule: the step and first length of a bot's lead-in, metres. A lead-in is a
     /// straight before a zone's entry on its first chord's line (<see cref="LeadInFor"/>).</summary>
     public const float LeadInStepM = 50f;
 
-    /// <summary>The remake's own: the longest straight a bot's run may add before an entry, metres.
+    /// <summary>Remake-only rule: the longest straight a bot's run may add before an entry, metres.
     /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float MaxLeadInM = 300f;
 
-    /// <summary>The remake's own: the fastest lock state <see cref="RailClears"/> flies from, m/s. A bot
+    /// <summary>Remake-only rule: the fastest lock state <see cref="RailClears"/> flies from, m/s. A bot
     /// must lock no faster, or it outruns the check. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float TopLockSpeedMps = 135f;
 
-    // The remake's own: how far below level the diving lock state RailClears flies points, degrees.
+    // Remake-only rule: how far below level the diving lock state RailClears flies points, degrees.
     private const float LockPitchDeg = 20f;
 
     // How long one checked rail run may last before it counts as a miss, sim steps.
     private const int RailCheckSteps = 3600;
 
-    // The remake's own lock states RailClears flies from. The bearings off the ribbon's line stay in
+    // Remake-only rule: the lock states RailClears flies from. The bearings off the ribbon's line stay in
     // the cone's half angle.
     private static readonly float[] LockBearingsDeg = { -30f, -15f, 0f, 15f, 30f };
     private static readonly float[] LockSpeedsMps = { 60f, 90f, TopLockSpeedMps };
@@ -107,7 +107,7 @@ public sealed class StuntBotObjective
     /// session. Without one every end runs its own route.</summary>
     public RunTable? Runs { get; init; }
 
-    /// <summary>The bot's lever between zones: the remake's own, full for an ace, 0.85 for a
+    /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
     public float CruiseThrottle => Tier switch
     {
@@ -116,7 +116,7 @@ public sealed class StuntBotObjective
         _ => 0.7f,
     };
 
-    /// <summary>The odds of fluffing each try at a zone: the remake's own, 0.05 for an ace, 0.2 for a
+    /// <summary>The odds of fluffing each try at a zone: a remake-only rule, 0.05 for an ace, 0.2 for a
     /// veteran and 0.35 for a novice.</summary>
     public float FluffChance => Tier switch
     {

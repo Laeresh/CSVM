@@ -138,7 +138,7 @@ public sealed class OptionsDef
     /// default rather than reading as off.</summary>
     public bool? CockpitEnginePitch { get; set; }
 
-    /// <summary>Whether a pilot pane draws the flight text block, the remake's own speed,
+    /// <summary>Whether a pilot pane draws the flight text block, the remake-only speed,
     /// altitude, throttle and damage readout (<c>FlightHud.TextBlockEnabled</c>). ⚠ No screen
     /// offers this. This key, hand-set in the file, is one of its two doors and <c>--hud-text</c>
     /// the other. Nullable because null is "never set", which reads as OFF, the original drawing

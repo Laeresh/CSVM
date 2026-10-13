@@ -305,7 +305,7 @@ at, a scripted run's window being hidden off screen with its capture compared ag
 `project.godot` pins.
 
 A screen never writes the store. Both values ride the exit, and `LiveSettings.Persist`, which the
-menu's apply and the pause leaf's both call, is the options file's one writer, so no test or suite that drives an Options screen
+menu's apply and the pause leaf's both call, is the options file's writer for an Options apply, so no test or suite that drives an Options screen
 through Apply can write the player's own file. Nor read it: `--run-tests` points
 `OptionsStore.UserOptions()` at an emptied scratch directory (`OptionsStore.DirectoryOverride`)
 before any suite runs, so every driven Options screen opens on the shipped defaults whatever the
@@ -345,8 +345,8 @@ Controls list's height with its position in the heading. The two presentations r
 display settings through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`, and each word setting's own descriptor) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
-through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
-keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
+through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so no option
+page writes the store itself. Both graphics choosers cover `original` and `enhanced`, and the apply switches
 the running world at once (`Launch/LiveSettings.cs`), so neither description owes a restart.
 Built-in's screen shows one row per registered word setting, which adds a View Distance row under
 its chooser (`Utils/ViewDistance.cs`), live the same way and marked as Enhanced only, and a Water
@@ -413,8 +413,8 @@ clips this port needs, since Music and Master are already audible through the me
 clip that is still running is left to run, its loudness following the bus the level moved, so a drag
 sounds one clip rather than one per frame. `EndMixPreview` puts back the gains that stood when the
 page opened and is called on every door out of the page and on `Hide`, so a preview cannot survive
-the page; an accepted mix is written and reapplied by `LiveSettings.Persist`, which stays the
-options file's one writer. ⚠ Previews are off in any run that drives itself (`--det`,
+the page; an accepted mix is written and reapplied by `LiveSettings.Persist`, and the page writes
+nothing itself. ⚠ Previews are off in any run that drives itself (`--det`,
 `--run-tests`, `--screenshot`), so a scripted run's mix cannot become a function of a menu walk.
 
 **A clip on the move is a deliberate departure.** The original's own page

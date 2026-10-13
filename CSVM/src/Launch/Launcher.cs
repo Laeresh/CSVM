@@ -1863,7 +1863,7 @@ public partial class Launcher : Node3D
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
     // own rebinding feature means a rebind over the pause edits the keymap the menu edits, saved
-    // through the one writer. LiveSettings.Persist is the apply. ⚠ No ShowMenu: the flight returns to
+    // through the menu's apply. LiveSettings.Persist is the apply. ⚠ No ShowMenu: the flight returns to
     // the sheet over its own world, not tearing down what the pause stands on. Null where no
     // layout reads.
     private UI.Screens.PausePreferences? BuildPauseOptions()

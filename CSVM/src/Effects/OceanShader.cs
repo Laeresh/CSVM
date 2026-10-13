@@ -20,46 +20,46 @@ public static class OceanShader
     /// <summary>The ship calm zones the shader carries, nearest the eye first.</summary>
     public const int MaxShips = 16;
 
-    /// <summary>Remake-only rule, set by the look at the controls. The track entries each hull passes
+    /// <summary>Remake-only rule: set by the look at the controls. The track entries each hull passes
     /// the wake (<see cref="OceanWakeTrack"/>): its position, a lead along its heading, then samples.</summary>
     public const int WakeSamples = 12;
 
-    // Remake-only rule, set by the look. The wake's height at the hull, at WakeRefSpeed and over, in
+    // Remake-only rule: set by the look. The wake's height at the hull, at WakeRefSpeed and over, in
     // metres. It falls off with the square root of the distance behind the bow, in hull lengths.
     private const float WakeHeight = 0.6f;
     private const float WakeRefSpeed = 8f;
 
-    // Remake-only rule. A hull under WakeMinSpeed m/s draws no wake; it grows in over three times that.
+    // Remake-only rule: a hull under WakeMinSpeed m/s draws no wake; it grows in over three times that.
     private const float WakeMinSpeed = OceanWakeTrack.HeadingSpeed;
 
-    // Remake-only rule, set by the look. The Kelvin waves run at this share of their deep-water
+    // Remake-only rule: set by the look. The Kelvin waves run at this share of their deep-water
     // length. A fast hull's V then reads from the air, not as a 100 m swell.
     private const float WakeLengthScale = 0.3f;
 
-    // Remake-only rule, set by the look. The two Kelvin families' shares of the height. The diverging
+    // Remake-only rule: set by the look. The two Kelvin families' shares of the height. The diverging
     // waves rise by WakeCusp toward the cusp line at the V's edge, over WakeCuspWidth of the wedge.
     private const float WakeTransverse = 0.4f;
     private const float WakeDiverging = 0.7f;
     private const float WakeCusp = 1.5f;
     private const float WakeCuspWidth = 0.4f;
 
-    // Remake-only rule, set by the look. The share of the wedge over which the V's edge fades in.
+    // Remake-only rule: set by the look. The share of the wedge over which the V's edge fades in.
     private const float WakeEdge = 0.12f;
 
-    // Remake-only rule, set by the look. Foam on the diverging crests along the V's arms. These are the
+    // Remake-only rule: set by the look. Foam on the diverging crests along the V's arms. These are the
     // band of the wedge either side of the cusp line, the crest phase it starts at, its reach in hulls.
     private const float WakeCuspFoamBand = 0.35f;
     private const float WakeCuspFoamCrest = 0f;
     private const float WakeCuspFoamReach = 4f;
 
-    // Remake-only rule, set by the look. The foam trail's half width grows from the half beam by
+    // Remake-only rule: set by the look. The foam trail's half width grows from the half beam by
     // WakeFoamSpread metres per metre behind the stern. It is dense over WakeFoamCore of that width.
     // It ramps in over WakeFoamRamp of a half length ahead of the stern.
     private const float WakeFoamSpread = 0.06f;
     private const float WakeFoamCore = 0.55f;
     private const float WakeFoamRamp = 0.25f;
 
-    // Remake-only rule, set by the look. The white the wake's foam reaches at its densest, and the
+    // Remake-only rule: set by the look. The white the wake's foam reaches at its densest, and the
     // cell of the noise that breaks it into patches, in metres.
     private const float WakeFoamWhite = 0.85f;
     private const float WakeFoamCell = 8f;

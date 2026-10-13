@@ -7,9 +7,9 @@ namespace CSVM.UI.Menu;
 /// <summary>
 /// Free Flight as a shared feature: the chapter roster it offers, the chapter picked, the launch
 /// gate, and the typed <see cref="LaunchExit"/> a launch leaves through. Free Flight is the
-/// remake's own mode, so nothing here is decoded; the rules are the launchscreen's, moved. A
-/// presentation offers the roster however it likes, tells the feature which chapter was picked,
-/// and asks for the exit once every joined seat has confirmed an aircraft. The seats themselves
+/// remake-only mode, so nothing here is decoded; the rules are the launchscreen's, moved. A
+/// presentation offers the roster however it likes and tells the feature which chapter was picked.
+/// It asks for the exit once every joined seat has confirmed an aircraft. The seats themselves
 /// stay the presentation's until the shared player setup owns them.
 /// </summary>
 public sealed class FreeFlightFeature : IMenuFeature

@@ -75,13 +75,13 @@ public sealed class DogfightLobby
     public const int CtfTeams = 2;
 
     /// <summary>The name of the team the bots open when one team alone stands in a team match.
-    /// The remake's own: the original has no bots.</summary>
+    /// Remake-only rule: the original has no bots.</summary>
     public const string BotTeamName = "Bots";
 
     /// <summary>How many types the Type box lists: the string table's three and Stunt Race.</summary>
     public const int TypeCount = 4;
 
-    /// <summary>The Type box's word for Stunt Race. The remake's own, so no string table id names it.
+    /// <summary>The Type box's word for Stunt Race. Remake-only, so no string table id names it.
     /// </summary>
     public const string StuntRaceName = "Stunt Race";
 
@@ -107,7 +107,7 @@ public sealed class DogfightLobby
     public const string MapUnlisted = "a lobby pilot flies only the seven lobby environments";
 
     /// <summary>The pilot count Fill-to-N's box opens on: the eight the original's colour table and
-    /// respawn fan were authored for. The remake's own choice.</summary>
+    /// respawn fan were authored for. A remake-only choice.</summary>
     public const int DefaultFillTo = 8;
 
     // The Environment box's words in the string table's order, and the chapter each is flown on.
@@ -449,7 +449,7 @@ public sealed class DogfightLobby
     };
 
     /// <summary>The line a refused launch raises, the original's langui 10518 to 10520 or the
-    /// remake's own for a teamless player or unbalanced teams. Empty for none.</summary>
+    /// remake-only line for a teamless player or unbalanced teams. Empty for none.</summary>
     public static string RefusalText(TeamLaunchRefusal refusal) => refusal switch
     {
         TeamLaunchRefusal.TooManyTeams => "There are too many teams.",

@@ -19,7 +19,7 @@ public sealed partial class FlagBanner : Node3D
     /// <summary>The tow line and the banner end to end, the chain's whole length in metres.</summary>
     internal const float TotalLength = TowLength + BannerLength;
 
-    // Remake-only rule values (docs/org/multiplayer-ctf.md, "Towed banner"); the original tows nothing.
+    // Remake-only rule: the original tows nothing (docs/org/multiplayer-ctf.md, "Towed banner").
     private const float TowLength = 14f;
     private const int TowSegments = 4;
     private const float BannerLength = 9f;

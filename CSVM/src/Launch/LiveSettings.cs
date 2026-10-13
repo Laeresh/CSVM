@@ -121,8 +121,8 @@ internal sealed class LiveSettings
         GraphicsMode.SwitchLocked = session is { InSession: true, Wire.Link: not null };
     }
 
-    /// <summary>The options file's one writer, shared by the menu's apply and the pause leaf's. The
-    /// display settings, the mix, the word settings and the graphics mode apply now.
+    /// <summary>The options file's writer for an Options apply, shared by the menu's apply and the
+    /// pause leaf's. The display settings, the mix, the word settings and the graphics mode apply now.
     /// ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
     /// them here. The pause leaf puts the head turn and targeting switch on the seats flying now
     /// (PausePreferences.FeedGameOptions).</summary>

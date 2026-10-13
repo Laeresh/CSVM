@@ -244,7 +244,10 @@ bot as any seat. `BotObjective` turns it off. Rule: [../org/aiPilot.md](../org/a
 Which bot order changes a team mode's host step logs: `Admit` notes a bot seat's reason each step
 and answers true when it changed and the seat still has one of its `LinesPerSeat` lines left, so a
 long match does not log every run. `FlagRuntime.StepBots`, `ZeppelinVersusRuntime.StepBots` and
-`StuntRaceBots.Step` share it, each writing its own line.
+`StuntRaceBots.Step` share it in one shape: only the host steps a bot (the two team runtimes guard
+on the host, and a guest builds no `StuntRaceBots`, since only the host gives a bot a pilot), a
+loop over the bot seats the machine flies, each runtime's own `BotObjective` switch (a suite control turns it off), and one
+"bot seat {seat} {why}" line, the switched-off reason being `ObjectiveOff`.
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `VersusDirector.WireZeppelinVersus` for a `--zvz`

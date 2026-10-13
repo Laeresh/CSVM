@@ -40,7 +40,7 @@ public sealed record QuitExit : MenuExit;
 /// <see cref="Flight.Hangar.Difficulty.Word"/>, <see cref="Utils.OptionsDef"/>'s other fields and
 /// one word per registered setting, null where never set. A screen showing none of them hands back what it
 /// read, since the consumer writes every field it is given. ⚠ Every setting rides the exit, not the
-/// screen's own save, so the options file keeps one writer, and none is defaulted. ⚠ A field no
+/// screen's own save, and none is defaulted. ⚠ A field no
 /// screen offers is dropped rather than left riding as a null, since a null the consumer saves wipes
 /// the file's value.</summary>
 public sealed record OptionsApplyExit(

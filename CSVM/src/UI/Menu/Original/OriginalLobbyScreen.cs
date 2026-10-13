@@ -79,7 +79,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Mission Type box.</summary>
     public const string TypeKey = "MPL_D_TYPE";
 
-    /// <summary>The line under the Type box for a Stunt Race, the remake's own type, so no string
+    /// <summary>The line under the Type box for a Stunt Race, the remake-only type, so no string
     /// table id carries it. It is written in the register of the original's three.</summary>
     public const string StuntRaceDescription =
         "Race the chapter's Danger Zone course against the clock. Fly as many runs as the time allows. The fastest complete run wins.";
@@ -184,7 +184,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// </summary>
     public const string CopyKey = "MPL_B_COPY";
 
-    /// <summary>Add Bot on Mission Options, the remake's own: one bot row (<see cref="DogfightLobby.AddBot"/>).
+    /// <summary>Add Bot on Mission Options, remake-only: one bot row (<see cref="DogfightLobby.AddBot"/>).
     /// </summary>
     public const string AddBotKey = "MPL_B_ADDBOT";
 
@@ -218,11 +218,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public const string BotDoneKey = "MPL_BOT_B_DONE";
 
     /// <summary>The line pinned over a guest's chat while its host flies a match the guest joined
-    /// too late for. The remake's own: no langui line says what happens next.</summary>
+    /// too late for. Remake-only rule: no langui line says what happens next.</summary>
     public const string MatchInProgress = "The host's match is under way. You take a seat when it ends.";
 
     /// <summary>The tag a bot's row carries in the player list's Ready column, where a person's
-    /// Ready mark stands, and beside its name on Game Scores. The remake's own: the original has no
+    /// Ready mark stands, and beside its name on Game Scores. Remake-only rule: the original has no
     /// bots.</summary>
     public const string BotTag = "BOT";
 
@@ -232,7 +232,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>How many rows the player list shows.</summary>
     public const int VisiblePlayers = 11;
 
-    /// <summary>Where a player row's plane column starts, the remake's own: the original's list names
+    /// <summary>Where a player row's plane column starts, remake-only: the original's list names
     /// no plane. The column ends <see cref="PlaneWidth"/> on, clear of the bot tag and the Ready mark.
     /// </summary>
     internal const float PlaneX = ListX + 136f;
@@ -317,7 +317,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The scores page's scroll bar over the landed match's lines.
     private static readonly OriginalScrollBar ScoresBar = OriginalRaceTable.ScrollBar(PageX, PageY);
 
-    // The player list's bar, the remake's own: the original's sixteen people and no bots fit its rows.
+    // The player list's bar, remake-only: the original's sixteen people and no bots fit its rows.
     // It wears the chat's track inside the pane's right border, clear of the Ready marks.
     private static readonly OriginalScrollBar PlayersBar =
         new(292f, ListY - 2f, VisiblePlayers * ListPitch, VisiblePlayers, new BoardTint(0x20, 0x24, 0x18));
@@ -1160,7 +1160,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return false;
     }
 
-    // No langui row words a bot on no team, so that word is the remake's own.
+    // No langui row words a bot on no team, so that word is remake-only.
     private static string TeamWord(DogfightLobby lobby, byte team)
     {
         foreach (var named in lobby.Teams)
@@ -1559,7 +1559,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, rules));
         rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, rules && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
         // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
-        // mail(5) and mail(1109) do. The remake's own-flag-home option stands beside the Teams
+        // mail(5) and mail(1109) do. The remake-only own-flag-home option stands beside the Teams
         // heading, the column's one clear line, and runs to the page's right edge.
         bool ctf = DogfightLobby.IsCtf(options);
         bool fixedTeams = DogfightLobby.FixesTeams(options);
@@ -2271,7 +2271,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             LeaveKey => (10062, "Leave Game"),
             BotDoneKey => (10540, "Accept"),
 
-            // The bot plaques are the remake's own, so no langui row words them.
+            // The bot plaques are remake-only, so no langui row words them.
             AddBotKey => (-1, "Add Bot"),
             FillKey => (-1, "Fill to"),
             RemoveBotKey => (-1, "Remove"),
@@ -2341,7 +2341,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var options = lobby.Options;
         if (DogfightLobby.IsStuntRace(options))
         {
-            // The remake's own line, in the face the string table's three are drawn in.
+            // The remake-only line, in the face the string table's three are drawn in.
             layers.Lines.Add(_text.Line(10123, string.Empty, PageX + 25f, DescriptionY, 200f, Black, text: StuntRaceDescription)
                 with
             { Leading = DescriptionPitch, Height = BotsY - DescriptionY - 4f });

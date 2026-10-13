@@ -24,7 +24,7 @@ public sealed partial class Ocean : Node3D
     // The grid's angular resolution near the eye; it halves at each of BandEnds.
     private const int InnerSegments = 384;
 
-    // Remake-only rule, set by the look. The waves stay flat this far past a hull's waterline, about the swell's sideways sway.
+    // Remake-only rule: set by the look. The waves stay flat this far past a hull's waterline, about the swell's sideways sway.
     // They reach full height over the fade beyond, so no crest crosses the deck.
     private const float CalmMargin = 2f;
     private const float CalmFade = 16f;

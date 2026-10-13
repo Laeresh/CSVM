@@ -22,7 +22,7 @@ public sealed partial class VersusBoard : ResultsBoard
     public const string HostCallsTheRematch = "The host calls the rematch";
 
     /// <summary>The tag after a computer pilot's callsign on its row, the same word the lobby and
-    /// Game Scores tag a bot with. The remake's own: the original has no bots.</summary>
+    /// Game Scores tag a bot with. Remake-only rule: the original has no bots.</summary>
     public const string BotTag = "BOT";
 
     // The board's sizes, chrome type scale rungs at the boards' 720p reference, scaled by

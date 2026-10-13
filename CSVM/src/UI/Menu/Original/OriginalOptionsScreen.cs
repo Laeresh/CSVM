@@ -67,8 +67,7 @@ internal interface IOriginalOptionsPage
 /// <c>[@ControlsPrefs@]</c> and <c>[@Keys@]</c> sections. It keeps the frame every page stands in,
 /// each page's ACCEPT CHANGES and CANCEL CHANGES, and the switch to the page showing. The settings
 /// pages read the saved options once per entry and leave through one apply exit carrying them all.
-/// <see cref="CSVM.Utils.OptionsStore"/>'s one writer so stays the only writer, while the rebinding
-/// pages stage their edits in the shared <see cref="ControlsFeature"/>.
+/// The rebinding pages stage their edits in the shared <see cref="ControlsFeature"/>.
 /// </summary>
 public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOptionsForm
 {

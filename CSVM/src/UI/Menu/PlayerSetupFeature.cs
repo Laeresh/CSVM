@@ -81,9 +81,9 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>How many seats may join, the splitscreen rig's own maximum.</summary>
     public const int MaxSeats = 4;
 
-    /// <summary>The kill target a screen may step up to. Remake-only: the original's Multiplayer
-    /// is network play and authors no such box, so the ceiling is this port's, picked to keep the
-    /// row one press per kill rather than a ladder of invented round numbers.</summary>
+    /// <summary>The kill target a screen may step up to. Remake-only rule: the original's Multiplayer
+    /// is network play and authors no such box. The ceiling is picked to keep the row one press
+    /// per kill rather than a ladder of invented round numbers.</summary>
     public const int MaxKillTarget = 20;
 
     /// <summary>The match clock a screen may step up to, in minutes, remake-only for the same

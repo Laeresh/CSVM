@@ -184,14 +184,14 @@ public sealed record PauseReadout(
 }
 
 /// <summary>
-/// What the Original presentation's pause screen is made of, engine-free: the mission's chart at
-/// its authored crop, the pins and icons the dialog's script places, the objectives parchment, the
-/// profile's memento and the button strips, the four the block authors plus the remake's own photo
-/// strip. Composed the way the load and briefing screens are, through
+/// What the Original presentation's pause screen is made of, engine-free. It holds the mission's
+/// chart at its authored crop, the pins and icons the dialog's script places, the objectives
+/// parchment and the profile's memento. Its button strips are the four the block authors plus the
+/// remake-only photo strip. Composed the way the load and briefing screens are, through
 /// <see cref="ComposedBoard"/>, and sharing <see cref="MissionMap"/> with both.
 ///
-/// An Instant Action sortie pauses on the same screen over a dialog that carries none of
-/// that: the load screen's blackboard, its three photographs, its four texts and the strips.
+/// An Instant Action sortie pauses on the same screen over a dialog that carries none of that. It
+/// shows the load screen's blackboard, its three photographs, its four texts and the strips.
 /// </summary>
 public static class PauseScreens
 {
@@ -218,11 +218,11 @@ public static class PauseScreens
     /// <summary>A strip's plate in authored pixels down (docs/org/pause-screen.md).</summary>
     public const float StripHeight = 28f;
 
-    /// <summary>What the remake's own strip reads. The authored four are set in title case, so this
+    /// <summary>What the remake-only strip reads. The authored four are set in title case, so this
     /// one is too rather than shouting beside them.</summary>
     public const string PhotoLabel = "Photo Mode";
 
-    // The widget names the shared BUTTONS block authors, and the name the remake's own strip
+    // The widget names the shared BUTTONS block authors, and the name the remake-only strip
     // carries, which no shipped file holds.
     private const string ResumeKey = "RESUME_MISSION_BTN";
     private const string RestartKey = "RESTART_MISSION_BTN";
@@ -238,9 +238,10 @@ public static class PauseScreens
         ResumeKey, RestartKey, PreferencesKey, QuitKey,
     };
 
-    /// <summary>The remake's own strip, in the authored plates and label offset the block's own
-    /// RESUME carries, at the one place that block leaves room for a fifth: the channel between two
-    /// columns of strips, or the cell under RESTART where they stand three across. Null where the
+    /// <summary>The remake-only strip, in the authored plates and label offset the block's own
+    /// RESUME carries, where that block leaves room for a fifth. That place is the
+    /// channel between two columns of strips, or the cell under RESTART where they stand three
+    /// across. Null where the
     /// block authors too few strips to stand one against.</summary>
     public static EscapeButton? PhotoStrip(EscapeShared shared)
     {

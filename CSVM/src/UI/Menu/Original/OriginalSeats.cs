@@ -449,7 +449,7 @@ public sealed partial class OriginalShell
 
     // FLY: seat 0's confirmation and the launch, reached by its own press and by the per-seat
     // walk's last confirm. Free Flight leaves through its feature with the chapter handed over;
-    // Dogfight, the remake's own mode with no feature of its own, leaves through the setup's exit.
+    // Dogfight, remake-only with no feature of its own, leaves through the setup's exit.
     private MenuExit? Fly()
     {
         if (!FlyEnabled() || Seat0 is not { } seat)

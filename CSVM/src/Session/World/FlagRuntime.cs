@@ -251,7 +251,7 @@ internal sealed class FlagRuntime
             if (seat is { Bot: true, Live: true, Source: FlightController { Pilot: { } pilot } bot } && _in.IsLocal(seat.Seat))
             {
                 var order = BotObjective ? CtfBotObjective.Decide(seat.Seat, _flags, _pilots)
-                    : new CtfBotOrder(CtfBotRole.None, null, null, "has its objective off");
+                    : new CtfBotOrder(CtfBotRole.None, null, null, BotOrderLog.ObjectiveOff);
                 Steer(seat.Seat, bot, pilot, order);
             }
         }

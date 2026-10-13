@@ -1631,8 +1631,8 @@ public static class NetMessage
     /// no spawn list, so the seat comes back on the one pose it was given.</summary>
     public const ushort NoSpawnEntry = 0xFFFF;
 
-    /// <summary>The highest type word the original itself uses. Anything above it is this
-    /// remake's own and has no counterpart in <c>crimson.exe</c>.</summary>
+    /// <summary>The highest type word the original itself uses. Anything above it is a
+    /// remake-only message type and has no counterpart in <c>crimson.exe</c>.</summary>
     public const ushort OriginalIdCeiling = 0x27;
 
     /// <summary>The ceiling <see cref="AircraftStateMessage.Size"/> may not pass. It is the

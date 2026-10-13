@@ -708,7 +708,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/FrameInstruments.cs`, the process's frame instruments on wall time: the hitch monitor and sidecar, the rate line, the F14 readout, and the opt-in `--perf`, `--debug-mem` and `--hitch-inject`.
 - `src/Launch/NetFlight.cs`, the multiplayer door and the wire a flight carries: the command line's socket, a menu launch's wire and field, the in-flight door upkeep, the lobby landing and the wire's end.
 - `src/Launch/SeatFields.cs`, who sits where at a launch: the co-op, lobby Dogfight, command-line and local-bot seat rosters, with each seat's fit and custom plane.
-- `src/Launch/LiveSettings.cs`, the Options page's settings on the running process: the pacing, window, graphics mode and word settings at launch, the options file's one writer, and the live graphics switch.
+- `src/Launch/LiveSettings.cs`, the Options page's settings on the running process: the pacing, window, graphics mode and word settings at launch, the Options apply's save, and the live graphics switch.
 - `src/Launch/LaunchBoards.cs`, the boards the launcher stands with no flight in front of them: the load screen, the graphics switch's blackboard and the `--menu=pauseboard` doors.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.

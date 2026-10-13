@@ -181,7 +181,7 @@ void csky_sun_rgb_at(vec3 camera_world, out vec3 sun_dir, out vec3 ambient_rgb, 
 // makes a written 1 significant, not what makes it doubtful. It replaced a `smoothstep`, which
 // was ours and rested on nothing (2026-08-08).
 // ⚠ The ALTITUDE term keeps its smoothstep deliberately. `fog_state` is D3D's distance-fog mode
-// and says nothing about a vertical fade; the cylinder's altitude fade is the remake's own model,
+// and says nothing about a vertical fade; the cylinder's altitude fade is a remake-only model,
 // and exactly one flown band in the install (C2 ZONE1, 256-1024 m) is inside the flight envelope,
 // so no render in seven of eight chapters can tell one altitude curve from another. Changing it
 // would be a guess dressed as a symmetry.
