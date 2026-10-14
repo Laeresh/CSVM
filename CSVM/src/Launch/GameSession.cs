@@ -139,7 +139,7 @@ public partial class GameSession : Node3D
     // A finished lobby match's landing on Game Scores, routed by the Launcher. Null leaves the
     // ending to the in-flight board.
     private readonly Action? _versusLobbyLanding;
-    // The process's music channel, owned by the Launcher so one channel outlives every session.
+    // The process's music channel, owned by LaunchAudio so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
     // Base (chapter-independent) paths, settled by the Launcher and handed in via the context.

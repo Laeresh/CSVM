@@ -83,9 +83,9 @@ availability check loaded).
 `Deactivate` and keeps no reference to past that: `Features` (the shared `MenuFeatureSet`), `Audio`
 (the shared `IMenuAudio`), `Seats` (one `IMenuInputSource` per joined seat, a live list) and
 `Exit(MenuExit)`, the only way out. The implementation is `MenuHost` (`CSVM/src/UI/Menu/MenuHost.cs`),
-engine-free, owned by `Launcher` for the life of the process. `Launcher` shows it with a destination
-on every entry, ticks it every frame, and receives every exit through the sink it constructed the
-host with. `MenuHost.Shown` is what the owner reads for "the menu is up"; no presentation's node is
+engine-free, held by `ProcessMenu` (`ProcessMenu.Host`) for the life of the process.
+`ProcessMenu.Show` shows it with a destination on every entry, `Launcher` ticks it every frame, and
+every exit reaches `Launcher` through the sink it handed `ProcessMenu`. `MenuHost.Shown` is what the owner reads for "the menu is up"; no presentation's node is
 consulted.
 
 A switch is three host calls in order: `Deactivate()` (ends the instance and calls
@@ -766,7 +766,7 @@ writes it back, and nothing reads it, so a file carrying `built-in` already open
 the word leaves the accepted set the store drops that one field, and the file keeps loading.
 
 **Shared code in Built-in's files.** These move rather than go: `BuiltInSeat`, which is seat 0
-under both presentations (`Launcher` wraps it in `PointerSeat`), every pad seat `MenuSeatDevices`
+under both presentations (`ProcessMenu.Build` wraps it in `PointerSeat`), every pad seat `MenuSeatDevices`
 joins, and the in-flight Preferences leaf's seat; `LaunchMenu.ReadyChipMark` and `RemoteChipMark`,
 which `OriginalSeats` draws; `LaunchMenu.CanLaunch` and `ChapterCodesFor`, which the feature tests
 assert against; `PlaneFit` and `PlaneRatings` in `UI/Hangar/`, which the per-seat aircraft, bot and

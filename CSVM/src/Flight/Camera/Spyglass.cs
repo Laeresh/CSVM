@@ -43,9 +43,8 @@ public static class Spyglass
     /// toggle flips it from here; nothing else writes it.</summary>
     public const bool DefaultOn = true;
 
-    /// <summary>The fewest panes at which an integrated GPU disarms the spyglass at level load.
-    /// On the Steam Deck, C5 at two panes ran 49.0 fps with both discs up and 69.5 with none
-    /// (analysis/issue-124-deck-c5-splitscreen/FINDINGS.md).</summary>
+    /// <summary>The fewest panes at which an integrated GPU disarms the spyglass at level load;
+    /// the frame-rate evidence is in docs/org/spyglass.md.</summary>
     public const int IntegratedSplitPanes = 2;
 
     /// <summary>The log's name for the rule that disarms the spyglass at
