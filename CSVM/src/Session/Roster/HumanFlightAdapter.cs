@@ -618,6 +618,7 @@ internal sealed class HumanFlightAdapter
         {
             var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
             pilotHud.TargetHud = targetHud;
+            targetHud.SpyglassOn = _policy.SpyglassOn;
             // The spyglass's range gate reads this pane's own fog band; null on a bare rig.
             var fogRange = _world.FogRange;
             int paneIndex = rig.Index;

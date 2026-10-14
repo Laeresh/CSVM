@@ -775,14 +775,14 @@ The camera stays with the callers, each keeping its own arrow, tag and label sty
 draws what this places; coverage is `CSVM.Tests/EdgeMarkerTests.cs`.
 
 ## src/Flight/Camera/Spyglass.cs
-The spyglass's decoded rules, engine-free and pure. `RangeGate(fogRange, held)` is the slant range
-the picture is allowed at: `near + (far - near) * 0.8`, capped at `RangeCapM`, times `EngageFactor`
-while nothing is held, so it engages nearer than it releases and cannot strobe at the boundary; a
-band whose far is no further than its near carries no fog information and takes the cap alone.
-`FovDeg(radius, distance)` is `2 * atan(1.1 R / d)` clamped to 1.5 and 90 degrees. `Pose` stands
-the camera at the pilot's own aircraft looking at the target, rolling with its attitude for an
-aircraft and level otherwise. Also owns `RefWindow`, `RefRadius` and `DefaultOn`. Decode:
-[../org/spyglass.md](../org/spyglass.md); coverage `CSVM.Tests/SpyglassTests.cs`.
+The spyglass's decoded rules, engine-free and pure but for `MachineDefaultFor`. `RangeGate(fogRange, held)`
+is the slant-range gate: `near + (far - near) * 0.8`, capped at `RangeCapM`, times `EngageFactor` while
+nothing is held, so it engages nearer than it releases and cannot strobe at the boundary; a band whose
+far is no further than its near takes the cap alone. `FovDeg(radius, distance)` is `2 * atan(1.1 R / d)`
+clamped to 1.5 and 90 degrees. `Pose` stands the camera at the pilot's own aircraft looking at the
+target, rolling with its attitude for an aircraft and level otherwise. Owns `RefWindow`, `RefRadius` and
+`DefaultOn`; `DefaultOnFor` (remake-only) disarms it on an integrated GPU at 2+ panes, bar `--det`.
+Decode: [../org/spyglass.md](../org/spyglass.md); coverage `CSVM.Tests/SpyglassTests.cs`.
 
 ## src/Flight/Camera/SpyglassView.cs
 The spyglass picture: a square `SubViewport` rendering the SHARED world through a `Camera3D` of its

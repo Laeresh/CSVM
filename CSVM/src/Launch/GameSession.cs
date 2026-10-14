@@ -281,6 +281,8 @@ public partial class GameSession : Node3D
     private Mech3.WorldMerge? _worldMerge;
     // the splitscreen pane rig (null in single player)
     private UI.Boards.SplitScreen? _split;
+    // whether each pane's spyglass is armed at level load, answered once by BuildRigs for its count
+    private bool _spyglassOn = Spyglass.DefaultOn;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
@@ -2110,7 +2112,7 @@ public partial class GameSession : Node3D
             Coop = _spec.Coop,
             SmokeScreens = _smokeScreens,
         };
-        var flightRoster = new FlightRoster(FlightRosterPolicy.From(_spec), _liveryResolver,
+        var flightRoster = new FlightRoster(FlightRosterPolicy.From(_spec, _spyglassOn), _liveryResolver,
             _worldEffectsFactory, _worldRoot!, aircraftResources, worldBindings, humanBindings,
             flightStarts);
         var rosterBuild = flightRoster.BuildPlayers(_seatRigs);
@@ -2864,6 +2866,9 @@ public partial class GameSession : Node3D
         _rigs.Clear();
         _split = null;
         FollowPanes(count);
+        _spyglassOn = Spyglass.MachineDefaultFor(_spec.Det, count);
+        if (!_spyglassOn)
+            Log.Info("flight", $"spyglass at {count} pane(s): spyglass=off spyglass_source={Spyglass.IntegratedSplitRule}");
         if (count <= 1)
         {
             _camera.Current = true;
