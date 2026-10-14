@@ -7,8 +7,8 @@ namespace CSVM.UI.Menu;
 /// <summary>
 /// Who a host seats. It refuses a guest of another version, and one the lobby turned away for a
 /// wrong password, a boot or the player cap. Each is told why and hung up on after a grace.
-/// In co-op it seats guests in arrival order and grants each further seats from the room the first
-/// seats leave. The door hands it the wire, its own seat count and the cap on every call.
+/// It seats guests in arrival order and grants each further seats from the room the first seats
+/// leave. The door hands it the wire, its own seat count and the cap on every call.
 /// </summary>
 public sealed class NetAdmission
 {
@@ -20,7 +20,7 @@ public sealed class NetAdmission
     private readonly Dictionary<int, int> _granted = new();
     private readonly List<(int Peer, double Waited)> _refused = new();
 
-    // The guests a campaign host seated, in arrival order.
+    // The guests a host seated, in arrival order.
     internal IReadOnlyList<int> Admitted => _admitted;
 
     internal bool Refused(int peer)
@@ -55,34 +55,10 @@ public sealed class NetAdmission
         return true;
     }
 
-    // A Dogfight host seats guests up to its chosen cap in arrival order and turns one past it away,
-    // as a campaign host does. ⚠ Do not leave a refused guest on the peer lists until its hang-up.
-    // A launch's field reads them, and ENet's hang-up lands a step later.
-    internal void RefuseOverCap(NetLobby lobby, int localPlayers, int cap)
-    {
-        int seated = localPlayers;
-        foreach (int peer in lobby.AllPeers)
-        {
-            if (Refused(peer))
-            {
-                continue;
-            }
-
-            if (seated < cap)
-            {
-                seated++;
-                continue;
-            }
-
-            lobby.TurnAway(peer, NetCloseReason.Full);
-        }
-
-        RefuseTurnedAway(lobby);
-    }
-
-    // A campaign host seats guests in arrival order while the cap has a seat free, every seat a
-    // guest was given counting. One past it is turned away as full, off every peer list at once, so
-    // a bind inside its grace never seats it.
+    // Either kind of host seats guests in arrival order while the cap has a seat free, every seat a
+    // guest was given counting. ⚠ Turn one past it away off every peer list at once, not at its
+    // hang-up. A bind or a launch's field inside its grace reads the lists, and ENet's hang-up lands
+    // a step later.
     internal void Admit(NetLobby lobby, int localPlayers, int cap)
     {
         var peers = lobby.AllPeers;

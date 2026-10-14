@@ -624,7 +624,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.StepNet(0.0);
                     break;
                 case string lobby when lobby == LobbyAid || lobby.StartsWith(LobbyAid + ":", StringComparison.Ordinal):
-                    OpenLobbyAid(lobby[LobbyAid.Length..].TrimStart(':'));
+                    OpenLobbyAid(lobby[LobbyAid.Length..].TrimStart(':'), setup);
                     break;
                 case CreditsAid + ":" + CreditsAboutAid:
                     // The screen opens on ABOUT, its first row, so one accept raises the box.
@@ -1072,7 +1072,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     // The lobby posed over the aids' wire. The shown door is opened through the screen itself, so it
     // goes by the pilot's name the way a player's own lobby does.
-    private void OpenLobbyAid(string argument)
+    private void OpenLobbyAid(string argument, PlayerSetupFeature setup)
     {
         string[] parts = argument.Split(':');
         if (parts[0] == "late")
@@ -1089,6 +1089,18 @@ public sealed class OriginalPresentation : IMenuPresentation
         string tab = parts.Length > 1 ? parts[1] : parts[0] is "host" or "guest" or "waiting" ? string.Empty : parts[0];
         var (host, guests) = NetDoorAid.DogfightDoors(NetDoorAid.InternetOf(parts.Length > 2 ? parts[2] : string.Empty));
         var shown = guestView ? guests[waiting ? 1 : 0] : host;
+        if (tab == "seats")
+        {
+            // A second seat at the host's machine and at the first guest's, the shown one's a
+            // device-less seat of this menu's own.
+            host.LocalSeats = 2;
+            guests[0].LocalSeats = 2;
+            if (setup.Seats.Count < 2)
+            {
+                setup.Join(new MenuIdleSource());
+            }
+        }
+
         _shell!.StandInNetDoor(shown);
         if (guestView)
         {
@@ -1112,6 +1124,13 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (guestView)
         {
             _shell.Lobby.OpenGuest();
+        }
+
+        if (tab == "seats")
+        {
+            // Each second seat on a plane of its own, so its row reads apart from its machine's first.
+            host.Dogfight?.PickSeat(1, 3, default);
+            guests[0].Dogfight?.PickSeat(1, 7, default);
         }
 
         bool outlaw = tab.StartsWith("outlaw", StringComparison.Ordinal);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
@@ -9,16 +10,13 @@ using CSVM.UI.Hangar;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The remake-only per-seat aircraft screen: once seat 0 has picked on a sortie screen, or has
-/// pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in player
-/// order picks its own aircraft here, on the campaign plane-selection board's shape (its list field,
-/// ratings and weapon column, WEAPON LOADOUT over a selection, ACCEPT and CANCEL SELECTIONS) over
-/// the sortie roster. The list stands open while the seat browses; Accept selects and closes it,
-/// Accept again confirms and hands the screen on, and WEAPON LOADOUT opens the loadout screen on
-/// that seat's own fit. Back and CANCEL SELECTIONS each drop a selection and reopen the list, and
-/// over the open list each leaves the walk with every seat kept; nothing here unjoins. Only the
-/// picking seat's device drives the screen, and the mouse riding seat 0's source. The last seat's
-/// confirm is the launch, or the return of a screen whose FLY gate is unmet. Nothing is decoded.
+/// The remake-only per-seat aircraft screen, nothing on it decoded.
+/// Each further seat picks its own aircraft here in player order, after seat 0's sortie pick,
+/// Instant Action's FLY MISSION or the lobby's Ready. It wears the campaign plane-selection board
+/// over the sortie roster, the lobby's walk over the stock rows alone. Accept selects, Accept again
+/// confirms and hands on, and WEAPON LOADOUT opens that seat's own fit. Back and CANCEL SELECTIONS
+/// drop a selection, then leave the walk with every seat kept. The picking seat's device and seat
+/// 0's mouse drive it, and the last confirm is the launch, the Ready or FLY's return.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -28,6 +26,10 @@ public sealed partial class OriginalShell
     private SeatPlanePage? _seatPage;
     private PlayerSeat? _pickingSeat;
     private OriginalScreen _seatReturn = OriginalScreen.FreeFlight;
+
+    // The stock rows the shared roster leads with, all a lobby's further seat may fly. Taken once
+    // as a lobby walk begins.
+    private IReadOnlyList<MenuAircraft> _lobbyRoster = Array.Empty<MenuAircraft>();
 
     /// <summary>The seat picking on the per-seat screen, as its index, or -1 off that screen.</summary>
     public int PickingSeat => _screen == OriginalScreen.SeatPlane && _pickingSeat is { } seat ? SeatIndex(seat) : -1;
@@ -42,6 +44,9 @@ public sealed partial class OriginalShell
     private bool OnSeatWalk =>
         _screen == OriginalScreen.SeatPlane
         || (_screen == OriginalScreen.InstantActionLoadout && InstantAction.OnSeatLoadout);
+
+    // The rows the walk offers: the stock ones alone over the lobby, else the whole sortie roster.
+    private IReadOnlyList<MenuAircraft> WalkRoster => _seatReturn == OriginalScreen.Lobby ? _lobbyRoster : _setup.Roster;
 
     /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
     /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
@@ -148,6 +153,35 @@ public sealed partial class OriginalShell
         return AdvanceSeatWalk();
     }
 
+    // The lobby's Ready with a further seat in the match. Each such seat picks again from browsing.
+    // A seat the host gave no place stands confirmed, so the walk passes it. ⚠ Keep a cursor inside
+    // the stock rows; a further seat flies no custom plane over the wire.
+    private void BeginLobbySeatWalk()
+    {
+        var seats = _setup.Seats;
+        int places = _net?.Dogfight?.SeatsFlown ?? 1;
+        _lobbyRoster = _setup.Roster.TakeWhile(row => !row.IsCustom).ToList();
+        for (int i = 1; i < seats.Count; i++)
+        {
+            // Two steps back reach browsing from any stage: confirmed, then selected.
+            _setup.Back(seats[i]);
+            _setup.Back(seats[i]);
+            if (seats[i].Cursor >= _lobbyRoster.Count)
+            {
+                _setup.Browse(seats[i], 0);
+            }
+
+            if (i >= places)
+            {
+                _setup.Select(seats[i]);
+                _setup.Confirm(seats[i]);
+            }
+        }
+
+        _seatReturn = OriginalScreen.Lobby;
+        _ = AdvanceSeatWalk();
+    }
+
     private void EnterSeatPlane(PlayerSeat seat, OriginalScreen returnTo)
     {
         _pickingSeat = seat;
@@ -178,6 +212,12 @@ public sealed partial class OriginalShell
     {
         var back = _seatReturn;
         Open(back);
+        if (back == OriginalScreen.Lobby)
+        {
+            Lobby.ReadySeats(_setup.Seats, _lobbyRoster);
+            return null;
+        }
+
         if (back != OriginalScreen.InstantAction)
         {
             return IsSortie ? Fly() : null;
@@ -409,7 +449,7 @@ public sealed partial class OriginalShell
             List = new CampaignCombo(x, y, width,
                 layout.Int(Section, "PS_D_PILOTPLANE", "ItemHeight", ItemHeight),
                 layout.Int(Section, "PS_D_PILOTPLANE", "TotalDisplayed", ItemsDisplayed));
-            var roster = shell._setup.Roster;
+            var roster = shell.WalkRoster;
             var entries = new List<string>(roster.Count);
             foreach (var row in roster)
             {
@@ -523,7 +563,7 @@ public sealed partial class OriginalShell
         {
             get
             {
-                var roster = _shell._setup.Roster;
+                var roster = _shell.WalkRoster;
                 int at = List.Open ? List.Highlight : List.Selected;
                 return at >= 0 && at < roster.Count ? roster[at] : null;
             }
@@ -574,7 +614,7 @@ public sealed partial class OriginalShell
         private string Others()
         {
             var seats = _shell._setup.Seats;
-            var roster = _shell._setup.Roster;
+            var roster = _shell.WalkRoster;
             var parts = new List<string>();
             for (int i = 0; i < seats.Count; i++)
             {

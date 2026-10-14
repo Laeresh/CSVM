@@ -526,11 +526,11 @@ public static class CoopDoorText
             NetCoopScreen.Debrief => flow.Won ? "Mission won" : "Mission failed",
             _ => "The host is in the cabin",
         };
-        string shortLine = net.CoopSeatsShort;
+        string shortLine = net.SeatsShort;
         return shortLine.Length > 0 ? $"CO-OP  {doing}\n{shortLine}" : $"CO-OP  {doing}";
     }
 
-    /// <summary>What a co-op guest is told when the host's cap gave its machine
+    /// <summary>What a guest or a Dogfight host is told when the cap gave its machine
     /// <paramref name="given"/> seats for its <paramref name="players"/> players.</summary>
     public static string SeatsShort(int given, int players)
     {

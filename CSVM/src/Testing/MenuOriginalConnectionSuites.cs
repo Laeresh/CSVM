@@ -254,6 +254,110 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-lobby-seats",
+        "The Multiplayer Lobby with two seats at each machine, over the loopback: a host and a guest, "
+        + "each with a second seat signed on, list four rows on both ends, each further seat by its "
+        + "player tag, and the advert counts four players. Each end's Ready walks its second seat through "
+        + "the per-seat aircraft screen, whose last confirm is the Ready, the host's seat taking a fit "
+        + "of its own. LAUNCH! hands out the host's two seats, the host's field builds four aircraft "
+        + "with the guest's two on their own picks, and the guest launches two seats behind the host's "
+        + "opener, whose join names it both")]
+    internal static void TheLobbysSeats(TestContext ctx)
+    {
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(23));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return mesh[1];
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-seats");
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits);
+            if (host == null || guest == null)
+            {
+                return;
+            }
+
+            var hostSecond = new ScriptedSeat();
+            var guestSecond = new ScriptedSeat();
+            ctx.Check(host.Host.Features.Get<PlayerSetupFeature>().Join(hostSecond) != null
+                      && guest.Host.Features.Get<PlayerSetupFeature>().Join(guestSecond) != null,
+                $"a second seat signs on at each machine");
+            if (!HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends, -1, "Nathan"))
+            {
+                return;
+            }
+
+            for (int frame = 0; frame < 4; frame++)
+            {
+                Pump(ends.ToArray());
+            }
+
+            ListEverySeat(ctx, host, guest, mesh[1].LocalPeer);
+            int guestPlane = WalkTheSecondSeat(ctx, guest, guestSecond, ends, rows: 2, ammo: "dumdum");
+            int hostPlane = WalkTheSecondSeat(ctx, host, hostSecond, ends, rows: 7, ammo: "ap");
+            var listed = host.Door.Dogfight!.Players;
+            ctx.Check(Row(host.Shell, OriginalLobbyScreen.LaunchKey) is { Enabled: true } && listed.Count == 4 && listed.All(row => row.Ready)
+                      && listed[1].Airframe == hostPlane && listed[3].Airframe == guestPlane,
+                $"every row stands Ready, each second seat on the plane it walked to ({SeatRows(listed)})");
+            int before = hostExits.Count;
+            ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+            if (hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault() is not { Net: { } wire } launch)
+            {
+                ctx.Check(false, $"LAUNCH! hands out a launch on the wire ({hostExits.Count - before})");
+                return;
+            }
+
+            ctx.Check(launch.Seats.Count == 2 && launch.Seats[1].PlaneNode == StockAirframes.Node(hostPlane) && launch.Seats[1].Fit?.GunAmmoFor(1) == "ap",
+                $"LAUNCH! hands out the host's two seats, its second on its plane and the shell it picked ({launch.Seats.Count}, {launch.Seats.LastOrDefault()?.PlaneNode}, {launch.Seats.LastOrDefault()?.Fit?.GunAmmoFor(1)})");
+            var roster = FourSeatField(ctx, host, launch, wire, mesh[1].LocalPeer, guestPlane);
+            GuestFliesBothSeats(ctx, wire, roster, guest, guestExits, guestPlane);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     [Suite("menu-original-outlaw-list",
         "The Multiplayer Lobby's outlaw list over the loopback: Select... is greyed on both ends while "
         + "Outlaw Components is clear, and the host's list still reaches the guest then. Toggling the "
@@ -2872,6 +2976,104 @@ internal static class MenuOriginalConnectionSuites
             $"the guest launches behind the host on the same chapter and rules in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 
+    // Both lists name four rows, each machine's second by its player tag, and the guest's two are its
+    // own. The advert and the list's header count every seat.
+    private static void ListEverySeat(TestContext ctx, End host, End guest, int guestPeer)
+    {
+        var hostLobby = host.Door.Dogfight!;
+        var guestLobby = guest.Door.Dogfight!;
+        string[] names = { "Zachary", "P2", "Nathan", "P4" };
+        ctx.Check(hostLobby.Players.Select(row => row.Name).SequenceEqual(names) && guestLobby.Players.Select(row => row.Name).SequenceEqual(names),
+            $"both lists name four rows, each second seat by its player tag (host {SeatRows(hostLobby.Players)}; guest {SeatRows(guestLobby.Players)})");
+        ctx.Check(guestLobby is { You: 2, SeatsFlown: 2 } && hostLobby is { SeatsFlown: 2, FieldSeats: 4 } && hostLobby.PeerAt(3) == guestPeer && hostLobby.PeerAt(1) == -1,
+            $"the guest's two rows are its own, and the host's second row names no guest ({guestLobby.You}, {guestLobby.SeatsFlown}, {hostLobby.FieldSeats}, {hostLobby.PeerAt(1)})");
+        ctx.Check(host.Door.Advertising?.Players == 4 && hostLobby.PeopleListed == 4,
+            $"the advert and the list's header count every seat ({host.Door.Advertising?.Players}, {hostLobby.PeopleListed})");
+    }
+
+    // One end's Ready walks its second seat through the per-seat aircraft screen. The seat steps down
+    // so many rows and selects, takes the shell WEAPON LOADOUT would store where asked, and confirms.
+    // That confirm is the Ready. Returns the airframe the seat walked to.
+    private static int WalkTheSecondSeat(TestContext ctx, End end, ScriptedSeat second, List<End> ends, int rows, string? ammo)
+    {
+        var shell = end.Shell;
+        var lobby = end.Door.Dogfight!;
+        ClickRow(ctx, end, OriginalLobbyScreen.ReadyKey);
+        ctx.Check(shell.Screen == OriginalScreen.SeatPlane && shell.PickingSeat == 1 && shell.SeatReturn == OriginalScreen.Lobby && !lobby.Ready,
+            $"Ready opens the second seat's own aircraft screen and marks nothing yet ({shell.Screen}, picking {shell.PickingSeat}, {lobby.Ready})");
+        for (int row = 0; row < rows; row++)
+        {
+            Press(end, second, new MenuCommands { MoveY = 1 });
+        }
+
+        Press(end, second, new MenuCommands { Accept = true });
+        if (ammo != null)
+        {
+            end.Host.Features.Get<PlayerSetupFeature>().Seats[1].Fit.SetGunAmmo(1, ammo);
+        }
+
+        Press(end, second, new MenuCommands { Accept = true });
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        int airframe = StockAirframes.IdOf(OriginalRosters.Airframes[rows].Node) ?? -1;
+        ctx.Check(shell.Screen == OriginalScreen.Lobby && lobby.Ready && lobby.SeatPick(1).Airframe == airframe,
+            $"the second seat's confirm lands back in the lobby, Ready on its pick ({shell.Screen}, {lobby.Ready}, {lobby.SeatPick(1).Airframe} for {airframe})");
+        return airframe;
+    }
+
+    // The host's field off its launch: its two seats, then the guest's two on their own picks. The
+    // control reads the same wire with every guest on one seat.
+    private static NetSeat[] FourSeatField(TestContext ctx, End host, LaunchExit launch, MenuNetLaunch wire, int guestPeer, int guestPlane)
+    {
+        var lobby = host.Door.Dogfight!;
+        var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
+        var fits = launch.Seats.Select(s => s.Fit).ToList();
+        var stock = StockLoadouts.Load();
+        var (roster, seatFits) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, stock, lobby.Rules, lobby.TeamOfPeer,
+            owners: lobby.SeatOwners);
+        var peers = roster.Select(seat => seat.PeerId).ToArray();
+        ctx.Check(roster.Length == 4 && peers[1] == peers[0] && peers[2] == guestPeer && peers[3] == guestPeer
+                  && roster[2].Callsign == "Nathan" && roster[3].Callsign == "P4" && roster[3].PlaneNode == StockAirframes.Node(guestPlane),
+            $"the host's field builds four aircraft, the guest's two on their own picks ({string.Join(", ", roster.Select(s => $"{s.Callsign} {s.PlaneNode}"))})");
+        ctx.Check(seatFits.Length == 4 && seatFits[1].AmmoAt(0) == 2 && seatFits[3].AmmoAt(0) == 1,
+            $"each second seat flies the shell it picked, the host's armour-piercing and the guest's dumdum ({(seatFits.Length == 4 ? $"{seatFits[1].AmmoAt(0)}, {seatFits[3].AmmoAt(0)}" : "no field")})");
+        var (one, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, stock, lobby.Rules, lobby.TeamOfPeer);
+        ctx.Check(one.Length == 3, $"ABLE-TO-FAIL CONTROL: without the door's grants the guest takes one seat ({one.Length})");
+        return roster;
+    }
+
+    // The host's opener reaching the guest's door, which launches both its seats on their picks. A
+    // session over that launch joins both as one run from the guest's first seat.
+    private static void GuestFliesBothSeats(TestContext ctx, MenuNetLaunch wire, NetSeat[] roster, End guest, List<MenuExit> exits, int guestPlane)
+    {
+        int before = exits.Count;
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, airframes: StockAirframes.Nodes);
+        for (int frame = 0; frame < 4 && exits.Count == before; frame++)
+        {
+            Pump(guest);
+        }
+
+        var launch = exits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(launch is { Net.IsHost: false, Seats.Count: 2 } && launch.Seats[1].PlaneNode == StockAirframes.Node(guestPlane)
+                  && launch.Seats[1].Fit?.GunAmmoFor(1) == "dumdum",
+            $"the guest launches both its seats behind the host's opener, its second on its pick ({launch?.Seats.Count}, {launch?.Seats.LastOrDefault()?.PlaneNode}, {launch?.Seats.LastOrDefault()?.Fit?.GunAmmoFor(1)})");
+        if (launch?.Net is not { } guestWire)
+        {
+            return;
+        }
+
+        var session = NetSession.Guest(guestWire.Transport, StockAirframes.Nodes);
+        ctx.Check(session is { Joined: true, LocalSeat: 2, LocalSeatCount: 2 } && session.Seats.Count == 4
+                  && session.Seats[3] is { FlownHere: true } flown && flown.PlaneNode == StockAirframes.Node(guestPlane),
+            $"the host's join names the guest seats 2 and 3, both flown there ({session.LocalSeat}, {session.LocalSeatCount}, {session.Seats.Count})");
+    }
+
+    private static string SeatRows(IEnumerable<DogfightLobbySeat> rows) =>
+        string.Join(", ", rows.Select(row => $"{row.Name} {row.Airframe}{(row.Ready ? " ready" : "")}"));
+
     // A completed match's landing on both ends, as the launcher runs it once the end has held. Each
     // door takes its wire back, and the menu comes back on a LobbyReturn built off that end's own
     // match. The guest's holds the host's scores as they reached it.
@@ -4471,9 +4673,12 @@ internal static class MenuOriginalConnectionSuites
     private static OriginalRow? Row(OriginalShell shell, string key) => shell.Rows.FirstOrDefault(row => row.Key == key);
 
     // One scripted frame on an end.
-    private static void Press(End end, MenuCommands commands)
+    private static void Press(End end, MenuCommands commands) => Press(end, end.Seat, commands);
+
+    // One scripted frame from one of an end's seats.
+    private static void Press(End end, ScriptedSeat seat, MenuCommands commands)
     {
-        end.Seat.Enqueue(commands);
+        seat.Enqueue(commands);
         end.Host.Tick(Dt);
     }
 

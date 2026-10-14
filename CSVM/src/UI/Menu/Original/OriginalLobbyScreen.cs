@@ -347,7 +347,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private readonly IOriginalScreenHost _host;
     private readonly MultiplayerBoardText _text;
     private readonly Func<StockLoadouts?> _stock;
-    private readonly Func<IReadOnlyList<int>> _pads;
+    private readonly Func<int, IReadOnlyList<int>> _pads;
+    private readonly Action _walkSeats;
     private readonly Func<string?> _pilotName;
     private readonly Func<IReadOnlyList<CustomPlaneDef>> _customs;
     private readonly OriginalOutlawList _outlaw;
@@ -385,15 +386,17 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private IReadOnlyList<string>? _botNames;
 
     /// <summary>A lobby module over the door <paramref name="net"/> answers. Its words come from the
-    /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. Seat
-    /// 0's flight devices are <paramref name="pads"/>, and the pilot's name is
+    /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. Each
+    /// local seat's flight devices are <paramref name="pads"/>, and the pilot's name is
     /// <paramref name="pilotName"/>, null for none. The pilot's saved custom planes are
-    /// <paramref name="customs"/>, none when null.</summary>
+    /// <paramref name="customs"/>, none when null. Ready with a further seat joined runs
+    /// <paramref name="walkSeats"/>, the per-seat aircraft screen, which ends in <see cref="ReadySeats"/>.</summary>
     public OriginalLobbyScreen(
         Func<NetPlayFeature?> net, IOriginalScreenHost host, string? dataRoot, Func<StockLoadouts?>? stock,
-        Func<IReadOnlyList<int>>? pads = null, Func<string?>? pilotName = null,
-        Func<IReadOnlyList<CustomPlaneDef>>? customs = null)
+        Func<int, IReadOnlyList<int>>? pads = null, Func<string?>? pilotName = null,
+        Func<IReadOnlyList<CustomPlaneDef>>? customs = null, Action? walkSeats = null)
     {
+        _walkSeats = walkSeats ?? (() => { });
         _customs = customs ?? (() => Array.Empty<CustomPlaneDef>());
         _net = net ?? throw new ArgumentNullException(nameof(net));
         _host = host ?? throw new ArgumentNullException(nameof(host));
@@ -402,7 +405,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _outlaw = new OriginalOutlawList(_text);
         _teamBox = new OriginalTeamBox(_host, _text);
         _stock = stock ?? (() => null);
-        _pads = pads ?? (() => Array.Empty<int>());
+        _pads = pads ?? (_ => Array.Empty<int>());
         _pilotName = pilotName ?? (() => null);
     }
 
@@ -438,11 +441,26 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The rows pinned over the chat under <see cref="PinnedName"/>. On a host they are
     /// <see cref="CoopDoorText.HostLobbyLines"/>: its join code or its wait for one, else its address
     /// and why there is no code. The copy hint follows the seat's device. A guest that joined while
-    /// its host flies a match reads <see cref="MatchInProgress"/>. Empty on any other guest.</summary>
-    public IReadOnlyList<string> NetworkRows =>
-        _net() is not { } net ? Array.Empty<string>()
-        : WaitsOnMatch ? new[] { MatchInProgress }
-        : CoopDoorText.HostLobbyLines(net, _host.CopyWay);
+    /// its host flies a match reads <see cref="MatchInProgress"/>. Empty on any other guest. A
+    /// machine flying fewer seats than it joined reads <see cref="NetPlayFeature.SeatsShort"/> last.</summary>
+    public IReadOnlyList<string> NetworkRows
+    {
+        get
+        {
+            if (_net() is not { } net)
+            {
+                return Array.Empty<string>();
+            }
+
+            var rows = new List<string>(WaitsOnMatch ? new[] { MatchInProgress } : (IEnumerable<string>)CoopDoorText.HostLobbyLines(net, _host.CopyWay));
+            if (net.SeatsShort is { Length: > 0 } cut)
+            {
+                rows.Add(cut);
+            }
+
+            return rows;
+        }
+    }
 
     /// <summary>The name the first pinned row stands under, <see cref="CoopDoorText.NoteName"/>.
     /// While a guest waits on its host's match it is langui 10090 "In Progress", the original's word
@@ -499,8 +517,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>A player list's team row's key by the team's number.</summary>
     public static string TeamRowKey(int team) => TeamRowKeyPrefix + team.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>What a team row reads: the team's name and its member count, the players' own
-    /// splitscreen seats not counted.</summary>
+    /// <summary>What a team row reads: the team's name and its member count, each seat a member
+    /// machine flies counted once.</summary>
     public static string TeamRowText(string name, int members) =>
         $"{name} ({members.ToString(CultureInfo.InvariantCulture)})";
 
@@ -894,6 +912,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 lobby?.SetAutoRespawn(!lobby.Options.AutoRespawn);
                 return null;
             case ReadyKey:
+                // Remake-only: a machine flying further seats walks them through the per-seat
+                // aircraft screen first, and the last confirm is the Ready (ReadySeats).
+                if (lobby is { Ready: false, SeatsFlown: > 1 })
+                {
+                    _walkSeats();
+                    return null;
+                }
+
                 if (lobby != null && !lobby.SetReady(!lobby.Ready))
                 {
                     Refused(lobby.ReadyRefusals);
@@ -1050,6 +1076,33 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         changed |= heard != _heard;
         _heard = heard;
         return changed;
+    }
+
+    /// <summary>The per-seat aircraft screen's end over this lobby. Each further seat takes the stock
+    /// aircraft under its cursor in <paramref name="roster"/> and the fit it confirmed. Then this
+    /// machine marks Ready, or the original's refusal says why not.</summary>
+    public void ReadySeats(IReadOnlyList<PlayerSeat> seats, IReadOnlyList<MenuAircraft> roster)
+    {
+        ArgumentNullException.ThrowIfNull(seats);
+        ArgumentNullException.ThrowIfNull(roster);
+        if (Lobby is not { } lobby)
+        {
+            return;
+        }
+
+        for (int local = 1; local < seats.Count && local < lobby.SeatsFlown; local++)
+        {
+            var seat = seats[local];
+            int airframe = seat.Cursor >= 0 && seat.Cursor < roster.Count && StockAirframes.IdOf(roster[seat.Cursor].Node) is { } id
+                ? id
+                : DogfightLobby.DefaultAirframe;
+            lobby.PickSeat(local, airframe, CampaignLoadout.FitOf(seat.Fit.IsStock ? null : seat.Fit, _stock()));
+        }
+
+        if (!lobby.SetReady(true))
+        {
+            Refused(lobby.ReadyRefusals);
+        }
     }
 
     /// <summary>A Dogfight guest's launch once its host has launched, taken after the door was
@@ -1427,17 +1480,25 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.Connection);
     }
 
-    // Seat 0 on the plane and fit this pilot picked, on the chapter and the rules the host's options
-    // name. The wire rides out with it. ⚠ A custom plane flies as its wire build reads back, the
-    // copy every other machine builds, never the stored def.
+    // Every seat this machine flies on the plane and fit it picked, on the chapter and the rules the
+    // host's options name. The wire rides out with it. ⚠ A custom plane flies as its wire build
+    // reads back, the copy every other machine builds, never the stored def.
     private LaunchExit Exit(NetPlayFeature net, DogfightLobby lobby)
     {
         var options = lobby.Options;
-        var seat = new MenuSeatChoice(
-            StockAirframes.Node(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.LaunchFit, _stock()),
-            CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build));
+        var seats = new List<MenuSeatChoice>
+        {
+            new(StockAirframes.Node(lobby.Airframe), _pads(0), CampaignLoadout.For(lobby.LaunchFit, _stock()),
+                CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build)),
+        };
+        for (int local = 1; local < lobby.SeatsFlown; local++)
+        {
+            var (airframe, fit) = lobby.SeatPick(local);
+            seats.Add(new MenuSeatChoice(StockAirframes.Node(airframe), _pads(local), CampaignLoadout.For(lobby.Rules.Enforce(fit), _stock())));
+        }
+
         return new LaunchExit(
-            DogfightLobby.ChapterOf(options.Environment), new[] { seat }, DogfightLobby.LaunchMode(options),
+            DogfightLobby.ChapterOf(options.Environment), seats, DogfightLobby.LaunchMode(options),
             Match: DogfightLobby.RulesOf(options), Net: net.BuildLaunch());
     }
 
@@ -1507,7 +1568,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         // A team row is picked by anyone, for Join Team. A player row is picked only on the host,
-        // for Boot; the host's own row is never booted (FUN_00413090 refuses it).
+        // for Boot; the host's own rows are never booted (FUN_00413090 refuses it).
         if (lobby != null && !_outlaw.IsOpen)
         {
             var entries = ListEntries(lobby);
@@ -1516,7 +1577,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             {
                 var entry = entries[_playersTop + slot];
                 string key = entry.Player < 0 ? TeamRowKey(entry.Team) : PlayerKey(entry.Player);
-                if (entry.Player < 0 || (lobby.IsHost && entry.Player >= 1))
+                if (entry.Player < 0 || (lobby.IsHost && entry.Player >= lobby.SeatsFlown))
                 {
                     rows.Add(new OriginalRow(key, entry.Text, OriginalRowKind.ListRow, ListX, ListY + (slot * ListPitch),
                         NameWidth + ListPitch, ListPitch, true, 0, null));
@@ -1938,7 +1999,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             }
 
             float indent = entry.Team != 0 ? MemberIndent : 0f;
-            var colour = lobby != null && entry.Player == lobby.You ? OwnName : Black;
+            var colour = lobby != null && entry.Player >= lobby.You && entry.Player < lobby.You + lobby.SeatsFlown ? OwnName : Black;
             float textY = y + ((ListPitch - size) / 2f);
 
             // A plain line wider than its box would wrap onto the row below. A marquee line stays on

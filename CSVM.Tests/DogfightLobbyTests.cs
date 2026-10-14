@@ -1396,7 +1396,7 @@ public sealed class DogfightLobbyTests
         Assert.Equal(14, roomy.Bots.Count);
         Assert.Equal(NetSeats.MaxPlayers, roomy.FieldSeats);
 
-        // A host flying two seats fills to sixteen pilots on fifteen rows, and a guest still frees one.
+        // A host flying two seats fills to sixteen pilots, a row each, and a guest still frees one.
         var admitted = new HashSet<int>();
         var (split, guests, _) = Lobbies(2, localSeats: 2, seated: admitted.Contains);
         Settle(split, guests);
@@ -1405,18 +1405,118 @@ public sealed class DogfightLobbyTests
         Settle(split, guests);
         Assert.Equal(13, split.Bots.Count);
         Assert.Equal(NetSeats.MaxPlayers, split.FieldSeats);
-        Assert.Equal(NetSeats.MaxPlayers - 1, split.Players.Count);
+        Assert.Equal(NetSeats.MaxPlayers, split.Players.Count);
+        Assert.Equal("P2", split.Players[1].Name);
+    }
+
+    [Fact]
+    public void EverySeatAMachineFliesHasItsOwnRowPickAndReady()
+    {
+        var (host, guests, mesh) = Lobbies(2, "Lucy", localSeats: 2, guestSeats: 2);
+        var guest = guests[0];
+        Settle(host, guests);
+        Assert.True(guest.PickSeat(1, 7, default));
+        Assert.False(guest.PickSeat(0, 7, default));
+        Settle(host, guests);
+
+        Assert.Equal(new[] { "Host", "P2", "Lucy", "P4" }, host.Players.Select(p => p.Name));
+        Assert.Equal(new[] { "Host", "P2", "Lucy", "P4" }, guest.Players.Select(p => p.Name));
+        Assert.Equal((4, 2, 2), (host.FieldSeats, guest.You, guest.SeatsFlown));
+        Assert.Equal(7, host.Players[3].Airframe);
+        Assert.Equal((-1, mesh[1].LocalPeer, mesh[1].LocalPeer), (host.PeerAt(1), host.PeerAt(2), host.PeerAt(3)));
+
+        // One Ready stands for every seat of its machine, and the host waits on each row.
+        Assert.True(host.SetReady(true));
+        Settle(host, guests);
+        Assert.False(host.CanLaunch);
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Players.All(p => p.Ready) && host.CanLaunch);
+
+        // A changed further seat clears its machine's Ready on both ends.
+        Assert.True(guest.PickSeat(1, 3, default));
+        Settle(host, guests);
+        Assert.False(guest.Ready);
+        Assert.Equal((3, false), (host.Players[3].Airframe, host.Players[3].Ready));
+
+        // ABLE-TO-FAIL CONTROL: a guest asking one seat stands on one row.
+        var (single, alone, _) = Lobbies(2, "Lucy", localSeats: 2);
+        Settle(single, alone);
+        Assert.Equal(new[] { "Host", "P2", "Lucy" }, single.Players.Select(p => p.Name));
+        Assert.Equal(1, alone[0].SeatsFlown);
+    }
+
+    [Fact]
+    public void ASeatGivenAfterTheReadyClearsItAndFliesNothingUnpicked()
+    {
+        // A guest joined with two seats and given one marks Ready on it; the host can launch.
+        int given = 1;
+        var (host, guests, _) = Lobbies(2, "Lucy", guestSeats: 2, seatsOf: _ => given);
+        var guest = guests[0];
+        Settle(host, guests);
+        Assert.Equal(1, guest.SeatsFlown);
+        Assert.True(host.SetReady(true));
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.CanLaunch);
+
+        // The second seat is given. On the host's very next step its row stands not Ready, since
+        // the guest's mark never covered it, and the guest's own mark clears.
+        given = 2;
+        host.Step();
+        Assert.Equal(3, host.Players.Count);
+        Assert.False(host.Players[2].Ready);
+        Assert.False(host.CanLaunch);
+        Settle(host, guests);
+        Assert.Equal(2, guest.SeatsFlown);
+        Assert.False(guest.Ready);
+        Assert.False(host.Players[1].Ready);
+
+        // Ready again over both seats stands for both.
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.CanLaunch);
+
+        // A seat taken away clears the mark too, and given back it stays cleared: no Ready returns
+        // without a new mark.
+        given = 1;
+        Settle(host, guests);
+        Assert.False(guest.Ready);
+        Assert.False(host.CanLaunch);
+        given = 2;
+        Settle(host, guests);
+        Assert.False(guest.Ready);
+        Assert.False(host.Players[1].Ready || host.Players[2].Ready);
+        Assert.False(host.CanLaunch);
+    }
+
+    [Fact]
+    public void TheTeamSizesCountEverySeatOfAGuestsMachine()
+    {
+        foreach (var (seats, refusal) in new[] { (3, TeamLaunchRefusal.Unbalanced), (2, TeamLaunchRefusal.None) })
+        {
+            // A one-seat host on Red against a guest's machine on Blue; two seats is the control.
+            var (host, guests, _) = Lobbies(2, "Lucy", guestSeats: seats);
+            Settle(host, guests);
+            Assert.True(host.CreateTeam("Red"));
+            Settle(host, guests);
+            Assert.True(guests[0].CreateTeam("Blue"));
+            Settle(host, guests);
+            Assert.Equal(seats + 1, host.Players.Count);
+            Assert.Equal(refusal, host.LaunchRefusal);
+        }
     }
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
         int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null, int localSeats = 1,
-        Func<int, bool>? seated = null)
+        Func<int, bool>? seated = null, int guestSeats = 1, Func<int, int>? seatsOf = null)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
         var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
         var host = new DogfightLobby(hostWire, () => "Host")
         {
             LocalSeats = () => localSeats,
+            SeatsOf = seatsOf ?? hostWire.SeatsWanted,
             BotDraws = new Random(players),
             Seated = seated ?? (_ => true),
         };
@@ -1426,7 +1526,7 @@ public sealed class DogfightLobbyTests
         {
             var wire = new NetLobby(mesh[i]);
             wires.Add(wire);
-            var guest = new DogfightLobby(wire, () => guestName, 0);
+            var guest = new DogfightLobby(wire, () => guestName, 0) { LocalSeats = () => guestSeats };
             guest.Show();
             guests.Add(guest);
         }

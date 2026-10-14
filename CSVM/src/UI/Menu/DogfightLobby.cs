@@ -136,19 +136,20 @@ public sealed class DogfightLobby
     private readonly List<PlaneRefusal> _refusals = new();
     private readonly NetTeamBook _teams;
     private readonly DogfightBots _bots = new();
+
+    // Each seat's pick by its place among this machine's seats, seat 0 first.
+    private readonly SeatPicked[] _picks = SeatPicked.All();
     private DogfightOptionsMessage _options = new(
         1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
         false, DefaultLives, true);
 
     // Clear until a lobby screen first stands on a host, which ticks Allow Custom Planes (Show).
     private NetPlaneRules _rules;
-    private byte _airframe = DefaultAirframe;
-    private NetPlaneBuild? _build;
-    private NetPlaneBuild? _buildSent;
-    private CoopFit _fit;
     private bool _ready;
     private byte _readyEpoch;
-    private CoopPickMessage? _pickSent;
+
+    // How many seats flew when this machine marked Ready. A change in them clears the mark.
+    private int _readySeats;
     private string[] _launchNames = Array.Empty<string>();
     private DogfightScore[] _scores = Array.Empty<DogfightScore>();
     private RaceTableRow[] _raceScores = Array.Empty<RaceTableRow>();
@@ -178,10 +179,14 @@ public sealed class DogfightLobby
     /// </summary>
     public Func<byte> Voice { get; init; } = () => CoopPickMessage.NoVoice;
 
-    /// <summary>How many seats the host's own machine flies, its splitscreen seats included. They
-    /// all fly on the host's team, and the balance check counts each as a player. A guest flies one.
+    /// <summary>How many seats this machine flies, its splitscreen seats included. A host lists each
+    /// on a row of its own, and a guest asks its host for each. A machine's seats fly on its team.
     /// </summary>
     public Func<int> LocalSeats { get; init; } = () => 1;
+
+    /// <summary>How many seats a host gave the guest at a peer: its first, and each further one the
+    /// player cap left room for. One each unless the door says otherwise.</summary>
+    public Func<int, int> SeatsOf { get; init; } = _ => 1;
 
     /// <summary>The callsigns a new bot row draws from, the shipped pilot names
     /// (<c>Session/Roster/BotSeats.cs</c>). Empty, every bot is called <c>Bot n</c>.</summary>
@@ -208,9 +213,46 @@ public sealed class DogfightLobby
     /// <see cref="Players"/>.</summary>
     public IReadOnlyList<DogfightBot> Bots => _bots.Rows;
 
-    /// <summary>How many pilots the field holds: every seat the host's machine flies, one per seated
-    /// guest and one per bot. A guest counts the host's rows.</summary>
-    public int FieldSeats => IsHost ? Math.Max(1, LocalSeats()) + SeatedPeers().Count + _bots.Count : Players.Count;
+    /// <summary>How many pilots the field holds: every seat each machine flies and one per bot, a
+    /// row each. A guest counts the host's rows.</summary>
+    public int FieldSeats => IsHost ? SeatOwners.Count + _bots.Count : Players.Count;
+
+    /// <summary>How many seats this machine flies in the match, out of its <see cref="LocalSeats"/>.
+    /// Its rows stand side by side from <see cref="You"/>. A guest flies as many as its host gave
+    /// it, read off the host's list.</summary>
+    public int SeatsFlown => Math.Clamp(
+        IsHost || _wire.DogfightRoster is not { } roster ? LocalSeats() : Math.Min(roster.YourSeats, LocalSeats()),
+        1, _picks.Length);
+
+    /// <summary>The machine and the place among its seats behind each person's row on a host's list.
+    /// The host's own seats come first, then each seated guest's given seats side by side. A launch
+    /// seats them in this order, so a row's player tag is its seat's. Empty on a guest.</summary>
+    public IReadOnlyList<(int Peer, int Local)> SeatOwners
+    {
+        get
+        {
+            var owners = new List<(int Peer, int Local)>();
+            if (!IsHost)
+            {
+                return owners;
+            }
+
+            for (int local = 0; local < SeatsFlown; local++)
+            {
+                owners.Add((_wire.LocalPeer, local));
+            }
+
+            foreach (int peer in SeatedPeers())
+            {
+                for (int local = 0; local < Math.Max(1, SeatsOf(peer)); local++)
+                {
+                    owners.Add((peer, local));
+                }
+            }
+
+            return owners;
+        }
+    }
 
     /// <summary>How many more bots the field takes before it holds <see cref="NetSeats.MaxPlayers"/>
     /// pilots. None on a guest.</summary>
@@ -236,17 +278,17 @@ public sealed class DogfightLobby
         : _wire.DogfightOptions ?? _options with { Epoch = 0 };
 
     /// <summary>The stock airframe this pilot picked, an index into the eleven.</summary>
-    public byte Airframe => _airframe;
+    public byte Airframe => _picks[0].Airframe;
 
     /// <summary>The ammunition and ordnance this pilot picked, stock when all zero.</summary>
-    public CoopFit Fit => _fit;
+    public CoopFit Fit => _picks[0].Fit;
 
     /// <summary>The fit this pilot flies: its pick as <see cref="NetPlaneRules.Enforce"/> leaves it.
     /// The host reads a guest's fit through the same rules, so both ends agree.</summary>
-    public CoopFit LaunchFit => Rules.Enforce(_fit);
+    public CoopFit LaunchFit => Rules.Enforce(Fit);
 
     /// <summary>The custom plane this pilot picked, or null on a stock airframe.</summary>
-    public NetPlaneBuild? Build => _build;
+    public NetPlaneBuild? Build => _picks[0].Build;
 
     /// <summary>The plane rules as this end stands on them: its own on the host, the host's word on
     /// a guest. A guest that has heard nothing reads cleared rules, which allow no custom plane.
@@ -254,11 +296,11 @@ public sealed class DogfightLobby
     public NetPlaneRules Rules => IsHost ? _rules : _wire.PlaneRules?.Rules ?? default;
 
     /// <summary>Why the rules refuse this pilot's plane, or none.</summary>
-    public PlaneRefusal Refusal => Rules.Refuses(_airframe, _build);
+    public PlaneRefusal Refusal => Rules.Refuses(Airframe, Build);
 
-    /// <summary>Whether this pilot marked itself Ready under the current round, on a plane the rules
-    /// admit.</summary>
-    public bool Ready => _ready && _readyEpoch == Options.Epoch && Refusal == PlaneRefusal.None;
+    /// <summary>Whether this machine marked itself Ready under the current round, on a plane the
+    /// rules admit, for the seats it flies now. A seat given or taken since clears the mark.</summary>
+    public bool Ready => _ready && _readyEpoch == Options.Epoch && _readySeats == SeatsFlown && Refusal == PlaneRefusal.None;
 
     /// <summary>Why the last <see cref="SetReady"/> was refused, in the order the original lists
     /// them. Empty after a mark that took.</summary>
@@ -338,8 +380,7 @@ public sealed class DogfightLobby
     }
 
     /// <summary>Why the host's launch is refused on its teams, or none. Each row counts one player,
-    /// a bot's included, the host's row every seat its machine flies (<see cref="LocalSeats"/>).
-    /// </summary>
+    /// a bot's and each seat of a machine's included.</summary>
     public TeamLaunchRefusal LaunchRefusal
     {
         get
@@ -399,8 +440,8 @@ public sealed class DogfightLobby
     /// </summary>
     public IReadOnlyList<string> LaunchNames => _launchNames;
 
-    /// <summary>The people in <see cref="Players"/>, the host's row and every person's, which the
-    /// list's header counts against the session's cap.</summary>
+    /// <summary>The people in <see cref="Players"/>, a row for every seat each machine flies, which
+    /// the list's header counts against the session's cap.</summary>
     public int PeopleListed => Players.Count - BotsListed;
 
     /// <summary>The bot rows in <see cref="Players"/>, which the list's header names apart from the
@@ -750,8 +791,8 @@ public sealed class DogfightLobby
     /// row past the list, and on a guest.</summary>
     public int BotAt(int row)
     {
-        int index = row - 1 - (IsHost ? SeatedPeers().Count : 0);
-        return IsHost && row >= 1 && index >= 0 && index < _bots.Count ? _bots.Rows[index].Id : -1;
+        int index = IsHost ? row - SeatOwners.Count : -1;
+        return index >= 0 && index < _bots.Count ? _bots.Rows[index].Id : -1;
     }
 
     /// <summary>Sets the Time box, in minutes. Refused on a guest and outside 1 to 99.</summary>
@@ -797,7 +838,7 @@ public sealed class DogfightLobby
             return false;
         }
 
-        Take((byte)airframe, null, fit);
+        Take(0, (byte)airframe, null, fit);
         return true;
     }
 
@@ -811,12 +852,35 @@ public sealed class DogfightLobby
             return false;
         }
 
-        Take(build.Airframe, build.Copy(), fit);
+        Take(0, build.Airframe, build.Copy(), fit);
         return true;
     }
 
     /// <summary>Changes this pilot's fit alone, keeping the plane it stands on.</summary>
-    public void Refit(CoopFit fit) => Take(_airframe, _build, fit);
+    public void Refit(CoopFit fit) => Take(0, Airframe, Build, fit);
+
+    /// <summary>The stock airframe and fit this machine's seat <paramref name="local"/> picked,
+    /// counted from 0 among its own. Seat 0's are <see cref="Airframe"/> and <see cref="Fit"/>.
+    /// </summary>
+    public (byte Airframe, CoopFit Fit) SeatPick(int local)
+    {
+        var seat = _picks[Math.Clamp(local, 0, _picks.Length - 1)];
+        return (seat.Airframe, seat.Fit);
+    }
+
+    /// <summary>Picks a further seat's stock airframe and fit, as <see cref="Pick"/> does seat 0's.
+    /// A further seat flies stock planes alone. A changed pick clears this machine's Ready, which
+    /// stands for every seat. Refused for seat 0, past the fourth seat and outside the eleven.</summary>
+    public bool PickSeat(int local, int airframe, CoopFit fit)
+    {
+        if (local < 1 || local >= _picks.Length || airframe is < 0 or >= AirframeCount)
+        {
+            return false;
+        }
+
+        Take(local, (byte)airframe, null, fit);
+        return true;
+    }
 
     /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
     /// on the next step. False, and no mark, when the rules refuse this pilot's plane or a picked
@@ -832,6 +896,7 @@ public sealed class DogfightLobby
 
         _ready = ready;
         _readyEpoch = Options.Epoch;
+        _readySeats = SeatsFlown;
         return true;
     }
 
@@ -980,17 +1045,12 @@ public sealed class DogfightLobby
         return true;
     }
 
-    /// <summary>The peer a host's player list row names. It is -1 for the host's own row, for a row
-    /// past the list, and on a guest.</summary>
+    /// <summary>The peer a host's player list row names, any of its machine's seats. It is -1 for
+    /// the host's own rows, for a bot's or a row past the list, and on a guest.</summary>
     public int PeerAt(int row)
     {
-        if (!IsHost || row < 1)
-        {
-            return -1;
-        }
-
-        var peers = SeatedPeers();
-        return row - 1 < peers.Count ? peers[row - 1] : -1;
+        var owners = SeatOwners;
+        return row >= 0 && row < owners.Count && owners[row].Peer != _wire.LocalPeer ? owners[row].Peer : -1;
     }
 
     /// <summary>One menu frame, after the socket was stepped. The host relays each guest's chat to the
@@ -999,6 +1059,12 @@ public sealed class DogfightLobby
     /// A guest takes the host's chat and sends its own pick.</summary>
     public void Step()
     {
+        // A seat given or taken since the mark clears it for good, so the seats come back unready.
+        if (_readySeats != SeatsFlown)
+        {
+            _ready = false;
+        }
+
         foreach (var (from, line) in _wire.TakeChat())
         {
             Add(line);
@@ -1094,14 +1160,18 @@ public sealed class DogfightLobby
         return false;
     }
 
-    // Every row's team and the players it counts: a bot one, a guest one, the host its seats.
+    // The airframe a guest seat's pick names, or the mark of a pick the host has not heard.
+    private static byte PickedAirframe(CoopPickMessage? pick) =>
+        pick is not { } heard ? DogfightLobbySeat.NoPick : heard.Airframe < AirframeCount ? heard.Airframe : DefaultAirframe;
+
+    // Every row's team, one player a row: a bot, or one seat of a machine.
     private List<(byte Team, int Seats)> Weighed()
     {
         var players = Players;
         var weighed = new List<(byte Team, int Seats)>(players.Count);
         foreach (var player in players)
         {
-            weighed.Add((player.Team, player.IsHost ? Math.Max(1, LocalSeats()) : 1));
+            weighed.Add((player.Team, 1));
         }
 
         return weighed;
@@ -1123,7 +1193,7 @@ public sealed class DogfightLobby
         {
             if (!player.IsBot && player.Team != 0)
             {
-                sizes[player.Team] = sizes.GetValueOrDefault(player.Team) + (player.IsHost ? Math.Max(1, LocalSeats()) : 1);
+                sizes[player.Team] = sizes.GetValueOrDefault(player.Team) + 1;
             }
         }
 
@@ -1208,47 +1278,52 @@ public sealed class DogfightLobby
         return peers;
     }
 
-    // A guest counts as Ready only under this round and on a plane the rules admit. The guest's
-    // own lobby asks the same, but the host does not take its word for it.
-    private bool Admits(int peer, CoopPickMessage pick) =>
+    // A guest's seat counts as Ready only under this round and on a plane the rules admit. The
+    // guest's own lobby asks the same, but the host does not take its word for it. Only a first
+    // seat flies a custom plane.
+    private bool Admits(int peer, CoopPickMessage pick, int local = 0) =>
         pick.Ready && pick.Epoch == _options.Epoch
-        && _rules.Refuses(pick.Airframe, _wire.PickBuilds.TryGetValue(peer, out var build) ? build : null) == PlaneRefusal.None;
+        && _rules.Refuses(pick.Airframe, local == 0 && _wire.PickBuilds.TryGetValue(peer, out var build) ? build : null) == PlaneRefusal.None;
 
-    // The original's Ready check, true when it refuses. An outlawed ammunition or rocket also resets
-    // every gun's or pylon's to none, so the next Ready takes; Outlaw All resets without refusing.
+    // The original's Ready check over every seat this machine flies, true when it refuses. An
+    // outlawed ammunition or rocket also resets every gun's or pylon's to none, so the next Ready
+    // takes; Outlaw All resets without refusing.
     private bool ReadyCheck()
     {
         var rules = Rules;
-        if (rules.Refuses(_airframe, _build) is var plane and not PlaneRefusal.None)
+        for (int local = 0; local < SeatsFlown; local++)
         {
-            _refusals.Add(plane);
+            var seat = _picks[local];
+            Refuse(rules.Refuses(seat.Airframe, seat.Build));
+            Refuse(rules.AmmoOutlawed(seat.Fit) && !rules.Has(NetPlaneRules.AllAmmoFlag) ? PlaneRefusal.Ammo : PlaneRefusal.None);
+            Refuse(rules.RocketsOutlawed(seat.Fit) && !rules.Has(NetPlaneRules.AllRocketsFlag) ? PlaneRefusal.Rockets : PlaneRefusal.None);
+            seat.Fit = rules.Enforce(seat.Fit);
         }
 
-        if (rules.AmmoOutlawed(_fit) && !rules.Has(NetPlaneRules.AllAmmoFlag))
-        {
-            _refusals.Add(PlaneRefusal.Ammo);
-        }
-
-        if (rules.RocketsOutlawed(_fit) && !rules.Has(NetPlaneRules.AllRocketsFlag))
-        {
-            _refusals.Add(PlaneRefusal.Rockets);
-        }
-
-        _fit = rules.Enforce(_fit);
         return _refusals.Count > 0;
     }
 
-    // ⚠ Readiness is consent to the plane as it stood, so the host must not launch a changed one.
-    private void Take(byte airframe, NetPlaneBuild? build, CoopFit fit)
+    // One reason a Ready check refuses, named once however many seats share it.
+    private void Refuse(PlaneRefusal why)
     {
-        if (airframe != _airframe || fit != _fit || !Equals(build, _build))
+        if (why != PlaneRefusal.None && !_refusals.Contains(why))
+        {
+            _refusals.Add(why);
+        }
+    }
+
+    // ⚠ Readiness is consent to the plane as it stood, so the host must not launch a changed one.
+    private void Take(int local, byte airframe, NetPlaneBuild? build, CoopFit fit)
+    {
+        var seat = _picks[local];
+        if (airframe != seat.Airframe || fit != seat.Fit || !Equals(build, seat.Build))
         {
             _ready = false;
         }
 
-        _airframe = airframe;
-        _build = build;
-        _fit = fit;
+        seat.Airframe = airframe;
+        seat.Build = build;
+        seat.Fit = fit;
     }
 
     // A rules change is a new round, as an options change is.
@@ -1312,21 +1387,20 @@ public sealed class DogfightLobby
     private List<DogfightLobbySeat> HostRows()
     {
         int self = _wire.LocalPeer;
-        var rows = new List<DogfightLobbySeat>
+        var rows = new List<DogfightLobbySeat>();
+        foreach (var (peer, local) in SeatOwners)
         {
-            new(OwnName(), _airframe, Ready, true, _teams.TeamOf(self), _teams.IsCaptain(self), Plane: _build?.Name ?? ""),
-        };
-        var peers = SeatedPeers();
-        for (int i = 0; i < peers.Count; i++)
-        {
-            bool picked = _wire.Picks.TryGetValue(peers[i], out var pick);
-            string name = picked && pick.Name is { Length: > 0 } named
-                ? named
+            // A further seat goes by the player tag the launch's roster calls it by.
+            bool own = peer == self;
+            var pick = own ? null : _wire.PickAt(peer, local);
+            string name = local > 0 ? NetSeats.PlayerTag(rows.Count)
+                : own ? OwnName()
+                : pick is { Name.Length: > 0 } named ? named.Name
                 : "Pilot " + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
-            byte airframe = !picked ? DogfightLobbySeat.NoPick : pick.Airframe < AirframeCount ? pick.Airframe : DefaultAirframe;
-            string plane = picked && _wire.PickBuilds.TryGetValue(peers[i], out var build) ? build.Name : "";
-            rows.Add(new DogfightLobbySeat(name, airframe, picked && Admits(peers[i], pick), false,
-                _teams.TeamOf(peers[i]), _teams.IsCaptain(peers[i]), Plane: plane));
+            string plane = local > 0 ? "" : own ? Build?.Name ?? "" : _wire.PickBuilds.TryGetValue(peer, out var build) ? build.Name : "";
+            rows.Add(new DogfightLobbySeat(name, own ? _picks[local].Airframe : PickedAirframe(pick),
+                own ? Ready : pick is { } heard && Admits(peer, heard, local), own && local == 0, _teams.TeamOf(peer),
+                local == 0 && _teams.IsCaptain(peer), Plane: plane));
         }
 
         // A bot is always Ready: it has no plane of its own to consent to.
@@ -1416,13 +1490,24 @@ public sealed class DogfightLobby
         return _wire.Picks.TryGetValue(member, out var pick) && pick.Name is { Length: > 0 } named ? named : "A pilot";
     }
 
-    // A guest that has not heard the host's list yet shows itself alone.
-    private DogfightLobbySeat[] GuestAlone() => new[] { new DogfightLobbySeat(OwnName(), _airframe, Ready, false, Plane: _build?.Name ?? "") };
+    // A guest that has not heard the host's list yet shows its own seats alone.
+    private DogfightLobbySeat[] GuestAlone()
+    {
+        var rows = new DogfightLobbySeat[SeatsFlown];
+        rows[0] = new DogfightLobbySeat(OwnName(), Airframe, Ready, false, Plane: Build?.Name ?? "");
+        for (int local = 1; local < rows.Length; local++)
+        {
+            rows[local] = new DogfightLobbySeat(NetSeats.PlayerTag(local), _picks[local].Airframe, Ready, false);
+        }
+
+        return rows;
+    }
 
     private void SendToGuests()
     {
         var peers = SeatedPeers();
         var rows = HostRows();
+        var owners = SeatOwners;
         var teams = new LobbyTeamsMessage(Teams);
         for (int i = 0; i < peers.Count; i++)
         {
@@ -1449,7 +1534,9 @@ public sealed class DogfightLobby
                 _teamsSent[peer] = teams;
             }
 
-            var roster = new DogfightRosterMessage(_options.Epoch, (byte)(i + 1), rows);
+            int first = owners.TakeWhile(owner => owner.Peer != peer).Count();
+            int given = owners.Count(owner => owner.Peer == peer);
+            var roster = new DogfightRosterMessage(_options.Epoch, (byte)first, rows, (byte)given);
             if (!_rosterSent.TryGetValue(peer, out var listed) || listed != roster)
             {
                 _wire.Tell(peer, roster);
@@ -1479,17 +1566,74 @@ public sealed class DogfightLobby
         }
 
         // The build goes before the pick, so the host never reads a Ready without the plane behind it.
-        if (!Equals(_build, _buildSent))
+        if (_picks[0].FollowBuild() is { } built)
         {
-            _wire.Tell(_hostPeer, new PlaneBuildMessage(PlaneBuildMessage.Mine, _build));
-            _buildSent = _build?.Copy();
+            _wire.Tell(_hostPeer, built);
         }
 
-        var pick = new CoopPickMessage(options.Epoch, Ready, _airframe, _fit, OwnName(), Voice: Voice());
-        if (_pickSent != pick)
+        // One pick per seat this machine asks for, each marking whether another follows. Only the
+        // first has a Player Information answer. ⚠ Mark Ready only a seat that flew when the mark
+        // was given; a seat given since has picked nothing.
+        int seats = Math.Clamp(LocalSeats(), 1, _picks.Length);
+        for (int local = 0; local < seats; local++)
         {
-            _wire.Tell(_hostPeer, pick);
-            _pickSent = pick;
+            bool first = local == 0;
+            if (_picks[local].Follow(options.Epoch, Ready && local < SeatsFlown, first ? OwnName() : "",
+                    first ? Voice() : CoopPickMessage.NoVoice, local, local + 1 < seats) is { } pick)
+            {
+                _wire.Tell(_hostPeer, pick);
+            }
+        }
+    }
+
+    // One seat's pick at this machine: the stock airframe, the custom plane on it and the fit. Only
+    // a first seat takes a custom plane. It keeps what last went to the host.
+    private sealed class SeatPicked
+    {
+        private CoopPickMessage? _sent;
+        private NetPlaneBuild? _buildSent;
+
+        public byte Airframe { get; set; } = DefaultAirframe;
+
+        public NetPlaneBuild? Build { get; set; }
+
+        public CoopFit Fit { get; set; }
+
+        // One per seat a machine may fly, the pick message's four places.
+        public static SeatPicked[] All()
+        {
+            var picks = new SeatPicked[CoopPickMessage.MaxLocal + 1];
+            for (int i = 0; i < picks.Length; i++)
+            {
+                picks[i] = new SeatPicked();
+            }
+
+            return picks;
+        }
+
+        // This seat's pick under the host's round, or null when the host already has it.
+        public CoopPickMessage? Follow(byte round, bool ready, string name, byte voice, int local, bool more)
+        {
+            var pick = new CoopPickMessage(round, ready, Airframe, Fit, name, Voice: voice, Local: (byte)local, More: more);
+            if (_sent == pick)
+            {
+                return null;
+            }
+
+            _sent = pick;
+            return pick;
+        }
+
+        // This seat's build as the host should hold it, or null when it already does.
+        public PlaneBuildMessage? FollowBuild()
+        {
+            if (Equals(Build, _buildSent))
+            {
+                return null;
+            }
+
+            _buildSent = Build?.Copy();
+            return new PlaneBuildMessage(PlaneBuildMessage.Mine, Build);
         }
     }
 }

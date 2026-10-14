@@ -738,9 +738,6 @@ Built-in has, and what takes its place.
 - View Distance and Water Quality. Only Built-in's Options screen has a row for either
   (`Utils/ViewDistance.cs`, `Utils/WaterQualitySetting.cs`); the VIDEO page hands both saved words
   back unchanged, and the one authored line it leaves blank is Clutter Detail's.
-- More than one local seat in a network Dogfight. Built-in's Multiplayer door launches every seat
-  joined on its machine through `PlayerSetupFeature.BuildExit`; Original's lobby launches seat 0
-  alone (`OriginalLobbyScreen`'s `Exit`).
 
 **The fallback.** `MenuHost.Select` answers a forced, unknown or unavailable request with
 `PresentationId.BuiltIn` through `PresentationResolution.Resolve`, and `MenuHost.Selected` and

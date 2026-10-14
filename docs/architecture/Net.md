@@ -386,7 +386,7 @@ set; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
 `DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3) and a spare flag bit saying whether the host's match lands on Game Scores, `DogfightRosterMessage`
 the whole player list with each row's team and custom plane name, a bot row's tier and Random plane, and the reading
-guest's own row marked, and `LobbyChatMessage` one typed line, which the host relays.
+guest's own rows marked (its first and how many seats it was given), and `LobbyChatMessage` one typed line, which the host relays.
 `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
 team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
 session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.

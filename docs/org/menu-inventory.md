@@ -310,7 +310,7 @@ named in it; `WaveEdit` is the thirteenth and has no aid, which is the warning u
 | `connection:gameinfo`, `connection:playerinfo` | Original only: the Connection page with GAME INFORMATION or PLAYER INFORMATION standing over it on the aids' sample answer (game and callsign Zachary, eight players, Gruff Male), over an in-process door | out of scope |
 | `connection:code` | Original only: the Connection page over an in-process door with a master server set, Join by code picked with `K7Q-X3M` in its box and the cursor there | out of scope |
 | `connection-games[:searching]` | Original only: the LAN games list over an in-process LAN answering with five sample games, one of another build version, or with none so the Searching box stands | out of scope |
-| `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets\|bots\|bot\|bot-scores\|race\|ctf[:code\|offline]]]`, `lobby:late` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed; `bots` fills the field to six with three bot rows on Mission Options, the first an ace on the Fury, callsigns drawn from the pilot names, `bot` opens Select Plane on that bot, `bot-scores` lands Game Scores on a match over those six seats that the first bot leads, and `race` turns the `bots` pose to a Stunt Race, whose bots fly the course; `ctf` turns the type to Capture the Flag on Mission Options; `lobby:late` is a guest that joined while its host flies a match, alone on its list with the In Progress line pinned over its chat; a third argument, `code` or `offline`, poses the host's master server as `campaign-coop`'s does, which the host's pinned Network rows show | out of scope |
+| `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets\|bots\|bot\|bot-scores\|race\|ctf\|seats[:code\|offline]]]`, `lobby:late` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed; `bots` fills the field to six with three bot rows on Mission Options, the first an ace on the Fury, callsigns drawn from the pilot names, `bot` opens Select Plane on that bot, `bot-scores` lands Game Scores on a match over those six seats that the first bot leads, and `race` turns the `bots` pose to a Stunt Race, whose bots fly the course; `ctf` turns the type to Capture the Flag on Mission Options; `seats` gives the host's machine and the first guest's a second seat each on Mission Options, the shown machine's a device-less seat of the menu's own, each second seat on a plane of its own; `lobby:late` is a guest that joined while its host flies a match, alone on its list with the In Progress line pinned over its chat; a third argument, `code` or `offline`, poses the host's master server as `campaign-coop`'s does, which the host's pinned Network rows show | out of scope |
 | `network-coopjoin` | the Network board of a guest joined over the loopback to a campaign host, the session named in its status | `Network` |
 | `network-coopwait` | that guest's waiting board | `Network` |
 | `join-board[:pads[:bots\|bot]]` | the join board; Original draws `pads` entries posed as signed on, Built-in ignores the count and draws `--debug-join=` seats as taken; Original's `bots` stands five bot rows of the player setup under the articles, named from the pilot names, the second a Fury at ace and the third a novice, and `bot` opens the Edit Bot panel on that second row | `Join` |
@@ -624,15 +624,26 @@ constants rather than reading a layout.
   under its bar, and past seven the splits scroll under the chat pane's own control, the pane they
   borrow; both bars' arrows join the board's cursor after the plaques, and the board takes no wheel
   or thumb drag. The other three tabs stand unlabelled.
-  Every word on it but Game Scores is the remake's own. A guest's plane and ammo picks stay live, and
-  a changed pick clears that guest's own Ready. The Lives box is greyed until Limited Lives is
-  ticked, then reads 3 (the remake's own default) and takes 1..99. A host's chat pane carries
-  remake-only rows pinned at its top under the name Network, in the picked sub-tab's red: the
-  internet join code alone while the master server has listed the game, the wait alone while it is
-  still answering (no address and no COPY yet, since a code may still come), else the address
-  guests type and, under it, why there is no code. With no master server set the address stands
-  alone. The first pinned row, the one
-  naming the code or the address, is a remake-only COPY control: a 48-wide box at the row's right
+  Every word on it but Game Scores is the remake's own. A guest's plane and ammo picks stay live,
+  and a changed pick clears that guest's own Ready. Every seat signed on at a machine's join board
+  flies the match, since the original has no split-screen network play: each further seat has a row
+  of its own under its machine's first, named by its player tag (its place in the list, which is its
+  seat at the launch) and drawn red on its own machine. One Ready stands for all of a machine's
+  seats, and a seat given or taken since clears it. Ready on a machine flying further seats walks
+  each of them, in player order, through the per-seat aircraft screen over the eleven stock planes
+  alone, its WEAPON LOADOUT included, and the last seat's confirm is the Ready; a further seat flies
+  no custom plane. The player count against the cap, the team rows' member counts, the team balance
+  and the launch refusals count every seat. A guest's further seats are seated only from the room
+  every seated guest's first seat leaves. A host whose joined seats outnumber its chosen cap flies
+  the cap's worth of them and seats no guest. A machine flying fewer seats than it joined reads the
+  co-op band's line, "The game is full: P1 flies, P2 sits out", last among the pinned Network rows.
+  The Lives box is greyed until Limited Lives is ticked, then reads 3 (the remake's own default) and
+  takes 1..99. A host's chat pane carries remake-only rows pinned at its top under the name Network,
+  in the picked sub-tab's red: the internet join code alone while the master server has listed the
+  game, the wait alone while it is still answering (no address and no COPY yet, since a code may
+  still come), else the address guests type and, under it, why there is no code. With no master
+  server set the address stands alone. The first pinned row, the one naming the code or the address,
+  is a remake-only COPY control: a 48-wide box at the row's right
   end, the row spanning the line so a click or a tap on the code copies it as the box does, and a
   cursor stop between Ready and the chat box. The line names Ctrl+C only after
   a key last moved the cursor. A Built-in Dogfight host serves
