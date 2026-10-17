@@ -186,15 +186,23 @@ internal static class XrMarkerSuites
             var bearing = new Vector2(1f, 0f);
             float radius = XrMarkerLaw.SpyglassRadiusRef;
             float metresPerRef = perRef * XrMarkers.RingDistanceM;
+            float discMetresPerRef = XrMarkerLaw.SpyglassTangentPerRef * XrMarkers.RingDistanceM;
             var tail = shown[0].ViewCentre;
-            var want = tail + new Vector3(-radius * metresPerRef, 0f, 0f);
+            var want = tail + new Vector3(-radius * discMetresPerRef, 0f, 0f);
             var disc = shown[2];
-            ctx.Check(disc.ViewCentre.DistanceTo(want) < 1e-5f && Mathf.Abs(disc.MetresPerRef - metresPerRef) < 1e-9f
+            ctx.Check(disc.ViewCentre.DistanceTo(want) < 1e-5f && Mathf.Abs(disc.MetresPerRef - discMetresPerRef) < 1e-9f
                     && Mathf.Abs(disc.SizeRef.X - (2f * radius)) < 1e-4f,
-                $"the disc sits one radius inside the arrow's tail on the 3 o'clock bearing, {Mm(disc.ViewCentre.DistanceTo(want))} off, {XrMarkerLaw.SpyglassDeg(CockpitFovDeg):0.00} degrees across");
+                $"the disc sits one radius inside the arrow's tail on the 3 o'clock bearing, {Mm(disc.ViewCentre.DistanceTo(want))} off, {XrMarkerLaw.SpyglassDeg(Flight.Camera.CameraController.ExternalFovDeg):0.00} degrees across");
             float labelIn = (tail - shown[1].ViewCentre).Dot(new Vector3(bearing.X, bearing.Y, 0f)) / metresPerRef;
-            ctx.Check(labelIn > (2f * radius) + (shown[1].SizeRef.X * 0.5f),
-                $"the label steps past the picture's inner rim ({labelIn:0.0} reference pixels in, the disc {2f * radius:0.0} across)");
+            float discAcross = 2f * radius * discMetresPerRef / metresPerRef;
+            ctx.Check(labelIn > discAcross + (shown[1].SizeRef.X * 0.5f),
+                $"the label steps past the picture's inner rim ({labelIn:0.0} reference pixels in, the disc {discAcross:0.0} across)");
+
+            // The Cockpit view's wider angle leaves the picture at the Nose view's size.
+            markers.Place(head, seat.Y, Flight.Camera.CameraController.ExternalFovDeg, ThemeDB.FallbackFont, head.Origin, 0f, null, marks, picture);
+            float noseMetresPerRef = markers.Shown.Count == 3 ? markers.Shown[2].MetresPerRef : -1f;
+            ctx.Check(Mathf.Abs(noseMetresPerRef - disc.MetresPerRef) < 1e-9f && discMetresPerRef < metresPerRef,
+                $"the disc is the same size in Nose and Cockpit ({noseMetresPerRef * 1000f:0.000} and {disc.MetresPerRef * 1000f:0.000} mm per reference pixel), smaller than Cockpit's ring cards ({metresPerRef * 1000f:0.000})");
 
             // Head-locked: a head turned 10 degrees away and leaning keeps the disc in its frame.
             var turned = new Transform3D(seat * new Basis(Vector3.Up, Mathf.DegToRad(10f)), head.Origin + (seat.X * 0.08f));

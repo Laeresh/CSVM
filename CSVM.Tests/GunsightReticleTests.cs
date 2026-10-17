@@ -73,6 +73,46 @@ public class GunsightReticleTests
             Assert.Equal(mask[i] ? tint : image.Rgba[(4 * i) + 3], glass![(4 * i) + 3]);
             Assert.Equal(mask[i] ? image.Rgba[(4 * i) + 3] : (byte)0, reticle![(4 * i) + 3]);
         }
+
+        // The red index mark atop the ring, which the headset draws over the scene, and the scale's centre.
+        var mark = GunsightReticle.IndexMark(image.Rgba, mask);
+        int marked = 0;
+        for (int i = 0; i < mark.Length; i++)
+        {
+            if (mark[i])
+            {
+                marked++;
+                Assert.InRange(i % w, 62, 68);
+                Assert.InRange(i / w, 1, 4);
+            }
+        }
+
+        Assert.Equal(20, marked);
+        Assert.Equal(new Vector2(65.5f / 128f, 62.5f / 128f), GunsightReticle.Centre(mask, w, image.Height));
+    }
+
+    [Fact]
+    public void OnlyARedReticleTexelIsTheIndexMark()
+    {
+        // Red, a white line, red off the reticle, and a dull red just under the margin.
+        byte[] rgba = { 247, 36, 0, 255, 255, 255, 255, 255, 247, 36, 0, 255, 120, 80, 80, 255 };
+        var mark = GunsightReticle.IndexMark(rgba, new[] { true, true, false, true });
+        Assert.Equal(new[] { true, false, false, false }, mark);
+    }
+
+    [Fact]
+    public void TheCentreIsWhereTheCrossesLinesMeet()
+    {
+        const int size = 9;
+        var mask = new bool[size * size];
+        for (int k = 1; k < size - 1; k++)
+        {
+            mask[(3 * size) + k] = true; // the horizontal line on row 3
+            mask[(k * size) + 5] = true; // the vertical line on column 5
+        }
+
+        mask[(7 * size) + 1] = true; // a stray texel
+        Assert.Equal(new Vector2(5.5f / size, 3.5f / size), GunsightReticle.Centre(mask, size, size));
     }
 
     [Fact]

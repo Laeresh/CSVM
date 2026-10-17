@@ -183,36 +183,36 @@
     {
       "name": "c1-cockpit-xr-sim",
       "frame": 120,
-      "hash": "93318a4a6056b744fe1cadb823c0f612",
+      "hash": "a2ed6fcd2df4a8d3fbe5911613632093",
       "exercises": "The --xr-sim stand-in headset: both eyes through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1, the reticle after its glass, the pipper card; frame-sensitive 19.82 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-enhanced",
       "frame": 120,
-      "hash": "a1ca3522c94aade436bb0aa069c6b752",
-      "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.15 %.",
+      "hash": "843847c5f6320102137a18d21d102727",
+      "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-xr-sim-far",
       "frame": 120,
-      "hash": "3dd67ec910f44b669a519b0ed1295cb8",
+      "hash": "d59c17a9568ca35edca81eb771c3e0f8",
       "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn by the render thread's eye feed, the pipper at its world point; frame-sensitive 11.92 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-aft",
       "frame": 120,
-      "hash": "4f298667138fee44b9986d242f50afee",
+      "hash": "6cb86c490aa742be9f75ecfe29e8e999",
       "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out, the gauges, the reticle after its glass and the pipper card; frame-sensitive 8.38 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-9800,700,-8200", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=head=0/0/0.1", "--det", "--mute"]
     },
     {
       "name": "stage-gunsight-xr-sim",
       "frame": 120,
-      "hash": "edb69374432ac499d4a351a8f8456e7a",
-      "exercises": "The stereo interior's gunsight reticle drawn at infinity over the empty stage's sky: both eyes put it on the same eye-local pixel while the glass and sight body keep their 0.45 m disparity, the pipper card beside it; frame-sensitive 7.70 %.",
+      "hash": "34b0ab54209b9574737ae6596015512b",
+      "exercises": "The stereo gunsight at infinity over the empty stage's sky, at 0.7 of its authored size with its red index mark covering the sky; the glass and sight body keep their 0.45 m disparity; frame-sensitive 7.71 %.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--direction=0,0.34,-0.94", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=pitch=-4.70001", "--det", "--mute"]
     },
     {

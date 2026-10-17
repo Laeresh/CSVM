@@ -713,7 +713,7 @@ the centre cross and the red index mark. Drawn at the glass's depth the reticle 
 converge on a distant target, so a stereo interior lifts it off the glass (`Mech3/GunsightReticle.cs`)
 and draws it collimated, as a reflector sight shows its image: each eye's ray takes the texel the
 authored eye sees along that direction, so the reticle has no disparity and keeps the flat game's
-place and angular size. The tint, the frame line and the sight body stay on the glass at its depth.
+place. The tint, the frame line and the sight body stay on the glass at its depth.
 
 Which texels are reticle is read off the alpha: the texels off the tint by more than 6 levels group
 8-connected (the ringing beside a line dips to alpha 26 against the tint's 38, so it joins the
@@ -723,10 +723,26 @@ texels. The reticle shows where the head centre looks through the glass, one win
 so a lean out of the eye box loses it as a real sight does, and the opaque sight body covers it in
 each eye. It is added to the scene in linear light, an illuminated reticle: the glass's own blend
 lifts a grey line less than a level over a bright sky, where the flat cockpit pass's canvas composite
-lifts it about ten.
+lifts it about ten. The red index mark is the exception (`GunsightReticle.IndexMark`, the 20 reticle
+texels at x 62-68, y 1-4 whose red leads green and blue by more than 40). Added, it read pink over
+sky and cloud, so the overlay blends premultiplied: the lines keep alpha 0 and add as before (within
+one level), and the mark covers the scene at its coverage.
 
-Measured on the stand-in, C1 empty stage, Bloodhawk, pose `--direction=0,0.34,-0.94 --hold=0,0,0,0.6`,
-frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
+The authored ring nearly fills the glass, so from the authored eye it clears the window's edge by
+only 0.5 mm (Kestrel, Peacemaker, Hoplite, Avenger) to 2 mm (Warhawk) of head movement, and a
+tracked head usually cuts it. The overlay draws the reticle at `GunsightReticle.HeadsetScale` (0.7,
+TUNE) of its authored size about the centre cross (`GunsightReticle.Centre`, texel 65, 62), which
+leaves 9 mm (Kestrel, Peacemaker, Avenger) to 25 mm (Warhawk) each way, 12 mm on the Bloodhawk. The
+ring's angular radius from the authored eye goes from 3.35-13.06 degrees to 2.35-9.14 (Bloodhawk
+5.16 to 3.61); the flat cockpit keeps the authored size.
+
+| | bhawk | pfighter | fury | warhawk | autogyro | avenger | balmoral | brigand | fbrand | kestrel | peacemaker |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ring radius at 1.0 / 0.7, degrees | 5.16 / 3.61 | 5.71 / 4.00 | 7.48 / 5.24 | 13.06 / 9.14 | 4.36 / 3.05 | 3.73 / 2.61 | 6.69 / 4.69 | 8.35 / 5.85 | 6.47 / 4.53 | 3.35 / 2.35 | 3.95 / 2.76 |
+| head movement it stays whole, mm, at 1.0 / 0.7 | 1.0 / 12.0 | 1.0 / 14.5 | 1.5 / 19.0 | 2.0 / 25.0 | 0.5 / 10.0 | 0.5 / 9.0 | 1.0 / 16.0 | 1.5 / 20.5 | 1.0 / 15.5 | 0.5 / 9.0 | 0.5 / 9.0 |
+
+Measured on the stand-in with the reticle at its authored size, C1 empty stage, Bloodhawk, pose
+`--direction=0,0.34,-0.94 --hold=0,0,0,0.6`, frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
 x 640.192 / 640.191 and y 321.24 in both eyes, the authored eye's projection of the centre cross being
 (640.15, 321.17); the sight body moves 81.5 px between the eyes, a point 0.44 m away. Every airframe
 puts the reticle in both eyes within 0.02 px of each other and within 0.35 px of its authored place.
@@ -740,6 +756,19 @@ Lift over the sky beside the glass, Rec. 709 levels, on SHOT-45's left eye again
 
 `GunsightReticle.EnhancedGain` takes back what AgX compresses in the world and not in the flat pass's
 canvas: 2.5 read 16.6 / 29.5 / 36.3, 4.0 read 23.8 / 40.3 / 47.3.
+
+The index mark's four reddest pixels at a headset's density (`shot=left,eye=2048x1152`, 21 pixels a
+degree; the same pitch and field), Bloodhawk, frame 60, sRGB:
+
+| | sky (empty stage) | ground (C1, nose down) | cloud (C1 deck) |
+|---|---|---|---|
+| Original, added | 255, 136, 147 | 255, 97, 67 | 255, 178, 175 |
+| Original, covering | 244, 42, 13 | 244, 40, 3 | 244, 44, 18 |
+| Enhanced, added | 255, 196, 181 | 255, 181, 150 | 255, 196, 182 |
+| Enhanced, covering | 206, 84, 59 | 207, 82, 54 | 207, 86, 61 |
+
+Enhanced's AgX desaturates the texture's red (247, 36, 0) to about 0.7 saturation wherever it
+stands; the mark gets no gain there.
 
 **Draw order.** The overlay shares the interior's blend priority (110) with the glass, and a lifted
 interior stands every geometry at the world origin, so their sort depths tie below float32's step at

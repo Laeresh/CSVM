@@ -26,6 +26,15 @@ public static class GunsightReticle
     /// at least as strongly as the flat cockpit pass's; measured in docs/org/cameraViews.md.</summary>
     public const float EnhancedGain = 6.0f;
 
+    /// <summary>The stereo reticle's size against the authored one, scaled about its centre. TUNE: at
+    /// 0.7 the whole reticle stays in the glass's window for a head 9 to 25 mm off the authored eye.
+    /// At 1.0 that is 0.5 to 2 mm (docs/org/cameraViews.md).</summary>
+    public const float HeadsetScale = 0.7f;
+
+    /// <summary>How far, 0-255, a reticle texel's red must stand above its green and blue to be the
+    /// red index mark. The mark draws over the scene rather than adding to it.</summary>
+    public const int MarkRedMargin = 40;
+
     /// <summary>How far the overlay reaches past the glass's edge, in metres: half of a 100 mm IPD.
     /// An eye beside the head centre still finds every line the head centre sees.</summary>
     public const float EyeReachM = 0.05f;
@@ -164,6 +173,38 @@ public static class GunsightReticle
         return mask;
     }
 
+    /// <summary>The red index mark: the <paramref name="reticle"/> texels whose red stands
+    /// <see cref="MarkRedMargin"/> above both green and blue.</summary>
+    public static bool[] IndexMark(byte[] rgba, bool[] reticle)
+    {
+        var mark = new bool[reticle.Length];
+        for (int i = 0; i < mark.Length; i++)
+        {
+            int r = rgba[4 * i];
+            mark[i] = reticle[i] && r - Math.Max(rgba[(4 * i) + 1], rgba[(4 * i) + 2]) > MarkRedMargin;
+        }
+
+        return mark;
+    }
+
+    /// <summary>The reticle's centre as a UV: the column and the row holding the most reticle texels.
+    /// Those are the cross's two lines, which meet at the centre cross.</summary>
+    public static Vector2 Centre(bool[] reticle, int width, int height)
+    {
+        var columns = new int[width];
+        var rows = new int[height];
+        for (int i = 0; i < reticle.Length; i++)
+        {
+            if (reticle[i])
+            {
+                columns[i % width]++;
+                rows[i / width]++;
+            }
+        }
+
+        return new Vector2((Array.IndexOf(columns, Max(columns)) + 0.5f) / width, (Array.IndexOf(rows, Max(rows)) + 0.5f) / height);
+    }
+
     /// <summary>The overlay that draws <paramref name="glass"/>'s reticle collimated, in the
     /// interior's own frame, to add as a direct child of the interior's root. Null when the glass
     /// polygon is degenerate. It lies in the glass's plane, <paramref name="margin"/> units wider
@@ -189,6 +230,9 @@ public static class GunsightReticle
         material.RenderPriority = SceneBuilder.XrInteriorBlendPriority;
         material.SetShaderParameter("reticle_tex", layers.Reticle);
         material.SetShaderParameter("glass_tex", layers.Glass);
+        material.SetShaderParameter("mark_tex", layers.Mark);
+        material.SetShaderParameter("centre_uv", layers.Centre);
+        material.SetShaderParameter("reticle_scale", HeadsetScale);
         material.SetShaderParameter("tint_alpha", layers.TintAlpha);
         material.SetShaderParameter("grad_u", look.GradU);
         material.SetShaderParameter("grad_v", look.GradV);
@@ -240,25 +284,37 @@ public static class GunsightReticle
         image.Convert(Image.Format.Rgba8);
         int w = image.GetWidth();
         int h = image.GetHeight();
-        if (Split(image.GetData(), w, h, out var glass, out var reticle, out byte tint) == 0)
+        var rgba = image.GetData();
+        if (Split(rgba, w, h, out var glass, out var reticle, out byte tint) == 0)
         {
             return null;
         }
 
-        return new Layers(Texture(glass!, w, h), Texture(reticle!, w, h), tint / 255f);
+        var mask = ReticleMask(rgba, w, h, out _);
+        var mark = IndexMark(rgba, mask);
+        var markRgba = new byte[rgba.Length];
+        for (int i = 0; i < mark.Length; i++)
+        {
+            markRgba[(4 * i) + 0] = markRgba[(4 * i) + 3] = mark[i] ? (byte)255 : (byte)0;
+        }
+
+        return new Layers(Texture(glass!, w, h), Texture(reticle!, w, h), Texture(markRgba, w, h), tint / 255f, Centre(mask, w, h));
     }
 
-    // The overlay's shader. The placement is the stereo interior's (SceneBuilder's stereo variant).
+    // The overlay's shader, placed as the stereo interior is (SceneBuilder's stereo variant).
     // Each eye's ray takes the texel the authored eye sees along it, so both eyes agree on direction.
     // It shows where the head centre looks through the glass along that ray, one window for both eyes.
     // The opaque sight body at the fragment's own place on the glass covers it.
+    // Premultiplied, the lines add with alpha 0 and the index mark covers the scene, so it reads red.
     // No sample sits under a branch, for the mip slope.
     private static string ShaderCode() =>
         "shader_type spatial;\n"
-        + "render_mode skip_vertex_transform, blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;\n"
+        + "render_mode skip_vertex_transform, blend_premul_alpha, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;\n"
         + SceneBuilder.XrInteriorGlobals + "\n"
         + "uniform sampler2D reticle_tex : source_color, filter_linear_mipmap, repeat_disable;\n"
         + "uniform sampler2D glass_tex : source_color, filter_linear_mipmap, repeat_disable;\n"
+        + "uniform sampler2D mark_tex : filter_linear_mipmap, repeat_disable;\n"
+        + "uniform vec2 centre_uv = vec2(0.5);\nuniform float reticle_scale = 1.0;\n"
         + "uniform float tint_alpha = 0.15;\n"
         + "uniform vec3 grad_u;\nuniform vec3 grad_v;\nuniform vec2 uv_origin;\n"
         + "uniform vec3 plane_n;\nuniform float plane_h;\n"
@@ -280,11 +336,14 @@ public static class GunsightReticle
         + "    vec2 r = v_ray.xy / v_ray.z;\n"
         + "    vec2 uv = plane_h * r + uv_origin;\n"
         + "    vec2 seen = (plane_h - dot(plane_n, v_head)) * r + vec2(dot(grad_u, v_head), dot(grad_v, v_head)) + uv_origin;\n"
-        + "    vec4 t = texture(reticle_tex, uv);\n"
+        + "    vec2 at = centre_uv + (uv - centre_uv) / reticle_scale;\n"
+        + "    vec4 t = texture(reticle_tex, at);\n"
+        + "    float mark = texture(mark_tex, at).r;\n"
         + "    float window = csky_inside(uv) * csky_inside(seen) * smoothstep(0.0, tint_alpha, texture(glass_tex, seen).a);\n"
         + "    float body = csky_inside(v_own) * clamp((texture(glass_tex, v_own).a - tint_alpha) / (1.0 - tint_alpha), 0.0, 1.0);\n"
-        + "    ALBEDO = t.rgb * " + (GraphicsMode.Enhanced ? EnhancedGain : 1f).ToString("0.0###", System.Globalization.CultureInfo.InvariantCulture) + ";\n"
-        + "    ALPHA = t.a * window * (1.0 - body);\n"
+        + "    float cover = csky_inside(at) * t.a * window * (1.0 - body);\n"
+        + "    ALBEDO = cover * t.rgb * mix(" + (GraphicsMode.Enhanced ? EnhancedGain : 1f).ToString("0.0###", System.Globalization.CultureInfo.InvariantCulture) + ", 1.0, mark);\n"
+        + "    ALPHA = cover * mark;\n"
         + "}\n";
 
     // The glass polygon's rectangle in its own plane, along its first edge and across it, grown by
@@ -492,6 +551,7 @@ public static class GunsightReticle
     /// priority and the texture name it wears.</summary>
     public sealed record Glass(IReadOnlyList<Vector3> Corners, IReadOnlyList<Vector2> Uvs, int Priority, string TextureName);
 
-    /// <summary>A sight glass texture's two layers (<see cref="Split"/>) and the tint's alpha, 0-1.</summary>
-    public sealed record Layers(ImageTexture Glass, ImageTexture Reticle, float TintAlpha);
+    /// <summary>A sight glass texture's two layers (<see cref="Split"/>), the index mark's texels in red
+    /// (<see cref="IndexMark"/>), the tint's alpha, 0-1, and the reticle's centre UV.</summary>
+    public sealed record Layers(ImageTexture Glass, ImageTexture Reticle, ImageTexture Mark, float TintAlpha, Vector2 Centre);
 }

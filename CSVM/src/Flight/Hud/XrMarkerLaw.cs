@@ -31,6 +31,10 @@ public static class XrMarkerLaw
     /// <summary>The side, in texels, the picture renders at for the ring.</summary>
     public static int SpyglassSide => Mathf.CeilToInt(2f * SpyglassRadiusRef * SpyglassTexelsPerRef);
 
+    /// <summary>The tangent one reference pixel of the ring's spyglass picture spans in every view.
+    /// It is the Nose view's, so the Cockpit view's wider angle does not enlarge the picture.</summary>
+    public static float SpyglassTangentPerRef => TangentPerReferencePixel(Camera.CameraController.ExternalFovDeg);
+
     /// <summary>The ring's spyglass picture's centre, reference pixels from the ring's point on
     /// <paramref name="dir"/>. It sits one radius inward, so its rim meets the arrow's tail. The flat
     /// anchor moves half a window in alike (docs/org/spyglass.md "Where the anchor is").</summary>

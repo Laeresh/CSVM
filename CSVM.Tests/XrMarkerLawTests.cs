@@ -114,10 +114,11 @@ public class XrMarkerLawTests
         Assert.Equal(48f * XrMarkerLaw.SpyglassScale, XrMarkerLaw.SpyglassRadiusRef, 4);
         Assert.Equal(288, XrMarkerLaw.SpyglassSide);
 
-        // At the author's 21 headset pixels per degree it spans 104 pixels in Nose and 151 in Cockpit,
-        // against a 1440p screen's 96. The picture keeps at least 1.9 texels a pixel.
+        // At the author's 21 headset pixels per degree it spans 104 pixels in every view, the Nose
+        // view's size, against a 1440p screen's 96. The picture keeps at least 1.9 texels a pixel.
         Assert.Equal(4.96f, XrMarkerLaw.SpyglassDeg(46.8264f), 2);
         Assert.Equal(7.20f, XrMarkerLaw.SpyglassDeg(64.3698f), 2);
+        Assert.Equal(XrMarkerLaw.TangentPerReferencePixel(46.8264f), XrMarkerLaw.SpyglassTangentPerRef, 6);
         foreach (float fovDeg in new[] { 46.8264f, 64.3698f })
         {
             float headsetPixels = XrMarkerLaw.SpyglassDeg(fovDeg) * 21f;

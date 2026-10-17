@@ -206,13 +206,13 @@ public sealed partial class XrMarkers : Node3D
             PlaceRing(arrow, dir, dir, Vector2.Zero, perRef);
             // The selection's picture stands inside its arrow, and its label steps past the picture.
             bool picture = !disc && spyglass != null && mark.Style == WorldMarkStyle.Selected;
-            float clear = picture ? 2f * XrMarkerLaw.SpyglassRadiusRef : 0f;
+            float clear = picture ? 2f * XrMarkerLaw.SpyglassRadiusRef * XrMarkerLaw.SpyglassTangentPerRef / perRef : 0f;
             var inward = (RingLabelGapRef + clear + XrMarkerLaw.Reach(dir, label.SizeRef * 0.5f)) * -dir;
             var along = new Vector2(-dir.Y, dir.X) * (mark.Stagger * TargetHud.StaggerStepRef);
             PlaceRing(label, dir, Vector2.Right, inward + along, perRef);
             if (picture)
             {
-                PlaceDisc(dir, perRef, spyglass!, mark.Color);
+                PlaceDisc(dir, XrMarkerLaw.SpyglassTangentPerRef, spyglass!, mark.Color);
                 disc = true;
             }
         }

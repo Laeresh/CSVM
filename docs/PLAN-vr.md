@@ -3240,10 +3240,11 @@ judgement, TUNE for the author).** Captures and instruments are in `.scratch/D19
   head with no lag and carries no world coordinate, C14's head-locked approach (A3b's eye feed is not
   needed for a head-locked quad). It faces the eye by construction, so no `StereoFacing` is involved
   (B10); like the ring labels it stays upright in the head's frame.
-- **Size (TUNE).** `XrMarkerLaw.SpyglassScale` 1.5 times the flat disc's angle at the flat view's
-  scale (C13's rule for every ring card): 4.96 degrees across in Nose and Chase, 7.20 in Cockpit.
-  At the author's 21 headset pixels per degree that is 104 and 151 pixels, against 69 and 101 at the
-  flat angle and 96 on a 1440p screen. The picture renders at `SpyglassSide` 288 texels square
+- **Size (TUNE).** `XrMarkerLaw.SpyglassScale` 1.5 times the flat disc's angle at the Nose view's
+  scale in every view (`XrMarkerLaw.SpyglassTangentPerRef`): 4.96 degrees across. The other ring
+  cards keep C13's rule, the flat view's scale, which would draw the picture 7.20 degrees across in
+  Cockpit. At the author's 21 headset pixels per degree that is 104 pixels,
+  against 69 at the flat angle and 96 on a 1440p screen. The picture renders at `SpyglassSide` 288 texels square
   (`SpyglassTexelsPerRef` 2), at least 1.9 texels per headset pixel, filtered by four taps. The
   binocular shape is the flat disc's circle and rim: no `sgwin` art ships, and the flat port draws a
   circle.

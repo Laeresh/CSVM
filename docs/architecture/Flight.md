@@ -401,9 +401,9 @@ The stereo markers' geometry, engine-free: the tangent one flat HUD reference pi
 angle, a point's place in the head's frame and its angle off the view axis, the `RingDeg` cone that sends a marker from
 the world to the ring (25 degrees, TUNE: the flat views' 5 percent edge inset sits 29.5 degrees above the cockpit view's
 centre and 21.3 above the chase view's), the ring's bearing (dead astern points down, as `EdgeMarker` does), a world
-card's facing axes and a label's inward step, and the ring's spyglass disc: `SpyglassScale` 1.5 times the flat disc (at
-21 headset pixels per degree it spans 104 pixels in Nose and 151 in Cockpit, where the flat angle gives 69 and 101
-against a 1440p screen's 96), its texel side at `SpyglassTexelsPerRef` (about twice a headset's pixels in Cockpit) and
+card's facing axes and a label's inward step, and the ring's spyglass disc: `SpyglassScale` 1.5 times the flat disc at the Nose
+view's angle in every view (`SpyglassTangentPerRef`; at 21 headset pixels per degree it spans 104 pixels, where the flat
+angle gives 69 against a 1440p screen's 96), its texel side at `SpyglassTexelsPerRef` (about 2.8 texels a headset pixel) and
 its place inside the arrow. `CSVM.Tests/XrMarkerLawTests.cs` covers it; `XrMarkers.cs` is the user.
 
 ## src/Flight/Hud/WorldMark.cs
