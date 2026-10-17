@@ -675,7 +675,8 @@ every reader of it agrees with the headset. No flat pane takes any of this.
 | Opening view | Cockpit, unless `--view=` names a view, whatever the saved Default View says. |
 | The destroy callback's view reset | Back to the opening view, where the flat game returns to the chase view. |
 | Crash cut | The authored spot, facing the impact on a level heading. |
-| Death camera, flyby | The authored spot, holding the level heading that faces the nearest point of the aircraft's track ahead (`XrMount.Watch`), so a passing aircraft crosses the view and swings at most about 90° round. A new spot is a cut. |
+| Death camera | The authored spot, holding the level heading that faces the nearest point of the aircraft's track ahead (`XrMount.Watch`), so a passing aircraft crosses the view and swings at most about 90° round. |
+| Flyby | The authored spot's flank offset, but `StaticCameras.VrBehindM` (20 m) behind the tail instead of ahead of the nose, held for the drawn watch time plus `VrExtraWatchS` (1 s). Each new spot is a cut whose level heading faces the aircraft, which then flies away ahead of the seat. |
 | A spent pilot watching another aircraft | The VR chase on the watched aircraft. |
 | A presenting cutscene | Not around the seat: the theater screen plays it as a stereo pair over a dark surround (`UI/Boards/StereoPair.cs`). The origin stands at the cutscene camera's eye, so the sky centres where the pair is drawn from, on the level heading it held as the cutscene took the camera. A shot change inside the cutscene is no cut. |
 | A camera another owner drives: the spectator and photo-mode cameras, the weapon lab's orbit | That camera's eye with its heading only. |
@@ -683,7 +684,9 @@ every reader of it agrees with the headset. No flat pane takes any of this.
 Nothing in this table rolls or pitches the player's horizon except the aircraft the player flies:
 Cockpit, Nose and Chase ride its attitude, and every other camera is level. A static camera holds its
 heading instead of re-aiming, because a turning origin is a turn the seated body never made; a flyby
-passing at 6 m would otherwise yaw the world at hundreds of degrees a second.
+passing at 6 m would otherwise yaw the world at hundreds of degrees a second. The headset's flyby sits
+behind the aircraft so that the heading facing it at the cut keeps it ahead of the seat; from the
+original's spot ahead, that heading leaves the aircraft passing behind the seat.
 
 **Why the chase rides the attitude.** The VR chase is specified as rigidly attached to the aircraft,
 with no spring lag, no speed FOV and no swing, and the comfort aids include no horizon lock. Riding the

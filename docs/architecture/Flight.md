@@ -259,14 +259,14 @@ The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_
 authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts; with the rig's `Fade` the view keys wait for black (`XrFade.Cover`) and land together on it. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
-The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death
-camera the pilot's own destruction enters, and the flyby. One placement shape serves both random
-ones, a circle about the flight axis carried `speed · interval + z` along the nose, and one
-clearance serves all three, a vertical probe that never lets a spot sit closer than `crash_elev`
-above the terrain under it. The flyby adds its own bookkeeping: a drawn watch deadline in sim time
-and a drawn switch distance, the re-site landing on the step after both are past. Placement and
-clearance are static and engine-free but for the `IWorldQuery` probe; `CameraController` owns one
-and does the aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
+The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death camera the pilot's
+own destruction enters, and the flyby. One placement shape serves both random ones, a circle about the flight axis
+carried `speed · interval + z` along the nose, and one clearance serves all three, a vertical probe that never lets
+a spot sit closer than `crash_elev` above the terrain under it. The flyby adds its own bookkeeping: a drawn watch
+deadline in sim time and a drawn switch distance, the re-site landing on the step after both are past. A headset's
+flyby takes the same draws but sits `VrBehindM` behind the tail and watches `VrExtraWatchS` longer. Placement and
+clearance are static and engine-free but for the `IWorldQuery` probe; `CameraController` owns one and does the
+aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
 
 ## src/Flight/Camera/HeadLook.cs
 The pilot's head, decoded from the original's shared look controller and shared by every view: it

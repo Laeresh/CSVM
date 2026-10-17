@@ -646,7 +646,8 @@ dropped request cannot leave the headset dark. Both durations are TUNE. Pinned b
 ## src/UI/Boards/XrVignette.cs
 The tunnel vignette's curve, engine-free. The rate is the XR origin's own turn a second, to which head
 tracking adds nothing, and a cut is no turn. The strength is a smoothstep from 20 deg/s (nothing) to
-90 deg/s (full), followed in 0.1 s and let go in 0.4 s, and closes the clear cone's half-angle from
+90 deg/s (full), followed in 0.1 s, held while the rate has been over 20 deg/s within the last
+second, then let go in 0.4 s, so a manoeuvre holds the tunnel rather than pumping it, and closes the clear cone's half-angle from
 60 degrees (past any eye's edge) to 40 (Mild) or 28 (Strong), feathered over 12. Every number is
 TUNE. Pinned by `CSVM.Tests/XrComfortTests.cs`; the level is `Utils/VrVignetteSetting.cs`.
 

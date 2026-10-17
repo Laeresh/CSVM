@@ -1509,8 +1509,9 @@ aircraft sits a little under your straight-ahead gaze at a comfortable distance,
 and rolls are tolerable with the world turning about you, and the offset reads right; (3) the second
 line flies the level chase: the same manoeuvres with the horizon level, and the half-circle turn at
 the top of a loop; say which should be the default; (4) the numpad, the right stick and its click,
-`numpad 0` and the middle mouse button change nothing; (5) the flyby (third line, or `F7`) holds a
-level view facing the flight path while the aircraft passes, and each new spot is a cut; (6) from
+`numpad 0` and the middle mouse button change nothing; (5) the flyby (third line, or `F7`) cuts to a
+spot behind the aircraft facing it and holds a level view while it flies away, each spot about a
+second longer than the flat flyby's; (6) from
 the menu (fourth line) with the saved Default View on Exterior, an Instant Action flight still opens
 in the cockpit; (7) crash into the ground in each view: the crash cut faces the impact level, which
 leaves the wreck about 56° below the gaze at the authored 30 m back and 45 m up, to judge.
@@ -2839,7 +2840,8 @@ instruments `.scratch/D16/` (`D16_burst.py`, `D16_hashes.ps1`).
 - **Fade:** 0.15 s out (view keys only) and 0.3 s in (`XrFade.DefaultOutS`, `DefaultInS`). VR titles
   sit at 0.1 to 0.3 s; the out is kept short because the view key waits on it.
 - **Vignette curve:** nothing below 20 deg/s (a gentle bank), full at 90 deg/s, a smoothstep between,
-  followed in 0.1 s and let go in 0.4 s so a series of short rolls does not pulse. The clear cone
+  followed in 0.1 s, held until the rate has stayed under the onset for 1 s (`SettleS`), then let go
+  in 0.4 s, so a manoeuvre whose rate dips and climbs again does not pump the tunnel. The clear cone
   closes from 60° (past any eye's edge) to 40° (Mild) or 28° (Strong), feathered over 12°
   (`XrVignette`). The rate is the origin's own turn, so the chase view's rolls count and head turns
   never do.

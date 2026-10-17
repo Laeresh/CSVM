@@ -564,16 +564,17 @@ public sealed class CameraController
     }
 
     /// <summary>The flyby camera: a spot out on the aircraft's flank and ahead of it, held while
-    /// the aeroplane runs past, then re-sited once the drawn watch time is up and the drawn switch
+    /// the aeroplane runs past. It re-sites once the drawn watch time is up and the drawn switch
     /// distance is exceeded. Takes SIM time, so the watch deadline survives a frame-rate change and
-    /// a halted sim freezes the pass rather than ending it.</summary>
+    /// a halted sim freezes the pass rather than ending it. Under a headset the spot is behind, and
+    /// each cut turns the held heading to face the aircraft, which flies away ahead of the seat.</summary>
     public void FlybyView(float simTime, in Transform3D renderPose, float speed, IWorldQuery? world,
         Godot.Collections.Array<Rid>? exclude)
     {
         ApplyDecodedExternalFov();
         AimStatic(
-            Statics.StepFlyby(simTime, renderPose.Origin, renderPose.Basis, speed, world, exclude),
-            renderPose.Origin, Statics.Placements != _heldPlacements, -renderPose.Basis.Z.Normalized());
+            Statics.StepFlyby(simTime, renderPose.Origin, renderPose.Basis, speed, world, exclude, _headset != null),
+            renderPose.Origin, Statics.Placements != _heldPlacements);
     }
 
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
@@ -860,7 +861,7 @@ public sealed class CameraController
     // The write every static camera shares: sit on the held world point and look at the aircraft.
     // ⚠ Do not hand LookAt an up parallel to the view. A camera lifted straight overhead reaches one,
     // so there the up swings to world back. Under a headset it holds, from the cut on, the level
-    // heading XrMount.Watch takes off the track ahead (`track`, zero for the crash cut's wreck).
+    // heading XrMount.Watch takes off the track ahead (`track`, zero to face the target).
     private void AimStatic(Vector3 eye, Vector3 target, bool cut, Vector3 track = default)
     {
         _framesSeeded = false;

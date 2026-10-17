@@ -195,7 +195,7 @@ internal static class XrViewSuites
     /// hold a level heading from their cut, and a camera another owner drives is taken by its
     /// heading. A headset death returns to the opening view.</summary>
     [Suite("xr-view-static",
-        "under a headset the flyby origin holds its spot and the level heading it cut to while the aircraft passes, cutting once per re-site; the crash and death cuts hold a level heading where the flat camera re-aims; a camera another owner drives is taken by its heading alone, with a cut each way; and a headset death returns to the opening view where the flat one returns to chase")]
+        "under a headset each flyby spot sits behind the aircraft and cuts to a level heading facing it, then holds its spot and that heading while the aircraft flies away, for the drawn watch time plus a second, cutting once per re-site; the crash and death cuts hold a level heading where the flat camera re-aims; a camera another owner drives is taken by its heading alone, with a cut each way; and a headset death returns to the opening view where the flat one returns to chase")]
     internal static void XrViewStatic(TestContext ctx)
     {
         var report = new StringBuilder();
@@ -312,7 +312,8 @@ internal static class XrViewSuites
         }
     }
 
-    // F7 into the flyby: the origin holds the spot and its level heading between re-sites.
+    // F7 into the flyby: each spot sits behind the aircraft and cuts to face it. The origin then
+    // holds the spot and its level heading until the next re-site.
     private static void FlybySortie(TestContext ctx, GameClock clock, FlightController plane, XrRig rig,
         StringBuilder report)
     {
@@ -322,24 +323,26 @@ internal static class XrViewSuites
         rig.Cut += OnCut;
         try
         {
-            Press(clock, plane, rig, InputAction.FlybyView);
-            ctx.Check(plane.CameraControl?.FlybyActive == true, $"F7 enters the flyby");
-            Transform3D held = rig.Origin.GlobalTransform;
             int placements = plane.CameraControl?.Statics.Placements ?? 0;
-            int sites = 1, frames = 0;
+            Transform3D held = rig.Origin.GlobalTransform;
+            var sites = new List<(double At, float Bearing, float AwayDeg, float Metres, double Watch)>();
+            int frames = 0;
             float worstTurn = 0f, worstMove = 0f, worstTilt = 0f, swept = 0f;
-            for (int i = 0; i < 600; i++)
+
+            // One frame read after its step: a new spot is a cut, read at once; else a held frame.
+            void Read()
             {
-                Step(clock, plane, rig);
                 var now = rig.Origin.GlobalTransform;
                 worstTilt = Mathf.Max(worstTilt, Mathf.RadToDeg(now.Basis.Y.AngleTo(Vector3.Up)));
-                int placed = plane.CameraControl?.Statics.Placements ?? 0;
-                if (placed != placements)
+                var statics = plane.CameraControl!.Statics;
+                if (statics.Placements != placements)
                 {
-                    placements = placed;
-                    sites++;
+                    placements = statics.Placements;
                     held = now;
-                    continue;
+                    var away = plane.GlobalPosition - now.Origin;
+                    float awayDeg = Mathf.RadToDeg(plane.WorldVelocity.AngleTo(away));
+                    sites.Add((clock.Time, YawOffDeg(now, plane.GlobalPosition), awayDeg, away.Length(), statics.WatchUntil - clock.Time));
+                    return;
                 }
 
                 frames++;
@@ -348,13 +351,43 @@ internal static class XrViewSuites
                 swept = Mathf.Max(swept, YawOffDeg(now, plane.GlobalPosition));
             }
 
-            report.AppendLine($"flyby: {sites} spots over 600 frames, {cuts} cuts, held frames {frames}, worst turn {worstTurn:0.####} deg move {worstMove * 1000f:0.###} mm tilt {worstTilt:0.####} deg, the aircraft at most {swept:0.#} deg round from the held gaze");
-            ctx.Check(sites >= 2 && cuts >= sites - 1,
-                $"the flyby re-sites ({sites} spots) and each re-site raises a cut ({cuts})");
+            plane.HoldActionForTest(InputAction.FlybyView, true);
+            Step(clock, plane, rig);
+            Read();
+            plane.HoldActionForTest(InputAction.FlybyView, false);
+            ctx.Check(plane.CameraControl?.FlybyActive == true, $"F7 enters the flyby");
+            for (int i = 0; i < 1200; i++)
+            {
+                Step(clock, plane, rig);
+                Read();
+            }
+
+            var cam = CamParams.Load(ctx.ZrdrPath, ctx.PlaneName);
+            for (int k = 0; k < sites.Count; k++)
+            {
+                var s = sites[k];
+                string interval = k + 1 < sites.Count ? $", next cut after {sites[k + 1].At - s.At:0.000} s" : "";
+                report.AppendLine(string.Format(Inv, "flyby spot {0}: bearing {1:0.###} deg off the origin's forward, {2:0.#} m to the aircraft, its velocity {3:0.#} deg off the line away from the seat, watch deadline {4:0.000} s{5}",
+                    k + 1, s.Bearing, s.Metres, s.AwayDeg, s.Watch, interval));
+                ctx.Check(s.Bearing < 0.5f, $"spot {k + 1}: the cut turns the origin to face the aircraft ({s.Bearing:0.###}°)");
+                ctx.Check(s.AwayDeg < 45f, $"spot {k + 1}: the spot is behind, the aircraft flies away from it ({s.AwayDeg:0.#}° off)");
+                if (k + 1 < sites.Count)
+                {
+                    double gap = sites[k + 1].At - s.At;
+                    ctx.Check(gap >= s.Watch - 1e-3 && gap <= s.Watch + (3 * StepDt)
+                        && s.Watch >= cam.FlybyMinWatchTime + StaticCameras.VrExtraWatchS - 1e-3
+                        && s.Watch <= cam.FlybyMaxWatchTime + StaticCameras.VrExtraWatchS + 1e-3,
+                        $"spot {k + 1}: held {gap:0.000} s to a deadline of {s.Watch:0.000} s, the drawn {cam.FlybyMinWatchTime}..{cam.FlybyMaxWatchTime} s plus the headset's {StaticCameras.VrExtraWatchS} s");
+                }
+            }
+
+            report.AppendLine($"flyby: {sites.Count} spots over 1200 frames, {cuts} cuts, held frames {frames}, worst turn {worstTurn:0.####} deg move {worstMove * 1000f:0.###} mm tilt {worstTilt:0.####} deg, the aircraft at most {swept:0.#} deg round from the held gaze");
+            ctx.Check(sites.Count >= 3 && cuts >= sites.Count,
+                $"the flyby re-sites ({sites.Count} spots) and each re-site raises a cut ({cuts})");
             ctx.Check(worstTurn < PoseTolDeg && worstMove < PoseTolM && worstTilt < PoseTolDeg,
                 $"between re-sites the origin holds its spot and a level heading ({worstTurn:0.####}°, {worstMove * 1000f:0.###} mm, tilt {worstTilt:0.####}°)");
-            ctx.Check(swept > 45f && swept < 95f,
-                $"the held gaze faces the track, so the passing aircraft swings at most {swept:0.#}° round, past the side and never behind the seat");
+            ctx.Check(swept < 45f,
+                $"the aircraft flies away ahead of the seat, at most {swept:0.#}° round from the held gaze");
             plane.CameraControl!.CycleCockpitViews();
             Step(clock, plane, rig);
             ctx.Check(plane.CameraControl.FlybyActive == false, $"the cycle leaves the flyby");
@@ -544,15 +577,6 @@ internal static class XrViewSuites
         {
             Step(clock, plane, rig);
         }
-    }
-
-    // One press and release, each on its own frame, as LookStickSuites presses.
-    private static void Press(GameClock clock, FlightController plane, XrRig rig, InputAction action)
-    {
-        plane.HoldActionForTest(action, true);
-        Step(clock, plane, rig);
-        plane.HoldActionForTest(action, false);
-        Step(clock, plane, rig);
     }
 
     // A live frame's order: the session's sim step, the camera step, then the VR seat after every

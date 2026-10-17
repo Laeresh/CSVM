@@ -6,12 +6,12 @@ namespace CSVM.UI.Boards;
 
 /// <summary>
 /// The headset's optional tunnel vignette, engine-free: how far the edge of view darkens while the
-/// aircraft turns the view. The rate is the XR origin's own turn per second, which the head adds
-/// nothing to, since head tracking moves the head under the origin. A cut is no turn. The strength
-/// rises with the rate between <see cref="OnsetDegS"/> and <see cref="FullDegS"/>, eased in quickly
-/// and out slowly, and closes the clear cone from <see cref="OpenHalfAngleDeg"/> to the level's
-/// <see cref="ClosedHalfAngleDeg"/>. Every number is a proposal to TUNE at the headset
-/// (docs/architecture/UI.md).
+/// aircraft turns the view. The rate is the XR origin's own turn per second, which head tracking
+/// adds nothing to, and a cut is no turn. The strength rises with the rate between
+/// <see cref="OnsetDegS"/> and <see cref="FullDegS"/>, closing the clear cone from
+/// <see cref="OpenHalfAngleDeg"/> to the level's <see cref="ClosedHalfAngleDeg"/>. It eases in
+/// quickly, holds until the turn settles (<see cref="SettleS"/>) and eases out slowly. Every number
+/// is a proposal to TUNE at the headset (docs/architecture/UI.md).
 /// </summary>
 public sealed class XrVignette
 {
@@ -37,7 +37,13 @@ public sealed class XrVignette
     /// pulse through a series of short rolls.</summary>
     public const float ReleaseS = 0.4f;
 
+    /// <summary>Seconds the rate must stay at or under <see cref="OnsetDegS"/> before the strength
+    /// may fall. Until then it only rises, so a manoeuvre whose rate dips and climbs again holds the
+    /// tunnel instead of pumping it.</summary>
+    public const float SettleS = 1f;
+
     private Basis? _last;
+    private float _quietS = SettleS;
 
     /// <summary>The strength after the last <see cref="Step"/>, 0 open to 1 fully closed.</summary>
     public float Strength { get; private set; }
@@ -94,6 +100,12 @@ public sealed class XrVignette
         }
 
         float target = TargetStrength(RateDegS);
+        _quietS = RateDegS > OnsetDegS ? 0f : _quietS + dt;
+        if (_quietS < SettleS)
+        {
+            target = Math.Max(target, Strength);
+        }
+
         float tau = target > Strength ? AttackS : ReleaseS;
         Strength += (target - Strength) * (1f - MathF.Exp(-dt / tau));
     }

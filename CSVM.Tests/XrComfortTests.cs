@@ -140,12 +140,64 @@ public class XrComfortTests
             Assert.InRange(vignette.RateDegS, 119f, 121f);
             Assert.True(vignette.Strength > 0.95f, $"{level}: a hard roll closes the tunnel ({vignette.Strength})");
 
-            // A cut's jump is no turn, and a still view opens the tunnel again, slowly.
+            // A cut's jump is no turn, and a still view holds the tunnel through the settle time,
+            // then opens it again, slowly.
             vignette.Step(level, new Basis(Vector3.Up, 2.5f), Dt, cut: true);
             Assert.Equal(0f, vignette.RateDegS);
             float held = vignette.Strength;
-            vignette.Step(level, new Basis(Vector3.Up, 2.5f), Dt, cut: false);
+            int settle = (int)MathF.Ceiling(XrVignette.SettleS / Dt);
+            for (int i = 2; i < settle; i++)
+            {
+                vignette.Step(level, new Basis(Vector3.Up, 2.5f), Dt, cut: false);
+            }
+
+            Assert.Equal(held, vignette.Strength);
+            for (int i = 0; i < 3; i++)
+            {
+                vignette.Step(level, new Basis(Vector3.Up, 2.5f), Dt, cut: false);
+            }
+
             Assert.True(vignette.Strength < held && vignette.Strength > held * 0.9f);
+        }
+    }
+
+    /// <summary>The owner's pumping report: a rate that crosses the onset back and forth through a
+    /// manoeuvre never lets the strength fall. Once the turning stops for the settle time it opens.
+    /// </summary>
+    [Fact]
+    public void TheVignetteHoldsThroughAManoeuvreWhoseRateCrossesTheOnset()
+    {
+        foreach (var level in new[] { VrVignette.Mild, VrVignette.Strong })
+        {
+            var vignette = new XrVignette();
+            var basis = Basis.Identity;
+            vignette.Step(level, basis, Dt, cut: false);
+            float last = 0f;
+            // Two seconds of 0.4 s at 70 deg/s, then 0.4 s at 8 deg/s: over and under the onset.
+            for (int i = 0; i < 180; i++)
+            {
+                float rate = (i / 36) % 2 == 0 ? 70f : 8f;
+                basis = new Basis(Vector3.Back, Mathf.DegToRad(rate * Dt)) * basis;
+                vignette.Step(level, basis, Dt, cut: false);
+                Assert.True(vignette.Strength >= last, $"{level} frame {i} at {rate} deg/s: {vignette.Strength} fell from {last}");
+                last = vignette.Strength;
+            }
+
+            Assert.True(last > 0.5f, $"{level}: the manoeuvre closes the tunnel ({last})");
+            int quiet = 0;
+            while (vignette.Strength >= last && quiet < 600)
+            {
+                vignette.Step(level, basis, Dt, cut: false);
+                quiet++;
+            }
+
+            Assert.InRange(quiet * Dt, XrVignette.SettleS - Dt, XrVignette.SettleS + (2f * Dt));
+            for (int i = 0; i < 240; i++)
+            {
+                vignette.Step(level, basis, Dt, cut: false);
+            }
+
+            Assert.True(vignette.Strength < 0.01f, $"{level}: still flight opens the tunnel ({vignette.Strength})");
         }
     }
 
