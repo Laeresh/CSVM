@@ -159,6 +159,10 @@ public sealed class PlaneBuilder
     /// one per sight glass; none on every other build.</summary>
     public int GunsightReticles { get; private set; }
 
+    /// <summary>The panel triangles the stereo interior's backdrop extrudes (<see cref="CockpitBackdrop"/>);
+    /// none on every other build.</summary>
+    public int BackdropTriangles { get; private set; }
+
     /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned with an
     /// additive amber tint. A <c>Flight.Airframe.WingLightBlinker</c> flashes them in flight;
     /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
@@ -434,6 +438,22 @@ public sealed class PlaneBuilder
             if (_interiorScene.XrPreciseInterior)
             {
                 AddGunsightReticles(n3d, node);
+                // A cone behind a cutout or a blend would show through its clear texels.
+                var seeThrough = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (material, texture) in _interiorScene.TexturedMaterials)
+                {
+                    if (_interiorScene.AlphaOf(material) != SceneBuilder.TransparencyClass.None)
+                    {
+                        seeThrough.Add(texture);
+                    }
+                }
+                var panel = CockpitBackdrop.Panel(_gamez, node, _interiorScene.OmittedPolygons,
+                    t => seeThrough.Contains(t) || IsInteriorBlendTexture(t) || GunsightReticle.IsGlass(t));
+                if (CockpitBackdrop.Build(panel) is { } backdrop)
+                {
+                    n3d.AddChild(backdrop);
+                    BackdropTriangles = panel.Count / 3;
+                }
             }
 
             built.AddChild(n3d);

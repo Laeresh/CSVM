@@ -25,6 +25,25 @@ public class XrCockpitTests
         Assert.True(rel.Basis.IsEqualApprox(Mount));
     }
 
+    // A pylon store's stereo copy (Flight/Weapons/PylonOrdnance.cs): mounted as built it lands on the
+    // world pylon; lifted, it rides the interior. The launch point is the pylon, which nothing moves.
+    [Fact]
+    public void AStoresCopyLandsOnItsPylonAndThenRidesTheInterior()
+    {
+        var mount = new Transform3D(Mount, Eye);
+        var pylon = new Transform3D(new Basis(Vector3.Up, 0.05f), new Vector3(-2.31f, -0.62f, 0.4f));
+        var copy = XrCockpit.InInterior(mount, pylon);
+        var landed = mount * copy;
+        Assert.True(landed.Origin.IsEqualApprox(pylon.Origin) && landed.Basis.IsEqualApprox(pylon.Basis), $"lands at {landed}");
+
+        var attitude = Basis.FromEuler(new Vector3(0.2f, -1.1f, 0.05f));
+        var lifted = new Transform3D(attitude, Vector3.Zero) * XrCockpit.InOrigin(mount, Eye);
+        var rides = lifted * copy;
+        var wing = lifted * XrCockpit.InInterior(mount, new Transform3D(Basis.Identity, pylon.Origin + new Vector3(0f, 0.1f, 0f)));
+        Assert.True((wing.Origin - rides.Origin).IsEqualApprox(attitude * new Vector3(0f, 0.1f, 0f)),
+            "the copy keeps its offset from the interior's wing above it");
+    }
+
     [Fact]
     public void TheWobbleTurnsTheInteriorAboutTheAirframeNotTheEye()
     {

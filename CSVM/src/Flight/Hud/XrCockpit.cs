@@ -92,6 +92,12 @@ public sealed class XrCockpit : IXrInterior
         return new Aabb(-reach * Vector3.One, 2f * reach * Vector3.One);
     }
 
+    /// <summary>The pose, in the interior's own frame, of a part at <paramref name="onAirframe"/> on
+    /// the node the interior is mounted on with <paramref name="mount"/>. Mounted as built, the part
+    /// lands exactly where the airframe holds the anchor. Engine-free, so it unit-tests.</summary>
+    public static Transform3D InInterior(in Transform3D mount, in Transform3D onAirframe) =>
+        mount.AffineInverse() * onAirframe;
+
     /// <summary>Places the interior for this frame under the XR origin at <paramref name="origin"/>,
     /// which must stand at <see cref="EyeInAircraft"/> on <paramref name="aircraft"/> with its
     /// attitude. A hidden interior, or one no longer under that aircraft, is put back in place.</summary>
@@ -144,6 +150,40 @@ public sealed class XrCockpit : IXrInterior
         {
             _interior.Transform = _mount;
         }
+    }
+
+    /// <summary>Hangs <paramref name="part"/>, built through the stereo interior's shader, under the
+    /// interior at <paramref name="anchor"/>'s pose on the airframe. It then moves with the interior,
+    /// rescales with its mount and draws in its frame; <paramref name="anchor"/> itself never moves.
+    /// False, and nothing hung, when the anchor is not under the node the interior is mounted on.</summary>
+    public bool Hang(Node3D part, Node3D anchor)
+    {
+        var onAirframe = Transform3D.Identity;
+        for (Node? node = anchor; node != _interior.GetParent(); node = node.GetParent())
+        {
+            if (node is not Node3D step)
+            {
+                return false;
+            }
+
+            onAirframe = step.Transform * onAirframe;
+        }
+
+        part.Transform = InInterior(_mount, onAirframe);
+        _interior.AddChild(part);
+        int from = _geometry.Count;
+        Collect(part, _geometry);
+        if (_lifted)
+        {
+            var everywhere = Everywhere(_mount.Basis.Scale);
+            for (int i = from; i < _geometry.Count; i++)
+            {
+                _geometry[i].Geometry.CustomAabb = everywhere;
+                _geometry[i].Geometry.SortingOffset = SortAhead + _geometry[i].Own;
+            }
+        }
+
+        return true;
     }
 
     private static void Collect(Node node, List<(GeometryInstance3D, float)> into)

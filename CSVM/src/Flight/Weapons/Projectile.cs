@@ -452,6 +452,8 @@ public sealed partial class ProjectilePool : Node3D
     private GameZNode? _casingProto;           // the gunshell gamez prototype, resolved once
     private bool _casingProtoResolved;
     private bool _casingLogged;
+    // The flyout scene's stereo-interior twin, built on the first stereo pylon store.
+    private SceneBuilder? _stereoFlyoutScene;
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
@@ -1195,8 +1197,8 @@ public sealed partial class ProjectilePool : Node3D
     /// collision-exempt body posed at its def's <c>RESET_STATE</c>. The in-flight round and
     /// <see cref="PylonOrdnance"/> share it. A reset may hide the root, so the caller sets the
     /// root's visibility. Null without a world scene, a <c>FLYOUT</c> <c>MODEL</c> or the
-    /// prototype root in this chapter's gamez.</summary>
-    public Node3D? BuildFlyoutBody(WeaponDef weapon)
+    /// prototype root in this chapter's gamez. A stereo body wears the stereo interior's shader.</summary>
+    public Node3D? BuildFlyoutBody(WeaponDef weapon, bool stereo = false)
     {
         if (_flyoutScene == null || _flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
             return null;
@@ -1209,10 +1211,18 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (node == null)
             return null;
+        // ⚠ A stereo copy never takes the world scene's shaders: the lifted interior would draw them at
+        // the world origin. The twin has no billboard or glow arm, since neither has a stereo variant.
+        var scene = !stereo ? _flyoutScene
+            : _stereoFlyoutScene ??= new SceneBuilder(_flyoutGamez, _textures, fullbright: true, cullBackfaces: true)
+            {
+                XrPreciseInterior = true,
+            };
+
         // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not
         // obstruct another round or the world hit-test; mounted ordnance must not be shootable either),
         // and the world builder would otherwise attach one.
-        var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
+        var inst = scene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
         if (inst != null)
             PoseAtResetState(inst, weapon);
         // Verification breadcrumb (once per model name): confirms the named prototype resolved and

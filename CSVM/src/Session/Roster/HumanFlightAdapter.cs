@@ -258,7 +258,7 @@ internal sealed class HumanFlightAdapter
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         if (controller.Dressing.Stereo != null)
-            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");
+            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles}), backdrop behind {planeBuilder.BackdropTriangles} panel triangles");
         // The recenter action, for the seat the headset flies.
         controller.RecenterHeadset = paneless ? null : _human.RecenterHeadset;
         // The headset's own views, for the seat the headset flies.
@@ -390,7 +390,8 @@ internal sealed class HumanFlightAdapter
                 }
                 // Hang the FLYOUT-model ordnance under the pylons, one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
-                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
+                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo,
+                    controller.Dressing.Stereo, controller.Dressing.Visibility);
                 if (verbose)
                 {
                     int groups = 0;
