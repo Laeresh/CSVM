@@ -2395,7 +2395,7 @@ public sealed partial class ProjectilePool : Node3D
             foreach (var plane in _aircraft)
             {
                 var rig = plane.Rig;
-                if (!rig.InPlay)
+                if (!rig.Shootable)
                     continue;
                 float distanceSq = rig.WorldPosition.DistanceSquaredTo(cloud.Centre);
                 if (distanceSq >= cloud.RadiusSq)
@@ -2425,7 +2425,7 @@ public sealed partial class ProjectilePool : Node3D
         float best = float.PositiveInfinity;
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || plane.Rig.Team == team || !plane.Rig.InPlay)
+            if (plane.PlayerIndex == shooter || plane.Rig.Team == team || !plane.Rig.Shootable)
                 continue;
             // Cheap reject: the segment cannot come within fuse range of any box while it stays
             // outside the plane's bounding sphere by more than that range.
@@ -2682,7 +2682,7 @@ public sealed partial class ProjectilePool : Node3D
         _blastCandidates.Clear();
     }
 
-    // Every registered flying plane inside the radius, never one out of play, and never the
+    // Every registered flying plane inside the radius, never one out of play or racing, and never the
     // shooter's own on the damage pass. The fuse's roster-walk caveat applies. Each is measured to
     // the nearest point on its collision boxes (0 inside, the engulf clamp). The hit lands at that
     // box, so part mapping and kill attribution run the direct-hit path. ⚠ Keep the damage pass's
@@ -2692,7 +2692,7 @@ public sealed partial class ProjectilePool : Node3D
     {
         foreach (var plane in _aircraft)
         {
-            if ((plane.PlayerIndex == shooter && !includeShooter) || !plane.Rig.InPlay)
+            if ((plane.PlayerIndex == shooter && !includeShooter) || !plane.Rig.Shootable)
                 continue;
             int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
             if (shapeIdx < 0 || distance * distance >= radiusSq)

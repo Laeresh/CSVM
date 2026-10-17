@@ -1678,8 +1678,15 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
 join board's bot rows on a menu Stunt Flying run with its race toggle on, which they make a race.
 
-A race seat carries no weapons, so a race bot's pilot has no gunner and no ordnance and takes no
-quarry. Every value above is the remake's own.
+A race seat carries its stock guns, because C2's hangar zone has a weapon-hit gate (`kkgate`, rooted
+on `propane`) that must be shot open. No round reaches an aircraft in a race
+(`FlightController.Shootable`). A race bot's pilot has no ordnance, and its gunner takes no target of
+its own, so it chases no quarry. While on a run it is ordered onto the nearest live weapon-hit
+structure the zone's route runs into (a world ray along each route chord, the struck body owned by
+the nearest pool anchor up its chain), and fires on it in any mode, the rail included. A short named
+list adds optional targets that the route clears, each taken on the zone whose gate it stands within
+50 m of: C2's Ramses Tomb wall (`ramses`, rooted on `trigger`, beside dz2). The Hollywood sign's
+letters frame dzpath7's gate as closely and are left standing. Every value above is the remake's own.
 
 Measured with the ace bot over every shipped course (the `stunt-race-bot` suite, `--chapter=` for
 each, a 16 minute window, one injected crash after the second zone in each run, from which it
@@ -1689,7 +1696,7 @@ returned to that zone's exit every time):
 |---|---|---|---|
 | C1 | 5 of 5 | 3:22.0 | none |
 | C1B | 5 of 5 | 3:03.9 | `dzpath6`, `dzpath7` |
-| C2 | 9 of 9 | 4:29.3 | `dzpath4` |
+| C2 | 9 of 9 | 4:57.4 | `dzpath4` |
 | C3 | 4 of 4 | 3:14.8 | `dzpath4` from either end |
 | C4 | 14 of 14 | 8:19.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
 | C5 | 17 of 17 | 10:41.3 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |

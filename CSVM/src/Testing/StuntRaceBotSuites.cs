@@ -6,7 +6,9 @@ using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
@@ -42,7 +44,8 @@ internal static class StuntRaceBotSuites
 
     [Suite("stunt-race-bot",
         "a local stunt race of one pane and one ace bot over the run chapter's IA1 course: the launch seats "
-        + "the bot, which carries no weapons and races under its callsign; the bot flies every Danger Zone "
+        + "the bot, which carries guns but no ordnance and takes no target of its own, and races under its "
+        + "callsign; it shoots open every weapon-hit structure blocking a zone, and C2's optional Ramses wall; the bot flies every Danger Zone "
         + "through its own gate test, steering between them and running each on its ribbon, locking on no "
         + "faster than the rail check's top lock speed; crashed "
         + "once after its second zone it returns unattended to that zone's exit with its zones and clock "
@@ -215,6 +218,12 @@ internal static class StuntRaceBotSuites
         }
     }
 
+    // The live structures any zone's bots shoot: those its route runs into, and any optional target.
+    private static List<DestructibleRegistry.Instance> Targets(StuntMission run, FlightController bot) =>
+        bot.Destructibles is { } structures
+            ? run.Zones.SelectMany(z => StuntRaceBots.Targets(z, structures, bot.WorldStruckAlong)).Distinct().ToList()
+            : new List<DestructibleRegistry.Instance>();
+
     // The course's data gates, and its chapter.
     private static string Course(TestContext ctx, string chapter)
     {
@@ -251,8 +260,8 @@ internal static class StuntRaceBotSuites
             }
 
             var racer = race.Of(BotSeat);
-            ctx.Check(racer?.Callsign == Callsign && bot.Loadout == null && pilot.Gunner == null && pilot.Rocketeer == null,
-                $"[{cell}] the bot races as '{racer?.Callsign}' and carries no weapons (loadout {bot.Loadout != null}, gunner {pilot.Gunner != null})");
+            ctx.Check(racer?.Callsign == Callsign && bot.Loadout != null && pilot.Gunner is { AutoTarget: false, Target: null } && pilot.Rocketeer == null,
+                $"[{cell}] the bot races as '{racer?.Callsign}' with guns and no target of its own (loadout {bot.Loadout != null}, gunner auto {pilot.Gunner?.AutoTarget}, rocketeer {pilot.Rocketeer != null})");
             ctx.Check(bots.RunsSawWorld,
                 $"ABLE-TO-FAIL CONTROL: [{cell}] the run table's world ray, at fill time, strikes the built world below {run.Zones[0].PathName}'s entry");
             bots.BotObjective = objective;
@@ -273,6 +282,7 @@ internal static class StuntRaceBotSuites
         var run = bot.Stunt!;
         var racer = race.Of(BotSeat)!;
         LeadInsClear(ctx, run, bot);
+        var targets = Targets(run, bot);
         var cleared = new List<string>();
         run.ZoneCompleted += zone => cleared.Add($"{zone.DzName}@{zone.CompletedAt:0.0}");
         int steps = 0;
@@ -308,6 +318,10 @@ internal static class StuntRaceBotSuites
             $"[{cell}] the bot completes a run of all {run.TotalCount} zones (best {Time(racer)}, {racer.MostZones} zones at most, {steps} steps)");
         ctx.Check(locks > 0 && fastestLockMps <= StuntBotObjective.TopLockSpeedMps,
             $"[{cell}] the bot locks onto each ribbon no faster than the rail check's top lock speed ({locks} locks, fastest {fastestLockMps:0.0} m/s, top {StuntBotObjective.TopLockSpeedMps:0} m/s)");
+        // A ram destroys a structure too, with no shooter, so only the bot's own id proves it shot.
+        var shot = targets.Where(s => s.Status == DestructibleRegistry.State.Destroyed && s.LastShooter == bot.PlayerIndex).ToList();
+        ctx.Check(shot.Count == targets.Count,
+            $"[{cell}] the bot's own rounds destroy every weapon-hit structure a zone's route runs into, and every optional target: {shot.Count} of {targets.Count} ({string.Join(", ", targets.Select(s => $"{s.Def.Name} {s.Status} by {s.LastShooter}"))})");
         var row = RaceRows.Of(race.Standings(), race.ZoneCount).FirstOrDefault(r => r.Racer.Index == BotSeat);
         ctx.Check(row != null && row.Name == Callsign && row.Best == Time(racer),
             $"[{cell}] the race board shows its time under its callsign ({row?.Place} {row?.Name} {row?.Best} {row?.Runs})");

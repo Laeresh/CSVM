@@ -11,8 +11,10 @@ namespace CSVM.Session.Roster;
 /// <summary>Where a seat's weapons come from (<see cref="BotSeats.ArmsFor"/>).</summary>
 public enum SeatArms
 {
-    /// <summary>No weapons: a race seat.</summary>
-    None,
+    /// <summary>A race seat: the stock or picked fit, for a course that needs a structure shot
+    /// open (C2's hangar gate). No round reaches an aircraft in a race, and a bot's gunner takes
+    /// only the structure its race orders.</summary>
+    Race,
 
     /// <summary>A bot's militia def's own weapons block.</summary>
     MilitiaDef,
@@ -205,11 +207,11 @@ public static class BotSeats
         return candidates.Count == 0 ? null : candidates[rng.Next(candidates.Count)];
     }
 
-    /// <summary>Where a seat's weapons come from. A race seat carries none, whatever its militia.
-    /// Otherwise a named <c>--loadout=</c> wins, then a bot's militia def with a weapons block, then
-    /// the airframe's stock or picked fit.</summary>
+    /// <summary>Where a seat's weapons come from. A race seat takes the race's arms, whatever its
+    /// militia. Otherwise a named <c>--loadout=</c> wins, then a bot's militia def with a weapons
+    /// block, then the airframe's stock or picked fit.</summary>
     public static SeatArms ArmsFor(bool racing, bool loadoutNamed, bool militiaWeapons) =>
-        racing ? SeatArms.None : !loadoutNamed && militiaWeapons ? SeatArms.MilitiaDef : SeatArms.Stock;
+        racing ? SeatArms.Race : !loadoutNamed && militiaWeapons ? SeatArms.MilitiaDef : SeatArms.Stock;
 
     /// <summary>Whether a pair carries torpedoes. Only Black Hat's Warhawk does: its def,
     /// <c>bhatwarhawk</c>, fits <c>wep_14</c> (docs/org/aiPilot/aiWeapons.md).</summary>

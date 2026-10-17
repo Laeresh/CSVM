@@ -312,7 +312,7 @@ internal sealed class AiFlightAssembler
     /// on <see cref="Rng.Bots"/> and shifted by <paramref name="tier"/> (<see cref="BotSeats.Ratings"/>);
     /// <c>--ai-attack=</c> pins them instead. The human path builds the seat's aeroplane, so no tier
     /// reaches its hull, fit or spawn. Only a bot launches on the wingman rule with no roll. A race
-    /// seat (<paramref name="arms"/> of none) keeps no gunner and no ordnance, so it takes no quarry.</summary>
+    /// seat keeps no ordnance, and its gunner fires, in any mode, only on what StuntRaceBots orders.</summary>
     public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team, Net.NetBotSkill tier,
         SeatArms arms = SeatArms.Stock)
     {
@@ -323,10 +323,14 @@ internal sealed class AiFlightAssembler
             AttackRating: _policy.AiAttackSkill ?? SeatRating,
             RosterSkills: _policy.AiAttackSkillExplicit ? null : ratings, Difficulty: Difficulty.Hard);
         PreparePilot(spawn, stats, Rng.Bots);
-        if (arms == SeatArms.None)
+        if (arms == SeatArms.Race)
         {
-            pilot.Gunner = null;
             pilot.Rocketeer = null;
+            if (pilot.Gunner is { } racer)
+            {
+                racer.AutoTarget = false;
+                racer.FiresInAnyMode = true;
+            }
         }
 
         if (pilot.Gunner is { } gunner)

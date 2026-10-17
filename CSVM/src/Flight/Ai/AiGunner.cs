@@ -47,6 +47,10 @@ public sealed class AiGunner
     /// Off, a cleared target simply holds fire, an explicitly ordered gunner.</summary>
     public bool AutoTarget = true;
 
+    /// <summary>Whether the guns fire in every mode, not only in pursuit. Remake-only: a stunt race
+    /// bot's, whose one target is a structure on or beside the zone it runs on rails.</summary>
+    public bool FiresInAnyMode;
+
     /// <summary>Whether the pilot has broken off: no quarry is held or taken while it stands. The
     /// pilot sets it each step from its rearm run (<see cref="AiPilot.RearmOrder"/>), so a launch's
     /// <see cref="AutoTarget"/> is never touched and comes back as it was.</summary>

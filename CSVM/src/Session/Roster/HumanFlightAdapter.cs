@@ -313,14 +313,9 @@ internal sealed class HumanFlightAdapter
         var militiaStats = militiaDef != null && !_world.Racing && _policy.LoadoutOverride == null
             ? _aircraft.AiStatsFor(planeName, militiaDef) : null;
         var arms = BotSeats.ArmsFor(_world.Racing, _policy.LoadoutOverride != null, militiaStats is { AiWeapons.Count: > 0 });
-        if (arms == SeatArms.None)
-        {
-            // A race pilot carries no weapons. With no loadout there is no fire control, so a held
-            // trigger does nothing. No gun gauge, missile gauge, pipper or pylon rocket is built.
-            if (verbose)
-                Log.Info("flight", $"weapons: none, a race pilot flies unarmed");
-        }
-        else if (arms == SeatArms.MilitiaDef)
+        // A race seat flies the stock branch below. Its rounds reach structures alone, since no
+        // aircraft in a race is in the pool's reach (FlightController.Shootable).
+        if (arms == SeatArms.MilitiaDef)
         {
             // A bot carries its militia def's own weapons block, as that militia's campaign aircraft do.
             try

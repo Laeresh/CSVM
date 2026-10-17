@@ -73,8 +73,8 @@ public sealed class AiWeaponsDrive
         if (!_acquisition.Step(gunner, out var targetPos, out var targetVel, out var targetFwd))
             return;
         // ⚠ Only Pursue shoots. Lay off holds fire deliberately (the rubber-band assist) even
-        // though the target stays acquired in every mode.
-        if (pilot.Machine is { } modes && modes.Mode != AiMode.Pursue)
+        // though the target stays acquired in every mode. A race bot's gunner is the one exception.
+        if (pilot.Machine is { } modes && modes.Mode != AiMode.Pursue && !gunner.FiresInAnyMode)
             return;
         if (shooter.SelectedGun is not { } group)
             return;

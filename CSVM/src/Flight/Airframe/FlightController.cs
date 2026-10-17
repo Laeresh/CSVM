@@ -1044,6 +1044,10 @@ public partial class FlightController : Node3D
     /// consumer that tests <see cref="Crashed"/> alone silently sees inert aircraft.</summary>
     public bool InPlay => _lifecycle.InPlay;
 
+    /// <summary>Whether a weapon may reach this aircraft: in play and not <see cref="Racing"/>. The
+    /// body's layer and the projectile pool's fuse, blast and tangler walks read it.</summary>
+    public bool Shootable => InPlay && !Racing;
+
     /// <summary>Another machine flies this airframe and this one only shows it
     /// (<see cref="RemotePoses"/>). While set the sim step reads no device and runs no
     /// <see cref="FlightModel"/> step, no ground-blow probe and no nearest-human fill. Nor any
@@ -2655,6 +2659,12 @@ public partial class FlightController : Node3D
     internal bool WorldBlocksLine(Vector3 from, Vector3 to) =>
         World.Ray(from, to, CollisionLayers.World, null, out _);
 
+    /// <summary>The static world body the segment strikes first, and where, or null on a clear
+    /// line. A stunt race bot reads it for the structures across a zone's route.</summary>
+    internal (Node Body, Vector3 At)? WorldStruckAlong(Vector3 from, Vector3 to) =>
+        World.Ray(from, to, CollisionLayers.World, null, out var report) && report.Collider is { } body
+            ? (body, report.Position) : null;
+
     /// <summary>What blocks the AI's avoid-crash lookahead along the segment, the static world or
     /// another aircraft, never this plane's own body, as the struck body's name, or null for a
     /// clear path. Not <see cref="WorldBlocksLine"/>; decode: docs/org/aiPilot.md, "What the ray
@@ -2968,7 +2978,7 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = true;
         // A race keeps every body off the layer for the whole session. That one rule stops a ram from
         // either side of the pair, and the contact resolver never learns of it.
-        Body?.SetHittable(InPlay && !Racing);
+        Body?.SetHittable(Shootable);
     }
 
     // The selected firable gun group, the one the trigger fires. Null with no fire control, no
@@ -3060,7 +3070,9 @@ public partial class FlightController : Node3D
         if (outcome.GunShots.Count > 0 && Projectiles != null)
         {
             _aimCandidates.Clear();
-            Projectiles.CollectAircraft(_aimCandidates);
+            // A racer's rounds reach no aircraft, so its assist must not bend them toward one.
+            if (!Racing)
+                Projectiles.CollectAircraft(_aimCandidates);
             SurfaceVehicles?.CollectVehicles(_aimCandidates);
             Projectiles.CollectTurrets(_aimCandidates);
             Projectiles.CollectFusedOrdnance(_aimCandidates);

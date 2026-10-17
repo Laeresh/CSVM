@@ -4,6 +4,8 @@ using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Utils;
 using Godot;
@@ -21,11 +23,26 @@ internal sealed class StuntRaceBots
     // How far below a zone's entry the fill-time probe looks for the built world, metres.
     private const float WorldProbeM = 3000f;
 
+    // How far past a struck body the route's cast resumes, metres, and how many bodies one chord's
+    // cast may pass through. Neither is a game value.
+    private const float StruckStepM = 0.5f;
+    private const int StruckPerChord = 8;
+
+    // How near a zone's gate an optional target stands, metres. Not a game value.
+    private const float OptionalReachM = 50f;
+
+    // Structures a bot shoots on the run past them though its route clears them. Remake-only: C2's
+    // Ramses Tomb wall. The Hollywood sign's letters frame dzpath7's gate as closely, and stand.
+    private static readonly string[] OptionalTargets = ["ramses"];
+
     private readonly StuntRace _race;
     private readonly IReadOnlyList<PlayerRig> _seats;
     private readonly List<(int Seat, StuntBotObjective Objective)> _bots;
     private readonly BotOrderLog _log = new();
     private readonly Dictionary<int, int> _respawns = new();
+
+    // Each zone's targets, found on its first run.
+    private readonly Dictionary<StuntZone, List<DestructibleRegistry.Instance>> _obstacles = new();
 
     private StuntRaceBots(StuntRace race, IReadOnlyList<PlayerRig> seats, List<(int, StuntBotObjective)> bots, bool runsSawWorld)
     {
@@ -119,6 +136,14 @@ internal sealed class StuntRaceBots
                 pilot.TargetAltitude = order.Point.Y;
             }
 
+            // On a run the gunner takes the zone's nearest target. Off one it holds no target and
+            // never fires, since a race's rounds have nothing else to strike.
+            if (pilot.Gunner is { } gunner)
+            {
+                gunner.Target = pilot.ZoneRun is { } zoneRun && bot.Destructibles is { } structures
+                    ? Obstacle(bot, run, zoneRun.Ribbon.Name, structures) : null;
+            }
+
             if (_log.Admit(seat, order.Why))
             {
                 string zone = order.Zone >= 0 ? $" {run.Zones[order.Zone].PathName}" : "";
@@ -126,6 +151,67 @@ internal sealed class StuntRaceBots
             }
         }
     }
+
+    /// <summary>The live weapon-hit structures <paramref name="zone"/>'s bots shoot: those its route
+    /// runs into, cast chord by chord through <paramref name="struck"/>, then any optional target
+    /// beside its gates. A struck body belongs to the nearest group up its chain that anchors one.
+    /// A collide-hit structure (a facade panel) breaks as a plane flies through, so never blocks.</summary>
+    internal static List<DestructibleRegistry.Instance> Targets(StuntZone zone, DestructibleRegistry structures,
+        Func<Vector3, Vector3, (Node Body, Vector3 At)?> struck)
+    {
+        var across = new List<DestructibleRegistry.Instance>();
+        if (zone.Route is not { } route)
+        {
+            return across;
+        }
+
+        foreach (var s in structures.All)
+        {
+            if (Array.IndexOf(OptionalTargets, s.Def.Name) >= 0 && Live(s, out var at)
+                && Mathf.Min(at.DistanceTo(zone.GreenGate.Center), at.DistanceTo(zone.RedGate.Center)) < OptionalReachM)
+            {
+                across.Add(s);
+            }
+        }
+
+        for (int i = 0; i < route.Segments.Count; i++)
+        {
+            var from = route.PointAt(i, 0f);
+            var to = route.PointAt(i, route.Segments[i].Length);
+            var step = (to - from).Normalized() * StruckStepM;
+            for (int hits = 0; hits < StruckPerChord && struck(from, to) is { } hit; hits++)
+            {
+                if (Owner(hit.Body, structures) is { } s && !across.Contains(s))
+                {
+                    across.Add(s);
+                }
+
+                from = hit.At + step;
+            }
+        }
+
+        return across;
+    }
+
+    // The live weapon-hit pool a struck body belongs to: the nearest node up its chain that anchors one.
+    private static DestructibleRegistry.Instance? Owner(Node body, DestructibleRegistry structures)
+    {
+        for (Node? n = body; n != null; n = n.GetParent())
+        {
+            foreach (var s in structures.PoolsOn(n))
+            {
+                if (s.Def.Activation.Equals("WeaponHit", StringComparison.OrdinalIgnoreCase) && Live(s, out _))
+                {
+                    return s;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Live(DestructibleRegistry.Instance s, out Vector3 at) =>
+        TargetPool.TryTargetGeometry(s, out at, out _, out _, out bool live) && live;
 
     // The table's own ray, cast down from the first zone's entry. A world missing from the physics
     // space refuses no lead-in, and the table would still look sound.
@@ -147,6 +233,47 @@ internal sealed class StuntRaceBots
         }
 
         return false;
+    }
+
+    // The live obstacle nearest the bot on the route of the zone named, or null.
+    private DestructibleRegistry.Instance? Obstacle(FlightController bot, StuntMission run, string pathName, DestructibleRegistry structures)
+    {
+        var at = bot.WorldPosition;
+        StuntZone? zone = null;
+        foreach (var z in run.Zones)
+        {
+            if (z.PathName == pathName)
+            {
+                zone = z;
+            }
+        }
+
+        if (zone == null)
+        {
+            return null;
+        }
+
+        if (!_obstacles.TryGetValue(zone, out var near))
+        {
+            _obstacles[zone] = near = Targets(zone, structures, bot.WorldStruckAlong);
+            foreach (var s in near)
+            {
+                Log.Info("flight", $"stunt race: bots on {pathName} shoot '{s.Def.Name}' ({s.Def.AnimName})");
+            }
+        }
+
+        DestructibleRegistry.Instance? best = null;
+        float bestSq = float.MaxValue;
+        foreach (var s in near)
+        {
+            if (Live(s, out var pos) && pos.DistanceSquaredTo(at) < bestSq)
+            {
+                best = s;
+                bestSq = pos.DistanceSquaredTo(at);
+            }
+        }
+
+        return best;
     }
 
     // A crash's return puts the bot on the route of the zone it cleared last, often low between
