@@ -67,7 +67,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
 **Data paths, override where the extraction is read from**
-`--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--messages`
+`--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--hd` · `--messages`
 
 **Extraction, build `extracted/` from an original install and exit**
 `--extract` · `--extract-force` · `--extract-unzip` · `--unzbd`
@@ -382,6 +382,7 @@ lines**.
 - `--interp=` (default extracted/interp.json, the boot scripts naming each chapter's clutter templates; every world build stamps them via `ClutterBuilder`, logged as `clutter: N sprites`, solid only in `--fly`)
 - `--sounds=` (default extracted/soundsh.zip)
 - `--zip-assets` (**read the `.zip` archives even where `--extract-unzip` left an unpacked sibling folder**, the asset shape an exported build ships. Process-wide: it flips `SessionPaths.ForceZipped` before the first path resolves, so the chapter gamez, texture and zrdr paths, the sounds archive and the menu pages' own lookups all take it. A path that only ever had the folder still resolves to the folder: the flag narrows the choice rather than adding a requirement. **Use it before shipping a build**, since the two shapes do not fail alike (INSTR-46))
+- `--hd=<folder>` (**the HD texture pack folder**, under the data root unless rooted, default `HD`, also config.json's `textures.hd`; empty reads none. Drop a pack's release zips there unchanged, `Extraction/HdTextures.cs` has the matching rules. A `--det` run, and so every `--screenshot=` and `--run-tests` run, reads no pack unless this flag names one)
 - `--messages=` (default extracted/messages.json, the string table resolving targets.json `MSG_*` keys for objective marker text)
 - `--extract=<install>` (**extract an original install into `<data-root>/extracted/` and exit**, before any world or menu is built: the ZBD archives through unzbd, then the `.rof` UI resources, both stamped. Prints a summary and exits 0, or 1 on any failure, including a folder that is not an install. A ZBD failure stops the run before the `.rof` half. Scripted, so the window stays hidden even without `--headless`. Does not remember the install for the menu. `ExtractionRun`, `docs/architecture/Extraction.md`)
 - `--extract-force` (with `--extract`, **re-extract archives the stamp calls up to date**; without it an unchanged archive is skipped. Ignored with a warning when `--extract` is absent)

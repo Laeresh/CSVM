@@ -489,6 +489,12 @@ public partial class Launcher : Node3D
         {
             Log.Info("core", $"assets: --zip-assets, reading .zip archives, ignoring unpacked folders");
         }
+        // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
+        // one machine dropped in; --hd= survives it, for a probe.
+        if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)
+        {
+            HdTextures.Current = HdTextures.Open(dataRoot, hdFolder);
+        }
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
         _paths = BasePaths.Resolve(repoRoot, dataRoot, _spec);

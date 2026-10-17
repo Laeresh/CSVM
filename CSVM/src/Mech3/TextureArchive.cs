@@ -743,10 +743,16 @@ public sealed class TextureArchive : IDisposable
     private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
     // Authored _N siblings whose dimensions disagreed with the level they claim, logged once each.
     private readonly HashSet<string> _reportedOddMips = new(StringComparer.OrdinalIgnoreCase);
+    // The archive's own folder or zip, which names its HD replacements' chapter entries.
+    private readonly string _path;
+    // Base name -> the original's size, for every texture an HD replacement took over. Its texture
+    // reports that size, as HdArt's 2D art does: the compass tape draws archive art by pixel rects.
+    private readonly Dictionary<string, Vector2I> _hdSizes = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     public TextureArchive(string path)
     {
+        _path = path;
         if (Directory.Exists(path))
         {
             _dir = path;
@@ -1015,6 +1021,10 @@ public sealed class TextureArchive : IDisposable
 
         var img = Build(baseName, out bool resolved, out _);
         ImageTexture? tex = img != null ? TextureUpload.Create(img) : null;
+        if (tex != null && _hdSizes.TryGetValue(baseName, out var authored))
+        {
+            tex.SetSizeOverride(authored);
+        }
         if (!resolved && _reportedMissing.Add(baseName))
         {
             // Report each distinct miss once. Log.Warn is a plain line, GD.PushWarning would
@@ -1061,7 +1071,11 @@ public sealed class TextureArchive : IDisposable
             if (Build(baseName, out _, out _) is { } img)
             {
                 bytes += img.GetDataSize();
+                // ⚠ Update refuses an image of another size than the texture reports.
+                var reported = tex.GetSize();
+                tex.SetSizeOverride(img.GetSize());
                 TextureUpload.Replace(tex, img);
+                tex.SetSizeOverride(new Vector2I((int)reported.X, (int)reported.Y));
             }
         }
         (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass) = last;
@@ -1091,7 +1105,14 @@ public sealed class TextureArchive : IDisposable
         if (bytes == null)
             return null;
         var img = new Image();
-        return img.LoadPngFromBuffer(bytes) == Error.Ok ? img : null;
+        if (img.LoadPngFromBuffer(bytes) != Error.Ok)
+            return null;
+        if (HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_path, Path.GetFileNameWithoutExtension(name!))) is not { } big)
+            return img;
+        if (big.GetFormat() != img.GetFormat())
+            big.Convert(img.GetFormat());
+        img.Dispose();
+        return big;
     }
 
     /// <summary>The archive's texture whose name begins with a zero-padded two-digit
@@ -1330,6 +1351,20 @@ public sealed class TextureArchive : IDisposable
         // Before mipmaps: raw pixels only. A texture in the family table is soft whatever the pixel
         // rule says about it (see SoftAlphaNamed).
         LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaNamed.Contains(baseName) || baseName.Contains("trans"));
+        // After the alpha reads, which stay the original's, so the blend/scissor choice is unchanged.
+        // Converted to the original's format, so an opaque original stays opaque.
+        bool hd = false;
+        if (HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_path, Path.GetFileNameWithoutExtension(name!))) is { } big)
+        {
+            if (big.GetFormat() != img.GetFormat())
+            {
+                big.Convert(img.GetFormat());
+            }
+            _hdSizes[baseName] = img.GetSize();
+            img.Dispose();
+            img = big;
+            hd = true;
+        }
         // The drop-in instruments repaint the RGB flat and keep everything else, size, format,
         // alpha channel, so the alpha class read just above (and with it the blend/scissor choice
         // and the cutout silhouette) is unchanged.
@@ -1347,7 +1382,8 @@ public sealed class TextureArchive : IDisposable
         {
             ScissorMipsKeepCoverage(img);
         }
-        if (Mips == MipSource.Authored)
+        // A replacement's authored siblings are the original's size, a level it does not have.
+        if (Mips == MipSource.Authored && !hd)
         {
             authoredLevels = InstallAuthoredMips(img, Path.GetFileNameWithoutExtension(name!), flat);
             if (authoredLevels > 0)
