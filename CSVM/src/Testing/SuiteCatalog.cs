@@ -129,6 +129,7 @@ public static class SuiteCatalog
         "menu-join-board",
         "menu-launch-return",
         "menu-original-boot",
+        "menu-original-campaign",
         "menu-original-campaign-film",
         "menu-original-cheats",
         "menu-original-connection",

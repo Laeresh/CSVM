@@ -16,7 +16,20 @@ public static class SyntheticMission
     /// <summary>The invented mission's folder name, matching no shipped mission.</summary>
     public const string Mission = "PROBE1";
 
+    /// <summary>The campaign's one story position's storage folder: campaign 1, mission 9, an
+    /// address no shipped mission holds.</summary>
+    public const string CampaignMission = "M09";
+
     private static readonly string[] Records = { "weather.json", "net.json" };
+
+    // The campaign family as (fixture, path under extracted/): the sequence's one entry, the
+    // briefing dialog holding that entry's state, and the mission's objectives note.
+    private static readonly (string Fixture, string Target)[] CampaignRecords =
+    {
+        ("synthetic/zrdr/cm_sequence.json", "zrdr/cm_sequence.json"),
+        ("synthetic/zrdr/Briefing.json", "zrdr/Briefing.json"),
+        ($"synthetic/{Chapter}/{CampaignMission}/zrdr/objectives.json", $"{Chapter}/{CampaignMission}/zrdr/objectives.json"),
+    };
 
     /// <summary>Writes the mission's zrdr scope under <paramref name="tree"/>.</summary>
     public static void WriteMission(SyntheticTree tree)
@@ -24,6 +37,16 @@ public static class SyntheticMission
         foreach (string record in Records)
         {
             tree.CopyFixture($"synthetic/{Chapter}/{Mission}/zrdr/{record}", $"{Chapter}/{Mission}/zrdr/{record}");
+        }
+    }
+
+    /// <summary>Writes the campaign's sequence, its briefing and its objectives under
+    /// <paramref name="tree"/>. Shapes: <c>docs/formats/campaign-sequence.md</c>.</summary>
+    public static void WriteCampaign(SyntheticTree tree)
+    {
+        foreach (var (fixture, target) in CampaignRecords)
+        {
+            tree.CopyFixture(fixture, target);
         }
     }
 }

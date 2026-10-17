@@ -37,7 +37,8 @@
       "probe_radio",
       [
         ["snd_probe_radio_line", "probe_radio_line.wav", "QUEUE", [45]],
-        ["snd_probe_radio_bark", "probe_radio_bark.wav", "QUEUE", [0.5]]
+        ["snd_probe_radio_bark", "probe_radio_bark.wav", "QUEUE", [0.5]],
+        ["snd_probe_briefing", "probe_briefing.wav", "SFX"]
       ],
       "probe_voice",
       [

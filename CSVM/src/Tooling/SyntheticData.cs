@@ -40,6 +40,7 @@ public static class SyntheticData
         new("sounds", SyntheticSounds.WriteArchive),
         new("voice", SyntheticSounds.WriteVoice),
         new("mission", SyntheticMission.WriteMission),
+        new("campaign", SyntheticMission.WriteCampaign),
         new("effects", SyntheticEffects.Write),
     };
 
