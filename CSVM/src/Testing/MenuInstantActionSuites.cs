@@ -95,14 +95,15 @@ internal static class MenuInstantActionSuites
             var size = ctx.Host.GetViewport().GetVisibleRect().Size;
             var fit = BoardFit.For(size.X, size.Y);
             var ia = host.Features.Get<InstantActionFeature>();
-            OriginalScreenOpens(ctx, host, seat, shell, fit, ia);
-            OriginalKeyboard(ctx, host, seat, shell, ia);
-            OriginalLives(ctx, host, seat, shell, fit, ia);
+            var section = layout.Screen("InstantAction");
+            OriginalScreenOpens(ctx, host, seat, shell, fit, ia, section);
+            OriginalKeyboard(ctx, host, seat, shell, ia, section);
+            OriginalLives(ctx, host, seat, shell, fit, ia, section);
             OriginalLaunches(ctx, host, seat, shell, fit, ia, exits);
             OriginalCustomPilot(ctx, host, seat, shell, fit, ia, exits, store, scratch);
-            OriginalLoadout(ctx, host, seat, shell, fit, ia);
+            OriginalLoadout(ctx, host, seat, shell, fit, ia, layout.Screen("OrdinanceLayout"));
             OriginalBuild(ctx, host, seat, shell, fit, host.Features.Get<HangarFeature>(), store, built);
-            OriginalTwoSeats(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), ia, exits);
+            OriginalTwoSeats(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), ia, exits, section);
         }
         finally
         {
@@ -115,7 +116,8 @@ internal static class MenuInstantActionSuites
     // A name no player would type, distinct per run, inside the name screen's own character set.
     private static string ScratchName() => "Scratch " + Guid.NewGuid().ToString("N")[..8];
 
-    private static void OriginalScreenOpens(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
+    private static void OriginalScreenOpens(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, MenuLayoutScreen? section)
     {
         var door = Row(shell, "MM_B_INSTANTACTION");
         ctx.Check(door is { Enabled: true }, $"the top level's Instant Action row is live");
@@ -126,8 +128,11 @@ internal static class MenuInstantActionSuites
 
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.InstantAction, $"a click on it opens the Instant Action screen ({shell.Screen})");
-        ctx.Check(ia.BaseDef != null && ia.BaseDef.AceName != "Marshall Bill Redmann",
-            $"with the first environment's own def loaded as the base ({ia.BaseDef?.AceName ?? "none"})");
+        // The invented tree carries no C1/IA1, so its first environment opens on the built-in def;
+        // the launches below read the other chapters' own.
+        ctx.Check(ia.BaseDef != null, $"with the first environment's def loaded as the base ({ia.BaseDef?.AceName ?? "none"})");
+        ctx.CheckShipped(ia.BaseDef?.AceName != "Marshall Bill Redmann",
+            $"on the install that def is the chapter's own rather than the built-in one ({ia.BaseDef?.AceName ?? "none"})");
         int contents = 0;
         foreach (var row in shell.Rows)
         {
@@ -137,29 +142,45 @@ internal static class MenuInstantActionSuites
             }
         }
 
-        ctx.Check(contents == 14, $"the contents window shows the layout's fourteen rows ({contents})");
+        var list = Box(section, OriginalInstantActionScreen.ContentsKey);
+        int window = section?.Widget(OriginalInstantActionScreen.ContentsKey)?.Int("TotalDisplayed", 0) ?? 0;
+        ctx.CheckShipped(list == (76f, 175f, 277f, 18f) && window == 14,
+            $"the install's contents list is X 76 Y 175 Width 277 in 18-pixel rows, fourteen to the window ({list}, {window})");
+        ctx.Check(window > 0 && contents == window, $"the contents window shows the layout's own count of rows ({contents} of {window})");
 
-        // The authored list is X 76 Width 277 and the scroll art 16 wide, so the chrome stands at
-        // 337, inside the gutter the page's own background paints, and the rows stop at 261.
+        // The list's arrows stand inside its right edge, in the gutter the page's own background
+        // paints, and the rows stop short of them. On the install that column is 337 to 353.
         var upArrow = Row(shell, OriginalInstantActionScreen.ContentsUpKey);
         var downArrow = Row(shell, OriginalInstantActionScreen.ContentsDownKey);
-        ctx.Check(upArrow is { X: 337f, Y: 175f, Width: 16f } && downArrow is { X: 337f, Width: 16f },
-            $"the contents arrows stand inside the list's right edge ({upArrow?.X}, {downArrow?.X})");
-        ctx.Check(Row(shell, OriginalInstantActionScreen.ContentsKey + ":0") is { X: 76f, Width: 261f },
+        float column = upArrow?.Width ?? 0f;
+        float edge = list.X + list.Width;
+        ctx.CheckShipped(column == 16f, $"the install's scroll art is 16 wide ({column})");
+        ctx.Check(column > 0f && upArrow!.X == edge - column && upArrow.Y == list.Y
+                && downArrow is { } down && down.X == edge - down.Width && down.Width == column,
+            $"the contents arrows stand inside the list's right edge ({upArrow?.X}, {downArrow?.X}, edge {edge})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.ContentsKey + ":0") is { } first && first.X == list.X && first.Width == list.Width - column,
             $"and its rows give that column up rather than the authored box growing ({Row(shell, OriginalInstantActionScreen.ContentsKey + ":0")?.Width})");
-        ctx.Check(List(shell, OriginalInstantActionScreen.ContentsKey) is { Window: { X: 76f, Width: 277f, ThumbX: 337f } },
+        ctx.Check(List(shell, OriginalInstantActionScreen.ContentsKey) is { } contentsList && contentsList.Window.X == list.X
+                && contentsList.Window.Width == list.Width && contentsList.Window.ThumbX == edge - column,
             $"the thumb rides the same column over the authored window ({List(shell, OriginalInstantActionScreen.ContentsKey)?.Window.ThumbX})");
 
-        // The reference frame draws the unscrolled thumb's foot at board y 356 on a track running
-        // 186 to 416, so 170 of its 230 pixels, which is the 14-row window's share of the 19
-        // presets rather than the scroll tile's own 11.
+        // The track runs between the two arrows, and the unscrolled thumb's length is the window's
+        // share of the presets rather than the scroll tile's own. The reference frame draws its
+        // foot at board y 356 on a track running 186 to 416.
         var contentsWindow = List(shell, OriginalInstantActionScreen.ContentsKey)?.Window;
-        float share = 230f * 14f / InstantActionFeature.Presets.Count;
-        ctx.Check(contentsWindow is { TrackTop: 186f, TrackHeight: 230f, Top: 0 }
+        float trackTop = list.Y + (upArrow?.Height ?? 0f);
+        float trackHeight = (window * list.ItemHeight) - (upArrow?.Height ?? 0f) - (downArrow?.Height ?? 0f);
+        float share = trackHeight * window / InstantActionFeature.Presets.Count;
+        ctx.CheckShipped(trackTop == 186f && trackHeight == 230f && Math.Abs(trackTop + share - 356f) < 1f,
+            $"on the install the track runs 186 to 416 and the thumb's foot is at 356 ({trackTop}, {trackHeight}, {trackTop + share})");
+        ctx.Check(contentsWindow is { Top: 0 } && contentsWindow.Value.TrackTop == trackTop && contentsWindow.Value.TrackHeight == trackHeight
             && Math.Abs(contentsWindow.Value.ThumbHeight - share) < 0.5f
-            && Math.Abs(contentsWindow.Value.ThumbY + contentsWindow.Value.ThumbHeight - 356f) < 1f,
+            && Math.Abs(contentsWindow.Value.ThumbY - trackTop) < 1f,
             $"and its length is the share of the list the window shows ({contentsWindow?.ThumbHeight} of {contentsWindow?.TrackHeight}, wanting {share})");
-        ctx.Check(Row(shell, OriginalInstantActionScreen.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
+        var plane = Box(section, OriginalInstantActionScreen.PlayerPlaneKey);
+        ctx.CheckShipped(plane == (511f, 210f, 224f, 18f), $"the install's player plane dropdown is at 511, 210, 224 by 18 ({plane})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.PlayerPlaneKey) is { Label: "Stock Autogyro" } planeRow
+                && (planeRow.X, planeRow.Y, planeRow.Width, planeRow.Height) == plane,
             $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
         ctx.Check(Row(shell, OriginalInstantActionScreen.MissionKey)?.Label == "Dogfighting an Ace"
             && Row(shell, "IA_D_NENEMY0") is { Enabled: false, Label: "" } && Row(shell, "IA_D_PLANEE0") is { Enabled: false, Label: "" },
@@ -171,11 +192,14 @@ internal static class MenuInstantActionSuites
         ctx.Check(Row(shell, OriginalInstantActionScreen.BuildKey) is { Enabled: true } && Row(shell, OriginalInstantActionScreen.WeaponLoadoutKey) is { Enabled: true },
             $"Build Custom Plane and Weapon Loadout are live");
         var board = shell.Compose();
-        ctx.Check(board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "IA_BackGround.jpg",
+        string backdrop = section?.Widget("IA_BackGround")?.Art.FirstOrDefault() ?? string.Empty;
+        ctx.CheckShipped(backdrop == "IA_BackGround.jpg", $"the install's page background is IA_BackGround.jpg ({backdrop})");
+        ctx.Check(backdrop.Length > 0 && board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == backdrop,
             $"the page's background is the layout's own ({board.Backdrop.Count})");
     }
 
-    private static void OriginalKeyboard(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia)
+    private static void OriginalKeyboard(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia, MenuLayoutScreen? section)
     {
         ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.ContentsKey + ":0", $"the focus opens on the first contents row ({shell.FocusedKey})");
         Press(host, seat, Right);
@@ -192,9 +216,12 @@ internal static class MenuInstantActionSuites
 
         // The store's length decides whether the list outruns its authored window of twenty, so
         // the row width is read against both readings of the same rule rather than one count.
-        bool scrolls = List(shell, OriginalInstantActionScreen.PlayerPlaneKey) is { Window.Scrolls: true };
-        ctx.Check(shell.Rows[0] is { X: 511f } && Math.Abs(shell.Rows[0].Width - (scrolls ? 208f : 224f)) < 0.5f,
-            $"its rows keep off the scroll column only where there is one ({shell.Rows[0].Width}, scrolling={scrolls})");
+        var open = List(shell, OriginalInstantActionScreen.PlayerPlaneKey);
+        bool scrolls = open is { Window.Scrolls: true };
+        var plane = Box(section, OriginalInstantActionScreen.PlayerPlaneKey);
+        float rowWidth = scrolls ? open!.Window.ThumbX - plane.X : plane.Width;
+        ctx.Check(shell.Rows[0].X == plane.X && Math.Abs(shell.Rows[0].Width - rowWidth) < 0.5f,
+            $"its rows keep off the scroll column only where there is one ({shell.Rows[0].Width} of {rowWidth}, scrolling={scrolls})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.InstantAction.OpenDropdown == null && ia.PlayerPlane.Name == "Balmoral" && Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label == "Stock Balmoral",
@@ -213,16 +240,24 @@ internal static class MenuInstantActionSuites
     // walk reaches it, a sideways step and a picked row both write the shared feature's own value,
     // the ace duel leaves it live where it blanks the enemy boxes, and a contents row's preset,
     // which carries no lives, leaves it where the player put it.
-    private static void OriginalLives(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
+    private static void OriginalLives(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, MenuLayoutScreen? section)
     {
         var box = Row(shell, OriginalInstantActionScreen.LivesKey);
-        ctx.Check(box is { Enabled: true, Label: "1", X: 525f, Y: 257.5f, Width: 90f, Height: 18f },
-            $"the lives box stands on the clear line the layout leaves over the mission dropdown reading the opening life ({box?.Label}, {box?.X}, {box?.Y})");
+        var mission = Box(section, OriginalInstantActionScreen.MissionKey);
+        ctx.CheckShipped(box is { X: 525f, Y: 257.5f, Height: 18f },
+            $"on the install that is the line between the wingman and mission rows ({box?.X}, {box?.Y})");
+        ctx.Check(box is { Enabled: true, Label: "1", Width: 90f } && box.X == mission.X && box.Height == mission.ItemHeight,
+            $"the lives box stands in the mission dropdown's column at its height reading the opening life ({box?.Label}, {box?.X}, {box?.Y})");
         ctx.Check(!shell.Rows.Any(r => r.Key != OriginalInstantActionScreen.LivesKey && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < box!.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
             $"and no authored row shares its space, the line being one the section skips ({box?.Y})");
+        // The walk reaches it from the live box straight above it, the wingman count on the install.
+        string above = box != null ? AboveKey(shell, box) : "none";
+        ctx.CheckShipped(above == OriginalInstantActionScreen.WingmenKey, $"the box above it is the wingman count ({above})");
+        OriginalWalk.WalkTo(shell, above, frame => Press(host, seat, frame));
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.LivesKey, $"the walk reaches it from the wingman count ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.LivesKey, $"the walk reaches it from the box above it ({above}, {shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.Lives == 2 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "2",
             $"a sideways step writes the shared feature's lives ({ia.Lives})");
@@ -233,7 +268,7 @@ internal static class MenuInstantActionSuites
         Press(host, seat, Accept);
         ctx.Check(shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.LivesKey
             && shell.Rows.Count == InstantActionFeature.MaxLives + 1
-            && shell.Rows[0] is { Label: "Unlimited", X: 525f, Width: 90f } && shell.Rows[^1].Label == "9",
+            && shell.Rows[0] is { Label: "Unlimited", Width: 90f } && shell.Rows[0].X == mission.X && shell.Rows[^1].Label == "9",
             $"Accept opens a list of every count with no scroll chrome ({shell.Rows.Count} rows, {shell.Rows[0].Label} to {shell.Rows[^1].Label})");
         var pick = shell.Rows[3];
         Click(host, seat, Pointer(fit, pick.X + 5f, pick.Y + 5f, pressed: true, clicked: true));
@@ -443,7 +478,8 @@ internal static class MenuInstantActionSuites
     // shared fit and the wingman airframe's own slots and pylons, a sideways step on a field
     // writes the fit, CANCEL restores what stood on entry, ACCEPT keeps it, and Fly Mission's def
     // carries the kept fit.
-    private static void OriginalLoadout(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
+    private static void OriginalLoadout(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, MenuLayoutScreen? section)
     {
         if (!EnterInstantAction(ctx, host, seat, shell, fit))
         {
@@ -471,12 +507,20 @@ internal static class MenuInstantActionSuites
 
         int pylons = def?.Hardpoints?.Count ?? 0;
         ctx.Check(shell.Rows.Count == guns + pylons + 2, $"one field per firable gun slot and per pylon of the {ia.WingmanPlane.Name}, then ACCEPT and CANCEL ({shell.Rows.Count} rows, {guns} guns, {pylons} pylons)");
-        ctx.Check(Row(shell, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0") is { X: 136f, Y: 120f, Width: 148f, Height: 15f },
+        var ammo = Box(section, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0");
+        var acceptAt = Corner(section, OriginalInstantActionScreen.LoadoutAcceptKey);
+        var cancelAt = Corner(section, OriginalInstantActionScreen.LoadoutCancelKey);
+        string backdrop = section?.Widget("OL_BACKGROUND")?.Art.FirstOrDefault() ?? string.Empty;
+        ctx.CheckShipped(ammo == (136f, 120f, 148f, 15f) && acceptAt == (341f, 553f) && cancelAt == (551f, 553f) && backdrop == "OL_BackGround.jpg",
+            $"the install's first ammunition field, plaques and backdrop ({ammo}, {acceptAt}, {cancelAt}, {backdrop})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0") is { } field && (field.X, field.Y, field.Width, field.Height) == ammo,
             $"the first ammunition field stands at its authored box ({Row(shell, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0")?.X})");
-        ctx.Check(Row(shell, OriginalInstantActionScreen.LoadoutAcceptKey) is { X: 341f, Y: 553f, Enabled: true } && Row(shell, OriginalInstantActionScreen.LoadoutCancelKey) is { X: 551f, Y: 553f, Enabled: true },
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LoadoutAcceptKey) is { Enabled: true } acceptRow && (acceptRow.X, acceptRow.Y) == acceptAt
+                && Row(shell, OriginalInstantActionScreen.LoadoutCancelKey) is { Enabled: true } cancelRow && (cancelRow.X, cancelRow.Y) == cancelAt,
             $"ACCEPT and CANCEL LOADOUT stand at their authored places");
         var board = shell.Compose();
-        ctx.Check(board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "OL_BackGround.jpg", $"the screen's background is the section's own ({board.Backdrop.Count})");
+        ctx.Check(backdrop.Length > 0 && board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == backdrop,
+            $"the screen's background is the section's own ({board.Backdrop.Count})");
         ctx.Check(board.Lines.Any(l => l.Text == ia.WingmanPlane.Name), $"and the fitted aircraft is named on it");
 
         OriginalRow? rocket = null;
@@ -614,7 +658,7 @@ internal static class MenuInstantActionSuites
     // and the launch that follows carries both seats and the picked race window.
     private static void OriginalTwoSeats(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
-        PlayerSetupFeature setup, InstantActionFeature ia, List<MenuExit> exits)
+        PlayerSetupFeature setup, InstantActionFeature ia, List<MenuExit> exits, MenuLayoutScreen? section)
     {
         if (!EnterInstantAction(ctx, host, seat, shell, fit))
         {
@@ -646,8 +690,8 @@ internal static class MenuInstantActionSuites
             $"the race blanks the wingman count and the enemy boxes ({Row(shell, OriginalInstantActionScreen.WingmenKey)?.Enabled})");
         ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey,
             $"and the cursor left on it lifts to the live box above it, not the far page ({shell.FocusedKey})");
-        OriginalRaceTime(ctx, host, seat, shell, ia, livesLabel);
-        OriginalRaceBots(ctx, host, seat, shell, setup, ia);
+        OriginalRaceTime(ctx, host, seat, shell, ia, livesLabel, section);
+        OriginalRaceBots(ctx, host, seat, shell, setup, ia, section);
 
         var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey);
         ctx.Check(fly != null, $"Fly Mission is on screen");
@@ -678,11 +722,13 @@ internal static class MenuInstantActionSuites
         }
     }
 
-    // The race time box over the install's layout with a second seat joined on a stunt run. It
-    // stands on the lives box's line, which a race leaves free, between the wingman row and the
-    // mission type. The keyboard walk reaches it there. A sideways step picks the next window.
+    // The race time box over the layout with a second seat joined on a stunt run. It stands on the
+    // lives box's line, which a race leaves free; on the install that is between the wingman row and
+    // the mission type. The keyboard walk reaches it there. A sideways step picks the next window.
     // Another mission type hides it with the pick kept and brings the lives box back with its count.
-    private static void OriginalRaceTime(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia, string livesLabel)
+    private static void OriginalRaceTime(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia, string livesLabel,
+        MenuLayoutScreen? section)
     {
         var rows = shell.Rows;
         int at = -1;
@@ -695,7 +741,12 @@ internal static class MenuInstantActionSuites
         }
 
         var box = at >= 0 ? rows[at] : null;
-        ctx.Check(box is { Visible: true, Enabled: true, Column: 1, Label: "5 minutes", X: 525f, Y: 257.5f, Width: 110f, Height: 18f },
+        var mission = Box(section, OriginalInstantActionScreen.MissionKey);
+        float titleX = section?.Widget("IA_T_MISSIONTITLE")?.Int("X") ?? -1;
+        ctx.CheckShipped(box is { X: 525f, Y: 257.5f, Height: 18f } && titleX == 420f,
+            $"on the install the race time box is at 525, 257.5 under a title at x 420 ({box?.X}, {box?.Y}, {titleX})");
+        ctx.Check(box is { Visible: true, Enabled: true, Column: 1, Label: "5 minutes", Width: 110f }
+                && box.X == mission.X && box.Height == mission.ItemHeight && box.Y == Row(shell, OriginalInstantActionScreen.LivesKey)?.Y,
             $"two seats show the race time box on the lives box's clear line at five minutes ({box?.Label}, {box?.X}, {box?.Y})");
         if (box == null)
         {
@@ -705,23 +756,33 @@ internal static class MenuInstantActionSuites
         ctx.Check(!rows.Any(r => r.Key != box.Key && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < box.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
             $"no other row shares its space ({box.Y})");
-        ctx.Check(at > 0 && at + 1 < rows.Count && rows[at - 1].Key == OriginalInstantActionScreen.LivesKey && rows[at + 1].Key == OriginalInstantActionScreen.MissionKey,
-            $"its row stands with the hidden lives box's, before the mission type ({(at > 0 ? rows[at - 1].Key : "?")}, {(at + 1 < rows.Count ? rows[at + 1].Key : "?")})");
-        ctx.Check(HasLine(shell, "Race Time:", 420f, 257.5f), $"titled in the column's title ink and place");
+        string before = at > 0 ? rows[at - 1].Key : "?";
+        string after = at + 1 < rows.Count ? rows[at + 1].Key : "?";
+        ctx.CheckShipped(before == OriginalInstantActionScreen.LivesKey && after == OriginalInstantActionScreen.MissionKey,
+            $"on the install its row stands with the hidden lives box's, before the mission type ({before}, {after})");
+        ctx.Check(at > 0 && at + 1 < rows.Count && rows[at - 1].Y <= box.Y && rows[at + 1].Y > box.Y,
+            $"its row stands where its line falls, before the first box below it ({before}, {after})");
+        ctx.Check(HasLine(shell, "Race Time:", titleX, box.Y), $"titled in the column's title ink and place");
 
         ctx.Check(shell.InstantAction.PoseRaceTime() && shell.FocusedKey == OriginalInstantActionScreen.RaceTimeKey,
             $"the screenshot aid's pose focuses it ({shell.FocusedKey})");
         Press(host, seat, Up);
-        bool upLands = shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey;
+        string up = shell.FocusedKey;
         Press(host, seat, Down);
         bool downLands = shell.FocusedKey == OriginalInstantActionScreen.RaceTimeKey;
-        ctx.Check(upLands && downLands, $"Up walks past the blank wingman boxes to the pilot plane and Down back onto it ({upLands}, {shell.FocusedKey})");
+        ctx.CheckShipped(up == OriginalInstantActionScreen.PlayerPlaneKey,
+            $"on the install Up walks past the blank wingman boxes to the pilot plane ({up})");
+        ctx.Check(up != OriginalInstantActionScreen.RaceTimeKey && downLands,
+            $"Up walks to the live box above it and Down back onto it ({up}, {shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.RaceWindowMinutes == 10 && Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label == "10 minutes",
             $"a sideways step picks the next window ({ia.RaceWindowMinutes})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.MissionKey,
-            $"and Down leaves it for the mission type, drawn under it ({shell.FocusedKey})");
+        ctx.CheckShipped(shell.FocusedKey == OriginalInstantActionScreen.MissionKey,
+            $"on the install Down leaves it for the mission type, drawn under it ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey != OriginalInstantActionScreen.RaceTimeKey,
+            $"and Down leaves it for the box under it ({shell.FocusedKey})");
+        OriginalWalk.WalkTo(shell, OriginalInstantActionScreen.MissionKey, frame => Press(host, seat, frame));
         Press(host, seat, Right);
         ctx.Check(ia.MissionType.Key == "zeppelin_run" && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false }
             && !HasLine(shell, "Race Time:"),
@@ -735,29 +796,37 @@ internal static class MenuInstantActionSuites
             $"and stunt flying brings it back with the pick kept and the lives box gone again ({Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label})");
     }
 
-    // The race toggle over the install's layout. A bot row left on a stunt run's join board shows it
-    // off on the clear line over the enemy block. The row's removal hides it again.
+    // The race toggle over the layout. A bot row left on a stunt run's join board shows it off on
+    // the setup column's second clear line. On the install that line is over the enemy block. The
+    // row's removal hides it again.
     private static void OriginalRaceBots(
-        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, PlayerSetupFeature setup, InstantActionFeature ia)
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, PlayerSetupFeature setup, InstantActionFeature ia,
+        MenuLayoutScreen? section)
     {
         ctx.Check(Row(shell, OriginalInstantActionScreen.RaceBotsKey) is { Visible: false } && !HasLine(shell, "Race Bots:"),
             $"with no bot row on the join board the race toggle is hidden ({ia.MissionType.Key})");
         ctx.Check(setup.AddBot(), $"a bot row joins the board");
         var toggle = Row(shell, OriginalInstantActionScreen.RaceBotsKey);
-        ctx.Check(!ia.RaceBots && toggle is { Visible: true, Enabled: true, Column: 1, Label: "Off", X: 525f, Y: 327.5f, Width: 60f, Height: 18f }
-            && HasLine(shell, "Race Bots:", 420f, 327.5f),
-            $"the race toggle shows off on the clear line over the enemy block ({toggle?.Label}, {toggle?.X}, {toggle?.Y})");
+        var mission = Box(section, OriginalInstantActionScreen.MissionKey);
+        float titleX = section?.Widget("IA_T_MISSIONTITLE")?.Int("X") ?? -1;
+        ctx.CheckShipped(toggle is { X: 525f, Y: 327.5f, Height: 18f },
+            $"on the install the race toggle is at 525, 327.5 ({toggle?.X}, {toggle?.Y})");
+        ctx.Check(!ia.RaceBots && toggle is { Visible: true, Enabled: true, Column: 1, Label: "Off", Width: 60f }
+            && toggle.X == mission.X && toggle.Height == mission.ItemHeight && HasLine(shell, "Race Bots:", titleX, toggle.Y),
+            $"the race toggle shows off on the setup column's next clear line ({toggle?.Label}, {toggle?.X}, {toggle?.Y})");
         ctx.Check(toggle != null && !shell.Rows.Any(r => r.Key != toggle.Key && r.Visible && r.Width > 0f && r.Height > 0f
             && r.X < toggle.X + toggle.Width && toggle.X < r.X + r.Width && r.Y < toggle.Y + toggle.Height && toggle.Y < r.Y + r.Height),
             $"no other row shares its space");
 
-        // The walk reaches it under the environment, a sideways press flips it in place, and Down
-        // leaves it past the blank enemy block.
+        // On the install the walk reaches it under the environment. A sideways press flips it in
+        // place, and Down leaves it past the blank enemy block.
         Press(host, seat, Down);
         bool fromMission = shell.FocusedKey == OriginalInstantActionScreen.EnvironmentKey;
         Press(host, seat, Down);
-        ctx.Check(fromMission && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey,
-            $"Down walks from the mission type over the environment onto the toggle ({fromMission}, {shell.FocusedKey})");
+        ctx.CheckShipped(fromMission && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey,
+            $"on the install Down walks from the mission type over the environment onto the toggle ({fromMission}, {shell.FocusedKey})");
+        OriginalWalk.WalkTo(shell, OriginalInstantActionScreen.RaceBotsKey, frame => Press(host, seat, frame));
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey, $"the walk reaches the toggle ({shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.RaceBots && shell.FocusedKey == OriginalInstantActionScreen.RaceBotsKey && Row(shell, OriginalInstantActionScreen.RaceBotsKey)?.Label == "On",
             $"Right turns it on and keeps the cursor on it ({ia.RaceBots}, {shell.FocusedKey})");
@@ -807,6 +876,24 @@ internal static class MenuInstantActionSuites
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         return shell.Screen == OriginalScreen.InstantAction;
     }
+
+    // A list or dropdown widget's box as the layout authors it: its corner, width and item height.
+    private static (float X, float Y, float Width, float ItemHeight) Box(MenuLayoutScreen? section, string key) =>
+        section?.Widget(key) is { } widget
+            ? (widget.Int("X"), widget.Int("Y"), widget.Int("Width"), widget.Int("ItemHeight"))
+            : (-1f, -1f, -1f, -1f);
+
+    // A widget's authored corner.
+    private static (float X, float Y) Corner(MenuLayoutScreen? section, string key) =>
+        section?.Widget(key) is { } widget ? (widget.Int("X"), widget.Int("Y")) : (-1f, -1f);
+
+    // The live row of the same column standing nearest above a box and over part of its width. A
+    // Down onto the box starts there. Ties on a line go to the row whose edge is nearest.
+    private static string AboveKey(OriginalShell shell, OriginalRow box) =>
+        shell.Rows.Where(r => r.Key != box.Key && r.Column == box.Column && r.Visible && r.Enabled
+                && r.Y + r.Height <= box.Y && r.X < box.X + box.Width && box.X < r.X + r.Width)
+            .OrderByDescending(r => r.Y).ThenBy(r => Math.Abs(r.X - box.X))
+            .Select(r => r.Key).FirstOrDefault() ?? "none";
 
     // The index of the open list's row carrying a label, or -1.
     private static int LabelRow(OriginalShell shell, string label)

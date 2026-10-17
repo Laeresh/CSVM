@@ -985,8 +985,8 @@ public class OriginalInstantActionTests
         var host = Host(out _, stock: true, out _, planes: store);
         host.Module.OpenInstantAction();
 
-        // The stock Bloodhawk hangs three pylons, 1, 5 and 2 in fill order, so all three of the
-        // fixture's rocket fields stand.
+        // The stock Bloodhawk carries two gun groups and hangs three pylons, 1, 5 and 2 in fill
+        // order. Those two gun fields and three rocket fields stand.
         Click(host, OriginalInstantActionScreen.PlayerPlaneKey);
         Click(host, 3);
         Assert.Equal("Bloodhawk", host.Module.PilotRoster[3].Name);
@@ -995,6 +995,7 @@ public class OriginalInstantActionTests
             new[]
             {
                 OriginalInstantActionScreen.LoadoutAmmoPrefix + "0",
+                OriginalInstantActionScreen.LoadoutAmmoPrefix + "1",
                 OriginalInstantActionScreen.LoadoutRocketPrefix + "0",
                 OriginalInstantActionScreen.LoadoutRocketPrefix + "1",
                 OriginalInstantActionScreen.LoadoutRocketPrefix + "4",

@@ -138,6 +138,7 @@ public static class SuiteCatalog
         "menu-original-coop-boot",
         "menu-original-coop-film",
         "menu-original-coop-flow",
+        "menu-original-instant-action",
         "menu-original-lobby",
         "menu-original-lobby-teams",
         "menu-original-outlaw-list",
