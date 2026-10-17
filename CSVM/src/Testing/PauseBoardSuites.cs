@@ -6,9 +6,9 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The chrome pause board, the one free flight raises. The real board
-/// stands over a real <see cref="PauseState"/>, and its rows are pointed at through the hit test
-/// the owner's mouse reaches them by.</summary>
+/// <summary>The chrome pause board, the one a session raises where ia_escape.zrd does not read.
+/// The real board stands over a real <see cref="PauseState"/>, and its rows are pointed at through
+/// the hit test the owner's mouse reaches them by.</summary>
 internal static class PauseBoardSuites
 {
     // The rows a board with every door wired carries, in the order its menu lists them.
@@ -20,7 +20,7 @@ internal static class PauseBoardSuites
     private const int RowCount = 5;
 
     [Suite("pause-board",
-        "the chrome pause board free flight raises, pointed at with the mouse: a real PauseBoard "
+        "the chrome pause board an install without ia_escape.zrd raises, pointed at with the mouse: a real PauseBoard "
         + "follows PauseState.Changed with its cursor on Resume, a pointer already resting on a middle "
         + "row when the board appears (where a flight's released capture leaves it) leaves the cursor "
         + "on Resume, entering each row moves the shared cursor onto it, a press released on "

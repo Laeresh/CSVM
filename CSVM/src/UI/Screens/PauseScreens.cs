@@ -36,6 +36,9 @@ public sealed record PauseSheet(
     IReadOnlyList<BoardLine> Texts,
     IReadOnlyList<EscapeButton?> Strips)
 {
+    // The dialog whose frame a mode of ours borrows. Its words and score photos are dropped.
+    private const string OwnModeKey = "loading_i1d";
+
     /// <summary>Reads one dialog and its shared block, runs its script out through
     /// <see cref="EscapeDialog.Settled"/>, and resolves every label through the message
     /// table. An Instant Action dialog also takes the four texts its own script writes, which no
@@ -122,6 +125,20 @@ public sealed record PauseSheet(
             LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages),
             strips);
     }
+
+    /// <summary>The blackboard free flight and the stunt race pause on. It is an Instant Action
+    /// dialog's frame and strips with none of its script, headed by <paramref name="heading"/>
+    /// alone, as the mode's load screen is. Every <c>ia_escape.zrd</c>
+    /// dialog shares that frame and differs only in words, so <see cref="OwnModeKey"/> names one.
+    /// Null when the file does not read, which leaves the chrome board.</summary>
+    public static PauseSheet? LoadOwnMode(string zrdrPath, string messagesPath, string heading) =>
+        Load(zrdrPath, messagesPath, OwnModeKey, instantAction: true) is { } sheet
+            ? sheet with
+            {
+                Reveal = EscapeDialog.Settled(Array.Empty<BriefingStep>()),
+                Texts = LoadScreens.Texts(null, heading, zrdrPath, messagesPath),
+            }
+            : null;
 
     // The block's strips in walk order with their labels, the remake's photo strip among them.
     private static (List<EscapeButton?> Strips, List<string> Labels) StripsOf(

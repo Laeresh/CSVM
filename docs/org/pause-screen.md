@@ -389,9 +389,16 @@ the strips' light plates need. The four texts are composed through `UI/Screens/L
 the same words at the same authored points. The parchment stands or not on the dialog's own script,
 which is what keeps it off this sheet, and with no map, memento or parchment the board asks for no
 readout at all. RESTART reruns the sortie rather than a campaign mission, and PREFERENCES opens the
-same leaf the campaign sheet opens. Free flight is a mode of ours that no shipped dialog
-describes, so it keeps the chrome board, the same split the load screen makes. The
-`--menu=pauseboard-ia` door composes one with no sortie behind it.
+same leaf the campaign sheet opens. The `--menu=pauseboard-ia` door composes one with no sortie
+behind it.
+
+**Free flight and the stunt race pause on the bare blackboard.** No shipped dialog describes a
+mode of ours, so `UI/Screens/PauseScreens.cs`'s `PauseSheet.LoadOwnMode` takes one `ia_escape.zrd`
+dialog's frame and strips, which every dialog in that file shares, and drops its script and its
+words. The sheet is headed by the mode's name alone, at the point and face the load screen writes
+it (`Launch/LaunchBoards.cs`'s `Subject`). A sortie or Dogfight whose own dialog does not read
+falls to the same sheet, and the chrome board stays only for an extraction with no
+`ia_escape.zrd`.
 
 **A Dogfight pauses on its mode's briefing, which the original never shows there.**
 `Launch/SessionBoards.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s

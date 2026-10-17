@@ -303,7 +303,8 @@ internal sealed class SessionBoards
     {
         if (sheetInputs.Campaign is not { } campaign)
         {
-            return BuildMultiplayerPauseBoard(sheetInputs) ?? BuildInstantActionPauseBoard(sheetInputs);
+            return BuildMultiplayerPauseBoard(sheetInputs) ?? BuildInstantActionPauseBoard(sheetInputs)
+                ?? BuildOwnModePauseBoard();
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
@@ -348,9 +349,24 @@ internal sealed class SessionBoards
             _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
     }
 
+    // A mode of ours, or a sortie whose own dialog did not read: the bare blackboard headed as the
+    // load screen heads it (docs/org/pause-screen.md). It needs no readout.
+    private OriginalPauseBoard? BuildOwnModePauseBoard()
+    {
+        string heading = LaunchBoards.Subject(_in.Spec).ToUpperInvariant();
+        if (PauseSheet.LoadOwnMode(_in.ZrdrPath, _in.MessagesPath, heading) is not { } sheet)
+        {
+            Log.Warn("ui", $"pause: no ia_escape.zrd blackboard for {heading}");
+            return null;
+        }
+
+        Log.Info("ui", $"pause: {_in.Spec.Chapter} {heading} draws the bare blackboard");
+        return OriginalPauseBoard.Build(
+            _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
+    }
+
     // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for its chapter and mission
-    // type. It carries no map, memento or parchment and so needs no readout. Free flight has no
-    // shipped dialog and keeps the chrome board, as on the load screen (docs/org/pause-screen.md).
+    // type. It carries no map, memento or parchment and so needs no readout.
     private OriginalPauseBoard? BuildInstantActionPauseBoard(PauseSheetInputs sheetInputs)
     {
         if (sheetInputs.InstantAction is not { } ia

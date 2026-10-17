@@ -20,6 +20,19 @@ namespace CSVM.Launch;
 /// </summary>
 internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
 {
+    /// <summary>What the load and pause screens call this flight. An Instant Action mission takes the
+    /// wizard's own name for it ("Attacking a Zeppelin"), anything else its mode. ⚠ Not ModeName,
+    /// that is the log file's internal tag ("fly", "stunt"), which is not a player's word.</summary>
+    public static string Subject(SessionSpec launch)
+    {
+        if (launch.IaDef is { } def)
+        {
+            return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
+        }
+        return launch.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
+            : launch.Versus ? "Dogfight" : "Free Flight";
+    }
+
     /// <summary>The load screen for the launch the spec describes. A campaign launch takes the
     /// original's chart sheet for the mission at <paramref name="missionSeq"/>, the spec's own
     /// position by default. Everything else takes its blackboard (docs/org/loading-screen.md).
@@ -267,16 +280,5 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
                 ? CampaignProfileStore.ForSession(spec.ProfilesDir).Load(name)
                 : null);
 
-    // What the load screen calls this flight. An Instant Action mission takes the wizard's own name
-    // for it ("Attacking a Zeppelin"), anything else its mode. ⚠ Not ModeName, that is the log
-    // file's and the startup line's internal tag ("fly", "stunt"), which is not a player's word.
-    private string LaunchSubject()
-    {
-        if (spec.IaDef is { } def)
-        {
-            return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
-        }
-        return spec.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
-            : spec.Versus ? "Dogfight" : "Free Flight";
-    }
+    private string LaunchSubject() => Subject(spec);
 }
