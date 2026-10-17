@@ -190,6 +190,25 @@ the wider 80° FOV.
   `staticprop1`, `prop1`, `prop1b`, `nitroprop1`). So mode 7's extra hiding is the prop disc plus
   the cockpit lamp and whatever hangs on the marker nodes (mounted pylon ordnance, muzzle flashes).
 
+**Remake-only, both presentations:** mode 6 keeps `dontmove`, so the original draws the outside
+model's wingtip lights and prop discs against `cockpit1`, a different model, and they float beside
+its fins and nacelles. The port seats them on the interior in mode 6 instead
+(`Flight.Hud.CockpitReseat`):
+- A light on its outside fin's peak moves to the same side's interior fin peak, with a point light
+  of its own in the cockpit pass. A fin peak is the highest fixed vertex on a rudder's hinge line.
+  Only the Warhawk's lights qualify; the Peacemaker's and Kestrel's sit elsewhere on the wing.
+- A light with no interior wingtip under it is hidden in mode 6: the Firebrand's and Devastator's
+  pair, and the Kestrel's `wing_flare1`. Every other light stays where the original draws it.
+- The Warhawk's two side props move onto hand-fitted noses of the interior nacelles. Its centre
+  prop is behind the panel and stays.
+Each copy keeps its authored size in airframe metres and the interior's −4.70° tilt.
+
+The interior's own control surfaces turn about their mesh's leading edge
+(`Flight.Airframe.ControlSurfaceAnimator.LeadingEdge`), also remake-only. Their node origins sit off
+the hinge, 0.65 to 0.67 m on the Warhawk's ailerons and elevators and 0.04 to 0.36 m elsewhere, so
+turning about the origin swings each surface out of its wing. The outside surfaces, whose origins
+lie on the hinge, turn about their origin as before.
+
 ## FOV constants and aspect correction
 
 The two base numbers are stored **in radians as horizontal half-angle constants**, side by side in

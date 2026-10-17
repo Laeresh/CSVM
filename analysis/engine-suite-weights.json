@@ -158,6 +158,8 @@
     "cockpit-interior": 1.967,
     "cockpit-overlay-pass": 0.247,
     "cockpit-panel-staging": 0.327,
+    "cockpit-reseat": 1.45,
+    "cockpit-surface-hinges": 1.5,
     "cockpit-sun-bearing": 0.05,
     "crash-rig-anchors": 0.316,
     "crater-carve": 1.363,
