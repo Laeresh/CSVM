@@ -209,6 +209,9 @@ internal sealed class HumanFlightAdapter
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
             raceGhost: _world.Racing);
         var planeModel = planeBuilder.Build(planeName);
+        // Before the ghost stamp, so the copies on the interior wear the stamp their originals do.
+        var reseat = CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
+
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
         // every camera keeps; the four-wide band then serves this machine's seats alone.
@@ -231,8 +234,9 @@ internal sealed class HumanFlightAdapter
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
-                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
+                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden),
                 Interior = planeBuilder.CockpitInterior,
+                Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
             },
             Scheme = scheme,
