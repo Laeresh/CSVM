@@ -361,11 +361,12 @@ public class OriginalOptionsTests
         Assert.Contains(moved.Lines, l => l.Text == "Master" && l.Ink == BoardInk.Row);
 
         // The slot is drawn at the track's corner, the thumb at the level's own place on it. The
-        // Master row authors no slider, so it takes the shipped art names as well as the sizes.
-        var masterSlot = board.Pictures.Single(p => p.Art.Name == "PF_B_SliderSlot.png");
-        Assert.Equal((130f, 276f), (masterSlot.X, masterSlot.Y));
-        var masterThumb = board.Pictures.Single(p => p.Art.Name == "PF_B_Slider.png");
-        Assert.Equal((258f, 267f), (masterThumb.X, masterThumb.Y));
+        // Master row authors no slider, so it draws the music slider's slot and thumb.
+        Assert.DoesNotContain(board.Pictures, p => p.Art.Name.StartsWith("PF_B_Slider", StringComparison.Ordinal));
+        var masterSlot = board.Pictures.Single(p => p.Art.Name == "PP_B_SliderSlot.png" && p.Y == 276f);
+        Assert.Equal(130f, masterSlot.X);
+        var masterThumb = board.Pictures.Single(p => p.Art.Name == "PP_B_Slider.png" && p.Y == 267f);
+        Assert.Equal(258f, masterThumb.X);
         // The music row stands at the shipped default of 50, which is half a run along its slot.
         Assert.Equal(130f, board.Pictures.Single(p => p.Art.Name == "PP_B_SliderSlot.png" && p.Y == 336f).X);
         Assert.Equal(194f, board.Pictures.Single(p => p.Art.Name == "PP_B_Slider.png" && p.Y == 327f).X);

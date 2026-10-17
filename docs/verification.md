@@ -988,7 +988,7 @@ member, and it does not go here.
 - **INSTR-94**, **A suite that reads a `user://` store passes on what the machine holds, not on what
   the suite set up: hand the presentation a scratch store, and prove nothing reads the production
   one by making its accessor throw for one run, with an unconverted suite failing as the
-  control.** `menu-original-tracer`'s aircraft column scrolled only on a profile holding a saved
+  control.** `menu-original-tracer-core`'s aircraft column scrolled only on a profile holding a saved
   custom plane, because the eleven stock airframes exactly fill the column's eleven-row window.
 - **INSTR-95**, **A draw-order overpaint is measured against the same pose with the suspect surface
   forced to draw first, never by counting pixels where the composite equals the backdrop exactly: a

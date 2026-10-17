@@ -184,7 +184,9 @@ non-failure, so the local battery is unchanged. The tier checks mechanisms on in
 data and never replaces the full local battery. A suite whose install reads sit in a few legs
 splits rather than staying off: those legs keep the original name and its `RequireData` gates, the
 rest move to a `<name>-core` suite on the tier, and no leg runs in both, so the local battery still
-makes every check once.
+makes every check once. A check that pins a value the install ships reads what it expects from the
+data root, and keeps its literal pin as a `TestContext.CheckShipped`, which only a real extraction
+makes, so a decode that garbles the shipped value still goes red on the install.
 
 **`RunCiSuites.ps1` is the CI engine stage, and runs locally on Linux or macOS the same way.** The
 `engine` job in `.github/workflows/checks.yml` runs it on `ubuntu-latest` after `dotnet build

@@ -140,6 +140,7 @@ public static class SuiteCatalog
         "menu-original-lobby",
         "menu-original-lobby-teams",
         "menu-original-outlaw-list",
+        "menu-original-tracer-core",
         "menu-original-version",
         "menu-player-setup-seats",
         "motor-acceleration",

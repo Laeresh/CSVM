@@ -999,6 +999,17 @@ public sealed class TestContext
         Check(expected == actual, $"{Log.Format(what)} expected={expected} actual={actual}");
     }
 
+    /// <summary>A check on a value the install ships, which the invented tree does not hold. It is
+    /// made over a real extraction only, where it catches a decode that garbles the shipped value.
+    /// The suite's other checks read what they expect from the data root.</summary>
+    public void CheckShipped(bool ok, FormattableString what)
+    {
+        if (!SyntheticData)
+        {
+            Check(ok, what);
+        }
+    }
+
     /// <summary>Something worth having in the report that is not a verdict, a measured count, a
     /// caveat about what this run could not see.</summary>
     public void Note(FormattableString what)
