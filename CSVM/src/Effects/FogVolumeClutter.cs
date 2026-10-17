@@ -321,7 +321,7 @@ public sealed partial class FogVolumeClutter : Node3D
         }
         kind.PuffTried = true;
         if (!DrawsRenderedPuffs(kind.Name) || CloudPuffs.Deck() is not { } pool
-            || textures.FindImage(kind.TextureName) is not { } mask || CloudPuffs.MaskTint(mask) is not { } tint)
+            || textures.FindImage(kind.TextureName, authored: true) is not { } mask || CloudPuffs.MaskTint(mask) is not { } tint)
         {
             return;
         }

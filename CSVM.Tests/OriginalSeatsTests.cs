@@ -55,13 +55,53 @@ public class OriginalSeatsTests
         Assert.False(Fly(shell).Enabled);
         Assert.Contains(shell.Compose().Lines, l => l.Text.StartsWith("Dogfight needs a second seat", StringComparison.Ordinal));
 
-        // A disabled FLY takes no keyboard focus (Up wraps past it) and no click.
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.AirframeKey(10), shell.FocusedKey);
+        // A disabled FLY takes no keyboard focus and no click.
         var fly = Fly(shell);
         var step = Click(shell, fly.X + 4f, fly.Y + 4f);
         Assert.Null(step.Exit);
         Assert.False(setup.Seats[0].Confirmed);
+    }
+
+    /// <summary>The Dogfight screen's two remake-only match rules stand over the aircraft column.
+    /// Up from its first row walks onto Time, then Kills. A sideways press steps a rule, clamped,
+    /// and a press steps it up, past its top round to no limit. Free Flight shows neither.</summary>
+    [Fact]
+    public void TheDogfightScreenStepsItsKillTargetAndTimeLimit()
+    {
+        var shell = Shell(out var setup, out _);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
+        Assert.DoesNotContain(shell.Rows, r => r.Key is OriginalShell.KillTargetKey or OriginalShell.TimeLimitKey);
+        shell.Step(Back);
+
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
+        Assert.Contains(shell.Rows, r => r.Key == OriginalShell.KillTargetKey && r.Label == "Kills  5");
+        Assert.Contains(shell.Rows, r => r.Key == OriginalShell.TimeLimitKey && r.Label == "Time  5 min");
+
+        shell.Step(Right);
+        Assert.Equal(OriginalShell.AirframeKey(0), shell.FocusedKey);
+        shell.Step(Up);
+        Assert.Equal(OriginalShell.TimeLimitKey, shell.FocusedKey);
+        shell.Step(Right);
+        Assert.Equal(6, setup.TimeLimitMinutes);
+        Assert.Equal(OriginalShell.TimeLimitKey, shell.FocusedKey);
+        shell.Step(Up);
+        Assert.Equal(OriginalShell.KillTargetKey, shell.FocusedKey);
+        shell.Step(new MenuCommands { MoveX = -1 });
+        Assert.Equal(4, setup.KillTarget);
+        for (int i = 0; i < PlayerSetupFeature.MaxKillTarget; i++)
+        {
+            shell.Step(Right);
+        }
+
+        Assert.Equal(PlayerSetupFeature.MaxKillTarget, setup.KillTarget);
+        shell.Step(Accept);
+        Assert.Equal(0, setup.KillTarget);
+        Assert.Contains(shell.Rows, r => r.Key == OriginalShell.KillTargetKey && r.Label == "Kills  no limit");
+        shell.Step(Accept);
+        Assert.Equal(1, setup.KillTarget);
     }
 
     [Fact]

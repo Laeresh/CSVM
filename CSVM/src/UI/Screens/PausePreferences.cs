@@ -5,7 +5,6 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
 using Godot;
@@ -41,8 +40,8 @@ public sealed partial class PausePreferences : Control
     // an event and never a held state, so it is counted rather than polled.
     private int _wheel;
 
-    // What the mouse mode was when the leaf went up, so closing it puts back what stood behind it:
-    // the Original sheet has already hidden the OS cursor, Built-in's board has not.
+    // What the mouse mode was when the leaf went up, so closing it puts back what stood behind it.
+    // The Original sheet has already hidden the OS cursor, and the chrome board has not.
     private Input.MouseModeEnum _mouseMode = Input.MouseModeEnum.Visible;
     private bool _tookCursor;
 
@@ -168,7 +167,7 @@ public sealed partial class PausePreferences : Control
         }
 
         _input = pollers[Math.Clamp(owner, 0, pollers.Count - 1)];
-        _seat = new PointerSeat(new BuiltInSeat(_input), PointerAt, PointerDown, TakeWheel);
+        _seat = new PointerSeat(new MenuInputSeat(_input), PointerAt, PointerDown, TakeWheel);
         // Primed, and the wheel drained with it: a click still held from the strip that opened this
         // leaf must not read as a fresh press on the row the page opens under it.
         _seat.Prime();

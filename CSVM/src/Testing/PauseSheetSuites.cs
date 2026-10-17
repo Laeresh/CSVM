@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
@@ -200,7 +201,9 @@ internal static class PauseSheetSuites
         + "loading_i dialogs: each of the seven environments Instant Action offers resolves its own "
         + "dialog for all four mission types rather than falling back on the file's default, the "
         + "composition is the load screen's blackboard with its three centred photographs and the "
-        + "dialog's own four texts, no chart, parchment, memento or world icon reaches it, every "
+        + "dialog's own four texts, free flight and the stunt race stand on that blackboard and its strips "
+        + "with no photograph and their heading alone where the load screen writes it, no chart, "
+        + "parchment, memento or world icon reaches it, every "
         + "bitmap it names exists in the extraction, C1's stunt sheet matches the reference still "
         + "word for word at its authored points, the remake's photo strip takes the free cell under "
         + "RESTART on a block that stands three across, the environment digit is read rather than assumed "
@@ -247,6 +250,7 @@ internal static class PauseSheetSuites
             $"every environment the game offers resolves a sheet for all four mission types");
         CheckOwnDialog(ctx, sheets);
         CheckBlackboard(ctx, sheets, report);
+        CheckOwnModeBlackboard(ctx, report);
         CheckBlackboardArt(ctx, sheets, report);
         CheckFilmedBlackboard(ctx, report);
         CheckEnvironmentIsRead(ctx, report);
@@ -362,6 +366,34 @@ internal static class PauseSheetSuites
         }
 
         return true;
+    }
+
+    // Free flight and the stunt race stand on the same blackboard and strips with no photograph. Each
+    // writes its heading alone, at the point and face its load screen writes it.
+    private static void CheckOwnModeBlackboard(TestContext ctx, StringBuilder report)
+    {
+        foreach (string heading in new[] { "FREE FLIGHT", "STUNT RACE" })
+        {
+            if (PauseSheet.LoadOwnMode(ctx.ZrdrPath, ctx.MessagesPath, heading) is not { } sheet)
+            {
+                ctx.Check(false, $"{heading} resolves the bare blackboard");
+                continue;
+            }
+
+            var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+            var expected = LoadScreens.Texts(null, heading, ctx.ZrdrPath, ctx.MessagesPath);
+            report.AppendLine(
+                $"{heading}: backdrop={string.Join(",", board.Backdrop.Select(p => p.Art.Name))} "
+                + $"pictures={board.Pictures.Count} lines={string.Join("|", board.Lines.Select(l => l.Text))}");
+            ctx.Check(
+                board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "loadframempt2",
+                $"{heading} stands on the Instant Action blackboard");
+            ctx.Same(0, board.Pictures.Count, $"{heading} draws none of the dialog's score photographs");
+            ctx.Check(
+                board.Lines.Count == 1 && board.Lines[0] == expected[0],
+                $"{heading} writes its heading alone where its load screen does ({board.Lines.Count} lines)");
+            ctx.Check(Striped(board), $"{heading} carries the five strips at the block's points");
+        }
     }
 
     private static bool Striped(ComposedBoard board)

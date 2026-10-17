@@ -4,18 +4,16 @@ using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>
-/// The wallet gate B13 wires at the hangar's existing Purchase/Sell seam: a campaign flow refuses
-/// an unaffordable build, an unavailable airframe and a purchase past the decoded slot cap, credits
-/// the wallet at the decoded full sell price with the special-plane and two-plane floor refusals,
-/// and the two wallet-free doors (a null <see cref="HangarFlow.Campaign"/>) never consult any of
-/// it.
+/// The wallet gate B13 wires at the hangar's Purchase/Sell seam. A campaign build refuses an
+/// unaffordable build, an unavailable airframe and a purchase past the decoded slot cap. A sale
+/// credits the decoded full price, with the special-plane and two-plane floor refusals. A
+/// wallet-free <see cref="HangarFeature"/> never consults any of it.
 /// </summary>
 public class CampaignWalletTests : IDisposable
 {
@@ -52,12 +50,11 @@ public class CampaignWalletTests : IDisposable
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var campaign = new CampaignWallet(_profiles, profile, _planes);
-        var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
-        flow.Accept(); // New Plane
+        var flow = Open(campaign);
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 5; // Devastator: availability 1, so a fresh profile clears the threshold
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "Broke Build";
-        Walk(flow, HangarScreen.Purchase);
 
         Assert.False(flow.Commit());
         Assert.Contains("INSUFFICIENT FUNDS", flow.Message, StringComparison.Ordinal);
@@ -76,12 +73,11 @@ public class CampaignWalletTests : IDisposable
         var campaign = new CampaignWallet(_profiles, profile, _planes);
         Assert.False(campaign.IsAirframeAvailable(2)); // Balmoral, availability 3
 
-        var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
-        flow.Accept();
+        var flow = Open(campaign);
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 2;
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "Too Soon";
-        Walk(flow, HangarScreen.Purchase);
 
         Assert.False(flow.Commit());
         Assert.Contains("not available yet", flow.Message, StringComparison.Ordinal);
@@ -101,11 +97,10 @@ public class CampaignWalletTests : IDisposable
         FillBought(profile, CampaignWallet.PurchasedPlaneCap);
 
         var flow = CampaignFlow(profile);
-        flow.Accept(); // the buy row
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 10;
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "One Too Many";
-        Walk(flow, HangarScreen.Purchase);
 
         Assert.False(flow.Commit());
         Assert.Contains("hangar limit", flow.Message, StringComparison.Ordinal);
@@ -148,12 +143,11 @@ public class CampaignWalletTests : IDisposable
         profile.MissionsCompleted = 20; // clears every airframe's threshold
         var campaign = new CampaignWallet(_profiles, profile, _planes);
 
-        var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
-        flow.Accept();
+        var flow = Open(campaign);
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 10; // Warhawk, cheapest airframe
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "Paid For";
-        Walk(flow, HangarScreen.Purchase);
         int cost = HangarEconomy.Price(flow.Scratch).Total.Cost;
 
         Assert.True(flow.Commit());
@@ -173,12 +167,11 @@ public class CampaignWalletTests : IDisposable
         profile.MissionsCompleted = 20;
         var campaign = new CampaignWallet(_profiles, profile, _planes);
 
-        var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
-        flow.Accept();
+        var flow = Open(campaign);
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 10;
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "Round Trip";
-        Walk(flow, HangarScreen.Purchase);
         flow.Commit();
         int fundsAfterBuy = profile.Funds;
         int price = campaign.SellPrice("Round Trip");
@@ -222,22 +215,20 @@ public class CampaignWalletTests : IDisposable
         Assert.Equal(4, profile.Planes.Count); // the two starters plus Jumping Jane plus Extra
     }
 
-    /// <summary>The two existing doors (IA Build, top-level entry) pass no campaign context, so
-    /// funds and threshold are never consulted: an otherwise-legal build commits exactly as
-    /// It remains available on a plane whose profile funds are $0.</summary>
+    /// <summary>A wallet-free door passes no campaign context, so funds and threshold are never
+    /// consulted: an otherwise-legal build on a campaign-gated airframe commits.</summary>
     [Fact]
     public void InstantActionHangarStaysWalletFree()
     {
-        var flow = new HangarFlow(_planes, UiStrings.Empty); // no campaign argument at all
-        Assert.Null(flow.Campaign);
-        flow.Accept();
+        var flow = Open(null);
+        Assert.Null(flow.Wallet);
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 2; // Balmoral: campaign-gated above, unrestricted here
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "IA Balmoral";
-        Walk(flow, HangarScreen.Purchase);
 
         Assert.True(flow.Commit());
-        Assert.Equal(HangarExit.Built, flow.Exit);
+        Assert.Equal("IA Balmoral", flow.BuiltPlaneName);
     }
 
     /// <summary>A fresh profile owns exactly the two seeded Devastators (docs/org/hangar.md, "The
@@ -263,7 +254,7 @@ public class CampaignWalletTests : IDisposable
         var profile = CampaignProfileDef.NewProfile("Zachary");
 
         Assert.DoesNotContain(CampaignFlow(profile).Saved, p => p.Name == "IA Kestrel");
-        Assert.Contains(new HangarFlow(_planes, UiStrings.Empty).Saved, p => p.Name == "IA Kestrel");
+        Assert.Contains(Open(null).Saved, p => p.Name == "IA Kestrel");
     }
 
     /// <summary>A purchase debits the wallet, names the build into the profile and shows up in the
@@ -275,13 +266,11 @@ public class CampaignWalletTests : IDisposable
         profile.Funds = 10_000;
         profile.MissionsCompleted = 20;
         var flow = CampaignFlow(profile);
-        Assert.Equal("Buy a New Plane", flow.Page.RowText(0));
 
-        flow.Accept(); // the buy row
+        flow.StartNewPlane();
         flow.Scratch.Airframe = 10;
         flow.Scratch.Engine = 0;
         flow.Scratch.Name = "Bought";
-        Walk(flow, HangarScreen.Purchase);
         int cost = HangarEconomy.Price(flow.Scratch).Total.Cost;
         Assert.True(flow.Commit());
 
@@ -292,25 +281,20 @@ public class CampaignWalletTests : IDisposable
             CampaignFlow(profile).Saved.Select(p => p.Name));
     }
 
-    /// <summary>The campaign's trailing row is a sale, not a delete: it credits the wallet at the
-    /// decoded full build cost and drops the plane from the profile and the build store together.</summary>
+    /// <summary>A campaign deletion is a sale at the decoded full build cost. It drops the plane from
+    /// the profile and the build store together.</summary>
     [Fact]
-    public void TheSellRowSellsThePlaneAndCreditsTheFullBuildCost()
+    public void ADeletionSellsThePlaneAndCreditsTheFullBuildCost()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Planes.Add(new OwnedPlane { Name = "Spare", Airframe = 10 });
         _planes.Save(new CustomPlaneDef { Name = "Spare", Airframe = 10, Engine = 0 });
         var campaign = new CampaignWallet(_profiles, profile, _planes);
-        var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
+        var flow = Open(campaign);
         int price = campaign.SellPrice("Spare");
         Assert.True(price > 0);
 
-        Assert.Equal("Sell a plane", flow.Page.RowText(flow.Saved.Count + 1));
-        flow.FocusRow(flow.Saved.Count + 1);
-        flow.Accept(); // open the sell list
-        Assert.Equal("Sell Spare", flow.Page.RowText(2));
-        flow.FocusRow(2);
-        flow.Accept();
+        Assert.True(flow.DeleteSaved("Spare"));
 
         Assert.Equal(price, profile.Funds);
         Assert.DoesNotContain(profile.Planes, p => p.Name == "Spare");
@@ -318,59 +302,36 @@ public class CampaignWalletTests : IDisposable
         Assert.Equal(new[] { "Gypsy Magic", "The Knave" }, flow.Saved.Select(p => p.Name));
     }
 
-    /// <summary>A reward aircraft is refused on the sell row itself, and the row says so before
-    /// the press (docs/org/hangar.md, langui 704).</summary>
+    /// <summary>A reward aircraft's sale is refused in the original's words (docs/org/hangar.md,
+    /// langui 704).</summary>
     [Fact]
-    public void TheSellRowRefusesARewardAircraft()
+    public void ADeletionRefusesARewardAircraft()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Planes.Add(new OwnedPlane { Name = "Jumping Jane", Airframe = 2, Special = true });
         profile.Planes.Add(new OwnedPlane { Name = "Spare", Airframe = 10 });
         var flow = CampaignFlow(profile);
 
-        flow.FocusRow(flow.Saved.Count + 1);
-        flow.Accept();
-        Assert.Contains("cannot be sold", flow.Page.Detail(2), StringComparison.Ordinal);
-        flow.FocusRow(2);
-        flow.Accept();
+        Assert.False(flow.DeleteSaved("Jumping Jane"));
 
         Assert.Contains("cannot be sold", flow.Message, StringComparison.Ordinal);
         Assert.Equal(0, profile.Funds);
         Assert.Equal(4, profile.Planes.Count);
     }
 
-    /// <summary>The two-aircraft floor holds on the row too: a fresh profile's sell list refuses
-    /// both of its starters and the wallet never moves (langui 701).</summary>
+    /// <summary>The two-aircraft floor holds on a deletion too: a fresh profile's starters are
+    /// refused and the wallet never moves (langui 701).</summary>
     [Fact]
-    public void TheSellRowHoldsTheTwoAircraftFloor()
+    public void ADeletionHoldsTheTwoAircraftFloor()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var flow = CampaignFlow(profile);
 
-        flow.FocusRow(flow.Saved.Count + 1);
-        flow.Accept();
-        Assert.Contains("at least two planes", flow.Page.Detail(0), StringComparison.Ordinal);
-        flow.FocusRow(0);
-        flow.Accept();
+        Assert.False(flow.DeleteSaved("Gypsy Magic"));
 
         Assert.Contains("at least two planes", flow.Message, StringComparison.Ordinal);
         Assert.Equal(0, profile.Funds);
         Assert.Equal(2, profile.Planes.Count);
-    }
-
-    /// <summary>An owned row is inert over a campaign flow: the decoded economy has no partial
-    /// upgrade, so editing in place would charge for the build again and strand the old plane's
-    /// value. Instant Action's own door still opens a saved plane for editing.</summary>
-    [Fact]
-    public void AnOwnedRowDoesNotOpenAnEditOverACampaignFlow()
-    {
-        var profile = CampaignProfileDef.NewProfile("Zachary");
-        var flow = CampaignFlow(profile);
-        flow.FocusRow(1);
-        flow.Accept();
-
-        Assert.Equal(HangarScreen.PlaneSelection, flow.Screen);
-        Assert.Null(flow.EditingName);
     }
 
     /// <summary>A campaign build cannot silently overwrite an Instant Action build: the taken-name
@@ -404,16 +365,16 @@ public class CampaignWalletTests : IDisposable
         Assert.Equal(9_500, profile.Funds);
     }
 
-    /// <summary>The two wallet-free doors keep Instant Action's own verbs: a New Plane row and a
-    /// delete that credits nothing.</summary>
+    /// <summary>A wallet-free deletion removes the file and credits nothing.</summary>
     [Fact]
-    public void InstantActionKeepsItsOwnRows()
+    public void AWalletFreeDeletionRemovesTheFile()
     {
         _planes.Save(new CustomPlaneDef { Name = "IA Kestrel", Airframe = 8, Engine = 0 });
-        var flow = new HangarFlow(_planes, UiStrings.Empty);
+        var flow = Open(null);
 
-        Assert.Equal("New Plane", flow.Page.RowText(0));
-        Assert.Equal("Delete a saved plane", flow.Page.RowText(2));
+        Assert.True(flow.DeleteSaved("IA Kestrel"));
+        Assert.Null(_planes.Load("IA Kestrel"));
+        Assert.Empty(flow.Saved);
     }
 
     // Ownership records up to a wanted total, the two seeded starters counting towards it.
@@ -425,21 +386,13 @@ public class CampaignWalletTests : IDisposable
         }
     }
 
-    private static void Walk(HangarFlow flow, HangarScreen target)
+    // A feature opened over the scratch store, funded by the wallet or wallet-free under null.
+    private HangarFeature Open(CampaignWallet? campaign)
     {
-        for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length + 3; guard++)
-        {
-            if (flow.Screen == HangarScreen.Airframe)
-            {
-                flow.FocusRow(flow.Scratch.Airframe);
-            }
-
-            flow.Accept();
-        }
-
-        Assert.Equal(target, flow.Screen);
+        var feature = new HangarFeature(UiStrings.Empty, StockAirframes.Node);
+        feature.Open(_planes, campaign);
+        return feature;
     }
 
-    private HangarFlow CampaignFlow(CampaignProfileDef profile) =>
-        new(_planes, UiStrings.Empty, campaign: new CampaignWallet(_profiles, profile, _planes));
+    private HangarFeature CampaignFlow(CampaignProfileDef profile) => Open(new CampaignWallet(_profiles, profile, _planes));
 }

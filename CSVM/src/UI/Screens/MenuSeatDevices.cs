@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.Utils;
 using Godot;
 
@@ -43,7 +42,7 @@ public readonly record struct BoardScan(bool Moved, bool Cast, bool Pressed);
 /// The pad side of the shared player setup, for any presentation. It is the join board's roster
 /// (<see cref="IJoinRoster"/>) and its three gestures, the only way a pad takes a seat or the
 /// captain's chair. It also carries hotplug: a pad gone past <see cref="DeviceGrace"/> unjoins its
-/// seat, and one back at another index keeps it. A joined pad becomes a <see cref="BuiltInSeat"/>
+/// seat, and one back at another index keeps it. A joined pad becomes a <see cref="MenuInputSeat"/>
 /// over a poller bound to that one pad, and its source carries the flight binding. The feature
 /// never sees a pad index. ⚠ Seat 0's poller reads every pad nobody holds, never <c>pads[0]</c>:
 /// phantom devices occupy the early slots.
@@ -83,14 +82,14 @@ public sealed class MenuSeatDevices : IJoinRoster
     /// keyboard plus every pad nobody holds.</summary>
     public int P1Pad { get; private set; } = -1;
 
-    /// <summary>The single pad a seat's source is bound to, or -1: a pad seat is a
-    /// <see cref="BuiltInSeat"/> over a one-pad poller, and any other source has no pad of its own.</summary>
-    public static int PadOf(IMenuInputSource source) => source is BuiltInSeat seat ? seat.Input.Pad : -1;
+    /// <summary>The single pad a seat's source is bound to, or -1. A pad seat is a
+    /// <see cref="MenuInputSeat"/> over a one-pad poller. Any other source has no pad of its own.</summary>
+    public static int PadOf(IMenuInputSource source) => source is MenuInputSeat seat ? seat.Input.Pad : -1;
 
     /// <summary>The poller behind a seat's source, or null for a source that has none (a device-less
     /// seat, or a seat wearing a source of another kind). It is what a screen reading the seat's own
     /// devices needs, and the same detail read in the same one place as the pad above.</summary>
-    public static MenuInput? PollerOf(IMenuInputSource source) => (source as BuiltInSeat)?.Input;
+    public static MenuInput? PollerOf(IMenuInputSource source) => (source as MenuInputSeat)?.Input;
 
     /// <summary>The pads a seat flies with, the binding a launch carries: seat 0's poller's set,
     /// a joined pad's one device, nothing for a device-less seat.</summary>
@@ -294,7 +293,7 @@ public sealed class MenuSeatDevices : IJoinRoster
 
         var input = new MenuInput { Pads = new[] { pad } };
         input.Prime();
-        if (_setup.Join(new BuiltInSeat(input)) == null)
+        if (_setup.Join(new MenuInputSeat(input)) == null)
         {
             return false;
         }

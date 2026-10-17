@@ -198,8 +198,10 @@ After each wave (every slot's item landed, or at a pause) run the full `.\RunTes
 -GoldenWorkers 2` on the run branch in the background and log it as "Battery N on <sha> (items):
 <the four PASS/FAIL lines>". A FAIL line names the failing suite and the item that owns it; a
 red battery is reported to the user before any merge to main, since a fast-forward carries no
-message of its own to hold a waiver. Never run a battery or goldens while an agent is running its own
-engine passes if you can avoid it; the hidden desktop is shared and a rebuild under a shot breaks it.
+message of its own to hold a waiver. A goldens FLAKE row is logged with its shots and its
+`.scratch\goldens-failures\` folder, never as a plain PASS, and is reported to the user. Never
+run a battery or goldens while an agent is running its own engine passes if you can avoid it; the
+hidden desktop is shared and a rebuild under a shot breaks it.
 
 ## 7. The log
 

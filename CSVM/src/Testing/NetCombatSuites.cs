@@ -1650,7 +1650,7 @@ internal static class NetCombatSuites
             Func<CoopWingmanMessage?>? coopWingman = null,
             Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
             IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null,
-            Action? lobbyLanding = null, UI.Menu.PresentationId? presentation = null,
+            Action? lobbyLanding = null,
             Func<IReadOnlyCollection<CoopPersistMessage>?>? coopPersisted = null)
         {
             var pane = new SubViewport
@@ -1665,19 +1665,20 @@ internal static class NetCombatSuites
             pane.AddChild(camera);
             pane.AddChild(sun);
             ctx.Host.AddChild(pane);
+            var paths = new BasePaths(
+                RepoRoot: ctx.RepoRoot,
+                DataRoot: ctx.DataRoot,
+                PlanesGamezPath: ctx.PlanesGamezPath,
+                ZrdrPath: ctx.ZrdrPath,
+                SoundsPath: ctx.SoundsPath,
+                InterpPath: ctx.InterpPath,
+                MessagesPath: ctx.MessagesPath,
+                RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"));
             var session = new GameSession(spec, new LauncherContext
             {
                 Decode = ctx.Decode,
-                RepoRoot = ctx.RepoRoot,
-                DataRoot = ctx.DataRoot,
-                PlanesGamezPath = ctx.PlanesGamezPath,
-                ZrdrPath = ctx.ZrdrPath,
-                SoundsPath = ctx.SoundsPath,
-                InterpPath = ctx.InterpPath,
-                MessagesPath = ctx.MessagesPath,
-                RofPath = System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"),
-                ProbeRunner = new ProbeRunner(ctx.RepoRoot, ctx.DataRoot, ctx.ZrdrPath, ctx.SoundsPath,
-                    ctx.InterpPath, ctx.MessagesPath, ctx.PlanesGamezPath),
+                Paths = paths,
+                ProbeRunner = new ProbeRunner(paths),
                 CaptureDirector = new CaptureDirector(spec),
                 MasterSeed = seed,
                 Camera = camera,
@@ -1685,12 +1686,9 @@ internal static class NetCombatSuites
                 Sun = sun,
                 Env = new Godot.Environment(),
                 // A suite that hands over its own exit stands in for the launcher's menu, as a lobby
-                // flight's is. A landing stands in for a lobby whose host lands on Game Scores, by
-                // default an Original host's.
+                // flight's is. A landing stands in for a lobby whose host lands on Game Scores.
                 MenuDriven = exitSession != null || lobbyLanding != null,
                 MenuPads = null,
-                Presentation = presentation
-                    ?? (lobbyLanding != null ? UI.Menu.PresentationId.Original : UI.Menu.PresentationId.BuiltIn),
                 ExitSession = exitSession ?? (() => { }),
                 VersusLobbyLanding = lobbyLanding,
                 RestartSession = () => { },

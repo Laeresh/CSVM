@@ -10,8 +10,8 @@ namespace CSVM.Net;
 /// each change, and a lobby message that arrives is kept here and never passed on. Any other payload
 /// is held until a listener binds, then replayed behind the roster announcement. A bound session
 /// sees only the peers present when it bound, and <see cref="Unbind"/> frees the carrier for the
-/// next. A clashing build, a banned address or a wrong password leaves every peer list, and only
-/// its close notice is read.
+/// next. A refused peer (a clashing build, a banned address, a wrong password, a full game) leaves
+/// every peer list; only its close notice is read.
 /// </summary>
 public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 {
@@ -90,8 +90,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// arrived. None of them is on any other peer list.</summary>
     public IReadOnlyCollection<int> AwaitingPassword => _waiting.Keys;
 
-    /// <summary>The connected peers this host turned away, in order, each with the reason its close
-    /// notice gives: a banned address or a wrong password. None of them is on any other peer list.
+    /// <summary>The connected peers this host turned away, in order, each with its close notice's
+    /// reason: a banned address, a wrong password or a full game. None is on any other peer list.
     /// </summary>
     public IReadOnlyList<(int Peer, NetCloseReason Why)> TurnedAway => _turnedAway;
 
@@ -428,6 +428,28 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>Whether a connection from <paramref name="address"/> is turned away.</summary>
     public bool IsBanned(string address) => _banned.Contains(address ?? "");
 
+    /// <summary>Turns <paramref name="peer"/> away for <paramref name="why"/>: Booted, WrongPassword
+    /// or Full. It leaves every peer list at once, as a clashing one does, while the carrier's
+    /// hang-up may land steps later. The door sends it the close notice and hangs up.</summary>
+    public void TurnAway(int peer, NetCloseReason why)
+    {
+        _waiting.Remove(peer);
+        if (Outside(peer))
+        {
+            return;
+        }
+
+        _turnedAway.Add((peer, why));
+        _held.RemoveAll(held => held.Peer == peer);
+        ForgetPicks(peer);
+        _pickBuilds.Remove(peer);
+        Changes++;
+        if (_listener != null && _bound.Remove(peer))
+        {
+            _listener.OnPeerDisconnected(peer);
+        }
+    }
+
     /// <inheritdoc/>
     public void OnPeerConnected(int peer)
     {
@@ -751,27 +773,6 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         }
 
         TurnAway(peer, NetCloseReason.WrongPassword);
-    }
-
-    // A peer turned away leaves every peer list, as a clashing one does. The door sends it the close
-    // notice and hangs up.
-    private void TurnAway(int peer, NetCloseReason why)
-    {
-        _waiting.Remove(peer);
-        if (Outside(peer))
-        {
-            return;
-        }
-
-        _turnedAway.Add((peer, why));
-        _held.RemoveAll(held => held.Peer == peer);
-        ForgetPicks(peer);
-        _pickBuilds.Remove(peer);
-        Changes++;
-        if (_listener != null && _bound.Remove(peer))
-        {
-            _listener.OnPeerDisconnected(peer);
-        }
     }
 
     // A peer that clashes leaves the peer lists at once, and the bound session with it. What it

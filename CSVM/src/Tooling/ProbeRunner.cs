@@ -19,25 +19,9 @@ namespace CSVM.Tooling;
 /// the effect-play point) take exactly the camera/node they need as parameters.</summary>
 public sealed class ProbeRunner
 {
-    private readonly string _repoRoot;
-    private readonly string _dataRoot;
-    private readonly string _zrdrPath;
-    private readonly string _soundsPath;
-    private readonly string _interpPath;
-    private readonly string _messagesPath;
-    private readonly string _planesGamezPath;
+    private readonly BasePaths _paths;
 
-    public ProbeRunner(string repoRoot, string dataRoot, string zrdrPath, string soundsPath,
-        string interpPath, string messagesPath, string planesGamezPath)
-    {
-        _repoRoot = repoRoot;
-        _dataRoot = dataRoot;
-        _zrdrPath = zrdrPath;
-        _soundsPath = soundsPath;
-        _interpPath = interpPath;
-        _messagesPath = messagesPath;
-        _planesGamezPath = planesGamezPath;
-    }
+    public ProbeRunner(BasePaths paths) => _paths = paths;
 
     /// <summary>--destroy=&lt;name&gt; (F42, docs/cli.md): kill every destructible whose def name, anim
     /// name or anchor <c>cs_name</c> matches (case-insensitive), through the real weapon-hit path
@@ -214,7 +198,7 @@ public sealed class ProbeRunner
     {
         // Windowed launches shouldn't steal focus for a report that renders nothing and quits.
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Markers(_planesGamezPath, spec.DumpMarkersPlane);
+        var r = Probes.Markers(_paths.PlanesGamezPath, spec.DumpMarkersPlane);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-markers: {r.Error}");
@@ -234,7 +218,7 @@ public sealed class ProbeRunner
     /// duplicating it.</summary>
     public void WriteScratch(string fileName, string text)
     {
-        var scratch = Path.Combine(_repoRoot, ".scratch");
+        var scratch = Path.Combine(_paths.RepoRoot, ".scratch");
         Directory.CreateDirectory(scratch);
         File.WriteAllText(Path.Combine(scratch, fileName), text);
     }
@@ -257,16 +241,16 @@ public sealed class ProbeRunner
         // harness from its dispatch. Anything else a suite shares with the game belongs here in Tooling.
         var ctx = new Testing.TestContext
         {
-            RepoRoot = _repoRoot,
-            DataRoot = _dataRoot,
-            SyntheticData = SyntheticData.Marks(_dataRoot),
+            RepoRoot = _paths.RepoRoot,
+            DataRoot = _paths.DataRoot,
+            SyntheticData = SyntheticData.Marks(_paths.DataRoot),
             Chapter = spec.Chapter,
             Mission = spec.Mission,
-            ZrdrPath = _zrdrPath,
-            MessagesPath = _messagesPath,
-            PlanesGamezPath = _planesGamezPath,
-            InterpPath = _interpPath,
-            SoundsPath = _soundsPath,
+            ZrdrPath = _paths.ZrdrPath,
+            MessagesPath = _paths.MessagesPath,
+            PlanesGamezPath = _paths.PlanesGamezPath,
+            InterpPath = _paths.InterpPath,
+            SoundsPath = _paths.SoundsPath,
             PlaneName = spec.PlaneName,
             Mute = spec.Mute,
             LoadoutOverride = spec.LoadoutOverride,
@@ -296,7 +280,7 @@ public sealed class ProbeRunner
     public bool DumpWeapons(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Weapons(_zrdrPath, _messagesPath, spec.DumpWeaponsFilter);
+        var r = Probes.Weapons(_paths.ZrdrPath, _paths.MessagesPath, spec.DumpWeaponsFilter);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-weapons: {r.Error}");
@@ -318,8 +302,8 @@ public sealed class ProbeRunner
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         string plane = spec.DumpFlightPlane.Length > 0 ? spec.DumpFlightPlane : spec.PlaneName;
         var r = plane.Equals("all", StringComparison.OrdinalIgnoreCase)
-            ? Probes.FlightEnvelopeAll(_zrdrPath)
-            : Probes.FlightEnvelope(_zrdrPath, plane);
+            ? Probes.FlightEnvelopeAll(_paths.ZrdrPath)
+            : Probes.FlightEnvelope(_paths.ZrdrPath, plane);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-flight: {r.Error}");
@@ -340,7 +324,7 @@ public sealed class ProbeRunner
     public bool DumpLoadout(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Loadouts(_zrdrPath, _messagesPath, _planesGamezPath, _dataRoot,
+        var r = Probes.Loadouts(_paths.ZrdrPath, _paths.MessagesPath, _paths.PlanesGamezPath, _paths.DataRoot,
             spec.DumpLoadoutFilter, spec.LoadoutOverride, forRig: spec.WeaponLab);
         if (r.Error != null)
         {
@@ -360,8 +344,8 @@ public sealed class ProbeRunner
     public bool DumpMips(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.MipChains(SessionPaths.ChapterTextures(_dataRoot, spec.Chapter),
-            spec.Chapter, spec.DumpMipsFilter, _interpPath);
+        var r = Probes.MipChains(SessionPaths.ChapterTextures(_paths.DataRoot, spec.Chapter),
+            spec.Chapter, spec.DumpMipsFilter, _paths.InterpPath);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-mips: {r.Error}");
@@ -380,7 +364,7 @@ public sealed class ProbeRunner
     public bool DumpAi(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
-        var r = Probes.Ai(_dataRoot, _zrdrPath, spec.DumpAiChapter);
+        var r = Probes.Ai(_paths.DataRoot, _paths.ZrdrPath, spec.DumpAiChapter);
         if (r.Error != null)
         {
             Log.Error("core", $"--dump-ai: {r.Error}");

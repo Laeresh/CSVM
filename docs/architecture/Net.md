@@ -72,7 +72,7 @@ These are the design rules every module below is shaped by, and every multiplaye
   the Multiplayer Connection screen, by LAN search into the games list or by Internet IP address,
   and with a master server set by its games in the same list or a typed join code.
   The Connection screen's Host opens the Multiplayer Lobby, where Dogfight is the one live mode;
-  co-op has no lobby. The Built-in menu, off by default, keeps its own network boards.
+  co-op has no lobby.
 - **A pause halts nothing.** In a network session the pause sheet is an overlay (`PauseState`):
   the world, the AI, the director, the net ticks and the pauser's own aeroplane run on, the
   aeroplane flying trimmed on a centred stick with its commands swallowed until the sheet closes.
@@ -302,8 +302,8 @@ messages stay here (a host's `Picks`, each seat's by `PickAt` with `SeatsWanted`
 rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
-address after `Boot`, a wrong password) stand off every peer list. Read `NetLobbyTests.cs` and
-`NetLobbyAdmissionTests.cs`.
+address after `Boot`, a wrong password, a full game) stand off every peer list at once, before the
+carrier's hang-up lands. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
 
 ## src/Net/NetBuildVersion.cs
 MAJOR.MINOR of the build's SemVer string, which two peers compare before they play: builds a patch
@@ -386,7 +386,7 @@ set; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
 `DogfightOptionsMessage` is the host's Mission Options under their round, its type byte the lobby's four (Stunt Race 3) and a spare flag bit saying whether the host's match lands on Game Scores, `DogfightRosterMessage`
 the whole player list with each row's team and custom plane name, a bot row's tier and Random plane, and the reading
-guest's own row marked, and `LobbyChatMessage` one typed line, which the host relays.
+guest's own rows marked (its first and how many seats it was given), and `LobbyChatMessage` one typed line, which the host relays.
 `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
 team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
 session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.

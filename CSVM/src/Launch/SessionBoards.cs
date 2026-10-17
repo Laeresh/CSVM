@@ -19,7 +19,7 @@ using Godot;
 namespace CSVM.Launch;
 
 /// <summary>The whole-window boards over one flight and the doors between them. The pause board is
-/// the Original presentation's sheet where the mode has one, the Built-in board otherwise, under
+/// the Original presentation's sheet where the mode has one, the chrome board otherwise, under
 /// its options leaf. The results boards are the race, the dogfight, the Instant Action wrap-up and
 /// each pane's solo stunt scoreboard. It holds one menu reader per local player, and photo mode,
 /// which suspends whichever board is up. The session builds it once its rigs and pause state stand
@@ -43,7 +43,7 @@ internal sealed class SessionBoards
     // The Original presentation's pause sheet while it is the board in use. Its parchment carries
     // the objectives, so the corner readout is not built beside it.
     private OriginalPauseBoard? _originalPause;
-    // The pause board in use, whichever presentation composed it, and the options leaf that stands
+    // The pause board in use, the sheet or the chrome board, and the options leaf that stands
     // over it while PREFERENCES is open. Null leaves both boards without that door.
     private Control? _pauseBoard;
     private PausePreferences? _pauseOptions;
@@ -67,7 +67,7 @@ internal sealed class SessionBoards
     /// </summary>
     public ResultsBoard? DogfightBoard => _boards.OfType<VersusBoard>().FirstOrDefault();
 
-    /// <summary>The race board, either presentation's, null outside a race. A suite reads its menu
+    /// <summary>The race board, the sheet or the chrome one, null outside a race. A suite reads its menu
     /// and rows through this.</summary>
     public Control? RaceBoard { get; private set; }
 
@@ -79,14 +79,14 @@ internal sealed class SessionBoards
     /// mission's objectives.</summary>
     public bool SheetCarriesObjectives => _originalPause != null;
 
-    /// <summary>The pause board, whichever presentation composes it, under the launcher's options
+    /// <summary>The pause board, the sheet or the chrome board, under the launcher's options
     /// leaf when it supplies one. Each pane's solo stunt scoreboard then joins the board list. The
     /// restart is the sheet's Restart row, null where none is offered.</summary>
     public void BuildPause(PauseSheetInputs sheetInputs, Action? restart)
     {
         var pauseState = _in.PauseState;
         // Built before the boards so each knows whether it has a PREFERENCES door at all. The
-        // Original sheet draws its strip either way and leaves the press a no-op. Built-in's menu
+        // Original sheet draws its strip either way and leaves the press a no-op. The chrome board
         // leaves the row off rather than offering one that does nothing.
         var pauseOptions = _in.PauseOptions?.Invoke();
         Action? preferences = pauseOptions == null
@@ -106,14 +106,14 @@ internal sealed class SessionBoards
         }
         else
         {
-            var builtIn = PauseBoard.Build(pauseState, exitsToMenu: _in.MenuDriven, InputFor);
-            builtIn.Restart = restart;
-            builtIn.Exit = _in.Exit;
-            builtIn.Preferences = preferences;
+            var chrome = PauseBoard.Build(pauseState, exitsToMenu: _in.MenuDriven, InputFor);
+            chrome.Restart = restart;
+            chrome.Exit = _in.Exit;
+            chrome.Preferences = preferences;
             // Read at press time, not captured: the owner is whoever paused THIS time, and only
             // that player drives the cursor that reached this row.
-            builtIn.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
-            pauseBoard = builtIn;
+            chrome.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
+            pauseBoard = chrome;
         }
 
         _boards.Add(pauseBoard);
@@ -141,7 +141,7 @@ internal sealed class SessionBoards
 
     /// <summary>The time-attack race's shared results board, one ranked row per pilot over the
     /// whole window. It is the Original presentation's lobby-scores board where that art and the
-    /// string table are installed, the Built-in chrome board otherwise. Instant Action builds it too,
+    /// string table are installed, the chrome board otherwise. Instant Action builds it too,
     /// since the race ends a multi-seat stunt run. <paramref name="zoneNames"/> are in course order.
     /// A network race names its own exit row in <paramref name="exitLabel"/>, and a guest's board
     /// shows <paramref name="restartWithheld"/> in place of Restart.</summary>
@@ -279,11 +279,10 @@ internal sealed class SessionBoards
     }
 
     // The string table the Original race board writes in, or null where that board does not apply.
-    // That is the Built-in presentation, or an install missing the table or the borrowed lobby art.
+    // That is an install missing the table or the borrowed lobby art.
     private UiStrings? OriginalRaceStrings()
     {
-        if (_in.Presentation != PresentationId.Original
-            || !File.Exists(Extraction.RofTree.Under(_in.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt)))
+        if (!File.Exists(Extraction.RofTree.Under(_in.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt)))
         {
             return null;
         }
@@ -291,25 +290,21 @@ internal sealed class SessionBoards
         var strings = UiStrings.TryLoad(_in.DataRoot);
         if (strings == null)
         {
-            Log.Warn("ui", $"race board: no string table under {_in.DataRoot}, the Built-in board stands in");
+            Log.Warn("ui", $"race board: no string table under {_in.DataRoot}, the chrome board stands in");
         }
 
         return strings;
     }
 
-    // The Original presentation's pause sheet, or null where it does not apply. That is the
-    // Built-in presentation, a mode with no authored dialog, or an extraction the sheet cannot be
-    // read out of. Falling back to the Built-in board keeps a pause always available.
+    // The Original presentation's pause sheet, or null where it does not apply. That is a mode
+    // with no authored dialog, or an extraction the sheet cannot be read out of. Falling back to
+    // the chrome board keeps a pause always available.
     private OriginalPauseBoard? BuildOriginalPauseBoard(PauseSheetInputs sheetInputs)
     {
-        if (_in.Presentation != PresentationId.Original)
-        {
-            return null;
-        }
-
         if (sheetInputs.Campaign is not { } campaign)
         {
-            return BuildMultiplayerPauseBoard(sheetInputs) ?? BuildInstantActionPauseBoard(sheetInputs);
+            return BuildMultiplayerPauseBoard(sheetInputs) ?? BuildInstantActionPauseBoard(sheetInputs)
+                ?? BuildOwnModePauseBoard();
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
@@ -354,9 +349,24 @@ internal sealed class SessionBoards
             _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
     }
 
+    // A mode of ours, or a sortie whose own dialog did not read: the bare blackboard headed as the
+    // load screen heads it (docs/org/pause-screen.md). It needs no readout.
+    private OriginalPauseBoard? BuildOwnModePauseBoard()
+    {
+        string heading = LaunchBoards.Subject(_in.Spec).ToUpperInvariant();
+        if (PauseSheet.LoadOwnMode(_in.ZrdrPath, _in.MessagesPath, heading) is not { } sheet)
+        {
+            Log.Warn("ui", $"pause: no ia_escape.zrd blackboard for {heading}");
+            return null;
+        }
+
+        Log.Info("ui", $"pause: {_in.Spec.Chapter} {heading} draws the bare blackboard");
+        return OriginalPauseBoard.Build(
+            _in.PauseState, InputFor, _in.DataRoot, sheet, () => PauseReadout.Empty);
+    }
+
     // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for its chapter and mission
-    // type. It carries no map, memento or parchment and so needs no readout. Free flight has no
-    // shipped dialog and keeps the Built-in board, as on the load screen (docs/org/pause-screen.md).
+    // type. It carries no map, memento or parchment and so needs no readout.
     private OriginalPauseBoard? BuildInstantActionPauseBoard(PauseSheetInputs sheetInputs)
     {
         if (sheetInputs.InstantAction is not { } ia
@@ -557,7 +567,7 @@ internal sealed class SessionBoards
         }
     }
 
-    // Both presentations' pause boards read the mouse, so whichever one is in use is re-primed.
+    // Both pause boards read the mouse, so whichever one is in use is re-primed.
     private void ReprimePauseBoard()
     {
         _originalPause?.Reprime();
@@ -599,7 +609,6 @@ internal sealed class SessionBoards
     internal sealed class Inputs
     {
         public SessionSpec Spec = null!;
-        public PresentationId Presentation;
         // Launched from the menu, so a board's Exit item returns there rather than quitting.
         public bool MenuDriven;
         public Action Exit = null!;

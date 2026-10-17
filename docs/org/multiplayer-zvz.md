@@ -190,8 +190,7 @@ lost hull's `score_zep` is 10. It goes to every other team's term on the board's
 the Score limit, and the winner is the side whose hull survived, both maintainer decisions. The end
 posts the original's two lines. The return is the decoded point, computed on the host and sent as
 `SpawnAtMessage`. The next match is the original's: each machine, host and guest alike, goes to
-the lobby, under an Original host on its own once the end has held and under a Built-in host by
-the results board's Restart (`VersusDirector.Restart`). The lobby's next launch builds
+the lobby on its own once the end has held. The lobby's next launch builds
 every machine's session and world afresh, both hulls whole. It never reruns in place, which would
 restore no world pool. A launch outside the lobby has no next match. Each hull's marker is
 relabelled per pane rather than per machine (`ZeppelinVersus.HullSide`), so splitscreen panes on

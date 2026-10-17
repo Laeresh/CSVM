@@ -319,7 +319,7 @@ wingman ids share one handler apiece, so only the slot differs). Row -1 returns 
   ammunition short name (langui `3360 + ammo`).
 - A rocket row `r` addresses **pylon cell `r`** of the record and is empty when the cell holds 11.
   Cells 0 to 3 are one wing and 4 to 7 the other. CSVM departs here on purpose: its loadout
-  screens key the boxes by physical pylon number in fill order (`LaunchMenu.AmmoPylons`), so the
+  screens key the boxes by physical pylon number in fill order, so the
   rows agree with the weapon gauge's belt lights, at the cost that a fill order crossing wings can
   draw a starboard pylon in the port box.
 

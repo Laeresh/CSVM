@@ -107,7 +107,7 @@ public static class InstantActionWrapupPage
     private const float PageHeight = 600f;
 
     // A photograph's print: the white border round the picture and the gap between two prints. A
-    // pending print is laid out at the built-in strip's own 4:3 until a landed one says otherwise.
+    // pending print is laid out at the chrome strip's own 4:3 until a landed one says otherwise.
     private const float PrintBorder = 3f;
     private const float PrintGap = 6f;
     private const float PendingAspect = 3f / 4f;
@@ -176,7 +176,7 @@ public static class InstantActionWrapupPage
         return lines;
     }
 
-    /// <summary>The further lines the built-in board carries and the shipped page authors no row
+    /// <summary>The further lines the chrome board carries and the shipped page authors no row
     /// for. First the context line naming the chapter and the mission type, then the stunt run's
     /// splits as the final snapshot has them. The outcome is the tick box's, not a line.
     /// ⚠ The splits' total is left out: both clocks run from the start to the ending, so it is the

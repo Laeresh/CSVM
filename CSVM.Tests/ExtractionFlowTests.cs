@@ -266,6 +266,11 @@ public class ExtractionFlowTests
         Flow(root, fresh, install).Extract();
         Assert.False(fresh.LastRequest!.Force);
         Assert.False(fresh.LastRequest.Unzip);
+
+        // A current tree the menus cannot read is extracted afresh, every output rewritten.
+        var unusable = new FakeRunner();
+        Flow(TestData.TempDir(), unusable, install, problem: DataProblem.Unusable).Extract();
+        Assert.True(unusable.LastRequest!.Force);
     }
 
     [Fact]

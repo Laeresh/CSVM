@@ -162,14 +162,12 @@ public interface ICampaignPage
 }
 
 /// <summary>
-/// Built-in's campaign screen graph: the screens between the launchscreen and a mission, walked
-/// as a stack over the shared <see cref="CampaignFeature"/>, which owns the profile, the seated
-/// player, the mission named and every write into the store. Engine-free, so the screen graph, the
-/// cursor and the cancel semantics test off engine; the launchscreen is only its renderer and input
-/// source. Screens are a stack rather than the hangar's fixed order, because the campaign's own
-/// navigation is a graph: the cabin opens a briefing, the briefing opens a flight check, and each
-/// of them returns to what opened it. A screen with no registered page draws a placeholder. The
-/// feature's state is read through the forwarding members here, so a page needs no second door.
+/// The campaign screen graph between the menu's top level and a mission, walked as a stack over
+/// the shared <see cref="CampaignFeature"/>. The feature owns the profile, the seated player, the
+/// mission named and every write into the store. Engine-free, so the graph, the cursor and the
+/// cancel semantics test off engine. The screens are a stack because the campaign's navigation is a
+/// graph: each screen returns to what opened it. A screen with no registered page draws a
+/// placeholder. A page reads the feature through the forwarding members here.
 /// </summary>
 public sealed class CampaignFlow
 {
@@ -271,8 +269,8 @@ public sealed class CampaignFlow
     public string? DataRoot => Feature.DataRoot;
 
     /// <summary>The decoded menu layout the pages and <see cref="CampaignBoards"/> read the fixed
-    /// chrome through: the one under <see cref="DataRoot"/>, or the fallback with no root. Built-in's
-    /// alone; the feature carries no presentation geometry.</summary>
+    /// chrome through: the one under <see cref="DataRoot"/>, or the fallback with no root. The
+    /// flow's alone; the feature carries no presentation geometry.</summary>
     public CampaignLayout Layout => _layout ??= CampaignLayout.For(DataRoot);
 
     /// <summary>Every stored profile's name, re-read by <see cref="RefreshRoster"/>.</summary>
@@ -644,10 +642,9 @@ public sealed class CampaignFlow
         ClampedRow();
     }
 
-    /// <summary>Takes the standing dialog off the flow without answering it, for a presentation
-    /// that shows a page's dialog its own way and runs the answer itself; null when none stands.
-    /// Built-in never calls this: its dialogs are answered through <see cref="Accept"/> and
-    /// <see cref="Back"/>.</summary>
+    /// <summary>Takes the standing dialog off the flow without answering it, null when none stands.
+    /// A presentation that shows a page's dialog its own way runs the answer itself. The flow's own
+    /// presses answer a dialog through <see cref="Accept"/> and <see cref="Back"/>.</summary>
     public CampaignModal? TakeModal()
     {
         var modal = Modal;

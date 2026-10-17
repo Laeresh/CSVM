@@ -100,7 +100,7 @@ public sealed class MenuInput
     /// decoded button here. X is the last free face button in menu context.</summary>
     public bool Presets;
 
-    // Auto-repeat while a direction is held (carried over from the original LaunchMenu). Confirmed
+    // Auto-repeat while a direction is held. Confirmed
     // at the controls: join/lock feel reads right at 2P and 4P, no retune owed.
     private const float RepeatInitial = 0.42f;   // s before the first repeat
     private const float RepeatInterval = 0.12f;  // s between repeats after that

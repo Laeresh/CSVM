@@ -182,9 +182,9 @@ neutral over the lever the pilot left, standing in for the crash animation the o
 The 1.0 s freeze and the 2.0 s fade are not reproduced: the ending simply takes the screen when the
 hold ends.
 
-Where that ending goes depends on the presentation. Built-in keeps its own board inside the flight
-(`src/UI/Screens/IaWrapupBoard.cs`, a stunt run's photographs drawn as a strip under its splits), which
-is also where Restart, Exit and photo mode live. Original
+A command-line run keeps its own board inside the flight (`src/UI/Screens/IaWrapupBoard.cs`, a
+stunt run's photographs drawn as a strip under its splits), which is also where Restart, Exit and
+photo mode live. A menu launch
 leaves the world instead and lands on this page in the menu shell, `src/UI/Menu/Original/`
 `OriginalWrapupScreen.cs` over `src/UI/Screens/InstantActionWrapupPage.cs`: the magazine spread, the notepad
 carrying the heading and the four decoded rows at their authored positions, and CONTINUE back to the
@@ -196,7 +196,7 @@ The table's total is left off, since the stunt clock and the mission clock both 
 to the ending and the time row already shows that figure. A stunt run's Danger Zone photographs
 stand as white-bordered prints in marker order in the same band, to the left of the post-its and
 right against them: the grid with the fewest rows whose pictures come within 15% of the widest the
-room allows, capped at the built-in strip's 164-pixel thumbnail width, so a short run reads as one
+room allows, capped at the chrome strip's 164-pixel thumbnail width, so a short run reads as one
 strip and a seventeen-zone run over three post-its shrinks into the room left of the last one. A
 photograph still on its way when the page opens draws as an empty print and fills when it lands.
 A box above CONTINUE carries the outcome,
@@ -219,9 +219,8 @@ now confirmed from the launcher as well. The environment dropdown index becomes 
 No chapter folder name exists anywhere in `crimson.exe` (searched: no `c1b`, `c1c` or `c2b`
 string), so the executable never spells out which folder an id names. The ids are the eight chapter
 folders in alphabetical order, C1 = 1 through C5 = 8, which resolves the map to **C1, C2B, C3, C5,
-C1B, C4, C2** and leaves id 3 (C1C) unreferenced. That is the mapping `CSVM/src/UI/Screens/LaunchMenu.cs`
-has carried all along, decoded before this plan and restated in its `Chapters` comment, so this
-read is a second source for it rather than a new finding. It corrects the "Environment → chapter"
+C1B, C4, C2** and leaves id 3 (C1C) unreferenced. That is the mapping `CSVM/src/UI/Menu/InstantActionFeature.cs`
+carries, decoded before this plan, so this read is a second source for it rather than a new finding. It corrects the "Environment → chapter"
 table above, which A5 had wrong on two rows.
 
 ## Friendly fire

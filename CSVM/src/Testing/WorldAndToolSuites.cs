@@ -2040,6 +2040,207 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The Cockpit view's copies of the pilot lights and props, against the interior they are seated
+    // on (#149). Able to fail: a light left on the outside fin, or a copy off the fin peak. So is an
+    // original still drawn in the pilot's pane, or a copy that stops following its original.
+    [Suite("cockpit-reseat",
+        "in the Cockpit view the Warhawk's pilot lights sit on its interior fin peaks and its side props on its interior nacelles, the Firebrand's and Devastator's open-air lights are hidden, the Brigand's stay as built, the originals leave only the pilot's own pane, and each copy follows its original's visibility and spin")]
+    internal static void CockpitReseatSuite(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("player_warhawk", "player_fbrand", "player_pfighter", "player_brigand");
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
+        {
+            if (gamez.FindByName(plane) == null)
+                continue;
+            var builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: true);
+            var model = builder.Build(plane);
+            try
+            {
+                if (builder.CockpitInterior is { } interior)
+                    ReseatAirframe(ctx, plane, model, interior, builder.WingFlares);
+            }
+            finally
+            {
+                model.Free();
+            }
+        }
+    }
+
+    // The cockpit interior's control surfaces turn about their own leading edge (#149), while the
+    // outside surfaces keep turning about their origin. Able to fail: an interior surface turned
+    // about its origin moves its leading edge by the noted offset, up to 0.47 m on the Warhawk.
+    [Suite("cockpit-surface-hinges",
+        "at full roll, pitch and yaw every cockpit interior's ailerons, elevators and rudders keep their leading edge in place in the wing, each one's origin offset noted, while the outside surfaces still turn about their own origin")]
+    internal static void CockpitSurfaceHinges(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("player_warhawk");
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        int judged = 0;
+        foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
+        {
+            if (gamez.FindByName(plane) == null)
+                continue;
+            var builder = new PlaneBuilder(gamez, textures, spinningProps: true, cockpitInterior: true);
+            var model = builder.Build(plane);
+            try
+            {
+                if (builder.CockpitInterior is not { } interior)
+                    continue;
+                var inside = interior.FindChildren("*", "Node3D", owned: false).OfType<Node3D>()
+                    .Where(n => ControlSurfaces.Classify(n.Name.ToString()) != ControlSurfaces.Kind.None)
+                    .Select(n => (Node: n, Edge: ControlSurfaceAnimator.LeadingEdge(n))).ToList();
+                var outside = model.FindChildren("*", "Node3D", owned: false).OfType<Node3D>()
+                    .Where(n => ControlSurfaces.Classify(n.Name.ToString()) != ControlSurfaces.Kind.None
+                        && !IsUnder(n, interior))
+                    .Select(n => (Node: n, Before: n.Position)).ToList();
+                var rest = inside.Select(s => AirframeTransform(s.Node, interior) * s.Edge).ToList();
+                var animator = ControlSurfaceAnimator.Build(model);
+                animator?.Advance(5.0, new FlightInput { Roll = 1f, Pitch = 1f, Yaw = 1f }, animate: true);
+                for (int i = 0; i < inside.Count; i++)
+                {
+                    var (node, edge) = inside[i];
+                    var axis = ControlSurfaces.HingeAxis(ControlSurfaces.Classify(node.Name.ToString()));
+                    float off = (edge - (edge.Dot(axis) * axis)).Length() * PlaneBuilder.InteriorScale;
+                    float moved = (AirframeTransform(node, interior) * edge).DistanceTo(rest[i]) * PlaneBuilder.InteriorScale;
+                    ctx.Note($"{plane} interior {node.Name}: hinge line {off:F3} m off its origin; the leading edge moves {moved:F4} m at full deflection");
+                    ctx.Check(moved < 0.005f, $"{plane} interior {node.Name} keeps its leading edge in place moved={moved:F4} m");
+                    judged++;
+                }
+                foreach (var (node, before) in outside)
+                    ctx.Check(node.Position.IsEqualApprox(before), $"{plane} outside {node.Name} still turns about its origin");
+            }
+            finally
+            {
+                model.Free();
+            }
+        }
+        ctx.Check(judged > 0, $"interior surfaces were judged count={judged}");
+    }
+
+    internal static Transform3D AirframeTransform(Node3D node, Node3D root)
+    {
+        var acc = Transform3D.Identity;
+        for (Node? n = node; n != null && n != root; n = n.GetParent())
+            if (n is Node3D n3d)
+                acc = n3d.Transform * acc;
+        return acc;
+    }
+
+    internal static bool IsUnder(Node node, Node ancestor)
+    {
+        for (var n = node.GetParent(); n != null; n = n.GetParent())
+            if (n == ancestor)
+                return true;
+        return false;
+    }
+
+    // One airframe's re-seat, noted for every airframe and judged on the four named ones.
+    internal static void ReseatAirframe(TestContext ctx, string plane, Node3D model, Node3D interior,
+        IReadOnlyList<Node3D> flares)
+    {
+        var reseat = CockpitReseat.Bind(model, interior, plane);
+        var hidden = reseat?.Hidden ?? System.Array.Empty<Node3D>();
+        Node3D? CopyOf(Node3D n) =>
+            reseat?.Copies.FirstOrDefault(c => c.Name.ToString() == $"cockpit_{n.Name}");
+        var peaks = CockpitReseat.FinPeaks(interior);
+        foreach (var flare in flares)
+        {
+            var copy = CopyOf(flare);
+            var outside = AirframeOrigin(flare, model);
+            ctx.Note($"{plane}/{flare.Name}: outside at {outside:F3}, {(copy != null ? $"seated at {interior.Transform * AirframeOrigin(copy, interior):F3}" : hidden.Contains(flare) ? "hidden" : "as built")}");
+            switch (plane)
+            {
+                case "player_warhawk":
+                    var at = copy == null ? (Vector3?)null : AirframeOrigin(copy, interior);
+                    ctx.Check(at is { } p && peaks.Any(k => k.DistanceTo(p) < 0.01f) && hidden.Contains(flare),
+                        $"{plane}/{flare.Name} sits on an interior fin peak and leaves the pilot's pane at={at}");
+                    ctx.Check(at is { } q && (interior.Transform * q).DistanceTo(outside) > 1f,
+                        $"{plane}/{flare.Name}'s copy is off the outside fin it was taken from");
+                    break;
+                case "player_fbrand" or "player_pfighter":
+                    ctx.Check(copy == null && hidden.Contains(flare),
+                        $"{plane}/{flare.Name} hangs in open air, so the Cockpit view hides it");
+                    break;
+                case "player_brigand":
+                    ctx.Check(copy == null && !hidden.Contains(flare), $"{plane}/{flare.Name} stays as built");
+                    break;
+            }
+        }
+        if (plane != "player_warhawk" || reseat == null)
+        {
+            ctx.Check(plane != "player_warhawk", $"the Warhawk binds a re-seat");
+            return;
+        }
+
+        var props = model.FindChildren("*prop*", owned: false).OfType<Node3D>()
+            .Where(n => PropParts.Classify(n.Name.ToString()) != PropParts.Kind.None).ToList();
+        foreach (var prop in props)
+        {
+            string name = prop.Name.ToString();
+            bool side = !name.Contains('1');
+            ctx.Check((CopyOf(prop) != null) == side && hidden.Contains(prop) == side,
+                $"{plane}/{name} {(side ? "moves onto its interior nacelle" : "stays behind the panel")}");
+        }
+        foreach (var (station, nose) in CockpitReseat.PropSeats[plane])
+        {
+            var disc = props.FirstOrDefault(p => p.Name.ToString() == $"staticprop{station}");
+            var copy = disc == null ? null : CopyOf(disc);
+            ctx.Check(copy != null && AirframeOrigin(copy, interior).DistanceTo(nose) < 0.01f,
+                $"staticprop{station}'s copy sits on its fitted nacelle nose");
+        }
+
+        // Seated as a human rig: the originals leave the pilot's own pane exactly while the
+        // interior is drawn, and another pane keeps them.
+        SplitScreen.SeatAirframe(model, null, 0);
+        var view = CockpitVisibility.Bind(model, interior, 0, hidden);
+        uint ownPane = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(0), 0);
+        uint otherPane = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(1), 1);
+        // By layer alone: a flare between blinks is hidden, and a pane's verdict must not wait on it.
+        static bool Reaches(Node n, uint mask, bool all) =>
+            n.FindChildren("*", "VisualInstance3D", owned: false).Append(n).OfType<VisualInstance3D>()
+                .Select(v => (v.Layers & mask) != 0) is var hits && (all ? hits.All(h => h) : !hits.Any(h => h));
+        var centre = props.First(p => p.Name.ToString() == "staticprop1");
+        view!.Apply(PilotViewMode.Cockpit, firstPerson: true);
+        ctx.Check(hidden.All(n => Reaches(n, ownPane, false) && Reaches(n, otherPane, true))
+            && Reaches(centre, ownPane, true),
+            $"Cockpit: the re-seated originals leave the pilot's own pane alone, the centre prop stays");
+        view.Apply(PilotViewMode.Cockpit, firstPerson: false);
+        ctx.Check(hidden.All(n => Reaches(n, ownPane, true)), $"a held external view draws the originals again");
+
+        var flareCopy = CopyOf(flares[0])!;
+        flares[0].Visible = true;
+        reseat.Sync();
+        ctx.Check(flareCopy.Visible, $"the light copy blinks on with its original");
+        flares[0].Visible = false;
+        reseat.Sync();
+        ctx.Check(!flareCopy.Visible, $"…and off with it");
+        var blur = props.First(p => p.Name.ToString() == "prop2");
+        var blurCopy = CopyOf(blur)!;
+        var before = blurCopy.Basis;
+        var turn = new Basis(Vector3.Back, 1f);
+        blur.Basis *= turn;
+        reseat.Sync();
+        ctx.Check(blurCopy.Basis.IsEqualApprox(before * turn), $"the prop copy spins with its original");
+    }
+
+    internal static Vector3 AirframeOrigin(Node3D node, Node3D model)
+    {
+        var acc = Transform3D.Identity;
+        for (Node? n = node; n != null && n != model; n = n.GetParent())
+            if (n is Node3D n3d)
+                acc = n3d.Transform * acc;
+        return acc.Origin;
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or

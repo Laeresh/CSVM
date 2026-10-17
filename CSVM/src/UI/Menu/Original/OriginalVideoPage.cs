@@ -46,19 +46,26 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's shadow-quality dropdown, on the authored Texture Quality line.</summary>
     public const string ShadowQualityKey = "SHADOWQUALITY";
 
+    /// <summary>The page's view-distance dropdown, the last row of the scrolled window.</summary>
+    public const string ViewDistanceKey = "VIEWDISTANCE";
+
+    /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
+    public const string WaterQualityKey = "WATERQUALITY";
+
     /// <summary>The page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
-    /// <summary>The page's VR mode checkbox, on the authored Clutter Detail line.</summary>
+    /// <summary>The page's VR mode dropdown, the window's last row.</summary>
     public const string VrModeKey = "VRMODE";
 
-    /// <summary>The headset's comfort vignette dropdown, on the authored Viewing Range line while a
-    /// headset is live.</summary>
+    /// <summary>The headset's comfort vignette dropdown, in Display Mode's place while a headset is
+    /// live.</summary>
     public const string VrVignetteKey = "VRVIGNETTE";
 
-    /// <summary>The headset's render-scale dropdown, on the authored Effects Level line while a
-    /// headset is live.</summary>
+    /// <summary>The headset's render-scale dropdown, in V-Sync's place while a headset is live.</summary>
     public const string VrRenderScaleKey = "VRRENDERSCALE";
+    /// <summary>The window the dropdown rows scroll through.</summary>
+    public const string WindowKey = "VP_DROPDOWNS";
 
     // The page's authored row shape, used where a layout does not carry the section. It is the
     // title column and the Shadows row's line, the checkbox's offset from its title, and the
@@ -74,56 +81,93 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private const float DescX = 325f;
     private const float PlaqueX = 569f;
 
+    // The dropdown window's scroll column: its gap from the widest box, and the arrow's size where
+    // the art cannot be measured. The shipped boxes end at 306 and the descriptions start at 325.
+    private const float BarGap = 2f;
+    private const float BarWidth = 16f;
+    private const float BarArrowHeight = 12f;
+
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
-    private static readonly string[] OffOnWords = { "OFF", "ON" };
+    private static readonly string[] OffOnWords = { "Off", "On" };
 
-    // The settings, in the authored order of the rows they stand on. Each is a title, the authored
-    // row it stands on, a description, a control and the words of the store field it reads and
-    // writes.
-    private static readonly VideoOption[] Options =
+    // The seven authored dropdown lines, top to bottom. The dropdown rows scroll through them as a
+    // window, so a row takes the widgets of whichever line it stands on.
+    private static readonly VideoSlot[] DropSlots =
     {
-        new(MonitorKey, "Monitor", "VP_T_VideoTitle", "VP_D_Device", "VP_T_DEVICEDESC",
+        new("VP_T_VideoTitle", "VP_D_Device", "VP_T_DEVICEDESC"),
+        new("VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC"),
+        new("VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC"),
+        new("VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC"),
+        new("VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC"),
+        new("VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC"),
+        new("VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC"),
+    };
+
+    // The dropdown rows in walk order, one more than the window shows. Each is a title, a
+    // description, a control and the words of the store field it reads and writes.
+    private static readonly VideoOption[] Dropdowns =
+    {
+        new(MonitorKey, "Monitor", null,
             _ => "Select the monitor the game opens on.",
             OriginalRowKind.Dropdown, c => c.Screens.Labels, c => c.MonitorAt,
             (c, i) => c.MonitorIndex = CSVM.Utils.MonitorSetting.Word(i)),
-        new(ResolutionKey, "Resolution", "VP_T_DisplayTitle", "VP_D_Display", "VP_T_DisplayDESC",
+        new(ResolutionKey, "Resolution", null,
             ResolutionDescription,
             OriginalRowKind.Dropdown, c => c.Sizes.Words, c => c.ResolutionAt,
             (c, i) => c.Resolution = c.Sizes.Words[i],
             c => !c.ResolutionPinned),
-        new(DisplayModeKey, "Display Mode", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
-            _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+        new(DisplayModeKey, "Display Mode", null,
+            _ => "Select how the window sits on the screen.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels, c => c.DisplayModeAt,
             (c, i) => c.DisplayMode = CSVM.Utils.DisplayWords.DisplayModes[i], HeadsetRow: false),
-        new(VrVignetteKey, "Comfort Vignette", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
+        new(VrVignetteKey, "Comfort Vignette", null,
             _ => DisplaySettingRows.VrVignetteDetail,
             OriginalRowKind.Dropdown, _ => CSVM.Utils.VrVignetteSetting.Labels(),
             c => DisplaySettingRows.WordIndex(CSVM.Utils.VrVignetteSetting.Words, c.VrVignette, CSVM.Utils.VrVignetteSetting.Default),
             (c, i) => c.VrVignette = CSVM.Utils.VrVignetteSetting.Words[i], HeadsetRow: true),
-        new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
-            _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+        new(VSyncKey, "V-Sync", null,
+            _ => "Select the frame pacing.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels, c => c.VSyncAt,
             (c, i) => c.VSync = CSVM.Utils.DisplayWords.VSyncChoices[i], HeadsetRow: false),
-        new(VrRenderScaleKey, "VR Render Scale", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
+        new(VrRenderScaleKey, "VR Render Scale", null,
             _ => DisplaySettingRows.VrRenderScaleDetail,
             OriginalRowKind.Dropdown, _ => CSVM.Utils.VrRenderScaleSetting.Labels(),
             c => DisplaySettingRows.WordIndex(CSVM.Utils.VrRenderScaleSetting.Words, c.VrRenderScale, CSVM.Utils.VrRenderScaleSetting.Default),
             (c, i) => c.VrRenderScale = CSVM.Utils.VrRenderScaleSetting.Words[i], HeadsetRow: true),
-        Word(RenderScaleKey, CSVM.Utils.RenderScaleSetting.Lookup, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC"),
-        Word(AntiAliasingKey, CSVM.Utils.AntiAliasingSetting.Lookup, "Anti-aliasing", "VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC"),
-        Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality", "VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC"),
-        new(VrModeKey, "VR Mode", "VP_T_ClutterTitle", "VP_B_CLUTTER", "VP_T_ClutterDESC",
-            _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Radio, _ => OffOnWords,
+        Word(RenderScaleKey, CSVM.Utils.RenderScaleSetting.Lookup, "Render Scale"),
+        Word(AntiAliasingKey, CSVM.Utils.AntiAliasingSetting.Lookup, "Anti-aliasing"),
+        Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality"),
+        Word(ViewDistanceKey, CSVM.Utils.ViewDistance.Lookup, "View Distance"),
+        new(VrModeKey, "VR Mode", null,
+            _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,
             (c, i) => c.VrMode = i == 1,
             _ => OperatingSystem.IsWindows()),
-        new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
-            _ => GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
+    };
+
+    // The dropdowns each kind of launch walks, one more than the window shows. Under a headset the
+    // comfort rows stand in Display Mode's and V-Sync's places, so both walks are as long.
+    private static readonly VideoOption[] FlatDrops = Dropdowns.Where(static o => o.Shows(false)).ToArray();
+    private static readonly VideoOption[] HeadsetDrops = Dropdowns.Where(static o => o.Shows(true)).ToArray();
+
+    // The two checkboxes, fixed on the short authored lines under the window.
+    private static readonly VideoOption[] Checks =
+    {
+        Check(WaterQualityKey, CSVM.Utils.WaterQualitySetting.Lookup, "Ocean Waves",
+            new("VP_T_ClutterTitle", "VP_B_CLUTTER", "VP_T_ClutterDESC"),
+            c => c.Enhanced ? "Draw a swell on the sea." : "Enhanced Graphics only."),
+        new(GraphicsKey, "Enhanced Graphics", new("VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC"),
+            _ => "Select the lit world.", OriginalRowKind.Radio, _ => GraphicsWords,
             c => c.Enhanced ? 1 : 0,
             (c, i) => c.Graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default,
             _ => !CSVM.Utils.GraphicsMode.SwitchLocked),
     };
+
+    private static readonly VideoOption[] Options = Dropdowns.Concat(Checks).ToArray();
+
+    // The furthest the window scrolls, which puts the last dropdown on its bottom line.
+    private static readonly int LastTop = FlatDrops.Length - DropSlots.Length;
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
@@ -134,6 +178,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
     private string? _open;
     private int _listTop;
+    // The first dropdown row the window shows.
+    private int _top;
 
     internal OriginalVideoPage(OriginalOptionsChrome chrome, IOriginalOptionsForm form, OptionsChoices choices)
     {
@@ -161,6 +207,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// The row then reads the screen's own size, takes no press and draws dead. The saved size is
     /// left where it is, so picking Windowed or Fullscreen again gives the player it back.</summary>
     public bool ResolutionPinned => _choices.ResolutionPinned;
+
+    /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line, 1
+    /// with View Distance on the bottom one and 2 with VR Mode there.</summary>
+    public int Top => _top;
 
     /// <summary>The graphics mode word the page would apply.</summary>
     public string GraphicsChoice => _choices.Graphics;
@@ -193,7 +243,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     public string? VrVignetteChoice => _choices.VrVignette;
 
     /// <summary>Whether a headset is live. Its two comfort rows then take the Display Mode and V-Sync
-    /// lines. A headset has no use for those two: it paces its own frames, and the window only
+    /// places. A headset has no use for those two: it paces its own frames, and the window only
     /// mirrors it. The hidden rows' words ride the apply unchanged. Settable for a test.</summary>
     public Func<bool> Headset { get; set; } = static () => CSVM.Bindings.XrControllers.SessionLive;
 
@@ -203,25 +253,12 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
     string IOriginalOptionsPage.CancelKey => CancelKey;
 
-    // The settings the page shows now, in authored order. Under a headset its comfort rows stand on
-    // two lines whose settings it has no use for.
-    private List<VideoOption> Rows
-    {
-        get
-        {
-            bool headset = Headset();
-            var shown = new List<VideoOption>(Options.Length);
-            foreach (var option in Options)
-            {
-                if (option.Shows(headset))
-                {
-                    shown.Add(option);
-                }
-            }
+    // The dropdowns the page walks now. Under a headset its comfort rows stand in the places of two
+    // settings it has no use for.
+    private VideoOption[] Shown => Headset() ? HeadsetDrops : FlatDrops;
 
-            return shown;
-        }
-    }
+    // Every row the page shows now, in walk order: the dropdowns, then the two checkboxes.
+    private List<VideoOption> Rows => Shown.Concat(Checks).ToList();
 
     /// <summary>The word the page would apply for <paramref name="setting"/>, or null while nothing has
     /// been saved and no row has been touched. A setting with no row here rides unchanged.</summary>
@@ -237,15 +274,19 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     {
         _open = null;
         _listTop = 0;
+        _top = 0;
         _host.Open(OriginalScreen.Video);
         _host.FocusedRow = -1;
     }
 
     /// <summary>Opens the page with one named row focused rather than its first, the screenshot
-    /// aid's way onto a setting further down the page.</summary>
+    /// aid's way onto a setting further down the page. A dropdown row under the window scrolls it
+    /// into view.</summary>
     public void OpenOn(string key)
     {
         Open();
+        int at = Array.FindIndex(Shown, option => option.Key == key);
+        _top = Math.Clamp(at - DropSlots.Length + 1, 0, LastTop);
         _host.FocusKey(key);
     }
 
@@ -279,13 +320,24 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         BuildControls(screen, rows);
     }
 
-    // The page's lists for the pointer: an open setting's list alone, and only once it outruns the
-    // authored window.
+    // The page's lists for the pointer: an open setting's list alone, once it outruns the authored
+    // window, and otherwise the dropdown rows' window. That one draws no bar; the wheel and the
+    // walk off its last line scroll it.
     void IOriginalOptionsPage.Lists(List<OriginalList> lists)
     {
-        if (OpenDrop() is { } drop && _chrome.DropListWindow(drop, _listTop) is { } window)
+        if (OpenDrop() is { } drop)
         {
-            lists.Add(new OriginalList(drop.Key, window, top => _listTop = _chrome.ScrollDropList(drop, top)));
+            if (_chrome.DropListWindow(drop, _listTop) is { } window)
+            {
+                lists.Add(new OriginalList(drop.Key, window, top => _listTop = _chrome.ScrollDropList(drop, top)));
+            }
+
+            return;
+        }
+
+        if (_chrome.Layout.Screen(Section) is { } screen)
+        {
+            lists.Add(new OriginalList(WindowKey, Bar(screen).Window, line => _top = Math.Clamp(line, 0, LastTop)));
         }
     }
 
@@ -307,9 +359,16 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
     bool IOriginalOptionsPage.CloseDropdown() => CloseDropdown();
 
-    // A list item picks and closes, a dropdown opens its list, a checkbox flips.
+    // A list item picks and closes, a dropdown opens its list, a checkbox flips, and the window's
+    // own arrows scroll it a line.
     MenuExit? IOriginalOptionsPage.Activate(OriginalRow row)
     {
+        if (row.Key.StartsWith(WindowKey + ":", StringComparison.Ordinal))
+        {
+            _top = Math.Clamp(_top + (row.Key.EndsWith(OriginalDropLists.UpSuffix, StringComparison.Ordinal) ? -1 : 1), 0, LastTop);
+            return null;
+        }
+
         int colon = row.Key.IndexOf(':');
         if (colon > 0 && OptionFor(row.Key[..colon]) is { } picked)
         {
@@ -376,13 +435,22 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
         _chrome.ComposePlate(screen, "VP_BACKGROUND", layers.Backdrop);
         _chrome.ComposePageTitle(screen, "VP_T_TITLE", "VIDEO", layers.Lines);
-        foreach (var option in Rows)
+        var bar = Bar(screen);
+        foreach (var option in Options)
         {
-            var place = Place(screen, option);
+            if (SlotOf(option) is not { } slot)
+            {
+                continue;
+            }
+
+            var place = Place(screen, slot, option.Kind, HomeOf(option));
+            float descWidth = option.Fixed == null
+                ? Math.Min(place.DescWidth, bar.Window.ThumbX - BarGap - place.DescX)
+                : place.DescWidth;
             layers.Lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
                 OriginalOptionsChrome.TitleFont, BoardInk.Row));
-            layers.Lines.Add(new BoardLine(option.Description(_choices), place.DescX, place.DescY, place.DescWidth,
-                OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
+            layers.Lines.Add(new BoardLine(FirstSentence(option.Description(_choices)), place.DescX, place.DescY,
+                descWidth, OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
         // With a list open the page under it is drawn from the closed controls with the open one
@@ -400,21 +468,41 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         }
 
         _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(_choices) == 1, layers);
+        if (bar.Thumb != null)
+        {
+            layers.Pictures.Add(new BoardPicture(bar.Thumb, bar.Window.ThumbX, bar.Window.ThumbY, Height: bar.Window.ThumbHeight));
+        }
         if (OpenDrop() is { } drop && rows.Count > 0)
         {
             layers.Overlays.Add(_chrome.ComposeOptionList(drop, _listTop, rows, focus));
         }
     }
 
-    // A row bound to a registered word setting by its key. The setting gives the words, labels,
-    // description and gate; the page gives its authored widgets and title.
-    private static VideoOption Word(string key, CSVM.Utils.WordSetting setting, string title,
-        string titleKey, string controlKey, string descriptionKey) =>
-        new(key, title, titleKey, controlKey, descriptionKey,
+    // A dropdown row bound to a registered word setting by its key. The setting gives the words,
+    // labels, description and gate; the page gives the title.
+    private static VideoOption Word(string key, CSVM.Utils.WordSetting setting, string title) =>
+        new(key, title, null,
             c => setting.Detail(c.Enhanced), OriginalRowKind.Dropdown,
             c => c.Offered(setting).Select(setting.Label).ToArray(), c => c.At(setting),
             (c, i) => c.Pick(setting, c.Offered(setting)[i]),
             c => c.Live(setting));
+
+    // A checkbox over a two-word setting on its own authored line, ticked on the second word. The
+    // setting's own description names both words, so the page gives the box's.
+    private static VideoOption Check(string key, CSVM.Utils.WordSetting setting, string title, VideoSlot slot,
+        Func<OptionsChoices, string> description) =>
+        new(key, title, slot,
+            description, OriginalRowKind.Radio,
+            c => c.Offered(setting).Select(setting.Label).ToArray(), c => c.At(setting),
+            (c, i) => c.Pick(setting, c.Offered(setting)[i]),
+            c => c.Live(setting));
+
+    // The text up to and including its first full stop, the one sentence each line has room for.
+    private static string FirstSentence(string text)
+    {
+        int end = text.IndexOf(". ", StringComparison.Ordinal);
+        return end < 0 ? text : text[..(end + 1)];
+    }
 
     private static int IndexOf(string key)
     {
@@ -435,13 +523,6 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         return at >= 0 ? Options[at] : null;
     }
 
-    // The graphics row's description. The apply switches the running world
-    // (Launch/LiveSettings.cs), over a paused flight as well, so no restart is owed. A network
-    // session refuses it, and the row draws dead.
-    private static string GraphicsDescription() => CSVM.Utils.GraphicsMode.SwitchLocked
-        ? "Select the lit world. A network game keeps the one it started with."
-        : "Select the lit world. Applies at once.";
-
     // The size row's description says what the size does under the mode standing beside it. It does
     // something different in each. It is the window's own size, nothing at all, or the size the
     // game draws at inside a fullscreen window Godot will not resize.
@@ -456,6 +537,11 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             ? "Select the size the game draws at, scaled up to fill the screen."
             : "Select the window size.";
     }
+
+    // The line whose box a row wears: a dropdown's unscrolled line, the rows past the window taking
+    // the last.
+    private VideoSlot HomeOf(VideoOption option) =>
+        option.Fixed ?? DropSlots[Math.Clamp(Array.IndexOf(Shown, option), 0, DropSlots.Length - 1)];
 
     // Where a key stands among the rows the page shows now, -1 when it is not shown.
     private int ShownIndexOf(string key)
@@ -492,56 +578,113 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private OpenDropList? OpenDrop()
     {
         if (_open is not { } key || _chrome.Layout.Screen(Section) is not { } screen
-            || OptionFor(key) is not { } option)
+            || OptionFor(key) is not { } option || SlotOf(option) is not { } slot)
         {
             return null;
         }
 
-        var place = Place(screen, option);
-        return OriginalOptionsChrome.DropList(key, screen.Widget(option.ControlKey), option.Words(_choices),
+        var place = Place(screen, slot, option.Kind, HomeOf(option));
+        return OriginalOptionsChrome.DropList(key, screen.Widget(slot.ControlKey), option.Words(_choices),
             (place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight));
     }
 
+    // The line a row stands on. A checkbox keeps its own, and a dropdown takes the window's line it
+    // scrolls to, or null while out of view.
+    private VideoSlot? SlotOf(VideoOption option)
+    {
+        if (option.Fixed != null)
+        {
+            return option.Fixed;
+        }
+
+        int line = Array.IndexOf(Shown, option) - _top;
+        return line >= 0 && line < DropSlots.Length ? DropSlots[line] : null;
+    }
+
+    // A dropdown out of view keeps its index at the window's nearer end, unseen and never a stop.
     private void BuildControls(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         foreach (var option in Rows)
         {
-            var place = Place(screen, option);
+            var slot = SlotOf(option);
+            int line = Array.IndexOf(Shown, option) - _top;
+            var place = Place(screen, slot ?? DropSlots[line < 0 ? 0 : ^1], option.Kind, HomeOf(option));
             rows.Add(new OriginalRow(option.Key,
                 option.Kind == OriginalRowKind.Dropdown ? option.Words(_choices)[option.Read(_choices)] : string.Empty,
                 option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight,
-                option.Editable(_choices), 0, place.Box));
+                option.Editable(_choices), 0, place.Box, slot != null));
         }
 
         _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey);
+        var bar = Bar(screen);
+        var window = bar.Window;
+        rows.Add(new OriginalRow(WindowKey + ":" + OriginalDropLists.UpSuffix, string.Empty, OriginalRowKind.Button,
+            window.ThumbX, window.Y, bar.UpSize.Width, bar.UpSize.Height, _top > 0, 0, bar.Up));
+        rows.Add(new OriginalRow(WindowKey + ":" + OriginalDropLists.DownSuffix, string.Empty, OriginalRowKind.Button,
+            window.ThumbX, window.TrackTop + window.TrackHeight, bar.DownSize.Width, bar.DownSize.Height,
+            _top < LastTop, 0, bar.Down));
     }
 
-    // One row's shape off the section's own widgets, each number falling back to the authored one
-    // when the row is not there. Two of them are derived rather than read. The title box stops at
-    // the control beside it. Every Video title but the Graphics one is authored the same 162 wide,
-    // whatever stands to its right. A description the section gives no width wraps at the plaque
-    // column, the two widthless rows being the two the plaques stand beside.
-    private VideoPlacement Place(MenuLayoutScreen screen, VideoOption option)
+    // The dropdown window and its scroll column, right-aligned on the widest description's edge, since
+    // the panel frame leaves no room past it. The window's descriptions wrap short of the column. It
+    // hangs the D rows' own arrows at its two ends and their thumb on the track between.
+    private VideoBar Bar(MenuLayoutScreen screen)
     {
-        var title = screen.Widget(option.TitleKey);
-        var control = screen.Widget(option.ControlKey);
-        var description = screen.Widget(option.DescriptionKey);
-        bool drop = option.Kind == OriginalRowKind.Dropdown;
+        var art = screen.Widget(DropSlots[0].ControlKey)?.Art ?? Array.Empty<string>();
+        var up = OriginalOptionsChrome.StripArt(art, 1);
+        var down = OriginalOptionsChrome.StripArt(art, 2);
+        var thumb = OriginalOptionsChrome.StripArt(art, 0, 1);
+        var upSize = _chrome.StripSize(up, BarWidth, BarArrowHeight);
+        var downSize = _chrome.StripSize(down, BarWidth, BarArrowHeight);
+        var thumbSize = _chrome.StripSize(thumb, upSize.Width, BarArrowHeight);
+        var first = Place(screen, DropSlots[0], OriginalRowKind.Dropdown);
+        var last = Place(screen, DropSlots[^1], OriginalRowKind.Dropdown);
+        float right = DropSlots.Max(slot => Place(screen, slot, OriginalRowKind.Dropdown) is var p ? p.DescX + p.DescWidth : 0f);
+        float x = right - upSize.Width;
+        float top = first.BoxY;
+        float bottom = last.BoxY + last.BoxHeight;
+        // The Accept plaque stands under the column's foot, so the column stops above it. The window
+        // keeps the rows' full height, the walk scrolling off its foot.
+        float foot = bottom;
+        if (screen.Widget(AcceptKey) is { } accept && x + upSize.Width > accept.Int("X", (int)PlaqueX))
+        {
+            foot = Math.Min(bottom, accept.Int("Y", (int)bottom) - BarGap);
+        }
+        float trackTop = top + upSize.Height;
+        float trackHeight = foot - top - upSize.Height - downSize.Height;
+        float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, DropSlots.Length, FlatDrops.Length, thumbSize.Height);
+        var window = new ListWindow(first.TitleX, top, x + upSize.Width - first.TitleX, bottom - top,
+            x, ListWindow.ThumbYFor(trackTop, trackHeight, thumbHeight, _top, LastTop), thumbSize.Width, thumbHeight,
+            trackTop, trackHeight, FlatDrops.Length, DropSlots.Length, _top);
+        return new VideoBar(window, up, upSize, down, downSize, thumb);
+    }
+
+    // One row's shape off the section's own widgets, falling back to the authored numbers. The title
+    // box stops at the control beside it, every Video title being authored 162 wide. A widthless
+    // description wraps at the plaque column. A dropdown takes its box column and width from its
+    // home line, so no box resizes as the window scrolls. It stands on the line it scrolled to.
+    private VideoPlacement Place(MenuLayoutScreen screen, VideoSlot slot, OriginalRowKind kind, VideoSlot? home = null)
+    {
+        var title = screen.Widget(slot.TitleKey);
+        var control = screen.Widget(slot.ControlKey);
+        var own = screen.Widget((home ?? slot).ControlKey);
+        var description = screen.Widget(slot.DescriptionKey);
+        bool drop = kind == OriginalRowKind.Dropdown;
         float titleX = title?.Int("X", (int)TitleX) ?? TitleX;
         float titleY = title?.Int("Y", (int)ShadowsY) ?? ShadowsY;
         var box = drop
-            ? OriginalOptionsChrome.StripArt(control?.Art ?? Array.Empty<string>(), 4)
+            ? OriginalOptionsChrome.StripArt(own?.Art ?? Array.Empty<string>(), 4)
             : OriginalOptionsChrome.StripArt(control?.Art ?? Array.Empty<string>(), 0, control?.Frames ?? 8);
         float fallbackX = drop ? DropX : titleX + CheckDx;
         float fallbackY = drop ? titleY : titleY + CheckDy;
-        float boxX = control?.Int("X", (int)fallbackX) ?? fallbackX;
+        float boxX = (drop ? own : control)?.Int("X", (int)fallbackX) ?? fallbackX;
         float boxY = control?.Int("Y", (int)fallbackY) ?? fallbackY;
         float boxWidth;
         float boxHeight;
         if (drop)
         {
-            boxWidth = control?.Int("Width", (int)DropWidth) ?? DropWidth;
-            boxHeight = control?.Int("ItemHeight", (int)ItemHeight) ?? ItemHeight;
+            boxWidth = own?.Int("Width", (int)DropWidth) ?? DropWidth;
+            boxHeight = own?.Int("ItemHeight", (int)ItemHeight) ?? ItemHeight;
         }
         else
         {
@@ -568,13 +711,21 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             box);
     }
 
-    // One setting, by its title and the authored widgets it composes over: the title, the control
-    // and the description. Its description is read off the shared choices, since a row can say
-    // something about the staged settings. The control it takes, the words of the store field it
+    // One authored line by its three widgets: the title, the control and the description.
+    private sealed record VideoSlot(string TitleKey, string ControlKey, string DescriptionKey);
+
+    // The dropdown window as the pointer reads it, with its two arrows' art and sizes and the thumb.
+    private sealed record VideoBar(
+        ListWindow Window, BoardArt? Up, (float Width, float Height) UpSize,
+        BoardArt? Down, (float Width, float Height) DownSize, BoardArt? Thumb);
+
+    // One setting, by its title and, for a checkbox, the authored line it keeps; a dropdown takes the
+    // window's line it scrolls to. Its description is read off the shared choices, since a row can
+    // say something about the staged settings. The control it takes, the words of the store field it
     // shows, how it is read and written, and whether the row is live follow. The words come off the
     // choices too, the resolution row's being enumerated per screen rather than held as an array.
     private sealed record VideoOption(
-        string Key, string Title, string TitleKey, string ControlKey, string DescriptionKey,
+        string Key, string Title, VideoSlot? Fixed,
         Func<OptionsChoices, string> Description, OriginalRowKind Kind,
         Func<OptionsChoices, IReadOnlyList<string>> Words,
         Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write,
@@ -586,7 +737,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         public bool Editable(OptionsChoices choices) => Live?.Invoke(choices) ?? true;
 
         // Whether the row stands on the page at all: a headset row only under a live headset, a
-        // flat row only without one. Two rows share each of two authored lines.
+        // flat row only without one. Two rows share each of two places in the walk.
         public bool Shows(bool headset) => HeadsetRow is not { } only || only == headset;
     }
 

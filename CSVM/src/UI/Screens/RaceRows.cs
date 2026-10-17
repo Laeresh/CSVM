@@ -15,8 +15,8 @@ public sealed record RaceRow(Racer Racer, string Place, string Name, string Airc
 
 /// <summary>
 /// The one reading of a stunt race's standings as board rows: place, name, aircraft, best, gap to the
-/// winner and runs finished of runs started. The Built-in results board, both held Display Scores
-/// looks and the Original scores page read these rows. Each lays them out its own way, and their
+/// winner and runs finished of runs started. The chrome results board, the held Display Scores and
+/// the Original scores page read these rows. Each lays them out its own way, and their
 /// words agree. Engine-free. Module entry: docs/architecture/UI.md.
 /// </summary>
 public static class RaceRows

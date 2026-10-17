@@ -44,9 +44,9 @@ public readonly record struct SettingContext(bool Det, bool Enhanced, int Panes)
 
 /// <summary>
 /// One word-valued setting, registered once in <see cref="WordSettings.All"/>: its words, config key,
-/// flag, options-file field, fallback, Built-in row and live-apply hook. Highest first, the lookup reads
+/// flag, options-file field, fallback, row and live-apply hook. Highest first, the lookup reads
 /// the flag, the saved word, the config key, then the fallback. A word outside <see cref="Words"/> reads
-/// as never set and falls through. The options store, the spec parser, both Options screens, the launch
+/// as never set and falls through. The options store, the spec parser, the Options pages, the launch
 /// and the apply walk the registry. Each setting keeps its own rules in its own file, such as the
 /// FSR 2.2 clamp in <see cref="RenderScaleSetting"/>.
 /// </summary>
@@ -85,21 +85,11 @@ public sealed class WordSetting
     /// <summary>The name the resolution log lines give the word, its source beside it.</summary>
     public string LogName { get; init; } = string.Empty;
 
-    /// <summary>The Built-in Options row's title.</summary>
-    public string Title { get; init; } = string.Empty;
-
     /// <summary>What a row shows for each of <see cref="Words"/>, index for index.</summary>
     public IReadOnlyList<string> Labels { get; init; }
 
     /// <summary>Whether a row steps only under Enhanced, keeping its word under Original.</summary>
     public bool EnhancedOnly { get; init; }
-
-    /// <summary>Whether a row stops at its ends rather than wrapping.</summary>
-    public bool Clamps { get; init; }
-
-    /// <summary>Whether the Built-in row stands under the graphics mode's row, which it belongs to,
-    /// rather than after the display rows.</summary>
-    public bool UnderGraphicsRow { get; init; }
 
     /// <summary>What a row says it does, under Enhanced or not.</summary>
     public Func<bool, string> Detail { get; init; } = static _ => string.Empty;

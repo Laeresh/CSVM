@@ -38,7 +38,6 @@ public static class RenderScaleSetting
     {
         SavedField = "renderScale",
         LogName = "render_scale",
-        Title = "Render scale",
         Labels = DisplayWords.RenderScaleChoices.Select(w => w + "%").ToArray(),
         Detail = static _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
         Shown = static _ => Default,

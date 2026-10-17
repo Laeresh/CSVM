@@ -213,6 +213,11 @@ internal sealed class HumanFlightAdapter
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
             raceGhost: _world.Racing || ghostSelf, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
         var planeModel = planeBuilder.Build(planeName);
+        // Before the ghost stamp, so the copies wear their originals' stamp. ponytail: none under the
+        // stereo path. Its lift draws the copies' flat shaders at the world origin. A stereo seat
+        // needs copies built through the interior's stereo variant.
+        var reseat = xrInterior ? null : CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
+
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
         // every camera keeps; the four-wide band then serves this machine's seats alone.
@@ -237,8 +242,9 @@ internal sealed class HumanFlightAdapter
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
-                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
+                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi, reseat?.Hidden),
                 Interior = planeBuilder.CockpitInterior,
+                Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
                 Stereo = xrInterior && planeBuilder.CockpitInterior is { } interior
                     ? new XrCockpit(interior, vrCockpit.EyeOffsetInAircraft)
@@ -633,6 +639,7 @@ internal sealed class HumanFlightAdapter
         {
             var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
             pilotHud.TargetHud = targetHud;
+            targetHud.SpyglassOn = _policy.SpyglassOn;
             // The spyglass's range gate reads this pane's own fog band; null on a bare rig.
             var fogRange = _world.FogRange;
             int paneIndex = rig.Index;

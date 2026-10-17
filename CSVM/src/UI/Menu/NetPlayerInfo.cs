@@ -57,7 +57,7 @@ public static class PilotVoices
 }
 
 /// <summary>
-/// What the original asks before a network game opens, engine-free so both presentations and a
+/// What the original asks before a network game opens, engine-free so a presentation and a
 /// unit test share it. Game Information names the game, its optional password, its seat cap and
 /// the remake's Public or Private choice. Player Information names the player's callsign and voice. The limits and the cap's range are
 /// the scripts' own (<c>docs/org/multiplayer-messages.md</c>, "Game and Player Information"). The

@@ -1114,6 +1114,11 @@ member, and it does not go here.
   nothing or kills a neighbour.** On C3's `susp_bridge` only `rope1`'s collider resolves to the pool,
   and rounds aimed along the cable at it flew past into `bridge_truck01`, whose chain then dropped the
   bridge with no shooter credited.
+- **INSTR-105**, **When no ray reaches a pool whose colliders exist and resolve to it, look for a
+  hidden ancestor before calling it a collision defect: a mission's boot script switches whole areas
+  off, and the original's ray test skips an inactive node's subtree too.** C3's seven guard towers
+  stand in C3/M02 and are switched off in C3/M01 by `m01.gw`'s `WorldPartitionSetActive`, which hides
+  `g28515` and `town_2` above them (`c3-hit-attribution`).
 
 ## SRC, sources and documents
 
@@ -1196,13 +1201,6 @@ owner. Rerun it alone with the entry's command: red alone, it is the change's un
 on the unchanged build (METHOD-8); green alone, the landing carries a `Waiver:` line naming that
 owner. An entry leaves when its owner closes. A `DEFERRED` result (`memory`, `rebuild`, `quiet`, `gaming mode`) is
 not a red: re-run, with `-WaitQuiet` when other sessions' Godots are live (`docs/tooling.md`).
-
-- **An Enhanced golden moved by a pixel or one LSB**: `MOVED c1-cockpit-enhanced: <pin> -> <hash>`,
-  or `c1-cloud-deck-enhanced`, `c1-rocket-hit-enhanced`. Owner #114, which wants the frame kept in
-  `.scratch\goldens-failures\<stamp>\`. Rerun the goldens once before re-pinning or waiving the
-  moved shot: `.\RunTests.ps1 -SkipUnits -SkipEngine`, which renders every shot, since the runner
-  has no single-shot selector. CPU load and other golden workers' GPU contention did not reproduce
-  the flips.
 
 ## The standing checklist
 

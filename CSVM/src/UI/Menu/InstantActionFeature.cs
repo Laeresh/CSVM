@@ -247,7 +247,7 @@ public sealed class InstantActionFeature : IMenuFeature
     public static int AirframeIndex(string name) => Array.IndexOf(AirframeNames, name);
 
     /// <summary>A lives value as a screen writes it: Unlimited at zero, else the count. One
-    /// vocabulary, so both presentations name the same setting the same way.</summary>
+    /// vocabulary, so every screen names the same setting the same way.</summary>
     public static string LivesLabel(int lives) =>
         lives <= 0 ? "Unlimited" : lives.ToString(CultureInfo.InvariantCulture);
 

@@ -46,6 +46,10 @@ public sealed class FirstPersonDressing
     /// interior.</summary>
     public XrCockpit? Stereo { get; set; }
 
+    /// <summary>The lights and propeller discs copied onto the interior, kept on their originals'
+    /// visibility and spin while the interior is drawn.</summary>
+    public CockpitReseat? Reseat { get; set; }
+
     /// <summary>One frame's dressing for <paramref name="selected"/> under the pose the frame took.
     /// <paramref name="firstPersonPose"/> is that pose, not the selection, so a held look-behind
     /// brings the body back. The pass follows the drawn attitude and the airframe's wobble, and
@@ -55,7 +59,10 @@ public sealed class FirstPersonDressing
     {
         Visibility?.Apply(selected, firstPersonPose);
         // Same rule, so the panel is driven exactly on the frames it is on the screen.
-        SetPanel(CockpitVisibility.Rules(selected, firstPersonPose).Interior);
+        bool interior = CockpitVisibility.Rules(selected, firstPersonPose).Interior;
+        SetPanel(interior);
+        if (interior)
+            Reseat?.Sync();
         // After the hide, so the pass shows exactly the frames the interior itself does.
         Pass?.Sync(drawn, camera, shakeRotation, pool?.ActiveMuzzleLights());
     }

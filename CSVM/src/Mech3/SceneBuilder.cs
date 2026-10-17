@@ -1892,7 +1892,7 @@ void fragment() {
     // so a faithful session never decodes it. A missing pool or an empty mask keeps the sprite.
     private void DrawPool(PooledSwap swap)
     {
-        swap.Tint ??= CloudPuffs.MaskTint(_textures.FindImage(swap.TexName)) ?? Colors.Transparent;
+        swap.Tint ??= CloudPuffs.MaskTint(_textures.FindImage(swap.TexName, authored: true)) ?? Colors.Transparent;
         if (CloudPuffs.Far() is not { } pool || swap.Tint == Colors.Transparent)
             return;
         ShaderTwins.Follow(swap.Material, swap.PooledShader.Value);

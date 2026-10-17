@@ -55,22 +55,26 @@ public sealed class WingLightBlinker
         var lamps = new List<(Node3D, OmniLight3D)>(flares.Count);
         foreach (var flare in flares)
         {
-            // AT_NODE offset is (0,0,0) in the def, the light sits exactly at the flare. It takes
-            // the authored falloff pair the way every world lamp does (WorldLights.OmniRange).
-            var light = new OmniLight3D
-            {
-                LightColor = WingLights.FlareColor,
-                OmniRange = WorldLights.OmniRange(WingLights.FlareRangeMin, WingLights.FlareRangeMax),
-                OmniAttenuation = WorldLights.OmniAttenuation,
-                LightEnergy = LightEnergy,
-                ShadowEnabled = false,
-                Visible = false,
-            };
+            // AT_NODE offset is (0,0,0) in the def, the light sits exactly at the flare.
+            var light = NewLamp(visible: false);
             flare.AddChild(light);
             lamps.Add((flare, light));
         }
         return new WingLightBlinker(lamps, animLod >= AnimRuntime.HighLod);
     }
+
+    /// <summary>One flare's point light, with the authored falloff pair the way every world lamp
+    /// takes it (<see cref="WorldLights.OmniRange"/>). <c>Hud.CockpitReseat</c> hangs one on each
+    /// re-seated flare.</summary>
+    public static OmniLight3D NewLamp(bool visible) => new()
+    {
+        LightColor = WingLights.FlareColor,
+        OmniRange = WorldLights.OmniRange(WingLights.FlareRangeMin, WingLights.FlareRangeMax),
+        OmniAttenuation = WorldLights.OmniAttenuation,
+        LightEnergy = LightEnergy,
+        ShadowEnabled = false,
+        Visible = visible,
+    };
 
     /// <summary>Advances the blink phase and shows the flares + lights during the flash
     /// window. A no-op below the LOD gate: the flares stay off (left however

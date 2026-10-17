@@ -1060,6 +1060,16 @@ public class NetMessagesTests
         });
         Assert.NotEqual(sent, other);
         Assert.False(DogfightRosterMessage.TryRead(buffer.AsSpan(0, DogfightRosterMessage.Size - 1), out _));
+
+        // The reader's seat count rides the header's spare byte; an older host's 0 reads as one.
+        Assert.Equal(1, got.YourSeats);
+        new DogfightRosterMessage(7, 1, sent.Rows, yourSeats: 2).Write(buffer);
+        Assert.True(DogfightRosterMessage.TryRead(buffer, out var two));
+        Assert.Equal(2, two.YourSeats);
+        Assert.NotEqual(sent, two);
+        buffer[NetMessage.HeaderBytes + 3] = 0;
+        Assert.True(DogfightRosterMessage.TryRead(buffer, out var older));
+        Assert.Equal(1, older.YourSeats);
     }
 
     [Fact]

@@ -460,9 +460,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         JoinBoard = new OriginalJoinBoard(layout, this, joinRoster, _setup, dataRoot, _stock);
         Lobby = new OriginalLobbyScreen(
             () => _net, this, dataRoot, _stock,
-            () => _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
+            local => local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>(),
             () => profiles?.Invoke().LastPlayedPilotName,
-            () => planes?.List() ?? Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>());
+            () => planes?.List() ?? Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>(),
+            BeginLobbySeatWalk);
         Connection = new OriginalConnectionScreen(
             () => _net, this, dataRoot, Lobby.OpenHost, (hosting, then, password) => AskNetInfo(hosting, then, asksPassword: password));
         _modules = Hangar != null
@@ -729,6 +730,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         }
 
         int revision = net.Revision;
+        net.LocalSeats = _setup.Seats.Count;
         net.Step(dt);
         bool changed = FollowCoopGuest(net) | FollowDogfight(net) | Campaign.StepCoop() | (net.Revision != revision);
         return Connection.Tick(dt) | Lobby.Tick(dt) || changed;
@@ -1105,6 +1107,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             // belonging to no one screen, then the network box or the screen's own module. Only a
             // step that changes no value moves the focus.
             if (SliderControl.StepValue(rows, focus, commands.MoveX)
+                || StepSortieRule(rows, focus, commands.MoveX)
                 || (_box.Standing == null && NetInfo.IsOpen && NetInfo.StepSideways(rows, focus, commands.MoveX))
                 || (_box.Standing == null && !NetInfo.IsOpen && ModuleFor(_screen) is { } module
                     && module.StepSideways(rows, focus, commands.MoveX)))

@@ -2,6 +2,8 @@
 # must NEVER be committed. Code and documentation only.
 /CrimsonSkiesGame/
 /extracted/
+# HD texture packs dropped in for HdTextures: redraws of the game's art.
+/HD/
 /tools/
 # Archives: every zip in this tree so far has been game data or an extraction of it
 # (CSVM-Complete.zip, the unzbd outputs). Ignored as a class rather than by name, so the
@@ -100,3 +102,6 @@ analysis/capture-rigs/*-log.txt
 .claude/settings.local.json
 # The webrtc-native GDExtension, fetched by InstallWebRtc.ps1 (binaries are never committed)
 /CSVM/addons/webrtc_native/
+
+# Per-app Caddy site blocks of other services on the VPS (see server/Caddyfile)
+/server/sites/

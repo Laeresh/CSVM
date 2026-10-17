@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Bindings;
@@ -388,19 +388,18 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.Video.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.Video.GraphicsChoice);
 
-        // Six steps, not eight: the size row is dead under the borderless default, which owns the
-        // size, and the shadow row under Original. A dead row is out of the walk. VR mode is live
-        // on Windows alone.
-        int steps = OperatingSystem.IsWindows() ? 6 : 5;
-        for (int i = 0; i < steps; i++)
-        {
-            Down(host);
-        }
-
+        // Five steps, not six: the size row is dead under the borderless default, which owns the
+        // size. A dead row is out of the walk, and VR Mode waits under the window.
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
         Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
-        Assert.Equal(4 + 2, Compose(host).Plaques.Single(p => p.Art.Name == "PP_B_Check8.png" && p.Y == 465f).Frame);
+        float graphicsY = Row(host, OriginalVideoPage.GraphicsKey).Y;
+        Assert.Equal(4 + 2, Compose(host).Plaques.Single(p => p.Art.Name == "PP_B_Check8.png" && p.Y == graphicsY).Frame);
 
         // A sideways step takes the next word with wrap, as a Game Options row does.
         StepX(host, 1);
@@ -408,11 +407,59 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
 
-        // Enhanced brings the shadow row live under the checkbox. Below it the column holds only
-        // value rows, so Down leaves for CANCEL CHANGES, whose centre lies below the shadow row's.
-        // ACCEPT CHANGES stands over that.
+        // The walk past the window's foot scrolled it, View Distance taking the bottom line dead and
+        // Monitor leaving the top one. Enhanced brings View Distance and Ocean Waves live.
+        Assert.Equal(1, host.Module.Video.Top);
+        Assert.False(Row(host, OriginalVideoPage.MonitorKey).Visible);
+        MoveY(host, -1);
+        Assert.Equal(OriginalVideoPage.WaterQualityKey, host.FocusedKey);
+        MoveY(host, -1);
+        Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
+        // Every row moved up one line: Shadow Quality now wears the Lighting Quality line's box.
+        Assert.Equal((260f, 440f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ShadowQualityKey)));
+
+        // The wheel over the window scrolls it as well, clamped at either end, VR Mode on the bottom
+        // line at the foot.
+        Wheel(host, 200f, 300f, -1);
+        Assert.Equal(0, host.Module.Video.Top);
+        Assert.True(Row(host, OriginalVideoPage.MonitorKey).Visible);
+        Wheel(host, 200f, 300f, 3);
+        Assert.Equal(2, host.Module.Video.Top);
+        Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
+        Wheel(host, 200f, 300f, -1);
+        Assert.Equal(1, host.Module.Video.Top);
+        Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
+
+        // Up off the window's top line scrolls it back. The dead size row scrolls in under Display
+        // Mode, so the press steps on past it to Monitor, and Down walks back to View Distance.
+        for (int i = 0; i < 5; i++)
+        {
+            MoveY(host, -1);
+        }
+
+        Assert.Equal(OriginalVideoPage.DisplayModeKey, host.FocusedKey);
+        MoveY(host, -1);
+        Assert.Equal(OriginalVideoPage.MonitorKey, host.FocusedKey);
+        Assert.Equal(0, host.Module.Video.Top);
+        for (int i = 0; i < 6; i++)
+        {
+            Down(host);
+        }
+
+        Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
+        Assert.Equal(1, host.Module.Video.Top);
+
+        // Down scrolls VR Mode in, stopping on it where it is live, then crosses both checkboxes.
+        // Under the window the column holds only value rows, so Down from the checkbox leaves for
+        // ACCEPT CHANGES, with CANCEL CHANGES under it.
+        for (int i = 0; i < (OperatingSystem.IsWindows() ? 3 : 2); i++)
+        {
+            Down(host);
+        }
+
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Down(host);
-        Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         MoveY(host, -1);
@@ -429,8 +476,8 @@ public class OriginalOptionsTests
         Assert.Equal("normal", exit.Difficulty);
     }
 
-    /// <summary>The VR Mode checkbox on the Clutter Detail line opens on the saved choice. An
-    /// Accept flips it, and ACCEPT CHANGES carries it on the one apply exit. Off Windows it stands
+    /// <summary>The VR Mode dropdown, the window's last row, opens on the saved choice. A sideways
+    /// step flips it, and ACCEPT CHANGES carries it on the one apply exit. Off Windows it stands
     /// dead.</summary>
     [Fact]
     public void TheVideoPageVrModeRowFlipsAndRidesTheApply()
@@ -446,16 +493,18 @@ public class OriginalOptionsTests
 
         host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
         Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
-        Accept(host);
+        Assert.Equal(2, host.Module.Video.Top);
+        Assert.Equal("On", Row(host, OriginalVideoPage.VrModeKey).Label);
+        StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
         StepX(host, 1);
         Assert.True(host.Module.Video.VrModeChoice);
         StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
 
-        // Down past Anti-aliasing and Enhanced Graphics onto ACCEPT CHANGES.
+        // Down past the dead Ocean Waves onto Enhanced Graphics, then ACCEPT CHANGES.
         Down(host);
-        Down(host);
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
@@ -535,14 +584,13 @@ public class OriginalOptionsTests
         StepX(host, -1);
         Assert.Equal(DisplayWords.Windowed, host.Module.Video.DisplayModeChoice);
 
-        // V-Sync, Render Scale, VR Mode where it is live, Anti-aliasing, then the checkbox, the
-        // column's last live row. Down leaves the value column for ACCEPT CHANGES, whose centre lies
-        // below the checkbox's though its top stands level with it.
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 6 : 5); i++)
-        {
-            Down(host);
-        }
-
+        // The checkbox is the column's last live row. Down leaves the value column for ACCEPT
+        // CHANGES, whose centre lies below the checkbox's though its top stands level with it.
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
         Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
@@ -679,24 +727,15 @@ public class OriginalOptionsTests
         Down(host);
         StepX(host, 1);
         Assert.Equal("125", host.Module.Video.Choice(RenderScaleSetting.Lookup));
-        // The VR Mode checkbox stands between Render Scale and Anti-aliasing, live on Windows only.
         Down(host);
-        if (OperatingSystem.IsWindows())
-        {
-            Accept(host);
-            Assert.True(host.Module.Video.VrModeChoice);
-            Down(host);
-        }
-
         StepX(host, 1);
         Assert.Equal(DisplayWords.AntiAliasingFxaa, host.Module.Video.Choice(AntiAliasingSetting.Lookup));
         Down(host);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
-        // Enhanced brings the shadow row live under the checkbox. Below it the column holds only value
-        // rows, so Down leaves for CANCEL CHANGES, whose centre lies below the column's foot.
+        // The checkbox is the column's foot, so Down leaves for ACCEPT CHANGES, then CANCEL CHANGES.
         Down(host);
-        Assert.Equal(OriginalVideoPage.ShadowQualityKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
@@ -706,14 +745,13 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.Video.VSyncChoice);
         Assert.Null(host.Module.Video.Choice(RenderScaleSetting.Lookup));
         Assert.Null(host.Module.Video.Choice(AntiAliasingSetting.Lookup));
-        Assert.Null(host.Module.Video.VrModeChoice);
 
         host.Module.Video.Open();
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 6 : 5); i++)
-        {
-            Down(host);
-        }
-
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
         Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.Video.GraphicsChoice);
@@ -785,8 +823,23 @@ public class OriginalOptionsTests
         Assert.Equal(ShadowQualitySetting.High, host.Module.Video.Choice(ShadowQualitySetting.Lookup));
         Assert.Equal("High", Row(host, OriginalVideoPage.ShadowQualityKey).Label);
 
-        // The shadow row is the column's foot. Down leaves the value column for CANCEL CHANGES, whose
-        // centre lies below the row's, and ACCEPT CHANGES stands over that.
+        // The shadow row is the window's foot. Down scrolls View Distance onto it, then VR Mode,
+        // stopping there where it is live. It walks the two checkboxes under the window and leaves
+        // the value column for ACCEPT and CANCEL CHANGES.
+        Down(host);
+        Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
+        if (OperatingSystem.IsWindows())
+        {
+            Down(host);
+            Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
+        }
+
+        Down(host);
+        Assert.Equal(OriginalVideoPage.WaterQualityKey, host.FocusedKey);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.AcceptKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.CancelKey, host.FocusedKey);
         MoveY(host, -1);
@@ -804,7 +857,7 @@ public class OriginalOptionsTests
     {
         var saved = new OptionsDef
         {
-            GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value,
+            GraphicsMode = GraphicsMode.EnhancedWord,
             Difficulty = "hardest", VSync = "120", DisplayMode = DisplayWords.Fullscreen,
             Resolution = "1920x1080", MonitorIndex = "0", NearestAfterKill = true, Rumble = false,
         };
@@ -815,7 +868,7 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // An older file's saved presentation word opens no row: the page reads it nowhere.
+        // Five option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {
@@ -957,7 +1010,7 @@ public class OriginalOptionsTests
         var host = Host();
         host.Module.Video.Open();
 
-        Assert.Equal((260f, 245f, 70f, 15f), Rect(Row(host, OriginalVideoPage.MonitorKey)));
+        Assert.Equal((240f, 245f, 90f, 15f), Rect(Row(host, OriginalVideoPage.MonitorKey)));
         var resolution = Row(host, OriginalVideoPage.ResolutionKey);
         Assert.Equal((260f, 290f, 70f, 17f), Rect(resolution));
         // The size row keeps its authored geometry under the borderless default and draws dead.
@@ -970,13 +1023,16 @@ public class OriginalOptionsTests
         // Shadow Quality stands on the authored Texture Quality line, dead under the Original
         // default, whose world casts no sun shadow.
         var shadow = Row(host, OriginalVideoPage.ShadowQualityKey);
-        Assert.Equal((260f, 530f, 70f, 17f), Rect(shadow));
+        Assert.Equal((260f, 465f, 70f, 17f), Rect(shadow));
         Assert.False(shadow.Enabled);
-        // The Graphics checkbox keeps the authored Shadows corner, and VR Mode's checkbox the
-        // Clutter Detail corner above it, live on Windows alone.
-        Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalVideoPage.GraphicsKey)));
+        // The two checkboxes keep the authored Clutter Detail and Shadows corners, Ocean Waves dead
+        // under the Original default as Shadow Quality is.
+        Assert.Equal((260f, 500f, 16f, 16f), Rect(Row(host, OriginalVideoPage.WaterQualityKey)));
+        Assert.False(Row(host, OriginalVideoPage.WaterQualityKey).Enabled);
+        Assert.Equal((260f, 540f, 16f, 16f), Rect(Row(host, OriginalVideoPage.GraphicsKey)));
+        // VR Mode waits under the window, its last row, live on Windows alone.
         var vr = Row(host, OriginalVideoPage.VrModeKey);
-        Assert.Equal((260f, 420f, 16f, 16f), Rect(vr));
+        Assert.False(vr.Visible);
         Assert.Equal(OperatingSystem.IsWindows(), vr.Enabled);
         Assert.Equal((500f, 470f, 240f, 50f), Rect(Row(host, OriginalVideoPage.AcceptKey)));
         Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalVideoPage.CancelKey)));
@@ -989,55 +1045,97 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Monitor" && l.X == 130f && l.Y == 245f && l.Width == 90f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the monitor", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 245f && l.Width == 310f);
+            && l.X == 350f && l.Y == 245f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Resolution" && l.X == 130f && l.Y == 290f && l.Width == 130f);
         // The size row's description is the mode's, and nothing saved stands on the borderless
         // default, which owns the size.
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Borderless runs at", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 290f && l.Width == 310f);
+            && l.X == 350f && l.Y == 290f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Display Mode" && l.X == 130f && l.Y == 335f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how the window sits", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 335f && l.Width == 310f);
+            && l.X == 350f && l.Y == 335f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 380f && l.Width == 310f);
+            && l.X == 350f && l.Y == 380f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Render Scale" && l.X == 130f && l.Y == 402f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Render the world below native", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 402f && l.Width == 310f);
+            && l.X == 350f && l.Y == 402f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Anti-aliasing" && l.X == 130f && l.Y == 440f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how edges are smoothed.", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 440f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Shadow Quality" && l.X == 130f && l.Y == 530f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Enhanced Graphics only.", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 530f && l.Width == 150f);
-        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 470f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 470f && l.Width == 160f);
-        Assert.Contains(board.Lines, l => l.Text == "VR Mode" && l.X == 130f && l.Y == 425f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text == DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows())
-            && l.X == 340f && l.Y == 425f && l.Width == 160f);
+            && l.X == 350f && l.Y == 440f && l.Width == 292f);
+        Assert.Contains(board.Lines, l => l.Text == "Shadow Quality" && l.X == 130f && l.Y == 465f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics only."
+            && l.X == 350f && l.Y == 465f && l.Width == 150f);
+        Assert.Contains(board.Lines, l => l.Text == "Ocean Waves" && l.X == 130f && l.Y == 505f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 545f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text == "Select the lit world."
+            && l.X == 350f && l.Y == 545f && l.Width == 150f);
+        // Every description is its first sentence alone, and View Distance, out of the window, draws
+        // neither title nor description.
+        Assert.DoesNotContain(board.Lines, l => l.Row < 0 && l.Text.Contains(". ", StringComparison.Ordinal));
+        Assert.DoesNotContain(board.Lines, l => l.Text == "View Distance");
         Assert.Equal(19, board.Lines.Count(l => l.Row < 0));
-        // The Graphics checkbox draws unchecked and unfocused, the page opening on the monitor row
-        // above it. That is the second of its eight frames.
-        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png" && p.Y == 465f).Frame);
+        // The graphics checkbox draws unchecked and unfocused, the page opening on the monitor row:
+        // the second of its eight frames.
+        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png" && p.Y == 540f).Frame);
 
         // The box marks the focused dropdown and no other, and it follows the cursor past the dead
-        // size row onto the display mode's. Further down it stands on a checkbox, VR Mode on Windows
-        // and Graphics elsewhere. A checkbox is a plaque strip that takes no box, so the page draws none.
+        // size row onto the display mode's. Four rows further down it stands on the checkbox, a
+        // plaque strip that takes no box at all, so the page draws none.
         Assert.Equal(
-            new[] { (260f, 245f, 70f, 15f) },
+            new[] { (240f, 245f, 90f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
         Down(host);
         Assert.Equal(
             new[] { (260f, 335f, 70f, 17f) },
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 3 : 4); i++)
-        {
-            Down(host);
-        }
+        Down(host);
+        Down(host);
+        Down(host);
+        Down(host);
 
-        Assert.Equal(OperatingSystem.IsWindows() ? OriginalVideoPage.VrModeKey : OriginalVideoPage.GraphicsKey, host.FocusedKey);
+        Assert.Equal(OriginalVideoPage.GraphicsKey, host.FocusedKey);
         Assert.Empty(Compose(host).Fills.Where(f => f.Border));
+    }
+
+    /// <summary>The dropdown window's scroll column ends on the widest description's right edge (the
+    /// fixture's 350 + 310). The window's descriptions wrap short of it.
+    /// The D rows' own arrows stand at its two ends, each live only towards more rows. Their thumb
+    /// spans seven ninths of the track. A click on the down arrow scrolls one line.</summary>
+    [Fact]
+    public void TheVideoDropdownWindowCarriesItsOwnScrollColumn()
+    {
+        var host = Host();
+        host.Module.Video.Open();
+        var up = Row(host, OriginalVideoPage.WindowKey + ":up");
+        var down = Row(host, OriginalVideoPage.WindowKey + ":down");
+        Assert.Equal(660f, up.X + up.Width);
+        Assert.Equal(245f, up.Y);
+        Assert.Equal(down.X, up.X);
+        Assert.False(up.Enabled);
+        Assert.True(down.Enabled);
+        var window = Assert.Single(Lists(host)).Window;
+        Assert.Equal(up.X, window.ThumbX);
+        Assert.Equal(7f / 9f * window.TrackHeight, window.ThumbHeight, 3);
+        var composed = Compose(host);
+        Assert.Contains(composed.Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
+        var monitorDesc = Assert.Single(composed.Lines, l => l.Y == 245f && l.X == 350f);
+        Assert.True(monitorDesc.X + monitorDesc.Width <= up.X);
+
+        Click(host, OriginalVideoPage.WindowKey + ":down");
+        Assert.Equal(1, host.Module.Video.Top);
+        Assert.True(Row(host, OriginalVideoPage.ViewDistanceKey).Visible);
+        // Resolution stands on Monitor's line now but keeps its own box, not Monitor's wider one.
+        Assert.Equal((260f, 245f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ResolutionKey)));
+        Assert.True(Row(host, OriginalVideoPage.WindowKey + ":up").Enabled);
+        // A second click reaches the foot, VR Mode on the bottom line, where down goes dead.
+        Click(host, OriginalVideoPage.WindowKey + ":down");
+        Assert.Equal(2, host.Module.Video.Top);
+        Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
+        Assert.False(Row(host, OriginalVideoPage.WindowKey + ":down").Enabled);
+        Click(host, OriginalVideoPage.WindowKey + ":up");
+        Click(host, OriginalVideoPage.WindowKey + ":up");
+        Assert.Equal(0, host.Module.Video.Top);
     }
 
     [Fact]
@@ -1439,11 +1537,22 @@ public class OriginalOptionsTests
                 headset ? OriginalVideoPage.VrVignetteKey : OriginalVideoPage.DisplayModeKey,
                 headset ? OriginalVideoPage.VrRenderScaleKey : OriginalVideoPage.VSyncKey,
                 OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
-                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.VrModeKey, OriginalVideoPage.GraphicsKey,
+                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey, OriginalVideoPage.VrModeKey,
+                OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey,
                 OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
+                OriginalVideoPage.WindowKey + ":up", OriginalVideoPage.WindowKey + ":down",
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "VIDEO", 18);
+        // View Distance and VR Mode wait under the window, unseen, so only the rows on screen must
+        // stand clear.
+        Assert.False(Row(host, OriginalVideoPage.ViewDistanceKey).Visible);
+        Assert.False(Row(host, OriginalVideoPage.VrModeKey).Visible);
+        RowsAreClearOfEachOther(host, rows.Where(r => r.Visible).ToArray(), "VIDEO", 18);
+
+        // Scrolled to its foot, Monitor and Resolution leave the top lines and VR Mode takes the
+        // bottom one, still clear.
+        host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
+        RowsAreClearOfEachOther(host, host.Rows.Where(r => r.Visible).ToArray(), "VIDEO", 18);
     }
 
     // The CONTROLS page's rows, the same rule over its own plate. The sensitivity slider is pinned

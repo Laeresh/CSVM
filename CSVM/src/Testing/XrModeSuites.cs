@@ -3,16 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Launch;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
-using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
 /// <summary>
-/// VR mode's menu-side rules on the real screens of both presentations. One suite reads the
-/// restart's argument source in this process. One is the single seat a headset or its stand-in
-/// flies, where the join boards close the entries past the captain's. One is the fallback notice a
+/// VR mode's menu-side rules on Original's real screens. One suite reads the restart's argument
+/// source in this process. One is the single seat a headset or its stand-in flies, where the join
+/// board closes the entries past the captain's. One is the fallback notice a
 /// launch that asked for OpenXR and plays flat shows the player. None starts a process or a
 /// runtime; the launcher's decisions are units (<c>CSVM.Tests/XrRelaunchTests.cs</c>).
 /// </summary>
@@ -23,28 +21,23 @@ internal static class XrModeSuites
     private const int SecondPad = 97;
 
     [Suite("xr-one-seat",
-        "VR mode's one local seat on both presentations' real screens, the limit the launcher sets "
-        + "whenever a headset or the --xr-sim stand-in draws: Built-in's join board opens with the "
-        + "captain's entry open and the other three closed and saying why, the first pad still takes "
-        + "the captain's chair, a second pad is refused a seat, and the strip says VR flies one seat "
-        + "where it would otherwise invite a pad; Original's board closes the same three entries "
-        + "under its own subtitle and refuses the same pad, and its Dogfight screen names VR as what "
-        + "holds a local match")]
+        "VR mode's one local seat on Original's real screens, the limit the launcher sets "
+        + "whenever a headset or the --xr-sim stand-in draws: the join board closes the three entries "
+        + "past the captain's under its own subtitle, saying why, the captain's pad signs on and a "
+        + "second pad is refused a seat, and the Dogfight screen names VR as what holds a local match")]
     internal static void XrOneSeat(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        BuiltInOneSeat(ctx);
         OriginalOneSeat(ctx);
     }
 
     [Suite("xr-fallback-notice",
-        "The notice a launch that asked for OpenXR and plays flat posts for the menu: Built-in "
-        + "shows it on its error line at the first show and Original raises it as the one-button "
-        + "warning box over its top level, each taking it once, so a later show is clean")]
+        "The notice a launch that asked for OpenXR and plays flat posts for the menu: Original "
+        + "raises it as the one-button warning box over its top level at the first show, taking it "
+        + "once, so a later show is clean")]
     internal static void XrFallbackNotice(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        BuiltInNotice(ctx);
         OriginalNotice(ctx);
     }
 
@@ -79,38 +72,6 @@ internal static class XrModeSuites
             $"and this run is flat-only whatever is saved ({flatOnly ?? "may restart"})");
     }
 
-    private static void BuiltInOneSeat(TestContext ctx)
-    {
-        var host = MenuSuiteHost.Bare(new List<MenuExit>(), ctx.DataRoot, out var seat);
-        var setup = host.Features.Get<PlayerSetupFeature>();
-        setup.SeatLimit = 1;
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "xr-one-seat");
-        ctx.Host.AddChild(menu);
-        try
-        {
-            menu.ShowMenu();
-            ctx.Check(menu.ShownJoinHint == $"({PlayerSetupFeature.VrOneSeat})",
-                $"Built-in's strip says VR flies one seat instead of inviting a pad ({menu.ShownJoinHint})");
-            menu.ShowMenu(LaunchMenu.JoinBoardAid);
-            ctx.Check(menu.ShownScreen == "Join", $"the join board stands ({menu.ShownScreen})");
-            var manifest = menu.ShownManifest;
-            ctx.Check(manifest.Count == 4 && manifest[0].Contains("open seat", StringComparison.Ordinal)
-                && manifest.Skip(1).All(e => e.Contains("closed seat", StringComparison.Ordinal)
-                    && e.Contains("VR mode flies one seat", StringComparison.Ordinal)),
-                $"with the captain's entry open and the other three closed, saying why ({string.Join(" / ", manifest)})");
-            ctx.Check(menu.Devices.SignOn(FirstPad) && menu.Devices.P1Pad == FirstPad && setup.Seats.Count == 1,
-                $"the first pad still takes the captain's chair, seat 1 ({menu.Devices.P1Pad}, {setup.Seats.Count} seats)");
-            ctx.Check(!menu.Devices.SignOn(SecondPad) && setup.Seats.Count == 1,
-                $"and a second pad is refused a seat of its own ({setup.Seats.Count} seats)");
-            menu.Devices.DropSignOns();
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-        }
-    }
-
     private static void OriginalOneSeat(TestContext ctx)
     {
         var host = OriginalHost(ctx, "xr-one-seat", out var layoutReason);
@@ -124,7 +85,7 @@ internal static class XrModeSuites
         setup.SeatLimit = 1;
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             if ((host.Active as OriginalPresentation) is not { Shell: { } shell, Devices: { } devices })
             {
@@ -155,40 +116,6 @@ internal static class XrModeSuites
         }
     }
 
-    private static void BuiltInNotice(TestContext ctx)
-    {
-        var registry = new PresentationRegistry();
-        var planes = MenuSuiteHost.ScratchPlanes(ctx, "xr-fallback-notice");
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new UI.Boards.MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
-        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
-        var notice = new MenuNoticeFeature();
-        notice.Post(XrRelaunch.FallbackNotice);
-        host.Features.Add(notice);
-        host.AddSeat(new MenuIdleSource());
-        try
-        {
-            host.Select(forceBuiltIn: true, cliOverride: null);
-            host.Show(MenuReturnDestination.TopLevel);
-            var menu = (host.Active as BuiltInPresentation)?.Menu;
-            ctx.Check(menu?.ShownDetail == XrRelaunch.FallbackNotice && notice.Pending == null,
-                $"Built-in writes the notice on its error line and takes it ({menu?.ShownDetail})");
-            host.Exit(new QuitExit());
-            host.Show(MenuReturnDestination.TopLevel);
-            ctx.Check(menu?.ShownDetail != XrRelaunch.FallbackNotice,
-                $"and a later show is clean ({menu?.ShownDetail})");
-        }
-        finally
-        {
-            host.Deactivate();
-            MenuSuiteHost.DropScratchPlanes(ctx, "xr-fallback-notice");
-        }
-    }
-
     private static void OriginalNotice(TestContext ctx)
     {
         var host = OriginalHost(ctx, "xr-fallback-notice", out var layoutReason);
@@ -203,7 +130,7 @@ internal static class XrModeSuites
         host.Features.Add(notice);
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell is { Screen: OriginalScreen.TopLevel } && shell.Dialog?.Message == XrRelaunch.FallbackNotice

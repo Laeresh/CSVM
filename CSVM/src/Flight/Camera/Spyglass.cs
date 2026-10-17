@@ -43,6 +43,14 @@ public static class Spyglass
     /// toggle flips it from here; nothing else writes it.</summary>
     public const bool DefaultOn = true;
 
+    /// <summary>The fewest panes at which an integrated GPU disarms the spyglass at level load;
+    /// the frame-rate evidence is in docs/org/spyglass.md.</summary>
+    public const int IntegratedSplitPanes = 2;
+
+    /// <summary>The log's name for the rule that disarms the spyglass at
+    /// <see cref="IntegratedSplitPanes"/> or more panes on an integrated GPU.</summary>
+    public const string IntegratedSplitRule = "default_integrated_gpu_panes";
+
     // The clamp the framing is held inside, 0x3cd67750 and 0x3fc90fdb. The floor is where a
     // distant target starts shrinking instead of holding its apparent size.
     private const float MinFovDeg = 1.5f;
@@ -50,6 +58,20 @@ public static class Spyglass
 
     // A direction this close to the up reference leaves no roll to build a basis from.
     private const float UpTolerance = 0.999f;
+
+    /// <summary>Whether the spyglass is armed at level load on a GPU that is or is not
+    /// <paramref name="integrated"/>, for a session drawing <paramref name="panes"/>. A remake-only
+    /// default like <c>ShadowQualitySetting.FallbackFor</c>: <see cref="DefaultOn"/> everywhere but an
+    /// integrated GPU's splitscreen, and the pilot's toggle still arms it there. ⚠ Under
+    /// <paramref name="det"/> it is <see cref="DefaultOn"/>, so a scripted capture does not depend
+    /// on the machine it runs on.</summary>
+    public static bool DefaultOnFor(bool det, bool integrated, int panes) =>
+        DefaultOn && (det || !(integrated && panes >= IntegratedSplitPanes));
+
+    /// <summary><see cref="DefaultOnFor"/> on this machine's GPU. ⚠ Asks the renderer for its GPU
+    /// class, so a unit test reads <see cref="DefaultOnFor"/> instead.</summary>
+    public static bool MachineDefaultFor(bool det, int panes) =>
+        DefaultOnFor(det, Utils.ShadowQualitySetting.IntegratedGpu, panes);
 
     /// <summary>The slant range the picture is allowed at, from the live per-zone fog band:
     /// <c>near + (far - near) * 0.8</c>, capped at <see cref="RangeCapM"/>, times

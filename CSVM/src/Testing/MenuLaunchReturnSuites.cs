@@ -8,7 +8,6 @@ using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 using CSVM.Utils;
@@ -16,15 +15,12 @@ using CSVM.Utils;
 namespace CSVM.Testing;
 
 /// <summary>
-/// Every launch and every return through the presentation boundary, in both presentations, over a
-/// real <see cref="MenuHost"/> and a scratch profile store: Free Flight, Instant Action (an ace and
-/// a squadron), Dogfight (two seats) and a campaign mission each leave as their typed exit with the
-/// host hiding the presentation; every launch names the screen it came from as the way back, so an
-/// Instant Action return lands on its own screen with the setup that flew and a campaign mission
-/// names the cabin; a top-level return lands on the top level itself even when the process started
-/// on a <c>--menu=</c> aid; the debrief and cabin returns land on the book and the cabin; and a
-/// presentation fallback before a return lands on Built-in's top level with the request kept. The
-/// two hosts stand for two processes, one started under each presentation.
+/// Every launch and every return through the presentation boundary, over a real
+/// <see cref="MenuHost"/> and a scratch profile store. Free Flight, Instant Action, Dogfight and a
+/// campaign mission each leave as their typed exit, the host hiding the presentation. Every launch
+/// names the screen it came from as the way back. A top-level return lands on the top level even
+/// after a <c>--menu=</c> aid, and the debrief and cabin returns land where they name.
+/// An unavailable Original stays selected with the request kept, each host standing for one process.
 /// </summary>
 internal static class MenuLaunchReturnSuites
 {
@@ -36,20 +32,17 @@ internal static class MenuLaunchReturnSuites
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
-    private static readonly MenuCommands Contents = new() { Contents = true };
 
     [Suite("menu-launch-return",
-        "every launch and return through the boundary in both presentations over a scratch store: "
-        + "a Built-in process started on --menu=chapter opens on Chapter once, Free Flight, an ace "
-        + "duel, a squadron, a two-seat Dogfight and a campaign mission each leave as their typed "
-        + "exit with the host hiding the screen, each launch names the screen it came from as its "
-        + "return, the Instant Action one landing back on the wizard over the setup that flew, "
-        + "every top-level return lands on Mode with the "
-        + "cursors kept, the live launcher holds each launch's own destination for the exit press "
-        + "to read, the debrief and cabin returns land on the book and the cabin, Back on Mode "
-        + "quits and Options' apply leaves by its exit; an Original process started on --menu=free-flight "
-        + "opens on Free Flight once and does the same over the decoded layout; and Original "
-        + "refused at selection falls back to Built-in's top level with the request kept, a return "
+        "every launch and return through the boundary over a scratch store: an Original process "
+        + "started on --menu=free-flight opens on Free Flight once, Free Flight, an ace duel, a "
+        + "squadron, a two-seat Dogfight and a campaign mission each leave as their typed exit with "
+        + "the host hiding the screen, each launch names the screen it came from as its return, the "
+        + "Instant Action one landing back on its screen over the setup that flew, every top-level "
+        + "return lands on the top level, the live launcher holds each launch's own destination for "
+        + "the exit press to read, the debrief and cabin returns land on the book and the cabin, and "
+        + "Quit leaves by its exit; a process started on --menu=campaign opens the player's door once; "
+        + "and Original refused at selection stays selected with the request kept, a return "
         + "re-showing the same presentation without re-selecting")]
     internal static void MenuLaunchReturn(TestContext ctx)
     {
@@ -67,14 +60,13 @@ internal static class MenuLaunchReturnSuites
             Directory.Delete(root, recursive: true);
         }
 
-        // ⚠ Both presentations open the campaign over this store: nothing here may read or write
+        // ⚠ The presentation opens the campaign over this store: nothing here may read or write
         // user://Profiles. Seeded with the pilot, so the cabin is one Accept away from the roster.
         var store = new CampaignProfileStore(Path.Combine(root, "Profiles"));
         store.Save(CampaignProfileDef.NewProfile(Pilot));
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-launch-return");
         try
         {
-            BuiltInProcess(ctx, store, planes);
             OriginalProcess(ctx, layout, store, planes);
             OriginalPlayerDoor(ctx, layout, store, planes);
         }
@@ -91,9 +83,9 @@ internal static class MenuLaunchReturnSuites
     [Suite("menu-backdrop",
         "the persistent environment's background over an Options restart and a launch, on the "
         + "launcher's own WorldEnvironment: a run that shows no menu leaves it on the sky, the "
-        + "menu's first show blacks it, Built-in's Options screen offers twenty-two steppers, two doors "
-        + "and no presentation row, the frame between the apply's exit and the restart carries no "
-        + "presentation and stays black, the restart stands a fresh Built-in up over the same "
+        + "menu's first show blacks it, Original's Game Options ACCEPT leaves by the apply exit, the "
+        + "frame between the apply's exit and the restart carries no presentation and stays black, "
+        + "the restart stands a fresh Original up over the same "
         + "black, and a launch puts the sky back with the material the rig built still on it")]
     internal static void MenuBackdrop(TestContext ctx)
     {
@@ -143,37 +135,26 @@ internal static class MenuLaunchReturnSuites
     private static void Switch(TestContext ctx, Run run, Godot.Environment env, Godot.Sky? sky)
     {
         var host = run.Host;
-        // Built-in is asked for by the command-line override, since the shipped default is Original
-        // and the walk below applies from Built-in's Options screen.
-        host.Select(forceBuiltIn: false, cliOverride: PresentationId.BuiltIn.Value);
+        host.Select(null);
         WorldBackdrop.Black(env);
         run.Show(MenuReturnDestination.TopLevel);
-        var menu = (host.Active as BuiltInPresentation)?.Menu;
-        ctx.Check(menu is { Visible: true } && WorldBackdrop.IsBlack(env),
+        var first = host.Active as OriginalPresentation;
+        ctx.Check(first?.Shell != null && WorldBackdrop.IsBlack(env),
             $"the menu's first show leaves the background flat black ({env.BackgroundMode}, {env.BackgroundColor})");
-        if (menu == null)
+        if (first?.Shell is not { } shell)
         {
             return;
         }
 
-        WalkTo(run, menu, LaunchMenu.OptionsRow);
-        run.Press(Accept);
-        // Every row of the screen once round: the presentation is the command line's alone, so no
-        // row may offer it.
-        var rows = new List<string>();
-        for (int i = 0; i < 24 && !rows.Contains(menu.ShownRowText); i++)
-        {
-            rows.Add(menu.ShownRowText);
-            run.Press(Down);
-        }
-
-        ctx.Check(rows.Count == 24 && !rows.Exists(r => r.Contains("presentation", StringComparison.OrdinalIgnoreCase)),
-            $"the Options screen holds twenty-two steppers and two doors and no presentation row ({string.Join(" | ", rows)})");
-        WalkTo(run, menu, "Apply and restart the menu");
-        run.Press(Accept);
+        var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        Click(run, shell, fit, "MM_B_PREFERENCES");
+        Click(run, shell, fit, OriginalOptionsScreen.GameOptionsDoorKey);
+        ctx.Check(shell.Screen == OriginalScreen.GameOptions, $"PREFERENCES and its GAME OPTIONS door reach the page ({shell.Screen})");
+        Click(run, shell, fit, OriginalGameOptionsPage.AcceptKey);
         var applied = run.Expect<OptionsApplyExit>();
-        ctx.Check(applied != null, $"the apply leaves by the options exit");
-        ctx.Check(!host.Shown && !menu.Visible && WorldBackdrop.IsBlack(env),
+        ctx.Check(applied != null, $"the page's ACCEPT leaves by the options exit");
+        ctx.Check(!host.Shown && WorldBackdrop.IsBlack(env),
             $"the frame the exit lands on has no presentation on screen and is still black ({env.BackgroundMode})");
 
         host.Deactivate();
@@ -181,15 +162,14 @@ internal static class MenuLaunchReturnSuites
             $"the restart's first call frees the old instance over the same black ({env.BackgroundMode})");
         WorldBackdrop.Black(env);
         run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(host.Selected == PresentationId.BuiltIn && host.Active is BuiltInPresentation { Menu: { } fresh } && fresh != menu,
-            $"and the show stands a fresh Built-in up, the apply having changed no presentation ({host.Selected})");
+        ctx.Check(host.Selected == PresentationId.Original && host.Active is OriginalPresentation fresh && !ReferenceEquals(fresh, first),
+            $"and the show stands a fresh Original up, the apply having changed no presentation ({host.Selected})");
         ctx.Check(WorldBackdrop.IsBlack(env), $"with the background black across every frame of the restart ({env.BackgroundMode})");
 
         WorldBackdrop.Sky(env);
         ctx.Check(env.BackgroundMode == Godot.Environment.BGMode.Sky && env.Sky?.GetInstanceId() == sky?.GetInstanceId(),
             $"a launch takes the sky back with the material the rig built ({env.BackgroundMode})");
     }
-
     // The launcher's process-lifetime environment: the WorldEnvironment its lighting rig adds
     // beside the node the suites are hosted under, which is the object the menu path blacks.
     private static Godot.Environment? LiveEnvironment(TestContext ctx)
@@ -210,223 +190,14 @@ internal static class MenuLaunchReturnSuites
         return null;
     }
 
-    // A process started under Built-in with --menu=chapter: the factory reads the aid while it is
-    // set and the first show consumes it, as the launcher does.
-    private static void BuiltInProcess(TestContext ctx, CampaignProfileStore store, CustomPlaneStore planes)
-    {
-        var run = new Run(ctx, "chapter", null, store, planes);
-        var host = run.Host;
-        try
-        {
-            host.Select(forceBuiltIn: false, cliOverride: null);
-            run.Show(MenuReturnDestination.TopLevel);
-            var built = host.Active as BuiltInPresentation;
-            var menu = built?.Menu;
-            ctx.Check(menu is { Visible: true }, $"the cold start stands Built-in up ({host.Active?.Id})");
-            if (menu == null)
-            {
-                return;
-            }
-
-            menu.CampaignProfiles = store;
-            ctx.Check(menu.ShownScreen == "Chapter", $"the cold start opens on the aid's screen ({menu.ShownScreen})");
-
-            // Free Flight from the aid's screen: the first chapter, the first airframe, select, confirm.
-            run.Press(Accept);
-            run.Press(Accept);
-            run.Press(Accept);
-            var launch = run.Expect<LaunchExit>();
-            ctx.Check(launch is { Mode: MenuMode.Free, Chapter: "C1", InstantAction: null, Seats.Count: 1 },
-                $"Free Flight leaves as one Free LaunchExit for C1 with one seat ({launch?.Chapter}, {launch?.Seats.Count})");
-            ctx.Check(launch != null && MenuReturnDestination.ForLaunch(launch) is TopLevelReturn,
-                $"whose launch origin is the top level, the only screen behind a Free Flight sortie ({Origin(launch)})");
-            ctx.Check(!menu.Visible, $"the launchscreen is off screen after the exit");
-
-            run.Show(MenuReturnDestination.TopLevel);
-            ctx.Check(menu.Visible && menu.ShownScreen == "Mode" && menu.ShownRow == 0,
-                $"the return lands on Mode, not on the aid's screen ({menu.ShownScreen}, row {menu.ShownRow})");
-            run.Press(Accept);
-            ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRow == 0, $"the chapter cursor survived the flight ({menu.ShownRowText})");
-            run.Press(Back);
-
-            InstantAction(ctx, run, menu);
-            Dogfight(ctx, run, menu);
-            Campaign(ctx, run, menu, store);
-
-            // Quit and the Options route: the two exits that are not launches.
-            run.Press(Back);
-            ctx.Check(run.Expect<QuitExit>() != null, $"Back on the Mode screen leaves as one QuitExit");
-            run.Show(MenuReturnDestination.TopLevel);
-            WalkTo(run, menu, LaunchMenu.OptionsRow);
-            run.Press(Accept);
-            // Past the steppers and the Controls door onto the last row, the apply row.
-            WalkTo(run, menu, "Apply and restart the menu");
-            run.Press(Accept);
-            ctx.Check(run.Expect<OptionsApplyExit>() != null, $"Options' apply row leaves as one OptionsApplyExit");
-            ctx.Check(run.HiddenAtEveryExit, $"the host had hidden the presentation before every one of the {run.Exits.Count} exits reached the sink");
-            CheckLauncherHolds(ctx, run.Exits);
-        }
-        finally
-        {
-            host.Deactivate();
-        }
-    }
-
-    // The wizard twice: the ace duel skips Waves and Wingmen, the squadron walks them.
-    private static void InstantAction(TestContext ctx, Run run, LaunchMenu menu)
-    {
-        WalkTo(run, menu, "Instant Action");
-        run.Press(Accept);
-        run.Press(Contents);
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Sky Haven",
-            $"the Table of Contents applies Girl Trouble onto Sky Haven ({menu.ShownScreen}, {menu.ShownRowText})");
-        run.Press(Accept);
-        run.Press(Up);
-        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Dogfighting an Ace",
-            $"Up from the preset's mission is the ace duel ({menu.ShownRowText})");
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Plane", $"the ace duel goes straight to the aircraft ({menu.ShownScreen})");
-        run.Press(Accept);
-        run.Press(Accept);
-        var ace = run.Expect<LaunchExit>();
-        ctx.Check(ace is { Mode: MenuMode.Stunt, Chapter: "C4", InstantAction: { MissionType: "dogfight_ace" } },
-            $"an ace duel leaves as one Instant Action LaunchExit with the ace def ({ace?.Chapter}, {ace?.InstantAction?.MissionType})");
-        ctx.Check(ace != null && MenuReturnDestination.ForLaunch(ace) is InstantActionReturn,
-            $"and its launch origin names the Instant Action screen as the way back ({Origin(ace)})");
-        run.Show(MenuReturnDestination.InstantAction);
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Sky Haven",
-            $"the Instant Action return lands on the wizard's first screen over the sortie's own environment ({menu.ShownScreen}, {menu.ShownRowText})");
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Dogfighting an Ace",
-            $"with the mission it flew still the pick ({menu.ShownRowText})");
-        run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(menu.ShownScreen == "Mode", $"the return lands on Mode ({menu.ShownScreen})");
-
-        WalkTo(run, menu, "Instant Action");
-        run.Press(Accept);
-        run.Press(Accept);
-        run.Press(Down);
-        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Dogfighting a Squadron",
-            $"the mission cursor survived the flight and Down is the squadron ({menu.ShownRowText})");
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Waves", $"a squadron opens Waves ({menu.ShownScreen})");
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Wingmen", $"Continue opens Wingmen ({menu.ShownScreen})");
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Plane", $"and Wingmen's Accept opens the aircraft ({menu.ShownScreen})");
-        run.Press(Accept);
-        run.Press(Accept);
-        var squadron = run.Expect<LaunchExit>();
-        ctx.Check(squadron is { Mode: MenuMode.Stunt, InstantAction: { MissionType: "dogfight_squadron", NumWingmen: 2 } },
-            $"a squadron leaves as one Instant Action LaunchExit with the squadron def ({squadron?.InstantAction?.MissionType}, {squadron?.InstantAction?.NumWingmen} wingmen)");
-        run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(menu.ShownScreen == "Mode", $"the return lands on Mode ({menu.ShownScreen})");
-    }
-
-    // Two seats: a second scripted source joins through the feature and is polled by the
-    // launchscreen's own frame; both confirm and the launch carries both.
-    private static void Dogfight(TestContext ctx, Run run, LaunchMenu menu)
-    {
-        var setup = run.Host.Features.Get<PlayerSetupFeature>();
-        WalkTo(run, menu, "Dogfight");
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowCount == UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length + 2,
-            $"the map screen carries the two match rows under the maps ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
-        for (int i = 0; i < UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length; i++)
-        {
-            run.Press(Down);
-        }
-
-        ctx.Check(menu.ShownRowText.StartsWith("Kill target", StringComparison.Ordinal),
-            $"the first is the kill target ({menu.ShownRowText})");
-        run.Press(Right);
-        run.Press(Accept);
-        run.Press(Down);
-        run.Press(Right);
-        ctx.Check(menu.ShownScreen == "Chapter" && setup.KillTarget == PlayerSetupFeature.DefaultKillTarget + 2
-            && setup.TimeLimitMinutes == PlayerSetupFeature.DefaultTimeLimitMinutes + 1,
-            $"each row steps its own rule and Accept on one steps rather than leaving ({menu.ShownScreen}, {setup.KillTarget} kills, {setup.TimeLimitMinutes} min)");
-        run.Press(Up);
-        run.Press(Up);
-        run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Plane", $"Dogfight reaches the aircraft screen ({menu.ShownScreen})");
-        var guest = new ScriptedSeat();
-        int before = run.Exits.Count;
-        ctx.Check(setup.Join(guest) != null && run.Host.Seats.Count == 2, $"a second seat joins ({run.Host.Seats.Count})");
-        run.Press(guest, Down);
-        run.Press(guest, Accept);
-        run.Press(guest, Accept);
-        ctx.Check(setup.Seats[1].Confirmed && run.Exits.Count == before, $"the guest confirms and nothing launches on that alone ({run.Exits.Count})");
-        run.Press(Accept);
-        run.Press(Accept);
-        var dogfight = run.Expect<LaunchExit>();
-        ctx.Check(dogfight is { Mode: MenuMode.Versus, Seats.Count: 2 },
-            $"Dogfight leaves as one Versus LaunchExit for both seats ({dogfight?.Mode}, {dogfight?.Seats.Count})");
-        ctx.Check(dogfight?.Match == new VersusRules(PlayerSetupFeature.DefaultKillTarget + 2, PlayerSetupFeature.DefaultTimeLimitMinutes + 1),
-            $"carrying the match rules the map screen was left at ({dogfight?.Match})");
-        ctx.Check(dogfight != null && MenuReturnDestination.ForLaunch(dogfight) is TopLevelReturn,
-            $"whose launch origin is the top level, a Dogfight carrying no Instant Action def ({Origin(dogfight)})");
-        run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(menu.ShownScreen == "Mode" && run.Host.Seats.Count == 2 && !setup.Seats[1].Locked,
-            $"the return lands on Mode with both seats kept and the picks dropped ({menu.ShownScreen}, {run.Host.Seats.Count})");
-        run.Host.RemoveSeat(guest);
-        ctx.Check(run.Host.Seats.Count == 1, $"the guest leaves for the campaign leg ({run.Host.Seats.Count})");
-    }
-
-    // The cabin's FLY MISSION over the scratch store, then the two campaign returns and a plain
-    // return from an abandoned mission, all on the same instance.
-    private static void Campaign(TestContext ctx, Run run, LaunchMenu menu, CampaignProfileStore store)
-    {
-        WalkTo(run, menu, LaunchMenu.CampaignRow);
-        run.Press(Accept);
-        ctx.Check(menu.Campaign is { Screen: CampaignScreen.Roster } flow && ReferenceEquals(flow.Store, store),
-            $"the Campaign door opens the roster over the scratch store ({menu.Campaign?.Screen})");
-        if (menu.Campaign is not { } roster)
-        {
-            return;
-        }
-
-        roster.SelectProfile(store.Load(Pilot)!);
-        int seq = roster.Feature.NextMissionSeq;
-        WalkTo(run, menu, "Next Mission");
-        run.Press(Accept);
-        WalkTo(run, menu, "GO TO FLIGHT CHECK");
-        run.Press(Accept);
-        WalkTo(run, menu, "FLY MISSION");
-        run.Press(Accept);
-        var mission = run.Expect<CampaignMissionExit>();
-        ctx.Check(mission is { Profile: Pilot, Seats.Count: 1 } && mission.MissionSeq == seq,
-            $"FLY MISSION leaves as one CampaignMissionExit for the pilot's next mission ({mission?.Profile}, seq {mission?.MissionSeq})");
-        ctx.Check(mission != null && MenuReturnDestination.ForLaunch(mission) is CabinReturn { Profile: Pilot },
-            $"whose launch origin is the cabin the mission was flown from, never the debrief ({Origin(mission)})");
-        ctx.Check(menu.Campaign == null, $"the flow is closed behind the exit");
-
-        // The director records the flown mission and saves; the returns re-read the profile.
-        var profile = store.Load(Pilot)!;
-        CampaignProgression.Record(profile, new MissionAttempt(
-            seq, CampaignProgression.PrimaryObjectiveMask, 420_000, 200, 90, profile.Planes[0].Airframe, profile.Planes[0].Name));
-        store.Save(profile);
-        run.Show(new DebriefReturn(Pilot, seq, MissionWon: true));
-        ctx.Check(menu.Campaign is { Screen: CampaignScreen.Scrapbook } book && book.MissionSeq == seq && book.Profile?.MissionsCompleted == seq + 1,
-            $"the debrief return opens the book on the flown mission over the saved profile ({menu.Campaign?.Screen}, seq {menu.Campaign?.MissionSeq})");
-        ctx.Check(menu.ShownRowText == "RETURN TO CABIN", $"with the cursor on the way out ({menu.ShownRowText})");
-        run.Show(new CabinReturn(Pilot));
-        ctx.Check(menu.Campaign is { Screen: CampaignScreen.Cabin } cabin && cabin.Profile?.Name == Pilot,
-            $"the cabin return lands on the cabin with the pilot seated ({menu.Campaign?.Screen})");
-        run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(menu.ShownScreen == "Mode" && menu.Campaign == null,
-            $"a top-level return from a campaign mission lands on Mode with no open campaign ({menu.ShownScreen})");
-    }
-
-    // A process started under Original with --menu=free-flight, Built-in registered beside it.
+    // A process started under Original with --menu=free-flight.
     private static void OriginalProcess(TestContext ctx, MenuLayout layout, CampaignProfileStore store, CustomPlaneStore planes)
     {
         var run = new Run(ctx, "free-flight", layout, store, planes);
         var host = run.Host;
         try
         {
-            string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
+            string? reason = host.Select("original");
             ctx.Check(host.Selected == PresentationId.Original && reason == null, $"Original is selected ({reason ?? "no reason"})");
             run.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
@@ -465,6 +236,7 @@ internal static class MenuLaunchReturnSuites
             }
 
             ctx.Check(run.HiddenAtEveryExit, $"the host had hidden the presentation before every one of the {run.Exits.Count} exits reached the sink");
+            CheckLauncherHolds(ctx, run.Exits);
             FallbackBeforeReturn(ctx, run);
         }
         finally
@@ -594,7 +366,7 @@ internal static class MenuLaunchReturnSuites
         var host = run.Host;
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             run.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             var campaign = host.Features.Get<CampaignFeature>();
@@ -620,37 +392,26 @@ internal static class MenuLaunchReturnSuites
         }
     }
 
-    // Original refused at selection: Built-in runs with the request kept, its return is its own
-    // top level, and a return never re-selects, so a repaired tree is seen only by a switch.
+    // Original refused at selection stays selected with the request kept and the reason said. A
+    // return never re-selects, so a repaired tree is seen only by a switch.
     private static void FallbackBeforeReturn(TestContext ctx, Run run)
     {
         var host = run.Host;
         host.Deactivate();
         host.Availability = id => id == PresentationId.Original ? "the layout went away" : null;
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
-        ctx.Check(host.Selected == PresentationId.BuiltIn && host.Requested == PresentationId.Original,
-            $"Original refused at selection resolves Built-in with the request kept ({host.Selected}, {host.Requested})");
+        string? reason = host.Select("original");
+        ctx.Check(host.Selected == PresentationId.Original && host.Requested == PresentationId.Original,
+            $"Original refused at selection stays selected with the request kept ({host.Selected}, {host.Requested})");
         ctx.Check(reason != null && reason.Contains("went away", StringComparison.Ordinal), $"with the availability reason appended ({reason})");
         run.Show(MenuReturnDestination.TopLevel);
-        var menu = (host.Active as BuiltInPresentation)?.Menu;
-        ctx.Check(menu is { Visible: true, ShownScreen: "Mode" }, $"the fallback shows Built-in's own top level, no aid ({menu?.ShownScreen})");
-        if (menu == null)
-        {
-            return;
-        }
-
-        run.Press(Accept);
-        run.Press(Accept);
-        run.Press(Accept);
-        run.Press(Accept);
-        ctx.Check(run.Expect<LaunchExit>() is { Mode: MenuMode.Free }, $"Free Flight launches under the fallback");
-        host.Availability = _ => null;
         var before = host.Active;
+        ctx.Check(before is OriginalPresentation { Shell.Screen: OriginalScreen.TopLevel },
+            $"the show stands Original up on its own top level, no aid ({host.Active?.Id})");
+        host.Availability = _ => null;
         run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(ReferenceEquals(before, host.Active) && menu.ShownScreen == "Mode" && host.Requested == PresentationId.Original,
-            $"the return re-shows the same Built-in instance on Mode with the request still Original ({menu.ShownScreen}, {host.Requested})");
+        ctx.Check(ReferenceEquals(before, host.Active) && host.Requested == PresentationId.Original,
+            $"the return re-shows the same instance with the request still Original ({host.Requested})");
     }
-
     // The launcher's own half of the return: a launch writes the destination it came from and the
     // exit press reads that field back, which no exit and no presentation can show. Driven on the
     // live node the suites are hosted under, since nothing instantiates a Launcher headlessly, over
@@ -693,16 +454,6 @@ internal static class MenuLaunchReturnSuites
     private static string Origin(MenuExit? exit) =>
         exit == null ? "no exit" : MenuReturnDestination.ForLaunch(exit).GetType().Name;
 
-    // Walks the Built-in cursor down to the named row, through the host's seat.
-    private static void WalkTo(Run run, LaunchMenu menu, string text)
-    {
-        int count = menu.ShownRowCount;
-        for (int i = 0; i < count && menu.ShownRowText != text; i++)
-        {
-            run.Press(Down);
-        }
-    }
-
     private static void Click(Run run, OriginalShell shell, BoardFit fit, string key)
     {
         if (Row(shell, key) is { } row)
@@ -727,33 +478,25 @@ internal static class MenuLaunchReturnSuites
     private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked) };
 
-    // One process's menu: a host with both presentations registered, the aid handed to the first
-    // instance created and consumed by the first show, a sink recording each exit and whether the
-    // host had hidden the presentation when it arrived.
+    // One process's menu: a host with Original registered and the aid handed to the first instance,
+    // consumed by the first show. Its sink records each exit and whether the host had hidden the
+    // presentation when it arrived.
     private sealed class Run
     {
         private readonly List<bool> _hidden = new();
         private string? _aid;
         private int _taken;
 
-        public Run(TestContext ctx, string aid, MenuLayout? layout, CampaignProfileStore store, CustomPlaneStore planes)
+        public Run(TestContext ctx, string aid, MenuLayout layout, CampaignProfileStore store, CustomPlaneStore planes)
         {
             _aid = aid;
             var registry = new PresentationRegistry();
-            registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-                ctx.Host, ctx.ZrdrPath, ctx.DataRoot, _aid ?? string.Empty, new MenuInput { Keyboard = true })
+            registry.Register(PresentationId.Original, () => new OriginalPresentation(
+                ctx.Host, ctx.DataRoot, layout, _aid ?? string.Empty, new MenuInput { Keyboard = true })
             {
+                CampaignProfiles = store,
                 Planes = planes,
             });
-            if (layout != null)
-            {
-                registry.Register(PresentationId.Original, () => new OriginalPresentation(
-                    ctx.Host, ctx.DataRoot, layout, _aid ?? string.Empty, new MenuInput { Keyboard = true })
-                {
-                    CampaignProfiles = store,
-                    Planes = planes,
-                });
-            }
 
             Host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exit =>
             {
@@ -788,8 +531,7 @@ internal static class MenuLaunchReturnSuites
             Press(frame with { Pointer = frame.Pointer!.Value with { Pressed = false, Clicked = false } });
         }
 
-        // Seat 0's frame, or a guest's: a Built-in guest is polled by the launchscreen's own frame,
-        // which the host's tick runs, and an Original guest by the presentation's poll.
+        // Seat 0's frame, or a guest's, polled by the presentation inside the host's tick.
         public void Press(ScriptedSeat seat, MenuCommands frame)
         {
             seat.Enqueue(frame);

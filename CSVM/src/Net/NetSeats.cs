@@ -178,6 +178,10 @@ public static class NetSeats
     public static bool LeavesWithPeer(NetSeat seat) =>
         seat is { FlownHere: false, Pilot: NetPilot.Human };
 
+    /// <summary>The player tag of seat <paramref name="seat"/>, counted from 0: P1 upward. What a
+    /// seat with no callsign is called on every machine.</summary>
+    public static string PlayerTag(int seat) => "P" + (seat + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>A host's field: one seat per plane in <paramref name="localPlanes"/> flown here,
     /// then one per peer in <paramref name="peers"/> flying <paramref name="remotePlane"/>, cut at
     /// <see cref="MaxPlayers"/>. Local seats are called P1 upward and a remote one after its peer,

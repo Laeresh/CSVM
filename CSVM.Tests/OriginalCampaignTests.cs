@@ -516,7 +516,7 @@ public class OriginalCampaignTests : IDisposable
     }
 
     [Fact]
-    public void AnAidScriptSpellsTheSamePressesUnderOriginalAsItDoesUnderBuiltIn()
+    public void AnAidScriptSpellsItsPressesUnderOriginal()
     {
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
         var host = Host(out _);

@@ -4,7 +4,7 @@
     with a single summary block and a single exit code.
 
 .DESCRIPTION
-    Stages, run in order, each reported PASS / FAIL / SKIP / TODO:
+    Stages, run in order, each reported PASS / FAIL / SKIP / TODO (goldens also REGEN / FLAKE):
 
       build    dotnet build CSVM/CSVM.sln. A failure stops the run: nothing downstream can
                say anything useful about a tree that does not compile.
@@ -32,10 +32,13 @@
                Up to -GoldenWorkers shots launch at once (default 4, measured bit-identical against
                serial), each still with its own process, log, .out/.err and PNG; the silent-death
                retry runs after the whole batch, serially. A mismatch names the shot and leaves the
-               actual PNG and that shot's engine log in .scratch/goldens/. Each shot is launched
-               under a per-shot timeout ($GoldenTimeoutSec); a shot that exceeds it is killed,
-               reported as FAIL, and has its evidence preserved -- it never silently hangs the
-               suite (BL-320).
+               actual PNG and that shot's engine log in .scratch/goldens/. A moved Enhanced shot
+               (--graphics=enhanced in its manifest args) is re-rendered once, serially, after the
+               batch: back on its pin it is a FLAKE, which keeps the stage out of the red and keeps
+               both frames, their diff and a machine census in .scratch/goldens-failures/<stamp>/;
+               off its pin it is MOVED. Each shot is launched under a per-shot timeout
+               ($GoldenTimeoutSec); a shot that exceeds it is killed, reported as FAIL, and has its
+               evidence preserved -- it never silently hangs the suite (BL-320).
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
                --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
                the fixed clock advances one sim step per rendered frame, so a frame count is an
@@ -222,8 +225,9 @@
     The longest -WaitQuiet waits, in seconds (default 1800, the memory ledger's own cap).
 
 .PARAMETER SelfTest
-    Check the rebuild stop's trigger (Get-RebuildCause) against a scratch DLL and log, then exit
-    without building or launching anything.
+    Check the rebuild stop's trigger (Get-RebuildCause) against a scratch DLL and log, the stall
+    watchdog, the shard plan, and the goldens' moved-shot verdict and frame diff, then exit
+    without building or launching Godot.
 
 .EXAMPLE
     .\RunTests.ps1
@@ -699,6 +703,70 @@ function Wait-Godot {
     return $code
 }
 
+# A golden shot's verdict: "ok" on its pin, else "moved", except a moved Enhanced shot (its own
+# args carry --graphics=enhanced) outside a regeneration, which is re-rendered once ("recheck").
+# A re-render back on the pin is a "flake": those shots move by a pixel or one level under
+# conditions no probe has reproduced, so one such move is evidence to keep, not a red.
+function Get-GoldenVerdict {
+    # $RetryHash untyped on purpose: $null means not yet re-rendered, "" a re-render with no hash.
+    param($Shot, $Hash, $RetryHash, [switch]$Regen)
+    if ($Hash -eq $Shot.hash) { return "ok" }
+    if ($Regen -or @($Shot.args) -notcontains "--graphics=enhanced") { return "moved" }
+    if ($null -eq $RetryHash) { return "recheck" }
+    if ($RetryHash -eq $Shot.hash) { return "flake" }
+    return "moved"
+}
+
+# How two frames of one shot differ, in the terms a flip is judged by: how many pixels, by how
+# many levels at most, and inside which box. The PNGs are decoded here and the compare is compiled
+# against System alone, since System.Drawing's assemblies differ between PowerShell 5.1 and 7.
+function Get-GoldenFrameDiff {
+    param([string]$A, [string]$B)
+    if (-not ("CsvmGoldenDiff" -as [type])) {
+        Add-Type -Language CSharp -TypeDefinition @"
+using System;
+
+public static class CsvmGoldenDiff
+{
+    public static string Compare(byte[] a, byte[] b, int width, int height, int stride)
+    {
+        int n = 0, max = 0, x0 = width, y0 = height, x1 = -1, y1 = -1;
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                int d = 0;
+                for (int c = 0; c < 4; c++)
+                    d = Math.Max(d, Math.Abs(a[y * stride + x * 4 + c] - b[y * stride + x * 4 + c]));
+                if (d == 0) continue;
+                n++; max = Math.Max(max, d);
+                x0 = Math.Min(x0, x); y0 = Math.Min(y0, y); x1 = Math.Max(x1, x); y1 = Math.Max(y1, y);
+            }
+        if (n == 0) return "pixel-identical";
+        return String.Format("{0} pixel(s) differ, at most {1} level(s), inside ({2},{3})-({4},{5})", n, max, x0, y0, x1, y1);
+    }
+}
+"@
+    }
+    try {
+        Add-Type -AssemblyName System.Drawing
+        $frames = @(foreach ($path in $A, $B) {
+            $bmp = New-Object System.Drawing.Bitmap $path
+            try {
+                $rect = New-Object System.Drawing.Rectangle 0, 0, $bmp.Width, $bmp.Height
+                $lock = $bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+                $bytes = New-Object byte[] ($lock.Stride * $bmp.Height)
+                [System.Runtime.InteropServices.Marshal]::Copy($lock.Scan0, $bytes, 0, $bytes.Length)
+                $bmp.UnlockBits($lock)
+                [pscustomobject]@{ Size = "$($bmp.Width)x$($bmp.Height)"; W = $bmp.Width; H = $bmp.Height; Stride = $lock.Stride; Bytes = $bytes }
+            } finally { $bmp.Dispose() }
+        })
+        if ($frames[0].Size -ne $frames[1].Size) { return "sizes differ, $($frames[0].Size) against $($frames[1].Size)" }
+        return [CsvmGoldenDiff]::Compare($frames[0].Bytes, $frames[1].Bytes, $frames[0].W, $frames[0].H, $frames[0].Stride)
+    } catch {
+        return "no diff: $($_.Exception.Message)"
+    }
+}
+
 if ($SelfTest) {
     $failed = 0
     function Assert-SelfTest {
@@ -773,6 +841,30 @@ if ($SelfTest) {
             $got = ($p.Learns | ForEach-Object { [int]$_ }) -join ","
             Assert-SelfTest ($p.Shared -eq $shared -and $p.Total -eq $total -and $got -eq $learns) "shard plan, ${case}: $($p.Shared) shared of $($p.Total) process(es), learns $got"
         }
+
+        # The goldens' moved-shot verdict over fabricated shots, and the frame diff over two
+        # frames one pixel and one level apart.
+        $enh = [pscustomobject]@{ hash = "pin"; args = @("--chapter=C1", "--det", "--graphics=enhanced") }
+        $faithful = [pscustomobject]@{ hash = "pin"; args = @("--chapter=C1", "--det") }
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $enh -Hash "pin") -eq "ok") "goldens: an Enhanced shot on its pin is ok"
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $enh -Hash "a1") -eq "recheck") "goldens: a moved Enhanced shot is re-rendered once"
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $enh -Hash "a1" -RetryHash "pin") -eq "flake") "goldens: moved, then on its pin at the re-render, is a flake"
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $enh -Hash "a1" -RetryHash "a1") -eq "moved") "goldens: moved, then moved again, is moved"
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $enh -Hash "a1" -RetryHash "") -eq "moved") "goldens: a re-render that printed no hash is moved"
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $faithful -Hash "a1") -eq "moved") "goldens: a moved Faithful shot is moved, with no re-render"
+        Assert-SelfTest ((Get-GoldenVerdict -Shot $enh -Hash "a1" -Regen) -eq "moved") "goldens: -RegenGoldens re-renders nothing"
+        Add-Type -AssemblyName System.Drawing
+        $frames = @(foreach ($green in 0, 1) {
+            $bmp = New-Object System.Drawing.Bitmap 4, 3
+            $bmp.SetPixel(2, 1, [System.Drawing.Color]::FromArgb(255, 0, $green, 0))
+            $framePath = Join-Path $dir "frame$green.png"
+            $bmp.Save($framePath, [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Dispose()
+            $framePath
+        })
+        $diff = Get-GoldenFrameDiff $frames[0] $frames[1]
+        Assert-SelfTest ($diff -eq "1 pixel(s) differ, at most 1 level(s), inside (2,1)-(2,1)") "goldens: frame diff, $diff"
+        Assert-SelfTest ((Get-GoldenFrameDiff $frames[0] $frames[0]) -eq "pixel-identical") "goldens: frame diff of a frame against itself"
     } finally {
         $env:CSVM_MEM_AVAILABLE_GB = $savedAvail
         Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
@@ -1577,6 +1669,8 @@ if ($SkipGoldensNow) {
     $moved      = @()      # shots whose hash differs from the manifest
     $broken     = @()      # shots that did not render, or rendered the wrong frame/size
     $retried    = @()      # shots that died silently and were re-run once with --verbose
+    $recheck    = @()      # moved Enhanced shots owed their one re-render
+    $flakes     = @()      # moved Enhanced shots whose re-render landed on the pin
     $adapters   = @{}
     # Lazily created: most runs never touch it, and BL-039's whole point is that a silent
     # exit-1 must leave something behind instead of being overwritten by the next shot or run.
@@ -1654,21 +1748,26 @@ if ($SkipGoldensNow) {
         }
     }
 
-    $states = @()
-    foreach ($shot in @($manifest.shots)) {
-        $png = Join-Path $GoldenDir "$($shot.name).png"
-        $shotLog = Join-Path $GoldenDir "$($shot.name).log"
-        foreach ($stale in @($png, $shotLog, "$shotLog.out", "$shotLog.err")) {
+    # A shot's files from an earlier launch, which a launch that writes nothing would be read as.
+    function Remove-GoldenShotFiles {
+        param($State)
+        foreach ($stale in @($State.Png, $State.Log, "$($State.Log).out", "$($State.Log).err")) {
             if (Test-Path $stale) {
                 Remove-Item -Path $stale -Force
             }
         }
-        $states += [pscustomobject]@{
-            Shot = $shot; Png = $png; Log = $shotLog
+    }
+
+    $states = @()
+    foreach ($shot in @($manifest.shots)) {
+        $state = [pscustomobject]@{
+            Shot = $shot; Png = (Join-Path $GoldenDir "$($shot.name).png"); Log = (Join-Path $GoldenDir "$($shot.name).log")
             Attempt = 1; ShotCode = -1; Launch = $null; NeedsRetry = $false; TimedOut = $false
             Label = $shot.name; Args = $null; ExitCode = -1
-            Hash = ""; Size = ""; Gpu = ""; Frame = -1; Clock = ""
+            Hash = ""; Size = ""; Gpu = ""; Frame = -1; Clock = ""; FirstHash = ""; FirstAttempt = 0
         }
+        Remove-GoldenShotFiles -State $state
+        $states += $state
     }
 
     # First pass: every shot's attempt 1 in registry order, at most $goldenWorkerCount in flight,
@@ -1746,10 +1845,10 @@ if ($SkipGoldensNow) {
             Write-Host "  FAIL $($shot.name): rendered $($state.Size), expected $($manifest.size)" -ForegroundColor Red
             continue
         }
-        if ($state.Hash -eq $shot.hash) {
+        $verdict = Get-GoldenVerdict -Shot $shot -Hash $state.Hash -Regen:$RegenGoldens
+        if ($verdict -eq "ok") {
             Write-Host "  ok   $($shot.name)  $($state.Hash)" -ForegroundColor DarkGray
         } else {
-            $moved += "$($shot.name) $($shot.hash) -> $($state.Hash) ($($state.Png))"
             if (-not $RegenGoldens) {
                 # The next run deletes this image at its start, and an unexplained move is only
                 # judged by diffing the moved frame against the pinned one.
@@ -1759,12 +1858,86 @@ if ($SkipGoldensNow) {
                 Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
                     -Attempt $state.Attempt -ShotLog $state.Log -Png $state.Png
             }
+            if ($verdict -eq "recheck") {
+                $state.FirstHash = $state.Hash
+                $state.FirstAttempt = $state.Attempt
+                $recheck += $state
+                Write-Host "  MOVED $($shot.name): $($shot.hash) -> $($state.Hash), re-rendered once after the batch" -ForegroundColor DarkYellow
+                continue
+            }
+            $moved += "$($shot.name) $($shot.hash) -> $($state.Hash) ($($state.Png))"
             $color = if ($RegenGoldens) { "DarkYellow" } else { "Red" }
             Write-Host "  MOVED $($shot.name): $($shot.hash) -> $($state.Hash)" -ForegroundColor $color
             Write-Host "        actual image: $($state.Png)" -ForegroundColor $color
         }
         $shot.hash = $state.Hash
     }
+
+    # Third pass: each moved Enhanced shot's one re-render, serially after the batch, as the
+    # silent-death retry runs. What else held the machine is read here, once, since the runner has
+    # no census from the moved attempt's moment: gaming mode names the user's own game, the ledger
+    # other trees' scripted Godots, and nvidia-smi, where it is on PATH, any other application.
+    if ($recheck.Count -gt 0 -and -not $script:Deferred) {
+        $census = @("machine after the batch, $(Get-Date -Format s), $(Format-GamingSummary $Gaming)")
+        $census += @(Format-MemLedger) + @(Get-CsvmGodots | ForEach-Object { "scripted CSVM Godot: pid $($_.Pid) $($_.Kind) $($_.Worktree)" })
+        $smi = Get-Command nvidia-smi -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($smi) {
+            try {
+                $psi = New-Object System.Diagnostics.ProcessStartInfo $smi.Source
+                $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
+                $smiProc = [System.Diagnostics.Process]::Start($psi)
+                $smiOut = $smiProc.StandardOutput.ReadToEndAsync()
+                if ($smiProc.WaitForExit(10000)) {
+                    $census += @($smiOut.Result -split "`r?`n" | Where-Object { $_.Trim() })
+                } else {
+                    $smiProc.Kill()
+                }
+            } catch { }
+        }
+        Add-Content -Path (Join-Path $failureRoot "report.txt") -Value $census
+    }
+    $deferredMoves = @()
+    foreach ($state in $recheck) {
+        $shot = $state.Shot
+        $first = "attempt $($state.FirstAttempt) $($state.FirstHash)"
+        if (-not $script:Deferred) {
+            # The moved attempt's files are copied out already.
+            Remove-GoldenShotFiles -State $state
+            $state.Hash = ""
+            $state.Attempt++
+            $ErrorActionPreference = "Continue"
+            $state.ShotCode = Invoke-Godot (Get-GoldenShotArguments -State $state -Verbose $false) -TimeoutSec $GoldenTimeoutSec -Kind "golden-shot"
+            $ErrorActionPreference = "Stop"
+        }
+        # A deferral skips or stops the re-render, so the shot is unrun, not moved, and its move
+        # is named in the stage row rather than lost.
+        if ($script:Deferred) {
+            $unrun += $state
+            $deferredMoves += $shot.name
+            Add-Content -Path (Join-Path $failureRoot "report.txt") -Value (
+                "$($shot.name): pin $($shot.hash), $first, not re-rendered: the run was deferred")
+            continue
+        }
+        Resolve-GoldenAttempt -State $state
+        Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
+            -Attempt $state.Attempt -ShotLog $state.Log -Png $state.Png
+        $verdict = Get-GoldenVerdict -Shot $shot -Hash $state.FirstHash -RetryHash $state.Hash
+        $firstPng = Join-Path $failureRoot "$($shot.name).attempt$($state.FirstAttempt).png"
+        $diff = if (Test-Path $state.Png) { Get-GoldenFrameDiff $firstPng $state.Png } else { "the re-render wrote no PNG" }
+        $retryText = if ($state.Hash) { $state.Hash } else { "no hash" }
+        Add-Content -Path (Join-Path $failureRoot "report.txt") -Value (
+            "$($shot.name): pin $($shot.hash), $first, re-render (attempt $($state.Attempt)) $retryText, " +
+            "$($verdict.ToUpper()); attempt $($state.FirstAttempt) against the re-render: $diff")
+        if ($verdict -eq "flake") {
+            $flakes += $shot.name
+            Write-Host "  FLAKE $($shot.name): $($shot.hash) -> $($state.FirstHash), the re-render is on its pin; $diff" -ForegroundColor Yellow
+        } else {
+            $moved += "$($shot.name) $($shot.hash) -> $($state.FirstHash), re-render $retryText ($($state.Png))"
+            Write-Host "  MOVED $($shot.name): $($shot.hash) -> $($state.FirstHash), re-render $retryText; $diff" -ForegroundColor Red
+            Write-Host "        actual image: $($state.Png)" -ForegroundColor Red
+        }
+    }
+    $deferredText = if ($deferredMoves.Count -gt 0) { "; moved, not re-rendered before the deferral [$($deferredMoves -join ', ')], kept in $failureRoot" } else { "" }
     $watch.Stop()
     if ($retried.Count -gt 0) {
         Add-Unchecked "$($retried.Count) golden shot(s) died silently on the first attempt and were retried with --verbose: $($retried -join ', ') -- evidence preserved in $failureRoot"
@@ -1797,11 +1970,18 @@ if ($SkipGoldensNow) {
         $passDetail = "$shotCount shot(s) hash-identical; gpu $liveGpu"
         if ($unrun.Count -gt 0) { $passDetail = "$($shotCount - $unrun.Count) of $shotCount shot(s) hash-identical, $($unrun.Count) not run; gpu $liveGpu" }
         if ($goldenWorkerCount -gt 1) { $passDetail = "$passDetail; $goldenWorkerCount workers" }
-        Add-Stage -Name "goldens" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $passDetail
+        $passDetail = "$passDetail$deferredText"
+        if ($flakes.Count -gt 0) {
+            Add-Stage -Name "goldens" -Status "FLAKE" -Seconds $watch.Elapsed.TotalSeconds `
+                -Detail "$passDetail; $($flakes.Count) moved and came back on the pin at one re-render [$($flakes -join ', ')], kept in $failureRoot"
+        } else {
+            Add-Stage -Name "goldens" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $passDetail
+        }
     } else {
         $names = @($moved | ForEach-Object { ($_ -split ' ')[0] }) + @($broken | ForEach-Object { ($_ -split ':')[0] })
+        $flakeText = if ($flakes.Count -gt 0) { ", $($flakes.Count) flake(s) [$($flakes -join ', ')]" } else { "" }
         Add-Stage -Name "goldens" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds `
-            -Detail "$($moved.Count) moved, $($broken.Count) broken of $shotCount [$($names -join ', ')]; actual images in $GoldenDir$(if ($failureRoot) { ", kept in $failureRoot" })"
+            -Detail "$($moved.Count) moved, $($broken.Count) broken of $shotCount [$($names -join ', ')]$flakeText$deferredText; actual images in $GoldenDir$(if ($failureRoot) { ", kept in $failureRoot" })"
         foreach ($m in $moved) {
             Write-Host "  !! moved: $m" -ForegroundColor Red
         }

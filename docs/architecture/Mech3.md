@@ -465,6 +465,15 @@ five row filters, and the `gAMA` transfer curve normalized to the UI baseline. `
 the metadata half the runtime board renderer needs while retaining Godot's native loader. A palette,
 16-bit channel, Adam7 file or malformed input decodes as null rather than throwing. Read `ArtImage.cs` next.
 
+## src/Mech3/HdArt.cs
+The engine half of `Extraction/HdTextures.cs`. `Decode` reads a replacement and blackens every
+texel under alpha 0, where the pack leaves its green-screen key for filtering to bleed onto the
+edges. `Texture` uploads 2D art with `SetSizeOverride` at the original's size. Godot measures a
+2D draw's source rect against that size, so every rect table, frame strip, crop and hitbox laid out
+in the original's pixels holds. `TextureArchive` does the same for world textures, which keep the
+original's alpha class and skip its authored mips. Loaders that read pixels themselves
+(`HudFont`, the `ArtImage` blueprints and icons) keep the originals.
+
 ## src/Mech3/ArtImage.cs
 The one door menu art is loaded through: a path in, a decoded `TgaImage` or null out, with the
 decoder picked from the extension (`.PNG` to `PngImage`, `.TGA` to `TgaImage`). It exists so a

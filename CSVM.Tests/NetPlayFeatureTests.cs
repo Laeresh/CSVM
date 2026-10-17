@@ -319,7 +319,7 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
-    public void ABuiltInHostRunsAnUnshownLobbyThatAnOriginalGuestPicksAgainst()
+    public void AHostWithNoLobbyScreenRunsAnUnshownLobbyThatAGuestPicksAgainst()
     {
         var mesh = LoopbackTransport.Mesh(2, Clean, new Random(37));
         var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
@@ -1012,7 +1012,7 @@ public class NetPlayFeatureTests
         Assert.Equal(1, guest.CoopFlow!.Value.Extra);
         Assert.Equal(3, guest.CoopFlow!.Value.Humans);
         Assert.Equal(3, host.Advertising!.Value.Players);
-        Assert.Equal("", guest.CoopSeatsShort);
+        Assert.Equal("", guest.SeatsShort);
 
         // ABLE-TO-FAIL CONTROL: one of the machine's two players Ready holds the launch.
         guest.Pick.Set(5, true);
@@ -1114,7 +1114,7 @@ public class NetPlayFeatureTests
         Assert.Equal(3, host.CoopGuests.Count);
         Assert.All(guests, guest => Assert.True(guest.IsCoopGuest));
         Assert.Equal(1, guests[0].CoopSeats);
-        Assert.Equal(CoopDoorText.SeatsShort(1, 2), guests[0].CoopSeatsShort);
+        Assert.Equal(CoopDoorText.SeatsShort(1, 2), guests[0].SeatsShort);
         Assert.Contains(CoopDoorText.SeatsShort(1, 2), CoopDoorText.GuestBand(guests[0]));
 
         // ABLE-TO-FAIL CONTROL: once a seat frees, the waiting player is given it.
@@ -1122,8 +1122,101 @@ public class NetPlayFeatureTests
         mesh[3].Disconnect(mesh[0].LocalPeer);
         PumpAll();
         Assert.Equal(2, guests[0].CoopSeats);
-        Assert.Equal("", guests[0].CoopSeatsShort);
+        Assert.Equal("", guests[0].SeatsShort);
         Assert.Equal(3, host.CoopGuests.Count);
+    }
+
+    // A Dogfight guest's further seats are given only from the room every first seat leaves. The
+    // one left out is told so on the lobby's pinned rows, the co-op band's line.
+    [Fact]
+    public void ADogfightGuestGivenFewerSeatsThanItJoinedFliesThoseAndIsToldSo()
+    {
+        var mesh = LoopbackTransport.Mesh(3, Clean, new Random(97));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
+        host.Identity.Take(new NetPlayerInfo { GameName = "Cap", Callsign = "Zachary", MaxPlayers = 3 }, game: true);
+        host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        var first = new NetPlayFeature((_, _, _) => mesh[1], (_, _) => mesh[1]);
+        var pair = new NetPlayFeature((_, _, _) => mesh[2], (_, _) => mesh[2]) { LocalSeats = 2 };
+        var doors = new[] { host, first, pair };
+        void PumpAll()
+        {
+            for (int frame = 0; frame < 4; frame++)
+            {
+                Array.ForEach(doors, door => door.Step(0.016));
+            }
+        }
+
+        first.OpenJoin();
+        PumpAll();
+        pair.OpenJoin();
+        PumpAll();
+        pair.Dogfight!.Show();
+        PumpAll();
+        Assert.Equal(1, pair.Dogfight.SeatsFlown);
+        Assert.Equal(CoopDoorText.SeatsShort(1, 2), pair.SeatsShort);
+        Assert.Equal(3, host.Dogfight!.Players.Count);
+        Assert.Equal("", host.SeatsShort);
+
+        // ABLE-TO-FAIL CONTROL: once the first guest leaves, the pair's second seat is given.
+        first.Close();
+        mesh[1].Disconnect(mesh[0].LocalPeer);
+        PumpAll();
+        Assert.Equal(2, pair.Dogfight.SeatsFlown);
+        Assert.Equal("", pair.SeatsShort);
+        Assert.Equal(new[] { "Zachary", "Pilot", "P3" }, host.Dogfight.Players.Select(p => p.Name));
+    }
+
+    // A Dogfight host with more players joined than its own cap flies the cap's worth of them and
+    // seats no guest. The rest are told they sit out. Remake-only: the original seats one a machine.
+    [Fact]
+    public void ADogfightHostWithMorePlayersThanItsCapFliesTheCapAndSeatsNoGuest()
+    {
+        foreach (int cap in new[] { 2, 4 })
+        {
+            var mesh = LoopbackTransport.Mesh(2, Clean, new Random(101 + cap));
+            var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { LocalSeats = 3 };
+            host.Identity.Take(new NetPlayerInfo { GameName = "Cap", Callsign = "Zachary", MaxPlayers = cap }, game: true);
+            host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            var guest = new NetPlayFeature((_, _, _) => mesh[1], (_, _) => mesh[1]);
+            guest.OpenJoin();
+            Pump(host, guest);
+            Pump(host, guest);
+            if (cap == 2)
+            {
+                Assert.Equal(new[] { "Zachary", "P2" }, host.Dogfight!.Players.Select(p => p.Name));
+                Assert.Equal(CoopDoorText.SeatsShort(2, 3), host.SeatsShort);
+                Assert.Equal(0, host.Peers);
+                Assert.Equal(CoopDoorText.GameFull, guest.Fault);
+                Assert.Equal(2, host.Advertising!.Value.Players);
+                continue;
+            }
+
+            // ABLE-TO-FAIL CONTROL: a cap with room flies all three and seats the guest.
+            Assert.Equal(4, host.Dogfight!.Players.Count);
+            Assert.Equal("", host.SeatsShort);
+            Assert.Equal(1, host.Peers);
+        }
+    }
+
+    // A door's seat count goes with the session it stood in, so a later Dogfight host counts only
+    // the seats joined then.
+    [Fact]
+    public void AClosedSessionsSeatsDoNotStandAsALaterDogfightHostsOwn()
+    {
+        var mesh = LoopbackTransport.Mesh(1, Clean, new Random(103));
+        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { LocalSeats = 2 };
+        door.Close();
+        Assert.Equal(1, door.LocalSeats);
+        door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        door.Step(0.016);
+        Assert.Single(door.Dogfight!.Players);
+        Assert.Equal(1, door.Advertising!.Value.Players);
+
+        // ABLE-TO-FAIL CONTROL: two seats joined while it hosts count two.
+        door.LocalSeats = 2;
+        door.Step(0.016);
+        Assert.Equal(2, door.Dogfight.Players.Count);
+        Assert.Equal(2, door.Advertising!.Value.Players);
     }
 
     [Fact]

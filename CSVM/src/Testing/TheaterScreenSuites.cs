@@ -17,7 +17,7 @@ internal static class TheaterScreenSuites
     private const int PhotoRow = 1;
     private const int RowCount = 5;
 
-    /// <summary>Builds the screen over the root and raises a Built-in pause board on a board layer.
+    /// <summary>Builds the screen over the root and raises a chrome pause board on a board layer.
     /// The board is then driven by key and by the pointer seam while it draws on the screen.</summary>
     [Suite("theater-screen",
         "under the stereo path the theater screen takes every board-layer canvas layer and leaves the flight chrome on the root, shows with a full surround while no flight is live, hides in flight until a board shows and then dims the world behind it, a real pause board on it takes Down and Enter from the keyboard as in flat play, a pointer ray through a row lands on that row through the seam, a Godot button on it takes a click pushed into the root, and every layer goes back to the root as it leaves")]

@@ -199,11 +199,10 @@ public sealed class CampaignWallet : IHangarWallet
         _store.Save(Profile);
     }
 
-    // What one ownership record flies. A hangar-built plane is its stored build; a reward aircraft
-    // granted before the store held one falls back to its own award template (the same order
-    // LaunchMenu's launch path resolves in); the two profile-seeded starters are never built at
-    // all, so they take the campaign's own Devastator spec (docs/org/hangar.md, "The campaign
-    // instead starts with two aircraft": engine 1, two hardpoints per wing, no armour or guns).
+    // What one ownership record flies. A hangar-built plane is its stored build, and a reward
+    // aircraft granted before the store held one falls back to its own award template. The two
+    // profile-seeded starters are never built, so they take the campaign's own Devastator spec
+    // (docs/org/hangar.md, "The campaign instead starts with two aircraft").
     private CustomPlaneDef BuildFor(OwnedPlane owned)
     {
         var built = _planes.Load(owned.Name) ?? CampaignProgression.BuildForOwned(owned);

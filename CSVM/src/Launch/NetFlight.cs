@@ -79,8 +79,8 @@ internal sealed class NetFlight
     /// match's seat is named by its callsign on <paramref name="seats"/>, the session's own roster,
     /// and a bot's line is marked. It is read while the session lives, before the lobby can move a
     /// seat. A launch with no roster names seats off the lobby's list at the launch. A race lands
-    /// its board's own table. Null for any other flight, one left before its end, or a Built-in
-    /// board.</summary>
+    /// its board's own table. Null for any other flight, one left before its end, or a lobby no
+    /// screen stood on.</summary>
     public static LobbyReturn? LobbyLanding(bool lobbyFlight, DogfightLobby? lobby, Flight.Modes.VersusMatch? match,
         IReadOnlyList<Net.NetSeat>? seats = null, Flight.Modes.StuntRace? race = null)
     {
@@ -254,8 +254,9 @@ internal sealed class NetFlight
         var bots = _lobbyFlight ? Door!.Dogfight!.LaunchBots : System.Array.Empty<VsBotEntry>();
         var pool = bots.Count > 0 ? Session.Roster.BotSeats.CallsignPool(Mech3.Messages.Load(messagesPath)) : null;
         var mission = _lobbyFlight ? (DogfightMissionType)Door!.Dogfight!.Options.MissionType : DogfightMissionType.Deathmatch;
+        var owners = _lobbyFlight ? Door!.Dogfight!.SeatOwners : null;
         (_roster, _seatFits) = SeatFields.VersusLaunchField(_wire, planes, fits, _stock ??= StockLoadouts.Load(), rules, teamOf,
-            bots, pool, mission: mission);
+            bots, pool, mission: mission, owners: owners);
         _seatBuilds = SeatFields.SeatBuildsFor(_roster, customs, _wire, rules);
         if (_lobbyFlight)
         {

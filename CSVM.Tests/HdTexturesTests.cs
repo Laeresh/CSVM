@@ -1,0 +1,81 @@
+using System.IO;
+using System.IO.Compression;
+using System.Text;
+using CSVM.Extraction;
+using Xunit;
+
+namespace CSVM.Tests;
+
+/// <summary>
+/// The HD folder's lookup rules. A release zip is read in place under its own top folder and
+/// matched without case or extension. A chapter's own entry beats the bare name; later packs win.
+/// </summary>
+public class HdTexturesTests
+{
+    [Fact]
+    public void ReleaseZipsReplaceUiFilesAndWorldTexturesInPlace()
+    {
+        var root = TestData.TempDir();
+        var hdDir = Path.Combine(root, "HD");
+        Directory.CreateDirectory(hdDir);
+        Zip(Path.Combine(hdDir, "crimson_hd_chosen_ui_textures.zip"),
+            ("ui_textures/rimage/c1m1.png", "c1m1"),
+            ("ui_textures/rof/ASSETS/GRAPHICS/SCRAPBOOK/SB_BG_1.png", "scrap"));
+        Zip(Path.Combine(hdDir, "crimson_hd_chosen_world_textures.zip"),
+            ("world_textures/cloud1.png", "flat"),
+            ("world_textures/C3/rtexture12/cloud1.png", "c3"),
+            ("world_textures/readme.txt", "not art"));
+        var extracted = Path.Combine(root, "extracted");
+
+        using var hd = HdTextures.Open(root, "HD");
+
+        Assert.Equal("c1m1", Text(hd.ForExtracted(Path.Combine(extracted, "rimage", "c1m1.png"))));
+        // The extraction upper-cases the rof tree and ships the scrapbook backdrops as .JPG.
+        Assert.Equal("scrap", Text(hd.ForExtracted(Path.Combine(extracted, "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK", "SB_BG_1.JPG"))));
+        Assert.Null(hd.ForExtracted(Path.Combine(extracted, "rimage", "c1m2.png")));
+        Assert.Null(hd.ForExtracted(Path.Combine(root, "rimage", "c1m1.png")));
+
+        // A chapter's own entry beats the bare name, which every other archive takes.
+        Assert.Equal("c3", Text(hd.ForWorld(Path.Combine(extracted, "C3", "rtexture12.zip"), "cloud1")));
+        Assert.Equal("c3", Text(hd.ForWorld(Path.Combine(extracted, "C3", "rtexture12"), "Cloud1")));
+        Assert.Equal("flat", Text(hd.ForWorld(Path.Combine(extracted, "C5", "rtexture14.zip"), "cloud1")));
+        Assert.Null(hd.ForWorld(Path.Combine(extracted, "C5", "rtexture14.zip"), "readme"));
+        Assert.Equal(4, hd.Count);
+    }
+
+    [Fact]
+    public void ALaterPackOverridesAnEarlierOneAndALooseFolderCounts()
+    {
+        var root = TestData.TempDir();
+        var hdDir = Path.Combine(root, "HD");
+        Directory.CreateDirectory(Path.Combine(hdDir, "b_fixes", "rimage"));
+        File.WriteAllText(Path.Combine(hdDir, "b_fixes", "rimage", "arrow.png"), "fixed");
+        Zip(Path.Combine(hdDir, "a_pack.zip"), ("pack/rimage/arrow.png", "old"), ("pack/rimage/darrow.png", "kept"));
+
+        using var hd = HdTextures.Open(root, "HD");
+
+        var rimage = Path.Combine(root, "extracted", "rimage");
+        Assert.Equal("fixed", Text(hd.ForExtracted(Path.Combine(rimage, "arrow.png"))));
+        Assert.Equal("kept", Text(hd.ForExtracted(Path.Combine(rimage, "darrow.png"))));
+    }
+
+    [Fact]
+    public void NoFolderOrAnEmptyNameReadsNoPack()
+    {
+        var root = TestData.TempDir();
+        Assert.Equal(0, HdTextures.Open(root, "HD").Count);
+        Assert.Equal(0, HdTextures.Open(root, "").Count);
+    }
+
+    private static string? Text(byte[]? bytes) => bytes == null ? null : Encoding.UTF8.GetString(bytes);
+
+    private static void Zip(string path, params (string Name, string Body)[] entries)
+    {
+        using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
+        foreach (var (name, body) in entries)
+        {
+            using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+            writer.Write(body);
+        }
+    }
+}

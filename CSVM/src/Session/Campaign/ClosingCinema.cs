@@ -6,21 +6,20 @@ namespace CSVM.Session.Campaign;
 
 /// <summary>
 /// Whether the closing cinema plays before the scrapbook a flown mission opens, and the one handoff
-/// to that scrapbook. The gate is the mission just flown, its result and its story position: a win
-/// on the campaign's last mission plays the film, the first flight and every replay alike, and any
-/// other ending reaches the book with no film, which is what <c>FINALCINEMA.SCRIPT</c>'s own false
-/// branch does (docs/formats/cinemas.md). The profile's completion state decides nothing, so a
+/// to that scrapbook. The gate is the mission just flown, its result and its story position. A win
+/// on the campaign's last mission plays the film, the first flight and every replay alike. Any other
+/// ending reaches the book with no film, as <c>FINALCINEMA.SCRIPT</c>'s own false branch does
+/// (docs/formats/cinemas.md). The profile's completion state decides nothing, so a
 /// failed mission on a finished campaign opens the book silently. Playing is a delegate the caller
 /// supplies, which keeps the whole decision testable with no engine present and leaves the film
-/// itself to <c>Launcher.PlayCinema</c>.
+/// itself to <c>LaunchAudio.PlayCinema</c>.
 /// </summary>
 public sealed class ClosingCinema
 {
     /// <summary>The film, spelled as the <c>FinalCinema</c> screen's own <c>CF_MOVIE</c> layout row
     /// spells it. That row is the only place the name is written down, because
     /// <c>FINALCINEMA.SCRIPT</c> sets no art path (docs/formats/cinemas.md). It is transcribed here
-    /// rather than read back, since the row lives in Original's decoded layout and this film plays
-    /// under both presentations; the lookup is case-blind either way.</summary>
+    /// rather than read back from Original's decoded layout. The lookup is case-blind either way.</summary>
     public const string Name = "Final.MPG";
 
     /// <summary>Escape or a left mouse press, the closing cinema's set and no more, and a pad

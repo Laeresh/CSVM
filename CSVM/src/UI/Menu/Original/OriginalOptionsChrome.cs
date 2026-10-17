@@ -274,6 +274,11 @@ internal sealed class OriginalOptionsChrome
         for (int i = 0; i < controls.Count; i++)
         {
             var control = controls[i];
+            if (!control.Visible)
+            {
+                continue;
+            }
+
             if (control.Kind == OriginalRowKind.Radio && control.Art != null)
             {
                 // An eight-state strip: the four button states unchecked, then the same four checked.

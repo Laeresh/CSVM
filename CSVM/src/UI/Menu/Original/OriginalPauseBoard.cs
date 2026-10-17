@@ -8,15 +8,13 @@ using Godot;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The Original presentation's pause screen: the mission's chart filling the window with its flags
-/// and icons, the objectives parchment, the profile's memento and the button strips, the authored
-/// four and the remake's photo strip among them, composed from <c>escape.zrd</c> the way the load
-/// and briefing screens are. An Instant Action sortie hands it an <c>ia_escape.zrd</c> sheet
-/// instead, the load screen's blackboard under the same strips, written in chalk. Follows
-/// <see cref="PauseState.Changed"/> and drives its cursor from the pausing player's reader alone,
-/// which is <see cref="PauseBoard"/>'s contract unchanged; that seat's pointer shares the cursor,
-/// hovering a strip to move it and clicking to fire, the rule every Original page keeps. The
-/// Built-in presentation keeps <see cref="PauseBoard"/>. Decode: docs/org/pause-screen.md.
+/// The Original presentation's pause screen, composed from <c>escape.zrd</c> the way the load and
+/// briefing screens are. The mission's chart fills the window with its flags and icons, under the
+/// objectives parchment, the profile's memento and the button strips. An Instant Action sortie hands
+/// it an <c>ia_escape.zrd</c> sheet instead, the load screen's blackboard under the same strips. It
+/// follows <see cref="PauseState.Changed"/> and the pausing player's reader, <see cref="PauseBoard"/>'s
+/// contract, and that seat's pointer hovers a strip to move the cursor and clicks to fire. A mode
+/// with no authored dialog keeps <see cref="PauseBoard"/>. Decode: docs/org/pause-screen.md.
 /// </summary>
 public sealed partial class OriginalPauseBoard : Control
 {

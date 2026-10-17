@@ -6,7 +6,6 @@ using CSVM.Launch;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 using Godot;
@@ -34,7 +33,7 @@ internal static class XrPointerSuites
         new(Basis.FromEuler(new Vector3(0.12f, -2.3f, 0.05f)), new Vector3(-6350f, 300f, -4144f));
 
     /// <summary>The shipped XR flight rows resolve through a seat's reader, and read nothing once
-    /// the session is gone. A Built-in pause board on the theater screen is pointed at and fired
+    /// the session is gone. A chrome pause board on the theater screen is pointed at and fired
     /// with the right trigger through the polled reader. A Godot button takes the pushed click, and
     /// the left trigger takes the pointer over without one.</summary>
     [Suite("xr-pointer",
@@ -148,11 +147,6 @@ internal static class XrPointerSuites
         XRServer.AddInterface(sim);
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "xr-pointer-original-menu");
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -173,7 +167,7 @@ internal static class XrPointerSuites
             ctx.Check(sim.Initialize(), $"the stand-in interface initialises");
             sim.ConnectHands();
             XrControllers.SessionLive = true;
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             ctx.Host.AddChild(theater);
             ctx.Host.AddChild(pointer);

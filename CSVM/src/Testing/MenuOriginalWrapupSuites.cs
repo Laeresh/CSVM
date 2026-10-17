@@ -7,7 +7,6 @@ using CSVM.Mech3;
 using CSVM.Session.InstantAction;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 using Godot;
@@ -18,7 +17,7 @@ namespace CSVM.Testing;
 /// The Original presentation's Instant Action wrap-up page over the install's decoded layout.
 /// A real <see cref="InstantActionRuntime"/> is ended and held. The ending's snapshot crosses the
 /// session boundary the way the launcher hands it over. The page draws the four decoded rows and
-/// the further lines the built-in board carries, and CONTINUE lands back on the Instant Action
+/// the further lines the chrome board carries, and CONTINUE lands back on the Instant Action
 /// screen. Readings: docs/formats/instant-action/wrap-up.md.
 /// </summary>
 internal static class MenuOriginalWrapupSuites
@@ -51,11 +50,6 @@ internal static class MenuOriginalWrapupSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-wrapup");
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -66,7 +60,7 @@ internal static class MenuOriginalWrapupSuites
         host.AddSeat(seat);
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");

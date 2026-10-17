@@ -56,8 +56,14 @@ public class NoGameDataScreenTests
     [Fact]
     public void EachProblemHasItsOwnTitleAndTheStaleBodiesNameBothSchemas()
     {
-        var titles = new[] { DataProblem.Missing, DataProblem.Incomplete, DataProblem.Older, DataProblem.Newer }.Select(NoGameDataScreen.Title).ToList();
-        Assert.Equal(4, titles.Distinct().Count());
+        var titles = new[] { DataProblem.Missing, DataProblem.Incomplete, DataProblem.Older, DataProblem.Newer, DataProblem.Unusable }
+            .Select(NoGameDataScreen.Title).ToList();
+        Assert.Equal(5, titles.Distinct().Count());
+
+        // An unusable tree's body names the fault the menus refused it for, and asks for a re-extract.
+        string unusable = NoGameDataScreen.Body(DataProblem.Unusable, null, "the decoded menu layout has no [MainMenu] section");
+        Assert.Contains("has no [MainMenu] section", unusable);
+        Assert.Contains("Extract it again", unusable);
 
         string older = NoGameDataScreen.Body(DataProblem.Older, 2);
         Assert.Contains("older", older);

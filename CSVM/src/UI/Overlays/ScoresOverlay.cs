@@ -10,10 +10,9 @@ namespace CSVM.UI.Overlays;
 
 /// <summary>
 /// One pane's held Display Scores: the standings stand in the pane whose seat holds the action
-/// (<c>FlightController.ScoresShown</c>) and go on release. Under the Original presentation they are
-/// the original's HUD text, yellow Courier New lines at the top left. A flag carrier's line has an
-/// "F" before it. Under Built-in they are a chrome table centred in the pane. A source with no race
-/// and no Dogfight draws nothing. Module entry: docs/architecture/UI.md; decode:
+/// (<c>FlightController.ScoresShown</c>) and go on release. They are the original's HUD text,
+/// yellow Courier New lines at the top left. A flag carrier's line has an "F" before it. A source
+/// with no race and no Dogfight draws nothing. Module entry: docs/architecture/UI.md; decode:
 /// docs/org/multiplayer-scoring.md "The in-flight scores".
 /// </summary>
 public sealed partial class ScoresOverlay : Control
@@ -37,37 +36,25 @@ public sealed partial class ScoresOverlay : Control
     private static readonly Color LineColor = new(1f, 250f / 255f, 66f / 255f);
     private static readonly Color[] FlagColors = { new(170f / 255f, 170f / 255f, 0f), new(170f / 255f, 0f, 0f) };
 
-    // The Built-in table's sizes and inks, chrome type scale rungs in the HUD's reference.
-    private static readonly float RefHeaderFont = ChromeType.InReference(ChromeSize.Note, HudMetrics.ReferenceHeight);
-    private static readonly float RefRowFont = ChromeType.InReference(ChromeSize.Text, HudMetrics.ReferenceHeight);
-    private static readonly Color Backdrop = new(0f, 0f, 0f, 0.6f);
-    private static readonly Color HeaderColor = new(0.72f, 0.78f, 0.85f);
-    private static readonly Color RowColor = new(1f, 1f, 1f);
-    private static readonly Color TeamColor = new(1f, 0.85f, 0.4f);
-
     private static Font? _face;
     private static bool _faceLooked;
 
     private PlayerRig _pane = null!;
     private ScoresSource _source = null!;
     private IReadOnlyList<OriginalScoresLine> _original = Array.Empty<OriginalScoresLine>();
-    private ScoresTable? _table;
     private bool _drawnShown;
-
-    /// <summary>Whether this pane draws the original's text rather than the chrome table.</summary>
-    public bool Original { get; private set; }
 
     /// <summary>Whether the standings are up this frame, as the last <see cref="Refresh"/> found.
     /// </summary>
     public bool Shown { get; private set; }
 
-    /// <summary>What the last <see cref="Refresh"/> put up, one string per line: the Original text,
-    /// or the chrome table's rows with their cells joined. Empty while hidden.</summary>
+    /// <summary>What the last <see cref="Refresh"/> put up, one string per line of the original's
+    /// text. Empty while hidden.</summary>
     public IReadOnlyList<string> Lines { get; private set; } = Array.Empty<string>();
 
     /// <summary>Builds the overlay for <paramref name="pane"/> on a layer of its own over that pane's
     /// HUD. It reads the seat in the pane each frame, so an airframe swap keeps it.</summary>
-    public static ScoresOverlay Attach(PlayerRig pane, ScoresSource source, bool original)
+    public static ScoresOverlay Attach(PlayerRig pane, ScoresSource source)
     {
         ArgumentNullException.ThrowIfNull(pane);
         ArgumentNullException.ThrowIfNull(source);
@@ -75,7 +62,6 @@ public sealed partial class ScoresOverlay : Control
         {
             _pane = pane,
             _source = source,
-            Original = original,
             Name = "scores",
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
@@ -91,11 +77,8 @@ public sealed partial class ScoresOverlay : Control
     public void Refresh()
     {
         Shown = _source.HasScores && _pane.Controller is { ScoresShown: true };
-        _original = Shown && Original ? _source.OriginalLines() : Array.Empty<OriginalScoresLine>();
-        _table = Shown && !Original ? _source.Table() : null;
-        Lines = Original
-            ? _original.Select(l => l.Text).ToList()
-            : _table?.Rows.Select(r => string.Join("  ", r.Cells)).ToList() ?? (IReadOnlyList<string>)Array.Empty<string>();
+        _original = Shown ? _source.OriginalLines() : Array.Empty<OriginalScoresLine>();
+        Lines = _original.Select(l => l.Text).ToList();
     }
 
     public override void _Process(double delta)
@@ -119,14 +102,7 @@ public sealed partial class ScoresOverlay : Control
             return;
         }
 
-        if (Original)
-        {
-            DrawOriginal(s);
-        }
-        else if (_table != null)
-        {
-            DrawTable(_table, s);
-        }
+        DrawOriginal(s);
     }
 
     // The original's face, Courier New at hudNetPlay's weight, or the theme's where it is missing.
@@ -177,55 +153,5 @@ public sealed partial class ScoresOverlay : Control
     {
         DrawChar(font, baseline + Vector2.One, glyph, fontSize, MarkerDraw.Shadow);
         DrawChar(font, baseline, glyph, fontSize, ink);
-    }
-
-    private void DrawTable(ScoresTable table, float s)
-    {
-        var font = ChromeType.Face(this);
-        float text = HudMetrics.StatusTextScale;
-        int headerSize = Mathf.Max(1, Mathf.RoundToInt(RefHeaderFont * s * text));
-        int rowSize = Mathf.Max(1, Mathf.RoundToInt(RefRowFont * s * text));
-        int columns = table.Headers.Count;
-        var widths = new float[columns];
-        for (int c = 0; c < columns; c++)
-        {
-            widths[c] = font.GetStringSize(table.Headers[c], HorizontalAlignment.Left, -1f, headerSize).X;
-            foreach (var row in table.Rows)
-            {
-                widths[c] = Mathf.Max(widths[c], font.GetStringSize(row.Cells[c], HorizontalAlignment.Left, -1f, rowSize).X);
-            }
-        }
-
-        float pad = RefPad * s, gap = RefColumnGap * s;
-        float headerHeight = font.GetHeight(headerSize) + (RefRowGap * s);
-        float rowHeight = font.GetHeight(rowSize) + (RefRowGap * s);
-        float width = widths.Sum() + (gap * (columns - 1)) + (2f * pad);
-        float height = headerHeight + (rowHeight * table.Rows.Count) + (2f * pad);
-        var corner = new Vector2((Size.X - width) / 2f, (Size.Y - height) / 2f);
-        DrawRect(new Rect2(corner, new Vector2(width, height)), Backdrop);
-        float y = corner.Y + pad;
-        DrawCells(font, headerSize, table.Headers, table.RightAligned, widths, corner.X + pad, y + font.GetAscent(headerSize), gap, _ => HeaderColor);
-        y += headerHeight;
-        foreach (var row in table.Rows)
-        {
-            Color Ink(int column) => row.Team ? TeamColor : column == 1 && row.Seat >= 0 ? SplitScreen.PlayerColor(row.Seat) : RowColor;
-            DrawCells(font, rowSize, row.Cells, table.RightAligned, widths, corner.X + pad, y + font.GetAscent(rowSize), gap, Ink);
-            y += rowHeight;
-        }
-    }
-
-    // One table line, each cell left- or right-set in its column, over a one-pixel shadow.
-    private void DrawCells(Font font, int fontSize, IReadOnlyList<string> cells, IReadOnlyList<bool> right,
-        float[] widths, float left, float baseline, float gap, Func<int, Color> ink)
-    {
-        float x = left;
-        for (int c = 0; c < cells.Count; c++)
-        {
-            float w = font.GetStringSize(cells[c], HorizontalAlignment.Left, -1f, fontSize).X;
-            var at = new Vector2(right[c] ? x + widths[c] - w : x, baseline);
-            DrawString(font, at + Vector2.One, cells[c], HorizontalAlignment.Left, -1f, fontSize, MarkerDraw.Shadow);
-            DrawString(font, at, cells[c], HorizontalAlignment.Left, -1f, fontSize, ink(c));
-            x += widths[c] + gap;
-        }
     }
 }

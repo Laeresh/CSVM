@@ -17,8 +17,7 @@ internal static class SuitePorts
     /// </summary>
     internal const int Walk = 5;
 
-    /// <summary>The Built-in board's port row, walked one Right at a time from the door's own
-    /// default: offsets 1 to 24. The LAN port is offset 1, which none of these doors opens.
+    /// <summary>The door's port, walked one step at a time from its own default: offsets 1 to 24. The LAN port is offset 1, which none of these doors opens.
     /// </summary>
     internal const int DoorWalk = 24;
 

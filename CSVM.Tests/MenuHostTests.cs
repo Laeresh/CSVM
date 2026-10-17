@@ -13,28 +13,25 @@ namespace CSVM.Tests;
 public class MenuHostTests
 {
     [Fact]
-    public void AnUnknownRequestFallsBackToBuiltInWithAReasonAndKeepsTheRequest()
+    public void AnUnknownRequestFallsBackToOriginalWithAReasonAndKeepsTheRequest()
     {
         var host = Host(out _, out _);
 
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "no-such-presentation");
+        string? reason = host.Select("no-such-presentation");
 
-        Assert.Equal(PresentationId.BuiltIn, host.Selected);
+        Assert.Equal(PresentationId.Original, host.Selected);
         Assert.Equal(new PresentationId("no-such-presentation"), host.Requested);
         Assert.NotNull(reason);
     }
 
     [Fact]
-    public void ARegisteredRequestIsSelectedAndTheForceFlagOverridesIt()
+    public void ARegisteredRequestIsSelected()
     {
         var host = Host(out _, out _);
         var wizard = new PresentationId("fake-wizard");
 
-        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: "fake-wizard"));
+        Assert.Null(host.Select("fake-wizard"));
         Assert.Equal(wizard, host.Selected);
-
-        Assert.NotNull(host.Select(forceBuiltIn: true, cliOverride: "fake-wizard"));
-        Assert.Equal(PresentationId.BuiltIn, host.Selected);
         Assert.Equal(wizard, host.Requested);
     }
 
@@ -46,35 +43,50 @@ public class MenuHostTests
         var host = Host(out _, out _);
         host.Availability = id => id.Value == "fake-wizard" ? "its layout is missing" : null;
 
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        string? reason = host.Select("fake-wizard");
 
-        Assert.Equal(PresentationId.BuiltIn, host.Selected);
+        Assert.Equal(PresentationId.Original, host.Selected);
         Assert.Equal(new PresentationId("fake-wizard"), host.Requested);
         Assert.NotNull(reason);
         Assert.Contains("its layout is missing", reason);
 
         host.Availability = _ => null;
-        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: "fake-wizard"));
+        Assert.Null(host.Select("fake-wizard"));
         Assert.Equal(new PresentationId("fake-wizard"), host.Selected);
     }
 
+    /// <summary>Original itself unavailable is not a menu path, since the launcher stops first, so
+    /// the host keeps it selected and says why rather than throwing.</summary>
+    [Fact]
+    public void AnUnavailableOriginalStaysSelectedWithItsReason()
+    {
+        var host = Host(out _, out _);
+        host.Availability = id => id == PresentationId.Original ? "the layout went away" : null;
+
+        string? reason = host.Select(null);
+
+        Assert.Equal(PresentationId.Original, host.Selected);
+        Assert.Equal(PresentationId.Original, host.Requested);
+        Assert.Contains("the layout went away", reason);
+    }
+
     /// <summary>A blank token cannot be a <see cref="PresentationId"/>, so it must read as an
-    /// unavailable request rather than throw at a persisted or typed value.</summary>
+    /// unavailable request rather than throw at a typed value.</summary>
     [Fact]
     public void AWhitespaceRequestNeverCrashesTheSelection()
     {
         var host = Host(out _, out _);
 
-        Assert.NotNull(host.Select(forceBuiltIn: false, cliOverride: "   "));
-        Assert.Equal(PresentationId.BuiltIn, host.Selected);
-        Assert.Equal(PresentationId.BuiltIn, host.Requested);
+        Assert.NotNull(host.Select("   "));
+        Assert.Equal(PresentationId.Original, host.Selected);
+        Assert.Equal(PresentationId.Original, host.Requested);
     }
 
     [Fact]
     public void ShowActivatesOneInstanceAndReshowsItAfterAnExit()
     {
         var host = Host(out var seat, out var exits);
-        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        host.Select("fake-wizard");
 
         host.Show(MenuReturnDestination.TopLevel);
         var first = Assert.IsType<FakeWizardPresentation>(host.Active);
@@ -103,7 +115,7 @@ public class MenuHostTests
     public void OnMainMenuHoldsOnlyOnTheShownTopLevel()
     {
         var host = Host(out var seat, out _);
-        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        host.Select("fake-wizard");
         Assert.False(host.OnMainMenu);
 
         host.Show(MenuReturnDestination.TopLevel);
@@ -130,7 +142,7 @@ public class MenuHostTests
     public void AHeldMenuDoesNotTickAndPrimesItsSeatsWhenReleased()
     {
         var host = Host(out var seat, out _);
-        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        host.Select("fake-wizard");
         host.Show(MenuReturnDestination.TopLevel);
         bool held = true;
         host.Held = () => held;
@@ -152,7 +164,7 @@ public class MenuHostTests
     public void DeactivateEndsThePresentationAndDiscardsTransientFeatureState()
     {
         var host = Host(out var seat, out _);
-        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        host.Select("fake-wizard");
         host.Show(MenuReturnDestination.TopLevel);
         seat.Enqueue(new MenuCommands { Accept = true });
         host.Tick(1f / 60f);
@@ -185,20 +197,20 @@ public class MenuHostTests
     }
 
     [Fact]
-    public void AnUnregisteredBuiltInIsAWiringError()
+    public void AnUnregisteredOriginalIsAWiringError()
     {
         var host = new MenuHost(new PresentationRegistry(), new RecordingAudio(), _ => { });
 
-        Assert.Throws<InvalidOperationException>(() => host.Select(false, null));
+        Assert.Throws<InvalidOperationException>(() => host.Select(null));
         Assert.Throws<InvalidOperationException>(() => host.Show(MenuReturnDestination.TopLevel));
     }
 
-    // A host with Built-in standing in as the pointer page and the wizard registered beside it,
-    // one scripted seat, the shared fake feature and a recording sink.
+    // A host with Original standing in as the pointer page and the wizard registered beside it.
+    // It carries one scripted seat, the shared fake feature and a recording sink.
     private static MenuHost Host(out ScriptedMenuSeat seat, out System.Collections.Generic.List<MenuExit> exits)
     {
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new FakePointerPresentation());
+        registry.Register(PresentationId.Original, () => new FakePointerPresentation());
         registry.Register(new PresentationId("fake-wizard"), () => new FakeWizardPresentation());
         var sink = new System.Collections.Generic.List<MenuExit>();
         var host = new MenuHost(registry, new RecordingAudio(), sink.Add);

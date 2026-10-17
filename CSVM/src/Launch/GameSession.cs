@@ -121,9 +121,6 @@ public partial class GameSession : Node3D
     private readonly OrbitCamera _orbit;
     // launched into the menu → the boards' Exit item returns there, not quit
     private readonly bool _menuDriven;
-    // The presentation this session's boards take, resolved by the Launcher. The only board that
-    // reads it is the pause screen, which the Original presentation composes from escape.zrd.
-    private readonly UI.Menu.PresentationId _presentation;
     // The boards' Exit item, routed by the Launcher (the screen this flight was launched from, or
     // quit when nothing launched it).
     private readonly Action _exitSession;
@@ -143,25 +140,13 @@ public partial class GameSession : Node3D
     // A finished lobby match's landing on Game Scores, routed by the Launcher. Null leaves the
     // ending to the in-flight board.
     private readonly Action? _versusLobbyLanding;
-    // The process's music channel, owned by the Launcher so one channel outlives every session.
+    // The process's music channel, owned by LaunchAudio so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
-    // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
-    // the context; StartSession reads them each build and recomputes the chapter-dependent
-    // gamez/texture/mission paths from _spec.Chapter.
-    private readonly string _repoRoot;
-    // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
-    // so a git worktree can run the game, /extracted/, /CrimsonSkiesGame/ and /tools/ are
-    // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
-    private readonly string _dataRoot;
-    private readonly string _planesGamezPath;
-    private readonly string _zrdrPath;
-    private readonly string _soundsPath;
-    private readonly string _interpPath;
-    private readonly string _messagesPath;
+    // Base (chapter-independent) paths, settled by the Launcher and handed in via the context.
+    // StartSession reads them each build and recomputes the chapter-dependent paths from the spec.
+    private readonly BasePaths _paths;
     private readonly DecodeCache? _decode;
-    // the extracted UI archive (paint patterns)
-    private readonly string _rofPath;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
     // --destroy= probe wrappers below delegate to it (see src/Tooling/ProbeRunner.cs).
     private readonly Tooling.ProbeRunner _probeRunner;
@@ -299,6 +284,8 @@ public partial class GameSession : Node3D
     private Mech3.WorldMerge? _worldMerge;
     // the splitscreen pane rig (null in single player)
     private UI.Boards.SplitScreen? _split;
+    // whether each pane's spyglass is armed at level load, answered once by BuildRigs for its count
+    private bool _spyglassOn = Spyglass.DefaultOn;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
@@ -360,16 +347,9 @@ public partial class GameSession : Node3D
         // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
         // story position, not a chapter, and every path below is derived from those two fields.
         _spec = CampaignDirector.ResolveSeatedPlane(
-            ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot));
-        _repoRoot = ctx.RepoRoot;
-        _dataRoot = ctx.DataRoot;
-        _planesGamezPath = ctx.PlanesGamezPath;
-        _zrdrPath = ctx.ZrdrPath;
-        _soundsPath = ctx.SoundsPath;
-        _interpPath = ctx.InterpPath;
-        _messagesPath = ctx.MessagesPath;
+            ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.Paths.ZrdrPath), ctx.Paths.DataRoot));
+        _paths = ctx.Paths;
         _decode = ctx.Decode;
-        _rofPath = ctx.RofPath;
         _probeRunner = ctx.ProbeRunner;
         _captureDirector = ctx.CaptureDirector;
         // A guest's seed is the host's, taken here so it is in place before Build calls Rng.Reset.
@@ -388,7 +368,6 @@ public partial class GameSession : Node3D
         _sun = ctx.Sun;
         _env = ctx.Env;
         _menuDriven = ctx.MenuDriven;
-        _presentation = ctx.Presentation;
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
@@ -550,9 +529,9 @@ public partial class GameSession : Node3D
     // overlay read this one definition, so they cannot disagree with what WorldSession built.
     private bool BuildsCollision => _spec.BuildsCollision;
 
-    // An Original menu flight lands in the menu rather than on an in-flight board. Instant Action
-    // lands on its wrap-up page, a lobby match on Game Scores. A command-line launch has no menu.
-    private bool LandsInMenu => _menuDriven && _presentation == UI.Menu.PresentationId.Original;
+    // A menu flight lands in the menu rather than on an in-flight board. Instant Action lands on
+    // its wrap-up page, a lobby match on Game Scores. A command-line launch has no menu.
+    private bool LandsInMenu => _menuDriven;
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -586,7 +565,7 @@ public partial class GameSession : Node3D
         AddChild(_worldRoot);
         // Built fresh per session: a launchscreen relaunch replaces _spec wholesale (FromMenu),
         // so these must not be cached across a rebuild.
-        _liveryResolver = new LiveryResolver(_spec, _rofPath);
+        _liveryResolver = new LiveryResolver(_spec, _paths.RofPath);
         _spawnPicker = new SpawnPicker(_spec);
         _ambience = new Effects.EffectAmbience();
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
@@ -666,7 +645,7 @@ public partial class GameSession : Node3D
         SmokeScreenTunables smokeTunables;
         try
         {
-            smokeTunables = SmokeScreenTunables.Load(_zrdrPath);
+            smokeTunables = SmokeScreenTunables.Load(_paths.ZrdrPath);
         }
         catch (Exception e)
         {
@@ -691,30 +670,30 @@ public partial class GameSession : Node3D
         // takes effect on rebuild, and ride BuildState so no phase method re-derives them.
         var state = new BuildState
         {
-            DataRoot = _dataRoot,
-            ZrdrPath = _zrdrPath,
-            SoundsPath = _soundsPath,
-            InterpPath = _interpPath,
-            MessagesPath = _messagesPath,
-            PlanesGamezPath = _planesGamezPath,
+            DataRoot = _paths.DataRoot,
+            ZrdrPath = _paths.ZrdrPath,
+            SoundsPath = _paths.SoundsPath,
+            InterpPath = _paths.InterpPath,
+            MessagesPath = _paths.MessagesPath,
+            PlanesGamezPath = _paths.PlanesGamezPath,
             Mute = _spec.Mute,
             DebugCollision = _spec.DebugCollision,
         };
-        state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_dataRoot, _spec.Chapter);
+        state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_paths.DataRoot, _spec.Chapter);
         // --zep= grafts one chapter node onto the empty stage, so it needs that chapter's gamez
         // where the bare stage needs only planes.zbd. Chapter is already the flag's own by here.
         state.GamezPath = _spec.Gamez
             ?? (_spec.WorldMode || _spec.Zep != null
-                ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter)
-                : _planesGamezPath);
-        state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
+                ? SessionPaths.ChapterGamez(_paths.DataRoot, _spec.Chapter)
+                : _paths.PlanesGamezPath);
+        state.MissionZrdrPath = SessionPaths.MissionZrdr(_paths.DataRoot, _spec.Chapter, _spec.Mission);
         LoadProgress.Report(LoadStep.Paths);
 
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
-        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath, _wire.CoopWingman, _wire.CoopPersisted);
+        _campaign = CampaignDirector.TryCreate(_spec, _paths.ZrdrPath, state.MissionZrdrPath, _wire.CoopWingman, _wire.CoopPersisted);
         if (_campaign is { } campaign)
         {
             // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the
@@ -1836,7 +1815,7 @@ public partial class GameSession : Node3D
 
     private void BuildFlightRigs(BuildState state)
     {
-        var voices = _voices = new SessionVoices(_spec, _zrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
+        var voices = _voices = new SessionVoices(_spec, _paths.ZrdrPath, _worldRoot!, _rigs, _seatRigs, _wire.Seats,
             onWire: _wire.Link != null);
         long mark = StartupProfile.Mark();
         // On the empty stage the session gamez IS planes.zbd (there is no chapter world), so there
@@ -1895,7 +1874,6 @@ public partial class GameSession : Node3D
         _boards = new SessionBoards(new SessionBoards.Inputs
         {
             Spec = _spec,
-            Presentation = _presentation,
             MenuDriven = _menuDriven,
             Exit = LeaveFlight,
             Restart = _restartSession,
@@ -1906,9 +1884,9 @@ public partial class GameSession : Node3D
             PadAssignment = padAssignment,
             PauseOptions = _pauseOptionsFactory,
             LockCandidates = LockCandidateAircraft,
-            ZrdrPath = _zrdrPath,
-            MessagesPath = _messagesPath,
-            DataRoot = _dataRoot,
+            ZrdrPath = _paths.ZrdrPath,
+            MessagesPath = _paths.MessagesPath,
+            DataRoot = _paths.DataRoot,
         });
         var boards = _boards;
         if (_menuPads != null)
@@ -2039,13 +2017,13 @@ public partial class GameSession : Node3D
         VersusMatch? versus = _dogfight?.Match;
         // The original's HUD bitmap font, loaded once and shared across panes. Null when the rimage
         // atlas is absent, and its consumers are then simply not built.
-        HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
+        HudFont? hudFont = HudFont.Load(Path.Combine(_paths.DataRoot, "extracted", "rimage"));
 
         // The gun aiming reticle's pipper: the game's own impact_point.png, loaded once
         // and shared across panes (it carries its own alpha, no colour-keying). Null (no file)
         // simply omits the reticle.
         Texture2D? reticleTex = ImpactReticle.LoadTexture(
-            Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
+            Path.Combine(_paths.DataRoot, "extracted", "rimage"), "impact_point.png");
 
         // ⚠ No --det bypass on this arm, unlike the race arm below: a story mission has one
         // PLAYER_INIT, so the plain walk stacks the whole field on it
@@ -2121,7 +2099,7 @@ public partial class GameSession : Node3D
             Ambience = _ambience,
             Projectiles = projectiles,
             HumanPositions = PlayerPositionsSnapshot,
-            ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
+            ChapterZrdrPath = SessionPaths.ChapterZrdr(_paths.DataRoot, _spec.Chapter),
             MissionZrdrPath = state.MissionZrdrPath,
             Gamez = state.Gamez,
             WorldScene = state.WorldScene,
@@ -2172,7 +2150,7 @@ public partial class GameSession : Node3D
             Coop = _spec.Coop,
             SmokeScreens = _smokeScreens,
         };
-        var flightRoster = new FlightRoster(FlightRosterPolicy.From(_spec), _liveryResolver,
+        var flightRoster = new FlightRoster(FlightRosterPolicy.From(_spec, _spyglassOn), _liveryResolver,
             _worldEffectsFactory, _worldRoot!, aircraftResources, worldBindings, humanBindings,
             flightStarts);
         var rosterBuild = flightRoster.BuildPlayers(_seatRigs);
@@ -2239,10 +2217,9 @@ public partial class GameSession : Node3D
         // Downed report once every rig exists (src/Session/World/VersusDirector.cs).
         if (_dogfight is { } dogfight)
         {
-            // The host's presentation decides the ending for every machine, so a guest follows its
-            // host's word (NetFlight.LandsOnScores) whatever its own presentation is.
-            var toScores = (_wire.Link is { IsHost: false } ? _menuDriven : LandsInMenu)
-                ? _versusLobbyLanding : null;
+            // The host's lobby decides the ending for every machine, so a guest follows its host's
+            // word (NetFlight.LandsOnScores), which already decided whether this landing is set.
+            var toScores = LandsInMenu ? _versusLobbyLanding : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
                 Spawns = _spawnPicker,
@@ -2769,7 +2746,7 @@ public partial class GameSession : Node3D
     // this install's extraction carries none.
     private SoundArchive? MenuSounds()
     {
-        string dir = RofTree.Member(_rofPath, "ASSETS/SOUNDS");
+        string dir = RofTree.Member(_paths.RofPath, "ASSETS/SOUNDS");
         return Directory.Exists(dir) ? new SoundArchive(dir) : null;
     }
 
@@ -2926,6 +2903,9 @@ public partial class GameSession : Node3D
         _rigs.Clear();
         _split = null;
         FollowPanes(count);
+        _spyglassOn = Spyglass.MachineDefaultFor(_spec.Det, count);
+        if (!_spyglassOn)
+            Log.Info("flight", $"spyglass at {count} pane(s): spyglass=off spyglass_source={Spyglass.IntegratedSplitRule}");
         if (count <= 1)
         {
             _camera.Current = true;
@@ -3166,15 +3146,14 @@ public partial class GameSession : Node3D
         };
         if (!source.HasScores)
             return;
-        bool original = _presentation == UI.Menu.PresentationId.Original;
         foreach (var pane in _rigs)
         {
             if (pane.Controller != null)
                 pane.Controller.DebugHoldScores = _spec.DebugScores;
-            ScoresOverlay.Attach(pane, source, original);
+            ScoresOverlay.Attach(pane, source);
         }
 
-        Log.Info("flight", $"display scores: {_rigs.Count} pane(s), {(original ? "the original's HUD text" : "the chrome table")}{(_spec.DebugScores ? ", held by --debug-scores" : "")}");
+        Log.Info("flight", $"display scores: {_rigs.Count} pane(s), the original's HUD text{(_spec.DebugScores ? ", held by --debug-scores" : "")}");
     }
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;

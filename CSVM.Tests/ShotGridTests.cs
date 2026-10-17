@@ -4,10 +4,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The Danger Zone photographs' grid rule and the cursor that walks the grid, shared by
-/// the built-in boards' strip and the Original wrap-up page's prints.</summary>
+/// the chrome boards' strip and the Original wrap-up page's prints.</summary>
 public class ShotGridTests
 {
-    // The built-in strip's room at 720p: 640 by 300, a 6 gap, a 20 caption under each picture.
+    // The chrome strip's room at 720p: 640 by 300, a 6 gap, a 20 caption under each picture.
     private const float Width = 640f;
     private const float Height = 300f;
     private const float Gap = 6f;

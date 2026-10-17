@@ -279,6 +279,41 @@ eight `OBJECT_MOTION` events drop the `lifeboat` under `GRAVITY -10`, drop `life
 fades and fourteen puffer states. Reaching `lboat_destructionNM` instead leaves the envelope with
 nothing but the RESET-derived healthy→destroyed swap, so the destroyed balloon hangs where it died.
 
+The addresses behind each step, for a reader re-checking the rule:
+
+| Step | Where | What it does |
+|---|---|---|
+| Registration | `FUN_005230d0`, `0x00523280`-`0x005232ee` | Branches on `def+0xa1`: 0 calls `FUN_005abbf0(def, def+0x6c, (def+0x9c >> 22) & 1, 0x004e7220)`, 1 calls `FUN_005abc30(def, def+0x6c, 0x004e7150)`, 2 calls both. The node argument is always `def+0x6c` |
+| Attach | `FUN_005abb20` | A node whose `+0xbc` is null, or holds a list it does not own (`FUN_005aba60`), gets a new list copied from the inherited one, then `FUN_005abaa0` writes the slot |
+| Stamp | `FUN_005abad0`, `0x005abada`-`0x005abb13` | Recurses over the node's children (`+0x56` count, `+0x5c` array) and writes the new list into `+0xbc` wherever it still equals the old one. It never touches a parent or a sibling |
+| Hit record | `FUN_004c9a00`, `0x004c9bd6` | After `FUN_0055c9c0`'s polygon test succeeds, records the node it was called on, the node whose model the ray met, through `FUN_004c7f50` into `hit+0x24` |
+| Dispatch | `FUN_005abcf0`, `0x005abd1c`-`0x005abd2f` | Reads `hit+0x24`, then that node's `+0xbc`, and returns through `0x005abf6c` when either is null; otherwise calls slot 0 at `0x005abe68` |
+
+C3's suspension bridge shows the stamp's reach. `susp_bridge` (`HEALTH 7`) roots on `rope1`, a
+leaf; the deck (`part1`-`part5`, `part3a`-`part3c`), `rope2` and `dbase` are its siblings under the
+`susp_bridge` group, and no def roots on any of them, so only `rope1`'s model answers for the pool.
+The siblings still stop a round. `FUN_004c9a00` enters a node only past five gates: `ACTIVE`
+(`0x004c9a09`), `INTERSECT_SURFACE` (`0x004c9a17`), the weapon's exclusion mask (`0x004c9a24`, which
+excludes nothing shipped, [../org/weaponRay.md](../org/weaponRay.md)), the zone gate
+`FUN_0056c430(node+0x30)` on the node's `zone_id` (`0x004c9a54`, [gamez.md](gamez.md)), and, while
+`DAT_0071e8ac` is set, `node+0xc4` against `DAT_009be6f8` (`0x004c9a72`). One more check sits
+before the polygon test itself: the model pointer `node+0x3c` must be non-null (`0x004c9ba2`), and
+`node+0xc4` must be greater than `DAT_0071e8b0` (`0x004c9ba9`-`0x004c9bb5`), or the node's own model
+is never tested. `dbase` carries both flags and a model, and the def's `RESET_STATE` holds it
+`ACTIVE` while the bridge stands. `dbase` and `rope1` share `zone_id` 1, so they pass or fail the
+zone gate together. What `+0xc4`, `DAT_009be6f8` and `DAT_0071e8b0` hold is not decoded, so that
+`dbase` passes either `+0xc4` check is not shown; `rope1` faces the same two comparisons. The
+bridge's death normally arrives through `bridge_truck01`'s chain reaction, which `CALL_ANIMATION`s
+`rope1burn`.
+
+The `g_tower*` guard towers root on `healthy`, the standing model itself. In C3/M01 no round
+reaches them: `support\c3\m01.gw` opens with
+`WorldPartitionSetActive off -15360 -7168 -8192 -14336`, a rectangle over all seven towers that
+clears `ACTIVE` on the `g28515` and `town_2` groups above them
+([interp.md](interp.md#worldpartitionsetactive-nodesetactive-selected-by-area)), and `FUN_004c9a00`
+returns at its `ACTIVE` gate before it reaches their children. `support\c3\m02.gw` switches the
+same rectangle back on.
+
 ## Water-tower example
 
 `extracted/C1/zrdr/ap_h2otwr.zrd.json` is one reader definition, `NAME ap_h2otwr*`,

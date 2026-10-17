@@ -34,6 +34,16 @@ public class CampaignMementoPageTests
         Assert.Contains("MS_P_02_01_hawaiianPrinces2.jpg", CampaignMementos.Awarded(profile));
     }
 
+    /// <summary>The layout's z puts the frame (2) between the picture (1) and the glass (3), so the
+    /// frame's window hides the photograph's white print border.</summary>
+    [Fact]
+    public void TheFrameDrawsOverThePictureAndUnderTheGlass()
+    {
+        var names = Chooser(out _, out _).Pictures.Select(p => p.Art.Name).ToArray();
+
+        Assert.Equal(new[] { "SCRAPBOOK/" + CampaignMementos.Seeded, "MS_BackGround2.png", "MS_Reflection2.png" }, names);
+    }
+
     [Fact]
     public void TheArrowsStepThroughTheHeldPicturesAndWrapAtBothEnds()
     {

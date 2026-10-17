@@ -7,6 +7,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Hangar;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -431,23 +432,20 @@ public class CustomPlaneBuildTests : IDisposable
         new DestroyablePart { Name = "rightwing", MaxHp = 20f, MaxArmor = 20f },
     };
 
-    // One plane built the way the Plane Construction hub builds one: a flow walked to the purchase
-    // review and committed, read back out of the store the commit wrote it to. The airframe
-    // defaults are declined, so the two counts are the only hardpoints the build pays for.
+    // One plane built the way the Plane Construction hub builds one, through the shared feature. It
+    // is committed and read back out of the store the commit wrote it to. The airframe defaults are
+    // declined, so the two counts are the only hardpoints the build pays for.
     private CustomPlaneDef HubBuild(string name, int left, int right)
     {
-        var flow = new HangarFlow(_store, UiStrings.Empty);
-        flow.Accept();
+        var flow = new HangarFeature(UiStrings.Empty, StockAirframes.Node);
+        flow.Open(_store);
+        flow.StartNewPlane();
         flow.PickAirframe(Bloodhawk);
         flow.AnswerDefaultsAsk(false);
         flow.Scratch.Engine = 1;
         flow.Scratch.LeftHardpoints = left;
         flow.Scratch.RightHardpoints = right;
         flow.Scratch.Name = name;
-        while (flow.Screen != HangarScreen.Purchase && flow.Advance())
-        {
-        }
-
         Assert.True(flow.Commit(), flow.Message);
         return Assert.Single(_store.List());
     }

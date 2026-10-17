@@ -114,9 +114,9 @@ public class MouseCaptureTests
         Assert.Equal(MouseCapture.FullDeflectionCounts, MouseCapture.DeflectionCounts(Bindings.SensitivityScale.Default));
     }
 
-    /// <summary>The slider scale both presentations step: the default at its middle, a doubling
+    /// <summary>The slider scale the Options pages step: the default at its middle, a doubling
     /// every quarter of it, the range's ends at its ends. One sideways step is the Original
-    /// slider's own key step, so the two presentations land on the same values.</summary>
+    /// slider's own key step.</summary>
     [Fact]
     public void SensitivityScale_MapsTheSliderEvenlyInRatio()
     {

@@ -1,0 +1,151 @@
+diff --git a/CSVM/src/Flight/Camera/SpyglassView.cs b/CSVM/src/Flight/Camera/SpyglassView.cs
+index 7775ec9d9..dfa657457 100644
+--- a/CSVM/src/Flight/Camera/SpyglassView.cs
++++ b/CSVM/src/Flight/Camera/SpyglassView.cs
+@@ -60,6 +60,17 @@ public sealed partial class SpyglassView : SubViewport
+         // The picture is the pane's own view through a longer lens, so it takes the mode's render
+         // flags as the pane does rather than reading sharper or softer than the view around it.
+         Utils.ViewportQuality.Apply(view);
++        if (I124("notaa"))
++        {
++            view.UseTaa = false;
++            view.ScreenSpaceAA = ScreenSpaceAAEnum.Disabled;
++        }
++
++        if (I124Levers.Length > 0)
++        {
++            Utils.Log.Info("flight", $"i124 levers={I124Levers} taa={view.UseTaa} scale={view.Scaling3DScale}");
++        }
++
+         view._pane = pane;
+         view._ownLayer = ownLayer;
+         view._camera = new Camera3D { Name = "spyglass_camera", Current = true };
+@@ -120,6 +131,11 @@ public sealed partial class SpyglassView : SubViewport
+     /// </summary>
+     public void Aim(Transform3D pose, float fovDeg, int side)
+     {
++        if (I124("nodisc"))
++        {
++            return;
++        }
++
+         side = RenderSide(side);
+         if (side > 0 && Size.X != side)
+         {
+@@ -135,12 +151,90 @@ public sealed partial class SpyglassView : SubViewport
+             _camera.Near = _pane.Near;
+             _camera.Far = _pane.Far;
+             _camera.CullMask = DiscMask(_pane.CullMask, _ownLayer, Utils.GraphicsMode.Enhanced);
++            if (I124("fogfar") && I124FogFar > 0f)
++            {
++                float k = I124("fogfar50") ? 0.5f : I124("fogfar75") ? 0.75f : 1f;
++                _camera.Far = Mathf.Min(_pane.Far, I124FogFar * k);
++            }
++
++            if (!_i124FarLogged)
++            {
++                _i124FarLogged = true;
++                Utils.Log.Info("flight", $"i124 pane near={_pane.Near:0.##} far={_pane.Far:0.#} fog far={I124FogFar:0.#} disc far={_camera.Far:0.#}");
++            }
+         }
+ 
+-        RenderTargetUpdateMode = UpdateMode.Always;
++        I124Clutter();
++        I124Env();
++        int every = I124("every3") ? 3 : I124("every2") ? 2 : 1;
++        RenderTargetUpdateMode = every == 1 || (Engine.GetFramesDrawn() + InTree.IndexOf(this)) % every == 0
++            ? (every == 1 ? UpdateMode.Always : UpdateMode.Once)
++            : UpdateMode.Disabled;
+         _live = true;
+     }
+ 
++    // TEMPORARY measurement levers, not for landing.
++    private static readonly string I124Levers = System.Environment.GetEnvironmentVariable("CSVM_I124") ?? string.Empty;
++    public static float I124FogFar;
++    private static bool _i124ClutterDone;
++    private bool _i124EnvDone;
++    private bool _i124FarLogged;
++
++    private static bool I124(string key) => I124Levers.Contains(key, StringComparison.Ordinal);
++
++    // Moves every layer-1 MultiMeshInstance3D (the clutter cells) onto the sun's layer, which every
++    // pane draws and no disc does.
++    private void I124Clutter()
++    {
++        if (_i124ClutterDone || !I124("noclutter") || !Utils.GraphicsMode.Enhanced)
++        {
++            return;
++        }
++
++        _i124ClutterDone = true;
++        int moved = 0;
++        var stack = new Stack<Node>();
++        stack.Push(GetTree().Root);
++        while (stack.Count > 0)
++        {
++            var node = stack.Pop();
++            if (node is MultiMeshInstance3D mmi && (mmi.Layers & 1u) != 0)
++            {
++                mmi.Layers = (mmi.Layers & ~1u) | UI.Boards.SplitScreen.SunLayer;
++                moved++;
++            }
++
++            foreach (var child in node.GetChildren())
++            {
++                stack.Push(child);
++            }
++        }
++
++        Utils.Log.Info("flight", $"i124 noclutter moved {moved} multimesh instance(s) off the disc");
++    }
++
++    private void I124Env()
++    {
++        if (_i124EnvDone || !(I124("nossao") || I124("nossr") || I124("noglow")))
++        {
++            return;
++        }
++
++        var env = FindWorld3D()?.Environment;
++        if (env == null)
++        {
++            return;
++        }
++
++        var dup = (Godot.Environment)env.Duplicate();
++        dup.SsaoEnabled = env.SsaoEnabled && !I124("nossao");
++        dup.SsrEnabled = env.SsrEnabled && !I124("nossr");
++        dup.GlowEnabled = env.GlowEnabled && !I124("noglow");
++        _camera.Environment = dup;
++        _i124EnvDone = true;
++        Utils.Log.Info("flight", $"i124 disc env ssao={dup.SsaoEnabled} ssr={dup.SsrEnabled} glow={dup.GlowEnabled} levers={I124Levers}");
++    }
++
+     /// <summary>Stop rendering. The gates are re-answered every frame, so this is called on every
+     /// frame the disc is down and must stay cheap when it is already idle.</summary>
+     public void Idle()
+diff --git a/CSVM/src/Flight/Hud/TargetHud.cs b/CSVM/src/Flight/Hud/TargetHud.cs
+index b8aaf9147..f79ded106 100644
+--- a/CSVM/src/Flight/Hud/TargetHud.cs
++++ b/CSVM/src/Flight/Hud/TargetHud.cs
+@@ -533,6 +533,7 @@ public sealed partial class TargetHud : Control
+         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
+         if (_spyglass != null && s > 0f)
+         {
++            SpyglassView.I124FogFar = (FogRange?.Invoke() ?? Vector2.Zero).Y;
+             // The eye stands on the DRAWN pose, never the sim one the gates above read: an eye
+             // quantised to the physics tick shakes against the frame around it. The roll is the
+             // original's aircraft case alone, every other class is watched level.
+diff --git a/CSVM/src/Utils/RenderScaleSetting.cs b/CSVM/src/Utils/RenderScaleSetting.cs
+index f0a4019bd..f33df08f9 100644
+--- a/CSVM/src/Utils/RenderScaleSetting.cs
++++ b/CSVM/src/Utils/RenderScaleSetting.cs
+@@ -108,6 +108,8 @@ public static class RenderScaleSetting
+     // The resolved word clamped under the method, stored as Scale and Clamped.
+     private static RenderScalePlan Store(ResolvedWord resolved, string? antiAliasingWord)
+     {
++        if ((System.Environment.GetEnvironmentVariable("CSVM_I124") ?? string.Empty).Contains("scale67", System.StringComparison.Ordinal))
++            resolved = new ResolvedWord("67", resolved.Source);
+         string clamped = ClampFor(resolved.Word, antiAliasingWord)!;
+         TryParseWord(clamped, out float scale);
+         Scale = scale;

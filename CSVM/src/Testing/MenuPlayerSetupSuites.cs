@@ -1,76 +1,29 @@
 using System.Collections.Generic;
-using CSVM.Bindings;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
-using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
 /// <summary>
-/// The shared player setup in both presentations. The first suite drives Built-in's aircraft screen
-/// with one to four seats, the extra ones device-less through <see cref="LaunchMenu.DebugJoin"/>.
-/// It pins the two-stage pick, Back at every stage, both launch gates, the join hint and a return.
-/// The second joins scripted seats through the feature and drives them in Built-in and in Original.
-/// The third pins which seats the rebinding screen will and will not offer a row to. The fourth
-/// walks Built-in's join board, where every pad seat is signed on.
+/// The shared player setup driven through Original. Scripted seats join through the feature and
+/// are polled by the presentation. Each joined seat picks on its own aircraft screen, and the last
+/// confirm is the launch.
 /// </summary>
 internal static class MenuPlayerSetupSuites
 {
     private const float Dt = 1f / 60f;
 
-    // Pad indices no real device holds, so a machine with pads plugged in walks the board the same.
-    private const int FirstPad = 96;
-    private const int SecondPad = 97;
-
-    // A frame a board gesture landed in and moved the manifest, the join board's own scan answer.
-    private static readonly BoardScan Signing = new(Moved: true, Cast: false, Pressed: true);
-
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
-    private static readonly MenuCommands Loadout = new() { Loadout = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
     private static readonly MenuCommands Left = new() { MoveX = -1 };
 
-    [Suite("menu-player-setup-journey",
-        "Built-in's player setup pinned on the real launchscreen: a lone seat's two-stage pick with "
-        + "Back at every stage and the launch it ends in, a second device-less seat splitting the "
-        + "screen and holding the gate until it confirms, player 1's Back unselecting everyone, the "
-        + "Dogfight gate waiting with its own hint for a second seat, the four-seat maximum, the "
-        + "selected and loadout aids under two seats, and a return from flight keeping the seats "
-        + "and dropping the picks")]
-    internal static void MenuPlayerSetupJourney(TestContext ctx)
-    {
-        var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-player-setup-journey");
-        ctx.Host.AddChild(menu);
-        var launches = new Exits<LaunchExit>(exits);
-        try
-        {
-            LoneSeat(ctx, menu, launches);
-            SecondSeat(ctx, menu, launches);
-            DogfightGate(ctx, menu, launches);
-            FourSeats(ctx, menu);
-            AidsUnderTwoSeats(ctx, menu);
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-        }
-    }
-
     [Suite("menu-player-setup-seats",
-        "Scripted seats through the shared player setup in both presentations: in Built-in a "
-        + "second scripted seat joins on the real launchscreen, picks and confirms, and Free "
-        + "Flight and Dogfight launch for both seats, a return keeps the seats and drops the picks, "
-        + "a guest's Back unjoins, four seats close the join and a fifth is refused, a lock and an "
-        + "unjoin land on one frame, and Deactivate discards every seat but the first; in Original "
-        + "the Dogfight door opens the Dogfight screen, FLY waits for a second seat with the hint "
+        "Scripted seats through the shared player setup in Original: the Dogfight door opens the "
+        + "Dogfight screen, FLY waits for a second seat with the hint "
         + "naming it, a joined seat gets its own aircraft screen where seat 0's cursor and buttons "
         + "move nothing, Back leaves the walk with "
         + "the seat kept and seat 0's pick undone, seat 0 picking again reopens it at the same "
@@ -82,564 +35,16 @@ internal static class MenuPlayerSetupSuites
         + "with no map picked it launches nothing and leaves FLY dark "
         + "until the map is picked, when seat 0's own press flies both, and a guest's Back unjoins "
         + "from the top level")]
-    internal static void MenuPlayerSetupSeats(TestContext ctx)
-    {
-        BuiltInSeats(ctx);
-        OriginalSeats(ctx);
-    }
-
-    [Suite("menu-controls-seats",
-        "The rebinding screen's seats, a second player's keymap coming from a pad signed on at the join board: "
-        + "Options reaches the screen on player 1 alone with a hint naming the join board, the clear "
-        + "gesture drops an action row's highlighted control where the loadout gesture alone does not, a pad seat "
-        + "joined becomes player 2 on the Player stepper, an accepted rebind on that seat "
-        + "writes player 2's keymap file and nobody else's, a device-less seat gets no player row "
-        + "at all because it would have nothing to capture with, and a seat that leaves takes its "
-        + "row and its staged edits with it")]
-    internal static void MenuControlsSeats(TestContext ctx)
-    {
-        string dir = System.IO.Path.Combine(ctx.ScratchDir, "menu-controls-seats");
-        System.IO.Directory.CreateDirectory(dir);
-        // ⚠ Before the host: the save below writes through the store, and without the override it
-        // would land on the keymap saved at this machine's controls.
-        string? previous = BindingStore.DirectoryOverride;
-        BindingStore.DirectoryOverride = dir;
-        var written = new List<int>();
-        var host = MenuSuiteHost.Bare(new List<MenuExit>(), ctx.DataRoot, out var seat, (player, profile) =>
-        {
-            written.Add(player);
-            BindingStore.UserBindings().Save(player, profile);
-        });
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-controls-seats");
-        ctx.Host.AddChild(menu);
-        try
-        {
-            ControlsJoin(ctx, menu, host, dir, written);
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-            BindingStore.DirectoryOverride = previous;
-        }
-    }
-
-    [Suite("menu-builtin-join-board",
-        "Built-in's join board, the one screen a pad signs onto a seat from, on the real "
-        + "launchscreen: the Mode screen's door beside the splitscreen modes opens four open seats, "
-        + "A on a first pad takes P1's seat and A on a second signs onto P2 without either press "
-        + "arming the row under the cursor, B gives P2 up without reading as Back, the captain's "
-        + "Start continues to Mode with both seats kept, the Dogfight then splits for the two seats "
-        + "and launches each on its own pad, Esc leaves the board dropping every sign-on, the "
-        + "keyboard alone walks Continue and reaches a Free Flight launch, and --debug-join's "
-        + "device-less seats stand on the board as taken")]
-    internal static void MenuBuiltInJoinBoard(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var setup = host.Features.Get<PlayerSetupFeature>();
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-builtin-join-board");
-        ctx.Host.AddChild(menu);
-        var launches = new Exits<LaunchExit>(exits);
-        try
-        {
-            menu.ShowMenu();
-            SignOnAtTheBoard(ctx, menu, setup);
-            FlyTheCrew(ctx, menu, setup, launches);
-            LeaveTheBoard(ctx, menu, setup, launches);
-            DeviceLessSeats(ctx, menu);
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-        }
-    }
-
-    // The board's gestures for two pads. They are raw device reads, and a scripted run has no pad.
-    // The walk presses through the device bookkeeping and hands the screen its scan's answer.
-    // The pad indices are ones no real device holds.
-    private static void SignOnAtTheBoard(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup)
-    {
-        var devices = menu.Devices;
-        for (int i = 0; i < 3; i++)
-            menu.Drive(Down);
-        Is(ctx, "the first door past the three modes", LaunchMenu.JoinBoardRow, menu.ShownRowText);
-        menu.Drive(Accept);
-        Is(ctx, "it opens the join board", "Join", menu.ShownScreen);
-        Is(ctx, "under its own heading", "JOIN BOARD", menu.ShownHeading);
-        Is(ctx, "on Continue", "Continue", menu.ShownRowText);
-        ctx.Check(Entries(menu, "open seat") == 4, $"with four open seats ({string.Join(" / ", menu.ShownManifest)})");
-        Is(ctx, "the board needs no strip hint", "", menu.ShownJoinHint);
-        Has(ctx, "and its footer names the pad's gestures", "A sign on, B sign off, Start continue", menu.ShownFooter);
-
-        ctx.Check(devices.SignOn(FirstPad) && devices.P1Pad == FirstPad && setup.Seats.Count == 1,
-            $"A on a first pad takes the captain's chair, P1 beside the keyboard ({devices.P1Pad}, {setup.Seats.Count} seats)");
-        menu.Drive(Accept, Signing);
-        Is(ctx, "and the same A is not seat 0's Accept on Continue", "Join", menu.ShownScreen);
-        ctx.Check(menu.ShownManifest.Count == 4 && menu.ShownManifest[0].EndsWith("signed on", System.StringComparison.Ordinal),
-            $"P1's entry reads signed on ({string.Join(" / ", menu.ShownManifest)})");
-
-        ctx.Check(devices.SignOn(SecondPad) && setup.Seats.Count == 2,
-            $"A on a second pad signs it onto a seat of its own ({setup.Seats.Count} seats)");
-        menu.Drive(MenuCommands.None, Signing);
-        ctx.Check(Entries(menu, "signed on") == 2 && Entries(menu, "open seat") == 2,
-            $"two entries taken and two open ({string.Join(" / ", menu.ShownManifest)})");
-
-        ctx.Check(devices.SignOff(SecondPad) && setup.Seats.Count == 1 && devices.P1Pad == FirstPad,
-            $"B on the second pad gives P2 up and leaves P1 where it is ({setup.Seats.Count} seats, {devices.P1Pad})");
-        menu.Drive(Back, Signing);
-        ctx.Check(menu.ShownScreen == "Join" && devices.P1Pad == FirstPad,
-            $"and the same B is not seat 0's Back off the board ({menu.ShownScreen}, {devices.P1Pad})");
-
-        ctx.Check(devices.SignOn(SecondPad) && setup.Seats.Count == 2, $"the second pad signs on again ({setup.Seats.Count} seats)");
-        menu.Drive(MenuCommands.None, Signing);
-        menu.Drive(MenuCommands.None, new BoardScan(Moved: false, Cast: true, Pressed: true));
-        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRowText == LaunchMenu.JoinBoardRow,
-            $"the captain's Start continues to Mode, the cursor on the board's door ({menu.ShownScreen}, {menu.ShownRowText})");
-        ctx.Check(setup.Seats.Count == 2 && devices.P1Pad == FirstPad,
-            $"with both seats as they were signed on ({setup.Seats.Count} seats, {devices.P1Pad})");
-    }
-
-    // The seats the board wrote are the ones a sortie flies. A Dogfight splits for them, and each
-    // launches on the pad it signed on with.
-    private static void FlyTheCrew(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup, Exits<LaunchExit> launches)
-    {
-        menu.Drive(Up);
-        Is(ctx, "over the board's door is Dogfight", "Dogfight", menu.ShownRowText);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        Is(ctx, "the two seats split its aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        Is(ctx, "and the strip points back at the board", "(other players sign on at the Join Board)", menu.ShownJoinHint);
-        setup.Select(setup.Seats[1]);
-        setup.Confirm(setup.Seats[1]);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1 && launches[0].Mode == MenuMode.Versus && launches[0].Seats.Count == 2,
-            $"both confirmed, one Dogfight launches for the two seats ({launches.Count})");
-        if (launches.Count == 1 && launches[0].Seats.Count == 2)
-        {
-            var pads = launches[0].Seats[1].Pads;
-            ctx.Check(pads.Count == 1 && pads[0] == SecondPad,
-                $"P2 flying on the pad it signed on with ([{string.Join(", ", pads)}])");
-        }
-
-        menu.HideMenu();
-        menu.ShowMenu();
-    }
-
-    // Esc on the board keeps nobody, and the keyboard alone still walks off it and into a flight,
-    // the startup escape hatch's promise.
-    private static void LeaveTheBoard(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup, Exits<LaunchExit> launches)
-    {
-        // Signed on afresh: the return's own device sync finds no pad behind either index, under
-        // --no-pads at once, and gives both seats up.
-        WalkTo(menu, LaunchMenu.JoinBoardRow);
-        menu.Drive(Accept);
-        menu.Devices.SignOn(FirstPad);
-        menu.Devices.SignOn(SecondPad);
-        menu.Drive(MenuCommands.None, Signing);
-        ctx.Check(menu.ShownScreen == "Join" && Entries(menu, "signed on") == 2 && setup.Seats.Count == 2,
-            $"the board stands with two pads signed on ({string.Join(" / ", menu.ShownManifest)})");
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Mode" && setup.Seats.Count == 1 && menu.Devices.P1Pad < 0,
-            $"Esc leaves the board and drops every sign-on ({menu.ShownScreen}, {setup.Seats.Count} seats, {menu.Devices.P1Pad})");
-
-        menu.Drive(Accept);
-        menu.Drive(Down);
-        Is(ctx, "the keyboard steps onto Back", "Back", menu.ShownRowText);
-        Has(ctx, "which says what it drops", "Give every pad's seat back", menu.ShownDetail);
-        menu.Drive(Down);
-        menu.Drive(Accept);
-        Is(ctx, "and Continue under Enter leaves the board too", "Mode", menu.ShownScreen);
-        WalkTo(menu, "Free Flight");
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 2 && launches[1].Mode == MenuMode.Free && launches[1].Seats.Count == 1,
-            $"from where the keyboard alone flies Free Flight ({launches.Count})");
-        menu.HideMenu();
-    }
-
-    // The screenshot twin: --menu=join-board with --debug-join's device-less seats. They stand on the
-    // board as taken, since a pad's A would sign onto the seat after them.
-    private static void DeviceLessSeats(TestContext ctx, LaunchMenu menu)
-    {
-        menu.ShowMenu(LaunchMenu.JoinBoardAid);
-        Is(ctx, "--menu=join-board opens on the board", "Join", menu.ShownScreen);
-        menu.DebugJoin(2);
-        ctx.Check(menu.ShownManifest.Count == 4 && menu.ShownManifest[1] == "P2  no device  signed on"
-                  && menu.ShownManifest[2] == "P3  no device  signed on" && menu.ShownManifest[3] == "P4  open seat  A to sign on",
-            $"--debug-join's seats stand as taken and the rest open ({string.Join(" / ", menu.ShownManifest)})");
-    }
-
-    // How many of the board's entries carry a piece of text.
-    private static int Entries(LaunchMenu menu, string text)
-    {
-        int count = 0;
-        foreach (string entry in menu.ShownManifest)
-        {
-            if (entry.Contains(text, System.StringComparison.Ordinal))
-                count++;
-        }
-
-        return count;
-    }
-
-    // Steps player 1's Mode cursor onto the row reading <paramref name="row"/>, one lap at most.
-    private static void WalkTo(LaunchMenu menu, string row)
-    {
-        for (int i = 0; i <= menu.ShownRowCount && menu.ShownRowText != row; i++)
-            menu.Drive(Down);
-    }
-
-    // The rebinding screen's seats: who it offers, whose file an accepted rebind reaches, and which
-    // seat it refuses a row to. The sign-on is a raw device read, so the seat is made the board's
-    // way, a poller bound to one pad.
-    private static void ControlsJoin(
-        TestContext ctx, LaunchMenu menu, MenuHost host, string dir, List<int> written)
-    {
-        var setup = host.Features.Get<PlayerSetupFeature>();
-        var controls = host.Features.Get<ControlsFeature>();
-        menu.ShowMenu("controls");
-        Is(ctx, "Options reaches the rebinding screen", "Controls", menu.ShownScreen);
-        Has(ctx, "on player 1", "Player 1", menu.ShownBreadcrumb);
-        ctx.Check(controls.Players.Count == 1, $"with one seat registered ({controls.Players.Count})");
-        Has(ctx, "the hint names the board a second keymap comes from", "Join Board", menu.ShownJoinHint);
-        Has(ctx, "and what signing a pad on there is for", "keymap", menu.ShownJoinHint);
-        menu.Drive(Right);
-        Has(ctx, "the stepper has nobody else to offer", "Player 1", menu.ShownBreadcrumb);
-
-        menu.Drive(Down);
-        Has(ctx, "the next stepper is the mouse sensitivity at the unscaled default", "Mouse sensitivity   1.00x", menu.ShownRowText);
-        menu.Drive(Right);
-        Has(ctx, "a step right is more sensitive by the Original slider's own step", "1.15x", menu.ShownRowText);
-        ctx.Check(controls.MouseSensitivity == SensitivityScale.FromLevel(55) && controls.Dirty,
-            $"and stages the multiplier like any other edit ({controls.MouseSensitivity})");
-        for (int i = 0; i < 20; i++)
-            menu.Drive(Right);
-        Has(ctx, "the stepper stops at the top of the range rather than wrapping", "4.00x", menu.ShownRowText);
-        controls.Cancel();
-        menu.Drive(Up);
-        ClearGesture(ctx, menu, controls);
-
-        var padInput = new MenuInput { Pads = new[] { 0 } };
-        padInput.Prime();
-        setup.Join(new BuiltInSeat(padInput));
-        menu.Drive(MenuCommands.None);
-        ctx.Check(controls.Players.Count == 2 && controls.Players[1] == 2,
-            $"a joined pad raises player 2 on the stepper ({controls.Players.Count} seats)");
-        menu.Drive(Right);
-        Has(ctx, "which the stepper steps onto", "Player 2", menu.ShownBreadcrumb);
-
-        controls.Context = InputContext.Flight;
-        controls.Focus(RowOf(controls, InputAction.Nitro));
-        controls.MoveSlot(9); // past the end: the empty slot that adds a control rather than stealing
-        controls.Offer(new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.M)));
-        ctx.Check(controls.Pending == null, $"a free control binds without an ask ({controls.Status})");
-        controls.Accept();
-        ctx.Check(written.Count == 1 && written[0] == 2,
-            $"an accepted rebind there saves player 2 and nobody else ([{string.Join(", ", written)}])");
-        ctx.Check(System.IO.File.Exists(System.IO.Path.Combine(dir, BindingStore.FileNameFor(2))),
-            $"player 2's keymap file is the one written");
-        ctx.Check(!System.IO.File.Exists(System.IO.Path.Combine(dir, BindingStore.FileNameFor(1))),
-            $"and player 1's file is not touched");
-
-        menu.DebugJoin(1);
-        menu.Drive(MenuCommands.None);
-        ctx.Check(setup.Seats.Count == 3 && controls.Players.Count == 2,
-            $"a device-less seat joins the game and still gets no player row ({setup.Seats.Count} seats, {controls.Players.Count} rows)");
-
-        setup.Unjoin(setup.Seats[1]);
-        menu.Drive(MenuCommands.None);
-        ctx.Check(controls.Players.Count == 1 && controls.Player == 1,
-            $"the pad leaving takes its row with it and the screen falls back to player 1 ({controls.Players.Count} rows, player {controls.Player})");
-    }
-
-    // The clear on the first action row. The footer names Delete and Backspace, the loadout gesture
-    // alone leaves the row, and the clear drops its highlighted control. Ends on the Player stepper.
-    private static void ClearGesture(TestContext ctx, LaunchMenu menu, ControlsFeature controls)
-    {
-        for (int i = 0; i < 3; i++)
-            menu.Drive(Down);
-        var action = controls.Actions[0];
-        int held = controls.Bindings(action).Count;
-        Has(ctx, "an action row's footer names the clear keys", "Del / Backspace / Y  Unbind", menu.ShownFooter);
-        ctx.Check(held > 0, $"the first action row holds a control to clear ({action})");
-        menu.Drive(new MenuCommands { Loadout = true });
-        ctx.Check(controls.Bindings(action).Count == held && !controls.Dirty,
-            $"the loadout gesture alone clears nothing ({controls.Bindings(action).Count} of {held})");
-        menu.Drive(new MenuCommands { Unbind = true });
-        ctx.Check(controls.Bindings(action).Count == held - 1 && controls.Dirty,
-            $"the clear drops the highlighted control ({controls.Bindings(action).Count} of {held})");
-        controls.Cancel();
-        for (int i = 0; i < 3; i++)
-            menu.Drive(Up);
-    }
-
-    // Which row of the context on screen names that action, found rather than counted: the shipped
-    // set may grow another row above it.
-    private static int RowOf(ControlsFeature controls, InputAction action)
-    {
-        var actions = controls.Actions;
-        for (int i = 0; i < actions.Count; i++)
-        {
-            if (actions[i] == action)
-                return i;
-        }
-
-        return 0;
-    }
-
-    // One seat: select, weapons, Back at each stage, then the launch, and the return that keeps
-    // the seat and drops every stage of its pick.
-    private static void LoneSeat(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
-    {
-        menu.ShowMenu();
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        Is(ctx, "Free Flight, first chapter, lands on the aircraft screen", "Plane", menu.ShownScreen);
-        Is(ctx, "a lone seat's heading", "SELECT AIRCRAFT", menu.ShownHeading);
-        Has(ctx, "the strip points at the board rather than inviting a press", "Join Board", menu.ShownJoinHint);
-        Has(ctx, "the footer offers the first Select", "Enter / A  Select", menu.ShownFooter);
-
-        menu.Drive(Down);
-        Is(ctx, "one row down", "Hellhound", menu.ShownRowText);
-        menu.Drive(Loadout);
-        Is(ctx, "Weapons while browsing does nothing", "SELECT AIRCRAFT", menu.ShownHeading);
-        menu.Drive(Accept);
-        Is(ctx, "the first Accept selects", "AIRCRAFT SELECTED", menu.ShownHeading);
-        Has(ctx, "and the footer offers FLY", "Enter / A  FLY", menu.ShownFooter);
-        menu.Drive(Loadout);
-        Is(ctx, "Weapons on a selected airframe opens its list", "AMMO SELECTION  (Hellhound)", menu.ShownHeading);
-        menu.Drive(Loadout);
-        Is(ctx, "Weapons again closes it with the selection standing", "AIRCRAFT SELECTED", menu.ShownHeading);
-        menu.Drive(Back);
-        Is(ctx, "Back unselects", "SELECT AIRCRAFT", menu.ShownHeading);
-        Is(ctx, "keeping the cursor", "Hellhound", menu.ShownRowText);
-        ctx.Check(launches.Count == 0, $"nothing has launched ({launches.Count})");
-
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1, $"select then confirm launches a lone seat once ({launches.Count})");
-        if (launches.Count == 1)
-        {
-            var launch = launches[0];
-            ctx.Check(launch.Mode == MenuMode.Free && launch.Seats.Count == 1 && launch.Seats[0].PlaneNode == "player_avenger",
-                $"as one Free Flight seat flying the Hellhound ({launch.Mode}, {launch.Seats.Count}, {(launch.Seats.Count > 0 ? launch.Seats[0].PlaneNode : "")})");
-            ctx.Check(launch.Seats[0].Pads.Count == 0 && launch.Seats[0].Fit == null,
-                $"with no pad and the stock fit ({launch.Seats[0].Pads.Count}, {launch.Seats[0].Fit})");
-        }
-
-        menu.HideMenu();
-        menu.ShowMenu("plane");
-        Is(ctx, "a return re-enters the aircraft screen browsing", "SELECT AIRCRAFT", menu.ShownHeading);
-        Is(ctx, "with the cursor kept", "Hellhound", menu.ShownRowText);
-        ctx.Check(launches.Count == 1, $"and nothing relaunched ({launches.Count})");
-    }
-
-    // A second, device-less seat: the screen splits, the gate waits for it, player 1's Back
-    // walks back through the stages and finally takes everyone to the Chapter screen.
-    private static void SecondSeat(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
-    {
-        menu.DebugJoin(1);
-        Is(ctx, "a second seat splits the aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        Has(ctx, "the footer says who steers the shared screens", "(P1 chooses)", menu.ShownFooter);
-        Has(ctx, "below four seats the strip still points at the board", "Join Board", menu.ShownJoinHint);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1,
-            $"player 1 selecting and confirming does not launch while the other seat has not confirmed ({launches.Count})");
-        menu.Drive(Back);
-        menu.Drive(Back);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1, $"Back twice then select and confirm again still waits ({launches.Count})");
-        menu.Drive(Back);
-        menu.Drive(Back);
-        menu.Drive(Back);
-        Is(ctx, "player 1's third Back, browsing, returns everyone to the Chapter screen", "Chapter", menu.ShownScreen);
-        menu.Drive(Accept);
-        Is(ctx, "and the aircraft screen is still split", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1, $"the other seat's pick was unselected too, so the gate still waits ({launches.Count})");
-        menu.Drive(Back);
-        menu.Drive(Back);
-    }
-
-    // Dogfight: a lone seat waits with the hint naming what is missing; a second seat lifts the
-    // hint but must confirm before anything flies.
-    private static void DogfightGate(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
-    {
-        menu.ShowMenu();
-        menu.Drive(Down);
-        menu.Drive(Down);
-        Is(ctx, "two rows down the Mode screen", "Dogfight", menu.ShownRowText);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        Is(ctx, "Dogfight reaches the aircraft screen", "Plane", menu.ShownScreen);
-        Is(ctx, "the second seat survived the trip to Mode and back", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        ctx.Check(menu.ShownJoinHint != "(Dogfight needs a fight, P2: sign on at the Join Board)",
-            $"two seats satisfy Dogfight's count, so the hint is the ordinary one ({menu.ShownJoinHint})");
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1, $"player 1 alone cannot fly a Dogfight while the second seat has not confirmed ({launches.Count})");
-        menu.Drive(Back);
-        menu.Drive(Back);
-
-        // Rebuilt on one seat: Deactivate is the only thing that drops a seat, so a fresh
-        // launchscreen stands in for it here.
-        var lone = MenuSuiteHost.Menu(ctx, "menu-player-setup-journey");
-        ctx.Host.AddChild(lone);
-        try
-        {
-            lone.ShowMenu();
-            lone.Drive(Down);
-            lone.Drive(Down);
-            lone.Drive(Accept);
-            lone.Drive(Accept);
-            Is(ctx, "a lone Dogfight seat waits with the hint naming the missing seat",
-                "(Dogfight needs a fight, P2: sign on at the Join Board)", lone.ShownJoinHint);
-            Is(ctx, "on the lone-seat layout", "SELECT AIRCRAFT", lone.ShownHeading);
-            lone.Drive(Accept);
-            Is(ctx, "it can still select", "AIRCRAFT SELECTED", lone.ShownHeading);
-            lone.Drive(Accept);
-            Is(ctx, "and confirming leaves it standing on the screen, no launch", "Plane", lone.ShownScreen);
-            Is(ctx, "with the heading unchanged", "AIRCRAFT SELECTED", lone.ShownHeading);
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(lone);
-            lone.QueueFree();
-        }
-    }
-
-    private static void FourSeats(TestContext ctx, LaunchMenu menu)
-    {
-        menu.DebugJoin(2);
-        Is(ctx, "four seats close the join", "(4-player maximum)", menu.ShownJoinHint);
-        menu.DebugJoin(1);
-        Is(ctx, "a fifth is refused", "(4-player maximum)", menu.ShownJoinHint);
-        menu.ShowMenu();
-        Is(ctx, "off the aircraft screen the maximum still reads", "(4-player maximum)", menu.ShownJoinHint);
-    }
-
-    // The aids that press for the reader do so for player 1 only; the seats stay.
-    private static void AidsUnderTwoSeats(TestContext ctx, LaunchMenu menu)
-    {
-        menu.ShowMenu("selected");
-        Is(ctx, "--menu=selected with seats joined keeps the split heading", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        Is(ctx, "the seats survive an aid's re-entry", "(4-player maximum)", menu.ShownJoinHint);
-        menu.ShowMenu("loadout");
-        Is(ctx, "--menu=loadout likewise", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        menu.ShowMenu();
-        Is(ctx, "and a plain re-entry lands on Mode", "Mode", menu.ShownScreen);
-    }
-
-    // Built-in: later seats are scripted sources joined through the feature, their frames read by
-    // the launchscreen's own frame (_Process, as the presentation's Tick runs it); player 1 drives.
-    private static void BuiltInSeats(TestContext ctx)
-    {
-        var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var setup = host.Features.Get<PlayerSetupFeature>();
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-player-setup-seats");
-        ctx.Host.AddChild(menu);
-        var launches = new Exits<LaunchExit>(exits);
-        try
-        {
-            menu.ShowMenu();
-            menu.Drive(Accept);
-            menu.Drive(Accept);
-            var s2 = new ScriptedSeat();
-            ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2,
-                $"a second scripted seat joins through the feature and the host's live seat list grows ({host.Seats.Count})");
-            Frame(menu, s2, MenuCommands.None);
-            Is(ctx, "the launchscreen picks the seat up on its next frame", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-            Frame(menu, s2, Down);
-            Frame(menu, s2, Accept);
-            Frame(menu, s2, Accept);
-            ctx.Check(setup.Seats[1].Confirmed && setup.Seats[1].Cursor == 1,
-                $"the seat's frames walk one row down, select and confirm (confirmed={setup.Seats[1].Confirmed}, row {setup.Seats[1].Cursor})");
-            ctx.Check(launches.Count == 0, $"nothing launches on the guest's confirmation alone ({launches.Count})");
-            menu.Drive(Accept);
-            menu.Drive(Accept);
-            ctx.Check(launches.Count == 1, $"player 1 selecting and confirming then launches ({launches.Count})");
-            if (launches.Count == 1)
-            {
-                var launch = launches[0];
-                ctx.Check(launch.Mode == MenuMode.Free && launch.Seats.Count == 2,
-                    $"a Free Flight launch for both seats ({launch.Mode}, {launch.Seats.Count})");
-                ctx.Check(launch.Seats.Count == 2 && launch.Seats[1].PlaneNode == "player_avenger" && launch.Seats[1].Pads.Count == 0,
-                    $"the guest flies the Hellhound with no pad behind a scripted source ({(launch.Seats.Count > 1 ? launch.Seats[1].PlaneNode : "")})");
-            }
-
-            menu.HideMenu();
-            menu.ShowMenu();
-            ctx.Check(host.Seats.Count == 2 && !setup.Seats[1].Locked && !setup.Seats[1].Confirmed,
-                $"a return keeps the seats and drops every stage of their picks ({host.Seats.Count}, locked={setup.Seats[1].Locked})");
-
-            menu.Drive(Down);
-            menu.Drive(Down);
-            menu.Drive(Accept);
-            menu.Drive(Accept);
-            Is(ctx, "Dogfight with two seats reaches the split aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-            Frame(menu, s2, Accept);
-            Frame(menu, s2, Accept);
-            menu.Drive(Accept);
-            menu.Drive(Accept);
-            ctx.Check(launches.Count == 2 && launches[1].Mode == MenuMode.Versus && launches[1].Seats.Count == 2,
-                $"both confirmed, a Dogfight launches for the two seats ({launches.Count})");
-
-            menu.HideMenu();
-            menu.ShowMenu("plane");
-            var s3 = new ScriptedSeat();
-            setup.Join(s3);
-            Frame(menu, s3, Back);
-            ctx.Check(host.Seats.Count == 2, $"a guest's Back while browsing unjoins it ({host.Seats.Count})");
-            var s4 = new ScriptedSeat();
-            setup.Join(s3);
-            setup.Join(s4);
-            Frame(menu, s4, MenuCommands.None);
-            Is(ctx, "four seats close the join", "(4-player maximum)", menu.ShownJoinHint);
-            ctx.Check(setup.Join(new ScriptedSeat()) == null, $"and a fifth is refused");
-            ctx.Check(setup.Join(s2) == null, $"as is a source already seated");
-
-            // One frame: seat 2 selects while seat 4 leaves. Both land, in seat order.
-            s2.Enqueue(Accept);
-            s4.Enqueue(Back);
-            menu._Process(Dt);
-            ctx.Check(host.Seats.Count == 3 && setup.Seats[1].Locked,
-                $"a lock and an unjoin on the same frame both land ({host.Seats.Count}, locked={setup.Seats[1].Locked})");
-
-            host.Deactivate();
-            ctx.Check(host.Seats.Count == 1 && !setup.Seats[0].Locked && setup.Seats[0].Cursor == 0,
-                $"Deactivate discards every seat but the first and its pick ({host.Seats.Count})");
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-        }
-    }
-
+    internal static void MenuPlayerSetupSeats(TestContext ctx) => OriginalSeats(ctx);
     // Original: seat 0 is a scripted keyboard, a second scripted seat joins through the feature
     // and is polled by the presentation's Tick like a pad would be.
     private static void OriginalSeats(TestContext ctx)
     {
-        if (!System.IO.File.Exists(MenuLayout.PathUnder(ctx.DataRoot)))
-        {
-            ctx.Note($"Original seats not checked: no decoded menu layout under {ctx.DataRoot}");
-            return;
-        }
-
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
         var layout = CSVM.UI.Menu.Original.OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
         {
-            ctx.Note($"Original seats not checked: {why}");
             return;
         }
 
@@ -647,11 +52,6 @@ internal static class MenuPlayerSetupSuites
         var seat0 = new ScriptedSeat();
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-player-setup-seats");
-        registry.Register(PresentationId.BuiltIn, () => new CSVM.UI.Menu.BuiltIn.BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
         registry.Register(PresentationId.Original, () => new CSVM.UI.Menu.Original.OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -663,7 +63,7 @@ internal static class MenuPlayerSetupSuites
         var setup = host.Features.Get<PlayerSetupFeature>();
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as CSVM.UI.Menu.Original.OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Original shows with its shell built");
@@ -856,14 +256,6 @@ internal static class MenuPlayerSetupSuites
 
         return false;
     }
-
-    // One launchscreen frame with one guest's commands queued; player 1 reads idle.
-    private static void Frame(LaunchMenu menu, ScriptedSeat guest, MenuCommands frame)
-    {
-        guest.Enqueue(frame);
-        menu._Process(Dt);
-    }
-
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)
     {
         seat.Enqueue(frame);
@@ -895,49 +287,4 @@ internal static class MenuPlayerSetupSuites
         }
     }
 
-    // The exits of one kind among everything the host's sink recorded, read live.
-    private sealed class Exits<T>
-        where T : MenuExit
-    {
-        private readonly List<MenuExit> _all;
-
-        public Exits(List<MenuExit> all)
-        {
-            _all = all;
-        }
-
-        public int Count
-        {
-            get
-            {
-                int n = 0;
-                foreach (var exit in _all)
-                {
-                    if (exit is T)
-                    {
-                        n++;
-                    }
-                }
-
-                return n;
-            }
-        }
-
-        public T this[int index]
-        {
-            get
-            {
-                int seen = 0;
-                foreach (var exit in _all)
-                {
-                    if (exit is T match && seen++ == index)
-                    {
-                        return match;
-                    }
-                }
-
-                throw new System.ArgumentOutOfRangeException(nameof(index));
-            }
-        }
-    }
 }

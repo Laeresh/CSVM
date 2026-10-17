@@ -6,14 +6,13 @@ using CSVM.Session.Campaign;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// The scratch profile store the campaign screenshot aids read, shared by both presentations so
-/// their shots show one player: under <c>%TEMP%\CSVM\menu-aid-profiles\&lt;pid&gt;</c>, emptied on
-/// every open, and seeded with two profiles for the filled-roster shot. The process id is in the
-/// path because the engine stage runs several Godot processes at once and two menu suites opening
-/// one shared directory deleted each other's files mid-suite; a sibling directory whose process is
-/// gone is swept on open so the tree does not grow. A progressed store additionally flies
-/// the first three missions, which is what puts rows on the previous-missions list and moves the
-/// cabin's Next Mission off the campaign's first entry. Nothing here can reach <c>user://Profiles</c>.
+/// The scratch profile store the campaign screenshot aids read, so their shots show one player.
+/// It stands under <c>%TEMP%\CSVM\menu-aid-profiles\&lt;pid&gt;</c>, emptied on every open and
+/// seeded with two profiles for the filled-roster shot. The process id is in the path because the
+/// engine stage runs several Godot processes at once. Two suites sharing one directory deleted each
+/// other's files, and a sibling whose process is gone is swept on open. A progressed store also
+/// flies the first three missions, filling the previous-missions list and moving Next Mission on.
+/// Nothing here can reach <c>user://Profiles</c>.
 /// </summary>
 public static class CampaignAidProfiles
 {

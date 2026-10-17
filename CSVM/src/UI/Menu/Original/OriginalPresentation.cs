@@ -67,6 +67,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// leaf list whose items can outrun the window its own row authors.</summary>
     public const string VideoOpenAid = "open";
 
+    /// <summary>The VIDEO aid's argument that scrolls the dropdown window onto View Distance.</summary>
+    public const string VideoScrolledAid = "scrolled";
+
     /// <summary>The aid value that opens the CONTROLS page behind the Preferences page's fourth
     /// door.</summary>
     public const string ControlsAid = "controls";
@@ -113,8 +116,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string InstantActionRaceBotsAid = "race-bots";
 
     /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
-    /// the page a flown mission's ending lands on. Original's own: Built-in shows a board inside
-    /// the flight instead and has no menu page to open.</summary>
+    /// the page a flown mission's ending lands on.</summary>
     public const string InstantActionWrapupAid = "instant-action-wrapup";
 
     /// <summary>The wrap-up aid's argument that shows the failed outcome instead of the complete
@@ -179,8 +181,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string PlaneInventoryAid = "plane-inventory";
 
     /// <summary>The aid value that opens the two-player profile screen with DELETE PLAYER pressed,
-    /// the two-answer messagebox standing over it; Original's own, since Built-in's confirm is two
-    /// rows of the screen and not a box.</summary>
+    /// the two-answer messagebox standing over it.</summary>
     public const string CampaignDeleteAid = "campaign-delete";
 
     /// <summary>The aid value that opens the cabin with its network door open over the aids'
@@ -232,11 +233,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// listed in <c>docs/org/menu-inventory.md</c>.</summary>
     public const string LobbyAid = "lobby";
 
-    /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
-    /// profile store: the empty profile screen, the two-player one, the cabin, the table of
-    /// contents, the book on the last mission flown, the briefing (with its seconds argument),
-    /// the flight check, ammo selection, plane selection and the hangar over the profile's wallet
-    /// (with a tab argument); plus Original's own <see cref="CampaignDeleteAid"/>.</summary>
+    /// <summary>The campaign aid values, each over the scratch profile store. They are the empty and
+    /// two-player profile screens, the cabin, the contents, the book and the briefing with its
+    /// seconds. Then the flight check, ammo and plane selection, the hangar over the wallet with its
+    /// tab, and <see cref="CampaignDeleteAid"/>.</summary>
     public static readonly IReadOnlyList<string> CampaignAids = new[]
     {
         "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
@@ -411,7 +411,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         LabelActivate: ToColor(inks.TabDepressed),
         Hint: ToColor(inks.Text));
 
-    /// <summary>The roster both presentations pick from: the eleven stock airframes, then the
+    /// <summary>The roster every picker reads: the eleven stock airframes, then the
     /// saved customs, each flying its airframe's stock node.</summary>
     public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CustomPlaneDef> customs) =>
         OriginalRosters.Roster(customs);
@@ -460,7 +460,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             _parent.AddChild(_layer);
         }
 
-        // Re-read on every show, so a plane saved in the hangar or by another presentation is
+        // Re-read on every show, so a plane saved in the hangar is
         // offered without a restart; cursors past a shrunk roster come back onto it.
         setup.SetRoster(Roster(PlaneStore.List()));
         foreach (var seat in setup.Seats)
@@ -526,7 +526,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
         else if (aid.Length > 0 && OpenCampaignAid(aid))
         {
-            // A campaign aid over the scratch store, shared with Built-in's aids of the same name.
+            // A campaign aid over the scratch store.
         }
         else
         {
@@ -577,6 +577,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Options.Video.OpenOn(OriginalVideoPage.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
+                case VideoAid + ":" + VideoScrolledAid:
+                    _shell.Options.Video.OpenOn(OriginalVideoPage.ViewDistanceKey);
+                    break;
                 case ControlsAid:
                     SyncControlsSeats();
                     _shell.Options.Controls.Open();
@@ -624,7 +627,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.StepNet(0.0);
                     break;
                 case string lobby when lobby == LobbyAid || lobby.StartsWith(LobbyAid + ":", StringComparison.Ordinal):
-                    OpenLobbyAid(lobby[LobbyAid.Length..].TrimStart(':'));
+                    OpenLobbyAid(lobby[LobbyAid.Length..].TrimStart(':'), setup);
                     break;
                 case CreditsAid + ":" + CreditsAboutAid:
                     // The screen opens on ABOUT, its first row, so one accept raises the box.
@@ -728,8 +731,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case PlanePaintAid:
                 case PlanePaintAid + ":" + PlanePaintDecalsAid:
-                    // The same pose as Built-in's paint aid: a Fury in Fortune Hunters colours with
-                    // a nose decal chosen, so the two presentations' shots show one plane.
+                    // A Fury in Fortune Hunters colours with a nose decal chosen.
                     _shell.OpenHangarTab(OriginalScreen.HangarPaint, AidPlaneName);
                     if (host.Features.TryGet<HangarFeature>(out var paint) && paint.IsOpen)
                     {
@@ -1076,7 +1078,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     // The lobby posed over the aids' wire. The shown door is opened through the screen itself, so it
     // goes by the pilot's name the way a player's own lobby does.
-    private void OpenLobbyAid(string argument)
+    private void OpenLobbyAid(string argument, PlayerSetupFeature setup)
     {
         string[] parts = argument.Split(':');
         if (parts[0] == "late")
@@ -1093,6 +1095,18 @@ public sealed class OriginalPresentation : IMenuPresentation
         string tab = parts.Length > 1 ? parts[1] : parts[0] is "host" or "guest" or "waiting" ? string.Empty : parts[0];
         var (host, guests) = NetDoorAid.DogfightDoors(NetDoorAid.InternetOf(parts.Length > 2 ? parts[2] : string.Empty));
         var shown = guestView ? guests[waiting ? 1 : 0] : host;
+        if (tab == "seats")
+        {
+            // A second seat at the host's machine and at the first guest's, the shown one's a
+            // device-less seat of this menu's own.
+            host.LocalSeats = 2;
+            guests[0].LocalSeats = 2;
+            if (setup.Seats.Count < 2)
+            {
+                setup.Join(new MenuIdleSource());
+            }
+        }
+
         _shell!.StandInNetDoor(shown);
         if (guestView)
         {
@@ -1116,6 +1130,13 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (guestView)
         {
             _shell.Lobby.OpenGuest();
+        }
+
+        if (tab == "seats")
+        {
+            // Each second seat on a plane of its own, so its row reads apart from its machine's first.
+            host.Dogfight?.PickSeat(1, 3, default);
+            guests[0].Dogfight?.PickSeat(1, 7, default);
         }
 
         bool outlaw = tab.StartsWith("outlaw", StringComparison.Ordinal);
@@ -1235,8 +1256,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         _host?.Audio.EndNarration();
     }
 
-    // A campaign aid: the same values and the same scratch store as Built-in's, so the two
-    // presentations' shots show one seeded player. False for a value that is not one.
+    // A campaign aid over the scratch store, so a shot shows one seeded player. False for a value
+    // that is not one.
     private bool OpenCampaignAid(string aid)
     {
         if (_shell == null)
@@ -1272,8 +1293,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
                 break;
             case CampaignCoopAid:
-                // The cabin with its network door open over the aids' loopback door, the same pose
-                // as Built-in's aid of this name. The colon arguments are the guests on its wire and
+                // The cabin with its network door open over the aids' loopback door. The colon arguments are the guests on its wire and
                 // what its master server does. The host and each guest go by a callsign.
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 string[] coop = argument.Split(':');
@@ -1363,8 +1383,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         // The briefing spends its colon on the reveal's seconds and the hangar's names a tab, both
-        // taken above; every other screen's is the script CampaignAidScript reads, the same words
-        // Built-in's aids take, with export still that button's own press.
+        // taken above. Every other screen's is the script CampaignAidScript reads.
         if (value is not ("campaign-briefing" or "campaign-hangar") && !_shell.Campaign.RunAidScript(argument))
         {
             // A script this presentation cannot press leaves nothing worth shooting, so the run

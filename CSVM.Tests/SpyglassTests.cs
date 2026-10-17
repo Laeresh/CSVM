@@ -19,6 +19,31 @@ namespace CSVM.Tests;
 /// </summary>
 public class SpyglassTests
 {
+    /// <summary>A discrete GPU arms the spyglass at every pane count, an integrated one only in
+    /// single-pane play.</summary>
+    [Theory]
+    [InlineData(false, 1, true)]
+    [InlineData(false, 2, true)]
+    [InlineData(false, 4, true)]
+    [InlineData(true, 1, true)]
+    [InlineData(true, 2, false)]
+    [InlineData(true, 3, false)]
+    [InlineData(true, 4, false)]
+    public void TheDefaultFollowsTheGpuAndThePaneCount(bool integrated, int panes, bool armed)
+    {
+        Assert.Equal(armed, Spyglass.DefaultOnFor(det: false, integrated, panes));
+    }
+
+    /// <summary>Under <c>--det</c> an integrated GPU's splitscreen keeps the spyglass armed, so a
+    /// scripted capture does not depend on the machine.</summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void DetKeepsTheSpyglassArmedInAnIntegratedSplit(int panes)
+    {
+        Assert.True(Spyglass.DefaultOnFor(det: true, integrated: true, panes));
+    }
+
     [Fact]
     public void TheGateSitsFourFifthsIntoTheFogBand()
     {

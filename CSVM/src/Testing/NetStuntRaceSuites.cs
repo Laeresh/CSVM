@@ -336,12 +336,12 @@ internal static class NetStuntRaceSuites
             bool ended = Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
             ctx.Check(ended, $"[{cell}] the window's end ends both races ({s.HostRace.Phase}/{s.GuestRace.Phase})");
 
-            var hostBoard = s.Peers[0].Boards?.RaceBoard as UI.Screens.StuntRaceBoard;
-            var guestBoard = s.Peers[1].Boards?.RaceBoard as UI.Screens.StuntRaceBoard;
-            ctx.Check(MenuRows(hostBoard) == "Photo Mode|Restart|Lobby" && hostBoard!.WithheldLine == null,
+            var hostBoard = s.Peers[0].Boards?.RaceBoard as UI.Menu.Original.OriginalRaceBoard;
+            var guestBoard = s.Peers[1].Boards?.RaceBoard as UI.Menu.Original.OriginalRaceBoard;
+            ctx.Check(MenuRows(hostBoard) == "Photo Mode|Restart|Lobby" && hostBoard!.Sheet?.Withheld == null,
                 $"[{cell}] the host's board offers Restart and Lobby ({MenuRows(hostBoard)})");
-            ctx.Check(MenuRows(guestBoard) == "Photo Mode|Leave" && guestBoard!.WithheldLine == UI.Screens.StuntRaceBoard.WaitingForHost,
-                $"[{cell}] the guest's board says it waits for the host and offers Leave ({MenuRows(guestBoard)}, \"{guestBoard?.WithheldLine}\")");
+            ctx.Check(MenuRows(guestBoard) == "Photo Mode|Leave" && guestBoard!.Sheet?.Withheld == UI.Screens.StuntRaceBoard.WaitingForHost,
+                $"[{cell}] the guest's board says it waits for the host and offers Leave ({MenuRows(guestBoard)}, \"{guestBoard?.Sheet?.Withheld}\")");
 
             s.Guest.RerunRace!();
             Steps(s.Peers, 10);
@@ -363,7 +363,7 @@ internal static class NetStuntRaceSuites
     // The host's Restart reaches the guest as a call ahead of the new window's lines. Both races go
     // to window 1 and both boards retire. Both openings end on one step, each local seat on the spawn.
     private static void Reopen(TestContext ctx, string cell, RaceSeats s, Vector3 spawn,
-        UI.Screens.StuntRaceBoard? hostBoard, UI.Screens.StuntRaceBoard? guestBoard)
+        UI.Menu.Original.OriginalRaceBoard? hostBoard, UI.Menu.Original.OriginalRaceBoard? guestBoard)
     {
         s.Host.RerunRace!();
         var opened = new[] { -1, -1 };
@@ -419,7 +419,7 @@ internal static class NetStuntRaceSuites
 
     // The guest flies a fast run in the new window and walks out of it. Its row stays, ranked and
     // marked left, its aeroplane goes from the host's world, and the host's race runs on alone.
-    private static void Leaving(TestContext ctx, string cell, RaceSeats s, int[] exits, UI.Screens.StuntRaceBoard? hostBoard)
+    private static void Leaving(TestContext ctx, string cell, RaceSeats s, int[] exits, UI.Menu.Original.OriginalRaceBoard? hostBoard)
     {
         FlyBoth(s, hostGap: HostGap, guestGap: FinalGap * 5);
         float guestBest = s.GuestRun.Elapsed;
@@ -442,9 +442,9 @@ internal static class NetStuntRaceSuites
         bool over = Until(host, () => s.HostRace.Ended);
         ctx.Check(over && s.HostRace.WindowElapsed - s.HostRace.WindowSeconds < 2f * GameClock.FixedDt,
             $"[{cell}] and ends at the window's end ({s.HostRace.WindowElapsed:0.000} of {s.HostRace.WindowSeconds:0} s)");
-        string first = hostBoard?.Rows.FirstOrDefault() ?? "";
-        ctx.Check(first.StartsWith($"1st  {left.Callsign}{StuntRace.LeftSuffix}", StringComparison.Ordinal),
-            $"[{cell}] the host's board ranks the guest first, marked left (\"{first}\")");
+        var first = hostBoard?.Sheet?.Standings.FirstOrDefault();
+        ctx.Check(first is { Left: true } && first.Pilot == $"1st  {left.Callsign}",
+            $"[{cell}] the host's board ranks the guest first, marked left (\"{first?.Pilot}\", left={first?.Left})");
     }
 
     // The host's Lobby from an ended race: the guest's link hears the call, and both machines land
@@ -564,8 +564,8 @@ internal static class NetStuntRaceSuites
         s.HostRace.Advance(s.HostRace.TimeLeft);
     }
 
-    private static string MenuRows(UI.Screens.ResultsBoard? board) =>
-        board?.StandardMenu is { } menu ? string.Join("|", menu.Items.Select(i => i.Label)) : "(no menu)";
+    private static string MenuRows(UI.Menu.Original.OriginalRaceBoard? board) =>
+        board?.Menu is { } menu ? string.Join("|", menu.Items.Select(i => i.Label)) : "(no menu)";
 
     private static string Table(IReadOnlyList<RaceTableRow>? rows) =>
         rows == null ? "(none)" : string.Join(" ", rows.Select(r => $"{r.Pilot}/{r.Best}{(r.Left ? "/left" : "")}"));

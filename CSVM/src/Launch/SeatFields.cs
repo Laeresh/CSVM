@@ -95,16 +95,16 @@ internal static class SeatFields
     }
 
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first, the first named by the wire's local callsign and any other by player tag. Each guest
-    /// follows in the stock airframe, fit and name its lobby pick carried.
-    /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
-    /// the Built-in Dogfight door's only rule. Each seat takes its machine's lobby team from
+    /// first, any but the first by player tag. Each guest follows on its seats in
+    /// <paramref name="owners"/>, the lobby's rows (one each when null), each in its seat's pick.
+    /// ⚠ A guest with no pick on the wire, one whose lobby screen never stood, flies the host's first
+    /// airframe on the stock fit. Each seat takes its machine's lobby team from
     /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
         Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null,
         IReadOnlyList<VsBotEntry>? bots = null, IReadOnlyList<string>? callsignPool = null, System.Random? draws = null,
-        DogfightMissionType mission = DogfightMissionType.Deathmatch)
+        DogfightMissionType mission = DogfightMissionType.Deathmatch, IReadOnlyList<(int Peer, int Local)>? owners = null)
     {
         teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
@@ -129,29 +129,34 @@ internal static class SeatFields
             seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
         }
 
-        var picks = lobby?.Picks;
-        foreach (int peer in wire.Peers)
+        // A lobby's launch seats the guests its rows name; any other seats each peer once.
+        var guests = owners == null
+            ? System.Linq.Enumerable.Select(wire.Peers, peer => (Peer: peer, Local: 0))
+            : System.Linq.Enumerable.Where(owners, owner => owner.Peer != wire.LocalPeer && System.Linq.Enumerable.Contains(wire.Peers, owner.Peer));
+        foreach (var (peer, local) in guests)
         {
             if (seats.Count >= Net.NetSeats.MaxPlayers)
             {
                 break;
             }
 
-            Net.CoopPickMessage chosen = default;
-            bool picked = picks != null && picks.TryGetValue(peer, out chosen);
-            string name = picked ? chosen.Name.Trim() : "";
+            var pick = lobby?.PickAt(peer, local);
+            var chosen = pick ?? default;
+            string name = pick != null ? chosen.Name.Trim() : "";
             seats.Add(new Net.NetSeat
             {
                 PeerId = peer,
                 SeatIndex = seats.Count,
                 TeamId = teamOf(peer),
-                Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
-                Unnamed = name.Length == 0,
-                PlaneNode = picked ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
-                Voice = picked ? chosen.Voice : (byte)0,
+                Callsign = name.Length > 0 ? name
+                    : local > 0 ? Net.NetSeats.PlayerTag(seats.Count)
+                    : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = name.Length == 0 && local == 0,
+                PlaneNode = pick != null ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
+                Voice = pick != null ? chosen.Voice : (byte)0,
             });
             // The guest's own lobby flies its pick through the same rules, so both ends agree.
-            seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
+            seatFits.Add(pick != null ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
         }
 
         // The lobby's bots follow every guest on the stock fit. Random planes and missing callsigns
@@ -194,8 +199,10 @@ internal static class SeatFields
                 continue;
             }
 
-            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot.
-            if (roster[seat].IsBot || rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot. A
+            // guest's build is its first seat's; its further seats fly stock.
+            bool further = seat > 0 && roster[seat - 1].PeerId == roster[seat].PeerId;
+            if (roster[seat].IsBot || further || rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
             {
                 continue;
             }

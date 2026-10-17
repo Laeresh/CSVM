@@ -3,12 +3,11 @@ using System;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// One notice the launcher posts for the player to read at the menu's next show, whichever
-/// presentation is active. Only VR mode posts one, for the flat game it fell back to or a restart
-/// whose new process did not start (<c>Launch/XrRelaunch.cs</c>). Built-in writes
-/// it on its error line and Original raises it as the one-button messagebox. A presentation takes it
-/// once, so a later return from flight shows nothing again. A switch keeps a notice nothing has
-/// shown yet.
+/// One notice the launcher posts for the player to read at the menu's next show. Only VR mode
+/// posts one, for the flat game it fell back to or a restart whose new process did not start
+/// (<c>Launch/XrRelaunch.cs</c>). Original raises it as the one-button messagebox. A presentation
+/// takes it once, so a later return from flight shows nothing again. A switch keeps a notice
+/// nothing has shown yet.
 /// </summary>
 public sealed class MenuNoticeFeature : IMenuFeature
 {

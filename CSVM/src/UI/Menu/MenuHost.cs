@@ -38,11 +38,11 @@ public sealed class MenuHost : IMenuHost
         Features.TryGet<PlayerSetupFeature>(out var setup) ? setup.Sources : _seats;
 
     /// <summary>The presentation <see cref="Show"/> activates, settled by <see cref="Select"/>;
-    /// Built-in until then.</summary>
-    public PresentationId Selected { get; private set; } = PresentationId.BuiltIn;
+    /// Original until then.</summary>
+    public PresentationId Selected { get; private set; } = PresentationId.Original;
 
     /// <summary>What was asked for before availability, the value the startup log reports.</summary>
-    public PresentationId Requested { get; private set; } = PresentationId.BuiltIn;
+    public PresentationId Requested { get; private set; } = PresentationId.Original;
 
     /// <summary>The live presentation, or null before the first <see cref="Show"/> and after
     /// <see cref="Deactivate"/>. Hidden between an exit and the next show, not null.</summary>
@@ -56,8 +56,8 @@ public sealed class MenuHost : IMenuHost
     public bool OnMainMenu => Shown && Active?.OnMainMenu == true;
 
     /// <summary>The availability answer beyond registration: why a registered presentation cannot
-    /// run this time (its assets are missing), or null when it can. Built-in is never asked. The
-    /// default says every registered presentation is available.</summary>
+    /// run this time (its assets are missing), or null when it can. The default says every
+    /// registered presentation is available.</summary>
     public Func<PresentationId, string?> Availability { get; set; } = _ => null;
 
     /// <summary>Whether a dialog outside the presentation stands over it and owns the pad, null for
@@ -100,16 +100,16 @@ public sealed class MenuHost : IMenuHost
         _seats.Remove(seat);
     }
 
-    /// <summary>Settles <see cref="Selected"/> from the force flag and the CLI override,
-    /// availability being registration plus <see cref="Availability"/>; returns the reason when the
-    /// selection differs from the request, else null. An unknown or unavailable request falls back
-    /// to Built-in rather than throwing at a command-line word; Built-in itself being unregistered
-    /// is a wiring error.</summary>
-    public string? Select(bool forceBuiltIn, string? cliOverride)
+    /// <summary>Settles <see cref="Selected"/> from the CLI override, availability being
+    /// registration plus <see cref="Availability"/>; returns the reason when the request is
+    /// unavailable, else null. An unknown request falls back to Original rather than throwing at a
+    /// command-line word, and an unavailable Original stays selected with its reason. Original
+    /// itself being unregistered is a wiring error.</summary>
+    public string? Select(string? cliOverride)
     {
         string? unavailable = null;
         var (active, reason) = PresentationResolution.Resolve(
-            forceBuiltIn, cliOverride,
+            cliOverride,
             id => IsRegistered(id) && (unavailable = Availability(new PresentationId(id))) == null);
         if (reason != null && unavailable != null)
         {
@@ -124,7 +124,7 @@ public sealed class MenuHost : IMenuHost
 
         Selected = selected;
         string requested = PresentationResolution.Requested(cliOverride);
-        Requested = string.IsNullOrWhiteSpace(requested) ? PresentationId.BuiltIn : new PresentationId(requested);
+        Requested = string.IsNullOrWhiteSpace(requested) ? PresentationId.Original : new PresentationId(requested);
         return reason;
     }
 

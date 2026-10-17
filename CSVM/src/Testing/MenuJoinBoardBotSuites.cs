@@ -49,7 +49,7 @@ internal static class MenuJoinBoardBotSuites
         host.AddSeat(new MenuIdleSource());
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             if ((host.Active as OriginalPresentation)?.Shell is not { } shell)
             {

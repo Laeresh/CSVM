@@ -14,12 +14,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The closing cinema as both presentations' campaigns actually reach it: the mission-end door onto
-/// the scrapbook in each, the book arriving on the frame the film stops, a win short of the last
-/// mission and a loss on it reaching the book with no film, and one instance serving both doors. A
-/// campaign whose feature carries no closing cinema opens the book exactly as it always did, which
-/// is what every suite and every golden gets. The click that skips the film is spanned across the
-/// hand-back, so the book it opens fires nothing on the release.
+/// The closing cinema as the campaign flow reaches it: the mission-end door onto the scrapbook, the
+/// book arriving on the frame the film stops. A win short of the last mission and a loss on it
+/// reach the book with no film, and one instance serves every door. A feature with no closing
+/// cinema opens the book as it always did, which every suite and golden gets. The click that skips
+/// the film is spanned across the hand-back, so the book it opens fires nothing on the release.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ClosingCinemaWiringTests : IDisposable
@@ -48,7 +47,7 @@ public class ClosingCinemaWiringTests : IDisposable
     }
 
     [Fact]
-    public void BuiltInsMissionEndDoorPlaysTheClosingFilmAndTheBookFollowsIt()
+    public void TheFlowsMissionEndDoorPlaysTheClosingFilmAndTheBookFollowsIt()
     {
         var closing = new Recorder();
         var flow = Flow(closing, out _);
@@ -65,7 +64,7 @@ public class ClosingCinemaWiringTests : IDisposable
     // The reported fault, at the door it came through: a mission lost on a profile that has
     // finished the campaign opens the book and plays nothing.
     [Fact]
-    public void ALostReplayOfTheLastMissionOpensBuiltInsBookWithNoFilm()
+    public void ALostReplayOfTheLastMissionOpensTheFlowsBookWithNoFilm()
     {
         var closing = new Recorder();
         var flow = Flow(closing, out _);
@@ -79,7 +78,7 @@ public class ClosingCinemaWiringTests : IDisposable
     // The negative control: the same door after any other mission plays nothing at all, which is
     // what a player sees 23 times out of 24.
     [Fact]
-    public void AnUnfinishedCampaignOpensBuiltInsBookWithNoFilm()
+    public void AnUnfinishedCampaignOpensTheFlowsBookWithNoFilm()
     {
         var closing = new Recorder();
         var flow = Flow(closing, out _);
@@ -171,8 +170,8 @@ public class ClosingCinemaWiringTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
     }
 
-    // The decision the wiring owns: one instance for the process, reached by both presentations'
-    // mission-end doors, and each door asking it about the mission that was just flown.
+    // The decision the wiring owns: one instance for the process, reached by every mission-end
+    // door. Each door asks it about the mission just flown.
     [Fact]
     public void OneInstanceServesBothPresentationsAndEachDoorAsksAboutItsOwnMission()
     {
@@ -194,7 +193,7 @@ public class ClosingCinemaWiringTests : IDisposable
         Assert.Equal(1, closing.Plays);
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
 
-        // And the same instance plays again for a won replay, in either presentation.
+        // And the same instance plays again for a won replay.
         Assert.True(shell.Campaign.ShowScrapbook("Zachary", LastSeq, missionWon: true));
         Assert.Equal(2, closing.Plays);
         closing.Stop();
@@ -249,7 +248,7 @@ public class ClosingCinemaWiringTests : IDisposable
             planes: _planes, campaign: campaign, profiles: () => store);
     }
 
-    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
+    // The stand-in for LaunchAudio.PlayCinema. It records what it was asked for and hands the film's
     // end back to the caller, so a test decides when the cinema stops.
     private sealed class Recorder
     {

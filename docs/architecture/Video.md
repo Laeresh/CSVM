@@ -122,7 +122,7 @@ because two of the ten cinemas end their sound first. The engine half is `CSVM.U
 
 ## src/Video/CinemaHandoff.cs
 What every cinema flow shares, below the screens and the session alike. `CinemaPlay` is the shape
-of the call that puts a film on screen, which `Launch/Launcher.cs` satisfies with `PlayCinema`, and
+of the call that puts a film on screen, which `Launch/LaunchAudio.cs` satisfies with `PlayCinema`, and
 `CinemaSkip` is a set of presses that end one early, each flow naming its own. `Once` wraps the
 continuation a film hands off to, so the next screen opens once however many times the film says it
 stopped; the boot block chains unwrapped. `CinemaFilm` is for the screen a film stands in front of:

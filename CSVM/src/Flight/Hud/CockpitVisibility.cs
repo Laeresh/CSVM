@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
@@ -18,20 +19,24 @@ public sealed class CockpitVisibility
 {
     private readonly Node3D? _interior, _body, _markers, _dontmove;
 
+    // CockpitReseat's originals, which leave the pilot's pane exactly while the interior is drawn.
+    private readonly IReadOnlyList<Node3D> _reseated;
+
     // The pilot's airframe stamp and the layer a hidden group trades it for.
     private readonly uint _own, _out;
 
     // Which airframe groups the last Apply moved out of the pilot's own view, so a frame that
     // changes nothing walks no subtree.
-    private (bool Body, bool Markers, bool Dontmove) _hidden;
+    private (bool Body, bool Markers, bool Dontmove, bool Reseated) _hidden;
 
     private CockpitVisibility(Node3D? interior, Node3D? body, Node3D? markers, Node3D? dontmove,
-        int pilot)
+        IReadOnlyList<Node3D> reseated, int pilot)
     {
         _interior = interior;
         _body = body;
         _markers = markers;
         _dontmove = dontmove;
+        _reseated = reseated;
         _own = SplitScreen.OwnAirframeLayer(pilot);
         _out = SplitScreen.FirstPersonLayer(pilot);
     }
@@ -51,14 +56,17 @@ public sealed class CockpitVisibility
     /// which is any build that did not ask <see cref="PlaneBuilder"/> for one.
     /// <paramref name="pilot"/> is the seat whose <see cref="SplitScreen.OwnAirframeLayer"/> the
     /// model wears.</summary>
-    public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior, int pilot)
+    /// <param name="reseated">The originals <see cref="CockpitReseat.Hidden"/> lists.</param>
+    public static CockpitVisibility? Bind(Node3D? planeModel, Node3D? interior, int pilot,
+        IReadOnlyList<Node3D>? reseated = null)
     {
         if (planeModel == null || interior == null)
         {
             return null;
         }
         return new CockpitVisibility(interior, FindGroup(planeModel, "healthy"),
-            FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"), pilot);
+            FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"),
+            reseated ?? Array.Empty<Node3D>(), pilot);
     }
 
     /// <summary>Write this frame's rule, every frame the rig owns its camera. The interior takes
@@ -70,7 +78,8 @@ public sealed class CockpitVisibility
     {
         var shown = Rules(mode, firstPerson);
         Set(_interior, shown.Interior);
-        var hidden = (Body: !shown.Body, Markers: !shown.Markers, Dontmove: !shown.Dontmove);
+        var hidden = (Body: !shown.Body, Markers: !shown.Markers, Dontmove: !shown.Dontmove,
+            Reseated: shown.Interior);
         if (hidden == _hidden)
         {
             return;
@@ -82,12 +91,17 @@ public sealed class CockpitVisibility
         Move(_body, _out, _own);
         Move(_markers, _out, _own);
         Move(_dontmove, _out, _own);
+        foreach (var node in _reseated)
+            Move(node, _out, _own);
         if (hidden.Body)
             Move(_body, _own, _out);
         if (hidden.Markers)
             Move(_markers, _own, _out);
         if (hidden.Dontmove)
             Move(_dontmove, _own, _out);
+        if (hidden.Reseated)
+            foreach (var node in _reseated)
+                Move(node, _own, _out);
     }
 
     private static void Set(Node3D? node, bool visible)

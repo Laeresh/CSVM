@@ -92,8 +92,13 @@ internal sealed class FlightRosterPolicy
     /// <see cref="XrInterior"/>.</summary>
     public XrChase XrChase { get; init; }
 
-    public static FlightRosterPolicy From(SessionSpec spec) => new()
+    /// <summary>Whether each human pane's spyglass is armed at level load
+    /// (<see cref="Spyglass.MachineDefaultFor"/>, answered once for the session's pane count).</summary>
+    public bool SpyglassOn { get; init; } = Spyglass.DefaultOn;
+
+    public static FlightRosterPolicy From(SessionSpec spec, bool spyglassOn = Spyglass.DefaultOn) => new()
     {
+        SpyglassOn = spyglassOn,
         HoldSets = spec.HoldSets,
         LeverSteps = spec.LeverSteps,
         MenuLoadouts = spec.MenuLoadouts,

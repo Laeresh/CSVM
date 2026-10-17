@@ -2,8 +2,10 @@
 
 `CSVM/src/Launch/Launcher.cs` is the composition root (Main.tscn's root). This census groups its
 fields and the members that use them by the reason they change, names the module each group
-becomes, and records which groups have moved out and which stay. Two passes have moved five groups:
-the first took groups 1 to 3, the second groups 7 and 8.
+becomes, and records which groups have moved out and which stay. Three passes have moved the
+groups with a reason of their own: the first took groups 1 to 3, the second groups 7 and 8, and the
+third group 4's base paths (with group 11's hand-back that re-resolves them), group 6's menu host
+construction, and group 10.
 
 ## How the counts were taken
 
@@ -24,6 +26,11 @@ cannot shed them.
 | Launcher, after the second pass | 2344 | 2178 | 60 | 1 | 5 |
 | LiveSettings (new) | 231 | 216 | 7 | 0 | 7 |
 | LaunchBoards (new) | 282 | 262 | 0 | 0 | 3 |
+| Launcher, before the third pass | 2348 | 2178 | 60 | 1 | 5 |
+| Launcher, after the third pass | 2012 | 1852 | 43 | 0 | 3 |
+| BasePaths (new, in `CSVM.Spec`) | 35 | 24 | 0 | 0 | 1 |
+| LaunchAudio (new) | 195 | 181 | 7 | 1 | 12 |
+| ProcessMenu (new) | 194 | 172 | 6 | 0 | 4 |
 
 The second pass's class lines run from the class declaration to its closing brace, so they read
 lower than the first pass's for the same file; its file lines and field counts compare directly.
@@ -34,6 +41,17 @@ what `Launcher` used to read off its own state. The 17 members that left are the
 suites call (`VersusLaunchField`, `LobbyLanding` and the rest), now on `SeatFields` and `NetFlight`.
 The one member that arrived is `Launcher`'s constructor, which builds `NetFlight` over the node's
 two exits.
+
+The third pass's 17 fields are the eight base paths (now the one value `_paths`), seven menu fields
+(`_menuHost`, `_menuWheel`, `_menuAudio`, `_originalLayout`, `_menuAid`, `_chapterCinema`,
+`_closingCinema`) and five sound fields (`_music`, `_musicArchive`, `_musicRng`, `_cinemaShown`,
+`_focusMuted`), less the three that compose them (`_paths`, `_audio`, `_menu`). `MasterBus` moved
+with the sound. The two members that left are `PlayCinema` and `StopCinema`, now `LaunchAudio`'s.
+Two fields in `LaunchAudio` (`_dataRoot`, `_masterVolume`) carry what `PlayCinema` used to read
+off the launcher, and `ProcessMenu`'s `Host` property holds the menu host. `LauncherContext`'s
+eight path properties are now its one `Paths`; `GameSession`, `ProbeRunner` and `LaunchBoards`
+hold the value rather than its strings. `BasePaths` lives in `CSVM.Spec`, the family the probe
+runner (`CSVM.Tooling`) can name.
 
 ## The groups
 
@@ -91,7 +109,7 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
   opens or closes, so they are their own module rather than part of `NetFlight`.
 - Seam: clean. They were already `internal static` and pure; 13 suites call them directly.
 
-### 4. Process bootstrap and paths: stays (later pass)
+### 4. Process bootstrap and paths: the base paths moved to `Spec/BasePaths.cs`, the rest stays
 
 - Fields (19): `_cli`, `_spec`, `_repoRoot`, `_exported`, `_dataRoot`, `_syntheticError`,
   `_planesGamezPath`, `_zrdrPath`, `_soundsPath`, `_interpPath`, `_messagesPath`, `_rofPath`,
@@ -100,12 +118,21 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
 - Members: most of `_Ready`, `ResolveSyntheticData`, `StartHeadlessExtraction`, `LogMasterSeed`,
   `StepSortieSeed`.
 - Reason to change: a new command-line flag or process-wide side effect.
-- Why it waits: `_Ready` is one ordered sequence whose order is the behaviour (the log opens after
-  the parse warnings, the memory admission before anything heavy, each early quit after what it
-  needs). The clearest sub-seam is the eight base paths, resolved together in `_Ready` and again in
-  `LeaveExtractionScreen`: a `BasePaths` value built by one function would remove the duplicate.
-  That is a value, not a module with a reason of its own, and it reaches `LauncherContext` and
-  `GameSession`, so it belongs with a pass that also reshapes the context.
+- What moved: the eight base paths (`_repoRoot`, `_dataRoot`, `_planesGamezPath`, `_zrdrPath`,
+  `_soundsPath`, `_interpPath`, `_messagesPath`, `_rofPath`) are one `BasePaths` value, and
+  `BasePaths.Resolve` is the one function `_Ready` and `LeaveExtractionScreen` both call. The two
+  roots are locals of `_Ready` until the value is built; `ResolveSyntheticData` answers the root
+  the run reads, and `StartHeadlessExtraction` takes both roots. `LauncherContext` carries the value
+  as `Paths`, which `GameSession` holds and the five suites that build a session construct; the
+  probe runner and `LaunchBoards` take the value too.
+- Order kept: `Resolve` runs where the unpacked-folder preference ran, after
+  `SessionPaths.ForceZipped` is set, and calls `PreferUnzipped` for the planes, zrdr and sounds
+  archives in that order. Nothing between the data root's settling and that point read the raw
+  paths. The hand-back now re-derives the interp, messages and rof paths too, which are the same
+  strings, since neither the data root nor the spec changes.
+- Why the rest stays: `_Ready` is one ordered sequence whose order is the behaviour (the log opens
+  after the parse warnings, the memory admission before anything heavy, each early quit after what
+  it needs).
 
 ### 5. Session lifecycle and load screen: stays (it is the composition root's job)
 
@@ -122,7 +149,7 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
   lifecycle, so the second pass moved it with group 8; `ShowLoadScreen` keeps the layer and its
   timing.
 
-### 6. Menu host, presentation and menu input: stays (later pass)
+### 6. Menu host, presentation and menu input: the host moved to `ProcessMenu.cs`, the rest stays
 
 - Fields (13): `_menuHost`, `_menuWheel`, `_menuAudio`, `_originalLayout`, `_menuAid`,
   `_pendingJoin`, `_pendingWaves`, `_pendingWingmen`, `_pendingPreset`, `_buildStamp`,
@@ -132,10 +159,23 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
   `_Input`.
 - Reason to change: the menu presentations and their seat (Steam's on-screen keyboard, the
   stamp's messagebox, the pointer seat).
-- Why it waits: `ShowMenu` is entangled with the lifecycle (it is the end of every
-  `ReturnToMenu`), and `OnMenuExit` is the sink that starts sessions. With the board aids gone,
-  `BuildMenuHost` is the remaining candidate, but it reads 14 launcher fields and hands the
-  presentations the node itself, so a module would carry a callback surface as wide as the group.
+- What moved: `_menuHost` (now `ProcessMenu.Host`), `BuildMenuHost` (now the private `Build`,
+  run by `ProcessMenu.Show` on the first show), `OriginalAvailable`, `MousePosition`,
+  `MenuPrimaryPressed` and `TakeMenuWheel`, with the fields only they read: `_menuWheel`,
+  `_menuAudio`, `_originalLayout`, `_menuAid` and the two cinemas. The pause leaf's body moved too
+  (`PauseOptions`), since it reads the layout and the audio service; `BuildPauseOptions` stays as
+  the one-line factory the context hands the session.
+- Seam: the module is built in the launcher's constructor over the node, `LaunchAudio`,
+  `NetFlight` and a live read of the paths, with `OnMenuExit` as its sink. The presentations still
+  take the node, as the parent their screens go up under, which is a `Node` parameter rather than a
+  reach into the launcher. `Show` takes the two specs and the build stamp for the first show's
+  build, and keeps the aid's order (read before the host's `Show`, which creates the presentation
+  that takes it, cleared after). `_Input` hands the wheel through `TurnWheel`. Every feature is
+  added in the same order, the door among them.
+- Why the rest stays: `ShowMenu` is entangled with the lifecycle (it is the end of every
+  `ReturnToMenu`), and `OnMenuExit` is the sink that starts sessions. The Built-in debug aids
+  (`_pending*`, `ApplyMenuDebugAids`), `_pendingApply` and `_buildStamp` stay with them, reading the
+  host through `ProcessMenu.Host`.
 
 ### 7. Options apply and the graphics switch: moved to `LiveSettings.cs`
 
@@ -181,23 +221,30 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
   about 80 lines of one-time registration, which shares `_Ready`'s ordering constraint (registered
   before the `--dump-*` branches build materials). Not worth a module on its own.
 
-### 10. Audio, music and cinemas: stays
+### 10. Audio, music and cinemas: moved to `LaunchAudio.cs`
 
 - Fields (5): `_music`, `_musicArchive`, `_musicRng`, `_focusMuted`, `_cinemaShown` (the two
   cinemas are counted under group 6, whose campaign feature holds them). Constant: `MasterBus`.
-- Members: `BuildMusic`, `PlayCinema`, `StopCinema`, `PlayBootSequence`, `ApplyMasterVolume`,
-  `SetFocusMuted`, `_Notification`.
-- Reason to change: the score and the master bus.
-- Why it waits: `PlayCinema` is the public seam the campaign's cinemas and the boot card call on
-  the node itself, and `BuildMusic` is re-run after an extraction; a move changes those call
-  sites for little gain.
+- Members: `BuildMusic` (now `Build`), `PlayCinema`, `StopCinema`, `PlayBootSequence` (now
+  `PlayBoot`), `ApplyMasterVolume`, `SetFocusMuted`, and the score's tick, stop, menu cue and the
+  archive's close (`Tick`, `StopMusic`, `CueMenu`, `Exit`). `_Notification` stays, a node override
+  that calls `SetFocusMuted`.
+- Reason to change: the score, the films and the master bus.
+- Seam: built in the launcher's constructor, so a focus change is answered from the first frame as
+  before. The campaign's cinemas, the boot card and the `--movie=` run take `PlayCinema` as the
+  `CinemaPlay` delegate they always took, now the module's method rather than the node's. The film's
+  data root comes from `Build`, which runs before any film can play, and the master-volume warning
+  reads the gain `ApplyMasterVolume` resolved; `--volume=` is parsed once and every derived spec
+  carries it unchanged. Every call keeps its point in `_Ready`, `_Process` and `_ExitTree`.
 
 ### 11. Extraction screen: stays
 
 - Fields (1): `_extractionScreen`. Members: `ShowExtractionScreen`, `RunExtraction`,
   `LeaveExtractionScreen`, `ApplyExtractionAid`.
 - Reason to change: the in-game extraction flow.
-- Why it waits: its hand-back re-resolves the base paths and the music, so it moves with group 4.
+- Its hand-back is now two calls, `BasePaths.Resolve` and `LaunchAudio.Build`, before `EnterMenu`.
+  The screen itself stays: it is shown from `_Ready`'s ordered sequence, and its exits are the
+  launcher's own (`EnterMenu`, `BlankAndQuit`).
 
 ### 12. Process quit and debug readouts: stays
 
@@ -209,9 +256,10 @@ Steam's on-screen keyboard, and the build stamp's messagebox.
   the drain, the drain before the instruments' exit, the log mirror last) is clearest kept in
   `_ExitTree` itself.
 
-## Order for a later pass
+## What stays
 
-Group 4's base paths, with group 11's extraction hand-back that re-resolves them, go with any
-change to `LauncherContext`, which `GameSession` and five suites construct. Group 6's
-`BuildMenuHost` and group 10's music are the next candidates; each needs its callers' sites
-reshaped (the presentations take the launcher node, and the cinemas call `PlayCinema` on it).
+The groups left on `Launcher` are the composition root's own: the bootstrap's ordered `_Ready`
+(group 4 less its paths), the session lifecycle and load layer (group 5), the menu's show and exit
+sink with Built-in's debug aids (group 6 less the host's construction), the persistent rendering
+nodes and shader globals (group 9), the extraction screen (group 11) and the quit (group 12). Each
+stays for the reason its section gives: its order is the behaviour, or it is what the root is for.

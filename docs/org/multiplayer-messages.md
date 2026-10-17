@@ -285,7 +285,7 @@ Case 2010 reads every widget and calls `$$E$$` 5007, which the jump table at `0x
 `0x40dce3`, the handler whose `0x40dde5` writes the tick into `0x642fb1`. Only the Zone way
 (`$$RY$$ == 0`) also runs case 2011, where a Zone-supplied setting (`$$A$$` 1035) may override it.
 The getter 5009 (`0x40de6c`) hands the byte back to the script's refresh 1015 on every peer. The
-remake ticks it on a host's first lobby screen; a Built-in host, which shows none, keeps it clear.
+remake ticks it on a host's first lobby screen; a host that shows none keeps it clear.
 
 The outlaw list is one object at `0x64e168`, built by `FUN_00410560`, of 34 byte flags:
 
@@ -959,8 +959,8 @@ a leave call first; a dropped link reads the same. The host takes each seat of t
 play as for any guest leaving a mission: the aeroplane goes inert, which takes its ghost and its
 label, and every other guest hears it through the world link's seat-left event. The racer stays on
 every board with its record, ranked as it stood and marked left: the scores page's grey row on the
-Original board and in the lobby, a "(left)" suffix on the Built-in board, the Built-in held scores
-table and the live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
+Original board and in the lobby, a "(left)" suffix on the chrome board, the held scores and the
+live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
 window leaves it out. Only a mid-race leave marks the racer: a guest that flew the whole window and
 leaves from the ended race's board keeps an unmarked row, since the host marks nobody once the race
 has ended. A race left with one pilot runs on to the window's end, since a race builds no
@@ -1054,8 +1054,8 @@ control (mask `0xff97`). So an empty name or one of spaces alone is refused. `FU
 three times, at `0040820c` (the callsign), `0040824f` and `00408290`; the second is read as the
 game name's callback and the third is not tied to a box.
 
-The remake follows both boxes in the Original presentation (`UI/Menu/Original/OriginalNetInfoBox.cs`)
-and offers the same choices as rows of the Built-in Network board. The cabin's remake-only HOST
+The remake follows both boxes in the Original presentation (`UI/Menu/Original/OriginalNetInfoBox.cs`).
+The cabin's remake-only HOST
 CO-OP asks both boxes too. The cap is held to the kind's own: four humans for campaign co-op, sixteen
 for a Dogfight. The game name is the advert's name, and the games list shows it and the chosen cap
 as they are. A host past its cap refuses a guest with the full notice, a Dogfight host as a co-op
@@ -1245,7 +1245,7 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture, bit 6 the host lands on Game Scores at the end, a remake bit), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 36 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 16 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (584 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, how many seats its machine was given at 7 (its rows side by side from its own, 0 from a host a patch older reading as one), then sixteen rows of 36 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 16 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (584 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
@@ -1253,7 +1253,10 @@ session.
 Any option change advances the round and clears every Ready, the host's own included, so a player
 is never launched on options it did not see. A guest's changed pick clears that guest's own Ready,
 and the pick drops any session payload the host still holds from that guest's last match. The
-launch waits until every row is Ready. A guest's
+launch waits until every row is Ready. A machine flying several seats has a row per seat, and a
+guest sends one pick per seat as a co-op guest does, its further seats on stock planes; the host
+seats them by the co-op rule above, counting every seat against its cap, and its launch builds
+each as that guest's, side by side. A guest's
 chat line goes to the host, which adds it to its own list and relays it to every other guest under
 the name the guest's pick gave, so each end shows the line once. The advert's mission sequence
 carries the environment index for a Dogfight, which is what the games list reads.

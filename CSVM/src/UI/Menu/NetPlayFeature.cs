@@ -195,8 +195,9 @@ public sealed class NetPlayFeature : IMenuFeature
     /// joined session across flights, and a new join starts on the starter.</summary>
     public CoopGuestPick Pick => _picks[0];
 
-    /// <summary>How many seats this co-op guest's machine asks its host for, one per local player,
-    /// 1 to <see cref="CoopHumans"/>. Each sends its own pick (<see cref="PickOf"/>).</summary>
+    /// <summary>How many seats this machine flies, one per local player, 1 to
+    /// <see cref="CoopHumans"/>. A guest asks its host for each and sends each its own pick, and a
+    /// Dogfight host lists each and counts each against its cap.</summary>
     public int LocalSeats
     {
         get => _localSeats;
@@ -385,9 +386,17 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    /// <summary>The line this co-op guest's band shows when the host gave its machine fewer seats
-    /// than its players, or "" when every player has one.</summary>
-    public string CoopSeatsShort => IsCoopGuest && CoopSeats < _localSeats ? CoopDoorText.SeatsShort(CoopSeats, _localSeats) : "";
+    /// <summary>The line a machine shows when the cap gave it fewer seats than its players, or ""
+    /// when every player has one. A co-op guest's band shows it. So do a Dogfight lobby's pinned
+    /// rows, on a guest or on a host whose joined seats outrun its own cap.</summary>
+    public string SeatsShort
+    {
+        get
+        {
+            int flown = IsCoopGuest ? CoopSeats : _dogfight?.SeatsFlown ?? _localSeats;
+            return (IsCoopGuest || _dogfight != null) && flown < _localSeats ? CoopDoorText.SeatsShort(flown, _localSeats) : "";
+        }
+    }
 
     /// <summary>The co-op host's hangar as this guest last heard it, each plane with the seat that
     /// holds it. Empty on a door that is not a co-op guest's, and until the host has named it.
@@ -460,6 +469,10 @@ public sealed class NetPlayFeature : IMenuFeature
     /// host names a board or a flight other than the one this guest launched into.</summary>
     public bool CoopFlightOver =>
         !IsCoopGuest || CoopFlow is not { Screen: NetCoopScreen.InMission } flow || (_flightEpoch is { } flown && flow.Epoch != flown);
+
+    // The seats this host's own machine flies against the cap: a campaign's local players, or a
+    // Dogfight's joined seats held to the cap. A joined seat past it sits out (SeatsShort).
+    private int HostSeats => _kind == NetSessionKind.CampaignCoop ? _localPlayers : Math.Min(_localSeats, HostCap);
 
     // The cap this host's advert names and its admission keeps: the chosen one inside its kind's.
     private int HostCap =>
@@ -749,14 +762,19 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>Opens a listen server for <paramref name="maxGuests"/> guests on
     /// <see cref="BindAddress"/> and asks the router for the port. A socket that will not open
     /// leaves the door shut with the reason on <see cref="Fault"/>.</summary>
-    /// <remarks>The lobby's host side runs behind it unshown, so an Original guest can pick, chat
-    /// and ready up against a Built-in host.</remarks>
+    /// <remarks>The lobby's host side runs behind it unshown until a lobby screen stands, so a guest
+    /// can pick, chat and ready up against it.</remarks>
     public void OpenHost(int maxGuests)
     {
         OpenHost(maxGuests, NetSessionKind.Dogfight);
         if (_transport != null && Stage == NetDoorStage.Hosting)
         {
-            _dogfight = new DogfightLobby(_transport, () => Identity.PlayerName) { Seated = peer => !_admission.Refused(peer) };
+            _dogfight = new DogfightLobby(_transport, () => Identity.PlayerName)
+            {
+                Seated = peer => !_admission.Refused(peer),
+                LocalSeats = () => HostSeats,
+                SeatsOf = _admission.GrantedTo,
+            };
         }
     }
 
@@ -1066,14 +1084,10 @@ public sealed class NetPlayFeature : IMenuFeature
         {
             _admission.RefuseClashing(_transport);
             _admission.RefuseTurnedAway(_transport);
+            _admission.Admit(_transport, HostSeats, HostCap);
             if (_kind == NetSessionKind.CampaignCoop)
             {
-                _admission.Admit(_transport, _localPlayers, HostCap);
                 SendFlows();
-            }
-            else
-            {
-                _admission.RefuseOverCap(_transport, _localPlayers, HostCap);
             }
 
             _admission.HangUpRefused(_transport, dt);
@@ -1124,6 +1138,7 @@ public sealed class NetPlayFeature : IMenuFeature
                 _dogfight ??= new DogfightLobby(_transport, () => Identity.PlayerName, _hostPeer)
                 {
                     Voice = () => PilotVoices.Wire(Identity.Voice),
+                    LocalSeats = () => _localSeats,
                 };
                 if (_flownEpoch is { } flown)
                 {
@@ -1223,19 +1238,19 @@ public sealed class NetPlayFeature : IMenuFeature
         Router.Open(Port);
     }
 
-    // The player count is this machine's seats plus every guest on the wire, and in co-op every
-    // further seat a guest was given. It moves as guests arrive, and the step re-sends it.
+    // The player count is this machine's seats plus every guest on the wire, and every further seat
+    // a guest was given. It moves as guests arrive, and the step re-sends it.
     private SessionAdvertMessage CurrentAdvert()
     {
         bool coop = _kind == NetSessionKind.CampaignCoop;
         int extra = 0;
-        foreach (int peer in coop ? _admission.Admitted : Array.Empty<int>())
+        foreach (int peer in _admission.Admitted)
         {
             extra += _admission.GrantedTo(peer) - 1;
         }
 
-        int players = Math.Min(_localPlayers + Peers + extra, byte.MaxValue);
-        // A Built-in host picks its map after the lobby opened, so its advert names none.
+        int players = Math.Min(HostSeats + Peers + extra, byte.MaxValue);
+        // A host whose lobby screen never stood has picked no map, so its advert names none.
         byte seq = coop ? _missionSeq : _dogfight is { Shown: true } lobby ? lobby.Options.Environment : SessionAdvertMessage.NoMission;
         int cap = HostCap;
         var status = players >= cap
@@ -1329,6 +1344,9 @@ public sealed class NetPlayFeature : IMenuFeature
             pick.Forget();
         }
 
+        // ⚠ A session's seat count goes with it. A co-op guest's two seats must not stand as a later
+        // Dogfight host's.
+        _localSeats = 1;
         _flownFlow = false;
     }
 

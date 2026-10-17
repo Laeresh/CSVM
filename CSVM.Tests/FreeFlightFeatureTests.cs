@@ -12,20 +12,18 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The Free Flight feature off-engine: the roster it offers, the pick, the launch gate and the
-/// typed exit, each checked against the launchscreen's own public rules where one exists, so the
-/// extracted feature and the screens it was cut from cannot disagree.
+/// typed exit, each checked against the rule it states.
 /// </summary>
 public class FreeFlightFeatureTests
 {
     private static readonly string[] AllEight = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
     [Fact]
-    public void TheRosterIsAllEightChaptersInTheLaunchscreensOrder()
+    public void TheRosterIsAllEightChaptersInOrder()
     {
         var feature = new FreeFlightFeature();
 
         Assert.Equal(AllEight, feature.Chapters.Select(c => c.Code));
-        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Free), feature.Chapters.Select(c => c.Code));
         Assert.Equal(MenuMode.Free, FreeFlightFeature.Mode);
     }
 
@@ -53,8 +51,8 @@ public class FreeFlightFeatureTests
         Assert.Equal("C1B", feature.Chapter!.Value.Code);
     }
 
-    /// <summary>The gate is the launchscreen's own Free Flight rule: everyone joined has
-    /// confirmed, solo included, and no second seat is ever required.</summary>
+    /// <summary>The gate is Free Flight's rule: everyone joined has confirmed, solo included, and
+    /// no second seat is ever required.</summary>
     [Theory]
     [InlineData(1, 0)]
     [InlineData(1, 1)]
@@ -62,13 +60,11 @@ public class FreeFlightFeatureTests
     [InlineData(2, 2)]
     [InlineData(4, 3)]
     [InlineData(4, 4)]
-    public void TheGateMatchesTheLaunchscreensRule(int joined, int confirmed)
+    public void TheGateIsEveryoneJoinedConfirmed(int joined, int confirmed)
     {
         var feature = Picked("C1");
 
-        Assert.Equal(
-            UI.Screens.LaunchMenu.CanLaunch(MenuMode.Free, allLocked: confirmed == joined, joined),
-            feature.CanLaunch(joined, confirmed));
+        Assert.Equal(confirmed == joined, feature.CanLaunch(joined, confirmed));
     }
 
     [Fact]
@@ -149,12 +145,12 @@ public class FreeFlightFeatureTests
     // ---- The shared chapter roster --------------------------------------------------------------
 
     [Fact]
-    public void TheSharedRosterAgreesWithTheLaunchscreensChapterScreens()
+    public void TheSharedRosterOffersEachModesChapters()
     {
         Assert.Equal(AllEight, MenuChapters.All.Select(c => c.Code));
-        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Free), MenuChapters.For(MenuMode.Free).Select(c => c.Code));
-        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus), MenuChapters.For(MenuMode.Versus).Select(c => c.Code));
-        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Stunt), MenuChapters.For(MenuMode.Stunt).Select(c => c.Code));
+        Assert.Equal(AllEight, MenuChapters.For(MenuMode.Free).Select(c => c.Code));
+        Assert.Equal(AllEight, MenuChapters.For(MenuMode.Versus).Select(c => c.Code));
+        Assert.Equal(new[] { "C1", "C1B", "C2", "C3", "C4", "C5" }, MenuChapters.For(MenuMode.Stunt).Select(c => c.Code));
     }
 
     [Fact]

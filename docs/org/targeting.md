@@ -826,7 +826,7 @@ The head rule above is the default and the only decoded behaviour. Because the h
 Enemy/Objective is the nearest objective whenever one exists, every kill in a defence mission sends
 the pilot back to the objective, which is the complaint the remake answers with one setting rather
 than a change. `nearestAfterKill` (off by default, `OptionsStore`, the Next Target row on Original's
-Game Options page and the second row of Built-in's Options screen, reaching the flight through
+Game Options page, reaching the flight through
 `SessionSpec.WithSavedNearestAfterKill` and `FlightRosterPolicy`) replaces the head with the nearest
 live member of the current cycle by distance from the plane, and only on a re-resolve that *lost* a
 selection it held under the same class. The mission-start auto-acquire and every class change keep

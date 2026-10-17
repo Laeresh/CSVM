@@ -4,7 +4,7 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// What the original's four menu cheats leave switched on, carried by <see cref="CampaignFeature"/>
-/// so both presentations read one answer. Three of them are typed into a screen through
+/// so every screen reads one answer. Three of them are typed into a screen through
 /// <see cref="TypedCheat"/> and the fourth is a pilot name on the profile screen. The words, the
 /// regions and the original's globals behind them are in <c>docs/formats/campaign-screens.md</c>.
 /// <see cref="RevealAll"/> is the original's <c>fViewAll</c> and <see cref="AllowAll"/> its

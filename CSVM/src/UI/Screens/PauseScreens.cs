@@ -36,6 +36,9 @@ public sealed record PauseSheet(
     IReadOnlyList<BoardLine> Texts,
     IReadOnlyList<EscapeButton?> Strips)
 {
+    // The dialog whose frame a mode of ours borrows. Its words and score photos are dropped.
+    private const string OwnModeKey = "loading_i1d";
+
     /// <summary>Reads one dialog and its shared block, runs its script out through
     /// <see cref="EscapeDialog.Settled"/>, and resolves every label through the message
     /// table. An Instant Action dialog also takes the four texts its own script writes, which no
@@ -56,7 +59,7 @@ public sealed record PauseSheet(
         catch (Exception e) when (e is IOException or JsonException)
         {
             // Shown over a running mission, so an unreadable extraction leaves the screen to the
-            // built-in board rather than taking the session down with it.
+            // chrome board rather than taking the session down with it.
             return null;
         }
 
@@ -82,7 +85,7 @@ public sealed record PauseSheet(
     /// <summary>A Dogfight's briefing blackboard: <c>escape.zrd</c>'s <c>loading_m</c> dialog under
     /// the key the load screen reads, with its texts. Where <c>escape.zrd</c> carries no dialog of
     /// that name, <c>Loading.zrd</c>'s own stands in. Null when neither file carries it, which leaves
-    /// the Built-in board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
+    /// the chrome board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
     /// <c>escape.zrd</c>'s block lays the campaign's two columns under a blackboard.</summary>
     public static PauseSheet? LoadMultiplayer(string zrdrPath, string messagesPath, string dialogKey)
     {
@@ -122,6 +125,20 @@ public sealed record PauseSheet(
             LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages),
             strips);
     }
+
+    /// <summary>The blackboard free flight and the stunt race pause on. It is an Instant Action
+    /// dialog's frame and strips with none of its script, headed by <paramref name="heading"/>
+    /// alone, as the mode's load screen is. Every <c>ia_escape.zrd</c>
+    /// dialog shares that frame and differs only in words, so <see cref="OwnModeKey"/> names one.
+    /// Null when the file does not read, which leaves the chrome board.</summary>
+    public static PauseSheet? LoadOwnMode(string zrdrPath, string messagesPath, string heading) =>
+        Load(zrdrPath, messagesPath, OwnModeKey, instantAction: true) is { } sheet
+            ? sheet with
+            {
+                Reveal = EscapeDialog.Settled(Array.Empty<BriefingStep>()),
+                Texts = LoadScreens.Texts(null, heading, zrdrPath, messagesPath),
+            }
+            : null;
 
     // The block's strips in walk order with their labels, the remake's photo strip among them.
     private static (List<EscapeButton?> Strips, List<string> Labels) StripsOf(

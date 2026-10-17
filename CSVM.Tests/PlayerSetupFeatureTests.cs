@@ -14,10 +14,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The shared player setup off-engine: seats claimed by source identity, the two-stage pick and
-/// its Back, the loadout list, the launch gate per mode against the launchscreen's own rule, the
-/// seat choices and the typed exit, the roster rule against the picker roster, the same-frame
-/// races (two claims, a lock and an unjoin, a confirm on a seat that has left), the discard a
-/// switch performs, and the host lending the feature's seat list.
+/// its Back, the loadout list and the launch gate per mode. Then the seat choices, the typed exit
+/// and the roster rule against the picker roster. Then the same-frame races: two claims, a lock and
+/// an unjoin, a confirm on a seat that has left. Last the switch's discard and the host's seats.
 /// </summary>
 public class PlayerSetupFeatureTests
 {
@@ -164,7 +163,7 @@ public class PlayerSetupFeatureTests
         Assert.True(a.Fit.IsStock);
     }
 
-    /// <summary>The gate is the launchscreen's own rule: everyone joined has confirmed, and
+    /// <summary>The gate is the menu's rule: everyone joined has confirmed, and
     /// Dogfight needs two seats; Free Flight and Instant Action launch solo.</summary>
     [Theory]
     [InlineData(MenuMode.Free, 1, 1)]
@@ -176,11 +175,11 @@ public class PlayerSetupFeatureTests
     [InlineData(MenuMode.Versus, 2, 1)]
     [InlineData(MenuMode.Versus, 2, 2)]
     [InlineData(MenuMode.Versus, 4, 4)]
-    public void TheGateMatchesTheLaunchscreensRule(MenuMode mode, int joined, int confirmed)
+    public void TheGateIsEveryoneConfirmedAndDogfightNeedsTwo(MenuMode mode, int joined, int confirmed)
     {
         var setup = Seated(joined, confirmed);
 
-        Assert.Equal(LaunchMenu.CanLaunch(mode, allLocked: confirmed == joined, joined), setup.CanLaunch(mode));
+        Assert.Equal(confirmed == joined && (mode != MenuMode.Versus || joined >= 2), setup.CanLaunch(mode));
         Assert.Equal(mode == MenuMode.Versus ? 2 : 1, PlayerSetupFeature.MinimumSeats(mode));
     }
 

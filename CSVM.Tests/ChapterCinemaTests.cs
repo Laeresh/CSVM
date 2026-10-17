@@ -224,8 +224,8 @@ public class ChapterCinemaTests
         Assert.Equal(1, handed);
     }
 
-    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
-    // end back to the caller, so a test decides when, and how often, the cinema stops.
+    // The stand-in for LaunchAudio.PlayCinema. It records what it was asked for and hands the film's
+    // end back to the caller. A test then decides when, and how often, the cinema stops.
     private sealed class Recorder
     {
         private Action? _then;

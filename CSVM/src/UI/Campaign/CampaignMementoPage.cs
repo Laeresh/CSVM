@@ -60,9 +60,10 @@ public sealed class CampaignMementoPage : CampaignPage
     /// one that commits.</remarks>
     public override int OpeningRow => NextRow;
 
-    /// <summary>The picture on show and the glass over it. The picture is the scrapbook photograph
-    /// the profile's memento names, which is where the script reads it from, and the reflection is
-    /// drawn after it so the sheen lands on the picture rather than under it.</summary>
+    /// <summary>The picture on show, the frame over it and the glass over both, the rows' authored z
+    /// order (1, 2, 3). The picture is the scrapbook photograph the profile's memento names, which
+    /// is where the script reads it from. Its white print border is hidden by the frame's window,
+    /// so the background cannot be a backdrop under it.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -70,10 +71,13 @@ public sealed class CampaignMementoPage : CampaignPage
             var layout = Flow.Layout;
             const string section = CampaignLayout.MementoSection;
             var (pictureX, pictureY) = layout.At(section, "MS_MEMENTO", PictureX, PictureY);
+            var (frameX, frameY) = layout.At(section, "MS_BACKGROUND", 0, 0);
             var (glassX, glassY) = layout.At(section, "MS_GLASS", GlassX, GlassY);
             return new[]
             {
                 new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "SCRAPBOOK/" + Showing), pictureX, pictureY),
+                new BoardPicture(
+                    layout.Art(section, "MS_BACKGROUND", new BoardArt(BoardArtLibrary.Ui, "MS_BackGround2.png")), frameX, frameY),
                 new BoardPicture(
                     layout.Art(section, "MS_GLASS", new BoardArt(BoardArtLibrary.Ui, "MS_Reflection2.png")), glassX, glassY),
             };

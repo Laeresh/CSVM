@@ -17,8 +17,8 @@ public enum ShotGridStep
 
 /// <summary>
 /// The Danger Zone photographs' grid rule, shared by the Original wrap-up page's prints and the
-/// built-in boards' strip: the fewest rows whose pictures come within <see cref="Slack"/> of the
-/// widest any grid in the room allows, capped at a maximum picture width, and the widest of those.
+/// chrome boards' strip. It takes the fewest rows whose pictures come within <see cref="Slack"/>
+/// of the widest the room allows, capped at a maximum width. Of those it takes the widest.
 /// A few shots therefore read as one strip and a long course wraps before its thumbnails shrink.
 /// Engine-free, so the rule unit-tests.
 /// </summary>

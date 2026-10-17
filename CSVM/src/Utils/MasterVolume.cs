@@ -7,7 +7,7 @@ namespace CSVM.Utils;
 /// over the <c>audio.volume</c> config key over a default: silence in a repo run, the resting gain
 /// in an exported one. ⚠ The player's four saved levels are no part of this. They multiply on the
 /// three child buses underneath it (<see cref="AudioMix"/>), so a saved level cannot un-silence a
-/// scripted run. The two gains reach the output as a product rather than as alternatives. Resolution only: <c>Launch/Launcher.cs</c> stays the one
+/// scripted run. The two gains reach the output as a product rather than as alternatives. Resolution only: <c>Launch/LaunchAudio.cs</c> stays the one
 /// caller that writes the bus, and is where a full-volume launch leaves it untouched.
 /// </summary>
 public static class MasterVolume

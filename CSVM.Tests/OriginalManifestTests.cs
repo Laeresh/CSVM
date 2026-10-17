@@ -138,7 +138,7 @@ public class OriginalManifestTests : IDisposable
     }
 
     [Fact]
-    public void AMissingRequiredFileNamesItsSectionAndRowAndSelectsBuiltInWithoutRewritingTheRequest()
+    public void AMissingRequiredFileNamesItsSectionAndRowAndKeepsOriginalWithTheReason()
     {
         Populate();
         File.Delete(Graphics("FX_B_Campaign.png"));
@@ -151,9 +151,10 @@ public class OriginalManifestTests : IDisposable
         Assert.Null(OriginalAvailability.Load(_root, out var reason, out _));
         Assert.Equal(report.Reason, reason);
 
-        var host = Host(reason);
-        Assert.Equal(PresentationId.BuiltIn, host.Selected);
+        var host = Host(reason, out string? selected);
+        Assert.Equal(PresentationId.Original, host.Selected);
         Assert.Equal(PresentationId.Original, host.Requested);
+        Assert.Contains(report.Reason!, selected);
     }
 
     [Fact]
@@ -296,14 +297,13 @@ public class OriginalManifestTests : IDisposable
         File.WriteAllBytes(path, bytes);
     }
 
-    private static MenuHost Host(string? unavailable)
+    private static MenuHost Host(string? unavailable, out string? reason)
     {
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new FakePointerPresentation());
         registry.Register(PresentationId.Original, () => new FakeWizardPresentation());
         var host = new MenuHost(registry, new RecordingAudio(), _ => { });
         host.Availability = id => id == PresentationId.Original ? unavailable : null;
-        host.Select(forceBuiltIn: false, cliOverride: PresentationId.Original.Value);
+        reason = host.Select(PresentationId.Original.Value);
         return host;
     }
 

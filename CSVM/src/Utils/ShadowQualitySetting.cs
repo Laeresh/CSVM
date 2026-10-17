@@ -197,7 +197,6 @@ public static class ShadowQualitySetting
     {
         SavedField = "shadowQuality",
         LogName = "shadow_quality",
-        Title = "Shadow quality",
         Labels = new[] { "Off", "Low", "Medium", "High", "Ultra" },
         EnhancedOnly = true,
         Detail = static enhanced => enhanced

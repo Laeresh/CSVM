@@ -10,7 +10,7 @@ namespace CSVM.Utils;
 /// <summary>The display settings' vocabularies: the words <see cref="OptionsDef.DisplayMode"/>,
 /// <see cref="OptionsDef.VSync"/>, the render scale and the anti-aliasing method accept, in the
 /// order a picker offers them. They are kept
-/// as strings, as the presentation and graphics words are. The resolved value is an argument to an
+/// as strings, as the graphics words are. The resolved value is an argument to an
 /// engine call, owned by whichever module makes the call, not a type this store carries. The other
 /// two display settings have no word list, so <see cref="OptionsStore"/> validates their shape
 /// instead.</summary>
@@ -118,11 +118,6 @@ public static class ViewWords
 /// <see cref="AudioMix.SavedLevels"/>.</summary>
 public sealed class OptionsDef
 {
-    /// <summary>A menu presentation word an older build saved. Loaded and saved back so such a
-    /// file round-trips, and read by nothing: the command line alone picks the presentation, and
-    /// no screen writes this field.</summary>
-    public string? MenuPresentation { get; set; }
-
     public string? GraphicsMode { get; set; }
 
     /// <summary>Whether a rocket warhead's ground burst carves the terrain
@@ -294,17 +289,9 @@ public sealed class OptionsStore
     /// source.</summary>
     public const string FileName = "options.json";
 
-    // The only presentation names this option currently accepts. Kept as strings, not an enum: the
-    // presentation identity type belongs to whichever module owns the presentation contract.
-    private static readonly HashSet<string> ValidPresentations = new(StringComparer.Ordinal)
-    {
-        PresentationResolution.BuiltIn,
-        "original",
-    };
-
     // The only graphics words this option accepts, the pair GraphicsMode.TryParse knows. Kept as
-    // strings for the same reason the presentations are: the resolved value is a boolean owned by
-    // the module that reads it, not a type this store carries.
+    // strings, not an enum: the resolved value is a boolean owned by the module that reads it, not
+    // a type this store carries.
     private static readonly HashSet<string> ValidGraphicsModes = new(StringComparer.Ordinal)
     {
         GraphicsMode.Default,
@@ -361,7 +348,6 @@ public sealed class OptionsStore
         {
             w.WriteStartObject();
             w.WriteNumber("version", Version);
-            Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
 
             WriteFlag(w, "rocketCraters", def.RocketCraters);
@@ -443,7 +429,6 @@ public sealed class OptionsStore
             error = string.Empty;
             var def = new OptionsDef
             {
-                MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
                 CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),

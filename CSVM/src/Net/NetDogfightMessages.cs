@@ -115,9 +115,10 @@ public readonly record struct DogfightLobbySeat(
 
 /// <summary>
 /// A Dogfight host's player list as one guest reads it, under the round it belongs to. The host
-/// sends the whole list to each guest whenever it changes, with that guest's own row marked. Fixed
-/// width, since a lobby list is short and sent rarely. Kept in the lobby. A bot row rides spare bits
-/// of the flags byte, so an older build reads it as a person's (docs/org/multiplayer-messages.md).
+/// sends the whole list to each guest whenever it changes. It marks that guest's first row and how
+/// many of its machine's seats stand from there. Fixed width, since a lobby list is short
+/// and sent rarely. Kept in the lobby. A bot row rides spare bits of the flags byte, so an older
+/// build reads it as a person's (docs/org/multiplayer-messages.md).
 /// </summary>
 public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage>, IEquatable<DogfightRosterMessage>
 {
@@ -137,14 +138,16 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
     private const int TierShift = 4;
 
     private readonly DogfightLobbySeat[] _rows;
+    private readonly byte _yourSeats;
 
     /// <summary>The list <paramref name="rows"/> under round <paramref name="epoch"/>, read by the
-    /// guest at row <paramref name="you"/>.</summary>
-    public DogfightRosterMessage(byte epoch, byte you, IReadOnlyList<DogfightLobbySeat> rows)
+    /// guest whose <paramref name="yourSeats"/> seats stand from row <paramref name="you"/>.</summary>
+    public DogfightRosterMessage(byte epoch, byte you, IReadOnlyList<DogfightLobbySeat> rows, byte yourSeats = 1)
     {
         ArgumentNullException.ThrowIfNull(rows);
         Epoch = epoch;
         You = you;
+        _yourSeats = yourSeats;
         int count = Math.Min(rows.Count, MaxRows);
         _rows = new DogfightLobbySeat[count];
         for (int i = 0; i < count; i++)
@@ -152,10 +155,11 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
     }
 
     // The reader's own array, taken as it stands rather than copied a second time.
-    private DogfightRosterMessage(DogfightLobbySeat[] rows, byte epoch, byte you)
+    private DogfightRosterMessage(DogfightLobbySeat[] rows, byte epoch, byte you, byte yourSeats)
     {
         Epoch = epoch;
         You = you;
+        _yourSeats = yourSeats;
         _rows = rows;
     }
 
@@ -170,6 +174,10 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
 
     /// <summary>The row that is the reading guest's own.</summary>
     public byte You { get; }
+
+    /// <summary>How many seats the host gave the reading guest's machine, its rows standing side by
+    /// side from <see cref="You"/>. A host a patch older writes 0 there, which reads as one.</summary>
+    public byte YourSeats => Math.Max((byte)1, _yourSeats);
 
     /// <summary>The rows in player order, the host first.</summary>
     public IReadOnlyList<DogfightLobbySeat> Rows => _rows ?? Array.Empty<DogfightLobbySeat>();
@@ -191,7 +199,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
         byte epoch = reader.ReadByte();
         int count = Math.Min((int)reader.ReadByte(), MaxRows);
         byte you = reader.ReadByte();
-        _ = reader.ReadByte();
+        byte yourSeats = reader.ReadByte();
         var rows = new DogfightLobbySeat[count];
         for (int i = 0; i < count; i++)
         {
@@ -211,7 +219,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
                 team, (flags & 4) != 0, bot ? NetPilot.Bot : NetPilot.Human, (NetBotSkill)tier, reader.ReadText(NetPlaneBuild.NameBytes));
         }
 
-        message = new DogfightRosterMessage(rows, epoch, you);
+        message = new DogfightRosterMessage(rows, epoch, you, yourSeats);
         return true;
     }
 
@@ -223,7 +231,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
         writer.WriteByte(Epoch);
         writer.WriteByte((byte)rows.Count);
         writer.WriteByte(You);
-        writer.WriteByte(0);
+        writer.WriteByte(YourSeats);
         for (int i = 0; i < MaxRows; i++)
         {
             var row = i < rows.Count ? rows[i] : default;
@@ -243,7 +251,7 @@ public readonly struct DogfightRosterMessage : INetMessage<DogfightRosterMessage
     /// <inheritdoc/>
     public bool Equals(DogfightRosterMessage other)
     {
-        if (Epoch != other.Epoch || You != other.You || Rows.Count != other.Rows.Count)
+        if (Epoch != other.Epoch || You != other.You || YourSeats != other.YourSeats || Rows.Count != other.Rows.Count)
             return false;
 
         for (int i = 0; i < Rows.Count; i++)

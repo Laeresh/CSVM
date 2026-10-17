@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 
@@ -57,11 +56,6 @@ internal static class MenuOriginalControlsSuites
         var player1 = new MenuInput { Keyboard = true };
         var registry = new PresentationRegistry();
         var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-controls");
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
         {
@@ -76,7 +70,7 @@ internal static class MenuOriginalControlsSuites
         host.AddSeat(seat);
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");
@@ -102,6 +96,132 @@ internal static class MenuOriginalControlsSuites
         }
     }
 
+    [Suite("menu-original-controls-seats",
+        "Original's CONTROLS page over the seats signed on at the board, a second player's keymap "
+        + "coming from a pad: the page opens on player 1 alone, a pad seat joined becomes player 2, "
+        + "an accepted rebind on that seat writes player 2's keymap file and nobody else's, a "
+        + "device-less seat gets no player row because it would have nothing to capture with, and a "
+        + "seat that leaves takes its row with it")]
+    internal static void MenuOriginalControlsSeats(TestContext ctx)
+    {
+        const string Suite = "menu-original-controls-seats";
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        string dir = System.IO.Path.Combine(ctx.ScratchDir, Suite);
+        if (System.IO.Directory.Exists(dir))
+        {
+            System.IO.Directory.Delete(dir, recursive: true);
+        }
+
+        System.IO.Directory.CreateDirectory(dir);
+        // ⚠ Set the override before the host. The save below writes through the store, which would
+        // otherwise land on the keymap saved at this machine's controls.
+        string? previous = BindingStore.DirectoryOverride;
+        BindingStore.DirectoryOverride = dir;
+        var written = new List<int>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+        {
+            Planes = MenuSuiteHost.ScratchPlanes(ctx, Suite),
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, (player, profile) =>
+        {
+            written.Add(player);
+            BindingStore.UserBindings().Save(player, profile);
+        });
+        host.AddSeat(seat);
+        bool padsDisabled = Pads.Disabled;
+        try
+        {
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            if ((host.Active as OriginalPresentation)?.Shell is not { } shell)
+            {
+                ctx.Check(false, $"Show activates Original ({host.Active?.Id})");
+                return;
+            }
+
+            var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+            var fit = BoardFit.For(size.X, size.Y);
+            var controls = host.Features.Get<ControlsFeature>();
+            var setup = host.Features.Get<PlayerSetupFeature>();
+            Click(host, seat, shell, fit, "MM_B_PREFERENCES");
+            Click(host, seat, shell, fit, OriginalOptionsScreen.ControlsDoorKey);
+            ctx.Check(shell.Screen == OriginalScreen.ControlsPrefs && controls.Players.Count == 1,
+                $"the CONTROLS page opens on player 1 alone ({shell.Screen}, {controls.Players.Count} seats)");
+
+            // The roster is live, so a seat on a pad index no device holds rides out the device
+            // grace as a blipping pad's does. A disabled roster drops it on the first frame.
+            Pads.Disabled = false;
+            var padInput = new MenuInput { Pads = new[] { 96 } };
+            padInput.Prime();
+            var pad = setup.Join(new MenuInputSeat(padInput));
+            host.Tick(Dt);
+            ctx.Check(controls.Players.Count == 2 && controls.Players[1] == 2,
+                $"a joined pad raises player 2 on the page ({controls.Players.Count} seats)");
+            if (controls.Players.Count == 2)
+            {
+                controls.Player = 2;
+                controls.Context = InputContext.Flight;
+                controls.Focus(RowOf(controls, InputAction.Nitro));
+                controls.MoveSlot(9); // past the end: the empty slot that adds a control rather than stealing
+                controls.Offer(new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.M)));
+                ctx.Check(controls.Pending == null, $"a free control binds without an ask ({controls.Status})");
+                controls.Accept();
+            }
+
+            ctx.Check(written.Count == 1 && written[0] == 2,
+                $"an accepted rebind there saves player 2 and nobody else ([{string.Join(", ", written)}])");
+            ctx.Check(System.IO.File.Exists(System.IO.Path.Combine(dir, BindingStore.FileNameFor(2)))
+                && !System.IO.File.Exists(System.IO.Path.Combine(dir, BindingStore.FileNameFor(1))),
+                $"player 2's keymap file is the one written and player 1's is not touched");
+
+            setup.Join(new MenuIdleSource());
+            host.Tick(Dt);
+            ctx.Check(setup.Seats.Count == 3 && controls.Players.Count == 2,
+                $"a device-less seat joins the game and still gets no player row ({setup.Seats.Count} seats, {controls.Players.Count} rows)");
+
+            if (pad != null)
+            {
+                setup.Unjoin(pad);
+            }
+
+            host.Tick(Dt);
+            ctx.Check(controls.Players.Count == 1 && controls.Player == 1,
+                $"the pad leaving takes its row with it and the page falls back to player 1 ({controls.Players.Count} rows, player {controls.Player})");
+        }
+        finally
+        {
+            host.Deactivate();
+            Pads.Disabled = padsDisabled;
+            BindingStore.DirectoryOverride = previous;
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, Suite);
+        }
+    }
+
+    private static int RowOf(ControlsFeature controls, InputAction action)
+    {
+        var actions = controls.Actions;
+        for (int i = 0; i < actions.Count; i++)
+        {
+            if (actions[i] == action)
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
     // The three doors: the top level's PREFERENCES, the Options screen's CONTROLS and the CONTROLS
     // page's KEYS AND BUTTONS, each over the shared feature rather than a page-local copy.
     private static void Doors(

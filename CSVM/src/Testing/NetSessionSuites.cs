@@ -599,19 +599,20 @@ internal static class NetSessionSuites
         pane.AddChild(camera);
         pane.AddChild(sun);
         ctx.Host.AddChild(pane);
+        var paths = new BasePaths(
+            RepoRoot: ctx.RepoRoot,
+            DataRoot: ctx.DataRoot,
+            PlanesGamezPath: ctx.PlanesGamezPath,
+            ZrdrPath: ctx.ZrdrPath,
+            SoundsPath: ctx.SoundsPath,
+            InterpPath: ctx.InterpPath,
+            MessagesPath: ctx.MessagesPath,
+            RofPath: System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"));
         var session = new GameSession(spec, new LauncherContext
         {
             Decode = ctx.Decode,
-            RepoRoot = ctx.RepoRoot,
-            DataRoot = ctx.DataRoot,
-            PlanesGamezPath = ctx.PlanesGamezPath,
-            ZrdrPath = ctx.ZrdrPath,
-            SoundsPath = ctx.SoundsPath,
-            InterpPath = ctx.InterpPath,
-            MessagesPath = ctx.MessagesPath,
-            RofPath = System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof"),
-            ProbeRunner = new ProbeRunner(ctx.RepoRoot, ctx.DataRoot, ctx.ZrdrPath, ctx.SoundsPath,
-                ctx.InterpPath, ctx.MessagesPath, ctx.PlanesGamezPath),
+            Paths = paths,
+            ProbeRunner = new ProbeRunner(paths),
             CaptureDirector = new CaptureDirector(spec),
             MasterSeed = seed,
             Camera = camera,
@@ -620,7 +621,6 @@ internal static class NetSessionSuites
             Env = new Godot.Environment(),
             MenuDriven = false,
             MenuPads = null,
-            Presentation = UI.Menu.PresentationId.BuiltIn,
             ExitSession = () => { },
             RestartSession = () => { },
             NetSeats = isHost ? roster : null,

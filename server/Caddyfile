@@ -5,3 +5,7 @@
 	encode gzip
 	reverse_proxy master:8080
 }
+
+# Other sites on this VPS (for example Gamester) drop one *.caddy file each into server/sites/.
+# The folder is gitignored, so each app ships its own block without touching this file.
+import /etc/caddy/sites/*.caddy

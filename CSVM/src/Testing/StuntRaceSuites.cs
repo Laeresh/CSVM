@@ -273,12 +273,12 @@ internal static class StuntRaceSuites
     }
 
     [Suite("stunt-race-boards",
-        "the session's race board under each presentation: Original builds the lobby-scores board over "
+        "the session's race board: Original builds the lobby-scores board over "
         + "the install's art and strings, which wakes on the race's end with the sim halted, ranks "
         + "the field on the scores page with each pilot's splits, rests on Photo Mode and offers "
         + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
         + "Photo Mode, and a sixteen-pilot field scrolls the scores page and the splits to the sixteenth "
-        + "pilot by their arrows under the pointer and the pad, and by the wheel and a thumb drag; Built-in keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
+        + "pilot by their arrows under the pointer and the pad, and by the wheel and a thumb drag; an install missing the art keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
@@ -287,8 +287,8 @@ internal static class StuntRaceSuites
         string[] zoneNames = { "Pier", "Bridge", "Tower" };
         var built = new List<Node>();
 
-        // One race board built the way a session builds it, under a presentation and launch kind.
-        (Control Board, StuntRace Race, PauseState Pause) Build(PresentationId presentation, bool menuDriven, Action exit, int pilots = 3)
+        // One race board built the way a session builds it, over a data root and a launch kind.
+        (Control Board, StuntRace Race, PauseState Pause) Build(string dataRoot, bool menuDriven, Action exit, int pilots = 3)
         {
             var race = new StuntRace(60f, zoneNames.Length);
             race.Add(0, "Bloodhawk");
@@ -304,7 +304,6 @@ internal static class StuntRaceSuites
             var boards = new Launch.SessionBoards(new Launch.SessionBoards.Inputs
             {
                 Spec = SessionSpec.Parse(new[] { "--no-pads" }),
-                Presentation = presentation,
                 MenuDriven = menuDriven,
                 Exit = exit,
                 Restart = () => { },
@@ -313,7 +312,7 @@ internal static class StuntRaceSuites
                 NetSeats = Array.Empty<Net.NetSeat>(),
                 PauseState = pause,
                 LockCandidates = () => Array.Empty<Node3D>(),
-                DataRoot = ctx.DataRoot,
+                DataRoot = dataRoot,
             });
             var board = boards.BuildRaceBoard(race, zoneNames, "C1   ·   Stunt Flying", () =>
             {
@@ -349,7 +348,7 @@ internal static class StuntRaceSuites
         try
         {
             int exits = 0, photos = 0;
-            var (control, race, pause) = Build(PresentationId.Original, menuDriven: true, () => exits++);
+            var (control, race, pause) = Build(ctx.DataRoot, menuDriven: true, () => exits++);
             if (control is not OriginalRaceBoard board)
             {
                 ctx.Check(false, $"the Original presentation builds the lobby-scores board, not {control.GetType().Name}");
@@ -414,13 +413,16 @@ internal static class StuntRaceSuites
             Point(px + (pw / 2f), py + (ph / 2f), false);
             ctx.Check(board.Visible && indexAfterEnd == 0 && exits == 1 && photos == 1,
                 $"the pointer fires Back and Photo Mode on their plaques: rested on {indexAfterEnd}, {exits} exit(s), {photos} photo(s)");
-            ScrollTheWideField(ctx, Build(PresentationId.Original, menuDriven: true, () => { }, pilots: 16), Fly);
+            ScrollTheWideField(ctx, Build(ctx.DataRoot, menuDriven: true, () => { }, pilots: 16), Fly);
 
-            // Built-in keeps the chrome board; the exit row reads Back from the menu, Quit Game otherwise.
+            // A root without the art keeps the chrome board; its exit row reads Back from the menu, Quit
+            // Game otherwise.
+            string noArt = Path.Combine(ctx.ScratchDir, "stunt-race-boards-no-art");
+            Directory.CreateDirectory(noArt);
             string chromeHeaders = "";
             string ChromeExit(bool menuDriven)
             {
-                var (chrome, chromeRace, _) = Build(PresentationId.BuiltIn, menuDriven, () => { });
+                var (chrome, chromeRace, _) = Build(noArt, menuDriven, () => { });
                 End(chromeRace);
                 if (chrome.FindChildren("*", nameof(GridContainer), true, false).FirstOrDefault() is { } grid)
                 {
@@ -433,11 +435,11 @@ internal static class StuntRaceSuites
             string chromeMenu = ChromeExit(true), chromeCli = ChromeExit(false);
             ctx.Check(chromeHeaders == "|PILOT|AIRCRAFT|BEST|GAP|RUNS",
                 $"the chrome board heads every column but the place, the gap's included: {chromeHeaders}");
-            var (cli, cliRace, _) = Build(PresentationId.Original, menuDriven: false, () => { });
+            var (cli, cliRace, _) = Build(ctx.DataRoot, menuDriven: false, () => { });
             End(cliRace);
             string originalCli = (cli as OriginalRaceBoard)?.Menu?.Items[^1].Label ?? "none";
             ctx.Check(chromeMenu == "Back" && chromeCli == "Quit Game" && originalCli == "Quit Game",
-                $"Built-in keeps the chrome board with Back from the menu ({chromeMenu}) and Quit Game from the command line ({chromeCli}); the Original board's command-line exit reads {originalCli}");
+                $"the chrome board offers Back from the menu ({chromeMenu}) and Quit Game from the command line ({chromeCli}); the Original board's command-line exit reads {originalCli}");
         }
         finally
         {
@@ -447,7 +449,7 @@ internal static class StuntRaceSuites
             }
         }
 
-        ctx.Note($"the Original race board's rows, splits and actions, and both presentations' exit rows");
+        ctx.Note($"the Original race board's rows, splits and actions, and both boards' exit rows");
     }
 
     [Suite("stunt-race-no-lives",

@@ -294,8 +294,18 @@ draws `cockpit1` and hides the `healthy` body, Nose hides the interior, the body
 `(PilotViewMode, firstPerson)`; `Apply` writes one frame's answer, keyed to the pose that frame took,
 so a held look-behind brings the body back. The interior takes node visibility. The airframe groups
 move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
-that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them.
-Decode: [../org/cameraViews.md](../org/cameraViews.md).
+that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them,
+and so do `CockpitReseat.Hidden` on the frames the interior is drawn. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Flight/Hud/CockpitReseat.cs
+The remake-only fix for the Cockpit view's floating wingtip lights and prop discs, in both
+presentations. `Bind` copies lights (onto interior fin peaks, `FinPeaks`) and hand-fitted prop
+stations (`PropSeats`) onto the interior while it is still a child of the plane model, so the
+copies follow it into the cockpit pass, and lists open-air lights (`OpenAirFlares`) to hide. `Sync`
+mirrors each original's visibility and spin onto its copy; `FirstPersonDressing` calls it while the
+interior is drawn, and `CockpitVisibility` takes `Hidden` out of the pilot's own pane. Copies come
+from `Utils.SceneCopy`, unindexed, on `ShaderTwins.Copy` materials. Rules and the per-airframe
+outcome: [../org/cameraViews.md](../org/cameraViews.md), "Remake-only" under mode 7.
 
 ## src/Flight/Hud/FirstPersonDressing.cs
 What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
@@ -862,14 +872,14 @@ The camera stays with the callers, each keeping its own arrow, tag and label sty
 draws what this places; coverage is `CSVM.Tests/EdgeMarkerTests.cs`.
 
 ## src/Flight/Camera/Spyglass.cs
-The spyglass's decoded rules, engine-free and pure. `RangeGate(fogRange, held)` is the slant range
-the picture is allowed at: `near + (far - near) * 0.8`, capped at `RangeCapM`, times `EngageFactor`
-while nothing is held, so it engages nearer than it releases and cannot strobe at the boundary; a
-band whose far is no further than its near carries no fog information and takes the cap alone.
-`FovDeg(radius, distance)` is `2 * atan(1.1 R / d)` clamped to 1.5 and 90 degrees. `Pose` stands
-the camera at the pilot's own aircraft looking at the target, rolling with its attitude for an
-aircraft and level otherwise. Also owns `RefWindow`, `RefRadius` and `DefaultOn`. Decode:
-[../org/spyglass.md](../org/spyglass.md); coverage `CSVM.Tests/SpyglassTests.cs`.
+The spyglass's decoded rules, engine-free and pure but for `MachineDefaultFor`. `RangeGate(fogRange, held)`
+is the slant-range gate: `near + (far - near) * 0.8`, capped at `RangeCapM`, times `EngageFactor` while
+nothing is held, so it engages nearer than it releases and cannot strobe at the boundary; a band whose
+far is no further than its near takes the cap alone. `FovDeg(radius, distance)` is `2 * atan(1.1 R / d)`
+clamped to 1.5 and 90 degrees. `Pose` stands the camera at the pilot's own aircraft looking at the
+target, rolling with its attitude for an aircraft and level otherwise. Owns `RefWindow`, `RefRadius` and
+`DefaultOn`; `DefaultOnFor` (remake-only) disarms it on an integrated GPU at 2+ panes, bar `--det`.
+Decode: [../org/spyglass.md](../org/spyglass.md); coverage `CSVM.Tests/SpyglassTests.cs`.
 
 ## src/Flight/Camera/SpyglassView.cs
 The spyglass picture: a square `SubViewport` rendering the SHARED world through a `Camera3D` of its
@@ -1303,9 +1313,10 @@ node takes which slot: [../org/flightModel.md](../org/flightModel.md).
 The node side of `ControlSurfaceMix`: collects every classified surface and poses it absolutely
 (`Basis = base · Rot(hingeAxis, slotAngle · scale)`) from its build-time local basis rather than
 accumulating, owning the two frame flips the original has no need of, a mount rotated by yaw π and a
-nose-mounted canard that raises the nose the other way. `--fly` only, frozen while paused or
-crashed, reset on respawn. `FlightController` passes its `IsHumanPiloted` as the guard, so every
-human pilot animates for splitscreen while AI stays frozen as the original has it.
+nose-mounted canard that raises the nose the other way. A surface inside the cockpit interior turns
+about its mesh's leading edge (`LeadingEdge`), remake-only: those origins sit up to 0.67 m off the
+hinge. `--fly` only, frozen while paused or crashed, reset on respawn. `FlightController` passes
+its `IsHumanPiloted` as the guard, so every human pilot animates while AI stays frozen.
 
 ## src/Flight/Airframe/WingLightBlinker.cs
 Flashes the wingtip flares for `FlashDuration` (about one frame of the original's own footage) each

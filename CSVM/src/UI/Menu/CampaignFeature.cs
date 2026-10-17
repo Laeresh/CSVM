@@ -10,16 +10,14 @@ using CSVM.Session.Campaign;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// The campaign as a shared feature: the profile store and the seated profile, the roster
-/// operations in the original's own words, the mission the screens after the cabin are about (the
-/// <c>cm_sequence</c> entry, the briefing and its reveal), the picks the flight check's screens
-/// write into the profile (ammunition and ordnance, the crew's aircraft, an export), the humans on
-/// the sortie, the wallet the hangar prices against, and the launch as one
-/// <see cref="CampaignMissionExit"/>. Engine-free and presentation-neutral: Built-in walks it
-/// through <c>CampaignFlow</c>'s screen stack and reads every board's content from here, and every
-/// write into the profile store goes through an operation below, so what a created player, a fit,
-/// a purchase, a sale, a launch and a deletion write is this class's contract. The screen stack,
-/// the cursor, the refusal line and the dialog over a screen are a presentation's own.
+/// The campaign as a shared feature: the profile store, the seated profile and the roster
+/// operations in the original's own words. It holds the mission after the cabin (the
+/// <c>cm_sequence</c> entry, the briefing and its reveal) and the flight check's picks. It holds the
+/// sortie's humans, the wallet the hangar prices against and the launch as one
+/// <see cref="CampaignMissionExit"/>. Engine-free and presentation-neutral: Original reads every
+/// board's content from here. Every write into the profile store goes through an operation below,
+/// so what each write leaves is this class's contract. The screen stack, the cursor, the refusal
+/// line and the dialog over a screen are a presentation's own.
 /// </summary>
 public sealed class CampaignFeature : IMenuFeature
 {
@@ -115,13 +113,13 @@ public sealed class CampaignFeature : IMenuFeature
 
     /// <summary>The chapter cinema every cabin door runs its handoff through, or null when the
     /// caller has none and a cabin door simply opens the cabin. One instance serves both
-    /// presentations, and its latch is what stops a film replaying (<c>Launch/Launcher.cs</c>).
+    /// presentations, and its latch is what stops a film replaying (<c>Launch/ProcessMenu.cs</c>).
     /// </summary>
     public ChapterCinema? ChapterCinema { get; }
 
     /// <summary>The closing cinema a flown mission's scrapbook door runs its handoff through. It is
     /// null when the caller has none, and that door then simply opens the book. One instance
-    /// serves both presentations (<c>Launch/Launcher.cs</c>), and the flown mission's own result
+    /// serves the process (<c>Launch/ProcessMenu.cs</c>), and the flown mission's own result
     /// is what decides whether it plays.</summary>
     public ClosingCinema? ClosingCinema { get; }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Mech3;
 using Godot;
 
@@ -18,6 +19,10 @@ public sealed class ControlSurfaceAnimator
                                               // (Bloodhawk elevators at z −4.2; every
                                               // conventional tail surface sits at z ≥ 0.19)
 
+    // The fraction of a surface's chord behind its forward-most vertex that still counts as its
+    // leading edge. A slightly raked edge still yields one hinge line.
+    private const float LeadingEdgeBand = 0.02f;
+
     private readonly List<Surface> _surfaces;
     private ControlSurfaceMix _mix;
 
@@ -32,8 +37,31 @@ public sealed class ControlSurfaceAnimator
     {
         var surfaces = new List<Surface>();
         foreach (var child in planeRoot.GetChildren())
-            Collect(child, Transform3D.Identity, surfaces);
+            Collect(child, Transform3D.Identity, surfaces, interior: false);
         return surfaces.Count > 0 ? new ControlSurfaceAnimator(surfaces) : null;
+    }
+
+    /// <summary>Where a cockpit-interior surface turns, in its own frame: the centroid of its
+    /// mesh's leading edge (the forward-most vertices). Remake-only, in both presentations (#149).
+    /// The interior's surface origins sit off their hinges, up to 0.67 m on the Warhawk's ailerons.
+    /// Turning about the origin swings the whole surface out of the wing. Zero when the node
+    /// carries no mesh.</summary>
+    public static Vector3 LeadingEdge(Node3D surface)
+    {
+        var verts = new List<Vector3>();
+        foreach (var mi in surface.GetChildren().OfType<MeshInstance3D>())
+        {
+            if (mi.Mesh is not ArrayMesh mesh)
+                continue;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                foreach (var v in mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Vertex].AsVector3Array())
+                    verts.Add(mi.Transform * v);
+        }
+        if (verts.Count == 0)
+            return Vector3.Zero;
+        float front = verts.Min(v => v.Z), chord = verts.Max(v => v.Z) - front;
+        var edge = verts.Where(v => v.Z <= front + (LeadingEdgeBand * chord)).ToList();
+        return edge.Aggregate(Vector3.Zero, (a, b) => a + b) / edge.Count;
     }
 
     /// <summary>Advances the six angle slots and poses every surface. Skip while crashed/paused
@@ -55,12 +83,13 @@ public sealed class ControlSurfaceAnimator
         Apply();
     }
 
-    private static void Collect(Node node, Transform3D parentAcc, List<Surface> surfaces)
+    private static void Collect(Node node, Transform3D parentAcc, List<Surface> surfaces, bool interior)
     {
         var acc = parentAcc;
         if (node is Node3D n3d)
         {
             acc = parentAcc * n3d.Transform; // pose in the plane model's frame
+            interior |= AnimRuntime.NameOf(n3d).StartsWith("cockpit", System.StringComparison.OrdinalIgnoreCase);
             var kind = ControlSurfaces.Classify(n3d.Name);
             if (kind != ControlSurfaces.Kind.None)
             {
@@ -91,18 +120,24 @@ public sealed class ControlSurfaceAnimator
                         break;
                 }
 
-                surfaces.Add(new Surface(n3d, axis, slot, scale));
+                // ⚠ The outside surfaces turn about their origin, as the original turns them.
+                surfaces.Add(new Surface(n3d, axis, slot, scale, interior ? LeadingEdge(n3d) : Vector3.Zero));
             }
         }
 
         foreach (var child in node.GetChildren())
-            Collect(child, acc, surfaces);
+            Collect(child, acc, surfaces, interior);
     }
 
     private void Apply()
     {
         foreach (var s in _surfaces)
-            s.Node.Basis = s.BaseBasis * new Basis(s.Axis, _mix[s.Slot] * s.Scale);
+        {
+            var turn = new Basis(s.Axis, _mix[s.Slot] * s.Scale);
+            s.Node.Basis = s.BaseBasis * turn;
+            // Turning about the pivot instead of the origin moves the origin by the difference.
+            s.Node.Position = s.BasePosition + (s.BaseBasis * (s.Pivot - (turn * s.Pivot)));
+        }
     }
 
     private readonly struct Surface
@@ -112,14 +147,18 @@ public sealed class ControlSurfaceAnimator
         public readonly Vector3 Axis;     // hinge axis in the node's local frame
         public readonly SurfaceSlot Slot;
         public readonly float Scale;      // the mount's frame flips, ±1
+        public readonly Vector3 BasePosition; // build-time local position
+        public readonly Vector3 Pivot;    // the hinge point in the node's own frame, zero = origin
 
-        public Surface(Node3D node, Vector3 axis, SurfaceSlot slot, float scale)
+        public Surface(Node3D node, Vector3 axis, SurfaceSlot slot, float scale, Vector3 pivot)
         {
             Node = node;
             BaseBasis = node.Basis;
             Axis = axis;
             Slot = slot;
             Scale = scale;
+            BasePosition = node.Position;
+            Pivot = pivot;
         }
     }
 }

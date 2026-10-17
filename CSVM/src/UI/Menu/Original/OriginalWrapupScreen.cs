@@ -10,11 +10,10 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original presentation's Instant Action wrap-up page, a standalone module over the decoded
-/// <c>[@IA_WrapUp@]</c> section: the magazine spread, the notepad's heading, the four decoded rows
-/// off the final snapshot, the further lines on post-its, a stunt run's photographs beside them,
-/// the outcome's tick box, and a CONTINUE
-/// plaque back to the Instant Action screen. The page stands only while a snapshot is held, which the session
-/// hands over when the wrap-up hold ends; the built-in presentation keeps its own board instead.
+/// <c>[@IA_WrapUp@]</c> section. It draws the magazine spread, the notepad's heading and the four
+/// decoded rows off the final snapshot. Post-its carry the further lines, beside a stunt run's
+/// photographs, the outcome's tick box and a CONTINUE plaque back to the Instant Action screen. The
+/// page stands only while a snapshot is held, which the session hands over when the hold ends.
 /// Readings: docs/formats/instant-action/wrap-up.md.
 /// </summary>
 public sealed class OriginalWrapupScreen : IOriginalScreenModule
