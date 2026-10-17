@@ -295,10 +295,8 @@ public static class CampaignBoards
         {
             new BoardPane(CampaignLayout.BookSection, "SB_BACKGROUND", Ui("SB_BackGround.jpg"), 0, 0),
         },
-        [CampaignScreen.MementoSelection] = new[]
-        {
-            new BoardPane(CampaignLayout.MementoSection, "MS_BACKGROUND", Ui("MS_BackGround2.png"), 0, 0),
-        },
+        // The memento chooser's MS_BACKGROUND is absent: its authored z lays it over the picture, so
+        // CampaignMementoPage draws it among its own pictures.
         [CampaignScreen.FlightCheck] = new[]
         {
             new BoardPane(CampaignLayout.FlightCheckSection, "FC_BACKGROUND", Ui("FC_BackGround.jpg"), 0, 0),

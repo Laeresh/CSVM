@@ -1092,10 +1092,11 @@ public sealed class TextureArchive : IDisposable
         Build(Path.GetFileNameWithoutExtension(materialTextureName), out _, out authoredLevels);
 
     /// <summary>The raw PNG as a fresh, un-mipmapped <see cref="Image"/>, the source
-    /// <see cref="PlanePainter"/> recolours. Deliberately NOT the ImageTexture cache: that
-    /// one is shared across every plane and world instance and must never be mutated, and
-    /// its images already carry generated mipmaps. Each call returns a new Image.</summary>
-    public Image? FindImage(string materialTextureName)
+    /// <see cref="PlanePainter"/> recolours. Deliberately NOT the ImageTexture cache, which every
+    /// plane and world instance shares and must never be mutated. Its images also carry mipmaps
+    /// already. Each call returns a new Image. <paramref name="authored"/> skips an HD replacement
+    /// for a reader that measures the original itself, such as a cloud mask's tint.</summary>
+    public Image? FindImage(string materialTextureName, bool authored = false)
     {
         // a synchronous decode on the frame path, PlanePainter calls this
         // per decal slot at AI spawn (players draw at build) and at livery repaint.
@@ -1107,7 +1108,7 @@ public sealed class TextureArchive : IDisposable
         var img = new Image();
         if (img.LoadPngFromBuffer(bytes) != Error.Ok)
             return null;
-        if (HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_path, Path.GetFileNameWithoutExtension(name!))) is not { } big)
+        if (authored || HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_path, Path.GetFileNameWithoutExtension(name!))) is not { } big)
             return img;
         if (big.GetFormat() != img.GetFormat())
             big.Convert(img.GetFormat());
