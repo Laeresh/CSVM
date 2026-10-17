@@ -916,7 +916,7 @@ public class OriginalOptionsTests
         var host = Host();
         host.Module.Video.Open();
 
-        Assert.Equal((260f, 245f, 70f, 15f), Rect(Row(host, OriginalVideoPage.MonitorKey)));
+        Assert.Equal((240f, 245f, 90f, 15f), Rect(Row(host, OriginalVideoPage.MonitorKey)));
         var resolution = Row(host, OriginalVideoPage.ResolutionKey);
         Assert.Equal((260f, 290f, 70f, 17f), Rect(resolution));
         // The size row keeps its authored geometry under the borderless default and draws dead.
@@ -985,7 +985,7 @@ public class OriginalOptionsTests
         // size row onto the display mode's. Four rows further down it stands on the checkbox, a
         // plaque strip that takes no box at all, so the page draws none.
         Assert.Equal(
-            new[] { (260f, 245f, 70f, 15f) },
+            new[] { (240f, 245f, 90f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
         Down(host);
         Assert.Equal(
@@ -1026,6 +1026,8 @@ public class OriginalOptionsTests
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Assert.Equal(1, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.ViewDistanceKey).Visible);
+        // Resolution stands on Monitor's line now but keeps its own box, not Monitor's wider one.
+        Assert.Equal((260f, 245f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ResolutionKey)));
         Assert.False(Row(host, OriginalVideoPage.WindowKey + ":down").Enabled);
         Assert.True(Row(host, OriginalVideoPage.WindowKey + ":up").Enabled);
         Click(host, OriginalVideoPage.WindowKey + ":up");

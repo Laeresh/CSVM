@@ -389,7 +389,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
                 continue;
             }
 
-            var place = Place(screen, slot, option.Kind);
+            var place = Place(screen, slot, option.Kind, HomeOf(option));
             float descWidth = option.Fixed == null
                 ? Math.Min(place.DescWidth, bar.Window.ThumbX - BarGap - place.DescX)
                 : place.DescWidth;
@@ -469,6 +469,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         return at >= 0 ? Options[at] : null;
     }
 
+    // The line whose box a row wears: a dropdown's unscrolled line, View Distance taking the last.
+    private static VideoSlot HomeOf(VideoOption option) =>
+        option.Fixed ?? DropSlots[Math.Min(Array.IndexOf(Dropdowns, option), DropSlots.Length - 1)];
+
     // The size row's description says what the size does under the mode standing beside it. It does
     // something different in each. It is the window's own size, nothing at all, or the size the
     // game draws at inside a fullscreen window Godot will not resize.
@@ -509,7 +513,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             return null;
         }
 
-        var place = Place(screen, slot, option.Kind);
+        var place = Place(screen, slot, option.Kind, HomeOf(option));
         return OriginalOptionsChrome.DropList(key, screen.Widget(slot.ControlKey), option.Words(_choices),
             (place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight));
     }
@@ -534,7 +538,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         {
             var slot = SlotOf(option);
             int line = Array.IndexOf(Dropdowns, option) - _top;
-            var place = Place(screen, slot ?? DropSlots[line < 0 ? 0 : ^1], option.Kind);
+            var place = Place(screen, slot ?? DropSlots[line < 0 ? 0 : ^1], option.Kind, HomeOf(option));
             rows.Add(new OriginalRow(option.Key,
                 option.Kind == OriginalRowKind.Dropdown ? option.Words(_choices)[option.Read(_choices)] : string.Empty,
                 option.Kind, place.BoxX, place.BoxY, place.BoxWidth, place.BoxHeight,
@@ -585,32 +589,32 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         return new VideoBar(window, up, upSize, down, downSize, thumb);
     }
 
-    // One row's shape off the section's own widgets, each number falling back to the authored one
-    // when the row is not there. Two of them are derived rather than read. The title box stops at
-    // the control beside it. Every Video title but the Graphics one is authored the same 162 wide,
-    // whatever stands to its right. A description the section gives no width wraps at the plaque
-    // column, the two widthless rows being the two the plaques stand beside.
-    private VideoPlacement Place(MenuLayoutScreen screen, VideoSlot slot, OriginalRowKind kind)
+    // One row's shape off the section's own widgets, falling back to the authored numbers. The title
+    // box stops at the control beside it, every Video title being authored 162 wide. A widthless
+    // description wraps at the plaque column. A dropdown takes its box column and width from its
+    // home line, so no box resizes as the window scrolls. It stands on the line it scrolled to.
+    private VideoPlacement Place(MenuLayoutScreen screen, VideoSlot slot, OriginalRowKind kind, VideoSlot? home = null)
     {
         var title = screen.Widget(slot.TitleKey);
         var control = screen.Widget(slot.ControlKey);
+        var own = screen.Widget((home ?? slot).ControlKey);
         var description = screen.Widget(slot.DescriptionKey);
         bool drop = kind == OriginalRowKind.Dropdown;
         float titleX = title?.Int("X", (int)TitleX) ?? TitleX;
         float titleY = title?.Int("Y", (int)ShadowsY) ?? ShadowsY;
         var box = drop
-            ? OriginalOptionsChrome.StripArt(control?.Art ?? Array.Empty<string>(), 4)
+            ? OriginalOptionsChrome.StripArt(own?.Art ?? Array.Empty<string>(), 4)
             : OriginalOptionsChrome.StripArt(control?.Art ?? Array.Empty<string>(), 0, control?.Frames ?? 8);
         float fallbackX = drop ? DropX : titleX + CheckDx;
         float fallbackY = drop ? titleY : titleY + CheckDy;
-        float boxX = control?.Int("X", (int)fallbackX) ?? fallbackX;
+        float boxX = (drop ? own : control)?.Int("X", (int)fallbackX) ?? fallbackX;
         float boxY = control?.Int("Y", (int)fallbackY) ?? fallbackY;
         float boxWidth;
         float boxHeight;
         if (drop)
         {
-            boxWidth = control?.Int("Width", (int)DropWidth) ?? DropWidth;
-            boxHeight = control?.Int("ItemHeight", (int)ItemHeight) ?? ItemHeight;
+            boxWidth = own?.Int("Width", (int)DropWidth) ?? DropWidth;
+            boxHeight = own?.Int("ItemHeight", (int)ItemHeight) ?? ItemHeight;
         }
         else
         {
