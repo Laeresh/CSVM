@@ -26,8 +26,9 @@ public enum XrChase
     /// <summary>Locked to the aircraft's whole attitude, the cockpit's own frame: the default.</summary>
     Rigid,
 
-    /// <summary>The aircraft's heading only, so the horizon stays level. The heading reverses
-    /// through any vertical flight, so a loop turns the whole view half a circle at once.</summary>
+    /// <summary>The aircraft's heading and pitch without its roll, so the horizon never tilts and
+    /// the gun pipper stays above the aircraft. Through vertical flight the view rolls half a turn.
+    /// </summary>
     Level,
 }
 
@@ -81,8 +82,26 @@ public static class XrMount
     /// place in the view however it manoeuvres.</summary>
     public static Transform3D Chase(Vector3 planePos, Basis attitude, Vector3 offset, XrChase frame)
     {
-        var axes = frame == XrChase.Rigid ? attitude.Orthonormalized() : Level(attitude);
+        var axes = frame == XrChase.Rigid ? attitude.Orthonormalized() : NoRoll(attitude);
         return new Transform3D(axes, planePos + (axes * offset));
+    }
+
+    /// <summary>The basis of <paramref name="attitude"/> with its roll taken out: the same forward
+    /// (−Z), its right axis horizontal and its up on the sky's side. Nose straight up or down, the
+    /// right axis is the aircraft's own. ⚠ Past vertical the up flips to the sky, a half-turn
+    /// roll of the view in one frame.</summary>
+    public static Basis NoRoll(Basis attitude)
+    {
+        var axes = attitude.Orthonormalized();
+        var forward = -axes.Z;
+        var right = forward.Cross(Vector3.Up);
+        if (right.Length() < LevelEpsilon)
+        {
+            right = new Vector3(axes.X.X, 0f, axes.X.Z);
+        }
+
+        right = right.Normalized();
+        return new Basis(right, right.Cross(forward), -forward);
     }
 
     /// <summary>The origin while a cutscene plays on the theater screen. It stands at the cutscene

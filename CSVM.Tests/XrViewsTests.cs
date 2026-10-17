@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CSVM.Flight.Camera;
 using CSVM.Spec;
 using Godot;
@@ -64,28 +65,39 @@ public class XrViewsTests
     }
 
     [Fact]
-    public void TheLevelChaseKeepsTheHorizonLevelAndTheHeightUp()
+    public void TheLevelChaseKeepsTheNoseAndDropsTheRoll()
     {
         var offset = CameraController.VrChaseOffset(new CamParams());
         var plane = new Vector3(100f, 500f, -40f);
-        foreach (var attitude in Attitudes)
+        var straightUp = new Basis(Vector3.Up, 0.4f) * new Basis(Vector3.Right, Mathf.Pi / 2f) * new Basis(Vector3.Back, 0.8f);
+        foreach (var attitude in new List<Basis>(Attitudes) { straightUp })
         {
             var mount = XrMount.Chase(plane, attitude, offset, XrChase.Level);
-            Assert.True(mount.Basis.Y.IsEqualApprox(Vector3.Up));
-            Assert.Equal(plane.Y + offset.Y, mount.Origin.Y, 3);
-            Assert.True(mount.Basis.IsEqualApprox(XrMount.Level(attitude)));
+            Assert.True(mount.Basis.IsEqualApprox(mount.Basis.Orthonormalized()), "orthonormal");
+            Assert.True(mount.Basis.Determinant() > 0.99f, "right-handed");
+            Assert.True((-mount.Basis.Z).IsEqualApprox(-attitude.Orthonormalized().Z), "the aircraft's own forward");
+            Assert.Equal(0f, mount.Basis.X.Y, 4);
+            // The aircraft in the origin's frame: the same point for every attitude, so the pipper
+            // on the nose axis keeps the rig's angle above it.
+            var seen = mount.Basis.Inverse() * (plane - mount.Origin);
+            Assert.True(seen.DistanceTo(-offset) < 2e-3f, $"aircraft at {seen}, against {-offset}");
         }
+
+        // Upright, a sky-side up; inverted level flight shows the world upright too.
+        Assert.True(XrMount.NoRoll(Attitudes[3]).Y.Y > 0.99f);
     }
 
     [Fact]
-    public void TheLevelChaseTurnsHalfACircleThroughVerticalFlight()
+    public void TheLevelChaseRollsHalfACircleThroughVerticalFlight()
     {
         // A loop entered heading north: just short of vertical and just past it.
         var rising = new Basis(Vector3.Right, Mathf.DegToRad(89f));
         var over = new Basis(Vector3.Right, Mathf.DegToRad(91f));
-        var a = -XrMount.Chase(Vector3.Zero, rising, Vector3.Back, XrChase.Level).Basis.Z;
-        var b = -XrMount.Chase(Vector3.Zero, over, Vector3.Back, XrChase.Level).Basis.Z;
-        Assert.True(a.Dot(b) < -0.99f, $"heading {a} then {b}");
+        var a = XrMount.Chase(Vector3.Zero, rising, Vector3.Back, XrChase.Level).Basis;
+        var b = XrMount.Chase(Vector3.Zero, over, Vector3.Back, XrChase.Level).Basis;
+        // The gaze moves the aircraft's two degrees; the view's up turns over.
+        Assert.InRange(Mathf.RadToDeg((-a.Z).AngleTo(-b.Z)), 1.99f, 2.01f);
+        Assert.True(a.Y.Dot(b.Y) < -0.99f, $"up {a.Y} then {b.Y}");
         // The rigid chase moves two degrees with the aircraft.
         var ra = -XrMount.Chase(Vector3.Zero, rising, Vector3.Back, XrChase.Rigid).Basis.Z;
         var rb = -XrMount.Chase(Vector3.Zero, over, Vector3.Back, XrChase.Rigid).Basis.Z;

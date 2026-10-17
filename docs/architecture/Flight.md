@@ -1577,7 +1577,7 @@ Where a headset's tracking origin sits in the world each frame, engine-free, by 
 camera write names: `Seat`, the flat eye at a live aircraft's attitude plus the seated eye offset
 (the flat view's head pitch left out); `Camera`, the flat camera's pose as a headset write left it;
 `Level`, the flat eye with its heading only, for a camera another owner drives. `Chase` is the VR
-chase, a fixed offset in the aircraft's frame (`XrChase.Rigid`) or its heading's (`XrChase.Level`),
+chase, a fixed offset in the aircraft's frame (`XrChase.Rigid`) or that frame unrolled (`XrChase.Level`, `NoRoll`),
 and `Watch` the level heading a static camera holds, facing the aircraft's track. `Screened` is the
 origin under a cutscene on the theater screen: the camera's eye on a held level heading. `XrRig.cs`
 applies it; `CameraController.cs` writes the poses; the per-view choices are in [../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".

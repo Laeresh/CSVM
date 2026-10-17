@@ -77,7 +77,7 @@ internal static class XrViewSuites
     /// <summary>The rigid chase over the same turn, against the flat chase's lag as the control,
     /// and the offset every airframe's camera block gives it.</summary>
     [Suite("xr-view-chase",
-        "under a headset the chase origin rides a fixed offset behind and above the aircraft in its own axes with zero lag over a banked climbing turn, where the flat chase on the same turn trails by its eased frames; the level variant keeps world up; every airframe's offset puts it a comfortable distance below the level gaze")]
+        "under a headset the chase origin rides a fixed offset behind and above the aircraft in its own axes with zero lag over a banked climbing turn, where the flat chase on the same turn trails by its eased frames; the level variant keeps the nose's heading and pitch with no roll, its right axis horizontal and the aircraft a constant angle below the gaze; every airframe's offset puts it a comfortable distance below the level gaze")]
     internal static void XrViewChase(TestContext ctx)
     {
         var report = new StringBuilder();
@@ -111,17 +111,29 @@ internal static class XrViewSuites
 
         flown = WithHeadsetFlight(ctx, PilotViewMode.Chase, TurnHold, XrChase.Level, (clock, plane, rig, _) =>
         {
-            float worstTilt = 0f, worstHeight = 0f;
+            float worstRoll = 0f, bank = 0f, minPitch = 90f, maxPitch = -90f;
+            float minBelow = 90f, maxBelow = -90f, worstForward = 0f;
             for (int i = 0; i < TurnFrames; i++)
             {
                 Step(clock, plane, rig);
-                worstTilt = Mathf.Max(worstTilt, Mathf.RadToDeg(rig.Origin.GlobalBasis.Y.AngleTo(Vector3.Up)));
-                worstHeight = Mathf.Max(worstHeight, Mathf.Abs(rig.Origin.GlobalPosition.Y - plane.GlobalPosition.Y - offset.Y));
+                var axes = rig.Origin.GlobalBasis.Orthonormalized();
+                worstRoll = Mathf.Max(worstRoll, Mathf.Abs(Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(axes.X.Y, -1f, 1f)))));
+                var nose = -plane.GlobalBasis.Orthonormalized().Z;
+                worstForward = Mathf.Max(worstForward, Mathf.RadToDeg(nose.AngleTo(-axes.Z)));
+                float pitch = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(nose.Y, -1f, 1f)));
+                (minPitch, maxPitch) = (Mathf.Min(minPitch, pitch), Mathf.Max(maxPitch, pitch));
+                bank = Mathf.Max(bank, Mathf.Abs(Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(plane.GlobalBasis.Orthonormalized().X.Y, -1f, 1f)))));
+                var seen = axes.Inverse() * (plane.GlobalPosition - rig.Origin.GlobalPosition);
+                float below = Mathf.RadToDeg(Mathf.Atan2(-seen.Y, -seen.Z));
+                (minBelow, maxBelow) = (Mathf.Min(minBelow, below), Mathf.Max(maxBelow, below));
             }
 
-            report.AppendLine($"level: worst tilt {worstTilt:0.####} deg, height off {worstHeight * 1000f:0.###} mm");
-            ctx.Check(worstTilt < PoseTolDeg && worstHeight < PoseTolM,
-                $"the level chase keeps world up and its height over the turn ({worstTilt:0.####}°, {worstHeight * 1000f:0.###} mm)");
+            report.AppendLine($"level: worst roll {worstRoll:0.####} deg, gaze off the nose {worstForward:0.####} deg, aircraft {minBelow:0.####} to {maxBelow:0.####} deg below the gaze, while the aircraft banked to {bank:0.#} deg and pitched {minPitch:0.#} to {maxPitch:0.#} deg");
+            ctx.Check(bank > 20f && maxPitch - minPitch > 10f, $"the turn banks the aircraft {bank:0.#}° and pitches it through {maxPitch - minPitch:0.#}°, so a frame that took either would show");
+            ctx.Check(worstRoll < PoseTolDeg && worstForward < PoseTolDeg,
+                $"the level chase keeps no roll: its right axis stays horizontal ({worstRoll:0.####}°) and it looks along the nose ({worstForward:0.####}°)");
+            ctx.Check(maxBelow - minBelow < PoseTolDeg && minBelow > 3f,
+                $"the aircraft sits a constant {minBelow:0.##}° below the gaze through the pitched turn (spread {maxBelow - minBelow:0.####}°)");
         });
         ctx.Check(flown, $"level: the chase builds an aircraft to fly");
 

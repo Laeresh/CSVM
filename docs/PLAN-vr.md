@@ -1433,7 +1433,9 @@ The suites' reports are `.scratch/test-xr-view-*.txt`, the captures `.scratch/B9
   Seat and exactly three cuts.
 - **The rigid chase** (`xr-view-chase`, the same turn): worst 0.318 mm and 0.0000° off the fixed
   offset, zero lag. Control (METHOD-9): the flat chase on the same turn leaves its settled pose by
-  5.778 m and 18.469°. The `level` variant keeps world up to 0.0000° and its height to 0.021 mm. The
+  5.778 m and 18.469°. The `level` variant keeps its right axis horizontal and its gaze on the nose to 0.0000° while
+  the aircraft banks to 89.3° and pitches from -24.3° to 0.1°, and holds the aircraft 7.5666° to
+  7.5676° below the gaze. The
   offset is `CameraController.VrChaseOffset`, the settled authored rig at `dist` held to
   `[dist_min, dist_max]`, the flat chase's cruise distance: per airframe 14.85 m (Kestrel) to
   25.86 m (Balmoral) out, 7.57° below the level gaze (11.11° on the Balmoral, whose rig is
@@ -1459,13 +1461,17 @@ The suites' reports are `.scratch/test-xr-view-*.txt`, the captures `.scratch/B9
   set) and every `xr` suite pass with clean engine errors. Goldens: 29 of 29 hash-identical on the
   second run; the first moved `c1-cloud-deck-enhanced` (a `--freecam` shot no flight camera
   touches) and `c1-cockpit-enhanced` once, with another session's Godots running.
-- **The chase frame, decided: attitude-locked (`--xr-chase=rigid`), heading-only as the A/B
+- **The chase frame, decided: attitude-locked (`--xr-chase=rigid`), unrolled as the A/B
   (`--xr-chase=level`).** Decision 3 says rigidly attached and Decision 12 has no horizon lock. The
   attitude frame is the cockpit's own, so a view switch never changes how the world moves about the
-  player. A heading-only frame keeps the horizon level, which is the usual comfort argument (the rest
-  frame a cockpit gives is missing in a chase view), but its heading reverses through any vertical
-  flight: `XrViewsTests` pins a 180° turn of the whole view between 89° and 91° of climb, where the
-  rigid frame moves 2°. Every loop would carry that cut. Comfort confidence: lead-only.
+  player. The unrolled frame keeps the nose's heading and pitch and drops the roll
+  (`XrMount.NoRoll`), so the horizon never tilts, the usual comfort argument (the rest frame a
+  cockpit gives is missing in a chase view), and the gun pipper keeps the rig's angle above the
+  aircraft. A heading-only frame puts the pipper on the aircraft whenever the nose drops a few
+  degrees. The unrolled frame keeps its up on
+  the sky's side, so it rolls the whole view half a turn through vertical flight: `XrViewsTests` pins
+  the gaze moving the aircraft's 2° between 89° and 91° of climb while the view's up turns over.
+  Every loop carries that cut. Comfort confidence: lead-only.
 
 **Resolved TODOs.**
 - `LookCenter` (`numpad 5`) and `LookBack` (`numpad 0`, right-stick click) are inert under VR, as are
@@ -1507,8 +1513,9 @@ Look for: (1) the first flight opens in the cockpit with no `--view=`; `F8` (or 
 walks Cockpit, Nose, Chase and back, each a hard cut, Nose with no interior; (2) in the chase the
 aircraft sits a little under your straight-ahead gaze at a comfortable distance, and banks, loops
 and rolls are tolerable with the world turning about you, and the offset reads right; (3) the second
-line flies the level chase: the same manoeuvres with the horizon level, and the half-circle turn at
-the top of a loop; say which should be the default; (4) the numpad, the right stick and its click,
+line flies the level chase: the same manoeuvres with the horizon never tilting while the world
+pitches with the nose, the gun pipper clear above the aircraft, and the half-turn roll at the top of
+a loop; say which should be the default; (4) the numpad, the right stick and its click,
 `numpad 0` and the middle mouse button change nothing; (5) the flyby (third line, or `F7`) cuts to a
 spot behind the aircraft facing it and holds a level view while it flies away, each spot about a
 second longer than the flat flyby's; (6) from
@@ -2046,7 +2053,7 @@ judgement from headset density, TUNE for the author).** Tools and captures are i
 - **Chase, decided: the same panel relative to the origin.** B9 makes the origin the view's own
   frame in every view (the seat in Cockpit and Nose, the rigid chase pose, a level held heading for
   the static cameras), and the flat game draws one HUD overlay in every view, so the panel stays the
-  view's pane: 2 m ahead of the chase eye, turning with the aircraft in the rigid chase and level in
+  view's pane: 2 m ahead of the chase eye, turning with the aircraft in the rigid chase and unrolled in
   `--xr-chase=level`. A panel kept at the cockpit seat would hang 15-26 m ahead of the chase eye as a
   small card over the aircraft. The flat crash and static cameras hide the HUD layer, and the panel
   hides with it (it shows only while a chrome layer draws).
@@ -2193,7 +2200,8 @@ draw-over-the-cockpit choice are the author's at the headset).** Tools and captu
   point to the tracked head's position, so it never turns with the head's rotation (the suite turns
   the head 0.12 / -0.15 / 0.4 rad in place and the card is unchanged), unlike Godot's billboard,
   which copies the head's view basis (B10's finding). Its up is the XR origin's up: the aircraft's
-  in Cockpit, Nose and the rigid chase, world up in the level chase and static cameras. That is the
+  in Cockpit, Nose and the rigid chase, the unrolled frame's up in the level chase, world up in the
+  static cameras. That is the
   frame the flat screen is drawn in, so a box reads as it does on the monitor and stays square to
   the cockpit when the head rolls. The suite fails (0.999641 against 0.999999) when the card takes
   the head's up instead.

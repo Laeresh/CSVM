@@ -670,7 +670,7 @@ every reader of it agrees with the headset. No flat pane takes any of this.
 | Camera | Under a headset |
 |---|---|
 | Cockpit, Nose | The eye at the `cockpit_camera` marker plus the plane's seated eye offset, in the aircraft's own axes, without the flat view's head pitch. Nose hides the interior as the flat view does. |
-| Chase | A fixed offset behind and above the aircraft in its own axes (`XrChase.Rigid`): the settled authored rig at `dist` held to `[dist_min, dist_max]`, so 14.9 to 25.9 m out and 7.57° below the level gaze, 11.1° on the Balmoral. No eased frames, no swing, no zoom, no speed in the distance and no speed FOV. |
+| Chase | A fixed offset behind and above the aircraft in its own axes (`XrChase.Rigid`): the settled authored rig at `dist` held to `[dist_min, dist_max]`, so 14.9 to 25.9 m out and 7.57° below the level gaze, 11.1° on the Balmoral. No eased frames, no swing, no zoom, no speed in the distance and no speed FOV. `--xr-chase=level` takes the same offset in the aircraft's axes with the roll dropped (heading and pitch kept, right axis horizontal). |
 | Snap, free-look, padlock, the centre key, the look stick, look-behind, zoom | Inert. The head stays level and forward and reads no input. |
 | Opening view | Cockpit, unless `--view=` names a view, whatever the saved Default View says. |
 | The destroy callback's view reset | Back to the opening view, where the flat game returns to the chase view. |
@@ -691,11 +691,13 @@ original's spot ahead, that heading leaves the aircraft passing behind the seat.
 **Why the chase rides the attitude.** The VR chase is specified as rigidly attached to the aircraft,
 with no spring lag, no speed FOV and no swing, and the comfort aids include no horizon lock. Riding the
 attitude keeps the chase in the cockpit's frame, so a view switch never changes how the world moves
-about the player, and it has no singular pose. A heading-only chase keeps the horizon level, the
-usual comfort argument against rolling the world, but its heading reverses through any vertical
-flight, so the top of every loop turns the whole view half a circle in one frame; in this game's
-stunt flying that is a cut the player did not ask for. `--xr-chase=level` flies the heading-only
-form for a side-by-side judgement at the headset.
+about the player, and it has no singular pose. `--xr-chase=level` flies the unrolled form for a
+side-by-side judgement at the headset: the same offset in a frame that keeps the nose's heading and
+pitch and drops the roll (`XrMount.NoRoll`), so the horizon never tilts, the world pitches with the
+nose, and the aircraft and the gun pipper on its nose axis keep the rig's angle apart. A heading-only
+frame puts the pipper on the aircraft whenever the nose drops a few degrees. The unrolled frame
+keeps its up on the sky's side, so past vertical flight, at the top of every loop, it rolls the view
+half a turn in one frame; nose exactly vertical it takes the aircraft's own right axis.
 
 Every jump of the origin (a view change, a respawn, a new static spot, a new watched aircraft, a
 camera taken by another owner or handed back) raises `XrRig.Cut`, and the comfort fade lands it on a
