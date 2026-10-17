@@ -1701,7 +1701,7 @@ returned to that zone's exit every time):
 |---|---|---|---|
 | C1 | 5 of 5 | 3:22.0 | none |
 | C1B | 5 of 5 | 3:03.9 | `dzpath6`, `dzpath7` |
-| C2 | 9 of 9 | 4:57.4 | `dzpath4` |
+| C2 | 9 of 9 | 4:10.1 | `dzpath4` |
 | C3 | 4 of 4 | 3:14.8 | `dzpath4` from either end |
 | C4 | 14 of 14 | 8:19.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
 | C5 | 17 of 17 | 10:41.3 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
