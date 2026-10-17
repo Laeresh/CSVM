@@ -381,6 +381,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
         _chrome.ComposePlate(screen, "VP_BACKGROUND", layers.Backdrop);
         _chrome.ComposePageTitle(screen, "VP_T_TITLE", "VIDEO", layers.Lines);
+        var bar = Bar(screen);
         foreach (var option in Options)
         {
             if (SlotOf(option) is not { } slot)
@@ -389,10 +390,13 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             }
 
             var place = Place(screen, slot, option.Kind);
+            float descWidth = option.Fixed == null
+                ? Math.Min(place.DescWidth, bar.Window.ThumbX - BarGap - place.DescX)
+                : place.DescWidth;
             layers.Lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
                 OriginalOptionsChrome.TitleFont, BoardInk.Row));
             layers.Lines.Add(new BoardLine(FirstSentence(option.Description(_choices)), place.DescX, place.DescY,
-                place.DescWidth, OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
+                descWidth, OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
         // With a list open the page under it is drawn from the closed controls with the open one
@@ -410,7 +414,6 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         }
 
         _chrome.ComposeControls(controls, controlFocus, controlPressed, key => OptionFor(key)?.Read(_choices) == 1, layers);
-        var bar = Bar(screen);
         if (bar.Thumb != null)
         {
             layers.Pictures.Add(new BoardPicture(bar.Thumb, bar.Window.ThumbX, bar.Window.ThumbY, Height: bar.Window.ThumbHeight));
@@ -544,12 +547,13 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         rows.Add(new OriginalRow(WindowKey + ":" + OriginalDropLists.UpSuffix, string.Empty, OriginalRowKind.Button,
             window.ThumbX, window.Y, bar.UpSize.Width, bar.UpSize.Height, _top > 0, 0, bar.Up));
         rows.Add(new OriginalRow(WindowKey + ":" + OriginalDropLists.DownSuffix, string.Empty, OriginalRowKind.Button,
-            window.ThumbX, window.Y + window.Height - bar.DownSize.Height, bar.DownSize.Width, bar.DownSize.Height,
+            window.ThumbX, window.TrackTop + window.TrackHeight, bar.DownSize.Width, bar.DownSize.Height,
             _top < LastTop, 0, bar.Down));
     }
 
-    // The dropdown window and its scroll column in the gap between the boxes and the descriptions.
-    // The column hangs the D rows' own arrows at its two ends and their thumb on the track between.
+    // The dropdown window and its scroll column, right-aligned on the widest description's edge, since
+    // the panel frame leaves no room past it. The window's descriptions wrap short of the column. It
+    // hangs the D rows' own arrows at its two ends and their thumb on the track between.
     private VideoBar Bar(MenuLayoutScreen screen)
     {
         var art = screen.Widget(DropSlots[0].ControlKey)?.Art ?? Array.Empty<string>();
@@ -561,12 +565,19 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         var thumbSize = _chrome.StripSize(thumb, upSize.Width, BarArrowHeight);
         var first = Place(screen, DropSlots[0], OriginalRowKind.Dropdown);
         var last = Place(screen, DropSlots[^1], OriginalRowKind.Dropdown);
-        float right = DropSlots.Max(slot => Place(screen, slot, OriginalRowKind.Dropdown) is var p ? p.BoxX + p.BoxWidth : 0f);
-        float x = right + BarGap;
+        float right = DropSlots.Max(slot => Place(screen, slot, OriginalRowKind.Dropdown) is var p ? p.DescX + p.DescWidth : 0f);
+        float x = right - upSize.Width;
         float top = first.BoxY;
         float bottom = last.BoxY + last.BoxHeight;
+        // The Accept plaque stands under the column's foot, so the column stops above it. The window
+        // keeps the rows' full height, the walk scrolling off its foot.
+        float foot = bottom;
+        if (screen.Widget(AcceptKey) is { } accept && x + upSize.Width > accept.Int("X", (int)PlaqueX))
+        {
+            foot = Math.Min(bottom, accept.Int("Y", (int)bottom) - BarGap);
+        }
         float trackTop = top + upSize.Height;
-        float trackHeight = bottom - top - upSize.Height - downSize.Height;
+        float trackHeight = foot - top - upSize.Height - downSize.Height;
         float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, DropSlots.Length, Dropdowns.Length, thumbSize.Height);
         var window = new ListWindow(first.TitleX, top, x + upSize.Width - first.TitleX, bottom - top,
             x, ListWindow.ThumbYFor(trackTop, trackHeight, thumbHeight, _top, LastTop), thumbSize.Width, thumbHeight,

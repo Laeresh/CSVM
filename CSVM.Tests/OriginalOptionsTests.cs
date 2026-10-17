@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Bindings;
@@ -947,24 +947,24 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Monitor" && l.X == 130f && l.Y == 245f && l.Width == 90f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the monitor", StringComparison.Ordinal)
-            && l.X == 350f && l.Y == 245f && l.Width == 310f);
+            && l.X == 350f && l.Y == 245f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Resolution" && l.X == 130f && l.Y == 290f && l.Width == 130f);
         // The size row's description is the mode's, and nothing saved stands on the borderless
         // default, which owns the size.
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Borderless runs at", StringComparison.Ordinal)
-            && l.X == 350f && l.Y == 290f && l.Width == 310f);
+            && l.X == 350f && l.Y == 290f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Display Mode" && l.X == 130f && l.Y == 335f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how the window sits", StringComparison.Ordinal)
-            && l.X == 350f && l.Y == 335f && l.Width == 310f);
+            && l.X == 350f && l.Y == 335f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", StringComparison.Ordinal)
-            && l.X == 350f && l.Y == 380f && l.Width == 310f);
+            && l.X == 350f && l.Y == 380f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Render Scale" && l.X == 130f && l.Y == 402f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Render the world below native", StringComparison.Ordinal)
-            && l.X == 350f && l.Y == 402f && l.Width == 310f);
+            && l.X == 350f && l.Y == 402f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Anti-aliasing" && l.X == 130f && l.Y == 440f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how edges are smoothed.", StringComparison.Ordinal)
-            && l.X == 350f && l.Y == 440f && l.Width == 310f);
+            && l.X == 350f && l.Y == 440f && l.Width == 292f);
         Assert.Contains(board.Lines, l => l.Text == "Shadow Quality" && l.X == 130f && l.Y == 465f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics only."
             && l.X == 350f && l.Y == 465f && l.Width == 150f);
@@ -999,7 +999,8 @@ public class OriginalOptionsTests
         Assert.Empty(Compose(host).Fills.Where(f => f.Border));
     }
 
-    /// <summary>The dropdown window's scroll column stands between the boxes and the descriptions.
+    /// <summary>The dropdown window's scroll column ends on the widest description's right edge (the
+    /// fixture's 350 + 310). The window's descriptions wrap short of it.
     /// The D rows' own arrows stand at its two ends, each live only towards more rows. Their thumb
     /// spans seven eighths of the track. A click on the down arrow scrolls one line.</summary>
     [Fact]
@@ -1009,15 +1010,18 @@ public class OriginalOptionsTests
         host.Module.Video.Open();
         var up = Row(host, OriginalVideoPage.WindowKey + ":up");
         var down = Row(host, OriginalVideoPage.WindowKey + ":down");
-        Assert.Equal(332f, up.X);
+        Assert.Equal(660f, up.X + up.Width);
         Assert.Equal(245f, up.Y);
         Assert.Equal(down.X, up.X);
         Assert.False(up.Enabled);
         Assert.True(down.Enabled);
         var window = Assert.Single(Lists(host)).Window;
-        Assert.Equal(332f, window.ThumbX);
+        Assert.Equal(up.X, window.ThumbX);
         Assert.Equal(7f / 8f * window.TrackHeight, window.ThumbHeight, 3);
-        Assert.Contains(Compose(host).Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
+        var composed = Compose(host);
+        Assert.Contains(composed.Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
+        var monitorDesc = Assert.Single(composed.Lines, l => l.Y == 245f && l.X == 350f);
+        Assert.True(monitorDesc.X + monitorDesc.Width <= up.X);
 
         Click(host, OriginalVideoPage.WindowKey + ":down");
         Assert.Equal(1, host.Module.Video.Top);
