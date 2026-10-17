@@ -224,6 +224,20 @@ public class StuntBotObjectiveTests
     }
 
     [Fact]
+    public void AShutEndSendsTheBotRoundToTheOtherUntilItOpens()
+    {
+        var zones = new List<StuntZone> { Zone("dzpath1", 1, FirstNear, FirstFar) };
+        bool standing = true;
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Shut = (_, far) => standing && !far };
+        Assert.True(bot.Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
+
+        // ABLE-TO-FAIL CONTROL: the structure down, a fresh pick enters from the nearer first vertex.
+        standing = false;
+        bot.Returned();
+        Assert.False(bot.Decide(zones, FirstNear + new Vector3(0, 0, 700), North, zoneRun: false).FarEnd);
+    }
+
+    [Fact]
     public void AnEndMissingFromTheTableRunsItsOwnRoute()
     {
         // A table without the second zone: the bot warns and flies that zone's route as it is.

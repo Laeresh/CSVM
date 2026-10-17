@@ -1683,7 +1683,12 @@ on `propane`) that must be shot open. No round reaches an aircraft in a race
 (`FlightController.Shootable`). A race bot's pilot has no ordnance, and its gunner takes no target of
 its own, so it chases no quarry. While on a run it is ordered onto the nearest live weapon-hit
 structure the zone's route runs into (a world ray along each route chord, the struck body owned by
-the nearest pool anchor up its chain), and fires on it in any mode, the rail included. A short named
+the nearest pool anchor up its chain), and fires on it in any mode, the rail included. It takes that
+target while it steers for the zone too. A hit counts only on the pool's own damage node, so an end
+whose route cast strikes another part of a standing target first is shut, as a refused end is: C2's
+`dzpath1` far end meets the closed gate leaf (`kkgate/healthy`) before the propane, and a bot there
+comes round to the near end, shoots the tank and flies through. The end opens once the target is
+down. Regression: the `stunt-race-bot-gate` suite. A short named
 list adds optional targets that the route clears, each taken on the zone whose gate it stands within
 50 m of: C2's Ramses Tomb wall (`ramses`, rooted on `trigger`, beside dz2). The Hollywood sign's
 letters frame dzpath7's gate as closely and are left standing. Every value above is the remake's own.

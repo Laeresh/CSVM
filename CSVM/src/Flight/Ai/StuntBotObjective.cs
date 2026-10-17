@@ -107,6 +107,10 @@ public sealed class StuntBotObjective
     /// session. Without one every end runs its own route.</summary>
     public RunTable? Runs { get; init; }
 
+    /// <summary>Whether a run may not enter a route from the end named, for now, as it may not from a
+    /// refused one. Null shuts none. StuntRaceBots shuts an end that cannot see a structure to shoot.</summary>
+    public Func<DangerZoneRibbon, bool, bool>? Shut { get; set; }
+
     /// <summary>The bot's lever between zones: a remake-only rule, full for an ace, 0.85 for a
     /// veteran and 0.7 for a novice.</summary>
     public float CruiseThrottle => Tier switch
@@ -351,18 +355,20 @@ public sealed class StuntBotObjective
 
     private void PickEnd(StuntZone zone, Vector3 at) => (_farEnd, _route) = EndFrom(zone.Route!, at);
 
-    // The ribbon end nearer `at`, or the other when that one is refused, and the route its run flies
-    // from there. With both refused it is the nearer end's own route.
+    // The ribbon end nearer `at`, or the other when only that one is open, and the route its run
+    // flies from there. A refused or shut end is closed. With both closed it is the nearer end's own route.
     private (bool Far, DangerZoneRibbon Route) EndFrom(DangerZoneRibbon ribbon, Vector3 at)
     {
         bool far = NearerEnd(ribbon, at);
-        if (RunFrom(ribbon, far) == null && RunFrom(ribbon, !far) != null)
+        if (!Open(ribbon, far) && Open(ribbon, !far))
         {
             far = !far;
         }
 
         return (far, RunFrom(ribbon, far) ?? ribbon);
     }
+
+    private bool Open(DangerZoneRibbon ribbon, bool far) => RunFrom(ribbon, far) != null && Shut?.Invoke(ribbon, far) != true;
 
     // The run from one end, null where it is refused.
     private DangerZoneRibbon? RunFrom(DangerZoneRibbon ribbon, bool far)
