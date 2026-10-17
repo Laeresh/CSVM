@@ -154,12 +154,21 @@ public sealed class PlanePainter
     {
         if (original == null)
             return;
-        var src = original.GetImage();
-        if (src == null || src.GetWidth() != w || src.GetHeight() != h)
+        // The texture's size is the original skin's, also under an HD replacement (HdArt).
+        if (original.GetWidth() != w || original.GetHeight() != h)
             return;
-        if (src.GetFormat() != Image.Format.Rgba8)
+        var src = original.GetImage();
+        if (src == null)
+            return;
+        bool hd = src.GetWidth() != w || src.GetHeight() != h;
+        if (src.GetFormat() != Image.Format.Rgba8 || hd)
         {
             src = (Image)src.Duplicate();
+            if (hd)
+            {
+                src.ClearMipmaps();
+                src.Resize(w, h, Image.Interpolation.Bilinear);
+            }
             src.Convert(Image.Format.Rgba8);
         }
         var sd = src.GetData();

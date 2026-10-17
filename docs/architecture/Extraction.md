@@ -155,6 +155,15 @@ and the `--zip-assets` switch that inverts it. A chapter or mission in either ca
 `Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
 the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 
+## src/Extraction/HdTextures.cs
+The index of HD texture packs a player drops into `<dataRoot>/HD` (`textures.hd`, `--hd=`; a
+`--det` run reads none unless `--hd=` names one). Every zip and subfolder there is read in place, in
+name order, a later one winning. Each drops its own top folder: a path left with a folder replaces
+that file under `extracted/`, matched without case or extension, and a bare name replaces that world
+texture in every archive. `C3/rtexture12/cliff01.png` therefore beats `cliff01.png` in C3 alone,
+the way a pack carries a chapter's own version of a name chapters share. Engine-free; `Mech3/HdArt.cs`
+decodes and sizes what it returns. Coverage: `CSVM.Tests/HdTexturesTests.cs`.
+
 ## src/Extraction/ExtractionStamp.cs
 Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version
 line, exe hash, fork commit, schema integer) and compares its schema against this class's own

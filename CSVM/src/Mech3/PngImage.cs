@@ -111,7 +111,8 @@ public static class PngImage
         return channels == 0 ? null : Unfilter(Inflate(idat), width, height, channels, gamma);
     }
 
-    private static uint? ReadGamma(byte[] png)
+    /// <summary>The <c>gAMA</c> chunk's value, or null when the bytes are not a PNG or carry none.</summary>
+    public static uint? ReadGamma(byte[] png)
     {
         if (png.Length < Signature.Length + 12)
         {

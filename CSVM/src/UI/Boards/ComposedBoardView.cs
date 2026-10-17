@@ -1107,12 +1107,17 @@ public sealed partial class ComposedBoardView : Control
         }
         else if (File.Exists(path) && Image.LoadFromFile(path) is { } image && !image.IsEmpty())
         {
-            if (Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase)
-                && PngImage.TryReadGamma(path) is { } gamma && gamma != PngImage.UiGamma)
+            // ⚠ Each file by its own gAMA, never the original's on its replacement. The pack's PNGs
+            // carry none, and the original's normalisation turned their raw samples pale.
+            byte[]? hdBytes = art.Library == BoardArtLibrary.Loose ? null : HdTextures.Current.ForExtracted(path);
+            var hd = HdArt.Decode(hdBytes);
+            uint? gamma = hd != null ? PngImage.ReadGamma(hdBytes!)
+                : Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase) ? PngImage.TryReadGamma(path) : null;
+            if (gamma is { } g && g != PngImage.UiGamma)
             {
-                NormalizeGamma(image, gamma);
+                NormalizeGamma(hd ?? image, g);
             }
-            texture = TextureUpload.Create(image);
+            texture = HdArt.Texture(hd, image);
         }
 
         _textures[path] = texture;

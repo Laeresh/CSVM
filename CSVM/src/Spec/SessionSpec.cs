@@ -1143,6 +1143,10 @@ public sealed record SessionSpec
     /// <see cref="SessionPaths.ForceZipped"/> for why the two shapes fail differently.</summary>
     public bool ZipAssets { get; private set; }
 
+    /// <summary><c>--hd=</c>: the HD texture pack folder, under the data root unless rooted. Empty
+    /// reads no pack. Null when absent, which leaves config.json's <c>textures.hd</c>.</summary>
+    public string? Hd { get; private set; }
+
     /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
@@ -1716,6 +1720,7 @@ public sealed record SessionSpec
             else if (arg == "--no-focus") { s.NoFocus = true; }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
             else if (arg == "--zip-assets") { s.ZipAssets = true; }
+            else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
             else if (arg.StartsWith("--hitch-inject="))
             {
                 (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =
