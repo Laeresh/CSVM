@@ -143,6 +143,7 @@ public static class SuiteCatalog
         "menu-original-outlaw-list",
         "menu-original-tracer-core",
         "menu-original-version",
+        "menu-original-wrapup-core",
         "menu-player-setup-seats",
         "motor-acceleration",
         "music-states",

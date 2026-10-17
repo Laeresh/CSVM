@@ -23,19 +23,36 @@ namespace CSVM.Testing;
 internal static class MenuOriginalWrapupSuites
 {
     [Suite("menu-original-wrapup",
+        "Original's Instant Action wrap-up page over the install's decoded layout and C4/IA1's Danger "
+        + "Zones: a real camera's photographs stand in marker order beside the post-its under the rows "
+        + "and a frame landing after the page woke fills its print, each landed print takes the cursor "
+        + "and the pointer and opens its PNG full size in the presentation's viewer, Back or a click "
+        + "closing it with the cursor back on the print while a pending print takes neither")]
+    internal static void MenuOriginalWrapup(TestContext ctx) =>
+        OnShell(ctx, "menu-original-wrapup", (host, seat, shell, fit) => Photographs(ctx, host, seat, shell, fit));
+
+    [Suite("menu-original-wrapup-core",
         "Original's Instant Action wrap-up page end to end over the install's decoded layout: a real "
         + "runtime's ending records the four counters as final and holds, nothing leaves for the menu until "
         + "the hold ends, the handover then opens the decoded [@IA_WrapUp@] page with the magazine "
         + "spread, the four brushstrokes, the heading and the eight row lines off the snapshot, the "
         + "context and the stunt splits (without their total) on a yellow post-it and a ticked box "
         + "above CONTINUE, a later ending's numbers never reach the page that is already standing, a "
-        + "failed run leaves the box empty, a real camera's C4/IA1 photographs stand in marker order "
-        + "beside the post-its under the rows and a frame landing after the page woke fills its "
-        + "print, each landed print takes the cursor and the pointer and opens its PNG full size in "
-        + "the presentation's viewer, Back or a click closing it with the cursor back on the print "
-        + "while a pending print takes neither, and CONTINUE and Back both return to the Instant Action "
+        + "failed run leaves the box empty, and CONTINUE and Back both return to the Instant Action "
         + "screen with the run forgotten")]
-    internal static void MenuOriginalWrapup(TestContext ctx)
+    internal static void MenuOriginalWrapupCore(TestContext ctx) =>
+        OnShell(ctx, "menu-original-wrapup-core", (host, seat, shell, fit) =>
+        {
+            Handover(ctx, host, shell);
+            Page(ctx, shell);
+            Frozen(ctx, host, shell);
+            Doors(ctx, host, seat, shell, fit);
+        });
+
+    // Original at its top level over the decoded layout, a scratch plane store and a scripted seat.
+    // It is handed to a walk and torn down after it.
+    private static void OnShell(
+        TestContext ctx, string scratch, System.Action<MenuHost, ScriptedSeat, OriginalShell, BoardFit> walk)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
@@ -49,7 +66,7 @@ internal static class MenuOriginalWrapupSuites
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
-        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-wrapup");
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, scratch);
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -70,18 +87,13 @@ internal static class MenuOriginalWrapupSuites
             }
 
             var size = ctx.Host.GetViewport().GetVisibleRect().Size;
-            var fit = BoardFit.For(size.X, size.Y);
-            Handover(ctx, host, shell);
-            Page(ctx, shell);
-            Frozen(ctx, host, shell);
-            Photographs(ctx, host, seat, shell, fit);
-            Doors(ctx, host, seat, shell, fit);
+            walk(host, seat, shell, BoardFit.For(size.X, size.Y));
         }
         finally
         {
             host.Deactivate();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
-            MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-wrapup");
+            MenuSuiteHost.DropScratchPlanes(ctx, scratch);
         }
     }
 
