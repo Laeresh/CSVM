@@ -67,8 +67,8 @@ public sealed partial class OriginalShell
     private const float AirframeBarWidth = 6f;
     private const float AirframeThumbMin = 20f;
 
-    // The focused chip's lit cell over the strip's ground, the one state the chips carry that
-    // Built-in's row has no use for: which seat's flight check is the one on show.
+    // The focused chip's lit cell over the strip's ground: which seat's flight check is the one on
+    // show.
     private const byte CampaignStripLit = 0xFF;
     private const float CampaignStripLitAlpha = 0.22f;
 
@@ -197,7 +197,7 @@ public sealed partial class OriginalShell
     // characters past the player tag's two.
     private static CampaignChip Chip(int seat, bool own, bool ready, string callsign = "")
     {
-        string mark = ready ? LaunchMenu.ReadyChipMark : own ? "" : LaunchMenu.RemoteChipMark;
+        string mark = ready ? SeatStrip.ReadyMark : own ? "" : SeatStrip.RemoteMark;
         int pitches = ready ? ReadyChipPitches : mark.Length > 0 ? RemoteChipPitches : 1;
         string name = callsign.Trim();
         if (name.Length == 0)
@@ -209,12 +209,11 @@ public sealed partial class OriginalShell
         return new CampaignChip(name + mark, seat, pitches, own, ready);
     }
 
-    // Built-in's chip row in the Original presentation's own space, drawn over a campaign board
-    // only once a second seat has joined so a solo campaign shows the authored screen alone. No
-    // device and no pick status: the campaign's picks are the flight field's, and the sortie
-    // screens' own strip names the devices.
-    // ⚠ Pass onPaper on the Instant Action screen: its background is light, and a chip's colour
-    // reads only over a ground dark enough to hold it.
+    // The chip row in the Original presentation's own space, drawn over a campaign board only once
+    // a second seat has joined. A solo campaign shows the authored screen alone. No device and no
+    // pick status: the picks are the flight field's, and the sortie screens' strip names devices.
+    // ⚠ Pass onPaper on the Instant Action screen. Its background is light, and a chip's colour
+    // reads only over a dark ground.
     private BoardPanel? CampaignSeatPanel(bool onPaper = false)
     {
         var chips = CampaignChips();

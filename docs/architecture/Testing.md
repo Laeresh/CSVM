@@ -136,20 +136,18 @@ The readings the bot suites share: lifting a pilot clear of the ground, the spaw
 placed aeroplane stands on, the Dogfight's ranked board as one line, and a pane's message stack.
 
 ## src/Testing/MenuSuiteHost.cs
-The launchscreen fixture a menu suite stands a `LaunchMenu` on. `Bare` builds a `MenuHost` over an
-empty `PresentationRegistry`, a silent `IMenuAudio` and a caller-owned exit list; `AddFeatures`
-registers the same Free Flight, Instant Action, player-setup, hangar, campaign and controls
-features the launcher wires; `Build` stands a launchscreen on a host over the suite's own
-`ScratchPlanes` store, and `Menu` does so on a bare host. Presentations take that store too, so no
-menu suite reads `user://Planes`; `DropScratchPlanes` removes it. Seat 0 joins through the setup
+What a menu suite's host is built from. `AddFeatures` registers the same Free Flight, Instant
+Action, player-setup, hangar, campaign and controls features the launcher wires, beside a silent
+`IMenuAudio`; `ScratchPlanes` is the suite's own plane store and `ScratchOptions` its own options
+directory. Presentations take that store, so no menu suite reads `user://Planes`;
+`DropScratchPlanes` removes it. Seat 0 joins through the setup
 feature, so it is added after the features; the controls feature is the form that saves nothing.
 A suite that drives the multiplayer door passes its own `netDoor`; `UI/Menu/MenuHost.cs` is the host.
 
 ## src/Testing/ScreenKeyboardRecorder.cs
 A suite's stand-in for Steam's on-screen keyboard: `Utils/ScreenKeyboard.cs` reads as available
 and every URL it would open is recorded instead. Disposing it lowers whatever is still up and puts
-back the detected state and the real handler. Used by `menu-screen-keyboard` and
-`menu-original-screen-keyboard`.
+back the detected state and the real handler. Used by `menu-original-screen-keyboard`.
 
 ## src/Testing/OriginalWalk.cs
 The presses a suite or a unit test makes to reach one row of an Original screen. The screen's walk

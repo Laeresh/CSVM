@@ -19,8 +19,7 @@ public sealed class ClosingCinema
     /// <summary>The film, spelled as the <c>FinalCinema</c> screen's own <c>CF_MOVIE</c> layout row
     /// spells it. That row is the only place the name is written down, because
     /// <c>FINALCINEMA.SCRIPT</c> sets no art path (docs/formats/cinemas.md). It is transcribed here
-    /// rather than read back, since the row lives in Original's decoded layout and this film plays
-    /// under both presentations; the lookup is case-blind either way.</summary>
+    /// rather than read back from Original's decoded layout. The lookup is case-blind either way.</summary>
     public const string Name = "Final.MPG";
 
     /// <summary>Escape or a left mouse press, the closing cinema's set and no more, and a pad

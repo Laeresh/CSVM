@@ -9,15 +9,14 @@ using CSVM.Session.Campaign;
 using CSVM.UI;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.Video;
 
 namespace CSVM.Testing;
 
 /// <summary>
-/// The campaign films across a co-op link, driven on two Original menu hosts over the in-process
-/// loopback. Each end plays through its own recorder, standing in for the launcher's cinema, so a
+/// The campaign films on one Original menu, and across a co-op link on two Original menu hosts
+/// over the in-process loopback. Each end plays through its own recorder, standing in for the launcher's cinema, so a
 /// suite decides which frame each film stops on.
 /// </summary>
 internal static class MenuOriginalCoopFilmSuites
@@ -111,6 +110,89 @@ internal static class MenuOriginalCoopFilmSuites
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Suite("menu-original-campaign-film",
+        "The two campaign films on one Original menu and the press that ends one, in the order the "
+        + "runtime runs them: RETURN TO CABIN after a chapter's last mission plays the next chapter's "
+        + "film, a press under it fires nothing on the screen behind, the film's stop opens the cabin "
+        + "and the poll on that frame reads the press that ended it as nothing, and the next press is "
+        + "the player's own; the last mission's win plays the closing film in front of the book the "
+        + "same way")]
+    internal static void TheSoloFilms(TestContext ctx)
+    {
+        const string Solo = "menu-original-campaign-film";
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, Solo);
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        var store = new CampaignProfileStore(Path.Combine(root, "Profiles"));
+        var door = MenuSuiteHost.NetDoor();
+        End? end = null;
+        try
+        {
+            end = Open(ctx, layout, door, store, new List<MenuExit>());
+            if (end == null)
+            {
+                return;
+            }
+
+            end.Shell.Campaign.OpenCampaignOver(store, MenuSuiteHost.ScratchPlanes(ctx, Solo));
+            store.Save(Flown(HostPilot, ChapterCinema.MissionsPerChapter));
+            end.Host.Show(new DebriefReturn(HostPilot, ChapterCinema.MissionsPerChapter - 1, MissionWon: true));
+            ClickRow(ctx, end, nameof(BoardButton.ReturnToCabin));
+            ctx.Check(end.Chapter is { Plays: 1, Running: true, Name: "chap2" },
+                $"RETURN TO CABIN plays the second chapter's film ({end.Chapter.Name})");
+            UnderTheFilm(ctx, end, end.Chapter, OriginalScreen.CampaignCabin, "the cabin");
+
+            int last = CampaignSequence.MissionCount - 1;
+            store.Save(Flown(HostPilot, CampaignSequence.MissionCount));
+            end.Host.Show(new DebriefReturn(HostPilot, last, MissionWon: true));
+            ctx.Check(end.Closing is { Plays: 1, Running: true, Name: ClosingCinema.Name },
+                $"the last mission's win plays the closing film ({end.Closing.Name})");
+            UnderTheFilm(ctx, end, end.Closing, OriginalScreen.CampaignScrapbook, "the book");
+        }
+        finally
+        {
+            end?.Host.Deactivate();
+            door.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, Solo);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    // A press under a running film, then the film's stop and a press on that same frame. The
+    // runtime stops a cinema inside the input flush, and the seat poll reads after it.
+    private static void UnderTheFilm(TestContext ctx, End end, FilmRecorder film, OriginalScreen behind, string where)
+    {
+        var before = end.Shell.Screen;
+        end.Seat.Enqueue(new MenuCommands { Accept = true });
+        end.Host.Tick(Dt);
+        ctx.Check(end.Shell.Screen == before && film is { Plays: 1, Running: true },
+            $"a press under the film fires nothing on the screen behind it ({end.Shell.Screen})");
+        film.End();
+        end.Seat.Enqueue(new MenuCommands { Accept = true });
+        end.Host.Tick(Dt);
+        ctx.Check(end.Shell.Screen == behind,
+            $"the film's stop opens {where} and the poll on that frame reads the press that ended it as nothing ({end.Shell.Screen})");
+        end.Seat.Enqueue(new MenuCommands { Accept = true });
+        end.Host.Tick(Dt);
+        ctx.Check(end.Shell.Screen != behind,
+            $"and the next press is the player's own ({end.Shell.Screen})");
     }
 
     // The host flies the chapter's last mission and returns to its book. RETURN TO CABIN then plays
@@ -238,8 +320,6 @@ internal static class MenuOriginalCoopFilmSuites
     {
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -253,7 +333,7 @@ internal static class MenuOriginalCoopFilmSuites
             closingCinema: new ClosingCinema(closing.Play, closing.Stop),
             netDoor: door);
         menu.AddSeat(seat);
-        menu.Select(forceBuiltIn: false, cliOverride: "original");
+        menu.Select("original");
         menu.Show(MenuReturnDestination.TopLevel);
         var shell = (menu.Active as OriginalPresentation)?.Shell;
         ctx.Check(shell is { Screen: OriginalScreen.TopLevel }, $"each end shows Original on the top level ({shell?.Screen})");

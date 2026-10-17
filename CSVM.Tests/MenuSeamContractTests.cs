@@ -165,8 +165,8 @@ public class MenuSeamContractTests
     {
         Assert.Throws<ArgumentException>(() => new PresentationId(string.Empty));
         Assert.Throws<ArgumentException>(() => new PresentationId("   "));
-        Assert.Equal(new PresentationId("built-in"), PresentationId.BuiltIn);
-        Assert.NotEqual(PresentationId.BuiltIn, PresentationId.Original);
+        Assert.Equal(new PresentationId("original"), PresentationId.Original);
+        Assert.NotEqual(new PresentationId("Original"), PresentationId.Original);
         Assert.Equal("original", PresentationId.Original.ToString());
     }
 

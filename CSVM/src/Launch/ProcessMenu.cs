@@ -5,7 +5,6 @@ using CSVM.Session.Campaign;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
 using Godot;
@@ -13,7 +12,7 @@ using Godot;
 namespace CSVM.Launch;
 
 /// <summary>
-/// The process's one menu. Its host is built on the first show, with both presentations, the shared
+/// The process's one menu. Its host is built on the first show, with the presentation, the shared
 /// features, seat 0 and the menu's audio service. It also holds the Original layout
 /// the availability check loads, the cold start's <c>--menu=</c> aid, the wheel steps <c>_Input</c>
 /// counts, and the in-flight Preferences leaf. The presentations' screens go up under the
@@ -76,7 +75,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         return UI.Screens.PausePreferences.Build(paths().DataRoot, _originalLayout, controls, persist, _audio);
     }
 
-    // The menu host: both presentations, the shared features, the audio service and the launcher's
+    // The menu host: the presentation, the shared features, the audio service and the launcher's
     // exit sink. Its first seat is the keyboard plus every unclaimed pad, with the mouse as its
     // pointer. The active presentation is settled through PresentationResolution.
     private MenuHost Build(SessionSpec cli, SessionSpec spec, UI.Screens.BuildStamp stamp)
@@ -91,9 +90,8 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         var seatInput = new MenuInput { Keyboard = true };
         // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
         seatInput.LoadSavedKeymap(1);
-        var builtInSeat = new BuiltInSeat(seatInput);
         var seat = new PointerSeat(
-            builtInSeat, MousePosition, () => PrimaryPressed(stamp), TakeWheel,
+            new UI.Screens.MenuInputSeat(seatInput), MousePosition, () => PrimaryPressed(stamp), TakeWheel,
             () => Input.IsMouseButtonPressed(MouseButton.Right));
         var registry = new PresentationRegistry();
         // The factories read the aid when they run, which is inside a Show. The cold start's instance
@@ -102,13 +100,8 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // --profiles= names the cabin's store as well as the flight's. A cabin launch carries the
         // flag into the flight, and the profile the cabin seated must load there.
         var profiles = cli.ProfilesDir is { } profilesDir ? CampaignProfileStore.ForSession(profilesDir) : null;
-        registry.Register(PresentationId.BuiltIn,
-            () => new BuiltInPresentation(parent, at.ZrdrPath, at.DataRoot, _aid ?? string.Empty, builtInSeat.Input)
-            {
-                CampaignProfiles = profiles,
-            });
         registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(parent, at.DataRoot, _originalLayout!, _aid ?? string.Empty, builtInSeat.Input, spec.DebugJoin)
+            () => new OriginalPresentation(parent, at.DataRoot, _originalLayout!, _aid ?? string.Empty, seatInput, spec.DebugJoin)
             {
                 DebugPointer = spec.DebugPointer,
                 CampaignProfiles = profiles,
@@ -123,8 +116,8 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Features.Add(new PlayerSetupFeature());
         var strings = UiStrings.TryLoad(at.DataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.ZrdrPath));
-        // The campaign feature carries both cinemas because both presentations already read it.
-        // Neither of them can reach this module to play a film through.
+        // The campaign feature carries both cinemas because the presentation reads it and cannot
+        // reach this module to play a film through.
         _chapterCinema = new ChapterCinema(audio.PlayCinema, audio.StopCinema);
         _closingCinema = new ClosingCinema(audio.PlayCinema, audio.StopCinema);
         host.Features.Add(new CampaignFeature(
@@ -140,7 +133,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         // The multiplayer door, built over the carrier and the master server the spec settles.
         host.Features.Add(net.OpenDoor(spec));
         host.AddSeat(seat);
-        string? reason = host.Select(spec.ForceBuiltInPresentation, spec.PresentationOverride);
+        string? reason = host.Select(spec.PresentationOverride);
         string why = reason == null ? "" : $" reason={reason}";
         Log.Info("ui", $"menu presentation active={host.Selected} requested={host.Requested}{why}");
         return host;

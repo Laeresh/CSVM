@@ -30,8 +30,7 @@ public sealed partial class BuildStamp : Node
     /// <summary>The user folder icon's tooltip.</summary>
     public const string UserTooltip = "Open user folder";
 
-    // Authored against the launchscreen's own 720p metrics (LaunchMenu's FooterFont), so the stamp
-    // reads as one line of the same size as the controls line it sits below.
+    // Authored against the menu's 720p chrome metrics, a footer line's size.
     private const float ReferenceFontSize = 15f;
     private const float ReferenceHeight = 720f;
 
@@ -162,8 +161,8 @@ public sealed partial class BuildStamp : Node
             MouseFilter = Control.MouseFilterEnum.Ignore,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        // The shadow carries it over the Original presentation's artwork, which is not the flat
-        // backdrop Built-in draws.
+        // The shadow carries it over the Original presentation's artwork, which is not a flat
+        // backdrop.
         _label.AddThemeColorOverride("font_color", DimColour);
         _label.AddThemeColorOverride("font_shadow_color", ShadowColour);
         _label.AddThemeConstantOverride("shadow_offset_x", 1);

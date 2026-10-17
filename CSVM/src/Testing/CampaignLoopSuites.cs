@@ -246,7 +246,7 @@ internal static class CampaignLoopSuites
     }
 
     // FLY MISSION: the flow hands the shell its job, and the shell's own save and fit resolution
-    // (LaunchMenu.FlyCampaignMission) are what the mission then flies with.
+    // are what the mission then flies with.
     private static LoadoutChoice PressFlyMission(
         TestContext ctx, CampaignFlow flow, CampaignProfileStore store, CampaignProfileDef profile,
         StockLoadouts stock, int group, StringBuilder report)
@@ -642,9 +642,8 @@ internal static class CampaignLoopSuites
         ctx.Check(result.Recorded.Advanced, $"and the campaign position advanced");
     }
 
-    // The cabin the campaign flow lands on for a fresh profile pick, checked here on a flow built
-    // straight from the store (Launcher.OpenDebrief -> LaunchMenu.OpenCampaignScrapbook opens the
-    // debrief on top of it instead, which is not this suite's own path).
+    // The cabin the campaign flow lands on for a fresh profile pick, on a flow built straight from
+    // the store. A debrief return opens the book on top of it instead, which is not this suite's path.
     private static void ReturnToTheCabin(
         TestContext ctx, CampaignProfileStore store, UiStrings strings, StockLoadouts stock, StringBuilder report)
     {

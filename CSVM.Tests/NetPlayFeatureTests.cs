@@ -319,7 +319,7 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
-    public void ABuiltInHostRunsAnUnshownLobbyThatAnOriginalGuestPicksAgainst()
+    public void AHostWithNoLobbyScreenRunsAnUnshownLobbyThatAGuestPicksAgainst()
     {
         var mesh = LoopbackTransport.Mesh(2, Clean, new Random(37));
         var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);

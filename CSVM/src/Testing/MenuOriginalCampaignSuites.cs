@@ -7,7 +7,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 
@@ -92,11 +91,6 @@ internal static class MenuOriginalCampaignSuites
         var audio = new RecordingAudio();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -109,7 +103,7 @@ internal static class MenuOriginalCampaignSuites
         var campaign = host.Features.Get<CampaignFeature>();
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");
@@ -824,8 +818,7 @@ internal static class MenuOriginalCampaignSuites
         hangar.Discard();
     }
 
-    // The screenshot aids' input script under Original: the same words Built-in's aids take, spelt
-    // on the ammo and plane-selection screens over the aid's own scratch store.
+    // The screenshot aids' input script under Original, spelt on the ammo and plane-selection screens over the aid's own scratch store.
     private static void AidScript(TestContext ctx, OriginalShell shell)
     {
         shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());

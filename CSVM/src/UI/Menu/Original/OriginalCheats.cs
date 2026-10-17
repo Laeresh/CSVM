@@ -8,7 +8,7 @@ namespace CSVM.UI.Menu.Original;
 /// Each screen owns one <see cref="TypedCheat"/> and the authored region a left click has to land
 /// in to give it the keyboard. No row of any screen lies inside one of those regions, so the shell
 /// reads the arm off the pointer before its hit test. What a completed word switches on is
-/// <see cref="CampaignCheats"/>, which both presentations read. The words, the regions and the
+/// <see cref="CampaignCheats"/>, which the campaign reads. The words, the regions and the
 /// script lines behind them are in <c>docs/formats/campaign-screens.md</c>.
 /// </summary>
 public sealed class OriginalCheats

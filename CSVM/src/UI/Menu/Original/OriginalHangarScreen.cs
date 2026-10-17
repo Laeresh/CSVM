@@ -881,7 +881,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         ReturnFromHangar();
     }
 
-    // The commit. On success the roster both presentations pick from gains the plane at once, the
+    // The commit. On success the roster every picker reads gains the plane at once, the
     // scratch build is dropped and the entry screen comes back. A refusal stays with its reason.
     private void PurchaseNow()
     {
@@ -1500,7 +1500,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
     // Export answers with the screen's own confirmation (langui 702 over the plane's short
     // airframe name) and writes nothing. The original's export copies the record into the store
-    // Multiplayer and Instant Action read. Both presentations here already pick from that one
+    // Multiplayer and Instant Action read. Every picker here already reads that one
     // store, so the plane is offered to them the moment it is built.
     private void ExportPicked()
     {

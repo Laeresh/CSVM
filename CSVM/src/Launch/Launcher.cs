@@ -14,7 +14,6 @@ using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Overlays;
 using CSVM.UI.Screens;
 using CSVM.Utils;
@@ -56,14 +55,6 @@ public partial class Launcher : Node3D
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private int[][]? _menuPads;
-    // The device-less menu players --debug-join= asks for, held until the launchscreen exists and
-    // consumed there: a later return to the menu keeps whoever really joined.
-    private int _pendingJoin;
-    // --debug-waves=/--debug-wingmen=, the same one-shot hold as _pendingJoin above but for the
-    // Instant Action wizard's own screenshot aids.
-    private int _pendingWaves, _pendingWingmen;
-    // --debug-preset=, same one-shot hold. −1 rather than 0 because preset 0 is a real request.
-    private int _pendingPreset = -1;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
     // ad-hoc save, see src/Tooling/CaptureDirector.cs's entry. Process-scoped: constructed once
     // from the launch spec, never re-armed by a menu relaunch.
@@ -189,18 +180,6 @@ public partial class Launcher : Node3D
     // build, nulled by its teardown) otherwise, null at the launchscreen.
     private GameClock? ClockNow => _clock ?? GameClock.Current;
 
-    // The launchscreen while the Built-in presentation is the active one, else null: the door for
-    // what is Built-in's alone (its one-shot debug aids, its failed-build note). Null-safe under
-    // Original, where both are absent by design; every other reading of the menu goes through the host.
-    private LaunchMenu? BuiltInMenu => (_menu.Host?.Active as BuiltInPresentation)?.Menu;
-
-    // The presentation a session's boards take. A menu launch has already settled it on the host,
-    // availability included. A CLI launch builds no host, so only the flags speak for it there.
-    private PresentationId SessionPresentation =>
-        _menu.Host is { } host ? host.Selected
-        : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
-        : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride));
-
     // The boards stood with no flight in front of them, over the live spec and the current paths.
     // Built per use, since an extraction's hand-back re-resolves the paths.
     private LaunchBoards Boards => new(_spec, _paths);
@@ -307,10 +286,6 @@ public partial class Launcher : Node3D
         Flight.Ai.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Tooling.CaptureDirector(_spec);
         _gltfExporter = new Tooling.GltfExporter(_spec);
-        _pendingJoin = _spec.DebugJoin;
-        _pendingWaves = _spec.DebugWaves;
-        _pendingWingmen = _spec.DebugWingmen;
-        _pendingPreset = _spec.DebugPreset;
         // Built alongside the other process-scoped services, ahead of every probe's early quit
         // and of --dump-config: its hitch monitor is what registers the five hitchMonitor.* keys.
         _instruments = new FrameInstruments(_spec, GetViewport().GetViewportRid());
@@ -719,9 +694,8 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // A current tree the Original menus cannot read stops at the same screen, naming the fault,
-        // rather than opening on some other presentation.
-        if (_spec.ShowsMenu && _spec.MovieName == null && RequestsOriginal()
+        // A current tree the Original menus cannot read stops at the same screen, naming the fault.
+        if (_spec.ShowsMenu && _spec.MovieName == null
             && UI.Menu.Original.OriginalAvailability.Load(dataRoot, out string? unusable) == null)
         {
             ShowExtractionScreen(UI.Screens.DataProblem.Unusable, unusable);
@@ -1199,10 +1173,9 @@ public partial class Launcher : Node3D
             return; // a CLI launch leaves the log to tell the story, as it always did
         }
         ReturnToMenu(MenuReturnDestination.TopLevel);
-        // Each presentation says so in its own chrome, Built-in on its error line and Original in
-        // its warning box. Without the box Original's top level shows bare, which reads as a misclick.
+        // Original says so in its warning box. Without the box its top level shows bare, which
+        // reads as a misclick.
         Log.Warn("ui", $"menu: the build failed, back at the top level of {_menu.Host?.Selected}");
-        BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)}, see the log.");
         if (_menu.Host?.Active is UI.Menu.Original.OriginalPresentation original)
         {
             original.RaiseWarning(FailedBuildWarning());
@@ -1326,7 +1299,6 @@ public partial class Launcher : Node3D
             Env = _env,
             MenuDriven = _menuDriven,
             MenuPads = _menuPads,
-            Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
             ToggleGraphicsMode = _settings.RequestToggle,
@@ -1422,11 +1394,6 @@ public partial class Launcher : Node3D
 
         ShowMenu(MenuReturnDestination.TopLevel);
     }
-
-    // Whether this run's menu asks for Original, the presentation the availability check answers for.
-    private bool RequestsOriginal() =>
-        !_spec.ForceBuiltInPresentation
-        && PresentationResolution.Requested(_spec.PresentationOverride) == PresentationResolution.Default;
 
     // The screen a menu launch stops at when the data root holds no extraction, or one stamped under
     // another schema. Nothing that reads the tree is built yet. Esc leaves through _UnhandledInput,
@@ -1583,12 +1550,6 @@ public partial class Launcher : Node3D
 
         // Safe on every entry: a cue for the track already playing is a no-op.
         _audio.CueMenu();
-        // The launchscreen's own screenshot aids, one-shot: a return to the menu keeps whoever
-        // really joined. Built-in's alone, so they reach it through the presentation's door.
-        if (BuiltInMenu is { } menu)
-        {
-            ApplyMenuDebugAids(menu);
-        }
     }
 
     // The Options route's apply from the menu: persist and apply every choice, then end the active
@@ -1611,34 +1572,6 @@ public partial class Launcher : Node3D
     // over its own world, not tearing down what the pause stands on.
     private UI.Screens.PausePreferences? BuildPauseOptions() =>
         _menu.PauseOptions(applied => _settings.Persist(applied, _spec, _session));
-
-    // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
-    // can be screenshot on a one-controller machine; --debug-waves=/--debug-wingmen=/--debug-preset=
-    // are the same aid for the Instant Action wizard's screens. The preset goes last, so it
-    // overwrites the two before it: a preset fills the wave and wingman fields itself.
-    private void ApplyMenuDebugAids(LaunchMenu menu)
-    {
-        if (_pendingJoin > 0)
-        {
-            menu.DebugJoin(_pendingJoin);
-            _pendingJoin = 0;
-        }
-        if (_pendingWaves > 0)
-        {
-            menu.DebugWaves(_pendingWaves);
-            _pendingWaves = 0;
-        }
-        if (_pendingWingmen > 0)
-        {
-            menu.DebugWingmen(_pendingWingmen);
-            _pendingWingmen = 0;
-        }
-        if (_pendingPreset >= 0)
-        {
-            menu.DebugPreset(_pendingPreset);
-            _pendingPreset = -1;
-        }
-    }
 
     // The host's exit sink: the one place a menu leaves through. The host has already hidden the
     // presentation, with its state kept so a failed build can show it again where it stood.
@@ -1762,8 +1695,8 @@ public partial class Launcher : Node3D
         BeginLaunch();
     }
 
-    // A flown campaign mission is over, won or lost: free the world and reopen the menu on the
-    // debrief for the mission just flown, which each presentation maps onto its own book. Reached
+    // A flown campaign mission is over, won or lost. Free the world and reopen the menu on the
+    // flown mission's debrief, which the presentation maps onto its own book. Reached
     // from the session's CampaignMissionEnded by way of _pendingDebrief, one frame later, carrying
     // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
@@ -1977,11 +1910,6 @@ public sealed record LauncherContext
     /// them at the launch. A host reads its own book and a guest the names its host sent. Null
     /// names each team by its number.</summary>
     public IReadOnlyDictionary<int, string>? NetTeamNames { get; init; }
-
-    /// <summary>The presentation this session's own boards take, already resolved: the menu's
-    /// active one, or what the flags name on a CLI launch. A resolved answer rather than a flag,
-    /// which is why it rides here beside <see cref="MenuDriven"/>.</summary>
-    public required UI.Menu.PresentationId Presentation { get; init; }
 
     /// <summary>Leaves the session the way <see cref="MenuDriven"/> says: back to the launchscreen,
     /// or out of the game. The boards' Exit item calls it, so the one routing rule lives on the

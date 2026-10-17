@@ -14,7 +14,7 @@ namespace CSVM.Tests;
 
 /// <summary>The held Display Scores: the appended action and its shipped controls, a saved keymap
 /// that predates it, and its place on the Original controls page. Then the standings it shows: a
-/// race's and a Dogfight's lines in both looks, and nothing where no mode keeps scores.</summary>
+/// race's and a Dogfight's lines in the original's text, and nothing where no mode keeps scores.</summary>
 public class DisplayScoresTests
 {
     private static readonly DeviceId Pad = DeviceId.Joypad("030000004c050000c405000000010000");
@@ -160,7 +160,7 @@ public class DisplayScoresTests
     }
 
     [Fact]
-    public void ARaceReadsAsPlacePilotAircraftBestGapAndRunsInBothLooks()
+    public void ARaceReadsAsPlacePilotAircraftBestGapAndRuns()
     {
         var race = new StuntRace(60f, 2);
         race.Add(0, "Bloodhawk");
@@ -169,12 +169,6 @@ public class DisplayScoresTests
         FlyRun(race, 0, 6f, 12.5f);
         FlyRun(race, 1, 4f, 10f);
         Assert.True(race.RunStarted(0));
-
-        var table = ScoresTable.Race(race);
-        Assert.Equal(new[] { "", "PILOT", "AIRCRAFT", "BEST", "GAP", "RUNS" }, table.Headers);
-        Assert.Equal(new[] { "1st", "P2", "Kestrel", "0:10.0", "", "1/1" }, table.Rows[0].Cells);
-        Assert.Equal(new[] { "2nd", "P1", "Bloodhawk", "0:12.5", "+2.5", "1/2" }, table.Rows[1].Cells);
-        Assert.Equal(new[] { 1, 0 }, table.Rows.Select(r => r.Seat).ToArray());
 
         var lines = OriginalScoresText.Race(race, Shipped).Select(l => l.Text).ToArray();
         Assert.Equal(
@@ -203,30 +197,13 @@ public class DisplayScoresTests
         Assert.Equal($"{"2nd P1",-21} {"Bloodhawk",-12} {"0:12.5",-10} {"+2.5",-9} 1/1", lines[2]);
     }
 
-    [Fact]
-    public void ADogfightTableLeadsWithTheTeamsInTheBoardsColumns()
-    {
-        var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
-        match.AssignTeams(new[] { 1, 2 }, new Dictionary<int, string> { [1] = "Red", [2] = "Blue" });
-        match.RegisterKill(1, 0);
-
-        var table = ScoresTable.Dogfight(match, seat => $"P{seat + 1}");
-        Assert.Equal(new[] { "", "PILOT", "SCORE", "KILLS", "DEATHS" }, table.Headers);
-        Assert.Equal(
-            new[] { "#1 Blue 1 1 0", "#2 Red 0 0 1", "#1 P2 1 1 0", "#2 P1 0 0 1" },
-            table.Rows.Select(r => string.Join(" ", r.Cells)).ToArray());
-        Assert.Equal(new[] { true, true, false, false }, table.Rows.Select(r => r.Team).ToArray());
-        Assert.Equal(new[] { -1, -1, 1, 0 }, table.Rows.Select(r => r.Seat).ToArray());
-    }
-
-    /// <summary>Solo and campaign flights keep no scores, so the source shows nothing in either look.
+    /// <summary>Solo and campaign flights keep no scores, so the source shows nothing.
     /// </summary>
     [Fact]
     public void ASourceWithNoRaceAndNoDogfightShowsNothing()
     {
         var source = new ScoresSource();
         Assert.False(source.HasScores);
-        Assert.Null(source.Table());
         Assert.Empty(source.OriginalLines());
         Assert.True(new ScoresSource { Match = new VersusMatch(2) }.HasScores);
     }

@@ -294,17 +294,6 @@ public class SessionSpecParserTests
         Assert.Equal(9, SessionSpec.Parse(new[] { "--ai-attack=42" }).AiAttackSkill);
     }
 
-    /// <summary>`--debug-preset=` defaults to −1, not 0: preset 0 ("Girl Trouble") is a real
-    /// request, unlike a 0 wave or wingman count, so the launcher's "was this asked for" test
-    /// cannot be a truthiness check on the value.</summary>
-    [Fact]
-    public void DebugPresetIsAbsentAtMinusOneSoPresetZeroCanBeAskedFor()
-    {
-        Assert.Equal(-1, SessionSpec.Parse(new[] { "--menu" }).DebugPreset);
-        Assert.Equal(0, SessionSpec.Parse(new[] { "--debug-preset=0" }).DebugPreset);
-        Assert.Equal(18, SessionSpec.Parse(new[] { "--debug-preset=18" }).DebugPreset);
-    }
-
     [Fact]
     public void AMalformedDamagePresetIsReportedThroughTheSpecsWarnings()
     {
@@ -346,18 +335,13 @@ public class SessionSpecParserTests
         Assert.Equal(30, a.HitchInjectFrame);
     }
 
-    /// <summary>The two menu-presentation flags: absent by default, the override carries whatever
-    /// name follows the `=`, and force-Built-in is a plain boolean independent of it.</summary>
+    /// <summary>The menu-presentation flag: absent by default, and the override carries whatever
+    /// name follows the `=`.</summary>
     [Fact]
-    public void PresentationOverrideAndForceBuiltInReachTheSpec()
+    public void PresentationOverrideReachesTheSpec()
     {
-        var bare = SessionSpec.Parse(new[] { "--fly" });
-        Assert.Null(bare.PresentationOverride);
-        Assert.False(bare.ForceBuiltInPresentation);
-
-        var s = SessionSpec.Parse(new[] { "--presentation=original", "--force-builtin" });
-        Assert.Equal("original", s.PresentationOverride);
-        Assert.True(s.ForceBuiltInPresentation);
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).PresentationOverride);
+        Assert.Equal("original", SessionSpec.Parse(new[] { "--presentation=original" }).PresentationOverride);
     }
 
     /// <summary>A join value is an address with an optional port. An IPv6 address is bracketed,

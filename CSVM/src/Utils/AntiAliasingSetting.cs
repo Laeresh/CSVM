@@ -46,7 +46,6 @@ public static class AntiAliasingSetting
     {
         SavedField = "antiAliasing",
         LogName = "anti_aliasing",
-        Title = "Anti-aliasing",
         Labels = new[] { "Off", "FXAA", "SMAA", "TAA", "FSR 2.2" },
         Detail = static _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
         Shown = DefaultFor,

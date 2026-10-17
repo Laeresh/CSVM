@@ -1,14 +1,12 @@
 namespace CSVM.UI.Boards;
 
 /// <summary>
-/// The player chip strip both presentations put in a screen's top-right corner once a second seat
-/// has joined: <c>P1</c> to <c>P4</c>, each in that player's own identity colour, so a pilot finds
-/// the same tag in the same place whichever shell they are in. The tag and the colour themselves
-/// are <c>SplitScreen.PlayerTag</c> and <c>SplitScreen.PlayerColor</c>; this is only the shape the
-/// two strips share, in authored board points scaled through the screen's own <see cref="BoardFit"/>.
-/// Built-in lays its chips out with Godot's own text measurement and reads the face and the inset
-/// alone; Original composes at authored coordinates with no font metric at hand, so it centres each
-/// chip in a fixed <see cref="Pitch"/> cell and draws its own ground behind them.
+/// The player chip strip in a screen's top-right corner once a second seat has joined: <c>P1</c>
+/// to <c>P4</c>, each in that player's identity colour. A pilot finds the
+/// same tag in the same place on every screen. The tag and the colour are
+/// <c>SplitScreen.PlayerTag</c> and <c>SplitScreen.PlayerColor</c>. This is the strip's shape, in
+/// authored board points scaled through the screen's own <see cref="BoardFit"/>. Original composes
+/// with no font metric at hand, so each chip centres in a fixed <see cref="Pitch"/> cell over a ground.
 /// </summary>
 public static class SeatStrip
 {
@@ -28,6 +26,14 @@ public static class SeatStrip
 
     /// <summary>The ground's height, the face plus room for its descenders and the margin.</summary>
     public const float Ground = Font + 4f + (2f * Pad);
+
+    /// <summary>What follows a remote guest's tag on the chip strip. A guest at another machine holds
+    /// a seat but no pane here, and the chip says which kind a player is.</summary>
+    public const string RemoteMark = " net";
+
+    /// <summary>What follows a co-op guest's tag on the chip strip once it is Ready for the launch,
+    /// in place of <see cref="RemoteMark"/>.</summary>
+    public const string ReadyMark = " ready";
 
     /// <summary>The ink seat <paramref name="index"/>'s chip takes. It resolves to the player's
     /// identity colour rather than to the screen's palette, since the four colours must read the

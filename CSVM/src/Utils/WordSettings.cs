@@ -6,15 +6,14 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// The registry of word settings, each one <see cref="WordSetting"/> held by its own file. The options
-/// store, the spec parser, both Options screens, the launch, the apply and the session walk
+/// store, the spec parser, the Options pages, the launch, the apply and the session walk
 /// <see cref="All"/> rather than naming a setting. A new setting is its own file and one entry here,
 /// plus an authored row where the Original VIDEO page shows it. One whose word changes what the session
 /// builds also adds that build to <c>EnhancedLook.FollowWordSettings</c>, the code its effect lives in.
 /// </summary>
 public static class WordSettings
 {
-    /// <summary>Every word setting, in the order the Built-in Options screen shows its rows within each
-    /// row group (<see cref="WordSetting.UnderGraphicsRow"/>).</summary>
+    /// <summary>Every word setting, in resolve order.</summary>
     public static IReadOnlyList<WordSetting> All { get; } = new[]
     {
         RenderScaleSetting.Lookup,

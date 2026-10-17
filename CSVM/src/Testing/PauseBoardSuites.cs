@@ -6,7 +6,7 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The Built-in presentation's pause board, the one free flight raises. The real board
+/// <summary>The chrome pause board, the one free flight raises. The real board
 /// stands over a real <see cref="PauseState"/>, and its rows are pointed at through the hit test
 /// the owner's mouse reaches them by.</summary>
 internal static class PauseBoardSuites
@@ -20,7 +20,7 @@ internal static class PauseBoardSuites
     private const int RowCount = 5;
 
     [Suite("pause-board",
-        "the Built-in pause board free flight raises, pointed at with the mouse: a real PauseBoard "
+        "the chrome pause board free flight raises, pointed at with the mouse: a real PauseBoard "
         + "follows PauseState.Changed with its cursor on Resume, a pointer already resting on a middle "
         + "row when the board appears (where a flight's released capture leaves it) leaves the cursor "
         + "on Resume, entering each row moves the shared cursor onto it, a press released on "
@@ -121,7 +121,7 @@ internal static class PauseBoardSuites
         }
 
         ctx.WriteArtifact($"test-pause-board.txt", report.ToString());
-        ctx.Note($"pointed at the Built-in pause board's rows over a live pause state");
+        ctx.Note($"pointed at the chrome pause board's rows over a live pause state");
     }
 
     // A container sorts its children on a deferred call, which a suite inside one frame never

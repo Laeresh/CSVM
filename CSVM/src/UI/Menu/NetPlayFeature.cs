@@ -762,8 +762,8 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>Opens a listen server for <paramref name="maxGuests"/> guests on
     /// <see cref="BindAddress"/> and asks the router for the port. A socket that will not open
     /// leaves the door shut with the reason on <see cref="Fault"/>.</summary>
-    /// <remarks>The lobby's host side runs behind it unshown, so an Original guest can pick, chat
-    /// and ready up against a Built-in host.</remarks>
+    /// <remarks>The lobby's host side runs behind it unshown until a lobby screen stands, so a guest
+    /// can pick, chat and ready up against it.</remarks>
     public void OpenHost(int maxGuests)
     {
         OpenHost(maxGuests, NetSessionKind.Dogfight);
@@ -1250,7 +1250,7 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         int players = Math.Min(HostSeats + Peers + extra, byte.MaxValue);
-        // A Built-in host picks its map after the lobby opened, so its advert names none.
+        // A host whose lobby screen never stood has picked no map, so its advert names none.
         byte seq = coop ? _missionSeq : _dogfight is { Shown: true } lobby ? lobby.Options.Environment : SessionAdvertMessage.NoMission;
         int cap = HostCap;
         var status = players >= cap

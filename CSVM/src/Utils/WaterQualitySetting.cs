@@ -96,7 +96,6 @@ public static class WaterQualitySetting
     {
         SavedField = "waterQuality",
         LogName = "water_quality",
-        Title = "Water quality",
         Labels = WaterQualitySetting.Labels,
         EnhancedOnly = true,
         Detail = static enhanced => enhanced

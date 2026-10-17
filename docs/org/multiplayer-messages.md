@@ -285,7 +285,7 @@ Case 2010 reads every widget and calls `$$E$$` 5007, which the jump table at `0x
 `0x40dce3`, the handler whose `0x40dde5` writes the tick into `0x642fb1`. Only the Zone way
 (`$$RY$$ == 0`) also runs case 2011, where a Zone-supplied setting (`$$A$$` 1035) may override it.
 The getter 5009 (`0x40de6c`) hands the byte back to the script's refresh 1015 on every peer. The
-remake ticks it on a host's first lobby screen; a Built-in host, which shows none, keeps it clear.
+remake ticks it on a host's first lobby screen; a host that shows none keeps it clear.
 
 The outlaw list is one object at `0x64e168`, built by `FUN_00410560`, of 34 byte flags:
 
@@ -959,8 +959,8 @@ a leave call first; a dropped link reads the same. The host takes each seat of t
 play as for any guest leaving a mission: the aeroplane goes inert, which takes its ghost and its
 label, and every other guest hears it through the world link's seat-left event. The racer stays on
 every board with its record, ranked as it stood and marked left: the scores page's grey row on the
-Original board and in the lobby, a "(left)" suffix on the Built-in board, the Built-in held scores
-table and the live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
+Original board and in the lobby, a "(left)" suffix on the chrome board, the held scores and the
+live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
 window leaves it out. Only a mid-race leave marks the racer: a guest that flew the whole window and
 leaves from the ended race's board keeps an unmarked row, since the host marks nobody once the race
 has ended. A race left with one pilot runs on to the window's end, since a race builds no
@@ -1054,8 +1054,8 @@ control (mask `0xff97`). So an empty name or one of spaces alone is refused. `FU
 three times, at `0040820c` (the callsign), `0040824f` and `00408290`; the second is read as the
 game name's callback and the third is not tied to a box.
 
-The remake follows both boxes in the Original presentation (`UI/Menu/Original/OriginalNetInfoBox.cs`)
-and offers the same choices as rows of the Built-in Network board. The cabin's remake-only HOST
+The remake follows both boxes in the Original presentation (`UI/Menu/Original/OriginalNetInfoBox.cs`).
+The cabin's remake-only HOST
 CO-OP asks both boxes too. The cap is held to the kind's own: four humans for campaign co-op, sixteen
 for a Dogfight. The game name is the advert's name, and the games list shows it and the chosen cap
 as they are. A host past its cap refuses a guest with the full notice, a Dogfight host as a co-op

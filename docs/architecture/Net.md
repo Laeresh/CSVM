@@ -72,7 +72,7 @@ These are the design rules every module below is shaped by, and every multiplaye
   the Multiplayer Connection screen, by LAN search into the games list or by Internet IP address,
   and with a master server set by its games in the same list or a typed join code.
   The Connection screen's Host opens the Multiplayer Lobby, where Dogfight is the one live mode;
-  co-op has no lobby. The Built-in menu, off by default, keeps its own network boards.
+  co-op has no lobby.
 - **A pause halts nothing.** In a network session the pause sheet is an overlay (`PauseState`):
   the world, the AI, the director, the net ticks and the pauser's own aeroplane run on, the
   aeroplane flying trimmed on a centred stick with its commands swallowed until the sheet closes.

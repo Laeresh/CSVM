@@ -5,7 +5,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 
@@ -79,11 +78,6 @@ internal static class MenuOriginalCheatSuites
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = planes,
-        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -96,7 +90,7 @@ internal static class MenuOriginalCheatSuites
         var campaign = host.Features.Get<CampaignFeature>();
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");

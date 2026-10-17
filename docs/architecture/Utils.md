@@ -323,8 +323,8 @@ which is how a golden or a deterministic capture pins the mode on purpose. The m
 written up as a divergence in `docs/architecture/Spec.md`.
 
 ## src/Utils/WordSetting.cs
-One word setting's descriptor, each setting's `Lookup`: its words, config key, flag, options-file field (`SavedField`), labels, Built-in
-row title, detail and place (`UnderGraphicsRow`), `Fallback` over a `SettingContext` (`--det`, the mode, the panes) naming its own rule,
+One word setting's descriptor, each setting's `Lookup`: its words, config key, flag, options-file field (`SavedField`), labels,
+detail, `Fallback` over a `SettingContext` (`--det`, the mode, the panes) naming its own rule,
 `Take` (where the word is stored) and live-apply hook over `ILiveWorld`, one surface for every setting (the sun, the session's follow).
 `Resolve` takes the flag, then the saved word, then the config key, then the fallback; a word outside the list falls through, a key spelling
 the fallback reads as it, and an unknown config word the lookup reaches warns. `ResolveFrom` keeps its inputs, so `Refresh` resolves again
@@ -332,7 +332,7 @@ only when a moved mode or pane count moves the fallback of a setting already res
 anti-aliasing method. `SourceName` spells a source, or the fallback's rule, for a log line. The registry is `WordSettings.cs`.
 
 ## src/Utils/WordSettings.cs
-The registry of word settings, in Built-in row order, and `WordValues`, one word per registered setting with value equality: the options
+The registry of word settings, in resolve order, and `WordValues`, one word per registered setting with value equality: the options
 file's, a screen's staged ones, an apply's and a command line's. `OptionsStore`, `Spec/SessionSpec.cs`, `UI/Menu/OptionsChoices.cs`, the
 VIDEO page's word rows, `Launch/LiveSettings.cs` (`ResolveLaunch` at startup, `ResolveAll` on an apply, then `ApplyAll`), `Launch/EnhancedLook.cs`
 (`FollowMode` on a live switch) and `Launch/GameSession.cs` (`FollowPanes`) walk it. `ReadSaved` is the words' `--det` guard. A new setting
@@ -365,7 +365,7 @@ the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, 
 which is `flat` on Linux or on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`), so the Steam Deck runs flat, under
 the rule `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store.
 `Launch/LiveSettings.cs` resolves it at startup and on every Options apply, then its live-apply hook (the session's follow, `EnhancedLook.FollowWordSettings`) has
-`Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. Only Built-in's Options screen shows a row.
+`Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. The VIDEO page shows it as the Ocean Waves box.
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
@@ -381,8 +381,8 @@ Enhanced mode's view distance: four saved words (`normal`, `far`, `veryfar`, `un
 label table beside them, resolving to how much further the clutter draws than the fade enhanced
 mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
 haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
-the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
-is chosen. `Resolve` runs `WordSetting` over `--view-distance`, the saved word (never under `--det`),
+the decoded fade. The VIDEO page offers it as the last row of its dropdown window, dead until
+Enhanced is chosen. `Resolve` runs `WordSetting` over `--view-distance`, the saved word (never under `--det`),
 the `graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
 cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
 
@@ -496,11 +496,11 @@ buses underneath it (`AudioMix`), so the two reach the output as a product and a
 un-silence a scripted run. The `audio-levels-launch` suite drives that whole ladder from a parsed command line.
 
 ## src/Utils/PresentationResolution.cs
-The requested-versus-active menu presentation resolver: force-Built-in → CLI override → the
-Original default, with the caller's availability check applied only after the request
-is picked, so a machine without the extracted menu data lands on Built-in with a reason. `Resolve`
-never rewrites what `Requested` would answer. ⚠ No saved word takes part: a `menuPresentation` an
-older build wrote stays in the options file unread. Presentation names are plain strings; no presentation contract type lives here.
+The requested-versus-active menu presentation resolver: the CLI override, else the Original
+default, with the caller's availability check applied only after the request is picked, so an
+unknown or unavailable request lands on Original with a reason. `Resolve` never rewrites what
+`Requested` would answer. ⚠ No saved word takes part: a `menuPresentation` an older build wrote
+stays in the options file unread. Presentation names are plain strings; no presentation contract type lives here.
 
 ## src/Utils/WorldBackdrop.cs
 The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the
@@ -518,7 +518,7 @@ through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam
 `Available` starts as `SteamOs.InGameMode`; Desktop Mode would open it behind the window.
 One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
 tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
-`Original/OriginalShell.cs`, `Screens/LaunchMenu.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
+`Original/OriginalShell.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
 
 ## src/Utils/ScreenKeyboardField.cs
 One field the on-screen keyboard can be raised for: its owner and id, the label and the live text

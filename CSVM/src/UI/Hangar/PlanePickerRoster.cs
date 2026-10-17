@@ -4,12 +4,11 @@ using CSVM.Flight.Hangar;
 
 namespace CSVM.UI.Hangar;
 
-/// <summary>One row of a human plane picker: a stock airframe, or a saved custom plane listed
-/// after them. <paramref name="Node"/> is the planes.zbd root node a
-/// launch builds; for a custom row that is its airframe's STOCK node, because building the
-/// custom def into a flying aircraft is D32's; <paramref name="CustomName"/> is the store name
-/// distinguishing the pick, carried into <c>LaunchMenu.PlayerChoice.CustomPlane</c> so D32 can
-/// read it where the session is built.</summary>
+/// <summary>One row of a human plane picker: a stock airframe, or a saved custom plane listed after
+/// them. The planes.zbd root node a launch builds is <paramref name="Node"/>, a custom row's being
+/// its airframe's STOCK node. Building the custom def into a flying aircraft is D32's. The store
+/// name telling the pick apart is <paramref name="CustomName"/>, carried in the launch's
+/// <c>MenuSeatChoice</c> to where the session is built.</summary>
 public sealed record PickerPlane(string Name, string Node, string? CustomName = null)
 {
     /// <summary>Whether this row is a saved custom plane rather than a stock airframe.</summary>

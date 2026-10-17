@@ -58,7 +58,7 @@
     ./RunCiSuites.ps1 -Godot ~/godot/Godot_v4.7-stable_mono_linux_x86_64/Godot_v4.7-stable_mono_linux.x86_64
 
 .EXAMPLE
-    ./RunCiSuites.ps1 -Godot $godot -Selector suite:menu-zone-layout
+    ./RunCiSuites.ps1 -Godot $godot -Selector suite:menu-host-address
 #>
 #Requires -Version 7.0
 param(

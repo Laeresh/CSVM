@@ -374,8 +374,8 @@ released.
 ## Where CSVM differs
 
 `UI/Screens/PauseScreens.cs` composes the pause sheet at its authored coordinates and
-`UI/Menu/Original/OriginalPauseBoard.cs` hangs it over the flown world in the Original presentation; the
-Built-in presentation keeps `UI/Screens/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` reads `escape.zrd`,
+`UI/Menu/Original/OriginalPauseBoard.cs` hangs it over the flown world; a mode with no authored
+dialog keeps the chrome `UI/Screens/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` reads `escape.zrd`,
 its Instant Action twin and the load screen's `Loading.zrd`, and `UI/Overlays/MissionMap.cs` is the one map
 drawer this screen shares with the campaign briefing and the load screen, which is where the world
 window and the pin placement live.
@@ -390,7 +390,7 @@ the same words at the same authored points. The parchment stands or not on the d
 which is what keeps it off this sheet, and with no map, memento or parchment the board asks for no
 readout at all. RESTART reruns the sortie rather than a campaign mission, and PREFERENCES opens the
 same leaf the campaign sheet opens. Free flight is a mode of ours that no shipped dialog
-describes, so it keeps the Built-in board, the same split the load screen makes. The
+describes, so it keeps the chrome board, the same split the load screen makes. The
 `--menu=pauseboard-ia` door composes one with no sortie behind it.
 
 **A Dogfight pauses on its mode's briefing, which the original never shows there.**
@@ -447,9 +447,10 @@ seats flying behind the leaf at once, mouse scheme included. Auto Head Turn take
 as the original's does (by the user's recall of it; the executable's caller of the settings apply is
 not decoded): every accepted page puts the saved value on each human seat, and the remake's Next
 Target switch with it, written into the live selection so its cycle and lock survive. The Default
-View and the difficulty are saved for the next sortie and leave the running flight alone. Built-in's board reaches the same
-leaf through its PREFERENCES row. Where the install carries no decoded layout there is nothing to
-compose, so the Original strip is drawn and unbound and Built-in's row is left off.
+View and the difficulty are saved for the next sortie and leave the running flight alone. The
+chrome board reaches the same leaf through its PREFERENCES row. Where the install carries no
+decoded layout there is nothing to compose, so the Original strip is drawn and unbound and the
+chrome board's row is left off.
 
 **Photo mode is a fifth strip the original does not author.** It is this port's own feature, so the
 sheet stands it in the authored plates and label offset the block's own RESUME carries, between
@@ -462,7 +463,7 @@ instead, level with MAINMENU. The rule is which of the two candidate points cove
 plate. The hit test answers the earlier row for a column two strips share. The pad and arrow
 cursor does not walk the row order: both blocks stand as a grid, so a press moves to the strip
 drawn in that direction, the nearest in the same column or row band, wrapping to the band's far
-end. Built-in's board keeps its own Photo Mode row.
+end. The chrome board keeps its own Photo Mode row.
 
 **The progress bar in a campaign dialog is not drawn.** Every campaign `escape.zrd` dialog carries a
 `PROGRESS` entry at `[90, 548]` copied from its `Loading.zrd` sibling, and `FUN_004a0d20` binds no

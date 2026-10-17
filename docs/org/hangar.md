@@ -468,9 +468,8 @@ Purchase button, which the export door never reaches.
 
 **No dropdown row is marked in the original.** The tab scripts' fill callbacks (2200, 2218,
 2246, 2248, 2244) write names alone, and the only funds check anywhere on the path is callback
-2264's `INSUFFICIENT FUNDS` at the Purchase button. Both presentations' mark on a row the wallet
-cannot cover (`HangarFeature.UnaffordableMark`) and Built-in's wallet line beside the totals are
-remake additions, and by that decode they are never a gate: every marked row stays pickable.
+2264's `INSUFFICIENT FUNDS` at the Purchase button. The mark on a row the wallet cannot cover
+(`HangarFeature.UnaffordableMark`) is a remake addition, and by that decode they are never a gate: every marked row stays pickable.
 
 ### The two red figures
 

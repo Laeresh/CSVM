@@ -26,10 +26,10 @@ public class PlaneNameTablesTests
             for (int n = 0; n < PlaneNameTables.Nouns.Length; n++)
             {
                 string name = PlaneNameTables.Compose(a, n);
-                Assert.InRange(name.Length, 1, HangarNamePage.MaxLength);
+                Assert.InRange(name.Length, 1, UI.Menu.HangarFeature.MaxNameLength);
                 foreach (char c in name)
                 {
-                    Assert.True(HangarNamePage.Accepts(c), $"'{c}' in \"{name}\" cannot be typed");
+                    Assert.True(UI.Menu.HangarFeature.AcceptsNameChar(c), $"'{c}' in \"{name}\" cannot be typed");
                     Assert.DoesNotContain(c, invalid);
                 }
             }

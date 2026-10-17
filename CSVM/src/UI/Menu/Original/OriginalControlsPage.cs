@@ -114,7 +114,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
         var mouseBox = MouseBox(screen);
         rows.Add(new OriginalRow(MouseKey, MouseWord(), OriginalRowKind.Dropdown,
             mouseBox.X, mouseBox.Y, mouseBox.Width, mouseBox.Height, MouseSchemeLive, 0, arrow));
-        // The authored slider as the original draws it, over the one scale both presentations step.
+        // The authored slider as the original draws it, over the one scale the store reads.
         rows.Add(_chrome.SliderRow(screen.Widget(SensitivityKey), SensitivityKey,
             MouseX, MouseY, 0, SensitivityScale.MaxLevel,
             SensitivityScale.Level(Seated ? _controls!.MouseSensitivity : SensitivityScale.Default),

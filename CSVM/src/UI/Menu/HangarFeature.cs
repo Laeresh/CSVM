@@ -50,16 +50,12 @@ public interface IHangarWallet
 }
 
 /// <summary>
-/// The hangar as a shared feature: one scratch <see cref="CustomPlaneDef"/> with its lifecycle
-/// (started bare, from the default configuration or as a copy of a saved plane, committed or
-/// discarded), the decoded rules over it (the airframe-defaults ask, the pattern a picked airframe
-/// may wear, the purchase gate in the original's own words, the name-collision rule over the whole
-/// build store), the store operations (the saved roster, the commit, the sale or deletion) and the
-/// campaign wallet when a profile funds the build. Engine-free and presentation-neutral: Built-in
-/// walks it through <c>HangarFlow</c>'s nine screens, Original through its tab hub, and both leave
-/// the store in the same state for the same presses. Nothing is written before
-/// <see cref="Commit"/>, so cancelling from anywhere is residue-free by construction and
-/// <see cref="Discard"/> only drops the scratch plane.
+/// The hangar as a shared feature: one scratch <see cref="CustomPlaneDef"/> with its lifecycle,
+/// started bare, from the default configuration or as a copy, then committed or discarded. It holds
+/// the decoded rules: the airframe-defaults ask, the wearable patterns, the purchase gate and the
+/// name-collision rule. It holds the store operations and the campaign wallet when a profile funds
+/// the build. Engine-free and presentation-neutral: Original walks it through its tab hub. Nothing
+/// is written before <see cref="Commit"/>, so <see cref="Discard"/> only drops the scratch plane.
 /// </summary>
 public sealed class HangarFeature : IMenuFeature
 {
@@ -74,7 +70,7 @@ public sealed class HangarFeature : IMenuFeature
     /// <summary>The GUNS dropdown's row count: five calibres single, five twinned, No Gun.</summary>
     public const int GunCycleRows = 11;
 
-    /// <summary>The prefix both presentations put on a row the wallet cannot cover. A mark only:
+    /// <summary>The prefix a presentation puts on a row the wallet cannot cover. A mark only:
     /// the row stays pickable, since the decoded flow refuses at the purchase and never at the
     /// part (docs/org/hangar.md, "The cash note").</summary>
     public const string UnaffordableMark = "✕ ";

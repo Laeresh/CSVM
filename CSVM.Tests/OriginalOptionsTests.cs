@@ -763,7 +763,7 @@ public class OriginalOptionsTests
     {
         var saved = new OptionsDef
         {
-            GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value,
+            GraphicsMode = GraphicsMode.EnhancedWord,
             Difficulty = "hardest", VSync = "120", DisplayMode = DisplayWords.Fullscreen,
             Resolution = "1920x1080", MonitorIndex = "0", NearestAfterKill = true, Rumble = false,
         };
@@ -774,7 +774,7 @@ public class OriginalOptionsTests
         Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.GameOptions.DifficultyChoice);
         Assert.True(host.Module.GameOptions.NearestAfterKillChoice);
         Assert.False(host.Module.GameOptions.RumbleChoice);
-        // An older file's saved presentation word opens no row: the page reads it nowhere.
+        // Five option rows, none of them a menu presentation: the command line alone picks one.
         Assert.Equal(
             new[]
             {

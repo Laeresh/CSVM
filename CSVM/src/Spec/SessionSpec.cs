@@ -38,10 +38,10 @@ public enum SessionProbe
     WeaponTest,
 }
 
-/// <summary>The launchscreen's Mode screen, in the order its rows are drawn. Carried in the
-/// typed <c>LaunchExit</c> into <see cref="SessionSpec.FromMenu"/>, which turns the pick into
-/// <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/>, kept here rather than on
-/// <c>LaunchMenu</c> so the menu's own tests stay engine-free.</summary>
+/// <summary>The menu's flight modes. Carried in the typed <c>LaunchExit</c> into
+/// <see cref="SessionSpec.FromMenu"/>, which turns the pick into
+/// <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/>. It lives here so the menu's
+/// own tests stay engine-free.</summary>
 public enum MenuMode
 {
     Free,
@@ -295,13 +295,9 @@ public sealed record SessionSpec
     public string? MovieName { get; private set; }
 
     /// <summary><c>--presentation=</c>: the menu presentation for this run, never persisted.
-    /// <see cref="Utils.PresentationResolution"/> ranks it above the Original default and below
-    /// <see cref="ForceBuiltInPresentation"/>. Null when the flag is absent.</summary>
+    /// <see cref="Utils.PresentationResolution"/> ranks it above the Original default. Null when
+    /// the flag is absent.</summary>
     public string? PresentationOverride { get; private set; }
-
-    /// <summary><c>--force-builtin</c>: the startup escape hatch that always resolves to the
-    /// Built-in presentation for this run, writing nothing.</summary>
-    public bool ForceBuiltInPresentation { get; private set; }
 
     /// <summary>Which mode-coercing probe (if any) drives this session. The three set a mode at
     /// parse time today; here they vote like anything else and this names the vote.</summary>
@@ -971,19 +967,6 @@ public sealed record SessionSpec
     /// at the speed in m/s and turning the degrees a second. A capture then shows a chosen speed and turn.</summary>
     public Godot.Vector2? DebugWake { get; private set; }
     public int DebugJoin { get; private set; }
-    /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
-    /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
-    /// editor's "N waves configured" states are screenshot-able with nobody at the controls. Same
-    /// role <see cref="DebugJoin"/> plays for the plane screen's join strip.</summary>
-    public int DebugWaves { get; private set; }
-    /// <summary><c>--debug-wingmen=N</c> (launchscreen only): pre-configure the Instant
-    /// Action wizard's wingman count (clamped 0-5), so the plane screen's flown-wingmen re-clamp
-    /// (decision 8a) is screenshot-able alongside <c>--debug-join=</c>.</summary>
-    public int DebugWingmen { get; private set; }
-    /// <summary><c>--debug-preset=N</c> (launchscreen only): apply Table of Contents preset N and
-    /// open on the wizard's step 1, so the FILLED wizard is screenshot-able. −1 = not asked for,
-    /// since preset 0 ("Girl Trouble") is a real request unlike a 0 wave or wingman count.</summary>
-    public int DebugPreset { get; private set; } = -1;
     /// <summary><c>--debug-pointer=x,y[,down][,right]</c> (the Original presentation only): stand
     /// seat 0's pointer at that authored 800x600 point, its buttons held by the words that follow,
     /// so a plaque's rollover and held states are screenshot-able with nobody at the controls.
@@ -1305,15 +1288,11 @@ public sealed record SessionSpec
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
             else if (arg.StartsWith("--presentation=")) { s.PresentationOverride = arg["--presentation=".Length..]; }
-            else if (arg == "--force-builtin") { s.ForceBuiltInPresentation = true; }
             else if (arg == "--debug-dzpaths") { s.DebugDzPaths = true; }
             else if (arg == "--debug-ainets") { s.DebugAiNets ??= ""; }
             else if (arg.StartsWith("--debug-ainets=")) { s.DebugAiNets = arg["--debug-ainets=".Length..]; }
             else if (arg == "--debug-targets") { s.DebugTargets = true; }
             else if (arg.StartsWith("--debug-join=")) { s.DebugJoin = int.Parse(arg["--debug-join=".Length..]); }
-            else if (arg.StartsWith("--debug-waves=")) { s.DebugWaves = int.Parse(arg["--debug-waves=".Length..]); }
-            else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
-            else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
             else if (arg.StartsWith("--debug-pointer=")) { s.DebugPointer = ParseDebugPointer(arg["--debug-pointer=".Length..]); }
             else if (arg.StartsWith("--debug-graphics-switch=")) { s.DebugGraphicsSwitch = ParseFrameList(arg["--debug-graphics-switch=".Length..]); }
             else if (arg.StartsWith("--debug-marquee=")) { s.DebugMarquee = double.TryParse(arg["--debug-marquee=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out double phase) ? Math.Max(0d, phase) : null; }

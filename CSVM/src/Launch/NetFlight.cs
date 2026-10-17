@@ -79,8 +79,8 @@ internal sealed class NetFlight
     /// match's seat is named by its callsign on <paramref name="seats"/>, the session's own roster,
     /// and a bot's line is marked. It is read while the session lives, before the lobby can move a
     /// seat. A launch with no roster names seats off the lobby's list at the launch. A race lands
-    /// its board's own table. Null for any other flight, one left before its end, or a Built-in
-    /// board.</summary>
+    /// its board's own table. Null for any other flight, one left before its end, or a lobby no
+    /// screen stood on.</summary>
     public static LobbyReturn? LobbyLanding(bool lobbyFlight, DogfightLobby? lobby, Flight.Modes.VersusMatch? match,
         IReadOnlyList<Net.NetSeat>? seats = null, Flight.Modes.StuntRace? race = null)
     {

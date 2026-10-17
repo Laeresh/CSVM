@@ -3,11 +3,11 @@ using CSVM.Extraction;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// Original's availability answer, made before entry: the extraction tree is not older than the
-/// manifest reads, the decoded layout file loads with a top level in it, and every file
+/// Original's availability answer, made before entry. The extraction tree is not older than the
+/// manifest reads, and the decoded layout file loads with a top level in it. Every file
 /// <see cref="OriginalAssetManifest"/> classes required is on disk and reads. A failure is one
-/// reason for the host to select Built-in for this run and leave the request alone; what is
-/// optional and absent comes back beside it, for the presentation to draw without.
+/// reason, the one the launcher's extraction screen names. What is optional and absent comes back
+/// beside it, for the presentation to draw without.
 /// </summary>
 public static class OriginalAvailability
 {

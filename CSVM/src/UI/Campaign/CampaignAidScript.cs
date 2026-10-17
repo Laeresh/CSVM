@@ -7,25 +7,22 @@ using CSVM.Utils;
 namespace CSVM.UI.Campaign;
 
 /// <summary>
-/// The presses a campaign screenshot aid's colon argument spells, replayed on the flow once the
-/// walk has reached its screen: with a confirm in the language an aid can leave a drop-down
-/// standing open, which no count of cursor steps could. A segment is either a run of verbs, each
-/// with an optional repeat count (<c>d</c> down, <c>u</c> up, <c>l</c> and <c>r</c> the horizontal
-/// stepper, <c>a</c> confirm, <c>b</c> back, <c>x</c> the secondary press), or a word naming a
-/// <see cref="BoardButton"/> to focus and confirm; <c>-</c> joins segments. A count with no verb
-/// after it is a run of downs, which is what leaves a bare number the step count it always was,
-/// and <c>export</c> names <see cref="BoardButton.ExportPlane"/>, the press it always was. So
-/// <c>4da</c> moves down four rows and opens the list standing there, and <c>4d-a</c> says the
-/// same thing.
+/// The presses a campaign screenshot aid's colon argument spells, replayed on the campaign screen
+/// once the walk has reached it. A confirm lets an aid leave a drop-down standing open. A segment
+/// is a run of verbs with optional repeat counts, or a <see cref="BoardButton"/> word to focus and
+/// confirm. The verbs are <c>d</c> down, <c>u</c> up, <c>l</c> and <c>r</c> the stepper, <c>a</c>
+/// confirm, <c>b</c> back and <c>x</c> the secondary press; <c>-</c> joins segments. A bare count is
+/// a run of downs, and <c>export</c> names <see cref="BoardButton.ExportPlane"/>. So <c>4da</c> and
+/// <c>4d-a</c> both move down four rows and open the list standing there.
 /// </summary>
 public static class CampaignAidScript
 {
-    /// <summary>The verbs, in the order <see cref="Press"/> reads them.</summary>
+    /// <summary>The verbs the grammar reads.</summary>
     public const string Verbs = "dulrabx";
 
     /// <summary>The verbs a presentation binding no secondary press can reach. Original selects a
-    /// row by clicking it and binds no X at all, so <c>x</c> spells a press nobody at its controls
-    /// can make; the grammar stays one for both presentations and the replay refuses instead.</summary>
+    /// row by clicking it and binds no X at all, so nobody at its controls can press <c>x</c>. The
+    /// grammar keeps the verb and the replay refuses it.</summary>
     public const string VerbsWithoutSecondary = "dulrab";
 
     /// <summary>What joins two segments, so a button word can stand beside a run of verbs.</summary>
@@ -79,28 +76,6 @@ public static class CampaignAidScript
         return script;
     }
 
-    /// <summary>Replays a script on a flow standing where the walk left it. Every step is a call a
-    /// player's own presses would make, so no aid can reach a state the campaign itself cannot.
-    /// False for a script Built-in's pad cannot spell, which its caller ends the run on.</summary>
-    public static bool Replay(CampaignFlow flow, string argument)
-    {
-        ArgumentNullException.ThrowIfNull(flow);
-        if (Presses(argument, Verbs, "Built-in's pad") is not { } script)
-        {
-            return false;
-        }
-
-        foreach (Step press in script)
-        {
-            for (int i = 0; i < press.Count; i++)
-            {
-                Press(flow, press);
-            }
-        }
-
-        return true;
-    }
-
     // A button word: an alias first, then the button's own member name. Checked before the verbs
     // so a word is read whole; no button's name is spelled out of the verb letters alone.
     private static bool TryButton(string segment, out BoardButton button)
@@ -152,55 +127,6 @@ public static class CampaignAidScript
         }
 
         return true;
-    }
-
-    private static void Press(CampaignFlow flow, Step press)
-    {
-        if (press.Button != BoardButton.None)
-        {
-            PressButton(flow, press.Button);
-            return;
-        }
-
-        switch (press.Verb)
-        {
-            case 'd':
-                flow.Move(1);
-                break;
-            case 'u':
-                flow.Move(-1);
-                break;
-            case 'l':
-                flow.Step(-1);
-                break;
-            case 'r':
-                flow.Step(1);
-                break;
-            case 'a':
-                flow.Accept();
-                break;
-            case 'b':
-                flow.Back();
-                break;
-            case 'x':
-                flow.Secondary();
-                break;
-        }
-    }
-
-    // The named button's own press: the row carrying it takes the cursor and the confirm. A screen
-    // without that button is left alone, which is what a player pressing nothing would leave.
-    private static void PressButton(CampaignFlow flow, BoardButton button)
-    {
-        for (int row = 0; row < flow.Page.RowCount; row++)
-        {
-            if (flow.Page.Button(row).Button == button)
-            {
-                flow.FocusRow(row);
-                flow.Accept();
-                return;
-            }
-        }
     }
 
     /// <summary>One step of a script: a cursor verb repeated <paramref name="Count"/> times, or,

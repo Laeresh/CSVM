@@ -7,11 +7,9 @@ using Godot;
 namespace CSVM.UI.Screens;
 
 /// <summary>
-/// One Danger Zone photograph shown large over the board that opened it: the PNG the camera wrote,
-/// fitted into the window with its own proportions on a dark backdrop, and a caption naming the
-/// marker, the run clock and the way out. Built-in's results boards and Original's wrap-up page both
-/// open this one viewer and each decides from its own cursor when it closes; the viewer reads no
-/// device. A viewer built to take clicks raises <see cref="Dismissed"/> on one. A shot whose file
+/// One Danger Zone photograph shown large over the board that opened it. The camera's PNG is
+/// fitted to the window on a dark backdrop, captioned with the marker, the clock and the way out. The chrome results boards and Original's wrap-up page open this one viewer. Each decides
+/// from its own cursor when it closes, and the viewer reads no device. A viewer built to take clicks raises <see cref="Dismissed"/> on one. A shot whose file
 /// cannot be read shows its strip thumbnail instead.
 /// </summary>
 public sealed partial class ShotViewer : Control

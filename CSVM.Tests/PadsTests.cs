@@ -34,9 +34,8 @@ public class PadsTests
     [Fact]
     public void P1GetsEveryPadNobodyElseClaimed()
     {
-        // 4 connected devices, 3 players: P2/P3 claim slots 1/2, P1 gets slot 0 AND the
-        // leftover slot 3, not just the first slot, so P1 flies as long as ANY unclaimed
-        // pad is real, exactly the union LaunchMenu already hands unclaimed player 1.
+        // 4 connected devices, 3 players: P2/P3 claim slots 1/2, and P1 gets slot 0 AND leftover
+        // slot 3. P1 flies as long as ANY unclaimed pad is real, the union the menu hands player 1.
         var a = Pads.AssignPads(3, new List<int> { 10, 20, 30, 40 });
         Assert.Equal(new[] { 10, 40 }, a![0]);
     }

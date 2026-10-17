@@ -226,8 +226,7 @@ stays the original's own. Not carried: the entry colour, `scorecolors`, and the 
 break (ties keep `VersusMatch.Standings` order). A seat on no lobby team in a team match, which the
 original has no counterpart for, follows the teams as a plain line. A stunt race borrows the grid
 for its own columns, remake text in the header's style: place and callsign in the name column, then
-the aircraft (12), best (10), gap (9) and runs. Under Built-in the same standings stand as a chrome
-table in the results board's columns. Either look stands in the holding seat's pane alone, as the
+the aircraft (12), best (10), gap (9) and runs. The standings stand in the holding seat's pane alone, as the
 original's stands in its one screen's HUD, so a split screen seat's table never covers another
 pilot's flight. While it stands, that pane's chat lines step aside; the original instead hides the
 panel at once on the press until the next line.

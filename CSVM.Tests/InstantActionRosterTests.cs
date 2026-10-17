@@ -1,19 +1,14 @@
-using System.IO;
 using System.Linq;
-using CSVM.Flight.Hangar;
-using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action wizard's own pure static surface: the wave
-/// editor's Militia/Aircraft/Skill rosters and its own build step. LaunchMenu itself is
-/// engine-bound and untestable directly, so these are the facts standing behind its wave editor,
-/// the same role SessionSpecMenuTests plays for the Mode/Environment/MissionType screens.
+/// The Instant Action feature's pure static surface: the wave editor's Militia/Aircraft/Skill
+/// rosters and its own build step, the facts standing behind every presentation's wave editor.
 /// </summary>
-public class LaunchMenuWizardTests
+public class InstantActionRosterTests
 {
     /// <summary>The thirteen militias, in the langui dropdown order (3670), docs/formats/instant-action.md
     /// "The thirteen militias and their aircraft".</summary>
@@ -101,24 +96,5 @@ public class LaunchMenuWizardTests
     {
         Assert.Equal(InstantAction.EmptyWave, UI.Menu.InstantActionFeature.WaveFor(0, militiaIndex: 4, aircraftIndex: 3, skillIndex: 1));
         Assert.Equal(InstantAction.EmptyWave, UI.Menu.InstantActionFeature.WaveFor(-1, militiaIndex: 0, aircraftIndex: 0, skillIndex: 0));
-    }
-
-    /// <summary>The Ammo Selection list's pylon rows: the stock Bloodhawk's three, then the same
-    /// airframe bought one hardpoint a wing, whose skipped fill-order entry gets no row. The
-    /// original draws no field for a hardpoint the aeroplane does not carry
-    /// (docs/formats/campaign-screens.md, the ammo screen).</summary>
-    [Fact]
-    public void TheAmmoListOffersOnlyThePylonsTheAeroplaneHangs()
-    {
-        var stock = StockLoadouts.Load(
-            Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json")).ForModel("player_bhawk");
-        Assert.NotNull(stock);
-        Assert.Equal(new[] { 1, 5, 2 }, UI.Screens.LaunchMenu.AmmoPylons(stock));
-
-        var built = CustomPlaneBuild.LoadoutFor(
-            new CustomPlaneDef { Name = "Blue Streak", Airframe = 3, Engine = 1, LeftHardpoints = 1, RightHardpoints = 1 },
-            stock!);
-        Assert.Equal(new[] { 1, 2 }, UI.Screens.LaunchMenu.AmmoPylons(built));
-        Assert.Empty(UI.Screens.LaunchMenu.AmmoPylons(null));
     }
 }

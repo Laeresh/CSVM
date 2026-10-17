@@ -5,14 +5,14 @@ using CSVM;
 using CSVM.Bindings;
 using CSVM.Mech3;
 using CSVM.Spec;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>
-/// What a launchscreen launch resolves to. The launchscreen is the one path with no automated
-/// coverage anywhere else, the pixel goldens never open it and the resolution baseline drives the
-/// CLI only, so these are the only facts standing behind it.
+/// What a menu launch resolves to. The pixel goldens never open the menu and the resolution
+/// baseline drives the CLI only, so these facts stand behind the launch leg alone.
 /// </summary>
 public class SessionSpecMenuTests
 {
@@ -247,11 +247,9 @@ public class SessionSpecMenuTests
         Assert.Equal(UI.Boards.SplitScreen.MaxPlayers, SessionSpec.FromMenu(Cli(), "C1", many, MenuMode.Free).Players);
     }
 
-    // ---- The third mode + its menu-only launch gate ---------------------------------------------
+    // ---- The third mode and its chapter roster ---------------------------------------------------
 
-    /// <summary>The Mode screen's three rows map 1:1 onto <see cref="MenuMode"/>'s ordinals
-    /// (`LaunchMenu.Modes[(int)mode]`), in this order, the fact the row-to-enum mapping in
-    /// <c>LaunchMenu</c> (an engine-bound CanvasLayer, unreachable from here) depends on.</summary>
+    /// <summary>The three flight modes, in the order <see cref="MenuMode"/>'s ordinals carry them.</summary>
     [Fact]
     public void TheThreeMenuModesExistInRowOrder()
     {
@@ -259,40 +257,18 @@ public class SessionSpecMenuTests
         Assert.Equal(new[] { MenuMode.Free, MenuMode.Stunt, MenuMode.Versus }, modes);
     }
 
-    /// <summary>The launch-gate rule itself (<see cref="UI.Screens.LaunchMenu.CanLaunch(MenuMode, bool, int)"/>)
-    /// is a pure static function, reachable from here with no menu instance behind it: Free Flight
-    /// and Stunt Flying launch as soon as everyone joined is locked, solo included; Dogfight
-    /// additionally needs 2 joined players. Nothing launches before everyone is locked, whatever
-    /// the mode or the count.</summary>
-    [Theory]
-    [InlineData(MenuMode.Free, 1, true)]
-    [InlineData(MenuMode.Stunt, 1, true)]
-    [InlineData(MenuMode.Versus, 1, false)]
-    [InlineData(MenuMode.Versus, 2, true)]
-    [InlineData(MenuMode.Versus, 4, true)]
-    public void TheLaunchGateLocksDogfightBelowTwoPlayers(MenuMode mode, int joinedCount, bool expected)
-        => Assert.Equal(expected, UI.Screens.LaunchMenu.CanLaunch(mode, allLocked: true, joinedCount));
-
-    [Theory]
-    [InlineData(MenuMode.Free)]
-    [InlineData(MenuMode.Versus)]
-    public void TheLaunchGateNeverOpensBeforeEveryoneIsLocked(MenuMode mode)
-        => Assert.False(UI.Screens.LaunchMenu.CanLaunch(mode, allLocked: false, joinedCount: 4));
-
-    /// <summary>The Map screen's roster rule (<see cref="UI.Screens.LaunchMenu.ChapterCodesFor"/>): Stunt
-    /// Flying hides C1C and C2B, they ship no <c>dzones</c>, so a stunt run there would be an
-    /// empty free flight (the original hides "the clouds" from stunt for the same reason), while
-    /// every other mode offers all eight chapters.</summary>
+    /// <summary>The chapter roster rule (<see cref="MenuChapters.For"/>). Stunt Flying hides C1C and
+    /// C2B, which ship no <c>dzones</c>, so a stunt run there would be an empty free flight. The
+    /// original hides "the clouds" from stunt for the same reason. Every other mode offers all eight.</summary>
     [Fact]
     public void StuntFlyingHidesTheChaptersWithoutDangerZones()
     {
         Assert.Equal(
             new[] { "C1", "C1B", "C2", "C3", "C4", "C5" },
-            UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Stunt));
-        Assert.Equal(8, UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Free).Length);
-        Assert.Equal(8, UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length);
+            MenuChapters.For(MenuMode.Stunt).Select(c => c.Code));
+        Assert.Equal(8, MenuChapters.For(MenuMode.Free).Count);
+        Assert.Equal(8, MenuChapters.For(MenuMode.Versus).Count);
     }
-
     // ---- Instant Action wizard steps 1-2 --------------------------
 
     /// <summary>The Environment screen's roster, in the decoded dropdown order, seven rows,

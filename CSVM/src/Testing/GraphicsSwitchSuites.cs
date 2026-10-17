@@ -1714,7 +1714,6 @@ internal static class GraphicsSwitchSuites
             Env = env,
             MenuDriven = false,
             MenuPads = null,
-            Presentation = UI.Menu.PresentationId.BuiltIn,
             ExitSession = () => { },
             RestartSession = () => { },
         });

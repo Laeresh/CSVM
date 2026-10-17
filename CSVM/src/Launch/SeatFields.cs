@@ -97,8 +97,8 @@ internal static class SeatFields
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
     /// first, any but the first by player tag. Each guest follows on its seats in
     /// <paramref name="owners"/>, the lobby's rows (one each when null), each in its seat's pick.
-    /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit, the
-    /// Built-in Dogfight door's only rule. Each seat takes its machine's lobby team from
+    /// ⚠ A guest with no pick on the wire, one whose lobby screen never stood, flies the host's first
+    /// airframe on the stock fit. Each seat takes its machine's lobby team from
     /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,

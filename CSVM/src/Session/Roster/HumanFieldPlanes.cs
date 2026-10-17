@@ -17,8 +17,8 @@ public static class HumanFieldPlanes
     /// <summary>The aircraft an Instant Action mission forces on every human, or null to leave
     /// each player the pick <see cref="PlaneFor"/> returns. A def read off a file (<c>--ia=</c>,
     /// <c>ia.zrd.json</c>) names one <c>player_plane</c> that no human picked, so it binds all of
-    /// them. The launchscreen wizard's def carries PLAYER 1's pick in that same field
-    /// (<c>LaunchMenu.FireLaunch</c>). Honouring it would fly P2..P4 in player 1's aircraft.</summary>
+    /// them. The menu's Instant Action def carries PLAYER 1's pick in that same field. Honouring it
+    /// would fly P2..P4 in player 1's aircraft.</summary>
     public static string? InstantActionOverride(SessionSpec spec, string? iaPlayerNode) =>
         spec.IaDef != null ? null : iaPlayerNode;
 }

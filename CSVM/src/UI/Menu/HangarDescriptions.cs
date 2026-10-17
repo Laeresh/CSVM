@@ -17,12 +17,11 @@ public sealed record HangarInfo(IReadOnlyList<string> Figures, string Heading, s
 }
 
 /// <summary>
-/// The six construction tabs' description boxes as the original's own handlers build them: the
-/// tab's shipped info string filled with the build's figures, then the component's own prose
-/// appended where the component has one. The info strings carry their own heading line, so the
-/// heading is read out of the shipped text rather than written here; the addresses of the handlers
-/// and the string-id blocks are in docs/org/hangar.md. Engine-free and presentation-neutral, so
-/// either presentation's box is the same words.
+/// The six construction tabs' description boxes as the original's own handlers build them. A box
+/// is the tab's shipped info string filled with the build's figures, then the component's own prose.
+/// The info strings carry their own heading line, read out of the shipped text. The handlers'
+/// addresses and the string-id blocks are in docs/org/hangar.md. Engine-free and
+/// presentation-neutral, so any presentation's box is the same words.
 /// </summary>
 public static class HangarDescriptions
 {

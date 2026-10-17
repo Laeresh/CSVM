@@ -198,8 +198,8 @@ the invented tree written for its process id, and the report must name that root
 `.scratch/ci-suites/`, which it wipes first and which receives `godot.out`, `godot.err` and a copy of
 the screened engine log; the job uploads those, `.scratch/test-report.json` and `.scratch/logs/` on
 every outcome. ⚠ **The verdict comes from the report, not from Godot's exit code.** A headless
-process prints engine error lines a windowed one does not, such as `menu-player-setup-journey`'s
-text-server lines. A headless harness adds the `headlessEngineErrors` patterns of
+process prints engine error lines a windowed one does not, such as a menu suite's text-server
+lines. A headless harness adds the `headlessEngineErrors` patterns of
 `analysis/headless-limits.json` to its allowlist, uncapped, and the script also excuses an
 unexpected line matching one, the mechanism `sandbox/LinuxRelease.ps1` uses; any other unexpected
 line, an allowance over its cap, an unscreened log, a FAIL, a missing or stale report, or a crash

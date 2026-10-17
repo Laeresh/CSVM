@@ -4,7 +4,7 @@ namespace CSVM.Bindings;
 
 /// <summary>The mouse sensitivity a seat flies the Fly scheme at, as a multiplier on the captured
 /// stick's travel. Higher is more sensitive, so 2 reaches full deflection in half the hand movement.
-/// The range and the slider scale a page shows it on are here, so both presentations and the store
+/// The range and the slider scale a page shows it on are here, so the pages and the store
 /// agree on one set of numbers. The arithmetic is in <c>docs/controls.md</c>, "Flying with the
 /// mouse". Remake-only rule: the original's Mouse Sensitivity slider moved the desktop cursor.</summary>
 public static class SensitivityScale
@@ -23,7 +23,7 @@ public static class SensitivityScale
     /// </summary>
     public const int MaxLevel = 100;
 
-    /// <summary>One sideways step on either presentation, in slider levels.</summary>
+    /// <summary>One sideways step, in slider levels.</summary>
     public const int LevelStep = 5;
 
     // Levels from the middle per doubling. Fifty levels each side of the default span a factor of

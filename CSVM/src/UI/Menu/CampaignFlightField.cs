@@ -49,7 +49,7 @@ public sealed class CampaignGuest
 /// network guests included, so a pick another human holds is refused (<see cref="HolderOf"/>).
 /// A guest's pick and its fit last the whole run, across the launches and hangar visits that
 /// rebuild the rosters. Engine-free and presentation-neutral, owned by the
-/// <see cref="CampaignFeature"/> so both presentations walk the same rules and player index.
+/// <see cref="CampaignFeature"/> so every screen walks the same rules and player index.
 /// </summary>
 public sealed class CampaignFlightField
 {

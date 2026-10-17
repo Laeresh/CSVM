@@ -8,111 +8,23 @@ using CSVM.Mech3;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
 /// <summary>
-/// Instant Action in both presentations. Built-in's journey, characterized: a real
-/// <see cref="LaunchMenu"/> is driven from the Mode screen through the five-step wizard
-/// (Environment, Mission type with lives, Waves with the per-wave editor, Wingmen with the wingman
-/// loadout, Aircraft) to the typed exit, backed out of at every step, opened through the Table of
-/// Contents, re-entered the way a return from flight re-enters it, and opened through the aids the
-/// screens carry; every check pins what the screens do today, quirks included. Then Original's
-/// decoded screen through a real <see cref="MenuHost"/> over the install's layout, driving the
-/// same shared feature to four representative launches.
+/// Instant Action through Original's decoded screen and a real <see cref="MenuHost"/> over the
+/// install's layout, driving the shared feature to four representative launches.
 /// </summary>
 internal static class MenuInstantActionSuites
 {
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
-    private static readonly MenuCommands Loadout = new() { Loadout = true };
-    private static readonly MenuCommands Contents = new() { Contents = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Left = new() { MoveX = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
-
-    // Without the install an environment's base def is InstantAction.Defaults(). The wizard's rows,
-    // presets and launch fields are the menu's own, so only the ace, which the base def carries,
-    // needs the install. That check is menu-instant-action-journey's.
-    [Suite("menu-instant-action-journey-core",
-        "Built-in's Instant Action journey pinned end to end. A real LaunchMenu is driven from Mode to "
-        + "Environment, the Table of Contents applies a preset, and Mission type steps the lives. A "
-        + "second seat on Stunt Flying hides the lives stepper, since a race spends no lives, and "
-        + "Accept then skips Waves and Wingmen, with Back returning to Mission. Another type or a "
-        + "solo run brings the stepper back with its count. The ace duel skips Waves and Wingmen both "
-        + "ways, the wave editor edits a slot live and a new militia resets its aircraft, and Wingmen "
-        + "hides its aircraft row at zero and opens the wingman loadout. The launch leaves as a "
-        + "LaunchExit carrying the built InstantActionDef, the fields survive a return from flight, "
-        + "and the --menu= and --debug-* aids open their states. Every check is what the screens do today.")]
-    internal static void MenuInstantActionJourneyCore(TestContext ctx)
-    {
-        var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey-core");
-        ctx.Host.AddChild(menu);
-        var launches = new Launches(exits);
-        try
-        {
-            EnvironmentScreen(ctx, menu);
-            TableOfContents(ctx, menu);
-            MissionTypeScreen(ctx, menu);
-            RaceSpendsNoLives(ctx, menu, host.Features.Get<PlayerSetupFeature>());
-            AceSkip(ctx, menu);
-            WavesScreen(ctx, menu);
-            WingmenScreen(ctx, menu);
-            BackPaths(ctx, menu);
-            Launch(ctx, menu, launches);
-            Return(ctx, menu, launches);
-            Aids(ctx, menu, launches);
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-        }
-    }
-
-    [Suite("menu-instant-action-journey",
-        "Built-in's Instant Action launch over the install: the Girl Trouble preset's squadron "
-        + "launched from Sky Haven through the wizard carries the environment's own ace, not the "
-        + "built-in default the def falls back to without the install")]
-    internal static void MenuInstantActionJourney(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireZrdrEntry(SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1"), "ia.json");
-        var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey");
-        ctx.Host.AddChild(menu);
-        var launches = new Launches(exits);
-        try
-        {
-            // The core journey's launch: the first preset applied, then Accept through Mission,
-            // Waves, Wingmen and both presses on the Aircraft screen. The first show builds the
-            // seats the preset writes its aircraft onto.
-            menu.ShowMenu();
-            menu.DebugPreset(0);
-            menu.ShowMenu("environment");
-            for (int press = 0; press < 6 && launches.Count == 0; press++)
-            {
-                menu.Drive(Accept);
-            }
-
-            var def = launches.Count == 1 ? launches[0].InstantAction : null;
-            ctx.Check(launches.Count == 1 && launches[0].Chapter == "C4" && def != null
-                && def.AceName != "Marshall Bill Redmann" && def.AceName.Length > 0,
-                $"the ace is the environment's own, not the built-in default ({launches.Count} launches, {(launches.Count == 1 ? launches[0].Chapter : "-")}, {def?.AceName})");
-        }
-        finally
-        {
-            ctx.Host.RemoveChild(menu);
-            menu.QueueFree();
-        }
-    }
 
     [Suite("menu-original-instant-action",
         "Original Instant Action through the presentation boundary over the install's decoded "
@@ -158,11 +70,6 @@ internal static class MenuInstantActionSuites
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         var store = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-instant-action");
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
-        {
-            Planes = store,
-        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
@@ -176,7 +83,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(store.List().Count == 0, $"the suite's scratch store starts empty ({store.List().Count})");
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");
@@ -207,416 +114,6 @@ internal static class MenuInstantActionSuites
 
     // A name no player would type, distinct per run, inside the name screen's own character set.
     private static string ScratchName() => "Scratch " + Guid.NewGuid().ToString("N")[..8];
-
-    private static void EnvironmentScreen(TestContext ctx, LaunchMenu menu)
-    {
-        menu.ShowMenu();
-        menu.Drive(Down);
-        Is(ctx, "the Mode screen's second row", "Instant Action", menu.ShownRowText);
-        Is(ctx, "its description", "Pick an environment and a mission: ace, squadron, stunt or zeppelin.", menu.ShownDetail);
-        menu.Drive(Accept);
-        Is(ctx, "Accept on Instant Action opens the Environment screen", "Environment", menu.ShownScreen);
-        Is(ctx, "its heading", "SELECT ENVIRONMENT", menu.ShownHeading);
-        Is(ctx, "its breadcrumb", "Instant Action  ›  Environment  ›  Mission  ›  Aircraft", menu.ShownBreadcrumb);
-        ctx.Check(menu.ShownRowCount == 7, $"seven environments ({menu.ShownRowCount})");
-        Is(ctx, "the first row is the decoded dropdown's first", "an airfield", menu.ShownRowText);
-        Is(ctx, "its description is the region code", "Region C1", menu.ShownDetail);
-        Has(ctx, "the footer names the contents list", "P / X  Scenarios", menu.ShownFooter);
-        Has(ctx, "and Back", "Esc / B  Back", menu.ShownFooter);
-
-        menu.Drive(Up);
-        ctx.Check(menu.ShownRow == 6 && menu.ShownRowText == "a movie studio",
-            $"the cursor wraps to the last environment ({menu.ShownRow}, {menu.ShownRowText})");
-        menu.Drive(Down);
-        menu.Drive(Down);
-        menu.Drive(Down);
-        Is(ctx, "two rows down from the top", "Hawaii", menu.ShownRowText);
-        Is(ctx, "whose region is C3", "Region C3", menu.ShownDetail);
-
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRowText == "Instant Action",
-            $"Back returns to the Mode screen on Instant Action ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Hawaii",
-            $"and the environment cursor survives the trip out and back ({menu.ShownRowText})");
-    }
-
-    private static void TableOfContents(TestContext ctx, LaunchMenu menu)
-    {
-        menu.Drive(Contents);
-        Is(ctx, "Contents on the Environment screen opens the Table of Contents", "Presets", menu.ShownScreen);
-        Is(ctx, "its heading counts the window's position", "TABLE OF CONTENTS  (1/19)", menu.ShownHeading);
-        Is(ctx, "its breadcrumb", "Instant Action  ›  Table of Contents", menu.ShownBreadcrumb);
-        ctx.Check(menu.ShownRowCount == 19, $"nineteen presets ({menu.ShownRowCount})");
-        Is(ctx, "the first preset", "Girl Trouble", menu.ShownRowText);
-        Is(ctx, "its description", "Dogfighting a Squadron over Sky Haven   ·   Firebrand, 2 wingmen   ·   6 enemies", menu.ShownDetail);
-        menu.Drive(Up);
-        ctx.Check(menu.ShownRow == 18 && menu.ShownRowText == "The Hollywood Brawl" && menu.ShownHeading == "TABLE OF CONTENTS  (19/19)",
-            $"Up wraps onto the last preset and the heading follows ({menu.ShownRowText}, {menu.ShownHeading})");
-        menu.Drive(Down);
-        Is(ctx, "Down wraps back to the first", "Girl Trouble", menu.ShownRowText);
-
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Hawaii" && !menu.ShownBreadcrumb.Contains("Girl Trouble", StringComparison.Ordinal),
-            $"Back leaves the list without applying anything ({menu.ShownScreen}, {menu.ShownRowText}, {menu.ShownBreadcrumb})");
-        menu.Drive(Contents);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Sky Haven",
-            $"Accept applies the preset and lands on Environment with its pick ({menu.ShownScreen}, {menu.ShownRowText})");
-        Is(ctx, "the preset's name rides the breadcrumb", "Instant Action  ›  Girl Trouble  ›  Environment  ›  Mission  ›  Aircraft", menu.ShownBreadcrumb);
-        menu.Drive(Down);
-        menu.Drive(Contents);
-        ctx.Check(menu.ShownScreen == "Presets" && menu.ShownRow == 0,
-            $"reopening the list lands on the applied preset ({menu.ShownScreen}, row {menu.ShownRow})");
-        menu.Drive(Back);
-        menu.Drive(Up);
-        Is(ctx, "the environment cursor is back on the preset's pick", "Sky Haven", menu.ShownRowText);
-    }
-
-    private static void MissionTypeScreen(TestContext ctx, LaunchMenu menu)
-    {
-        menu.Drive(Accept);
-        Is(ctx, "Accept on an environment opens the Mission screen", "MissionType", menu.ShownScreen);
-        Is(ctx, "its heading", "SELECT MISSION", menu.ShownHeading);
-        Is(ctx, "its breadcrumb names the environment", "Instant Action  ›  Girl Trouble  ›  Sky Haven  ›  Mission  ›  Aircraft", menu.ShownBreadcrumb);
-        ctx.Check(menu.ShownRowCount == 4, $"Sky Haven offers all four mission types ({menu.ShownRowCount})");
-        Is(ctx, "the cursor stands on the preset's mission", "Dogfighting a Squadron", menu.ShownRowText);
-        Is(ctx, "the lives stepper stands in the description slot", "Lives   1        ◀ ▶  change", menu.ShownDetail);
-        Has(ctx, "the footer names the stepper", "←→  Lives", menu.ShownFooter);
-        menu.Drive(Right);
-        Is(ctx, "Right raises the lives", "Lives   2        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Left);
-        menu.Drive(Left);
-        Is(ctx, "two Lefts reach unlimited", "Lives   Unlimited        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Left);
-        Is(ctx, "and a third stays there", "Lives   Unlimited        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Right);
-        Is(ctx, "Right steps back to one life", "Lives   1        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Environment", $"Back returns to Environment ({menu.ShownScreen})");
-        menu.Drive(Accept);
-        Is(ctx, "and the mission cursor survives it", "Dogfighting a Squadron", menu.ShownRowText);
-    }
-
-    // A multi-seat stunt run is a race, which spends no lives. With a second seat joined the
-    // stepper leaves the Mission screen on Stunt Flying alone. It returns with its count on
-    // another type and once the run is solo again.
-    private static void RaceSpendsNoLives(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup)
-    {
-        menu.Drive(Down);
-        Is(ctx, "the row under the squadron is the stunt run", "Stunt Flying", menu.ShownRowText);
-        Is(ctx, "a solo stunt run keeps the lives stepper", "Lives   1        ◀ ▶  change", menu.ShownDetail);
-        var guest = setup.Join(new ScriptedSeat());
-        ctx.Check(guest != null && setup.Seats.Count == 2, $"a second pilot joins ({setup.Seats.Count})");
-        Is(ctx, "two seats on a stunt run show no lives", "", menu.ShownDetail);
-        ctx.Check(!menu.ShownFooter.Contains("Lives", StringComparison.Ordinal),
-            $"and the footer no longer names the stepper ({menu.ShownFooter})");
-        menu.Drive(Accept);
-        Is(ctx, "Accept on the race skips Waves and Wingmen as the ace duel does", "Plane", menu.ShownScreen);
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Stunt Flying",
-            $"and Back returns to Mission ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.Drive(Right);
-        Is(ctx, "a sideways press leaves the hidden count alone", "Stunt Flying", menu.ShownRowText);
-        menu.Drive(Down);
-        Is(ctx, "two seats on another type keep the stepper and its count", "Lives   1        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Up);
-        if (guest != null)
-        {
-            setup.Unjoin(guest);
-        }
-
-        Is(ctx, "the stunt run alone again shows the stepper", "Lives   1        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Up);
-        Is(ctx, "back on the squadron", "Dogfighting a Squadron", menu.ShownRowText);
-    }
-
-    private static void AceSkip(TestContext ctx, LaunchMenu menu)
-    {
-        menu.Drive(Up);
-        Is(ctx, "the first mission row is the ace duel", "Dogfighting an Ace", menu.ShownRowText);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Plane" && menu.ShownHeading == "SELECT AIRCRAFT",
-            $"Accept on the ace duel skips Waves and Wingmen and opens the Aircraft screen ({menu.ShownScreen}, {menu.ShownHeading})");
-        Is(ctx, "its breadcrumb names the mission", "Instant Action  ›  Girl Trouble  ›  Sky Haven  ›  Dogfighting an Ace  ›  Aircraft", menu.ShownBreadcrumb);
-        Is(ctx, "the airframe cursor stands on the preset's player aircraft", "Firebrand", menu.ShownRowText);
-        // The roster is the eleven stock airframes plus whatever the user:// store holds, so the
-        // count is a floor and the door is read as the trailing row wherever it lands.
-        ctx.Check(menu.ShownRowCount >= 12, $"the eleven airframes, the store's customs and the hangar door ({menu.ShownRowCount})");
-        Is(ctx, "the trailing row is the hangar door", LaunchMenu.HangarRow, RowText(menu, menu.ShownRowCount - 1));
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Dogfighting an Ace",
-            $"Back from the Aircraft screen under the ace duel returns to Mission ({menu.ShownScreen}, {menu.ShownRowText})");
-    }
-
-    private static void WavesScreen(TestContext ctx, LaunchMenu menu)
-    {
-        menu.Drive(Down);
-        menu.Drive(Accept);
-        Is(ctx, "Accept on a squadron opens the Waves screen", "Waves", menu.ShownScreen);
-        Is(ctx, "its heading", "CONFIGURE WAVES", menu.ShownHeading);
-        Is(ctx, "its breadcrumb", "Instant Action  ›  Girl Trouble  ›  Sky Haven  ›  Dogfighting a Squadron  ›  Waves  ›  Aircraft", menu.ShownBreadcrumb);
-        ctx.Check(menu.ShownRowCount == 5, $"four waves and the Continue row ({menu.ShownRowCount})");
-        ctx.Check(menu.ShownRow == 4 && menu.ShownRowText == "Continue → Wingmen",
-            $"the cursor opens on the Continue row ({menu.ShownRow}, {menu.ShownRowText})");
-        Is(ctx, "its description", "Enter / A  on to the wingmen", menu.ShownDetail);
-        menu.Drive(Up);
-        Is(ctx, "the fourth wave is empty", "Wave 4: empty", menu.ShownRowText);
-        menu.Drive(Up);
-        menu.Drive(Up);
-        menu.Drive(Up);
-        Is(ctx, "the first wave is the preset's", "Wave 1: 4x Medusa Kestrel (Veteran)", menu.ShownRowText);
-        Is(ctx, "its description", "Enter / A  edit a wave", menu.ShownDetail);
-
-        menu.Drive(Accept);
-        Is(ctx, "Accept on a wave opens its editor", "WaveEdit", menu.ShownScreen);
-        Is(ctx, "its heading", "WAVE 1", menu.ShownHeading);
-        ctx.Check(menu.ShownRowCount == 4, $"four fields ({menu.ShownRowCount})");
-        Field(ctx, "the enemies field", "Enemies", "4", menu.ShownRowText);
-        Has(ctx, "the footer names the stepper", "←→  Change", menu.ShownFooter);
-        menu.Drive(Right);
-        Field(ctx, "Right raises the count", "Enemies", "5", menu.ShownRowText);
-        menu.Drive(Down);
-        Field(ctx, "the militia field", "Militia", "Medusa", menu.ShownRowText);
-        menu.Drive(Right);
-        Field(ctx, "Right steps the militia", "Militia", "Russian", menu.ShownRowText);
-        menu.Drive(Down);
-        Field(ctx, "a new militia resets its aircraft to the first it flies", "Aircraft", "Devastator", menu.ShownRowText);
-        menu.Drive(Right);
-        Field(ctx, "a one-aircraft militia's stepper wraps onto itself", "Aircraft", "Devastator", menu.ShownRowText);
-        menu.Drive(Down);
-        Field(ctx, "the skill field", "Skill", "Veteran", menu.ShownRowText);
-        menu.Drive(Right);
-        Field(ctx, "Right steps the skill", "Skill", "Ace", menu.ShownRowText);
-        menu.Drive(Down);
-        Field(ctx, "the field cursor wraps", "Enemies", "5", menu.ShownRowText);
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRowText == "Wave 1: 5x Russian Devastator (Ace)",
-            $"Back returns to the list with the wave edited live ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.Drive(Down);
-        Is(ctx, "the second wave is the preset's second", "Wave 2: 2x Black Swan Fury (Ace)", menu.ShownRowText);
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRow == 1,
-            $"Accept in the editor means done and keeps the wave's row ({menu.ShownScreen}, {menu.ShownRow})");
-    }
-
-    private static void WingmenScreen(TestContext ctx, LaunchMenu menu)
-    {
-        menu.Drive(Down);
-        menu.Drive(Down);
-        menu.Drive(Down);
-        Is(ctx, "back on the Continue row", "Continue → Wingmen", menu.ShownRowText);
-        menu.Drive(Accept);
-        Is(ctx, "Continue opens the Wingmen screen", "Wingmen", menu.ShownScreen);
-        Is(ctx, "its heading", "WINGMEN", menu.ShownHeading);
-        Is(ctx, "its breadcrumb", "Instant Action  ›  Girl Trouble  ›  Sky Haven  ›  Dogfighting a Squadron  ›  Wingmen  ›  Aircraft", menu.ShownBreadcrumb);
-        ctx.Check(menu.ShownRowCount == 2, $"the count and the aircraft rows ({menu.ShownRowCount})");
-        Field(ctx, "the count is the preset's", "Wingmen", "2", menu.ShownRowText);
-        Has(ctx, "the footer offers the wingman loadout", "L / Y  Weapons", menu.ShownFooter);
-        menu.Drive(Down);
-        Field(ctx, "the aircraft is the preset's", "Aircraft", "Peacemaker", menu.ShownRowText);
-        menu.Drive(Right);
-        Field(ctx, "Right steps the wingman aircraft", "Aircraft", "Warhawk", menu.ShownRowText);
-        menu.Drive(Up);
-        menu.Drive(Left);
-        menu.Drive(Left);
-        ctx.Check(menu.ShownRowCount == 1 && menu.ShownRowText.StartsWith("Wingmen", StringComparison.Ordinal) && menu.ShownRowText.EndsWith(" 0", StringComparison.Ordinal),
-            $"at zero wingmen the aircraft row is hidden ({menu.ShownRowCount}, {menu.ShownRowText})");
-        ctx.Check(!menu.ShownFooter.Contains("L / Y  Weapons", StringComparison.Ordinal),
-            $"and the footer drops the loadout ({menu.ShownFooter})");
-        menu.Drive(Loadout);
-        Is(ctx, "Loadout at zero wingmen does nothing", "Wingmen", menu.ShownScreen);
-        menu.Drive(Left);
-        Field(ctx, "the count does not go below zero", "Wingmen", "0", menu.ShownRowText);
-        menu.Drive(Right);
-        menu.Drive(Right);
-        ctx.Check(menu.ShownRowCount == 2, $"two wingmen bring the aircraft row back ({menu.ShownRowCount})");
-        menu.Drive(Loadout);
-        Is(ctx, "Loadout with wingmen opens the wingman loadout", "WingmanLoadout", menu.ShownScreen);
-        Is(ctx, "its heading names the wingman aircraft", "WINGMEN: AMMO SELECTION  (Warhawk)", menu.ShownHeading);
-        menu.Drive(Back);
-        Is(ctx, "Back leaves the loadout for Wingmen", "Wingmen", menu.ShownScreen);
-        menu.Drive(Loadout);
-        menu.Drive(Loadout);
-        Is(ctx, "Loadout again also leaves it", "Wingmen", menu.ShownScreen);
-    }
-
-    private static void BackPaths(TestContext ctx, LaunchMenu menu)
-    {
-        menu.Drive(Back);
-        Is(ctx, "Back from Wingmen returns to Waves", "Waves", menu.ShownScreen);
-        menu.Drive(Back);
-        Is(ctx, "Back from Waves returns to Mission", "MissionType", menu.ShownScreen);
-        menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Sky Haven",
-            $"Back from Mission returns to Environment on its pick ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRow == 4,
-            $"the forward path re-parks the Waves cursor on Continue ({menu.ShownScreen}, row {menu.ShownRow})");
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Plane" && menu.ShownRowText == "Firebrand",
-            $"Wingmen's Accept opens the Aircraft screen on the preset's aircraft ({menu.ShownScreen}, {menu.ShownRowText})");
-        Is(ctx, "its breadcrumb", "Instant Action  ›  Girl Trouble  ›  Sky Haven  ›  Dogfighting a Squadron  ›  Aircraft", menu.ShownBreadcrumb);
-        menu.Drive(Back);
-        Is(ctx, "Back from the Aircraft screen under a squadron returns to Wingmen", "Wingmen", menu.ShownScreen);
-        menu.Drive(Accept);
-    }
-
-    private static void Launch(TestContext ctx, LaunchMenu menu, Launches launches)
-    {
-        menu.Drive(Down);
-        Is(ctx, "one row down the roster", "Fury", menu.ShownRowText);
-        menu.Drive(Accept);
-        Is(ctx, "the first Accept selects", "AIRCRAFT SELECTED", menu.ShownHeading);
-        ctx.Check(launches.Count == 0, $"and nothing has launched ({launches.Count})");
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 1, $"the second Accept launches, once ({launches.Count})");
-        if (launches.Count != 1)
-        {
-            return;
-        }
-
-        var launch = launches[0];
-        Is(ctx, "the launch carries the environment's chapter", "C4", launch.Chapter);
-        ctx.Check(launch.Mode == MenuMode.Stunt, $"in the Instant Action mode ({launch.Mode})");
-        ctx.Check(launch.Seats.Count == 1 && launch.Seats[0].PlaneNode == "player_fury",
-            $"for the one seat flying the selected airframe ({launch.Seats.Count}, {launch.Seats[0].PlaneNode})");
-        var def = launch.InstantAction;
-        ctx.Check(def != null, $"with an Instant Action def");
-        if (def == null)
-        {
-            return;
-        }
-
-        Is(ctx, "the def's mission type", "dogfight_squadron", def.MissionType);
-        Is(ctx, "its player aircraft is the seat's stock name", "Fury", def.PlayerPlane);
-        ctx.Check(def.NumWingmen == 2, $"two wingmen ({def.NumWingmen})");
-        Is(ctx, "flying the stepped aircraft", "Warhawk", def.WingmanPlane);
-        ctx.Check(launch.WingmanLoadout == null, $"with the stock fit");
-        ctx.Check(def.Lives == 1, $"one life ({def.Lives})");
-        ctx.Check(def.Waves.Count == 4, $"four wave slots ({def.Waves.Count})");
-        // The trailing id is the militia's own wave accent, Russian's and Black Swan's.
-        ctx.Check(def.Waves[0] == new InstantActionWave(5, "Russian Devastator", "Devastator", "ace", 5),
-            $"the first wave as edited ({def.Waves[0]})");
-        ctx.Check(def.Waves[1] == new InstantActionWave(2, "Black Swan Fury", "Fury", "ace", 1),
-            $"the second as the preset had it ({def.Waves[1]})");
-        ctx.Check(def.Waves[2] == InstantAction.EmptyWave && def.Waves[3] == InstantAction.EmptyWave,
-            $"the two unused slots as the empty wave");
-        ctx.Check(menu.ShownScreen == "Plane" && menu.Visible,
-            $"the menu keeps its state for the host to hide ({menu.ShownScreen})");
-    }
-
-    private static void Return(TestContext ctx, LaunchMenu menu, Launches launches)
-    {
-        menu.HideMenu();
-        menu.ShowMenu();
-        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRowText == "Instant Action",
-            $"a return re-enters on the Mode screen with the mode cursor kept ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.Drive(Accept);
-        Is(ctx, "the environment survives the flight", "Sky Haven", menu.ShownRowText);
-        Has(ctx, "and so does the applied preset's name", "Girl Trouble", menu.ShownBreadcrumb);
-        menu.Drive(Accept);
-        Is(ctx, "the mission survives it", "Dogfighting a Squadron", menu.ShownRowText);
-        Is(ctx, "and the lives", "Lives   1        ◀ ▶  change", menu.ShownDetail);
-        menu.Drive(Accept);
-        menu.Drive(Up);
-        menu.Drive(Up);
-        menu.Drive(Up);
-        menu.Drive(Up);
-        Is(ctx, "and the edited wave", "Wave 1: 5x Russian Devastator (Ace)", menu.ShownRowText);
-        menu.Drive(Down);
-        menu.Drive(Down);
-        menu.Drive(Down);
-        menu.Drive(Down);
-        menu.Drive(Accept);
-        Field(ctx, "and the wingmen", "Wingmen", "2", menu.ShownRowText);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownHeading == "SELECT AIRCRAFT" && menu.ShownRowText == "Fury",
-            $"the airframe cursor survives it and the selection does not ({menu.ShownHeading}, {menu.ShownRowText})");
-        ctx.Check(launches.Count == 1, $"and nothing relaunched on the way back in ({launches.Count})");
-    }
-
-    private static void Aids(TestContext ctx, LaunchMenu menu, Launches launches)
-    {
-        menu.ShowMenu("presets");
-        ctx.Check(menu.ShownScreen == "Presets" && menu.ShownHeading == "TABLE OF CONTENTS  (1/19)",
-            $"--menu=presets opens the Table of Contents on its cursor ({menu.ShownScreen}, {menu.ShownHeading})");
-        menu.ShowMenu("environment");
-        ctx.Check(menu.ShownScreen == "Environment" && menu.ShownRowText == "Sky Haven",
-            $"--menu=environment opens the Environment screen on its cursor ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.ShowMenu("missiontype");
-        ctx.Check(menu.ShownScreen == "MissionType" && menu.ShownRowText == "Dogfighting a Squadron",
-            $"--menu=missiontype opens the Mission screen ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.ShowMenu("waves");
-        ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRow == 4,
-            $"--menu=waves opens the Waves screen parked on Continue ({menu.ShownScreen}, row {menu.ShownRow})");
-        menu.ShowMenu("wingmen");
-        ctx.Check(menu.ShownScreen == "Wingmen" && menu.ShownRowCount == 2,
-            $"--menu=wingmen opens the Wingmen screen ({menu.ShownScreen}, {menu.ShownRowCount})");
-        menu.ShowMenu("wingmanloadout");
-        ctx.Check(menu.ShownScreen == "WingmanLoadout" && menu.ShownHeading.StartsWith("WINGMEN: AMMO SELECTION", StringComparison.Ordinal),
-            $"--menu=wingmanloadout opens the wingman loadout ({menu.ShownScreen}, {menu.ShownHeading})");
-
-        // The aids force the Instant Action mode whatever the Mode screen last picked.
-        menu.ShowMenu();
-        menu.Drive(Up);
-        menu.Drive(Accept);
-        Is(ctx, "Free Flight picked on the Mode screen", "Free Flight  ›  Map  ›  Aircraft", menu.ShownBreadcrumb);
-        menu.ShowMenu("environment");
-        ctx.Check(menu.ShownBreadcrumb.StartsWith("Instant Action", StringComparison.Ordinal),
-            $"--menu=environment forces the mode back to Instant Action ({menu.ShownBreadcrumb})");
-        menu.Drive(Accept);
-        menu.Drive(Contents);
-        Is(ctx, "Contents anywhere but the Environment screen does nothing", "MissionType", menu.ShownScreen);
-
-        // --debug-waves= and --debug-wingmen= fill the wizard's slots with their own loads.
-        menu.DebugWaves(2);
-        menu.ShowMenu("waves");
-        Is(ctx, "--debug-waves=2 fills the first wave", "Wave 1: 4x Black Hat Autogyro (Novice)", RowText(menu, 0));
-        Is(ctx, "and the second", "Wave 2: 4x Black Swan Fury (Veteran)", RowText(menu, 1));
-        Is(ctx, "and leaves the third empty", "Wave 3: empty", RowText(menu, 2));
-        menu.DebugWingmen(3);
-        menu.ShowMenu("wingmen");
-        Field(ctx, "--debug-wingmen=3 sets the count", "Wingmen", "3", menu.ShownRowText);
-        menu.Drive(Down);
-        Field(ctx, "and the second airframe", "Aircraft", "Hellhound", menu.ShownRowText);
-
-        // --debug-preset= applies a preset over both and opens on step 1; the ace preset then
-        // launches a solo duel through the ace skip.
-        menu.DebugPreset(2);
-        menu.ShowMenu("environment");
-        ctx.Check(menu.ShownRowText == "the ocean" && menu.ShownBreadcrumb.Contains("Me and My Big Mouth", StringComparison.Ordinal),
-            $"--debug-preset=2 applies Me and My Big Mouth ({menu.ShownRowText}, {menu.ShownBreadcrumb})");
-        menu.Drive(Accept);
-        Is(ctx, "whose mission is the ace duel", "Dogfighting an Ace", menu.ShownRowText);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Plane" && menu.ShownRowText == "Autogyro",
-            $"which skips to the Aircraft screen on the preset's Autogyro ({menu.ShownScreen}, {menu.ShownRowText})");
-        menu.Drive(Accept);
-        menu.Drive(Accept);
-        ctx.Check(launches.Count == 2, $"and launches ({launches.Count})");
-        if (launches.Count == 2 && launches[1].InstantAction is { } ace)
-        {
-            ctx.Check(launches[1].Chapter == "C1B" && ace.MissionType == "dogfight_ace" && ace.PlayerPlane == "Autogyro",
-                $"the ace duel over the ocean in an Autogyro ({launches[1].Chapter}, {ace.MissionType}, {ace.PlayerPlane})");
-            ctx.Check(ace.NumWingmen == 0 && ace.Waves[0] == InstantAction.EmptyWave && ace.Waves[1] == InstantAction.EmptyWave,
-                $"with the wingmen and every wave forced empty ({ace.NumWingmen}, {ace.Waves[0].NumEnemies})");
-        }
-
-        // The clouds bar Stunt Flying, so the mission roster there is three rows.
-        menu.ShowMenu("environment");
-        menu.Drive(Up);
-        menu.Drive(Up);
-        menu.Drive(Up);
-        Is(ctx, "three rows up from the ocean", "the clouds", menu.ShownRowText);
-        menu.Drive(Accept);
-        ctx.Check(menu.ShownRowCount == 3, $"the clouds offer three mission types ({menu.ShownRowCount})");
-        ctx.Check(RowText(menu, 0) == "Dogfighting an Ace" && RowText(menu, 1) == "Dogfighting a Squadron" && RowText(menu, 2) == "Attacking a Zeppelin",
-            $"with Stunt Flying withheld ({RowText(menu, 0)}, {RowText(menu, 1)}, {RowText(menu, 2)})");
-    }
 
     private static void OriginalScreenOpens(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
     {
@@ -732,7 +229,7 @@ internal static class MenuInstantActionSuites
         Press(host, seat, Left);
         Press(host, seat, Left);
         ctx.Check(ia.Lives == 0 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "Unlimited",
-            $"and zero reads Unlimited, the word the Built-in stepper writes ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
+            $"and zero reads Unlimited, the word for no lives limit ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
         Press(host, seat, Accept);
         ctx.Check(shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.LivesKey
             && shell.Rows.Count == InstantActionFeature.MaxLives + 1
@@ -1403,39 +900,6 @@ internal static class MenuInstantActionSuites
         host.Tick(1f / 60f);
     }
 
-    // The text of an absolute row: the cursor is walked there and back so the read-out is the
-    // screen's own, and the cursor ends where it started.
-    private static string RowText(LaunchMenu menu, int row)
-    {
-        int start = menu.ShownRow;
-        int count = menu.ShownRowCount;
-        int steps = ((row - start) % count + count) % count;
-        for (int i = 0; i < steps; i++)
-        {
-            menu.Drive(Down);
-        }
-
-        string text = menu.ShownRowText;
-        for (int i = 0; i < steps; i++)
-        {
-            menu.Drive(Up);
-        }
-
-        return text;
-    }
-
-    private static void Is(TestContext ctx, string what, string expected, string actual) =>
-        ctx.Check(expected == actual, $"{what}: expected '{expected}', got '{actual}'");
-
-    private static void Has(TestContext ctx, string what, string expected, string actual) =>
-        ctx.Check(actual.Contains(expected, StringComparison.Ordinal),
-            $"{what}: expected '{expected}' in '{actual}'");
-
-    // A field row reads as its label, a run of spaces, then its value.
-    private static void Field(TestContext ctx, string what, string label, string value, string actual) =>
-        ctx.Check(actual.StartsWith(label, StringComparison.Ordinal) && actual.EndsWith(" " + value, StringComparison.Ordinal),
-            $"{what}: expected '{label} ... {value}', got '{actual}'");
-
     private sealed class ScriptedSeat : IMenuInputSource
     {
         private readonly Queue<MenuCommands> _frames = new();
@@ -1450,51 +914,6 @@ internal static class MenuInstantActionSuites
 
         public void Prime()
         {
-        }
-    }
-
-    // The launches among everything the host's sink recorded, read live.
-    private sealed class Launches
-    {
-        private readonly List<MenuExit> _all;
-
-        public Launches(List<MenuExit> all)
-        {
-            _all = all;
-        }
-
-        public int Count
-        {
-            get
-            {
-                int n = 0;
-                foreach (var exit in _all)
-                {
-                    if (exit is LaunchExit)
-                    {
-                        n++;
-                    }
-                }
-
-                return n;
-            }
-        }
-
-        public LaunchExit this[int index]
-        {
-            get
-            {
-                int seen = 0;
-                foreach (var exit in _all)
-                {
-                    if (exit is LaunchExit match && seen++ == index)
-                    {
-                        return match;
-                    }
-                }
-
-                throw new ArgumentOutOfRangeException(nameof(index));
-            }
         }
     }
 }

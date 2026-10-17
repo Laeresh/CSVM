@@ -10,11 +10,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The shared hangar feature off engine: the scratch plane's three starts, the airframe pick and
-/// its defaults ask, the purchase gate in the original's words, the commit into a store, the sale
-/// through a wallet and the deletion without one, the name-collision rule over the whole build
-/// directory, the paint rules, and the discard that drops everything but what was saved. The
-/// same rules Built-in's flow walks, so a case here binds both presentations.
+/// The shared hangar feature off engine: the scratch plane's three starts, the airframe pick, its
+/// defaults ask and the purchase gate. Then the commit into a store,
+/// the sale through a wallet and the deletion without one. Then the name-collision rule, the paint
+/// rules and the discard that keeps only what was saved. A case here binds every presentation.
 /// </summary>
 public class HangarFeatureTests : IDisposable
 {

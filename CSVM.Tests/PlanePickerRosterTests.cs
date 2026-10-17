@@ -6,14 +6,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The picker roster's build rule: stock airframes first in their given order,
-/// saved customs after them, each custom carrying its store name and flying as its airframe's
-/// stock node. `LaunchMenu` is engine-bound and untestable directly, so these are the
-/// facts behind every human plane picker it draws, lone-pilot and splitscreen panes alike.
+/// The picker roster's build rule: stock airframes first in their given order, saved customs after
+/// them. Each custom carries its store name and flies as its airframe's stock node. These are the
+/// facts behind every human plane picker, lone-pilot and per-seat screens alike.
 /// </summary>
 public class PlanePickerRosterTests
 {
-    // A stand-in for LaunchMenu.Planes: order is what the roster must preserve, not the names.
+    // A stand-in for the stock roster: order is what the roster must preserve, not the names.
     private static readonly (string Name, string Node)[] Stock =
     {
         ("Devastator", "player_pfighter"),

@@ -5,7 +5,6 @@ using CSVM.Net;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
-using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 
 namespace CSVM.Testing;
@@ -211,14 +210,12 @@ internal static class MenuOriginalScoresSuites
     private static MenuHost? Open(TestContext ctx, MenuLayout layout, NetPlayFeature door, ScriptedSeat seat)
     {
         var registry = new PresentationRegistry();
-        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
         host.AddSeat(seat);
-        host.Select(forceBuiltIn: false, cliOverride: "original");
+        host.Select("original");
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(host.Active is OriginalPresentation { Shell.Screen: OriginalScreen.TopLevel }, $"the host shows Original on the top level");
         return host;

@@ -621,7 +621,6 @@ internal static class NetSessionSuites
             Env = new Godot.Environment(),
             MenuDriven = false,
             MenuPads = null,
-            Presentation = UI.Menu.PresentationId.BuiltIn,
             ExitSession = () => { },
             RestartSession = () => { },
             NetSeats = isHost ? roster : null,

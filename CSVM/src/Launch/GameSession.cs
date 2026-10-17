@@ -117,9 +117,6 @@ public partial class GameSession : Node3D
     private readonly OrbitCamera _orbit;
     // launched into the menu → the boards' Exit item returns there, not quit
     private readonly bool _menuDriven;
-    // The presentation this session's boards take, resolved by the Launcher. The only board that
-    // reads it is the pause screen, which the Original presentation composes from escape.zrd.
-    private readonly UI.Menu.PresentationId _presentation;
     // The boards' Exit item, routed by the Launcher (the screen this flight was launched from, or
     // quit when nothing launched it).
     private readonly Action _exitSession;
@@ -363,7 +360,6 @@ public partial class GameSession : Node3D
         _sun = ctx.Sun;
         _env = ctx.Env;
         _menuDriven = ctx.MenuDriven;
-        _presentation = ctx.Presentation;
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
@@ -517,9 +513,9 @@ public partial class GameSession : Node3D
     // overlay read this one definition, so they cannot disagree with what WorldSession built.
     private bool BuildsCollision => _spec.BuildsCollision;
 
-    // An Original menu flight lands in the menu rather than on an in-flight board. Instant Action
-    // lands on its wrap-up page, a lobby match on Game Scores. A command-line launch has no menu.
-    private bool LandsInMenu => _menuDriven && _presentation == UI.Menu.PresentationId.Original;
+    // A menu flight lands in the menu rather than on an in-flight board. Instant Action lands on
+    // its wrap-up page, a lobby match on Game Scores. A command-line launch has no menu.
+    private bool LandsInMenu => _menuDriven;
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -1836,7 +1832,6 @@ public partial class GameSession : Node3D
         _boards = new SessionBoards(new SessionBoards.Inputs
         {
             Spec = _spec,
-            Presentation = _presentation,
             MenuDriven = _menuDriven,
             Exit = LeaveFlight,
             Restart = _restartSession,
@@ -2179,10 +2174,9 @@ public partial class GameSession : Node3D
         // Downed report once every rig exists (src/Session/World/VersusDirector.cs).
         if (_dogfight is { } dogfight)
         {
-            // The host's presentation decides the ending for every machine, so a guest follows its
-            // host's word (NetFlight.LandsOnScores) whatever its own presentation is.
-            var toScores = (_wire.Link is { IsHost: false } ? _menuDriven : LandsInMenu)
-                ? _versusLobbyLanding : null;
+            // The host's lobby decides the ending for every machine, so a guest follows its host's
+            // word (NetFlight.LandsOnScores), which already decided whether this landing is set.
+            var toScores = LandsInMenu ? _versusLobbyLanding : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
                 Spawns = _spawnPicker,
@@ -3088,15 +3082,14 @@ public partial class GameSession : Node3D
         };
         if (!source.HasScores)
             return;
-        bool original = _presentation == UI.Menu.PresentationId.Original;
         foreach (var pane in _rigs)
         {
             if (pane.Controller != null)
                 pane.Controller.DebugHoldScores = _spec.DebugScores;
-            ScoresOverlay.Attach(pane, source, original);
+            ScoresOverlay.Attach(pane, source);
         }
 
-        Log.Info("flight", $"display scores: {_rigs.Count} pane(s), {(original ? "the original's HUD text" : "the chrome table")}{(_spec.DebugScores ? ", held by --debug-scores" : "")}");
+        Log.Info("flight", $"display scores: {_rigs.Count} pane(s), the original's HUD text{(_spec.DebugScores ? ", held by --debug-scores" : "")}");
     }
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;

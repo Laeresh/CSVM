@@ -56,7 +56,7 @@ public sealed record PauseSheet(
         catch (Exception e) when (e is IOException or JsonException)
         {
             // Shown over a running mission, so an unreadable extraction leaves the screen to the
-            // built-in board rather than taking the session down with it.
+            // chrome board rather than taking the session down with it.
             return null;
         }
 
@@ -82,7 +82,7 @@ public sealed record PauseSheet(
     /// <summary>A Dogfight's briefing blackboard: <c>escape.zrd</c>'s <c>loading_m</c> dialog under
     /// the key the load screen reads, with its texts. Where <c>escape.zrd</c> carries no dialog of
     /// that name, <c>Loading.zrd</c>'s own stands in. Null when neither file carries it, which leaves
-    /// the Built-in board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
+    /// the chrome board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
     /// <c>escape.zrd</c>'s block lays the campaign's two columns under a blackboard.</summary>
     public static PauseSheet? LoadMultiplayer(string zrdrPath, string messagesPath, string dialogKey)
     {

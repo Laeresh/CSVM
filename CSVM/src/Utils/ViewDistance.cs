@@ -29,11 +29,8 @@ public static class ViewDistance
     {
         SavedField = "viewDistance",
         LogName = "view_distance",
-        Title = "View distance (Enhanced only)",
         Labels = ViewDistance.Labels,
         EnhancedOnly = true,
-        Clamps = true,
-        UnderGraphicsRow = true,
         Detail = static enhanced => enhanced
             ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
             : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.",

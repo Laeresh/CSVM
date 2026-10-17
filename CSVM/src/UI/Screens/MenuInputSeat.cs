@@ -1,19 +1,18 @@
 using CSVM.UI.Boards;
-using CSVM.UI.Screens;
+using CSVM.UI.Menu;
 
-namespace CSVM.UI.Menu.BuiltIn;
+namespace CSVM.UI.Screens;
 
 /// <summary>
-/// Seat 0's input source for the Built-in presentation: the keyboard plus every unclaimed pad,
-/// read through the launchscreen's own raw poller and translated into one frame of semantic
-/// commands. The host owns the seat for the life of the process; <see cref="LaunchMenu"/> is
-/// handed the same <see cref="MenuInput"/> so its pad bookkeeping (claiming, joining, hotplug)
-/// keeps binding the devices behind the seat until the shared player setup owns them.
+/// A seat's input source over one <see cref="MenuInput"/>, the raw poller translated into one frame
+/// of semantic commands. Seat 0's reads the keyboard plus every unclaimed pad, under a pointer seat
+/// for the mouse. A joined seat's reads its one pad. The devices behind the poller stay bound by
+/// <see cref="MenuSeatDevices"/>, through claiming, joining and hotplug.
 /// </summary>
-public sealed class BuiltInSeat : IMenuInputSource
+public sealed class MenuInputSeat : IMenuInputSource
 {
-    /// <summary>A seat over <paramref name="input"/>, which stays the launchscreen's to bind.</summary>
-    public BuiltInSeat(MenuInput input)
+    /// <summary>A seat over <paramref name="input"/>, which stays the seat devices' to bind.</summary>
+    public MenuInputSeat(MenuInput input)
     {
         Input = input ?? throw new System.ArgumentNullException(nameof(input));
     }

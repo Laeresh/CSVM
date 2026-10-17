@@ -367,7 +367,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     public void PressExport() => PressBoardButton(BoardButton.ExportPlane);
 
     /// <summary>Replays a screenshot aid's colon argument on the campaign screen showing, the words
-    /// <see cref="CampaignAidScript"/> reads for Built-in, so one string poses both presentations.
+    /// <see cref="CampaignAidScript"/> reads.
     /// The flow here is never walked. A cursor verb is one command frame through this graph, and a
     /// button word is that button's row taking the focus and the confirm. False for a script
     /// spelling the secondary verb x, which is refused whole because Original binds no such press,

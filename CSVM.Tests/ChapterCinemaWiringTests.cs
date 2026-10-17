@@ -14,15 +14,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The chapter cinema as both presentations' campaigns actually reach it: the roster's CONTINUE,
-/// the flight-return door and the in-campaign doors (RETURN TO CABIN and the back press) in each,
-/// the cabin arriving on the frame the film stops, a position inside a chapter opening the cabin
-/// with no film, and one instance serving both so a chapter plays once whichever door reached it.
-/// A campaign whose feature carries no cinema opens the cabin exactly as it always did, which is
-/// what every suite and every golden gets. The press that skips a film is spanned rather than
-/// pressed after the hand-back, which is the only way to see the board behind the film read it:
-/// with the pointer, with a key or a pad button, and held from under the film to past its end.
-/// Built-in's presentation polls its seats, so the span itself is what these read off its flow.
+/// The chapter cinema as the campaign flow reaches it: the roster's CONTINUE, the flight-return
+/// door and the in-campaign doors, RETURN TO CABIN and Back. The cabin arrives on the
+/// frame the film stops, and a position inside a chapter opens it with no film. One instance
+/// serves every door, so a chapter plays once. A feature with no cinema opens the cabin as it always
+/// did, which every suite and golden gets. The press that skips a film is spanned across the
+/// hand-back, by pointer, key or pad button held from under the film past its end.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ChapterCinemaWiringTests : IDisposable
@@ -51,7 +48,7 @@ public class ChapterCinemaWiringTests : IDisposable
     }
 
     [Fact]
-    public void BuiltInsContinuePlaysTheChapterFilmAndTheCabinFollowsIt()
+    public void TheFlowsContinuePlaysTheChapterFilmAndTheCabinFollowsIt()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -67,7 +64,7 @@ public class ChapterCinemaWiringTests : IDisposable
     }
 
     [Fact]
-    public void BuiltInsFlightReturnDoorPlaysTheFilmOfTheChapterTheProfileHasReached()
+    public void TheFlowsFlightReturnDoorPlaysTheFilmOfTheChapterTheProfileHasReached()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -84,7 +81,7 @@ public class ChapterCinemaWiringTests : IDisposable
     // book, press RETURN TO CABIN. That is a cabin entry at a chapter-opening position, and
     // PASSENGERCABIN.SCRIPT runs the chapter-intro script on every one of them.
     [Fact]
-    public void BuiltInsReturnToCabinFromTheBookPlaysTheNextChaptersFilm()
+    public void TheFlowsReturnToCabinFromTheBookPlaysTheNextChaptersFilm()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -102,7 +99,7 @@ public class ChapterCinemaWiringTests : IDisposable
     // The same cabin, reached by the back press instead of the plaque: the door taken must not be
     // what decides whether a film is due.
     [Fact]
-    public void BuiltInsBackFromTheBookPlaysTheNextChaptersFilm()
+    public void TheFlowsBackFromTheBookPlaysTheNextChaptersFilm()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -153,7 +150,7 @@ public class ChapterCinemaWiringTests : IDisposable
     // The negative control the plan names, off engine: --menu=campaign-cabin seats a profile three
     // missions in, which is a position inside a chapter and plays nothing at all.
     [Fact]
-    public void APositionInsideAChapterOpensBuiltInsCabinWithNoFilm()
+    public void APositionInsideAChapterOpensTheFlowsCabinWithNoFilm()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -182,7 +179,7 @@ public class ChapterCinemaWiringTests : IDisposable
     // The span a presentation that polls its input reads off the flow: the film owns every frame it
     // plays, and the frame it hands back on is the tail of the press that ended it.
     [Fact]
-    public void BuiltInsChapterFilmOwnsItsFramesAndTheTailOfThePressThatEndedIt()
+    public void TheFlowsChapterFilmOwnsItsFramesAndTheTailOfThePressThatEndedIt()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -197,7 +194,7 @@ public class ChapterCinemaWiringTests : IDisposable
     }
 
     [Fact]
-    public void BuiltInsClosingFilmOwnsItsFramesAndTheTailOfThePressThatEndedIt()
+    public void TheFlowsClosingFilmOwnsItsFramesAndTheTailOfThePressThatEndedIt()
     {
         var cinema = new Recorder();
         var feature = new CampaignFeature(
@@ -220,7 +217,7 @@ public class ChapterCinemaWiringTests : IDisposable
     // The pointer's tail lasts while its button is down, the release being the gesture a board fires
     // on; a key or a pad button is spent on the one frame it lands on.
     [Fact]
-    public void ThePointerTailOfABuiltInFilmLastsUntilTheButtonComesUp()
+    public void ThePointerTailOfAFlowsFilmLastsUntilTheButtonComesUp()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);
@@ -236,7 +233,7 @@ public class ChapterCinemaWiringTests : IDisposable
     // The negative control: a door with no film due hands its screen over inside the play call, so
     // no frame is owned and the very next press is the player's own.
     [Fact]
-    public void ABuiltInCabinDoorWithNoFilmDueOwnsNoFrameAndSwallowsNothing()
+    public void AFlowsCabinDoorWithNoFilmDueOwnsNoFrameAndSwallowsNothing()
     {
         var cinema = new Recorder();
         var flow = Flow(cinema);

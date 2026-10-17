@@ -17,8 +17,8 @@ namespace CSVM.Tests;
 public class OptionsStoreTests
 {
     /// <summary>A file saved before the word settings registered themselves loads every word under its
-    /// old field name. It saves back under the same names with the same values. A field the build
-    /// added since writes as null, never in place of an old one.</summary>
+    /// old field name. It saves back under the same names with the same values, bar the menu
+    /// presentation word the store reads no more. A field the build added since writes as null.</summary>
     [Fact]
     public void AFileSavedBeforeTheWordRegistryRoundTrips()
     {
@@ -38,6 +38,12 @@ public class OptionsStoreTests
         using var after = System.Text.Json.JsonDocument.Parse(OptionsStore.Serialize(def));
         foreach (var field in before.RootElement.EnumerateObject())
         {
+            if (field.Name == "menuPresentation")
+            {
+                Assert.False(after.RootElement.TryGetProperty(field.Name, out _), "the retired presentation word is written back");
+                continue;
+            }
+
             Assert.True(after.RootElement.TryGetProperty(field.Name, out var saved), $"{field.Name} is no longer written");
             Assert.Equal(field.Value.GetRawText(), saved.GetRawText());
         }
@@ -55,35 +61,48 @@ public class OptionsStoreTests
         var store = new OptionsStore(TestData.TempDir());
         var def = store.Load();
 
-        Assert.Null(def.MenuPresentation);
+        Assert.Null(def.Difficulty);
         Assert.Null(def.GraphicsMode);
     }
 
+    /// <summary>An older build saved the menu presentation as a word. The store reads no such field,
+    /// so the word is ignored, every other field in the file loads, and a save writes it no more.
+    /// </summary>
     [Fact]
-    public void RoundTrip_PreservesTheRequestedPresentation()
+    public void Load_AnOlderFilesPresentationWord_LoadsEveryOtherField()
     {
-        var store = new OptionsStore(TestData.TempDir());
-        store.Save(new OptionsDef { MenuPresentation = "original" });
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"),
+            "{\"version\": 1, \"menuPresentation\": \"built-in\", \"graphicsMode\": \"enhanced\", \"difficulty\": \"hard\", "
+            + "\"vsync\": \"144\", \"resolution\": \"1280x720\", \"audioMusic\": 40, \"rumble\": false}",
+            new UTF8Encoding(false));
+        var def = new OptionsStore(dir).Load();
 
-        Assert.Equal("original", store.Load().MenuPresentation);
+        Assert.Equal("enhanced", def.GraphicsMode);
+        Assert.Equal("hard", def.Difficulty);
+        Assert.Equal("144", def.VSync);
+        Assert.Equal("1280x720", def.Resolution);
+        Assert.Equal(40, def.AudioMusic);
+        Assert.False(def.Rumble);
+        Assert.DoesNotContain("menuPresentation", OptionsStore.Serialize(def), System.StringComparison.Ordinal);
     }
 
     [Fact]
     public void RoundTrip_PreservesBothOptionsIndependently()
     {
         var store = new OptionsStore(TestData.TempDir());
-        store.Save(new OptionsDef { MenuPresentation = "built-in", GraphicsMode = "enhanced" });
+        store.Save(new OptionsDef { Difficulty = "hard", GraphicsMode = "enhanced" });
         var def = store.Load();
 
-        Assert.Equal("built-in", def.MenuPresentation);
+        Assert.Equal("hard", def.Difficulty);
         Assert.Equal("enhanced", def.GraphicsMode);
 
-        // The graphics word alone, with the presentation never set: the two fields do not depend
-        // on each other, so an options file can carry either one.
+        // The graphics word alone, with the difficulty never set. The two fields do not depend on
+        // each other, so an options file can carry either one.
         store.Save(new OptionsDef { GraphicsMode = "original" });
         def = store.Load();
 
-        Assert.Null(def.MenuPresentation);
+        Assert.Null(def.Difficulty);
         Assert.Equal("original", def.GraphicsMode);
     }
 
@@ -95,13 +114,12 @@ public class OptionsStoreTests
         var def = store.Load();
 
         Assert.Equal("hard", def.Difficulty);
-        Assert.Null(def.MenuPresentation);
         Assert.Null(def.GraphicsMode);
 
-        store.Save(new OptionsDef { Difficulty = "hardest", MenuPresentation = "original" });
+        store.Save(new OptionsDef { Difficulty = "hardest", GraphicsMode = "original" });
         def = store.Load();
         Assert.Equal("hardest", def.Difficulty);
-        Assert.Equal("original", def.MenuPresentation);
+        Assert.Equal("original", def.GraphicsMode);
     }
 
     /// <summary>The file carries the three campaign words alone: Instant Action's names and the
@@ -114,11 +132,11 @@ public class OptionsStoreTests
         foreach (string word in new[] { "brutal", "veteran", "1", "Hard" })
         {
             File.WriteAllText(Path.Combine(dir, "options.json"),
-                $"{{\"version\": 1, \"menuPresentation\": \"original\", \"difficulty\": \"{word}\"}}",
+                $"{{\"version\": 1, \"graphicsMode\": \"enhanced\", \"difficulty\": \"{word}\"}}",
                 new UTF8Encoding(false));
             var def = new OptionsStore(dir).Load();
 
-            Assert.Equal("original", def.MenuPresentation);
+            Assert.Equal("enhanced", def.GraphicsMode);
             Assert.Null(def.Difficulty);
         }
     }
@@ -161,11 +179,11 @@ public class OptionsStoreTests
     {
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            "{\"version\": 1, \"menuPresentation\": \"original\", \"graphicsMode\": \"raytraced\"}",
+            "{\"version\": 1, \"difficulty\": \"hard\", \"graphicsMode\": \"raytraced\"}",
             new UTF8Encoding(false));
         var def = new OptionsStore(dir).Load();
 
-        Assert.Equal("original", def.MenuPresentation);
+        Assert.Equal("hard", def.Difficulty);
         Assert.Null(def.GraphicsMode);
     }
 
@@ -177,12 +195,12 @@ public class OptionsStoreTests
     {
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            "{\"version\": 1, \"menuPresentation\": \"original\"}", new UTF8Encoding(false));
+            "{\"version\": 1, \"difficulty\": \"hard\"}", new UTF8Encoding(false));
         var def = new OptionsStore(dir).Load();
 
-        Assert.Equal("original", def.MenuPresentation);
+        Assert.Equal("hard", def.Difficulty);
         Assert.Null(def.GraphicsMode);
-        Assert.Null(def.Difficulty);
+        Assert.Null(def.VSync);
     }
 
     [Fact]
@@ -190,19 +208,9 @@ public class OptionsStoreTests
     {
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            "{\"version\": 99, \"menuPresentation\": \"original\"}", new UTF8Encoding(false));
+            "{\"version\": 99, \"difficulty\": \"hard\"}", new UTF8Encoding(false));
 
-        Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
-    }
-
-    [Fact]
-    public void Load_UnknownPresentationValue_DropsOnlyThatField()
-    {
-        var dir = TestData.TempDir();
-        File.WriteAllText(Path.Combine(dir, "options.json"),
-            "{\"version\": 1, \"menuPresentation\": \"nonsense\"}", new UTF8Encoding(false));
-
-        Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
+        Assert.Null(new OptionsStore(dir).Load().Difficulty);
     }
 
     /// <summary>A hand edit that broke the JSON reads as empty. The file is moved aside with a
@@ -221,11 +229,11 @@ public class OptionsStoreTests
             loaded = new OptionsStore(dir).Load();
         }
 
-        Assert.Null(loaded.MenuPresentation);
+        Assert.Null(loaded.Difficulty);
         Assert.Contains(lines, l => l.StartsWith("WARN", System.StringComparison.Ordinal) && l.Contains(path) && l.Contains(".bad"));
-        new OptionsStore(dir).Save(new OptionsDef { MenuPresentation = "original" });
+        new OptionsStore(dir).Save(new OptionsDef { Difficulty = "hard" });
         Assert.Equal("{ not json", File.ReadAllText(path + ".bad"));
-        Assert.Equal("original", new OptionsStore(dir).Load().MenuPresentation);
+        Assert.Equal("hard", new OptionsStore(dir).Load().Difficulty);
     }
 
     [Fact]
@@ -234,7 +242,7 @@ public class OptionsStoreTests
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json"), "[1, 2]", new UTF8Encoding(false));
 
-        Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
+        Assert.Null(new OptionsStore(dir).Load().Difficulty);
         Assert.True(File.Exists(Path.Combine(dir, "options.json.bad")));
     }
 
@@ -247,7 +255,6 @@ public class OptionsStoreTests
         var store = new OptionsStore(TestData.TempDir());
         store.Save(new OptionsDef
         {
-            MenuPresentation = "original",
             GraphicsMode = "enhanced",
             Difficulty = "hard",
             MonitorIndex = "1",
@@ -261,7 +268,6 @@ public class OptionsStoreTests
         Assert.Equal("2560x1440", def.Resolution);
         Assert.Equal(DisplayWords.Borderless, def.DisplayMode);
         Assert.Equal("144", def.VSync);
-        Assert.Equal("original", def.MenuPresentation);
         Assert.Equal("enhanced", def.GraphicsMode);
         Assert.Equal("hard", def.Difficulty);
     }
@@ -301,7 +307,7 @@ public class OptionsStoreTests
         foreach (string text in malformed)
         {
             Assert.Null(LoadWith(dir, "resolution", text).Resolution);
-            Assert.Equal("original", LoadWith(dir, "resolution", text).MenuPresentation);
+            Assert.Equal("hard", LoadWith(dir, "resolution", text).Difficulty);
         }
 
         Assert.Equal("1280x720", LoadWith(dir, "resolution", "1280x720").Resolution);
@@ -317,7 +323,7 @@ public class OptionsStoreTests
         foreach (string text in new[] { "-1", "01", "1.0", "primary", " 1", "64", "99999999", "" })
         {
             Assert.Null(LoadWith(dir, "monitorIndex", text).MonitorIndex);
-            Assert.Equal("original", LoadWith(dir, "monitorIndex", text).MenuPresentation);
+            Assert.Equal("hard", LoadWith(dir, "monitorIndex", text).Difficulty);
         }
 
         Assert.Equal("0", LoadWith(dir, "monitorIndex", "0").MonitorIndex);
@@ -350,11 +356,10 @@ public class OptionsStoreTests
     {
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            "{\"version\": 1, \"menuPresentation\": \"original\", \"graphicsMode\": \"enhanced\", \"difficulty\": \"hard\"}",
+            "{\"version\": 1, \"graphicsMode\": \"enhanced\", \"difficulty\": \"hard\"}",
             new UTF8Encoding(false));
         var def = new OptionsStore(dir).Load();
 
-        Assert.Equal("original", def.MenuPresentation);
         Assert.Equal("enhanced", def.GraphicsMode);
         Assert.Equal("hard", def.Difficulty);
         Assert.Null(def.MonitorIndex);
@@ -410,7 +415,7 @@ public class OptionsStoreTests
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json.tmp"), "{ half-writ", new UTF8Encoding(false));
 
-        Assert.Null(new OptionsStore(dir).Load().MenuPresentation);
+        Assert.Null(new OptionsStore(dir).Load().Difficulty);
     }
 
     /// <summary>The same leftover temp file beside a real, already-saved file: the reader still
@@ -420,10 +425,10 @@ public class OptionsStoreTests
     {
         var dir = TestData.TempDir();
         var store = new OptionsStore(dir);
-        store.Save(new OptionsDef { MenuPresentation = "original" });
+        store.Save(new OptionsDef { Difficulty = "hard" });
         File.WriteAllText(Path.Combine(dir, "options.json.tmp"), "{ half-writ", new UTF8Encoding(false));
 
-        Assert.Equal("original", new OptionsStore(dir).Load().MenuPresentation);
+        Assert.Equal("hard", new OptionsStore(dir).Load().Difficulty);
     }
 
     /// <summary>The four levels round-trip beside the seven fields already there, so an AUDIO page
@@ -435,7 +440,6 @@ public class OptionsStoreTests
         var store = new OptionsStore(TestData.TempDir());
         store.Save(new OptionsDef
         {
-            MenuPresentation = "original",
             Difficulty = "hard",
             VSync = "144",
             AudioMaster = 100,
@@ -449,7 +453,6 @@ public class OptionsStoreTests
         Assert.Equal(40, def.AudioMusic);
         Assert.Equal(55, def.AudioEffects);
         Assert.Equal(70, def.AudioVoice);
-        Assert.Equal("original", def.MenuPresentation);
         Assert.Equal("hard", def.Difficulty);
         Assert.Equal("144", def.VSync);
         Assert.Null(def.GraphicsMode);
@@ -494,7 +497,7 @@ public class OptionsStoreTests
         foreach (string text in new[] { "-1", "101", "1000", "-2147483648", "2147483648" })
         {
             Assert.Null(LoadWithRaw(dir, "audioMusic", text).AudioMusic);
-            Assert.Equal("original", LoadWithRaw(dir, "audioMusic", text).MenuPresentation);
+            Assert.Equal("hard", LoadWithRaw(dir, "audioMusic", text).Difficulty);
         }
 
         Assert.Equal(0, LoadWithRaw(dir, "audioMusic", "0").AudioMusic);
@@ -512,7 +515,7 @@ public class OptionsStoreTests
         foreach (string text in new[] { "\"50\"", "\"loud\"", "true", "null", "50.5", "[50]", "{}", "\"\"" })
         {
             Assert.Null(LoadWithRaw(dir, "audioVoice", text).AudioVoice);
-            Assert.Equal("original", LoadWithRaw(dir, "audioVoice", text).MenuPresentation);
+            Assert.Equal("hard", LoadWithRaw(dir, "audioVoice", text).Difficulty);
         }
 
         Assert.Equal(50, LoadWithRaw(dir, "audioVoice", "50").AudioVoice);
@@ -526,11 +529,10 @@ public class OptionsStoreTests
     {
         var dir = TestData.TempDir();
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            "{\"version\": 1, \"menuPresentation\": \"original\", \"difficulty\": \"hard\", \"vsync\": \"144\"}",
+            "{\"version\": 1, \"difficulty\": \"hard\", \"vsync\": \"144\"}",
             new UTF8Encoding(false));
         var def = new OptionsStore(dir).Load();
 
-        Assert.Equal("original", def.MenuPresentation);
         Assert.Equal("hard", def.Difficulty);
         Assert.Equal("144", def.VSync);
         Assert.Null(def.AudioMaster);
@@ -570,9 +572,9 @@ public class OptionsStoreTests
         Assert.Contains("\"audioEffects\": null", json);
     }
 
-    // One field's value written into an otherwise good file and loaded back. The presentation
-    // beside it is the control: it says the reader read the file, so a null in the field under
-    // test is that field being dropped rather than the whole file being thrown away.
+    // One field's value written into an otherwise good file and loaded back. The difficulty beside
+    // it is the control that says the reader read the file. A null in the field under test is then
+    // that field being dropped, not the whole file.
     private static OptionsDef LoadWith(string dir, string name, string value) =>
         LoadWithRaw(dir, name, $"\"{value}\"");
 
@@ -581,7 +583,7 @@ public class OptionsStoreTests
     private static OptionsDef LoadWithRaw(string dir, string name, string json)
     {
         File.WriteAllText(Path.Combine(dir, "options.json"),
-            $"{{\"version\": 1, \"menuPresentation\": \"original\", \"{name}\": {json}}}",
+            $"{{\"version\": 1, \"difficulty\": \"hard\", \"{name}\": {json}}}",
             new UTF8Encoding(false));
         return new OptionsStore(dir).Load();
     }

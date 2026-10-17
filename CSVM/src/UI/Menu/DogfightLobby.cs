@@ -99,13 +99,6 @@ public sealed class DogfightLobby
     /// <summary>How many stock airframes the Select Plane list offers.</summary>
     public const int AirframeCount = 11;
 
-    /// <summary>Why a Built-in host's launch waits: a lobby guest is not Ready yet.</summary>
-    public const string GuestsNotReady = "waiting for every lobby pilot to be Ready";
-
-    /// <summary>Why a Built-in host's launch waits: a lobby guest flies only the seven environments.
-    /// </summary>
-    public const string MapUnlisted = "a lobby pilot flies only the seven lobby environments";
-
     /// <summary>The pilot count Fill-to-N's box opens on: the eight the original's colour table and
     /// respawn fan were authored for. A remake-only choice.</summary>
     public const int DefaultFillTo = 8;
@@ -420,8 +413,8 @@ public sealed class DogfightLobby
         }
     }
 
-    /// <summary>Whether a lobby screen stands on this lobby. A Built-in Network board never shows
-    /// one, so its guest sends no pick and its flight ends the way it always has.</summary>
+    /// <summary>Whether a lobby screen stands on this lobby. Until one does, its guest sends no
+    /// pick and its flight ends on the results board.</summary>
     public bool Shown { get; private set; }
 
     /// <summary>The last match's lines for the Game Scores page, best first, or empty before any
@@ -902,7 +895,7 @@ public sealed class DogfightLobby
 
     /// <summary>A lobby screen now stands on this lobby, so a guest's pick and name go to the host.
     /// A host's first showing ticks Allow Custom Planes, as the original's lobby opens
-    /// (<c>docs/org/multiplayer-messages.md</c>, "Custom planes"). An unshown Built-in host stays clear.</summary>
+    /// (<c>docs/org/multiplayer-messages.md</c>, "Custom planes"). An unshown host stays clear.</summary>
     public void Show()
     {
         if (!Shown)
@@ -911,65 +904,6 @@ public sealed class DogfightLobby
         }
 
         Shown = true;
-    }
-
-    /// <summary>A Built-in host's launch against the guests that sent a pick, which only a lobby
-    /// screen sends. It waits for their Ready, refuses the teams LAUNCH! refuses
-    /// (<see cref="LaunchRefusal"/>), and writes the map and rules into the options. Null when the
-    /// launch may go, otherwise why not.</summary>
-    public string? CheckBuiltInLaunch(string chapter, VersusRules rules)
-    {
-        bool picked = false;
-        foreach (int peer in SeatedPeers())
-        {
-            if (!_wire.Picks.TryGetValue(peer, out var pick))
-            {
-                continue;
-            }
-
-            picked = true;
-            if (!Admits(peer, pick))
-            {
-                return GuestsNotReady;
-            }
-        }
-
-        // The Built-in board forms no teams, but an Original guest's lobby does, and the launch flies them.
-        if (LaunchRefusal is var refusal and not TeamLaunchRefusal.None)
-        {
-            return RefusalText(refusal);
-        }
-
-        return AdoptLaunch(chapter, rules) || !picked ? null : MapUnlisted;
-    }
-
-    /// <summary>A Built-in host's launch written into the options, so an Original guest flies the same
-    /// map and rules. False on a guest and for a chapter the Environment box does not list.</summary>
-    public bool AdoptLaunch(string chapter, VersusRules rules)
-    {
-        ArgumentNullException.ThrowIfNull(rules);
-        int environment = EnvironmentOf(chapter);
-        if (!IsHost || environment < 0)
-        {
-            return false;
-        }
-
-        var adopted = _options with
-        {
-            Environment = (byte)environment,
-            Victory = rules.KillTarget > 0
-                ? rules.TimeLimitMinutes > 0 ? DogfightVictory.Both : DogfightVictory.Score
-                : DogfightVictory.Time,
-            TimeMinutes = (byte)Math.Clamp(rules.TimeLimitMinutes > 0 ? rules.TimeLimitMinutes : _options.TimeMinutes, 1, MaxTimeMinutes),
-            Score = (ushort)Math.Clamp(rules.KillTarget > 0 ? rules.KillTarget : _options.Score, 1, MaxScore),
-            LimitedLives = rules.Lives > 0,
-            Lives = (byte)ClampLives(rules.Lives > 0 ? rules.Lives : _options.Lives),
-            AutoRespawn = rules.AutoRespawn,
-        };
-
-        // Written without a new round: the guests' Ready marks are what let this launch go.
-        _options = adopted with { Epoch = _options.Epoch };
-        return true;
     }
 
     /// <summary>The launch leaves: the player list as it stands is kept, so the match's seats can be

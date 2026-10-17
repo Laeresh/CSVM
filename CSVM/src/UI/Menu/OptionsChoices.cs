@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using CSVM.Flight.Camera;
 using CSVM.Utils;
 using DifficultyTiers = CSVM.Flight.Hangar.Difficulty;
@@ -10,70 +8,13 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// The settings an Options screen stages before the apply, and the rules tying them together.
-/// Borderless pins the size, and a volume step clamps where other rows wrap. Each registered word
-/// setting (<see cref="WordSettings.All"/>) stages in <see cref="Words"/> under its own rules.
-/// Built-in walks it as numbered rows, each defined once in a table (<see cref="Step"/>,
-/// <see cref="Label"/>, <see cref="Detail"/>). Original's three settings pages read and write the
-/// same values from their own authored rows. Both read the saved options through <see cref="Load"/>
+/// Borderless pins the size. Each registered word setting (<see cref="WordSettings.All"/>) stages
+/// in <see cref="Words"/> under its own rules. Original's three settings pages read and write the
+/// values from their own authored rows. They read the saved options through <see cref="Load"/>
 /// and leave through <see cref="ToExit"/>, so an Options apply writes through <c>LiveSettings.Persist</c>.
 /// </summary>
 public sealed class OptionsChoices
 {
-    // The GAME OPTIONS page's three in its order, then the targeting switch, the rumble and the
-    // graphics mode.
-    private static readonly Row[] GameRows =
-    {
-        new("Difficulty", c => DifficultyTiers.Label(c.Difficulty), (c, d) => c.Difficulty = Wrap(DifficultyTiers.Clamp(c.Difficulty) + d, 3),
-            _ => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn."),
-        new("Default View", c => PilotView.Label(c.DefaultViewMode), (c, d) => c.DefaultView = PilotView.Name(PilotView.Step(c.DefaultViewMode, d)),
-            _ => "Select your default view. A --view= on the command line still outranks it."),
-        new("Auto Head Turn", c => OnOff(c.AutoHeadTurnOn), (c, _) => c.AutoHeadTurn = !c.AutoHeadTurnOn,
-            _ => "Select to turn your head automatically as your aircraft turns. Cockpit views only."),
-        new("Nearest target after a kill", c => OnOff(c.NearestAfterKillOn), (c, _) => c.NearestAfterKill = !c.NearestAfterKillOn,
-            _ => "Take the nearest target after a kill instead of the first of the list."),
-        new("Controller rumble", c => OnOff(c.RumbleOn), (c, _) => c.Rumble = !c.RumbleOn,
-            _ => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum."),
-        new("Graphics", c => c.Enhanced ? "Enhanced" : "Original",
-            (c, _) => c.Graphics = c.Enhanced ? GraphicsMode.Default : GraphicsMode.EnhancedWord,
-            _ => "Original is the faithful world; Enhanced lights it. Applies at once."),
-    };
-
-    // The monitor, size, mode and V-Sync in the VIDEO page's order.
-    private static readonly Row[] DisplayRows =
-    {
-        new("Monitor", c => c.Screens.Labels[c.MonitorAt], (c, d) => c.MonitorIndex = MonitorSetting.Word(DisplaySettingRows.Step(c.MonitorAt, d, c.Screens.Labels.Count)),
-            _ => "Select the monitor the game opens on. Applied on the way out, before the size."),
-        new("Resolution", c => c.Sizes.Words[c.ResolutionAt], (c, d) => c.StepResolution(d), c => c.ResolutionDetail()),
-        new("Display mode", c => DisplaySettingRows.DisplayModeLabels[c.DisplayModeAt],
-            (c, d) => c.DisplayMode = DisplayWords.DisplayModes[DisplaySettingRows.Step(c.DisplayModeAt, d, DisplayWords.DisplayModes.Count)],
-            _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it."),
-        new("V-Sync", c => DisplaySettingRows.VSyncLabels[c.VSyncAt],
-            (c, d) => c.VSync = DisplayWords.VSyncChoices[DisplaySettingRows.Step(c.VSyncAt, d, DisplayWords.VSyncChoices.Count)],
-            _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap."),
-    };
-
-    // The four volume levels in the AUDIO page's order.
-    private static readonly Row[] AudioRows =
-    {
-        new("Master volume", c => LevelLabel(c.AudioMaster, AudioMix.DefaultMaster), (c, d) => c.AudioMaster = StepLevel(c.AudioMaster, AudioMix.DefaultMaster, d),
-            _ => "Set the overall volume of all sounds. Heard once the choices are applied."),
-        new("Music volume", c => LevelLabel(c.AudioMusic, AudioMix.DefaultMusic), (c, d) => c.AudioMusic = StepLevel(c.AudioMusic, AudioMix.DefaultMusic, d),
-            _ => "Set the volume of the in-game music. Heard once the choices are applied."),
-        new("Effects volume", c => LevelLabel(c.AudioEffects, AudioMix.DefaultEffects), (c, d) => c.AudioEffects = StepLevel(c.AudioEffects, AudioMix.DefaultEffects, d),
-            _ => "Set the volume of the sound effects. Heard once the choices are applied."),
-        new("Voice volume", c => LevelLabel(c.AudioVoice, AudioMix.DefaultVoice), (c, d) => c.AudioVoice = StepLevel(c.AudioVoice, AudioMix.DefaultVoice, d),
-            _ => "Set the volume of the voices. Heard once the choices are applied."),
-    };
-
-    // Built-in's stepper rows, top to bottom. The game rows, the word settings under the graphics row,
-    // the display rows, the other word settings, then the volume levels.
-    private static readonly Row[] Rows = GameRows
-        .Concat(WordSettings.All.Where(static s => s.UnderGraphicsRow).Select(WordRow))
-        .Concat(DisplayRows)
-        .Concat(WordSettings.All.Where(static s => !s.UnderGraphicsRow).Select(WordRow))
-        .Concat(AudioRows)
-        .ToArray();
-
     private readonly Func<SizeList> _screenSizes;
     private readonly Func<ScreenList> _screens;
 
@@ -90,10 +31,6 @@ public sealed class OptionsChoices
         _screenSizes = screenSizes ?? (() => ResolutionSetting.Unknown);
         _screens = screens ?? (() => MonitorSetting.Unknown);
     }
-
-    /// <summary>How many numbered rows <see cref="Step"/>, <see cref="Label"/> and <see cref="Detail"/>
-    /// answer.</summary>
-    public static int Count => Rows.Length;
 
     /// <summary>The difficulty tier (<see cref="CSVM.Flight.Hangar.Difficulty"/>).</summary>
     public int Difficulty { get; set; } = DifficultyTiers.Normal;
@@ -228,83 +165,4 @@ public sealed class OptionsChoices
         Words[setting] = word;
         setting.Picked?.Invoke(Words, word);
     }
-
-    /// <summary>A sideways step of <paramref name="direction"/> on numbered row <paramref name="row"/>.
-    /// A row that is dead under the standing choices takes nothing.</summary>
-    public void Step(int row, int direction) => Rows[row].Step(this, direction);
-
-    /// <summary>What numbered row <paramref name="row"/> draws: its title and its value.</summary>
-    public string Label(int row) => $"{Rows[row].Title}: {Rows[row].Value(this)}";
-
-    /// <summary>What numbered row <paramref name="row"/> says it does, under the standing choices.</summary>
-    public string Detail(int row) => Rows[row].Detail(this);
-
-    private static int Wrap(int index, int count) => ((index % count) + count) % count;
-
-    private static string OnOff(bool on) => on ? "On" : "Off";
-
-    // One volume step, the Original AUDIO slider's keyboard step, so both presentations write the
-    // same levels. It clamps at both ends, since a step from silence must not land on full volume. A
-    // step that moves nothing keeps a never-set level never set.
-    private static int? StepLevel(int? level, int shipped, int dir)
-    {
-        int from = Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel);
-        int to = Math.Clamp(from + (dir * Original.SliderControl.KeyStep), AudioMix.MinLevel, AudioMix.MaxLevel);
-        return to == from ? level : to;
-    }
-
-    private static string LevelLabel(int? level, int shipped) =>
-        Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel).ToString(CultureInfo.InvariantCulture);
-
-    // A word setting's row: its title, the label of the word it stands on, a step that clamps or
-    // wraps, and its detail.
-    private static Row WordRow(WordSetting setting) => new(
-        setting.Title,
-        c => setting.Label(c.Offered(setting)[c.At(setting)]),
-        (c, d) => c.StepWord(setting, d),
-        c => setting.Detail(c.Enhanced));
-
-    private void StepResolution(int dir)
-    {
-        if (!ResolutionPinned)
-        {
-            var sizes = Sizes;
-            Resolution = sizes.Words[DisplaySettingRows.Step(ResolutionAt, dir, sizes.Words.Count)];
-        }
-    }
-
-    // A clamping row settles on its end under a held arrow; every other row wraps.
-    private void StepWord(WordSetting setting, int dir)
-    {
-        if (!Live(setting))
-        {
-            return;
-        }
-
-        var offered = Offered(setting);
-        int at = At(setting);
-        Pick(setting, offered[setting.Clamps ? Math.Clamp(at + dir, 0, offered.Count - 1) : DisplaySettingRows.Step(at, dir, offered.Count)]);
-    }
-
-    // The size does something different in each display mode, and under borderless nothing at all.
-    // A stepper that refuses without saying why reads as a broken row.
-    private string ResolutionDetail()
-    {
-        if (ResolutionPinned)
-        {
-            return "Borderless runs at the desktop's own size. Pick Windowed or Fullscreen to choose one.";
-        }
-
-        return DisplayMode == DisplayWords.Fullscreen
-            ? "Select the size the game draws at, scaled up to fill the fullscreen window."
-            : "Select the window size. The list is what the screen the window stands on can hold.";
-    }
-
-    // One numbered row: its title, the value it draws, its step and its detail. All four sit in one
-    // entry, so a row cannot lose one of them to its neighbour.
-    private sealed record Row(
-        string Title,
-        Func<OptionsChoices, string> Value,
-        Action<OptionsChoices, int> Step,
-        Func<OptionsChoices, string> Detail);
 }

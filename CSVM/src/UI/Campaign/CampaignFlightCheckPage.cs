@@ -634,8 +634,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return groups;
     }
 
-    // A plane's per-wing hardpoint counts, same build-or-stock precedence as the guns; the stock
-    // half reuses HangarFlow's own count off the rig's wing split rather than re-deriving it.
+    // A plane's per-wing hardpoint counts, the same build-or-stock precedence as the guns. The stock
+    // half reuses the hangar feature's own count off the rig's wing split.
     private (int Left, int Right) ResolveHardpoints(OwnedPlane plane)
     {
         if (BuildFor(plane) is { } custom)
@@ -643,7 +643,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             return (custom.LeftHardpoints, custom.RightHardpoints);
         }
 
-        return HangarFlow.StockWingCounts(StockFor(plane.Airframe)?.Hardpoints);
+        return Menu.HangarFeature.StockWingCounts(StockFor(plane.Airframe)?.Hardpoints);
     }
 
     // The hangar build a record flies with, if any. ⚠ A guest's stock record is named for its

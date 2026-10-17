@@ -32,7 +32,7 @@ public static class OriginalRosters
     /// <summary>The eleven stock airframes with their nodes.</summary>
     public static IReadOnlyList<OriginalAirframe> Airframes { get; } = BuildAirframes();
 
-    /// <summary>The roster both presentations pick from: the eleven stock airframes, then the
+    /// <summary>The roster every picker reads: the eleven stock airframes, then the
     /// saved customs, each flying its airframe's stock node.</summary>
     public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CSVM.Flight.Hangar.CustomPlaneDef> customs)
     {

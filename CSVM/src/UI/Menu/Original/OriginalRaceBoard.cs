@@ -10,7 +10,7 @@ using Godot;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The Original presentation's end-of-race board, in the Built-in <c>StuntRaceBoard</c>'s place over
+/// The Original presentation's end-of-race board, in the chrome <c>StuntRaceBoard</c>'s place over
 /// the whole window. It wakes on <see cref="StuntRace.RaceCompleted"/> and halts the sim, and it
 /// retires once a new window clears <see cref="StuntRace.Ended"/>. It draws
 /// <see cref="OriginalRaceResults"/>' composition through <see cref="ComposedBoardView"/>, frozen at

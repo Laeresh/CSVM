@@ -512,8 +512,8 @@ merge, not its author, and the two run in the same mission-end pass.
   `LAYOUT.CSV` position.
 - **The mission-end entry and Replay Mission are wired (C17).** `CampaignScreen.Scrapbook` and its
   `CampaignScrapbookPage` are reached from `Launcher.OpenDebrief`, renamed from `OpenCabin` since it
-  now opens the debrief with the cabin on its far side (`LaunchMenu.OpenCampaignScrapbook`,
-  mirroring `OpenCampaignCabin`'s re-read-from-store discipline). Replay Mission opens the briefing
+  now opens the debrief with the cabin on its far side, re-reading the profile from the store as the
+  cabin door does. Replay Mission opens the briefing
   without touching `CampaignFlow.MissionSeq`, which is already the flown mission and not the
   campaign's current position (they differ after a win); Return to Cabin pops back to the cabin
   `SelectProfile` already pushed. Both tabs are live, and Replay Mission is offered only where
