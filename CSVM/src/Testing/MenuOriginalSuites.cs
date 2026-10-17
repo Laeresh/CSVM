@@ -1245,10 +1245,11 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
-        // The install draws the checkbox under the shadow row, the column's foot. Both buttons'
-        // centres stand above the checkbox's, so Down from it wraps out of the value column.
+        // The shadow row is the dropdown window's foot, so Down scrolls View Distance onto it. The
+        // install draws the two checkboxes under the window, Enhanced Graphics at the column's foot,
+        // and Down from it wraps out of the value column.
         var walk = new List<string> { shell.FocusedKey };
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 5; i++)
         {
             Press(host, seat, Down);
             walk.Add(shell.FocusedKey);
@@ -1256,9 +1257,10 @@ internal static class MenuOriginalSuites
 
         ctx.Check(walk.SequenceEqual(new[]
             {
-                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
-            }),
-            $"Down walks the shadow row, the checkbox at the column's foot, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)})");
+                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey, OriginalVideoPage.WaterQualityKey,
+                OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
+            }) && shell.Options.Video.Top == 1,
+            $"Down walks the shadow row, scrolls View Distance into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit

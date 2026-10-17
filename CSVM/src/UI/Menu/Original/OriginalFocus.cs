@@ -16,8 +16,9 @@ internal static class OriginalFocus
 {
     /// <summary>The row a press moves the focus to from <paramref name="focus"/>. A vertical press
     /// past a list's last row on screen scrolls the list one row. It lands on the row now standing
-    /// where the focus stood. At the list's end the press leaves the list. A scroll rebuilds the
-    /// rows, so <paramref name="rowsOf"/> reads them afresh.</summary>
+    /// where the focus stood, or steps on past it where that row is dead. At the list's end the press
+    /// leaves the list. A scroll rebuilds the rows, so <paramref name="rowsOf"/> reads them afresh.
+    /// </summary>
     internal static int Move(
         Func<IReadOnlyList<OriginalRow>> rowsOf, IReadOnlyList<OriginalList> lists, int focus, int moveX, int moveY)
     {
@@ -52,7 +53,9 @@ internal static class OriginalFocus
             }
         }
 
-        return Math.Min(focus, rows.Count - 1);
+        // A dead row scrolled into the focus's place: the press steps on from the focused row where
+        // the scroll moved it, past the dead one.
+        return focus < rows.Count ? Step(rows, lists, focus, 0, moveY) : rows.Count - 1;
     }
 
     /// <summary>The live row on screen a press moves the focus to, scrolling nothing. It is

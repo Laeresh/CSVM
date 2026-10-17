@@ -6,7 +6,7 @@ namespace CSVM.Utils;
 /// moves with it, since the early chapters' haze is part of their scenery. The faithful path
 /// ignores it and keeps the decoded fade. In <see cref="Lookup"/>, <c>--view-distance=</c> beats
 /// the saved <c>viewDistance</c> option, then the <see cref="Key"/> config key, then
-/// <see cref="Default"/>. The Built-in Options screen writes the option, applied live.
+/// <see cref="Default"/>. The VIDEO page writes the option, applied live.
 /// </summary>
 public static class ViewDistance
 {
@@ -24,7 +24,7 @@ public static class ViewDistance
     public static readonly string[] Labels = { "Normal", "Far", "Very Far", "Unlimited" };
 
     /// <summary>The setting's registry entry, beaten by <c>--view-distance=</c>. Its row stops at
-    /// either end, and only the Built-in Options screen shows it.</summary>
+    /// either end.</summary>
     public static readonly WordSetting Lookup = new(Key, Words, "--view-distance")
     {
         SavedField = "viewDistance",

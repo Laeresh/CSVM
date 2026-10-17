@@ -1102,6 +1102,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             // belonging to no one screen, then the network box or the screen's own module. Only a
             // step that changes no value moves the focus.
             if (SliderControl.StepValue(rows, focus, commands.MoveX)
+                || StepSortieRule(rows, focus, commands.MoveX)
                 || (_box.Standing == null && NetInfo.IsOpen && NetInfo.StepSideways(rows, focus, commands.MoveX))
                 || (_box.Standing == null && !NetInfo.IsOpen && ModuleFor(_screen) is { } module
                     && module.StepSideways(rows, focus, commands.MoveX)))

@@ -10,7 +10,7 @@ namespace CSVM.Utils;
 /// fallback. That is <see cref="Waves"/> on a desktop and <see cref="Flat"/> on Linux or an
 /// integrated GPU (<see cref="FallbackFor"/>), so the Steam Deck runs flat. Under <c>--det</c> only
 /// the flag survives, over <see cref="Default"/>. The faithful path draws the flat sheet whatever the
-/// word. The Built-in Options screen writes the option, applied live through the session.
+/// word. The VIDEO page's Ocean Waves box writes the option, applied live through the session.
 /// </summary>
 public static class WaterQualitySetting
 {
@@ -40,8 +40,7 @@ public static class WaterQualitySetting
     /// <summary>What the Options row shows for each of <see cref="Words"/>, index for index.</summary>
     public static readonly IReadOnlyList<string> Labels = new[] { "Flat", "Waves" };
 
-    /// <summary>The setting's registry entry, beaten by <c>--water-quality=</c>. Only the Built-in
-    /// Options screen shows a row.</summary>
+    /// <summary>The setting's registry entry, beaten by <c>--water-quality=</c>.</summary>
     public static readonly WordSetting Lookup = Register();
 
     /// <summary>The word the run resolved, <see cref="Default"/> until <see cref="Resolve"/> runs. The

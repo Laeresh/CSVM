@@ -67,6 +67,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// leaf list whose items can outrun the window its own row authors.</summary>
     public const string VideoOpenAid = "open";
 
+    /// <summary>The VIDEO aid's argument that scrolls the dropdown window onto View Distance.</summary>
+    public const string VideoScrolledAid = "scrolled";
+
     /// <summary>The aid value that opens the CONTROLS page behind the Preferences page's fourth
     /// door.</summary>
     public const string ControlsAid = "controls";
@@ -576,6 +579,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // whose one screen on this machine says nothing about a windowed list.
                     _shell.Options.Video.OpenOn(OriginalVideoPage.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
+                    break;
+                case VideoAid + ":" + VideoScrolledAid:
+                    _shell.Options.Video.OpenOn(OriginalVideoPage.ViewDistanceKey);
                     break;
                 case ControlsAid:
                     SyncControlsSeats();

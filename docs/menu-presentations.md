@@ -364,11 +364,11 @@ value cannot read one way on the VIDEO page and another on Built-in's screen. Ev
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so no option
 page writes the store itself. Both graphics choosers cover `original` and `enhanced`, and the apply switches
 the running world at once (`Launch/LiveSettings.cs`), so neither description owes a restart.
-Built-in's screen shows one row per registered word setting, which adds a View Distance row under
-its chooser (`Utils/ViewDistance.cs`), live the same way and marked as Enhanced only, and a Water
-Quality row under its shadow quality (`Utils/WaterQualitySetting.cs`), dead under Original, whose
-apply builds or drops the wave ocean on the flying world. The Original VIDEO page has no line for either and hands both saved words
-back unchanged. The
+Both presentations show View Distance (`Utils/ViewDistance.cs`) and Water Quality
+(`Utils/WaterQualitySetting.cs`), live under Enhanced and dead under Original; Water Quality's apply
+builds or drops the wave ocean on the flying world. Built-in gives each a row of its own. The VIDEO
+page shows View Distance as the last row of its dropdown window and Water Quality as the Ocean Waves
+box (see `docs/org/menu-inventory.md`, the Video row). The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 **What an Options page focuses with, and what it draws focus as.** Two choices on these pages are
@@ -476,10 +476,10 @@ are the `PlayerSetupFeature`'s (`KillTarget`, `TimeLimitMinutes`, stepped by `St
 `StepTimeLimit`, either at 0 disabling that limit). They start at the command line's own defaults of
 5 kills and 5 minutes, ride `LaunchExit.Match` into `SessionSpec.FromMenu`, and lose to an explicit
 `--vs-kills=`/`--vs-time=`, one flag beating only the rule it names. Built-in offers both as two rows
-under the map list on its Dogfight map screen. Original offers neither, because its Dogfight screen
-is remake-designed with no authored layout section to take a widget, so its Dogfight launches carry
-the defaults or whatever the flags say. A presentation that wants the rules on a screen reads the
-feature's two values and steps them; nothing in the launch leg changes.
+under the map list on its Dogfight map screen. Original's Dogfight screen offers them as two
+remake-only rows on its heading line over the aircraft column, stepped sideways and by a press that
+wraps past the top to no limit. A presentation reads the feature's two values and steps them;
+nothing in the launch leg changes.
 
 A networked Dogfight leaves through the same exit with one more field. `MenuNetLaunch` is the open
 transport and which end owns the match, built by `NetPlayFeature.BuildLaunch` and taken by the
@@ -586,7 +586,7 @@ shows a board inside the flight instead and has no menu page to open), `options`
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
 standing open, the one leaf list whose sizes can outrun the window its row authors,
-`controls`, `keys` and `keys:<category>` with the KEYS AND BUTTONS page standing on the tab of that
+`video:scrolled` with the dropdown window scrolled onto View Distance, `controls`, `keys` and `keys:<category>` with the KEYS AND BUTTONS page standing on the tab of that
 name (spaces and case ignored), `keys:other` being the one category that outruns its list window and
 `keys:targeting` the eleven targeting actions, `credits` and
 `credits:about` with the About box standing over it, `join-board` on the crew manifest with nobody
@@ -731,13 +731,6 @@ Five layers, each catching what the others cannot:
 
 Built-in can be deleted once every entry below is resolved. Each entry names something only
 Built-in has, and what takes its place.
-
-**What a player can only reach through Built-in.**
-
-- Dogfight's match rules, which only Built-in's Dogfight screen steps (see [Launch](#launch)).
-- View Distance and Water Quality. Only Built-in's Options screen has a row for either
-  (`Utils/ViewDistance.cs`, `Utils/WaterQualitySetting.cs`); the VIDEO page hands both saved words
-  back unchanged, and the one authored line it leaves blank is Clutter Detail's.
 
 **The fallback.** `MenuHost.Select` answers a forced, unknown or unavailable request with
 `PresentationId.BuiltIn` through `PresentationResolution.Resolve`, and `MenuHost.Selected` and

@@ -25,7 +25,20 @@ public sealed partial class OriginalShell
     /// <summary>How many aircraft rows the column shows at once; the window follows the focus.</summary>
     public const int AirframeWindow = 11;
 
+    /// <summary>The Dogfight screen's kill-target row, remake-only.</summary>
+    public const string KillTargetKey = "KILLTARGET";
+
+    /// <summary>The Dogfight screen's time-limit row, remake-only.</summary>
+    public const string TimeLimitKey = "TIMELIMIT";
+
     private const string AirframeKeyPrefix = "AIRFRAME:";
+
+    // The two match rules stand stacked in the right half of the aircraft column's head. Four seats'
+    // strip leaves no other stretch clear. Stacked, the walk reaches each, since a sideways press
+    // steps a rule's value rather than moving.
+    private const float RuleX = RightColumnX + (ListWidth / 2f);
+    private const float RuleY = ListTop - (2f * RowPitch);
+    private const float RuleWidth = ListWidth / 2f;
 
     // The Dogfight door under the Free Flight door, one plaque plus air below it.
     private const float DogfightDoorY = DoorY + 36f;
@@ -169,6 +182,10 @@ public sealed partial class OriginalShell
         return key.StartsWith(AirframeKeyPrefix, StringComparison.Ordinal)
             && int.TryParse(key.AsSpan(AirframeKeyPrefix.Length), out index);
     }
+
+    // A rule's value as its row reads it, zero being no limit at all.
+    private static string LimitLabel(int value, string unit) =>
+        value == 0 ? "no limit" : value.ToString(System.Globalization.CultureInfo.InvariantCulture) + unit;
 
     private static string SeatStatus(PlayerSeat seat, IReadOnlyList<MenuAircraft> roster)
     {
@@ -331,6 +348,47 @@ public sealed partial class OriginalShell
 
         var flySize = PlaqueSize();
         rows.Add(TextButton(FlyKey, "FLY", RightColumnX + ListWidth - flySize.Width, PlaqueY, FlyEnabled(), 1));
+        if (_screen == OriginalScreen.Dogfight)
+        {
+            rows.Add(new OriginalRow(KillTargetKey, "Kills  " + LimitLabel(_setup.KillTarget, ""),
+                OriginalRowKind.ListRow, RuleX, RuleY, RuleWidth, RowHeight, true, 1, null));
+            rows.Add(new OriginalRow(TimeLimitKey, "Time  " + LimitLabel(_setup.TimeLimitMinutes, " min"),
+                OriginalRowKind.ListRow, RuleX, RuleY + RowPitch, RuleWidth, RowHeight, true, 1, null));
+        }
+    }
+
+    // A sideways step on a match rule moves it one step, clamped; false off the two rows.
+    private bool StepSortieRule(IReadOnlyList<OriginalRow> rows, int focus, int direction)
+    {
+        if (_screen != OriginalScreen.Dogfight || focus < 0 || focus >= rows.Count)
+        {
+            return false;
+        }
+
+        switch (rows[focus].Key)
+        {
+            case KillTargetKey:
+                _setup.StepKillTarget(direction);
+                return true;
+            case TimeLimitKey:
+                _setup.StepTimeLimit(direction);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // A press on a match rule steps it up, past its top back round to no limit.
+    private void PressSortieRule(string key)
+    {
+        if (key == KillTargetKey)
+        {
+            _setup.StepKillTarget(_setup.KillTarget == PlayerSetupFeature.MaxKillTarget ? -PlayerSetupFeature.MaxKillTarget : 1);
+        }
+        else
+        {
+            _setup.StepTimeLimit(_setup.TimeLimitMinutes == PlayerSetupFeature.MaxTimeLimitMinutes ? -PlayerSetupFeature.MaxTimeLimitMinutes : 1);
+        }
     }
 
     // The aircraft column as the pointer's one list on a sortie screen.
@@ -408,6 +466,9 @@ public sealed partial class OriginalShell
                 return null;
             case FlyKey:
                 return Fly();
+            case KillTargetKey or TimeLimitKey:
+                PressSortieRule(row.Key);
+                return null;
         }
 
         if (row.Column == 0)
