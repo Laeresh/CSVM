@@ -89,7 +89,7 @@ Each entry's `exercises` field says what that shot covers and carries its measur
 frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
 twice proves nothing, because most poses show nothing that moves). Ten shots move on a one-frame
-perturbation (`c1-flight-kill` 78.07 %, `c1-cockpit-xr-sim` 19.82 %, `c1-cockpit-xr-sim-aft` 8.37 %, `campaign-4p-grid` 73.79 %, `c1-cockpit` 43.35 %,
+perturbation (`c1-flight-kill` 78.07 %, `c1-cockpit-xr-sim` 19.81 %, `c1-cockpit-xr-sim-aft` 8.38 %, `campaign-4p-grid` 73.79 %, `c1-cockpit` 43.35 %,
 `empty-stage` 12.21 %, `c4-snow` 3.74 %, `campaign-intro-fill` 3.89 %, `c1c-rain` 2.50 %,
 `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
