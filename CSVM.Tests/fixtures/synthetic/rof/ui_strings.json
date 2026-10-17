@@ -866,5 +866,26 @@
     "font": null,
     "text": "Probe airship duel: guard your own hull.",
     "dll": "langui"
+  },
+  {
+    "id": 1154,
+    "symbol": null,
+    "font": null,
+    "text": "COST: $%1!d!\nWEIGHT: %2!d! lbs.\nTOP SPEED: %3!d! m.p.h.\nNITRO-BOOST: %4!s!\n\nPROBE ENGINE NOTES\n",
+    "dll": "langui"
+  },
+  {
+    "id": 1155,
+    "symbol": null,
+    "font": null,
+    "text": "COST: $%1!d!/%2!d! units\nWEIGHT: %3!d! lbs./%4!d! units\n\nPROBE PLATING NOTES\nProbe plating is laid on in even sheets over the frame, one sheet to a press of the stepper, and every sheet adds the same weight wherever it goes. The nose takes the first sheets because a head-on pass meets it first, and the tail takes the next because a chase meets that. The two wings share one count, so a sheet on the left is a sheet on the right as well, and a wing never flies heavier than its twin. A frame carrying more plating than its capacity flies, but slowly, and climbs like a loaded barge. Strip a sheet and the frame is lighter at once. The stepper never sells a sheet back for less than it cost, so a pilot who over-plates loses nothing but the weight.\n",
+    "dll": "langui"
+  },
+  {
+    "id": 3241,
+    "symbol": null,
+    "font": null,
+    "text": "The probe twin is a small radial for a light frame, quick to spool up and slow to tire, with no nitro to burn.",
+    "dll": "langui"
   }
 ]
