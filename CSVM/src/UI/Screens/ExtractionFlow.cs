@@ -25,6 +25,11 @@ public enum DataProblem
 
     /// <summary>Stamped by a newer build than this one.</summary>
     Newer,
+
+    /// <summary>Current, but the menus cannot read it: the decoded layout or a file the Original
+    /// presentation requires is missing or unreadable (<see cref="ExtractionFlow.Detail"/> says
+    /// which).</summary>
+    Unusable,
 }
 
 /// <summary>Which of its views the extraction screen shows.</summary>
@@ -93,6 +98,10 @@ public sealed class ExtractionFlow
     /// <summary>Gets why the screen is up.</summary>
     public DataProblem Problem { get; }
 
+    /// <summary>Gets the fault an <see cref="DataProblem.Unusable"/> tree was refused for, which the
+    /// screen names; null for every other problem.</summary>
+    public string? Detail { get; init; }
+
     /// <summary>Gets the data root the extraction writes under.</summary>
     public string DataRoot { get; }
 
@@ -134,7 +143,7 @@ public sealed class ExtractionFlow
     /// call a stale tree's outputs current, and an unfinished run's half-written archive too. The
     /// marker is read live, so a retry on this screen after a failed or cancelled run is forced as
     /// well.</summary>
-    public bool Force => Problem is DataProblem.Older or DataProblem.Newer or DataProblem.Incomplete
+    public bool Force => Problem is DataProblem.Older or DataProblem.Newer or DataProblem.Incomplete or DataProblem.Unusable
         || File.Exists(Path.Combine(DataRoot, ExtractionRun.ExtractedFolder, UnfinishedMarker));
 
     /// <summary>Whether <paramref name="dataRoot"/> stops the launch at this screen, and why. Only a

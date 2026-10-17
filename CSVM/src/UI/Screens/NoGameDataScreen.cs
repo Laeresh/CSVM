@@ -131,12 +131,14 @@ public sealed partial class NoGameDataScreen : CanvasLayer
         DataProblem.Older => "Game data is out of date",
         DataProblem.Newer => "Game data is from a newer CSVM",
         DataProblem.Incomplete => "Game data is incomplete",
+        DataProblem.Unusable => "Game data cannot be read",
         _ => "No game data found",
     };
 
     /// <summary>The asking view's body for <paramref name="problem"/>, naming the stamp's schema
-    /// <paramref name="found"/> against this build's.</summary>
-    public static string Body(DataProblem problem, int? found)
+    /// <paramref name="found"/> against this build's, or an unusable tree's
+    /// <paramref name="detail"/>.</summary>
+    public static string Body(DataProblem problem, int? found, string? detail = null)
     {
         string versions = string.Create(CultureInfo.InvariantCulture,
             $"(data version {found?.ToString(CultureInfo.InvariantCulture) ?? "?"}, this build reads {ExtractionStamp.Schema})");
@@ -148,6 +150,8 @@ public sealed partial class NoGameDataScreen : CanvasLayer
                 $"The game data in this folder was extracted by a newer version of CSVM {versions}. Start that version, or extract the data again for this one. The install is only read, never changed.",
             DataProblem.Incomplete =>
                 "The last extraction into this folder did not finish, so parts of the game data are missing. " + Instruction,
+            DataProblem.Unusable =>
+                $"The menus cannot read the game data in this folder: {detail ?? "a required file is missing"}. Extract it again from your Crimson Skies install to play. The install is only read, never changed.",
             _ => "CSVM plays Crimson Skies from your own copy of the game, and this folder holds none of it yet. " + Instruction,
         };
     }
@@ -311,7 +315,7 @@ public sealed partial class NoGameDataScreen : CanvasLayer
         box.AddThemeConstantOverride("separation", 18);
         _title = Line(Title(_flow.Problem), TitleFontSize, TitleColour);
         ExtractionStamp.Standing(_flow.DataRoot, out int? found);
-        _askingBody = Body(_flow.Problem, found);
+        _askingBody = Body(_flow.Problem, found, _flow.Detail);
         _body = Line(_askingBody, BodyFontSize, BodyColour);
         box.AddChild(_title);
         box.AddChild(_body);

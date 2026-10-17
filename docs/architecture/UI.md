@@ -729,14 +729,14 @@ second from `Launcher.TickNetReadout`, which logs the same line. Hidden while no
 wire. Drawn on `HudLayers.Debug`, unscaled, in the top-left corner.
 
 ## src/UI/Screens/NoGameDataScreen.cs
-The screen a launch reaches instead of the menu when `ExtractionFlow.ProblemAt` names a problem:
-no extraction (`Missing`, an absent or empty `extracted` directory), an unfinished run, or a stamp
-naming another schema. Views follow `ExtractionFlow.View`: the install folder field with Choose folder, Extract
-(focused) and Quit, plus Play anyway on stale data; the phase, bar and latest line with Cancel;
-the failures with Try again and Choose another folder. Every press is a focusable button, so a
-pad's d-pad and A drive it; Esc or B cancels a run and quits otherwise. A success hands back once
-to `Launcher`, which re-resolves the data paths and enters the menu in the same process.
-The picker's controller hint label does not wrap, since the dialog grows to its content's minimum. A pad's A or a tap on the folder field raises `Utils/ScreenKeyboard.cs`; focus alone does not.
+The screen a launch reaches instead of the menu when `ExtractionFlow.ProblemAt` names a problem (no
+extraction, an unfinished run, a stamp naming another schema), or as `Unusable` when `Launcher`'s
+`OriginalAvailability.Load` refuses a current tree, the fault riding `ExtractionFlow.Detail` into the
+body. Views follow `ExtractionFlow.View`: the folder field with Choose folder, Extract (focused) and
+Quit, plus Play anyway on stale data; the phase, bar and latest line with Cancel; the failures with
+Try again and Choose another folder. Each press is a focusable button, so a pad's d-pad and A drive
+it; Esc or B cancels a run and quits otherwise. A success hands back once to `Launcher`, which
+re-resolves the data paths and enters the menu. A pad's A or a tap on the folder field raises `Utils/ScreenKeyboard.cs`; the picker's hint label does not wrap.
 
 ## src/UI/Screens/ExtractionFlow.cs
 The extraction screen's state, engine-free so a unit drives it with a fake runner. A stamp naming

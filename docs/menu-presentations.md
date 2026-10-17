@@ -529,8 +529,10 @@ section's art, those rows' art and the media a script names are optional; the fi
 and Original draws anyway (the two pointers, the font, the two export plaques) are required. `Check`
 reads no bitmap (existence plus the PNG signature and header size for required entries, existence
 alone for optional ones) and answers one report naming every fault with its section, row and file.
-A required fault makes the presentation unavailable and Built-in runs with the reason logged; an
-optional absence is logged once and degrades where it is drawn (a row with no readable strip keeps
+A required fault makes the presentation unavailable. A menu start then stops at the extraction
+screen (`UI/Screens/NoGameDataScreen.cs`, `DataProblem.Unusable`), whose body names the fault and
+whose Extract re-extracts every output; it reaches no menu. Only a switch or a forced request that
+gets past that check still falls back to Built-in with the reason logged. An optional absence is logged once and degrades where it is drawn (a row with no readable strip keeps
 a fallback rectangle and no picture). The manifest's `StampSchema` is the extraction stamp's own
 schema (`ExtractionStamp.Schema`, recorded in `extracted/VERSION.json`), so a tree extracted before
 the layout decode, or before the movies were copied into it, is refused with the re-extract
@@ -734,11 +736,9 @@ Built-in has, and what takes its place.
 
 **The fallback.** `MenuHost.Select` answers a forced, unknown or unavailable request with
 `PresentationId.BuiltIn` through `PresentationResolution.Resolve`, and `MenuHost.Selected` and
-`Requested` start on it. In a shipped build the only refusal that reaches it is
-`OriginalAvailability.Load`'s over a tree that is present and current (a missing or unreadable
-layout, no `[MainMenu]`, a required file the manifest names missing or unreadable): a missing or
-stale tree already stops at the extraction screen (`UI/Screens/NoGameDataScreen.cs` over
-`ExtractionFlow`) before any menu stands. The error screen replaces this path. The pieces that go
+`Requested` start on it. A menu start no longer reaches it: a missing, stale or unusable tree
+stops at the extraction screen (`UI/Screens/NoGameDataScreen.cs` over `ExtractionFlow`, the last as
+`DataProblem.Unusable`) before any menu stands. The pieces that go
 with it are `ProcessMenu.Build`'s `registry.Register(PresentationId.BuiltIn, ...)`, and in
 `Launcher` the `ForceBuiltInPresentation` branch of `SessionPresentation` (which hands a
 command-line flight the chrome boards) and the `BuiltInMenu` door (the failed-build note and the

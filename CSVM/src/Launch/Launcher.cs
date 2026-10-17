@@ -719,6 +719,15 @@ public partial class Launcher : Node3D
             return;
         }
 
+        // A current tree the Original menus cannot read stops at the same screen, naming the fault,
+        // rather than opening on some other presentation.
+        if (_spec.ShowsMenu && _spec.MovieName == null && RequestsOriginal()
+            && UI.Menu.Original.OriginalAvailability.Load(dataRoot, out string? unusable) == null)
+        {
+            ShowExtractionScreen(UI.Screens.DataProblem.Unusable, unusable);
+            return;
+        }
+
         // The music channel, once per process and after every early-quit probe: one player that
         // outlives every session, over a sound archive of its own for the same reason (D37's
         // wiring contract, step 1).
@@ -1414,15 +1423,24 @@ public partial class Launcher : Node3D
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
+    // Whether this run's menu asks for Original, the presentation the availability check answers for.
+    private bool RequestsOriginal() =>
+        !_spec.ForceBuiltInPresentation
+        && PresentationResolution.Requested(_spec.PresentationOverride) == PresentationResolution.Default;
+
     // The screen a menu launch stops at when the data root holds no extraction, or one stamped under
     // another schema. Nothing that reads the tree is built yet. Esc leaves through _UnhandledInput,
     // which quits with neither a menu nor a session up; the screen keeps Esc while a run is going.
-    private void ShowExtractionScreen(UI.Screens.DataProblem problem)
+    private void ShowExtractionScreen(UI.Screens.DataProblem problem, string? detail = null)
     {
         string extracted = Path.Combine(_paths.DataRoot, Extraction.ExtractionRun.ExtractedFolder);
         if (problem == UI.Screens.DataProblem.Missing)
         {
             Log.Error("core", $"no extracted game data path={extracted}, {UI.Screens.NoGameDataScreen.Instruction}");
+        }
+        else if (problem == UI.Screens.DataProblem.Unusable)
+        {
+            Log.Error("core", $"the menus cannot read the game data ({detail}) path={extracted}, asking to extract again");
         }
         else if (problem == UI.Screens.DataProblem.Incomplete)
         {
@@ -1446,7 +1464,10 @@ public partial class Launcher : Node3D
             ? _ => { }
         : Extraction.RememberedInstall.Set;
         var flow = new UI.Screens.ExtractionFlow(problem, _paths.DataRoot, unzbd, preFill,
-            (request, progress, cancel) => RunExtraction(request, progress, cancel), remember);
+            (request, progress, cancel) => RunExtraction(request, progress, cancel), remember)
+        {
+            Detail = detail,
+        };
         _extractionScreen = UI.Screens.NoGameDataScreen.Build(flow, LeaveExtractionScreen, BlankAndQuit);
         AddChild(_extractionScreen);
         Callable.From(() => ApplyExtractionAid(_cli.MenuStartScreen)).CallDeferred();
