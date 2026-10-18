@@ -712,7 +712,7 @@ Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list f
 ia.json `dzones` (marker positions, gate polygons, strings through `MissionTargets` and `Messages`,
 null where a mission authors none), `Update` requires both polygon-plane crossings in either order and records the gate a zone was left through,
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
-`Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick) and `RunReset` feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
+`Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick), `RunReset` and `RunStopped` (`Stop`) feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
 apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
 rest of what a run draws, and `StuntScoreboard` for what it scores.
@@ -883,9 +883,9 @@ The time-attack race's bookkeeping, engine-free and fed by events, never by a co
 (`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished` and `RunAbandoned`
 carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed. A `Racer`
 keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
-most zones and time to them. `MayStartRun` gates reruns, `BestImproved` records bests and
-`RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by `TakeLine` and
-`TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
+most zones and time to them. `MayStartRun` gates reruns, `MayRespawn` respawns, `BestImproved`
+records bests and `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by
+`TakeLine` and `TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
 
 ## src/Flight/Modes/MatchScores.cs
 What each network match scoring event is worth, engine-free: the nine `score_*` keys of

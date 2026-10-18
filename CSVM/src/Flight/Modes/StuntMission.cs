@@ -146,7 +146,13 @@ public sealed class StuntMission
     /// <summary>Fired by <see cref="Reset"/>: the run so far is thrown away.</summary>
     public event Action? RunReset;
 
+    /// <summary>Fired by <see cref="Stop"/>: the run flies no further, and what it reached stands.</summary>
+    public event Action? RunStopped;
+
     public bool AllComplete { get; private set; }
+
+    /// <summary>Whether <see cref="Stop"/> ended the run short of completion. Its clock stands.</summary>
+    public bool Stopped { get; private set; }
 
     public int CompletedCount { get; private set; }
 
@@ -331,10 +337,10 @@ public sealed class StuntMission
     /// <summary>Advance the run clock one physics frame. Not called while a start count runs,
     /// because the clock starts at GO. Once started it is called every frame, through the crash
     /// freeze. That is a remake-only rule: a crash costs the run the seconds it spends frozen. It
-    /// stops only at completion.</summary>
+    /// stops only at completion or <see cref="Stop"/>.</summary>
     public void Tick(float dt)
     {
-        if (AllComplete)
+        if (AllComplete || Stopped)
             return;
         if (!_clockStarted)
         {
@@ -390,7 +396,19 @@ public sealed class StuntMission
         _clockStarted = false;
         _crossedGates.Clear();
         _haveLastPlanePos = false;
+        Stopped = false;
         RunReset?.Invoke();
+    }
+
+    /// <summary>The pilot's aeroplane is lost where no respawn is offered, a race's final run: the
+    /// run started flies no further. Its zones and clock stand as they were. Once per run; a run
+    /// not started or already complete has nothing to stop.</summary>
+    public void Stop()
+    {
+        if (Stopped || AllComplete || !_clockStarted)
+            return;
+        Stopped = true;
+        RunStopped?.Invoke();
     }
 
     /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with

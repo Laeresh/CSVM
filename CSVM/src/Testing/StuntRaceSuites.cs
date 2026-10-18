@@ -35,6 +35,10 @@ internal static class StuntRaceSuites
     // The opening count's READY, the session's own.
     private const float ReadySeconds = 2f;
 
+    // A press well short of the hold, so it resolves as a tap. Kept short: the final run's own
+    // clock runs on for P2 while P1's presses are refused.
+    private const int TapFrames = 2;
+
     private static readonly int HoldFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / Dt) + 2;
 
     [Suite("stunt-race-time-attack",
@@ -42,8 +46,9 @@ internal static class StuntRaceSuites
         + "open on READY then 3, 2, 1 in lockstep and the window clock starts at that GO with both "
         + "run clocks; P1 completes a run, holds respawn into a new run behind its own 3, 2, 1 "
         + "while P2 flies on, keeps its first time as its best until a faster run replaces it with "
-        + "that run's splits; P2 restarts late, is in a run at time up and completes it as the "
-        + "final run, faster than P1's best; P1's hold in the final run is refused; the race ends on "
+        + "that run's splits; both restart late and are in a run at time up; P1's hold, its tap in "
+        + "flight and its crash's return in the final run are refused, the crash stopping P1's run with "
+        + "its zone counted while P2 completes its run as the final run, faster than P1's best; the race ends on "
         + "P2's finish and its board ranks P2 then P1 by best run, with each pilot's best-run splits")]
     internal static void StuntRaceTimeAttack(TestContext ctx)
     {
@@ -140,13 +145,23 @@ internal static class StuntRaceSuites
                 }
             }
 
-            void Rerun(FlightController seat)
+            void Press(int frames, params FlightController[] seats)
             {
-                seat.HoldActionForTest(InputAction.Respawn, true);
-                Frames(HoldFrames);
-                seat.HoldActionForTest(InputAction.Respawn, false);
+                foreach (var seat in seats)
+                {
+                    seat.HoldActionForTest(InputAction.Respawn, true);
+                }
+
+                Frames(frames);
+                foreach (var seat in seats)
+                {
+                    seat.HoldActionForTest(InputAction.Respawn, false);
+                }
+
                 Frame();
             }
+
+            void Rerun(params FlightController[] seats) => Press(HoldFrames, seats);
 
             // The opening: lockstep counts, the window opening on their GO step.
             int steps = 0;
@@ -213,31 +228,44 @@ internal static class StuntRaceSuites
             ctx.Check(secondRun < firstRun && r1.BestTime == secondRun && r1.Splits.SequenceEqual(p1Splits),
                 $"P1's faster second run replaces its best, {StuntMission.FormatTime(firstRun)} to {StuntMission.FormatTime(secondRun)}, splits and all");
 
-            // P2 restarts late enough that its run is still in progress at time up.
+            // Both restart late enough that their runs are still in progress at time up.
             while (race.TimeLeft > 3.6f && race.Phase == StuntRacePhase.Open)
             {
                 Frame();
             }
-            Rerun(p2);
-            while (p2.StartCount.Running)
+            Rerun(p1, p2);
+            while (p1.StartCount.Running || p2.StartCount.Running)
             {
                 Frame();
             }
             Frame();
             Frames(12);
+            ClearZone(run1, run1.Zones[0]);
             ClearZone(run2, run2.Zones[0]);
             while (race.Phase == StuntRacePhase.Open)
             {
                 Frame();
             }
-            ctx.Check(race.Phase == StuntRacePhase.FinalRun && r2.InRun && !r1.InRun,
-                $"at time up P2's run is in progress and the race runs on as its final run: {race.Phase}, P2 in a run={r2.InRun}");
+            ctx.Check(race.Phase == StuntRacePhase.FinalRun && r1.InRun && r2.InRun,
+                $"at time up both runs are in progress and the race runs on as its final run: {race.Phase}, in a run={r1.InRun}/{r2.InRun}");
 
             // P1 cannot start another run in the final run.
             int respawns = p1.RespawnCount;
             Rerun(p1);
-            ctx.Check(p1.RespawnCount == respawns && !p1.StartCount.Running && run1.AllComplete && run1.Elapsed == secondRun,
-                $"P1's hold in the final run is refused: {p1.RespawnCount - respawns} respawn(s), count running={p1.StartCount.Running}, run kept at {StuntMission.FormatTime(run1.Elapsed)}");
+            ctx.Check(p1.RespawnCount == respawns && !p1.StartCount.Running && run1.CompletedCount == 1 && r1.InRun,
+                $"P1's hold in the final run is refused: {p1.RespawnCount - respawns} respawn(s), count running={p1.StartCount.Running}, zones kept {run1.CompletedCount}");
+
+            // Nor does it respawn there: not on a tap in flight, and not once its aeroplane is lost.
+            Press(TapFrames, p1);
+            bool tapRefused = p1.RespawnCount == respawns && r1.InRun;
+            p1.DebugForceCrash();
+            Press(TapFrames, p1);
+            Frames(6);
+            ctx.Check(tapRefused && p1.Crashed && !p1.RespawnOffered && p1.RespawnCount == respawns
+                    && race.Phase == StuntRacePhase.FinalRun && r2.InRun,
+                $"P1's tap in flight and its crash in the final run are refused: {p1.RespawnCount - respawns} respawn(s), crashed={p1.Crashed}, P2 still in its run={r2.InRun}");
+            ctx.Check(run1.Stopped && !r1.InRun && r1.CurrentZones == 1 && r1.BestTime == secondRun,
+                $"…and the crash stops P1's run with its zone counted and its best kept: stopped={run1.Stopped}, in a run={r1.InRun}, zones {r1.CurrentZones}, best {r1.BestTime}");
 
             // P2 completes its final run faster than P1's best; the race ends on it.
             for (int k = 1; k < run2.TotalCount; k++)

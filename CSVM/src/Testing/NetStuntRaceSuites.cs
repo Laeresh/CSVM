@@ -117,7 +117,9 @@ internal static class NetStuntRaceSuites
         + "nobody for its return; a tap puts each seat abeam the exit of the Danger Zone it cleared "
         + "last, zones and clock kept and no count run, and the other machine's copy follows it there; "
         + "a hold restarts each seat's run once behind the count, zones cleared, its release taps "
-        + "nothing, and GO stands each seat on the shared spawn")]
+        + "nothing, and GO stands each seat on the shared spawn; a crash before time up returns on a tap "
+        + "with the run kept, while in the final run the tap in flight is refused and a crash stays down, "
+        + "stopping its run on the host, and the last one ends the race on both machines")]
     internal static void ANetworkRaceRespawnsInFlight(TestContext ctx)
     {
         const string cell = "respawn";
@@ -212,6 +214,8 @@ internal static class NetStuntRaceSuites
                 ctx.Check(seats[i].RespawnCount == respawns[i] + 1 && off < SpawnReach,
                     $"[{cell}] the {names[i]}'s release taps nothing and GO stands it on the shared spawn ({seats[i].RespawnCount - respawns[i]} respawn(s), {off:0.0} m off)");
             }
+
+            FinalRunCrashes(ctx, cell, s, seats, runs, names);
         }
         finally
         {
@@ -228,6 +232,62 @@ internal static class NetStuntRaceSuites
     /// store a guest's best would land in the player's own stunt scores.</summary>
     internal static string[] RaceArgs(TestContext ctx) =>
         new[] { "--mute", "--no-pads", $"--scores={System.IO.Path.Combine(ctx.ScratchDir, "net_race_scores.json")}" };
+
+    // Before time up a crash returns each seat with its run kept. In the final run the tap is
+    // refused in flight, and a crash keeps the seat down and stops its run on the host. The second
+    // stop ends the race on both machines.
+    private static void FinalRunCrashes(TestContext ctx, string cell, RaceSeats s, FlightController[] seats,
+        StuntMission[] runs, string[] names)
+    {
+        var races = new[] { s.HostRace, s.GuestRace };
+        // Past GO's step, so each run's clock has started and the race counts its zone.
+        Steps(s.Peers, 10);
+        foreach (var run in runs)
+        {
+            StuntRaceSuites.ClearZone(run, run.Zones[0]);
+        }
+
+        Steps(s.Peers, 10);
+        var respawns = seats.Select(p => p.RespawnCount).ToArray();
+        foreach (var seat in seats)
+        {
+            seat.DebugForceCrash();
+        }
+
+        Press(s.Peers, seats, TapFrames);
+        Steps(s.Peers, 10);
+        for (int i = 0; i < seats.Length; i++)
+        {
+            ctx.Check(seats[i].RespawnCount == respawns[i] + 1 && !seats[i].Crashed && runs[i].CompletedCount == 1
+                      && s.HostRace.Of(seats[i].PlayerIndex)!.InRun,
+                $"ABLE-TO-FAIL CONTROL: [{cell}] before time up the {names[i]}'s crash returns on a tap with its run kept ({seats[i].RespawnCount - respawns[i]} respawn(s), zones {runs[i].CompletedCount})");
+        }
+
+        foreach (var race in races)
+        {
+            race.Advance(race.TimeLeft);
+        }
+
+        bool up = Until(s.Peers, () => races.All(r => r.Phase == StuntRacePhase.FinalRun));
+        respawns = seats.Select(p => p.RespawnCount).ToArray();
+        Press(s.Peers, seats, TapFrames);
+        ctx.Check(up && seats.Select(p => p.RespawnCount).SequenceEqual(respawns) && races.All(r => r.Racers.All(x => x.InRun)),
+            $"[{cell}] in the final run a tap in flight is refused on both seats ({string.Join("/", seats.Select((p, i) => p.RespawnCount - respawns[i]))} respawn(s), {s.HostRace.Phase}/{s.GuestRace.Phase})");
+
+        // The host's seat first: the race waits on the guest's run.
+        s.Host.DebugForceCrash();
+        Press(s.Peers, new[] { s.Host }, TapFrames);
+        bool hostStopped = Until(s.Peers, () => !s.GuestRace.Of(0)!.InRun);
+        ctx.Check(hostStopped && s.Host.Crashed && !s.Host.RespawnOffered && !s.HostRace.Ended && s.HostRace.Of(1)!.InRun,
+            $"[{cell}] the host's crash in the final run stays down after a tap and stops its run on both boards while the guest's runs on ({s.Host.RespawnCount - respawns[0]} respawn(s), ended={s.HostRace.Ended})");
+
+        s.Guest.DebugForceCrash();
+        Press(s.Peers, new[] { s.Guest }, TapFrames);
+        bool over = Until(s.Peers, () => s.HostRace.Ended && s.GuestRace.Ended);
+        ctx.Check(over && seats.All(p => p.Crashed) && seats.Select(p => p.RespawnCount).SequenceEqual(respawns)
+                  && races.All(r => r.Racers.All(x => !x.InRun) && r.Racers.All(x => x.CurrentZones == 1)),
+            $"[{cell}] the guest's crash stops the last run on the host, and the race ends on both machines with nobody respawned and each run's zone kept (ended {s.HostRace.Ended}/{s.GuestRace.Ended}, crashed {string.Join("/", seats.Select(p => p.Crashed))}, respawns {string.Join("/", seats.Select((p, i) => p.RespawnCount - respawns[i]))}, in a run and zones {string.Join(" ", races.SelectMany(r => r.Racers).Select(x => $"{x.InRun}:{x.CurrentZones}"))})");
+    }
 
     private static void Race(TestContext ctx, string cell, LoopbackConditions link, int seed, int opensWithin)
     {

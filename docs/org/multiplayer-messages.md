@@ -912,8 +912,9 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
 the step after its count's GO, each zone's first clearing with its run time, the finish, and a
-rerun that throws the run away. The owner numbers its runs from 1 within a window, and the window
-number is 0 for the first, one more for each rerun. The host takes a report only from the machine
+rerun that throws the run away. A crash in the final run is reported as an abandon too, and the
+host stops that run with the zones it reached. The owner numbers its runs from 1 within a window,
+and the window number is 0 for the first, one more for each rerun. The host takes a report only from the machine
 flying its seat and only under its own window. A start must carry a run number above the newest it
 heard from that seat, and any other report must name that newest run, so a repeated start or a
 report of a run already superseded counts nothing. A zone or finish with no finite run time is dropped. The race

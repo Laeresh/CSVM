@@ -271,7 +271,8 @@ public partial class FlightController : Node3D
     public VersusStatusLine? VersusStatusLine;
 
     /// <summary>The time-attack race this plane is one seat of, or null flying solo. Set, a
-    /// rerun of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>. Once
+    /// rerun of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>, and any
+    /// respawn only while <see cref="StuntRace.MayRespawn"/>. Once
     /// the race has ended, R is a new window for every pilot through <see cref="RerunRace"/>.</summary>
     public StuntRace? Race;
 
@@ -996,7 +997,7 @@ public partial class FlightController : Node3D
     /// <summary>Whether R, pad Y or the armed timer would bring this pilot back once crashed. The
     /// crashed step and the HUD's respawn prompt both read this one answer, so the prompt cannot
     /// offer a respawn the step refuses.</summary>
-    public bool RespawnOffered => !Spectating && !CrashIsFinal && !CommandsHeld;
+    public bool RespawnOffered => !Spectating && !CrashIsFinal && !CommandsHeld && !RaceRefusesRespawn;
 
     /// <summary>An aircraft that has been BUILT but held completely out of the session, not
     /// stepped, drawn, collidable, hittable, or a targeting candidate. The original's wave
@@ -1132,6 +1133,9 @@ public partial class FlightController : Node3D
     // Whether the respawn control splits into a tap and a hold. A seat whose return somebody else
     // grants keeps the one press it asks with.
     private bool StuntRespawnSplits => Stunt != null && RespawnRequest == null;
+
+    // A race's final run, which offers no respawn of any kind.
+    private bool RaceRefusesRespawn => Race is { MayRespawn: false };
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
@@ -2100,6 +2104,9 @@ public partial class FlightController : Node3D
             // reads the same answer. A hull that dies inside a hold keeps falling.
             if (!RespawnOffered)
             {
+                // Otherwise the race would wait on this wreck's run until the final run's cap.
+                if (RaceRefusesRespawn)
+                    Stunt?.Stop();
                 StepWreckFall(dt);
                 return;
             }
@@ -3744,7 +3751,7 @@ public partial class FlightController : Node3D
         // and that branch's own read is what brings a crashed pilot back.
         if (StuntRespawnSplits)
         {
-            if (AllowLiveRespawn)
+            if (AllowLiveRespawn && !RaceRefusesRespawn)
                 Perform(_run.StepLive(RespawnPressed(), dt));
             else
                 _run.StepLiveRefused(dt); // the button is not read where the pin refuses it

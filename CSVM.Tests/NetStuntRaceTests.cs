@@ -178,6 +178,32 @@ public sealed class NetStuntRaceTests
     }
 
     [Fact]
+    public void AGuestsRunLostInTheFinalRunStopsOnTheHostWhichEndsTheRaceOnBothMachines()
+    {
+        var f = Field();
+        var run = StuntRaceTests.FakeMission(Zones);
+        f.Guest.Feed(1, run);
+        run.Tick(Dt);
+        f.Pump();
+        f.Step();
+        Assert.True(f.HostRace.Of(1)!.InRun);
+
+        Advance(f.HostRace, Window + 1f);
+        Advance(f.GuestRace, Window + 1f);
+        f.Step();
+        Assert.Equal((StuntRacePhase.FinalRun, false), (f.GuestRace.Phase, f.GuestRace.MayRespawn));
+
+        // ABLE-TO-FAIL CONTROL: the host waits on the guest's run until it is lost.
+        Assert.False(f.HostRace.Ended);
+        run.Stop();
+        f.Pump();
+        Assert.Equal((false, true), (f.HostRace.Of(1)!.InRun, f.HostRace.Ended));
+        f.Step();
+        Assert.True(f.GuestRace.Ended);
+        Assert.DoesNotContain(f.GuestRace.Racers, r => r.InRun);
+    }
+
+    [Fact]
     public void AFinishPastTheCapIsRefusedAndTheGuestEndsOnlyOnTheHostsWord()
     {
         var f = Field();

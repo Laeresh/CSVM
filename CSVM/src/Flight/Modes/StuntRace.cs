@@ -274,6 +274,10 @@ public sealed class StuntRace
     /// <summary>Whether a run may start or rerun now: only while the window is open.</summary>
     public bool MayStartRun => Phase == StuntRacePhase.Open;
 
+    /// <summary>Whether a pilot may respawn: a crashed aeroplane's return and a tapped return in
+    /// flight alike. Refused in the final run, where a lost aeroplane's run stops where it stood.</summary>
+    public bool MayRespawn => Phase != StuntRacePhase.FinalRun;
+
     public bool Ended => Phase == StuntRacePhase.Ended;
 
     /// <summary>The racers in player order (index 0 = player 1).</summary>
@@ -323,11 +327,12 @@ public sealed class StuntRace
     }
 
     /// <summary>Feeds this race from player <paramref name="index"/>'s own run: its clock
-    /// starting, each zone, its completion and a rerun throwing it away.</summary>
+    /// starting, each zone, its completion, a rerun and a final-run stop.</summary>
     public void Follow(int index, StuntMission run)
     {
         run.RunStarted += () => RunStarted(index);
         run.RunReset += () => RunAbandoned(index);
+        run.RunStopped += () => RunAbandoned(index);
         run.ZoneCompleted += zone =>
         {
             for (int i = 0; i < run.Zones.Count; i++)
@@ -430,7 +435,8 @@ public sealed class StuntRace
         return true;
     }
 
-    /// <summary>Player <paramref name="index"/> threw the run in progress away.</summary>
+    /// <summary>Player <paramref name="index"/> threw the run in progress away, or lost their
+    /// aeroplane in the final run. The run stops, its zones counted, which may end a final run.</summary>
     public void RunAbandoned(int index)
     {
         if (Replicated || Of(index) is not { InRun: true, Left: false } racer)
