@@ -395,9 +395,11 @@ constants rather than reading a layout.
   seat too), scrolling in its column when wider, and drawn red on its own machine. The row's place
   in the list is its seat at the launch. One Ready stands for all of a machine's
   seats, and a seat given or taken since clears it. Ready on a machine flying further seats walks
-  each of them, in player order, through the per-seat aircraft screen over the eleven stock planes
-  alone, its WEAPON LOADOUT included, and the last seat's confirm is the Ready; a further seat flies
-  no custom plane. The player count against the cap, the team rows' member counts, the team balance
+  each of them, in player order, through the per-seat aircraft screen, its WEAPON LOADOUT included,
+  and the last seat's confirm is the Ready. That screen lists the eleven stock planes and, while the
+  host allows custom planes, the machine's saved ones after them. A further seat's custom plane is
+  named on its row and checked against Allow Custom Planes and Outlaw Components as a first seat's
+  is. The player count against the cap, the team rows' member counts, the team balance
   and the launch refusals count every seat. A guest's further seats are seated only from the room
   every seated guest's first seat leaves. A host whose joined seats outnumber its chosen cap flies
   the cap's worth of them and seats no guest. A machine flying fewer seats than it joined reads the

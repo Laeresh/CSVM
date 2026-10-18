@@ -622,7 +622,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
         foreach (int peer in IsCoopHost ? _admission.Admitted : _transport.AllPeers)
         {
-            for (int seat = 0; seat < bySeat.Count && seat < PlaneBuildMessage.Mine; seat++)
+            for (int seat = 0; seat < bySeat.Count && seat < PlaneBuildMessage.LowestMine; seat++)
             {
                 _transport.Tell(peer, new PlaneBuildMessage((byte)seat, bySeat[seat]));
             }

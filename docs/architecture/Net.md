@@ -298,7 +298,7 @@ a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 ## src/Net/NetLobby.cs
 A carrier's first listener and itself the `INetTransport` the session later binds. A host's
 `Advertise` reaches every peer on connect and on change; a guest keeps `Advert` and `Closed`. Lobby
-messages stay here (a host's `Picks`, each seat's by `PickAt` with `SeatsWanted`, `PickBuilds` and team actions, a guest's flow, fits, builds,
+messages stay here (a host's `Picks`, each seat's by `PickAt` with `SeatsWanted`, each seat's build by `BuildAt` and team actions, a guest's flow, fits, builds,
 rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
@@ -411,8 +411,8 @@ original's `0x1a` subtypes. Decode: [../org/multiplayer-messages.md](../org/mult
 
 ## src/Net/NetPlaneMessages.cs
 Custom planes on the wire. `NetPlaneBuild` is one plane's airframe, engine, armour, hardpoints, guns
-and paint as the saved record holds them, and `PlaneBuildMessage` carries one: a guest's pick, or a
-seat's build at launch. `NetPlaneRules` is the host's Allow Custom Planes, Outlaw Components and the
+and paint as the saved record holds them, and `PlaneBuildMessage` carries one: a guest seat's pick under
+`MineAt` its place, or a seat's build at launch. `NetPlaneRules` is the host's Allow Custom Planes, Outlaw Components and the
 original's 34-flag outlaw list; `Refuses` and `Enforce` are the original's Ready check, so every end
 judges a plane alike. `LobbyPlaneRulesMessage` sends the rules. Decode:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).

@@ -184,17 +184,21 @@ internal static class SeatFields
     }
 
     /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
-    /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
-    /// when <paramref name="rules"/> admit it. Without rules a guest's pick seats no build; a co-op
-    /// guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
+    /// <paramref name="customs"/> in menu order. Each guest seat takes the build its lobby pick sent
+    /// for that seat when <paramref name="rules"/> admit it. Without rules a guest's pick seats no
+    /// build; a co-op guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
     /// </summary>
     internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
         IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
     {
         var builds = new Net.NetPlaneBuild?[roster.Count];
-        var picks = (wire as Net.NetLobby)?.PickBuilds;
+        var lobby = wire as Net.NetLobby;
+        int local = 0;
         for (int seat = 0; seat < roster.Count; seat++)
         {
+            // A machine's seats stand side by side in the roster. A seat's place among them is the
+            // count of same-peer seats directly before it.
+            local = seat > 0 && roster[seat - 1].PeerId == roster[seat].PeerId ? local + 1 : 0;
             if (roster[seat].HasPane)
             {
                 int menu = Net.NetSeats.LocalOrdinal(roster, seat);
@@ -202,10 +206,8 @@ internal static class SeatFields
                 continue;
             }
 
-            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot. A
-            // guest's build is its first seat's; its further seats fly stock.
-            bool further = seat > 0 && roster[seat - 1].PeerId == roster[seat].PeerId;
-            if (roster[seat].IsBot || further || rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot.
+            if (roster[seat].IsBot || rules is not { } admitting || lobby?.BuildAt(roster[seat].PeerId, local) is not { } build)
             {
                 continue;
             }

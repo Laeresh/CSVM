@@ -835,35 +835,36 @@ public sealed class DogfightLobby
         return true;
     }
 
-    /// <summary>Picks one of this pilot's custom planes and its fit. Refused on an airframe outside
-    /// the eleven. Whether the rules admit it is asked at Ready, as the original asks.</summary>
-    public bool PickCustom(NetPlaneBuild build, CoopFit fit)
+    /// <summary>Picks one of this machine's custom planes and its fit for its seat
+    /// <paramref name="local"/>, seat 0 unless named. Refused past the fourth seat and on an airframe
+    /// outside the eleven. Whether the rules admit it is asked at Ready, as the original asks.</summary>
+    public bool PickCustom(NetPlaneBuild build, CoopFit fit, int local = 0)
     {
         ArgumentNullException.ThrowIfNull(build);
-        if (build.Airframe >= AirframeCount)
+        if (local < 0 || local >= _picks.Length || build.Airframe >= AirframeCount)
         {
             return false;
         }
 
-        Take(0, build.Airframe, build.Copy(), fit);
+        Take(local, build.Airframe, build.Copy(), fit);
         return true;
     }
 
     /// <summary>Changes this pilot's fit alone, keeping the plane it stands on.</summary>
     public void Refit(CoopFit fit) => Take(0, Airframe, Build, fit);
 
-    /// <summary>The stock airframe and fit this machine's seat <paramref name="local"/> picked,
-    /// counted from 0 among its own. Seat 0's are <see cref="Airframe"/> and <see cref="Fit"/>.
-    /// </summary>
-    public (byte Airframe, CoopFit Fit) SeatPick(int local)
+    /// <summary>The airframe, fit and custom plane (null on a stock one) this machine's seat
+    /// <paramref name="local"/> picked, counted from 0 among its own. Seat 0's are
+    /// <see cref="Airframe"/>, <see cref="Fit"/> and <see cref="Build"/>.</summary>
+    public (byte Airframe, CoopFit Fit, NetPlaneBuild? Build) SeatPick(int local)
     {
         var seat = _picks[Math.Clamp(local, 0, _picks.Length - 1)];
-        return (seat.Airframe, seat.Fit);
+        return (seat.Airframe, seat.Fit, seat.Build);
     }
 
-    /// <summary>Picks a further seat's stock airframe and fit, as <see cref="Pick"/> does seat 0's.
-    /// A further seat flies stock planes alone. A changed pick clears this machine's Ready, which
-    /// stands for every seat. Refused for seat 0, past the fourth seat and outside the eleven.</summary>
+    /// <summary>Picks a further seat's stock airframe and fit, as <see cref="Pick"/> does seat 0's;
+    /// <see cref="PickCustom"/> picks its custom plane. A changed pick clears this machine's Ready,
+    /// which stands for every seat. Refused for seat 0, past the fourth seat and outside the eleven.</summary>
     public bool PickSeat(int local, int airframe, CoopFit fit)
     {
         if (local < 1 || local >= _picks.Length || airframe is < 0 or >= AirframeCount)
@@ -1213,11 +1214,11 @@ public sealed class DogfightLobby
     }
 
     // A guest's seat counts as Ready only under this round and on a plane the rules admit. The
-    // guest's own lobby asks the same, but the host does not take its word for it. Only a first
-    // seat flies a custom plane.
+    // guest's own lobby asks the same, but the host does not take its word for it. Each seat's
+    // custom plane is the one that seat's build named.
     private bool Admits(int peer, CoopPickMessage pick, int local = 0) =>
         pick.Ready && pick.Epoch == _options.Epoch
-        && _rules.Refuses(pick.Airframe, local == 0 && _wire.PickBuilds.TryGetValue(peer, out var build) ? build : null) == PlaneRefusal.None;
+        && _rules.Refuses(pick.Airframe, _wire.BuildAt(peer, local)) == PlaneRefusal.None;
 
     // The original's Ready check over every seat this machine flies, true when it refuses. An
     // outlawed ammunition or rocket also resets every gun's or pylon's to none, so the next Ready
@@ -1327,7 +1328,7 @@ public sealed class DogfightLobby
                 : own ? OwnName()
                 : pick is { Name.Length: > 0 } named ? named.Name
                 : "Pilot " + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
-            string plane = local > 0 ? "" : own ? Build?.Name ?? "" : _wire.PickBuilds.TryGetValue(peer, out var build) ? build.Name : "";
+            string plane = (own ? _picks[local].Build : _wire.BuildAt(peer, local))?.Name ?? "";
             rows.Add(new DogfightLobbySeat(name, own ? _picks[local].Airframe : PickedAirframe(pick),
                 own ? Ready : pick is { } heard && Admits(peer, heard, local), own && local == 0, _teams.TeamOf(peer),
                 local == 0 && _teams.IsCaptain(peer), Plane: plane));
@@ -1427,7 +1428,8 @@ public sealed class DogfightLobby
         rows[0] = new DogfightLobbySeat(OwnName(), Airframe, Ready, false, Plane: Build?.Name ?? "");
         for (int local = 1; local < rows.Length; local++)
         {
-            rows[local] = new DogfightLobbySeat(NetSeats.FurtherSeatName(_name(), host: IsHost, local: local), _picks[local].Airframe, Ready, false);
+            rows[local] = new DogfightLobbySeat(NetSeats.FurtherSeatName(_name(), host: IsHost, local: local), _picks[local].Airframe, Ready, false,
+                Plane: _picks[local].Build?.Name ?? "");
         }
 
         return rows;
@@ -1495,18 +1497,19 @@ public sealed class DogfightLobby
             return;
         }
 
-        // The build goes before the pick, so the host never reads a Ready without the plane behind it.
-        if (_picks[0].FollowBuild() is { } built)
-        {
-            _wire.Tell(_hostPeer, built);
-        }
-
         // One pick per seat this machine asks for, each marking whether another follows. Only the
         // first has a Player Information answer. ⚠ Mark Ready only a seat that flew when the mark
         // was given; a seat given since has picked nothing.
         int seats = Math.Clamp(LocalSeats(), 1, _picks.Length);
         for (int local = 0; local < seats; local++)
         {
+            // Each seat's build goes before its pick, so the host never reads a Ready without the
+            // plane behind it.
+            if (_picks[local].FollowBuild(local) is { } built)
+            {
+                _wire.Tell(_hostPeer, built);
+            }
+
             bool first = local == 0;
             if (_picks[local].Follow(options.Epoch, Ready && local < SeatsFlown, first ? OwnName() : "",
                     first ? Voice() : CoopPickMessage.NoVoice, local, local + 1 < seats) is { } pick)
@@ -1516,8 +1519,8 @@ public sealed class DogfightLobby
         }
     }
 
-    // One seat's pick at this machine: the stock airframe, the custom plane on it and the fit. Only
-    // a first seat takes a custom plane. It keeps what last went to the host.
+    // One seat's pick at this machine: the stock airframe, the custom plane on it and the fit. It
+    // keeps what last went to the host.
     private sealed class SeatPicked
     {
         private CoopPickMessage? _sent;
@@ -1554,8 +1557,9 @@ public sealed class DogfightLobby
             return pick;
         }
 
-        // This seat's build as the host should hold it, or null when it already does.
-        public PlaneBuildMessage? FollowBuild()
+        // This seat's build as the host should hold it, or null when it already does. ⚠ Name the
+        // seat's own place; under one byte for all, a second seat's build overwrites the first's.
+        public PlaneBuildMessage? FollowBuild(int local)
         {
             if (Equals(Build, _buildSent))
             {
@@ -1563,7 +1567,7 @@ public sealed class DogfightLobby
             }
 
             _buildSent = Build?.Copy();
-            return new PlaneBuildMessage(PlaneBuildMessage.Mine, Build);
+            return new PlaneBuildMessage(PlaneBuildMessage.MineAt(local), Build);
         }
     }
 }

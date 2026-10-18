@@ -1255,14 +1255,15 @@ session.
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture, bit 6 the host lands on Game Scores at the end, a remake bit), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
 | `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, how many seats its machine was given at 7 (its rows side by side from its own, 0 from a host a patch older reading as one), then sixteen rows of 60 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 40 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (968 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 40 bytes at 4, the line in 84 bytes at 44 (128 bytes) |
-| `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
+| `0x5D` | Plane build | reliable, guest to host (each of its seats' picks) and host to each guest (every seat, at launch) | seat at 4 (a guest's own seat from `0xFF` for its first down to `0xFC` for its fourth, a launch seat below `0xFC`), flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
 
 Any option change advances the round and clears every Ready, the host's own included, so a player
 is never launched on options it did not see. A guest's changed pick clears that guest's own Ready,
 and the pick drops any session payload the host still holds from that guest's last match. The
 launch waits until every row is Ready. A machine flying several seats has a row per seat, and a
-guest sends one pick per seat as a co-op guest does, its further seats on stock planes; the host
+guest sends one pick per seat as a co-op guest does, each seat's custom plane as a build under its
+own seat byte before that seat's pick; the host
 seats them by the co-op rule above, counting every seat against its cap, and its launch builds
 each as that guest's, side by side. A guest's
 chat line goes to the host, which adds it to its own list and relays it to every other guest under
@@ -1280,14 +1281,24 @@ type 3 must not reach a patch release of a minor that lacks it.
 
 A custom plane crosses whole, where the original's player data leaves out the engine, the armour
 and the hardpoints. The shooter decides a hit here, so every copy of a plane needs its owner's hit
-volumes and armour. A guest sends its pick's build before the pick; at launch the host sends every
-seat's build and fit before the session's opener, on the same ordered channel, so a guest has built
-every custom plane before it reports loaded. The plane rules change the round as an option does.
-The original's Ready check runs on each end for its own pick, and the host also checks every guest's
-pick against its rules before counting it Ready, which the original does not. An outlawed
+volumes and armour. A guest sends each seat's build before that seat's pick, the seat byte naming
+its place among the guest's own seats, so a second seat's build never overwrites the first's; at
+launch the host sends every seat's build and fit before the session's opener, on the same ordered
+channel, so a guest has built every custom plane before it reports loaded. The plane rules change
+the round as an option does. The original's Ready check runs on each end for every seat it flies,
+and the host also checks every guest seat's pick against its rules before counting it Ready, which
+the original does not. An outlawed
 ammunition or rocket refuses Ready once and resets the fit, as the original does; the hardpoint
 counts are kept, since the pylons stay empty either way. A co-op launch sends the host's own custom
 planes, and its guests fly stock.
+
+**Compatibility of the seat bytes.** The previous layout knew only `0xFF`, a guest's one pick, and
+read every other byte as a launch seat. A host of that layout files `0xFE` to `0xFC` as launch-seat
+builds it never reads, so it flies a newer guest's further seat on the stock airframe while that
+guest builds its own custom plane: the two machines disagree on the plane. A guest of that layout
+sends only `0xFF`, so its further seats fly stock on both ends. Two builds share a lobby only on
+the same MAJOR.MINOR (`BuildVersionMessage`), so this layout must not reach a patch release of a
+minor that lacks it.
 
 The roster names each row's custom plane so every end's player list can show it, where the build
 itself reaches only the host before the launch. The roster is 968 bytes, and a reader refuses any

@@ -187,7 +187,54 @@ public sealed class DogfightLobbyTests
         Assert.True(guest.SetReady(true));
         Settle(host, guests);
         Assert.True(host.Players[1].Ready);
-        Assert.Equal(build, ((NetLobby)Steps[host][0]).PickBuilds[1]);
+        Assert.Equal(build, ((NetLobby)Steps[host][0]).BuildAt(1, 0));
+    }
+
+    [Fact]
+    public void EachSeatOfAMachineFliesItsOwnCustomPlaneUnderTheHostsRules()
+    {
+        var (host, guests, _) = Lobbies(2, "Lucy", localSeats: 2, guestSeats: 2);
+        var guest = guests[0];
+        Assert.True(host.SetAllowCustomPlanes(true));
+        Settle(host, guests);
+        var first = new NetPlaneBuild { Name = "Bee", Airframe = 2, Engine = 1 };
+        var second = new NetPlaneBuild { Name = "Moth", Airframe = 3, Engine = 1 };
+        var hosts = new NetPlaneBuild { Name = "Wasp", Airframe = 6, Engine = 1 };
+        Assert.True(guest.PickCustom(first, default));
+        Assert.True(guest.PickCustom(second, default, local: 1));
+        Assert.True(host.PickCustom(hosts, default, local: 1));
+        Assert.False(guest.PickCustom(second, default, local: 4));
+        Settle(host, guests);
+
+        // The second seat's build reaches the host under its own place, beside the first's.
+        var wire = (NetLobby)Steps[host][0];
+        Assert.Equal((first, second), (wire.BuildAt(1, 0), wire.BuildAt(1, 1)));
+        string[] planes = { "", "Wasp", "Bee", "Moth" };
+        Assert.Equal(planes, host.Players.Select(p => p.Plane));
+        Assert.Equal(planes, guest.Players.Select(p => p.Plane));
+        Assert.Equal((3, second), (guest.SeatPick(1).Airframe, guest.SeatPick(1).Build));
+
+        Assert.True(host.SetReady(true) && guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.CanLaunch);
+
+        // Outlawing the second seat's airframe refuses that seat on both ends, the first's standing.
+        Assert.True(host.SetOutlawComponents(true));
+        Assert.True(host.SetOutlawed(NetPlaneRules.AirframeFlag + second.Airframe, true));
+        Settle(host, guests);
+        Assert.False(guest.SetReady(true));
+        Assert.Equal(new[] { PlaneRefusal.Airframe }, guest.ReadyRefusals);
+        Assert.True(host.SetReady(true));
+        Settle(host, guests);
+        Assert.False(host.CanLaunch);
+
+        // A stock pick on another airframe clears the second seat's build at the host.
+        Assert.True(guest.PickSeat(1, 4, default));
+        Settle(host, guests);
+        Assert.Equal((first, (NetPlaneBuild?)null), (wire.BuildAt(1, 0), wire.BuildAt(1, 1)));
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.CanLaunch);
     }
 
     [Fact]

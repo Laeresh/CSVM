@@ -13,10 +13,11 @@ namespace CSVM.UI.Menu.Original;
 /// The remake-only per-seat aircraft screen, nothing on it decoded.
 /// Each further seat picks its own aircraft here in player order, after seat 0's sortie pick,
 /// Instant Action's FLY MISSION or the lobby's Ready. It wears the campaign plane-selection board
-/// over the sortie roster, the lobby's walk over the stock rows alone. Accept selects, Accept again
-/// confirms and hands on, and WEAPON LOADOUT opens that seat's own fit. Back and CANCEL SELECTIONS
-/// drop a selection, then leave the walk with every seat kept. The picking seat's device and seat
-/// 0's mouse drive it, and the last confirm is the launch, the Ready or FLY's return.
+/// over the sortie roster, the lobby's walk over the stock rows alone unless the host allows custom
+/// planes. Accept selects, Accept again confirms and hands on, and WEAPON LOADOUT opens that seat's
+/// own fit. Back and CANCEL SELECTIONS drop a selection, then leave the walk with every seat kept.
+/// The picking seat's device and seat 0's mouse drive it, and the last confirm is the launch, the
+/// Ready or FLY's return.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -27,8 +28,8 @@ public sealed partial class OriginalShell
     private PlayerSeat? _pickingSeat;
     private OriginalScreen _seatReturn = OriginalScreen.FreeFlight;
 
-    // The stock rows the shared roster leads with, all a lobby's further seat may fly. Taken once
-    // as a lobby walk begins.
+    // The rows a lobby's further seat may fly, taken once as a lobby walk begins. That is the whole
+    // shared roster while the host allows custom planes, else the stock rows it leads with.
     private IReadOnlyList<MenuAircraft> _lobbyRoster = Array.Empty<MenuAircraft>();
 
     /// <summary>The seat picking on the per-seat screen, as its index, or -1 off that screen.</summary>
@@ -45,7 +46,7 @@ public sealed partial class OriginalShell
         _screen == OriginalScreen.SeatPlane
         || (_screen == OriginalScreen.InstantActionLoadout && InstantAction.OnSeatLoadout);
 
-    // The rows the walk offers: the stock ones alone over the lobby, else the whole sortie roster.
+    // The rows the walk offers: the lobby's own over the lobby, else the whole sortie roster.
     private IReadOnlyList<MenuAircraft> WalkRoster => _seatReturn == OriginalScreen.Lobby ? _lobbyRoster : _setup.Roster;
 
     /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
@@ -154,13 +155,15 @@ public sealed partial class OriginalShell
     }
 
     // The lobby's Ready with a further seat in the match. Each such seat picks again from browsing.
-    // A seat the host gave no place stands confirmed, so the walk passes it. ⚠ Keep a cursor inside
-    // the stock rows; a further seat flies no custom plane over the wire.
+    // A seat the host gave no place stands confirmed, so the walk passes it. ⚠ Keep the shared
+    // roster's indices; the seat's loadout reads its cursor against that roster.
     private void BeginLobbySeatWalk()
     {
         var seats = _setup.Seats;
         int places = _net?.Dogfight?.SeatsFlown ?? 1;
-        _lobbyRoster = _setup.Roster.TakeWhile(row => !row.IsCustom).ToList();
+        _lobbyRoster = _net?.Dogfight?.Rules.AllowCustom == true
+            ? _setup.Roster
+            : _setup.Roster.TakeWhile(row => !row.IsCustom).ToList();
         for (int i = 1; i < seats.Count; i++)
         {
             // Two steps back reach browsing from any stage: confirmed, then selected.

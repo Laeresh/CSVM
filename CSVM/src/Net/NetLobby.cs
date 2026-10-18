@@ -39,7 +39,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly Dictionary<int, CoopPickMessage> _picks = new();
     private readonly Dictionary<int, CoopPickMessage?[]> _seatPicks = new();
     private readonly Dictionary<int, CoopFit> _seatFits = new();
-    private readonly Dictionary<int, NetPlaneBuild> _pickBuilds = new();
+    private readonly Dictionary<int, NetPlaneBuild?[]> _pickBuilds = new();
     private readonly Dictionary<int, NetPlaneBuild?> _seatBuilds = new();
     private readonly List<int> _unpicked = new();
     private readonly List<CoopHangarMessage?> _hangar = new();
@@ -144,10 +144,6 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// seat again, so an entry from an earlier flight is always overwritten before it is read.
     /// </summary>
     public IReadOnlyDictionary<int, CoopFit> SeatFits => _seatFits;
-
-    /// <summary>Each connected guest's custom plane, by peer. A guest on a stock pick has none.
-    /// </summary>
-    public IReadOnlyDictionary<int, NetPlaneBuild> PickBuilds => _pickBuilds;
 
     /// <summary>Each seat's custom plane as the host last launched it, by seat, null for a stock
     /// seat. A launch names every seat again, as it does its fit.</summary>
@@ -266,6 +262,11 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// counted from 0 among its own, or null while none has arrived.</summary>
     public CoopPickMessage? PickAt(int peer, int local) =>
         _seatPicks.TryGetValue(peer, out var picks) && local >= 0 && local < picks.Length ? picks[local] : null;
+
+    /// <summary>The custom plane <paramref name="peer"/> picked for its seat <paramref name="local"/>,
+    /// counted from 0 among its own, or null for a stock pick.</summary>
+    public NetPlaneBuild? BuildAt(int peer, int local) =>
+        _pickBuilds.TryGetValue(peer, out var builds) && local >= 0 && local < builds.Length ? builds[local] : null;
 
     /// <summary>Hands <paramref name="advert"/> to every peer now and to every peer that connects
     /// later. Sent only when it differs from the last one, so a board may call this every frame.
@@ -442,7 +443,6 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _turnedAway.Add((peer, why));
         _held.RemoveAll(held => held.Peer == peer);
         ForgetPicks(peer);
-        _pickBuilds.Remove(peer);
         Changes++;
         if (_listener != null && _bound.Remove(peer))
         {
@@ -483,7 +483,6 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _answered.Remove(peer);
         _held.RemoveAll(held => held.Peer == peer);
         ForgetPicks(peer);
-        _pickBuilds.Remove(peer);
         _unpicked.Remove(peer);
         _teamActions.RemoveAll(asked => asked.Peer == peer);
         if (_listener != null && _bound.Remove(peer))
@@ -788,7 +787,6 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _clashing.Add(peer);
         _held.RemoveAll(held => held.Peer == peer);
         ForgetPicks(peer);
-        _pickBuilds.Remove(peer);
         if (_listener != null && _bound.Remove(peer))
         {
             _listener.OnPeerDisconnected(peer);
@@ -817,23 +815,27 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     {
         _picks.Remove(peer);
         _seatPicks.Remove(peer);
+        _pickBuilds.Remove(peer);
     }
 
-    // A guest's own build goes with its pick, by peer. A host's build names a seat of its launch.
+    // A guest's own build goes with its seat's pick, by peer and place. A host's build names a seat
+    // of its launch.
     private void TakeBuild(int peer, PlaneBuildMessage built)
     {
-        if (built.Seat != PlaneBuildMessage.Mine)
+        int local = PlaneBuildMessage.LocalOf(built.Seat);
+        if (local < 0)
         {
             _seatBuilds[built.Seat] = built.Build;
+            return;
         }
-        else if (built.Build is { } build)
+
+        if (!_pickBuilds.TryGetValue(peer, out var builds))
         {
-            _pickBuilds[peer] = build;
+            builds = new NetPlaneBuild?[CoopPickMessage.MaxLocal + 1];
+            _pickBuilds[peer] = builds;
         }
-        else
-        {
-            _pickBuilds.Remove(peer);
-        }
+
+        builds[local] = built.Build;
     }
 
     private void SendAdvert(int peer)

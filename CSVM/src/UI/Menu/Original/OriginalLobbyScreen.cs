@@ -1078,9 +1078,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return changed;
     }
 
-    /// <summary>The per-seat aircraft screen's end over this lobby. Each further seat takes the stock
-    /// aircraft under its cursor in <paramref name="roster"/> and the fit it confirmed. Then this
-    /// machine marks Ready, or the original's refusal says why not.</summary>
+    /// <summary>The per-seat aircraft screen's end over this lobby. Each further seat takes the
+    /// aircraft under its cursor in <paramref name="roster"/> and the fit it confirmed. A saved custom
+    /// plane goes as its wire build, on its saved fit when the seat confirmed none. Then this machine
+    /// marks Ready, or the original's refusal says why not.</summary>
     public void ReadySeats(IReadOnlyList<PlayerSeat> seats, IReadOnlyList<MenuAircraft> roster)
     {
         ArgumentNullException.ThrowIfNull(seats);
@@ -1093,10 +1094,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         for (int local = 1; local < seats.Count && local < lobby.SeatsFlown; local++)
         {
             var seat = seats[local];
-            int airframe = seat.Cursor >= 0 && seat.Cursor < roster.Count && StockAirframes.IdOf(roster[seat.Cursor].Node) is { } id
-                ? id
-                : DogfightLobby.DefaultAirframe;
-            lobby.PickSeat(local, airframe, CampaignLoadout.FitOf(seat.Fit.IsStock ? null : seat.Fit, _stock()));
+            var row = seat.Cursor >= 0 && seat.Cursor < roster.Count ? roster[seat.Cursor] : null;
+            var fit = CampaignLoadout.FitOf(seat.Fit.IsStock ? null : seat.Fit, _stock());
+            if (row?.Custom is { } def && CSVM.Flight.Hangar.CustomPlaneWire.Build(def) is { } build)
+            {
+                lobby.PickCustom(build, seat.Fit.IsStock ? SavedFit(def) : fit, local);
+                continue;
+            }
+
+            int airframe = row != null && StockAirframes.IdOf(row.Node) is { } id ? id : DogfightLobby.DefaultAirframe;
+            lobby.PickSeat(local, airframe, fit);
         }
 
         if (!lobby.SetReady(true))
@@ -1374,6 +1381,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static string Item(DropdownList list) =>
         list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
 
+    // The fit a saved plane flies when picked: its stored loadout, else the stock fit.
+    private static CoopFit SavedFit(CustomPlaneDef def) => def.HasLoadout ? CoopFit.Of(def.Ammo, def.Ordnance) : default;
+
     // What the team button does for this pilot, the ready script's 1200 to 1202. It is Leave Team on
     // a team, Join Team with a team row picked, else Create Team.
     private TeamButtonAction TeamButton(DogfightLobby lobby) =>
@@ -1493,8 +1503,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         };
         for (int local = 1; local < lobby.SeatsFlown; local++)
         {
-            var (airframe, fit) = lobby.SeatPick(local);
-            seats.Add(new MenuSeatChoice(StockAirframes.Node(airframe), _pads(local), CampaignLoadout.For(lobby.Rules.Enforce(fit), _stock())));
+            var (airframe, fit, build) = lobby.SeatPick(local);
+            seats.Add(new MenuSeatChoice(StockAirframes.Node(airframe), _pads(local), CampaignLoadout.For(lobby.Rules.Enforce(fit), _stock()),
+                CSVM.Flight.Hangar.CustomPlaneWire.Def(build)));
         }
 
         return new LaunchExit(
@@ -1866,8 +1877,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     return new DropdownList(items, current, _ => true, i =>
-                        lobby.PickCustom(CSVM.Flight.Hangar.CustomPlaneWire.Build(saved[i])!,
-                            saved[i].HasLoadout ? CoopFit.Of(saved[i].Ammo, saved[i].Ordnance) : default));
+                        lobby.PickCustom(CSVM.Flight.Hangar.CustomPlaneWire.Build(saved[i])!, SavedFit(saved[i])));
                 }
 
             case PlaneKey:

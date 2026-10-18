@@ -31,6 +31,11 @@ public sealed class NetPlaneMessagesTests
             Assert.Equal(sent, got);
         }
 
+        // A guest's four seats name bytes 0xFF down to 0xFC; every launch seat lies below them.
+        Assert.Equal(new byte[] { 0xFF, 0xFE, 0xFD, 0xFC }, Enumerable.Range(0, 4).Select(PlaneBuildMessage.MineAt));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PlaneBuildMessage.MineAt(4));
+        Assert.Equal(new[] { 0, 3, -1, -1 }, new byte[] { 0xFF, 0xFC, 0xFB, (byte)(NetSeats.MaxPlayers - 1) }.Select(PlaneBuildMessage.LocalOf));
+
         Assert.Equal(0x5D, (int)NetMessageType.PlaneBuild);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.PlaneBuild));
 

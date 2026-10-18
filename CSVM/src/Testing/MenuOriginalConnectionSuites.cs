@@ -38,6 +38,9 @@ internal static class MenuOriginalConnectionSuites
     // The suite whose scratch store holds the plane the Connection page builds.
     private const string BuildSuite = "menu-original-connection-build";
 
+    // The suite whose scratch store holds the planes the lobby's second seats fly.
+    private const string SeatCustomsSuite = "menu-original-lobby-seat-customs";
+
     // The landing's flown match: the host's seed, the steps both sessions settle through, and a
     // fifth of a second either side of the end's hold.
     private const ulong FlightSeed = 0x139UL;
@@ -353,6 +356,131 @@ internal static class MenuOriginalConnectionSuites
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite(SeatCustomsSuite,
+        "The Multiplayer Lobby's further seats on custom planes, over the loopback: a host and a guest, "
+        + "each with a second seat signed on and planes saved in the hangar, walk each second seat to a "
+        + "saved plane on the per-seat aircraft screen. Both lists name each second seat's custom plane "
+        + "on its row, LAUNCH! hands the host's second seat its plane's def, the host's field takes "
+        + "the guest's second seat's build off its pick, and the guest launches its second seat on its plane")]
+    internal static void TheLobbysSeatsOnCustomPlanes(TestContext ctx)
+    {
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(29));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return mesh[1];
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.Lan.SearchAddress = Loopback;
+        }
+
+        // Saved in name order, so the stock rows lead and the two builds follow at 11 and 12.
+        var store = MenuSuiteHost.ScratchPlanes(ctx, SeatCustomsSuite);
+        store.Save(NetCustomPlaneSuites.HostPlane());
+        store.Save(NetCustomPlaneSuites.SecondSeatPlane());
+        int hostRow = OriginalRosters.Airframes.Count;
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, SeatCustomsSuite);
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits, store);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits, store);
+            if (host == null || guest == null)
+            {
+                return;
+            }
+
+            var hostSecond = new ScriptedSeat();
+            var guestSecond = new ScriptedSeat();
+            _ = host.Host.Features.Get<PlayerSetupFeature>().Join(hostSecond);
+            _ = guest.Host.Features.Get<PlayerSetupFeature>().Join(guestSecond);
+            if (!HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends, -1, "Nathan"))
+            {
+                return;
+            }
+
+            for (int frame = 0; frame < 4; frame++)
+            {
+                Pump(ends.ToArray());
+            }
+
+            ctx.Check(host.Door.Dogfight!.Rules.AllowCustom && guest.Door.Dogfight!.SeatsFlown == 2,
+                $"the lobby allows custom planes and the guest flies two seats ({host.Door.Dogfight.Rules}, {guest.Door.Dogfight!.SeatsFlown})");
+            WalkTheSecondSeat(ctx, guest, guestSecond, ends, rows: hostRow + 1, ammo: null);
+            WalkTheSecondSeat(ctx, host, hostSecond, ends, rows: hostRow, ammo: null);
+            string[] planes = { "", "Host Wasp", "", "Loopback Moth" };
+            ctx.Check(host.Door.Dogfight.Players.Select(row => row.Plane).SequenceEqual(planes)
+                      && guest.Door.Dogfight.Players.Select(row => row.Plane).SequenceEqual(planes),
+                $"both lists name each second seat's custom plane on its row (host {string.Join(",", host.Door.Dogfight.Players.Select(r => r.Plane))}; guest {string.Join(",", guest.Door.Dogfight.Players.Select(r => r.Plane))})");
+
+            int before = hostExits.Count;
+            ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+            if (hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault() is not { Net: { } wire } launch)
+            {
+                ctx.Check(false, $"LAUNCH! hands out a launch on the wire ({hostExits.Count - before})");
+                return;
+            }
+
+            ctx.Check(launch.Seats.Count == 2 && launch.Seats[1].Custom?.Name == "Host Wasp" && launch.Seats[0].Custom == null,
+                $"LAUNCH! hands the host's second seat its custom plane's def ({launch.Seats.Count}, {launch.Seats.LastOrDefault()?.Custom?.Name ?? "stock"})");
+            var lobby = host.Door.Dogfight;
+            var (roster, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, launch.Seats.Select(s => s.PlaneNode).ToList(),
+                launch.Seats.Select(s => s.Fit).ToList(), StockLoadouts.Load(), lobby.Rules, lobby.TeamOfPeer, owners: lobby.SeatOwners);
+            var builds = CSVM.Launch.SeatFields.SeatBuildsFor(roster, launch.Seats.Select(s => s.Custom).ToList(), wire.Transport, lobby.Rules);
+            ctx.Check(builds.Select(b => b?.Name ?? "").SequenceEqual(planes),
+                $"the host's field builds each seat's custom plane, the guest's second seat's off its pick ({string.Join(",", builds.Select(b => b?.Name ?? "stock"))})");
+
+            before = guestExits.Count;
+            _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, airframes: StockAirframes.Nodes);
+            for (int frame = 0; frame < 4 && guestExits.Count == before; frame++)
+            {
+                Pump(guest);
+            }
+
+            var guestLaunch = guestExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+            ctx.Check(guestLaunch is { Seats.Count: 2 } && guestLaunch.Seats[1].Custom?.Name == "Loopback Moth"
+                      && guestLaunch.Seats[1].PlaneNode == StockAirframes.Node(NetCustomPlaneSuites.SecondSeatPlane().Airframe),
+                $"the guest launches its second seat on its custom plane ({guestLaunch?.Seats.Count}, {guestLaunch?.Seats.LastOrDefault()?.Custom?.Name ?? "stock"})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+            MenuSuiteHost.DropScratchPlanes(ctx, SeatCustomsSuite);
         }
     }
 
@@ -2897,7 +3025,7 @@ internal static class MenuOriginalConnectionSuites
             Pump(ends.ToArray());
         }
 
-        int airframe = StockAirframes.IdOf(OriginalRosters.Airframes[rows].Node) ?? -1;
+        int airframe = StockAirframes.IdOf(end.Host.Features.Get<PlayerSetupFeature>().Roster[rows].Node) ?? -1;
         ctx.Check(shell.Screen == OriginalScreen.Lobby && lobby.Ready && lobby.SeatPick(1).Airframe == airframe,
             $"the second seat's confirm lands back in the lobby, Ready on its pick ({shell.Screen}, {lobby.Ready}, {lobby.SeatPick(1).Airframe} for {airframe})");
         return airframe;
