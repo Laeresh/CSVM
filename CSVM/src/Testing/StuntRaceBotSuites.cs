@@ -42,6 +42,11 @@ internal static class StuntRaceBotSuites
     // How often the world's moved colliders reach the physics server, in steps.
     private const int SyncSteps = 30;
 
+    // How far out along a shielded end's approach the gate cell starts the bot, metres. Then how long
+    // it is given to clear that zone, seconds.
+    private const float ShieldedStartM = 400f;
+    private const float ShieldedSeconds = 120f;
+
     [Suite("stunt-race-bot",
         "a local stunt race of one pane and one ace bot over the run chapter's IA1 course: the launch seats "
         + "the bot, which carries guns but no ordnance and takes no target of its own, and races under its "
@@ -64,6 +69,30 @@ internal static class StuntRaceBotSuites
         {
             int steps = Fly(ctx, spec, objective: true, limit: null);
             Fly(ctx, spec, objective: false, steps);
+        }
+        finally
+        {
+            ambient.Restore();
+        }
+    }
+
+    [Suite("stunt-race-bot-gate",
+        "a local C2 stunt race of one pane and one ace bot, started on the far side of the Seaplane Hangar's "
+        + "closed gate (kkgate) and heading in: a cast along the zone's route from that end strikes the gate "
+        + "leaf before the propane tank, and from the other end the tank first; the bot comes round to the "
+        + "open end, its own rounds destroy the tank, and it clears the hangar without crashing; ABLE-TO-FAIL "
+        + "CONTROL: with no end shut, the same start crashes or clears it with the tank never shot")]
+    internal static void ABotComesRoundToShootAShieldedGate(TestContext ctx)
+    {
+        string chapter = Course(ctx, "C2");
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
+            bots: new[] { new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign) });
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            Shielded(ctx, spec, shut: true);
+            Shielded(ctx, spec, shut: false);
         }
         finally
         {
@@ -396,6 +425,68 @@ internal static class StuntRaceBotSuites
         ctx.Check(!bot.Crashed && off < ReturnReach && run.CompletedCount == zones && run.Elapsed > clock,
             $"[{cell}] crashed after {zones} zones, the bot returns unattended to the last zone's exit ({off:0.0} m off, {steps} steps, zones {run.CompletedCount}, clock {StuntMission.FormatTime(clock)} on to {StuntMission.FormatTime(run.Elapsed)})");
         return steps;
+    }
+
+    // The bot started out along the approach to a zone's shielded end, flown until it clears that
+    // zone or first crashes.
+    private static void Shielded(TestContext ctx, SessionSpec spec, bool shut)
+    {
+        string cell = shut ? "gate" : "gate unshut";
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var end = roster == null ? null : NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end?.Session;
+            var bot = end is { Built: true } && session!.SeatRigs.Count > BotSeat ? session.SeatRigs[BotSeat].Controller : null;
+            var structures = bot?.Destructibles;
+            var zone = bot?.Stunt?.Zones.FirstOrDefault(z => z.Route is { } r && structures != null
+                && StuntRaceBots.Unseen(r, true, structures, bot.WorldStruckAlong) != null);
+            if (session?.RaceBots is not { } bots || structures == null || zone?.Route is not { } route
+                || StuntRaceBots.Unseen(route, true, structures, bot!.WorldStruckAlong) is not { } gate)
+            {
+                ctx.Check(false, $"[{cell}] the race builds, and a cast along a zone's route from its far end strikes a structure off its damage node first");
+                return;
+            }
+
+            if (shut)
+            {
+                ctx.Check(StuntRaceBots.Unseen(route, false, structures, bot.WorldStruckAlong) == null,
+                    $"[{cell}] a cast along {zone.PathName} from its far end strikes '{gate.Def.Name}' off its damage node first, and from its near end on it");
+            }
+
+            // Every other zone counts as cleared, so this one is the bot's only pick.
+            foreach (var other in bot.Stunt!.Zones)
+            {
+                other.Completed = other != zone;
+            }
+
+            bots.EndsShut = shut;
+            var into = route.EndTangentInto(true);
+            into = new Vector3(into.X, 0f, into.Z).Normalized();
+            bot.RespawnAt(route.End(true) - (into * ShieldedStartM), route.End(true));
+            int steps = 0;
+            bool crashed = false;
+            while (!zone.Completed && !crashed && steps < Steps(ShieldedSeconds))
+            {
+                Step(session, ++steps);
+                crashed = bot.Crashed;
+            }
+
+            bool shot = gate.Status == DestructibleRegistry.State.Destroyed && gate.LastShooter == bot.PlayerIndex;
+            string seen = $"{zone.PathName} {(zone.Completed ? "cleared" : "open")}, {(crashed ? "crashed" : "no crash")}, '{gate.Def.Name}' {gate.Status} by {gate.LastShooter}, {steps} steps";
+            if (shut)
+            {
+                ctx.Check(zone.Completed && shot && !crashed, $"[{cell}] the bot comes round to the open end, shoots the tank and clears the zone ({seen})");
+            }
+            else
+            {
+                ctx.Check(!shot, $"ABLE-TO-FAIL CONTROL: [{cell}] with no end shut the bot never shoots the tank ({seen})");
+            }
+        }
+        finally
+        {
+            end?.Close();
+        }
     }
 
     // ABLE-TO-FAIL CONTROL: the same bot from the same start with its objective off clears nothing.
