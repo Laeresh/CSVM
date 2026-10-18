@@ -109,6 +109,13 @@ path through `ZbdTree.Canonical`. An output as new as its source is up to date. 
 stored one is kept) and "VAL FAIL" or "anim def duplicate anim ref" (anim fields kept as read); every
 other line is a warning.
 
+## src/Extraction/ZbdManifest.cs
+`Expected` lists the 184 ZBD archives a complete install holds (the six root archives, then per
+chapter its `cam_anim`, `gamez`, `texture`, `zrdr` and texture tiers, and per mission its
+`mis_anim` and `zrdr`), the same on the English install and the German disc. `Missing(zbdRoot)`
+looks each one up without regard to case and is checked before the ZBD half runs, since the walk
+extracts whatever it finds and a missing archive would otherwise fail only when its chapter loads.
+
 ## src/Extraction/ZbdTree.cs
 The one case the ZBD half writes under `extracted/`, the retail install's: folders upper case
 (`C3/M01`), file names lower case (`zrdr.zip`). `Canonical` maps a relative path, `Under` a file

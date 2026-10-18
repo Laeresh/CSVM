@@ -402,10 +402,10 @@ the constant: a decode is not contested with a measurement read off a running pi
 ```
 
 Four viewers is the case the wash channel was designed against: the original routes its wash
-through a single global and that does not survive four panes. ⚠ `BL-389` already reports that the
+through a single global and that does not survive four panes. ⚠ #226 already reports that the
 splitscreen weapon mix wants a retune, with rockets too quiet against guns and worst with four guns
 firing at once. **A mix problem is not a behaviour problem**: judge what happens, and file loudness
-against `BL-389` rather than against the wash routing.
+against #226 rather than against the wash routing.
 
 - `PT-75` `[Own]` **The disabling types with four viewers on one team.**
   *Look for:*
@@ -421,7 +421,7 @@ against `BL-389` rather than against the wash routing.
     candidate now costs a cover ray.
 
   *Blocks:* nothing tracks the outcome: a fail on routing mints a new `BL`; a fail on loudness is
-  `BL-389`.
+  #226.
 
 - `PT-76` `[Own]` **The same pass under Dogfight rules, four viewers hostile.** `--coop` puts every human on one team, so the beeper's hostility
   gate and the AI-side effects never fire between players there. Dogfight makes them mutually
@@ -441,7 +441,7 @@ against `BL-389` rather than against the wash routing.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
 
-- `PT-129` `[Own]` **Effect pools with four pilots all firing (`BL-537`).** The single-player half
+- `PT-129` `[Own]` **Effect pools with four pilots all firing (#225).** The single-player half
   reads right at the controls: four fireballs burn out in place, and the seven-death wrap is not
   visible under the debris. Owed is the four-player case, where the default root wants more slots
   than it gets. *Look for:*
@@ -450,7 +450,7 @@ against `BL-389` rather than against the wash routing.
   - (b) simultaneous deaths across panes, which is where `flame_ball_01` wraps;
   - (c) the instrument alongside the flight: the `anim: effect pool for '<name>' recycled slot`
     DEBUG line in the log file sink names any root that actually wrapped.
-  *Blocks:* `BL-537`. ⚠ Raise only a root that logs a recycle, never the default; the three gun
+  *Blocks:* #225. ⚠ Raise only a root that logs a recycle, never the default; the three gun
   roots stay at 1, and a root sized 0 clamps to 1.
 
 ### C1 · four pilots, Dogfight without the warning-shot shield

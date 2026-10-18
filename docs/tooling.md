@@ -840,7 +840,7 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   prints them; bindings and profiles key on the model.
 - **Windows only:** `InstallSdl2.ps1`, which pins the `win32-x64` zip; the three SDL2 files
   `ExportRelease.ps1` ships in the zip, with the DLL's hash in `BUILD-INFO.txt`; and
-  `SDL_JOYSTICK_DIRECTINPUT=0` in the launch scripts, a workaround for Godot's SDL3 (BL-033).
+  `SDL_JOYSTICK_DIRECTINPUT=0` in the launch scripts, a workaround for Godot's SDL3 (#227).
 
 ## The WebRTC library and the master server
 
