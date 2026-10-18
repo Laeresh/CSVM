@@ -55,18 +55,15 @@ public class VrCockpitsTests
     }
 
     [Fact]
-    public void TheUpOffsetReadsInTheSameRangeAndRunsAlongTheMountsTiltedY()
+    public void TheUpOffsetReadsInTheSameRangeAndRunsAlongTheAircraftsY()
     {
         var table = Parse("""{ "planes": { "player_fury": { "eyeOffsetY": 0.03 }, "player_bhawk": { "eyeOffsetY": -1.5 } } }""", out var problems);
         var up = table.For("player_fury").EyeOffsetInAircraft;
-        float tilt = PlaneBuilder.HeadPitchOffsetRad;
 
         Assert.Single(problems);
         Assert.Contains("player_bhawk", problems[0]);
         Assert.Equal(new VrCockpit(1f, 0f, 0.03f), table.For("player_fury"));
-        Assert.Equal(0f, up.X);
-        Assert.Equal(0.03f * Mathf.Cos(tilt), up.Y, 6);
-        Assert.Equal(0.03f * Mathf.Sin(tilt), up.Z, 6);
+        Assert.Equal(new Vector3(0f, 0.03f, 0f), up);
         Assert.Equal(new[] { "player_fury", "player_bhawk" }, table.Names);
     }
 
@@ -173,16 +170,13 @@ public class VrCockpitsTests
     }
 
     [Fact]
-    public void TheEyeOffsetRunsAlongTheMountsTiltedZ()
+    public void TheEyeOffsetRunsAftAlongTheUntiltedStereoMount()
     {
         var offset = new VrCockpit(1f, 0.06f).EyeOffsetInAircraft;
-        float tilt = PlaneBuilder.HeadPitchOffsetRad;
 
-        // Aft along the sight line, which the fixed head pitch tips nose-down: no lateral part.
-        Assert.Equal(0f, offset.X);
-        Assert.Equal(0.06f, offset.Length(), 6);
-        Assert.Equal(0.06f * Mathf.Cos(tilt), offset.Z, 6);
-        Assert.Equal(-0.06f * Mathf.Sin(tilt), offset.Y, 6);
+        // Aft along the sight line, which the stereo mount keeps on the nose axis: no lateral part.
+        Assert.Equal(new Vector3(0f, 0f, 0.06f), offset);
+        Assert.True(PlaneBuilder.StereoMount(new Vector3(1.98f, 0.75f, -1.21f), 0.04f).Basis.Orthonormalized().IsEqualApprox(Basis.Identity));
         Assert.Equal(Vector3.Zero, VrCockpit.Default.EyeOffsetInAircraft);
     }
 

@@ -29,18 +29,22 @@ public sealed class XrCockpit : IXrInterior
     private readonly Node3D _interior;
     // Each geometry with the sorting offset it was built with, which lifting adds to.
     private readonly List<(GeometryInstance3D Geometry, float Own)> _geometry = new();
+    // The authored eye in the interior's own units (PlaneBuilder.InteriorEye).
+    private readonly Vector3 _eye;
     // The airframe's mount, rescaled only by the tuning lab (SetMountScale).
     private Transform3D _mount;
     private bool _lifted;
 
     /// <summary>Follows <paramref name="interior"/>, as the plane builder mounted it under the
-    /// airframe, with the seated eye <paramref name="eyeOffset"/> from the mount's origin in the
+    /// airframe, with the seated eye <paramref name="eyeOffset"/> from the authored eye in the
     /// aircraft's frame (<see cref="VrCockpit.EyeOffsetInAircraft"/>). The interior must have been
-    /// built for the stereo path (<c>xrInterior</c>).</summary>
-    public XrCockpit(Node3D interior, Vector3 eyeOffset = default)
+    /// built for the stereo path (<c>xrInterior</c>), its authored eye at <paramref name="eyeInInterior"/>
+    /// in its own units (<see cref="PlaneBuilder.InteriorEye"/>).</summary>
+    public XrCockpit(Node3D interior, Vector3 eyeOffset = default, Vector3 eyeInInterior = default)
     {
         _interior = interior;
         _mount = interior.Transform;
+        _eye = eyeInInterior;
         EyeOffset = eyeOffset;
         Collect(interior, _geometry);
     }
@@ -52,14 +56,14 @@ public sealed class XrCockpit : IXrInterior
     /// <summary>The interior this follows.</summary>
     public Node3D Interior => _interior;
 
-    /// <summary>The seated eye's offset from the interior's own origin, in the aircraft's frame. The
+    /// <summary>The seated eye's offset from the interior's authored eye, in the aircraft's frame. The
     /// XR origin's placement adds the same offset, so the eye and this point move together. The
     /// tuning lab (<see cref="XrCockpitTuner"/>) sets it live; the next placement takes it.</summary>
     public Vector3 EyeOffset { get; set; }
 
-    /// <summary>The aircraft-frame point the XR origin stands at: the interior's own origin, mounted
-    /// at the <c>cockpit_camera</c> marker where the flat eye is, plus <see cref="EyeOffset"/>.</summary>
-    public Vector3 EyeInAircraft => _mount.Origin + EyeOffset;
+    /// <summary>The aircraft-frame point the XR origin stands at: the interior's authored eye, mounted
+    /// on the <c>cockpit_camera</c> marker where the flat eye is, plus <see cref="EyeOffset"/>.</summary>
+    public Vector3 EyeInAircraft => (_mount * _eye) + EyeOffset;
 
     /// <summary>The mount's scale in metres per interior unit, as built or as last set.</summary>
     public float MountScale => _mount.Basis.Scale.X;
@@ -98,6 +102,15 @@ public sealed class XrCockpit : IXrInterior
     public static Transform3D InInterior(in Transform3D mount, in Transform3D onAirframe) =>
         mount.AffineInverse() * onAirframe;
 
+    /// <summary><paramref name="mount"/> rescaled to <paramref name="metresPerUnit"/> about the
+    /// interior's point <paramref name="eyeInInterior"/>, which keeps its place on the airframe.
+    /// Engine-free, so it unit-tests.</summary>
+    public static Transform3D Rescaled(in Transform3D mount, Vector3 eyeInInterior, float metresPerUnit)
+    {
+        var basis = mount.Basis.Orthonormalized().Scaled(Vector3.One * metresPerUnit);
+        return new Transform3D(basis, (mount * eyeInInterior) - (basis * eyeInInterior));
+    }
+
     /// <summary>Places the interior for this frame under the XR origin at <paramref name="origin"/>,
     /// which must stand at <see cref="EyeInAircraft"/> on <paramref name="aircraft"/> with its
     /// attitude. A hidden interior, or one no longer under that aircraft, is put back in place.</summary>
@@ -118,10 +131,10 @@ public sealed class XrCockpit : IXrInterior
         _interior.Transform = new Transform3D(origin.Basis, Vector3.Zero) * InOrigin(held, EyeInAircraft);
     }
 
-    /// <summary>Rescales the mount about the interior's origin, the authored eye, to
-    /// <paramref name="metresPerUnit"/>: the tuning lab's live scale. The next <see cref="Follow"/>
-    /// places it. ⚠ The depth bias stays the one the build baked (SceneBuilder's
-    /// <c>DepthBiasScale</c>); only a rebuild at the new scale is exact.</summary>
+    /// <summary>Rescales the mount about the authored eye to <paramref name="metresPerUnit"/>: the
+    /// tuning lab's live scale. The next <see cref="Follow"/> places it. ⚠ The depth bias stays the
+    /// one the build baked (SceneBuilder's <c>DepthBiasScale</c>); only a rebuild at the new scale is
+    /// exact.</summary>
     public void SetMountScale(float metresPerUnit)
     {
         if (!(metresPerUnit > 0f) || Mathf.IsEqualApprox(metresPerUnit, MountScale))
@@ -129,7 +142,7 @@ public sealed class XrCockpit : IXrInterior
             return;
         }
 
-        _mount = new Transform3D(_mount.Basis.Orthonormalized().Scaled(Vector3.One * metresPerUnit), _mount.Origin);
+        _mount = Rescaled(_mount, _eye, metresPerUnit);
         if (!GodotObject.IsInstanceValid(_interior))
         {
             return;

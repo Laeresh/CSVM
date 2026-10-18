@@ -209,8 +209,9 @@ public static class GunsightReticle
     /// interior's own frame, to add as a direct child of the interior's root. Null when the glass
     /// polygon is degenerate. It lies in the glass's plane, <paramref name="margin"/> units wider
     /// each way, for an eye half an IPD off the head. The bias, <paramref name="depthBias"/>, is the
-    /// glass's own pull toward the eye, so the overlay hides where the glass hides.</summary>
-    public static MeshInstance3D? Overlay(Glass glass, Layers layers, float margin, float depthBias)
+    /// glass's own pull toward the eye, so the overlay hides where the glass hides. The reticle is
+    /// read as <paramref name="eye"/>, the interior's authored eye, sees it.</summary>
+    public static MeshInstance3D? Overlay(Glass glass, Layers layers, float margin, float depthBias, Vector3 eye = default)
     {
         if (Look.For(glass.Corners, glass.Uvs) is not { } look)
         {
@@ -240,6 +241,7 @@ public static class GunsightReticle
         material.SetShaderParameter("plane_n", look.N);
         material.SetShaderParameter("plane_h", look.H);
         material.SetShaderParameter("depth_bias", depthBias);
+        material.SetShaderParameter("authored_eye", eye);
         return new MeshInstance3D
         {
             Name = "gunsight_reticle",
@@ -251,7 +253,7 @@ public static class GunsightReticle
     }
 
     /// <summary>The sight glass polygons of the interior rooted at <paramref name="interior"/>, read
-    /// in that node's own frame (eye at the origin, view down -Z). LOD levels the build skips are
+    /// in that node's own frame (view down -Z). LOD levels the build skips are
     /// skipped here too.</summary>
     public static List<Glass> Find(GameZ gamez, GameZNode interior)
     {
@@ -319,6 +321,7 @@ public static class GunsightReticle
         + "uniform vec3 grad_u;\nuniform vec3 grad_v;\nuniform vec2 uv_origin;\n"
         + "uniform vec3 plane_n;\nuniform float plane_h;\n"
         + "uniform float depth_bias = 0.0;\n"
+        + "uniform vec3 authored_eye = vec3(0.0);\n"
         + "varying vec3 v_ray;\nvarying vec2 v_own;\nvarying vec3 v_head;\n"
         + "float csky_inside(vec2 uv) { return step(0.0, uv.x) * step(0.0, uv.y) * step(uv.x, 1.0) * step(uv.y, 1.0); }\n"
         + "void vertex() {\n"
@@ -334,7 +337,7 @@ public static class GunsightReticle
         + "}\n"
         + "void fragment() {\n"
         + "    vec2 r = v_ray.xy / v_ray.z;\n"
-        + "    vec2 uv = plane_h * r + uv_origin;\n"
+        + "    vec2 uv = (plane_h - dot(plane_n, authored_eye)) * r + vec2(dot(grad_u, authored_eye), dot(grad_v, authored_eye)) + uv_origin;\n"
         + "    vec2 seen = (plane_h - dot(plane_n, v_head)) * r + vec2(dot(grad_u, v_head), dot(grad_v, v_head)) + uv_origin;\n"
         + "    vec2 at = centre_uv + (uv - centre_uv) / reticle_scale;\n"
         + "    vec4 t = texture(reticle_tex, at);\n"
@@ -491,8 +494,8 @@ public static class GunsightReticle
     private static float Sq(float v) => v * v;
 
     /// <summary>A glass polygon's plane, <c>N·p = H</c>, and its UVs over that plane,
-    /// <c>uv = (GradU·p, GradV·p) + Origin</c>. Both are in the interior's frame, whose origin is the
-    /// authored eye. Engine-free, so it unit-tests.</summary>
+    /// <c>uv = (GradU·p, GradV·p) + Origin</c>. Both are in the interior's own frame. Engine-free,
+    /// so it unit-tests.</summary>
     public readonly record struct Look(Vector3 GradU, Vector3 GradV, Vector2 Origin, Vector3 N, float H)
     {
         /// <summary>The look of a flat polygon whose UVs are affine over it. It is fitted to the three

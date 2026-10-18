@@ -52,8 +52,8 @@ public sealed class PylonOrdnance
             model.Transform = Transform3D.Identity;
             bool shown = hp.Armed(infiniteAmmo);
             model.Visible = shown;
-            // The copy draws steady and stencilled beside the interior's wing. The pylon, the launch
-            // point the firing path reads, stays where it is.
+            // The copy draws steady, and the interior covers it wherever they overlap, as the flat pass
+            // does: the interior is not the airframe scaled. The pylon, the launch point, stays put.
             Node3D? copy = null;
             if (stereo != null && pool.BuildFlyoutBody(hp.Weapon, stereo: true) is { } built)
             {

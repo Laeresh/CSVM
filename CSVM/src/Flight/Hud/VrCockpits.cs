@@ -12,8 +12,8 @@ namespace CSVM.Flight.Hud;
 /// One plane's VR cockpit data: a factor on the <c>cockpit1</c> mount's scale, and the seated eye's
 /// offset in metres. The offset runs along the mount's Z (positive aft) and its Y (positive up). All
 /// of it stays on the interior, never on <c>XRServer.WorldScale</c>, which would resize the sky and
-/// every other aircraft with it. No lateral offset exists: the authored eye is where the tub puts it.
-/// The collimated reticle (<c>Mech3/GunsightReticle.cs</c>) stays on the guns from any eye, and a
+/// every other aircraft with it. No lateral offset exists: the authored eye, the
+/// <c>cockpit_camera</c> marker read in interior units, centres every tub. The collimated reticle (<c>Mech3/GunsightReticle.cs</c>) stays on the guns from any eye, and a
 /// vertical offset only moves where the glass frames it; engine-free.
 /// </summary>
 public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffsetZ, float EyeOffsetY = 0f)
@@ -25,10 +25,9 @@ public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffs
     /// <summary>The interior's mount scale in metres per interior unit.</summary>
     public float InteriorScale => PlaneBuilder.InteriorScale * InteriorScaleFactor;
 
-    /// <summary>The eye offset in the aircraft's frame: along the mount's Y and Z, which the fixed
-    /// head pitch tilts.</summary>
-    public Vector3 EyeOffsetInAircraft =>
-        new Basis(Vector3.Right, PlaneBuilder.HeadPitchOffsetRad) * new Vector3(0f, EyeOffsetY, EyeOffsetZ);
+    /// <summary>The eye offset in the aircraft's frame: along the stereo mount's Y and Z, which are
+    /// the aircraft's own (<see cref="PlaneBuilder.StereoMount"/>).</summary>
+    public Vector3 EyeOffsetInAircraft => new(0f, EyeOffsetY, EyeOffsetZ);
 }
 
 /// <summary>

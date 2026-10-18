@@ -1197,7 +1197,8 @@ public sealed partial class ProjectilePool : Node3D
     /// collision-exempt body posed at its def's <c>RESET_STATE</c>. The in-flight round and
     /// <see cref="PylonOrdnance"/> share it. A reset may hide the root, so the caller sets the
     /// root's visibility. Null without a world scene, a <c>FLYOUT</c> <c>MODEL</c> or the
-    /// prototype root in this chapter's gamez. A stereo body wears the stereo interior's shader.</summary>
+    /// prototype root in this chapter's gamez. A stereo body wears the stereo interior's shader and
+    /// draws under the interior (<c>SceneBuilder.XrUnderInterior</c>).</summary>
     public Node3D? BuildFlyoutBody(WeaponDef weapon, bool stereo = false)
     {
         if (_flyoutScene == null || _flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
@@ -1217,6 +1218,7 @@ public sealed partial class ProjectilePool : Node3D
             : _stereoFlyoutScene ??= new SceneBuilder(_flyoutGamez, _textures, fullbright: true, cullBackfaces: true)
             {
                 XrPreciseInterior = true,
+                XrUnderInterior = true,
             };
 
         // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not

@@ -620,8 +620,8 @@ same footage without re-judging what it should look like would carry the old bas
 new number.
 
 **The interior is authored in its own space, and the two spaces are not a similarity apart.** The
-eye sits at `cockpit1`'s origin looking down −Z (the built dials sit straight ahead of it at
-z ≈ −10.6), while the interior's own elevators sit at y −10.5 where the exterior's sit at −0.40;
+interior looks down −Z (the built dials sit straight ahead at z ≈ −10.6), while the interior's own
+elevators sit at y −10.5 where the exterior's sit at −0.40;
 the scale that fits the interior's wings to the hull's span runs from 0.030 (Bloodhawk) to 0.078
 (Balmoral). It is a stylised model built to be looked at from one point, not a scaled copy of the
 aircraft, so the framing is scale-invariant and `PlaneBuilder.InteriorScale` chooses only how the
@@ -633,11 +633,36 @@ the eye (the Warhawk's 7.9), inside a tub 22-39 units wide. At 0.04 m per unit t
 79 mm standard instrument and a canopy, where there is one overhead, clears the eye by
 0.22-0.36 m, but the panel sits only 0.42-0.51 m away (the Warhawk's 0.32 m) and the tub is 0.9-1.6 m wide: depth is
 compressed and width is stretched, which is what an 80° flat view wants. Ten interiors (all but the
-Warhawk) also carry a flat head-and-shoulders plate 0.16-1.8 units behind the eye. The
-original draws the interior in its own pass from the interior origin along the interior's own −Z,
-which is why a single-pass renderer says the same thing by mounting the subtree at the −4.70°
-head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
-applied to the mount.
+Warhawk) also carry a flat head-and-shoulders plate 0.16-1.8 units behind the eye. These distances
+are from the interior's origin, where the flat view's eye sits; from the original's eye (below) the
+dials sit 10.6-12.4 units away on every airframe, the Warhawk's 11.9.
+
+### Where the eye sits in the interior
+
+`cockpit1` hangs under the plane root with no transform of its own (`Initial`), and the mode-6 draw
+in `FUN_0049fb00` renders it with the main camera, `FUN_004d6ac0(*DAT_0064ef78, DAT_0071c314, 0, 1)`,
+the camera that `FUN_0042d980` stands on the `cockpit_camera` marker. Nothing rescales or re-places
+the interior first, so the eye in the interior is the marker's numbers read in interior units. The
+data agrees on every airframe:
+
+- **The tub is built round that point.** The Kestrel's centre gauge column, artificial horizon,
+  compass, pilot seat (`pass_st`) and turret sit at x 1.97-1.99 against its marker's 1.98; the
+  Peacemaker's at −1.81 against −1.80; the Firebrand's at −0.08 against −0.08. The other eight sit
+  on x 0, where their markers are.
+- **The sight glass is dead ahead of it.** From the marker point the glass centre lies within 0.73°
+  across and 1.26° up or down of −Z on all eleven. From the interior's origin it sits 2.90° to
+  15.67° high (Warhawk), and 8.66° right (Kestrel) or 10.25° left (Peacemaker).
+
+The Kestrel's and Peacemaker's pilots really sit off the aircraft's centreline: the Kestrel's
+marker is on the right boom, the open seat with the rear turret behind it. So the outside eye is
+faithful, and only the eye inside the interior moved.
+
+The flat view draws the interior from its origin, mounted at the −4.70° head-pitch tilt, which
+brings the sight to within about a degree of the guns on the 0.75-unit airframes and leaves it
+8.7° and 10.3° to the side on the Kestrel and the Peacemaker. The stereo interior takes the
+original's eye: `PlaneBuilder.StereoMount` mounts it untilted with the marker's numbers on the
+marker, and `PlaneBuilder.InteriorEye` hands that point to `XrCockpit` and the collimated reticle.
+Head-look is not applied to either mount.
 
 ## The enhanced presentation's own chase cue (remake-only)
 
@@ -711,8 +736,8 @@ sees the jump. The first flight frame after a load lands on black the same way.
 
 ### The gunsight under a headset
 
-The sight is one glass polygon per interior, 0.33 m (Warhawk) to 0.51 m (Kestrel) from the eye at
-the 0.04 mount, wearing one 128x128 texture in every airframe (`cockpit6`, the Warhawk's
+The sight is one glass polygon per interior, 0.41 m (Firebrand, Peacemaker) to 0.49 m (Brigand)
+from the stereo interior's eye at the 0.04 mount, wearing one 128x128 texture in every airframe (`cockpit6`, the Warhawk's
 `crosshair`, the same pixels). The texture holds the glass tint (alpha 38 of 255), the frame line on
 its outermost texels, the black sight body along its bottom edge and the reticle: the ring, the cross,
 the centre cross and the red index mark. Drawn at the glass's depth the reticle doubles when the eyes
@@ -739,13 +764,17 @@ only 0.5 mm (Kestrel, Peacemaker, Hoplite, Avenger) to 2 mm (Warhawk) of head mo
 tracked head usually cuts it. The overlay draws the reticle at `GunsightReticle.HeadsetScale` (0.7,
 TUNE) of its authored size about the centre cross (`GunsightReticle.Centre`, texel 65, 62), which
 leaves 9 mm (Kestrel, Peacemaker, Avenger) to 25 mm (Warhawk) each way, 12 mm on the Bloodhawk. The
-ring's angular radius from the authored eye goes from 3.35-13.06 degrees to 2.35-9.14 (Bloodhawk
-5.16 to 3.61); the flat cockpit keeps the authored size.
+ring's angular radius from the stereo eye goes from 3.75-9.84 degrees to 2.63-6.92 (Bloodhawk
+5.25 to 3.68); the flat cockpit keeps the authored size.
 
 | | bhawk | pfighter | fury | warhawk | autogyro | avenger | balmoral | brigand | fbrand | kestrel | peacemaker |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| ring radius at 1.0 / 0.7, degrees | 5.16 / 3.61 | 5.71 / 4.00 | 7.48 / 5.24 | 13.06 / 9.14 | 4.36 / 3.05 | 3.73 / 2.61 | 6.69 / 4.69 | 8.35 / 5.85 | 6.47 / 4.53 | 3.35 / 2.35 | 3.95 / 2.76 |
-| head movement it stays whole, mm, at 1.0 / 0.7 | 1.0 / 12.0 | 1.0 / 14.5 | 1.5 / 19.0 | 2.0 / 25.0 | 0.5 / 10.0 | 0.5 / 9.0 | 1.0 / 16.0 | 1.5 / 20.5 | 1.0 / 15.5 | 0.5 / 9.0 | 0.5 / 9.0 |
+| ring radius at 1.0 / 0.7, degrees | 5.25 / 3.68 | 5.81 / 4.07 | 7.61 / 5.34 | 9.84 / 6.92 | 4.44 / 3.11 | 3.80 / 2.66 | 6.93 / 4.87 | 7.88 / 5.53 | 7.10 / 4.98 | 3.75 / 2.63 | 4.22 / 2.96 |
+| head movement it stays whole, mm, at 1.0 / 0.7, from the interior's origin | 1.0 / 12.0 | 1.0 / 14.5 | 1.5 / 19.0 | 2.0 / 25.0 | 0.5 / 10.0 | 0.5 / 9.0 | 1.0 / 16.0 | 1.5 / 20.5 | 1.0 / 15.5 | 0.5 / 9.0 | 0.5 / 9.0 |
+
+The radii are from the stereo eye, the origin's measurement scaled by the eye-to-glass distances. The
+head-movement row was measured with the eye at the interior's origin and has not been re-measured
+from the marker.
 
 Measured on the stand-in with the reticle at its authored size, C1 empty stage, Bloodhawk, pose
 `--direction=0,0.34,-0.94 --hold=0,0,0,0.6`, frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
@@ -796,8 +825,8 @@ interior's other blended surfaces.
 - **What reads `instruments.zrd`.** Its seven gauge positions (z −17.5, x ±9) are not where the
   built `cockpit1` meshes put the same assemblies (z ≈ −10.6, x ±5.0), and no uniform scale maps one
   onto the other. The port reads the meshes.
-- **The tilted interior mount overshoots by 0.60°.** It leaves the gun pipper about 6 px above the
-  sight ring's crosshair at 720p where the original has them coincident. The exact fit is a 3.82°
-  tilt, but that is a Bloodhawk-fitted number with no decode behind it and the sight's height is
-  per-airframe geometry, so the decoded constant is what ships. Measuring the same offset on a
-  second airframe's cockpit footage is what would settle whether the constant should become a TUNE.
+- **The flat view's tilted interior mount overshoots by 0.60°.** It leaves the gun pipper about 6 px
+  above the sight ring's crosshair at 720p where the original has them coincident. The cause is the
+  flat eye at the interior's origin rather than at the marker ("Where the eye sits in the
+  interior"), which also leaves the Kestrel's and Peacemaker's flat sights 8.7° and 10.3° to the
+  side. The flat view has not taken the stereo interior's eye.

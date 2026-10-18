@@ -311,6 +311,14 @@ public sealed class SceneBuilder
     /// building: it keys the shader.</summary>
     internal bool XrPreciseInterior;
 
+    /// <summary>With <see cref="XrPreciseInterior"/>: a part the interior draws over wherever the two
+    /// overlap, at any depth. The flat cockpit pass composites the interior over the world the same
+    /// way. It reads <see cref="XrInteriorStencil"/> instead of writing it, and draws in the
+    /// transparent pass at <see cref="XrInteriorBlendPriority"/>, after every opaque surface wrote
+    /// the mark. The pylon stores' stereo copies are built so. Set before building: it keys the
+    /// shader.</summary>
+    internal bool XrUnderInterior;
+
     /// <summary>Polygons this builder draws nothing for, by identity (<see cref="CockpitPlate"/>
     /// on the stereo interior's builder). Each one's surface group is still formed, so every later
     /// group keeps the rank, and so the depth bias, it builds with otherwise. Null omits nothing.
@@ -1920,7 +1928,7 @@ void fragment() {
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase));
         NoteAlpha(mat, blend, scissor);
-        if (XrPreciseInterior && blend)
+        if (XrPreciseInterior && (blend || XrUnderInterior))
             mat.RenderPriority = XrInteriorBlendPriority;
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
@@ -1953,7 +1961,7 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage. Then
-    // 262144 the race ghost, 524288 the base sea, 1048576 the stereo interior, 2097152 the stereo ghost.
+    // 262144 race ghost, 524288 base sea, 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -1970,6 +1978,7 @@ void fragment() {
         bool debugClutter = DebugClutterFlag;
         bool noAlphaCoverage = NoAlphaCoverage;
         bool xrInterior = XrPreciseInterior;
+        bool underInterior = xrInterior && XrUnderInterior;
         // The stereo text sets the ghost's dither at the surface's depth; a launch's path never changes.
         bool stereoGhost = raceGhost && StereoFacing.Live;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
@@ -1978,13 +1987,13 @@ void fragment() {
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
-            | (stereoGhost ? 2097152 : 0);
+            | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior), "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -1997,7 +2006,7 @@ void fragment() {
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
-        bool oceanBase, bool xrInterior, bool stereoGhost)
+        bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -2027,10 +2036,15 @@ void fragment() {
             sb.Append(", unshaded");
         if (coverage)
             sb.Append(CoverageMode);
+        // A part under the interior draws in the transparent pass and still sorts its own faces.
+        if (underInterior)
+            sb.Append(", depth_draw_always");
         sb.AppendLine(";");
         // The stereo interior marks what it covers, so the whiteout leaves even its far wings
         // clear. A blended surface does not: the world behind the glass whitens.
-        if (xrInterior && !blend)
+        if (underInterior)
+            sb.AppendLine($"stencil_mode read, compare_not_equal, {XrInteriorStencil};");
+        else if (xrInterior && !blend)
             sb.AppendLine($"stencil_mode write, compare_always, {XrInteriorStencil};");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         if (xrInterior)
@@ -2260,6 +2274,8 @@ void fragment() {{");
             sb.AppendLine(gammaBlend
                 ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
                 : $"    ALPHA = col.a{OpacityTerm};");
+        else if (underInterior)
+            sb.AppendLine("    ALPHA = 1.0;");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)

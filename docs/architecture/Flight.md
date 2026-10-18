@@ -339,7 +339,7 @@ seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `X
 The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
 headset: under `planes`, keyed by plane node name (`player_bhawk`), `interiorScaleFactor` multiplies
 the `cockpit1` mount's `Mech3/PlaneBuilder.cs` `InteriorScale` (0.25 to 4, default 1), `eyeOffsetZ`
-moves the seated eye in metres along the mount's tilted Z, positive aft, and `eyeOffsetY` along its Y,
+moves the seated eye in metres along the aircraft's Z, positive aft, and `eyeOffsetY` along its Y,
 positive up (each at most 1 m, default 0); keys starting `_` are notes. A plane or field left out
 takes the default. Read once per session by `Session/Roster/FlightRosterInputs.cs` only when the
 stereo path draws the interior; a missing or malformed file or entry warns and falls back.

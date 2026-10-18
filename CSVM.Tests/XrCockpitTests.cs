@@ -1,4 +1,5 @@
 using CSVM.Flight.Hud;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -23,6 +24,23 @@ public class XrCockpitTests
         var rel = XrCockpit.InOrigin(new Transform3D(Mount, Eye), Eye);
         Assert.Equal(Vector3.Zero, rel.Origin);
         Assert.True(rel.Basis.IsEqualApprox(Mount));
+    }
+
+    // The Kestrel's marker, off the centreline on the pilot's boom. The stereo mount stands the
+    // interior's point at the marker's numbers on the marker, untilted, and a rescale keeps it there.
+    [Fact]
+    public void TheStereoMountSeatsTheAuthoredEyeOnTheMarkerAndARescaleKeepsIt()
+    {
+        var marker = new Vector3(1.9785f, 0.7479f, -1.21f);
+        var mount = PlaneBuilder.StereoMount(marker, 0.04f);
+        Assert.True((mount * marker).IsEqualApprox(marker), $"the authored eye lands at {mount * marker}");
+        Assert.True(mount.Basis.IsEqualApprox(Basis.Identity.Scaled(Vector3.One * 0.04f)));
+
+        var rescaled = XrCockpit.Rescaled(mount, marker, 0.05f);
+        Assert.True((rescaled * marker).IsEqualApprox(marker), $"rescaled, the eye moves to {rescaled * marker}");
+        Assert.Equal(0.05f, rescaled.Basis.Scale.X, 6);
+        Assert.True(XrCockpit.Rescaled(new Transform3D(Mount, Eye), Vector3.Zero, 0.05f).Origin.IsEqualApprox(Eye),
+            "an interior whose eye is its origin rescales about its origin");
     }
 
     // A pylon store's stereo copy (Flight/Weapons/PylonOrdnance.cs): mounted as built it lands on the
