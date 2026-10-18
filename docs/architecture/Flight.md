@@ -1568,9 +1568,9 @@ its wreck still flying, inert, and back to spawned. It owns those flags, the col
 carrier-drop and auto-respawn timers, and the crash-def table with the selection off it, and holds
 no node, so the whole table runs in a unit test. Every transition reports what happened instead of
 performing it, answering one outcome value carrying everything the caller owes.
-`FlightController` forwards the flags and keeps the events the session subscribes to. That a
-crashed aircraft cannot crash again is a transition rule here, with the falling wreck's own
-landing as the single exception. `RespawnOnFire` (Auto Respawn off) waits on Fire Guns.
+`FlightController` forwards the flags and keeps the events the session subscribes to. A crashed
+aircraft cannot crash again, the falling wreck's own landing excepted. `RespawnOnFire` (Auto Respawn
+off) waits on Fire Guns; `CrashCameraSeconds` is how long a crash holds the crash camera.
 
 ## src/Flight/Airframe/GroundShadowLaw.cs
 The original's aircraft ground shadow as a rule, engine-free and pure: the projection direction

@@ -77,12 +77,23 @@ ledger and the wrap-up, which it reaches only through `IaWrapupSnapshot.cs`'s se
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line, and `Scenario`, `IsStuntRun` and `PlayerPlaneOverride` settle the mission's spawn table, its stunt objective and the aircraft it forces on the humans.
 
 ## src/Session/Roster/SpectateHandoff.cs
-The shared pane handoff for an Instant Action pilot out of lives or a campaign human whose aircraft
-is lost while teammates continue. `Begin` pins the wreck through `FlightController.Spectating`,
-releases the pane camera through `CameraOwned`, and creates a `SpectatorCamera` at the crash view's
-last pose. It follows the first other rig still `InPlay`, or starts free when none exists, and uses
-the downed pilot's own device filter. A false result means that pane already has a spectator.
-Candidate and tracking lists are optional for callers without a roster or rerun path.
+The shared pane handoff for an Instant Action pilot out of lives, a lost campaign human and a race's
+pilot with no run left (`RaceSpectate.cs`). `Begin` pins the aircraft (`FlightController.Spectating`),
+releases the pane camera (`CameraOwned`) and creates a `SpectatorCamera` at the crash view's last pose;
+a pilot still flying also leaves the cockpit view and its HUD and is held (`FlightControlHold.All`).
+It follows the first other rig still `InPlay`, or starts free, with the pilot's own device filter; a
+false result means the pane already has a spectator. `ReleaseControls` drops the hold while the
+spectator stays, and `HandBack` undoes all of it on every pane and frees the tracked spectators.
+
+## src/Session/Roster/RaceSpectate.cs
+A race's spectators, stepped by `GameSession` after the race and its link. In the final run a pane
+with no run left (lost, finished, or out at time up) waits `FlightController.CrashCameraSeconds`,
+then `SpectateHandoff.Begin` puts it onto a seat still in a run, its target key cycling over those
+seats alone; a watcher whose racer leaves its run moves on, one its pilot released stays free. A guest
+watches through the copies it flies. Nothing is handed over before time up, onto nobody, or to a bot.
+`RaceCompleted` releases a held stick, so R reaches the board however the race ended. A finished
+aeroplane cannot ram: a race keeps every body off the aircraft layer (`race-presence`). `HandBack`
+runs at the top of `RerunRace`.
 
 ## src/Session/InstantAction/IaWrapupSnapshot.cs
 What one ended Instant Action mission hands its wrap-up. `IaWrapupSnapshot` is the final numbers,

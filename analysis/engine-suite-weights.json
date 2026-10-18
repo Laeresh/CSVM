@@ -560,6 +560,7 @@
     "stunt-respawn-tap-hold": 0.632,
     "stunt-start-count": 0.599,
     "stunt-race-time-attack": 0.908,
+    "stunt-race-spectate": 0.8,
     "stunt-race-no-lives": 0.911,
     "stunt-race-boards": 0.211,
     "stunt-race-display-scores": 0.83,

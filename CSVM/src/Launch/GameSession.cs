@@ -69,8 +69,8 @@ public partial class GameSession : Node3D
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private readonly int[][]? _menuPads;
-    // The panes handed to a spectator when their pilot ran out of lives, so a rerun can take them
-    // back. Freed with this node otherwise.
+    // The panes handed to a spectator when their pilot is out, so a race's new window can take
+    // them back. Freed with this node otherwise.
     private readonly List<SpectatorCamera> _spectatorCameras = new();
     // The --screenshot=/--shots=/--frames= state machine, see
     // src/Tooling/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
@@ -259,6 +259,8 @@ public partial class GameSession : Node3D
     private StuntRace? _race;
     // The race's bots this machine flies. Null outside a race or with none flown here.
     private StuntRaceBots? _raceBots;
+    // The race's spectators, the panes here whose pilot has no run left in the final run.
+    private RaceSpectate? _raceSpectate;
     // Who is holding the sim clock and why, shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
@@ -441,6 +443,9 @@ public partial class GameSession : Node3D
 
     /// <summary>The race's bots this machine flies, for a suite to read; null with none.</summary>
     internal StuntRaceBots? RaceBots => _raceBots;
+
+    /// <summary>The spectators watching from this machine's panes, for a suite to read.</summary>
+    internal IReadOnlyList<SpectatorCamera> SpectatorCameras => _spectatorCameras;
 
     /// <summary>The chapter world's animation runtime, for a suite that steps the world's doors
     /// itself; null with no world.</summary>
@@ -2149,6 +2154,7 @@ public partial class GameSession : Node3D
         {
             _race = race;
             _raceBots = StuntRaceBots.For(race, _seatRigs, _wire.Seats);
+            _raceSpectate = new RaceSpectate(race, panes: _rigs, seats: _seatRigs, _worldRoot!, _spectatorCameras);
             var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
             if (raceLink is { IsHost: false })
                 raceLink.Rerun = () => RerunRace(race);
@@ -3038,6 +3044,7 @@ public partial class GameSession : Node3D
     private void RerunRace(StuntRace race)
     {
         Log.Info("flight", $"stunt race: a new window, every pilot's runs cleared");
+        _raceSpectate?.HandBack();
         race.Rerun();
         _wire.Race?.CallRerun();
         IReadOnlyList<StartCountPhase>? opening = null;
@@ -3352,6 +3359,8 @@ public partial class GameSession : Node3D
             // After every seat: a run started this step was started inside the window it saw.
             session._race?.Advance(dt);
             session._wire.Race?.Step();
+            // After the host's word, so a guest hands no pane over in a race already ended.
+            session._raceSpectate?.Step(dt);
             session._wire.BroadcastAircraftState();
             session._wire.TraceStep();
         }

@@ -7,13 +7,12 @@ using Godot;
 namespace CSVM.Session.Roster;
 
 /// <summary>
-/// What both directors do to a pane whose pilot is out of the mission for good: the wreck is
-/// pinned so neither <c>R</c> nor an armed respawn timer flies it again, the controller stops
-/// writing this pane's camera, and a <see cref="SpectatorCamera"/> takes it, orbit-locked onto a
-/// live aeroplane where there is one. One copy because the two rules that reach it differ only in
-/// what counts as "out": Instant Action's last life, and a campaign human whose aircraft is lost
-/// while the others fly on. The hand-off itself is the same, and so is its failure mode, a pane
-/// left on a camera nobody drives.
+/// What is done to a pane whose pilot is out, and undone when a race's new window flies it again.
+/// The aeroplane is pinned so neither <c>R</c> nor an armed respawn timer flies it. The controller
+/// stops writing this pane's camera, and a <see cref="SpectatorCamera"/> takes it, orbit-locked
+/// onto a live aeroplane or free when none is left. Its callers differ only in what "out" is:
+/// Instant Action's last life, a lost campaign human, a race's pilot with no run left
+/// (<see cref="RaceSpectate"/>). The failure mode is shared too: a pane left on a camera nobody drives.
 /// </summary>
 internal static class SpectateHandoff
 {
@@ -33,6 +32,15 @@ internal static class SpectateHandoff
 
         pilot.Spectating = true;
         pilot.CameraOwned = true;   // the spectator owns this pane from here
+        if (!pilot.Crashed)
+        {
+            // A pilot still flying (a race's finished run) leaves the cockpit and its HUD, as a wreck
+            // does at the crash cut. Its aeroplane flies on as trimmed: the pane's controls are the camera's.
+            pilot.SetViewedFromOutside(true);
+            pilot.SetPilotHudVisible(false);
+            pilot.ControlHold = FlightControlHold.All;
+        }
+
         foreach (var other in rigs)
         {
             if (other.Controller is { InPlay: true } live && live != pilot)
@@ -60,5 +68,44 @@ internal static class SpectateHandoff
         }
 
         return true;
+    }
+
+    /// <summary>Gives every watcher of <paramref name="rigs"/> its controls back while its
+    /// spectator stays, for an ended race whose board reads R.</summary>
+    internal static void ReleaseControls(IReadOnlyList<PlayerRig> rigs)
+    {
+        foreach (var rig in rigs)
+        {
+            if (rig.Controller is { Spectating: true } pilot)
+            {
+                pilot.ControlHold = FlightControlHold.None;
+            }
+        }
+    }
+
+    /// <summary>Undoes <see cref="Begin"/> on every pane of <paramref name="rigs"/> that took it, and
+    /// frees the spectators <paramref name="tracked"/> holds: a race's new window flies every pilot
+    /// again.</summary>
+    internal static void HandBack(IReadOnlyList<PlayerRig> rigs, List<SpectatorCamera> tracked)
+    {
+        foreach (var spectator in tracked)
+        {
+            spectator.QueueFree();
+        }
+
+        tracked.Clear();
+        ReleaseControls(rigs);
+        foreach (var rig in rigs)
+        {
+            if (rig.Controller is not { Spectating: true } pilot)
+            {
+                continue;
+            }
+
+            pilot.Spectating = false;
+            pilot.CameraOwned = false;
+            pilot.SetPilotHudVisible(true);
+            pilot.SetViewedFromOutside(false);
+        }
     }
 }

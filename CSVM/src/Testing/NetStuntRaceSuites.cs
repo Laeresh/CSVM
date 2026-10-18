@@ -62,6 +62,8 @@ internal static class NetStuntRaceSuites
         + "host's board and comes back to the guest's with its splits, and the host's run reaches the "
         + "guest's; both boards agree on the order and the best splits before and after a final run; a "
         + "guest run finished after time up counts while the guest's restart there is refused; the "
+        + "guest, out of a run, then spectates the host's copy after the crash camera's time, its own "
+        + "aeroplane taking no input and its target key offering only the racers still in a run; the "
         + "guest's race does not end at its own cap but on the host's, after the host's race has ended")]
     internal static void ANetworkRaceKeepsOneBoard(TestContext ctx)
     {
@@ -117,9 +119,11 @@ internal static class NetStuntRaceSuites
         + "nobody for its return; a tap puts each seat abeam the exit of the Danger Zone it cleared "
         + "last, zones and clock kept and no count run, and the other machine's copy follows it there; "
         + "a hold restarts each seat's run once behind the count, zones cleared, its release taps "
-        + "nothing, and GO stands each seat on the shared spawn; a crash before time up returns on a tap "
-        + "with the run kept, while in the final run the tap in flight is refused and a crash stays down, "
-        + "stopping its run on the host, and the last one ends the race on both machines")]
+        + "nothing, and GO stands each seat on the shared spawn; a crash before time up, down past the "
+        + "crash camera's time, spectates nothing and returns on a tap with the run kept, while in the "
+        + "final run the tap in flight is refused and a crash stays down, stopping its run on the host, "
+        + "and past the crash camera's time the host's pane spectates the guest's copy while that copy "
+        + "is in play there, holding the crash camera otherwise; the last one ends the race on both machines")]
     internal static void ANetworkRaceRespawnsInFlight(TestContext ctx)
     {
         const string cell = "respawn";
@@ -233,9 +237,9 @@ internal static class NetStuntRaceSuites
     internal static string[] RaceArgs(TestContext ctx) =>
         new[] { "--mute", "--no-pads", $"--scores={System.IO.Path.Combine(ctx.ScratchDir, "net_race_scores.json")}" };
 
-    // Before time up a crash returns each seat with its run kept. In the final run the tap is
-    // refused in flight, and a crash keeps the seat down and stops its run on the host. The second
-    // stop ends the race on both machines.
+    // Before time up a crash returns each seat with its run kept, its pane never spectating. In the
+    // final run the tap is refused in flight, and a crash keeps the seat down and stops its run on
+    // the host. The host's pane then watches the guest's copy if it flies. The second stop ends the race.
     private static void FinalRunCrashes(TestContext ctx, string cell, RaceSeats s, FlightController[] seats,
         StuntMission[] runs, string[] names)
     {
@@ -254,13 +258,16 @@ internal static class NetStuntRaceSuites
             seat.DebugForceCrash();
         }
 
+        // Down past the crash camera's time, so a pane handed to a spectator before time up shows.
+        Steps(s.Peers, CrashCameraSteps(s.Host) + 5);
+        var watchedEarly = seats.Select(p => p.Spectating).ToArray();
         Press(s.Peers, seats, TapFrames);
         Steps(s.Peers, 10);
         for (int i = 0; i < seats.Length; i++)
         {
             ctx.Check(seats[i].RespawnCount == respawns[i] + 1 && !seats[i].Crashed && runs[i].CompletedCount == 1
-                      && s.HostRace.Of(seats[i].PlayerIndex)!.InRun,
-                $"ABLE-TO-FAIL CONTROL: [{cell}] before time up the {names[i]}'s crash returns on a tap with its run kept ({seats[i].RespawnCount - respawns[i]} respawn(s), zones {runs[i].CompletedCount})");
+                      && s.HostRace.Of(seats[i].PlayerIndex)!.InRun && !watchedEarly[i] && !seats[i].Spectating,
+                $"ABLE-TO-FAIL CONTROL: [{cell}] before time up the {names[i]}'s crash, down past the crash camera's time, spectates nothing and returns on a tap with its run kept ({seats[i].RespawnCount - respawns[i]} respawn(s), zones {runs[i].CompletedCount}, spectating {watchedEarly[i]}/{seats[i].Spectating})");
         }
 
         foreach (var race in races)
@@ -278,8 +285,22 @@ internal static class NetStuntRaceSuites
         s.Host.DebugForceCrash();
         Press(s.Peers, new[] { s.Host }, TapFrames);
         bool hostStopped = Until(s.Peers, () => !s.GuestRace.Of(0)!.InRun);
+        bool onCrashCamera = !s.Host.Spectating;
         ctx.Check(hostStopped && s.Host.Crashed && !s.Host.RespawnOffered && !s.HostRace.Ended && s.HostRace.Of(1)!.InRun,
             $"[{cell}] the host's crash in the final run stays down after a tap and stops its run on both boards while the guest's runs on ({s.Host.RespawnCount - respawns[0]} respawn(s), ended={s.HostRace.Ended})");
+
+        // Past the crash camera's time the host's pane watches the guest's copy if it is in play here.
+        // Otherwise it holds the crash camera, never a spectator onto a wreck.
+        var guestCopy = s.Peers[0].SeatRigs[1].Controller!;
+        Steps(s.Peers, CrashCameraSteps(s.Host) + 5);
+        bool copyFlies = guestCopy.InPlay;
+        var watcher = s.Peers[0].SpectatorCameras.FirstOrDefault();
+        bool handed = copyFlies
+            ? s.Host.Spectating && ReferenceEquals(watcher?.Follow, guestCopy)
+              && watcher?.LockCandidates?.Invoke() is { Count: 1 } offered && ReferenceEquals(offered[0], guestCopy)
+            : !s.Host.Spectating && watcher == null;
+        ctx.Check(onCrashCamera && handed && !s.Guest.Spectating && s.HostRace.Of(1)!.InRun,
+            $"[{cell}] the host's pane holds the crash camera for its time, then spectates the guest's copy only while that copy is in play here, the guest's own pane flying on (crash camera first={onCrashCamera}, copy in play={copyFlies}, spectating={s.Host.Spectating}, following the copy={ReferenceEquals(watcher?.Follow, guestCopy)}, guest spectating={s.Guest.Spectating})");
 
         s.Guest.DebugForceCrash();
         Press(s.Peers, new[] { s.Guest }, TapFrames);
@@ -713,6 +734,31 @@ internal static class NetStuntRaceSuites
                   && guestRace.Of(1)!.BestTime == guestFinal && guestRace.Of(1)!.Splits.SequenceEqual(finalSplits),
             $"[{cell}] the guest's run finished after time up, {StuntMission.FormatTime(guestFinal)}, counts as its best on both boards while the host's pilot flies on ({hostRace.Phase})");
         Agree(ctx, cell, "after the final run", hostRace, guestRace, firstIndex: 1);
+
+        // The guest, out of a run, watches the host's copy once its crash camera's time has run.
+        var hostCopy = peers[1].SeatRigs[0].Controller!;
+        bool early = guest.Spectating;
+        int waited = 0;
+        for (; waited < StepLimit && !guest.Spectating; waited++)
+        {
+            Step(peers);
+        }
+
+        var watcher = peers[1].SpectatorCameras.FirstOrDefault();
+        var offered = watcher?.LockCandidates?.Invoke().ToList();
+        int due = CrashCameraSteps(guest);
+        ctx.Check(!early && guest.Spectating && waited >= due - 3 && ReferenceEquals(watcher?.Follow, hostCopy)
+                  && guest.ControlHold == FlightControlHold.All && !host.Spectating,
+            $"[{cell}] the guest, its run finished while the host's pilot flies on, spectates the host's copy after the crash camera's time, its own aeroplane taking no input, and the host's pane flies on ({waited} steps of {due}, following the copy={ReferenceEquals(watcher?.Follow, hostCopy)}, hold {guest.ControlHold}, host spectating={host.Spectating})");
+        watcher?.FollowNode(null);
+        watcher?.PressLockForTest();
+        ctx.Check(offered is { Count: 1 } && ReferenceEquals(offered[0], hostCopy) && ReferenceEquals(watcher!.Follow, hostCopy),
+            $"[{cell}] its target key offers the racers still in a run, the host's copy and not its own aeroplane still flying, and locks back onto it ({offered?.Count} offered)");
+
+        // The race-presence rule keeps every race body off the aircraft layer, so no ram can happen.
+        var pair = new[] { guest, hostCopy, host, peers[0].SeatRigs[1].Controller! };
+        ctx.Check(guest.InPlay && pair.All(c => c.Racing && !c.Shootable),
+            $"[{cell}] the guest's finished aeroplane, flying on, can strike no racer still in a run: it and the host's, on both machines, are off the aircraft layer ({string.Join(", ", pair.Select(c => $"{c.Racing}/{c.Shootable}"))})");
     }
 
     // The guest's clock passes its cap and its race waits; the host's reaching the cap ends both.
@@ -751,6 +797,9 @@ internal static class NetStuntRaceSuites
     }
 
     private static List<float?> Splits(StuntMission run) => run.Zones.Select(z => (float?)z.CompletedAt).ToList();
+
+    // A seat's crash camera time in whole steps, which a pane out of a run waits before it spectates.
+    private static int CrashCameraSteps(FlightController seat) => Mathf.CeilToInt(seat.CrashCameraSeconds / GameClock.FixedDt);
 
     private static string Names(StuntRace race) => string.Join(" ", race.Racers.Select(r => $"{r.Index}:{r.Callsign}"));
 

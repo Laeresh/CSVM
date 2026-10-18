@@ -972,6 +972,9 @@ public partial class FlightController : Node3D
         set => _lifecycle.AutoRespawnAfter = value;
     }
 
+    /// <summary>How long a crash holds this pane's crash camera (<see cref="AircraftLifecycle.CrashCameraSeconds"/>).</summary>
+    public float CrashCameraSeconds => _lifecycle.CrashCameraSeconds;
+
     /// <summary>Whether the crash, once <see cref="AutoRespawnAfter"/> has run, waits for a Fire
     /// Guns press, the lobby's Auto Respawn off. R still respawns at any time.</summary>
     public bool RespawnOnFire

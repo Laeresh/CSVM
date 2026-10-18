@@ -39,6 +39,9 @@ internal static class StuntRaceSuites
     // clock runs on for P2 while P1's presses are refused.
     private const int TapFrames = 2;
 
+    // P1's crash camera time, short so the final run's clock P2 flies on stays under P1's best.
+    private const int WatchFrames = 6;
+
     private static readonly int HoldFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / Dt) + 2;
 
     [Suite("stunt-race-time-attack",
@@ -48,8 +51,11 @@ internal static class StuntRaceSuites
         + "while P2 flies on, keeps its first time as its best until a faster run replaces it with "
         + "that run's splits; both restart late and are in a run at time up; P1's hold, its tap in "
         + "flight and its crash's return in the final run are refused, the crash stopping P1's run with "
-        + "its zone counted while P2 completes its run as the final run, faster than P1's best; the race ends on "
-        + "P2's finish and its board ranks P2 then P1 by best run, with each pilot's best-run splits")]
+        + "its zone counted; P1 finished before time up keeps its pane, while after its final-run crash "
+        + "and the crash camera's time P1's pane spectates P2, the only racer its target key offers, and "
+        + "P2's pane flies on; P2 completes its run as the final run, faster than P1's best; the race ends on "
+        + "P2's finish and its board ranks P2 then P1 by best run, with each pilot's best-run splits; "
+        + "a new window hands P1's pane back")]
     internal static void StuntRaceTimeAttack(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -104,6 +110,8 @@ internal static class StuntRaceSuites
         var zoneNames = zones.Zones.Select(z => z.Description).ToList();
         var board = StuntRaceBoard.Build(race, zoneNames, "C1   ·   test", exitsToMenu: true, pause, _ => new MenuInput());
         ctx.Host.AddChild(board);
+        var cameras = new List<SpectatorCamera>();
+        var watch = new RaceSpectate(race, panes: rigs, seats: rigs, ctx.Host, cameras);
         try
         {
             roster.BuildPlayers(rigs);
@@ -120,6 +128,7 @@ internal static class StuntRaceSuites
                 seat.HoldActionForTest(InputAction.Respawn, false);
             }
 
+            p1.AutoRespawnAfter = WatchFrames * Dt;
             ctx.Check(p1.Race == race && p2.Race == race && race.Racers.Count == 2
                     && p1.StartCount.Figure == "READY" && p2.StartCount.Figure == "READY",
                 $"the roster seats both pilots in the race, each opening on READY: {p1.StartCount.Figure}/{p2.StartCount.Figure}, {race.Racers.Count} racers");
@@ -135,6 +144,7 @@ internal static class StuntRaceSuites
                 p1.SimStep(Dt);
                 p2.SimStep(Dt);
                 race.Advance(Dt);
+                watch.Step(Dt);
             }
 
             void Frames(int n)
@@ -198,6 +208,9 @@ internal static class StuntRaceSuites
             var r2 = race.Of(1)!;
             ctx.Check(run1.AllComplete && r1.BestTime == firstRun && r1.RunsFinished == 1 && !r1.InRun && r2.MostZones == 2,
                 $"P1's first run counts as its best, {StuntMission.FormatTime(firstRun)}, and P2 has two zones: best {r1.BestTime}, P2 zones {r2.MostZones}");
+            Frames(WatchFrames + 2);
+            ctx.Check(!p1.Spectating && !p1.CameraOwned && cameras.Count == 0,
+                $"ABLE-TO-FAIL CONTROL: before time up P1, out of a run past its crash camera's time, keeps its pane: spectating={p1.Spectating}, {cameras.Count} spectator(s)");
 
             // P1 holds into a new run behind its own count while P2's clock runs on.
             float p2Before = run2.Elapsed;
@@ -260,12 +273,24 @@ internal static class StuntRaceSuites
             bool tapRefused = p1.RespawnCount == respawns && r1.InRun;
             p1.DebugForceCrash();
             Press(TapFrames, p1);
-            Frames(6);
+            bool onCrashCamera = !p1.Spectating;
+            Frames(WatchFrames);
             ctx.Check(tapRefused && p1.Crashed && !p1.RespawnOffered && p1.RespawnCount == respawns
                     && race.Phase == StuntRacePhase.FinalRun && r2.InRun,
                 $"P1's tap in flight and its crash in the final run are refused: {p1.RespawnCount - respawns} respawn(s), crashed={p1.Crashed}, P2 still in its run={r2.InRun}");
             ctx.Check(run1.Stopped && !r1.InRun && r1.CurrentZones == 1 && r1.BestTime == secondRun,
                 $"…and the crash stops P1's run with its zone counted and its best kept: stopped={run1.Stopped}, in a run={r1.InRun}, zones {r1.CurrentZones}, best {r1.BestTime}");
+
+            // P1's pane watches P2 once the crash camera's time has run; P2's own pane flies on.
+            var watcher = cameras.Count == 1 ? cameras[0] : null;
+            ctx.Check(onCrashCamera && p1.Spectating && p1.CameraOwned && ReferenceEquals(watcher?.Follow, p2)
+                    && !p2.Spectating && !p2.CameraOwned,
+                $"P1's pane holds the crash camera for its time, then spectates P2, still in its run, while P2's pane flies on: crash camera first={onCrashCamera}, spectating={p1.Spectating}, following P2={ReferenceEquals(watcher?.Follow, p2)}, P2 spectating={p2.Spectating}");
+            var offered = watcher?.LockCandidates?.Invoke().ToList();
+            watcher?.FollowNode(null);
+            watcher?.PressLockForTest();
+            ctx.Check(offered is { Count: 1 } && ReferenceEquals(offered[0], p2) && ReferenceEquals(watcher!.Follow, p2),
+                $"P1's target key cycles over the racers still in a run, P2 alone, and locks back onto it once released: {offered?.Count} offered, following P2={ReferenceEquals(watcher?.Follow, p2)}");
 
             // P2 completes its final run faster than P1's best; the race ends on it.
             for (int k = 1; k < run2.TotalCount; k++)
@@ -281,9 +306,19 @@ internal static class StuntRaceSuites
                 $"the board ranks by best run, P2 first though it finished last: {string.Join(" | ", board.Rows)}");
             ctx.Check(r2.Splits.SequenceEqual(p2Splits) && r1.Splits.SequenceEqual(p1Splits),
                 $"…and carries each pilot's best-run splits: P2 {string.Join(",", r2.Splits.Select(s => s?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)))}");
+
+            // A new window's hand-back: P1's pane is its own again and the spectator goes.
+            watch.HandBack();
+            ctx.Check(!p1.Spectating && !p1.CameraOwned && cameras.Count == 0 && watcher?.IsQueuedForDeletion() == true,
+                $"a new window hands P1's pane back: spectating={p1.Spectating}, camera owned={p1.CameraOwned}, {cameras.Count} spectator(s)");
         }
         finally
         {
+            foreach (var camera in cameras)
+            {
+                camera.Free();
+            }
+
             board.Free();
             var built = rigs.Select(rig => rig.Controller).Where(c => c != null).ToArray();
             roster.ClearMembership();
@@ -298,6 +333,163 @@ internal static class StuntRaceSuites
         }
 
         ctx.Note($"a two-seat window ranked by best run, with a restart each and a final run");
+    }
+
+    [Suite("stunt-race-spectate",
+        "three seats built through the session's roster over C1/IA1's zones, each in its own pane: P3 "
+        + "completes a run before time up and, past its crash camera's time, keeps its pane (the control); "
+        + "at time up P3 is between runs and P1 and P2 fly on in theirs, so past its crash camera's time "
+        + "P3's pane spectates one of them with its own aeroplane taking no input, and its target key "
+        + "offers P1 and P2 alone and cycles between them; when P1 crashes P3's spectator moves on to "
+        + "P2 and P1's pane spectates P2; P2's finish ends the race, which gives P3 its controls back "
+        + "on the ending itself, and the hand-back returns every pane")]
+    internal static void ARaceWatcherFollowsTheRacersStillInARun(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(gamezPath, $"C1 gamez");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        if (zones is not { TotalCount: >= 2 })
+        {
+            throw new SuiteSkippedException($"C1/IA1 loads fewer than two danger zones");
+        }
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var pane = new SubViewport();
+        ctx.Host.AddChild(pane);
+        var rigs = Enumerable.Range(0, 3).Select(i =>
+        {
+            var camera = new Camera3D();
+            pane.AddChild(camera);
+            return new PlayerRig { Index = i, Camera = camera, HudParent = pane, Viewport = pane };
+        }).ToArray();
+        var race = new StuntRace(WindowSeconds, zones.TotalCount);
+        var spec = SessionSpec.Parse(new[] { "--no-pads" });
+        var roster = new FlightRoster(FlightRosterPolicy.From(spec),
+            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            new FlightWorldBindings
+            {
+                Projectiles = pool,
+                Gamez = planesGamez,
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+            },
+            new HumanRosterBindings { RigCount = rigs.Length, Rigs = rigs, PauseState = new PauseState(), StuntZones = zones, Race = race },
+            new ApartStarts());
+        var cameras = new List<SpectatorCamera>();
+        var watch = new RaceSpectate(race, panes: rigs, seats: rigs, ctx.Host, cameras);
+        try
+        {
+            roster.BuildPlayers(rigs);
+            var seats = rigs.Select(r => r.Controller).ToArray();
+            if (seats.Any(s => s?.Stunt == null))
+            {
+                ctx.Check(false, $"all three seats were built with a stunt run");
+                return;
+            }
+
+            var (p1, p2, p3) = (seats[0]!, seats[1]!, seats[2]!);
+            foreach (var seat in new[] { p1, p2, p3 })
+            {
+                seat.UseKeyboard = false;
+                seat.PadDevices = Array.Empty<int>();
+                seat.AutoRespawnAfter = WatchFrames * Dt;
+            }
+
+            void Frames(int n)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    foreach (var seat in new[] { p1, p2, p3 })
+                    {
+                        seat.SimStep(Dt);
+                    }
+
+                    race.Advance(Dt);
+                    watch.Step(Dt);
+                }
+            }
+
+            // No count: each run's clock starts on the first step, inside the open window.
+            race.BeginOpening(0f);
+            Frames(2);
+            foreach (var zone in p3.Stunt!.Zones)
+            {
+                ClearZone(p3.Stunt, zone);
+            }
+
+            Frames(WatchFrames + 2);
+            ctx.Check(race.Phase == StuntRacePhase.Open && p3.Stunt.AllComplete && !race.Of(2)!.InRun && !p3.Spectating && cameras.Count == 0,
+                $"ABLE-TO-FAIL CONTROL: before time up P3, its run complete and past its crash camera's time, keeps its pane: {race.Phase}, spectating={p3.Spectating}");
+
+            race.Advance(race.TimeLeft);
+            Frames(WatchFrames + 2);
+            var watcher = cameras.Count == 1 ? cameras[0] : null;
+            var offered = watcher?.LockCandidates?.Invoke().ToList();
+            ctx.Check(race.Phase == StuntRacePhase.FinalRun && race.Of(0)!.InRun && race.Of(1)!.InRun && p3.Spectating
+                      && !p3.Crashed && p3.ControlHold == FlightControlHold.All && !p1.Spectating && !p2.Spectating
+                      && (ReferenceEquals(watcher?.Follow, p1) || ReferenceEquals(watcher?.Follow, p2)),
+                $"P3, between runs at time up, spectates a racer still in a run once its crash camera's time has run, its own aeroplane flying on held: {race.Phase}, spectating={p3.Spectating}, hold {p3.ControlHold}, following P{(watcher?.Follow as FlightController)?.PlayerIndex + 1}");
+
+            var first = watcher?.Follow;
+            watcher?.PressLockForTest();
+            var second = watcher?.Follow;
+            watcher?.PressLockForTest();
+            ctx.Check(offered is { Count: 2 } && offered.Contains(p1) && offered.Contains(p2)
+                      && second != null && !ReferenceEquals(second, first) && (ReferenceEquals(second, p1) || ReferenceEquals(second, p2))
+                      && ReferenceEquals(watcher!.Follow, first),
+                $"P3's target key offers P1 and P2 alone, not its own aeroplane still flying, and cycles between them and back: {offered?.Count} offered, P{(first as FlightController)?.PlayerIndex + 1} to P{(second as FlightController)?.PlayerIndex + 1}");
+
+            watcher?.FollowNode(p1);
+            p1.DebugForceCrash();
+            Frames(WatchFrames + 2);
+            var p1Watcher = cameras.Count == 2 ? cameras[1] : null;
+            ctx.Check(!race.Of(0)!.InRun && ReferenceEquals(watcher?.Follow, p2) && p1.Spectating && ReferenceEquals(p1Watcher?.Follow, p2),
+                $"P1's crash stops its run, P3's spectator moves on to P2, and P1's pane spectates P2: P3 following P{(watcher?.Follow as FlightController)?.PlayerIndex + 1}, P1 spectating={p1.Spectating}");
+
+            // The finish ends the race inside the zone's own test, outside any step.
+            foreach (var zone in p2.Stunt!.Zones)
+            {
+                ClearZone(p2.Stunt, zone);
+            }
+
+            ctx.Check(race.Ended && p3.ControlHold == FlightControlHold.None && p3.Spectating,
+                $"P2's finish ends the race, and the ending itself gives P3 its controls back while it still watches: ended={race.Ended}, hold {p3.ControlHold}");
+
+            watch.HandBack();
+            ctx.Check(seats.All(s => !s!.Spectating && !s.CameraOwned && s.ControlHold == FlightControlHold.None) && cameras.Count == 0,
+                $"a new window hands every pane back: spectating {string.Join("/", seats.Select(s => s!.Spectating))}, {cameras.Count} spectator(s)");
+        }
+        finally
+        {
+            foreach (var camera in cameras)
+            {
+                camera.Free();
+            }
+
+            var built = rigs.Select(rig => rig.Controller).Where(c => c != null).ToArray();
+            roster.ClearMembership();
+            foreach (var controller in built)
+            {
+                controller!.Free();
+            }
+
+            pane.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+
+        ctx.Note($"three seats: a pilot between runs at time up watches the two still racing, cycling and moving on");
     }
 
     // Every stock airframe name, measured in the race table's row face at the authored page size,
