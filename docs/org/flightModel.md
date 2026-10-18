@@ -1045,16 +1045,23 @@ smoothed exponentially toward its target at 2/s by `FUN_00460490`, and `FUN_004b
 (elevators) and `FUN_004b2ca0` (rudders) each run two `sprintf` loops over the six format strings
 at `0x62aee8`–`0x62af2c` (`l_aileron%d`, `r_aileron%d`, `l_elevator%d`, `r_elevator%d`,
 `l_rudder%d`, `r_rudder%d`), starting at index 1 and pushing every node `FUN_004d8cf0` finds until
-a lookup misses. The six vectors sit at `obj+0x9c0`, `+0x9d0`, `+0x9e0`, `+0x9f0`, `+0xa00` and
-`+0xa10` in that order, so the string order is the slot order. Nothing else writes them: the
+a lookup misses. `FUN_004d8cf0` is a depth-first by-name search: it returns the node itself on a
+name match, else recurses into its children (count at node `+0x56`, array at `+0x5c`, walked last
+to first) and returns the first hit. Every lookup starts at the plane's root `obj+0xc`, the same
+root `FUN_00476250` searches for the cockpit-only `compass` (`0x476bbb`) and `pfhorizon`
+(`0x476bd2`), so the `cockpit1` interior and the outside airframe share one numbering. A gap in it
+ends the list: `l_aileron3` with no `l_aileron2` anywhere in the plane is never found (the
+interiors this affects are tabled in `docs/org/cameraViews.md`). The six vectors sit at
+`obj+0x9c0`, `+0x9d0`, `+0x9e0`, `+0x9f0`, `+0xa00` and `+0xa10` in that order, so the string order is the slot order. Nothing else writes them: the
 constructor `FUN_004aff80` zeroes them and the destructor `FUN_004b0aa0` frees them.
 
 **Named product exception: CSVM's name matching is wider than the original's.** The Fury's
 deflecting rudder node is `l_rudder_rotate`, which no `l_rudder%d` lookup finds, so the original
 flies that plane with a frozen rudder; the digitless `l_elevator` shape misses the same way.
 CSVM's `RudderRe`/`ElevatorRe` accept those names and animate the surfaces, kept deliberately as
-an improvement over the shipped behavior. The
-mixing, angles and smoothing on every matched node remain the decoded values above.
+an improvement over the shipped behavior. `ControlSurfaces`' regexes also ignore the original's
+stop at a gap in the numbering, so `AileronRe` moves the Hellhound's and Balmoral's interior
+`l/r_aileron3`, which the original never finds; that divergence is not a remake-only rule. The mixing, angles and smoothing on every matched node remain the decoded values above.
 
 The arithmetic per frame, with addresses:
 
