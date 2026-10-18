@@ -108,6 +108,9 @@ public sealed class CameraController
     // wide pane's canopy rails and panel.
     private const float AssumedAspect = 4f / 3f;
 
+    // 20 deg in one frame: a flown pitch turns the level chase's up about 1 deg a frame at 90 Hz, 9 at 11 fps.
+    private const float LevelSwingCutRad = 0.349f;
+
     private readonly Camera3D _camera;
 
     // The view-selection controls' last readings, one slot per control (StepViewKeys).
@@ -690,9 +693,9 @@ public sealed class CameraController
         {
             // The VR chase: no eased frames, no swing, no zoom and no speed in the distance.
             var mount = XrMount.Chase(planePos, attitude, VrChaseOffset(_camParams), frame);
-            // Through vertical flight the unrolled frame's up turns over, a half-turn roll in one
-            // frame. Counted as a cut, so the comfort fade covers it.
-            if (_xrChaseUp is { } lastUp && lastUp.Dot(mount.Basis.Y) < 0f)
+            // Near vertical flight the unrolled frame's up swings round within a few frames. A swing
+            // faster than any flown pitch counts as a cut, so the comfort fade covers it.
+            if (frame == XrChase.Level && _xrChaseUp is { } lastUp && lastUp.AngleTo(mount.Basis.Y) > LevelSwingCutRad)
             {
                 Shot++;
             }
