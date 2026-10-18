@@ -381,8 +381,7 @@ A list of part entries:
     **combined** progression of both pools: yellow = up to half the zone's armor gone, orange =
     the rest of the armor plus the first quarter of the airframe, red = beyond that. With armor
     equal to hp at stock those bands break at 0.75 and 0.375 of the combined pool, and
-    `_damage_green` firing at **0.72** is the expected one-state name lag (see the standing rule in
-    `backlog.md`). ⚠ **A reading, not a decode**, `_damage_yellow` at 0.46 sits mid-band rather
+    `_damage_green` firing at **0.72** is the expected one-state name lag. ⚠ **A reading, not a decode**, `_damage_yellow` at 0.46 sits mid-band rather
     than on 0.375, so the correspondence is suggestive and does not pin the mapping down.
     Source: Crimson Skies PC manual, damage-indicator section,
     <https://manualmachine.com/gamespc/crimsonskies/1119420-user-manual/>.

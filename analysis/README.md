@@ -16,7 +16,7 @@ the probe first". Anything that is *evidence* rather than *output* belongs here 
 would have to rebuild before it could be picked up.
 **What does not:** rendered frames, hexdumps, screenshots, extraction output, anything derived
 from the game's own bytes.
-**When it leaves:** a directory that no live file (`docs/`, `backlog.md`, `playtest.md`, source
+**When it leaves:** a directory that no live file (`docs/`, `playtest.md`, an open issue, source
 or test comments) cites any more is deleted. Git keeps every version, and the tag
 `analysis-archive` marks the tree before the bulk retirement, so
 `git show analysis-archive:analysis/<dir>/FINDINGS.md` recovers a retired one and

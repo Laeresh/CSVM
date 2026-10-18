@@ -69,8 +69,8 @@ For each data row `| \`CAP-NN\` | Capture | Detail | Unblocks |`:
 - **id** — the `CAP-NN` token, verbatim.
 - **capture** — the second column, verbatim (may contain inline code/bold).
 - **detail** — the third column, verbatim.
-- **unblocks** — the fourth column, verbatim (may be multiple `BL-NNN` refs with parentheticals, or
-  empty).
+- **unblocks** — the fourth column, verbatim (may be multiple `#N` refs or historical `BL-NNN`
+  citations with parentheticals, or empty).
 
 **Skip themes with zero data rows entirely** — do not emit an entry for them (the artifact hides
 empty themes by design; `playtest.md` itself keeps the empty table as a "nothing owed right now"

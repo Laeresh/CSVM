@@ -49,8 +49,8 @@ and what to read when the game vanishes after it starts.
 Bugs go in an [issue](https://github.com/Laeresh/CSVM/issues/new?template=bug_report.yml).
 The form asks for the build version and the newest log file from the `logs\` folder beside
 `CSVM.exe`, which between them usually identify a fault without a round trip. A report is
-worked on in its own issue; this repository's `backlog.md` is the author's internal list and
-is not mirrored, so the issue is the thread to follow.
+worked on in its own issue and is not copied into the author's `backlog` issues, so the issue
+is the thread to follow.
 
 Small self-contained pull requests are welcome for `packaging/`, the repo scripts,
 the documentation and typo fixes. A change under `CSVM/src` needs an issue first, because

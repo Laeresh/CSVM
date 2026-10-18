@@ -3796,6 +3796,15 @@ Every mechanism and every envelope row, on every stock airframe, in exactly one 
 footage figure: `FlightEnvelopeTests`, the probe's targets and the tables here all pin the decoded
 plant's own values.
 
+⚠ **Do not chase a transient or a feel report through the force path.** The flight constants are
+coupled (thrust sets speed, and speed scales the yaw `eff`), so a change to one moves the others,
+and `FlightEnvelopeTests` fails when a change breaks a decoded scenario. There is no thrust scale
+left to turn: thrust is `EnginePower · ref_area · curve(Mach) · lever`, every factor is the
+executable's, and the level-equilibrium curve it produces is asserted per airframe and per lever
+position ("Part-throttle equilibrium"). `PitchTune`, `YawTune` and `RollTune` are all 1, since
+`FUN_0048c470` carries no per-axis factor ("The `*Tune` rates"), and
+`FlightConstantInventoryTests` pins them there.
+
 The constant inventory's four finer classes collapse into these three: `decoded`, `authored` and
 `unit` are all values CSVM did not invent and read as **decoded** here, each keeping its own source,
 while `exception` separates out. The constants table is above, "The plant's constant inventory";
