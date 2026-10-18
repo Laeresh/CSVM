@@ -41,8 +41,9 @@ issue is one row:
 
 - **id**: `#N`.
 - **theme**: the *description* of its `theme:` label, which is the theme's heading. Theme order is
-  the order `gh label list` returns the `theme:` labels in, keeping only themes with an open issue;
-  do not hardcode the theme list, so a renamed or new theme label is picked up automatically. An
+  `build.py`'s `THEME_ORDER` (the order `issue-tracker.md` lists the slugs in), keeping only themes
+  with an open issue; a new `theme:` label sorts after the listed ones, with its description as
+  the heading. An
   issue with no `theme:` label goes into an `Untriaged` theme at the end, and one whose `theme:`
   label does not exist is a build failure.
 - **type**: its `type:` label, capitalised (`Bug`, `Feature`, `Research`, `Tuning`, `Cleanup`,
