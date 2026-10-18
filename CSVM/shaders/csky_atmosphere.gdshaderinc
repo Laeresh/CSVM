@@ -165,6 +165,13 @@ void csky_sun_rgb_at(vec3 camera_world, out vec3 sun_dir, out vec3 ambient_rgb, 
     fill_rgb = csky_sun_fill_rgb;
 }
 
+// Whether a view's linear fog colour puts it under a night sky: the shader twin of
+// WeatherRig.IsNightZone, its 0.25 sRGB luminance cut taken to linear. The install's night fogs sit
+// under 0.01 and its day fogs over 0.4 (docs/org/weather.md), so the two keys cannot disagree.
+bool csky_night_fog(vec3 fog_linear) {
+    return dot(fog_linear, vec3(0.2126, 0.7152, 0.0722)) < 0.0508;
+}
+
 // How much fog covers a fragment. `fog_world` is the fragment in WORLD space (under
 // skip_vertex_transform, VERTEX is view-space — lift it with INV_VIEW_MATRIX first).
 //

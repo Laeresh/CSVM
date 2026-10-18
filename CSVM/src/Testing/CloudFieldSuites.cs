@@ -145,14 +145,21 @@ internal static class CloudFieldSuites
         + "colour and peak opacity, with the rim sample deepened by the size ratio, and each card "
         + "picks its puff, tilt, mirror and size off a hash of its own position, so the placements "
         + "match the faithful field's and a second build's exactly; C1's white cards and C5's "
-        + "dark haze both keep their authored colour; and C1's placed cloudparent sprites draw "
-        + "their masks on the faithful presentation and the fuller placed-cloud pool under "
+        + "dark haze both keep their authored colour, linearised once, and an Enhanced card "
+        + "darkens toward a night fog over its authored band; and C1's placed "
+        + "cloudparent sprites draw their masks on the faithful presentation and the fuller "
+        + "placed-cloud pool under "
         + "Enhanced, every one of them, at the same places")]
     internal static void CloudPuffPools(TestContext ctx)
     {
         var pool = CloudPuffs.Deck();
         ctx.Check(pool != null && pool.GetLayers() == PuffPoolSize && pool.GetWidth() > 64 && pool.HasMipmaps(),
             $"the rendered puff pool reads as {PuffPoolSize} mipmapped layers: {pool?.GetLayers()} of {pool?.GetWidth()}px");
+        // Godot linearises the Color the tint is set with; a second conversion sinks C5's haze to black.
+        string include = FileAccess.GetFileAsString("res://shaders/csky_cloud_puffs.gdshaderinc");
+        ctx.Check(include.Contains("uniform vec4 puff_tint : source_color", System.StringComparison.Ordinal)
+                  && !include.Contains("csky_srgb_to_linear(puff_tint", System.StringComparison.Ordinal),
+            $"the puff tint is linearised once, by Godot, and never again in the shader");
         foreach (var kindName in PuffKinds)
         {
             ctx.Check(FogVolumeClutter.DrawsRenderedPuffs(kindName), $"{kindName} draws from the rendered pool");
@@ -264,6 +271,8 @@ internal static class CloudFieldSuites
                     {
                         ctx.Check(!code.Contains("cloud_puffs", System.StringComparison.Ordinal),
                             $"{chapter} {arm} {kind} shader carries no puff tint");
+                        ctx.Check(!code.Contains("csky_clutter_dark", System.StringComparison.Ordinal),
+                            $"{chapter} {arm} {kind} shader takes no night darkening");
                     }
                     continue;
                 }
@@ -279,6 +288,9 @@ internal static class CloudFieldSuites
                 var want = chapter == "C5" ? DarkHaze : WhiteCard;
                 ctx.Check(Mathf.Abs(tint.R - want) < 0.02f && Mathf.Abs(tint.G - want) < 0.03f && tint.A > 0.9f,
                     $"{chapter} {arm} {kind} carries its authored mask colour {tint} (about {want:0.00})");
+                ctx.Check(code.Contains("v_dark = csky_clutter_dark(origin, CAMERA_POSITION_WORLD, fade)", System.StringComparison.Ordinal)
+                          && code.Contains("csky_night_fog(", System.StringComparison.Ordinal),
+                    $"{chapter} {arm} {kind} darkens toward a night fog over its authored band");
                 float lod = mat.GetShaderParameter("rim_lod").AsSingle();
                 float wantLod = 3f + Mathf.Log(pool.GetWidth() / 64f) / Mathf.Log(2f);
                 ctx.Check(Mathf.Abs(lod - wantLod) < 1e-3f, $"{chapter} {arm} {kind} rim sample at level {lod:0.##}");

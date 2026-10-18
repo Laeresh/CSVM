@@ -30,6 +30,18 @@ float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
     return (fade.y - d2) * fade.z;
 }
 
+// Enhanced Graphics only: how far a clutter instance has darkened toward the fog colour under a night
+// zone. It runs over the AUTHORED band, unscaled: 0 inside near, 1 at far, where the original drops
+// the instance. Past it the extended reach draws a silhouette in the fog's own colour, so the later
+// cull has nothing lit to pop. Linear in squared distance like the fade; a band of 0 never darkens.
+float csky_clutter_dark(vec3 origin, vec3 camera, vec4 fade) {
+    if (fade.y <= 0.0) {
+        return 0.0;
+    }
+    vec3 d = origin - camera;
+    return clamp((dot(d, d) - fade.x) * fade.z, 0.0, 1.0);
+}
+
 // The same near/far test with the per-instance VIEW-ANGLE term the fog-volume scatter installs:
 // the sprite carries the plane normal of the polygon it was scattered on, and the band is compared
 // against the squared cosine `c` between that normal and the direction to the eye. A sprite seen

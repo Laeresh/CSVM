@@ -356,6 +356,16 @@ out 2x for its shadows. Pushed, C5's black fog let the lit walls of its far city
 ground already gone dark, and inside a fog volume (`ZONE3`, 50 to 250 m) it showed streets the
 original fogs to flat 16 grey.
 
+Under a night zone Enhanced also darkens the clutter toward the fog colour over each instance's
+AUTHORED fade band (`csky_clutter_dark`, the shader twin of the key being `csky_night_fog`): C5's
+city blocks are lit inside their authored near (200 to 300 m) and reach the fog's colour at their
+authored far (300 to 450 m), where the original drops them. The extended Enhanced reach past that
+draws silhouettes in the fog's colour, never lit blocks that dither out. The `fvol` cards take the
+same ramp over their own band (1,000 to 1,800 m), since every card is authored `fog: false` and no
+zone fog darkens them. This is a remake-only rule: the original never draws those blocks past their
+band, and Enhanced's longer reach would otherwise show them lit against a black fog. Day zones and
+the faithful path keep the authored fade.
+
 ## The lens flare (measured, not decoded)
 
 ⚠ Everything in this section is **footage**, not the executable, no `FUN_` address backs it. It is

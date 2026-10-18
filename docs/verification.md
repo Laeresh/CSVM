@@ -654,6 +654,12 @@ member, and it does not go here.
   reading "X lies under Y" as what draws, check it against a flat render with the suspect texture
   overridden.** C3's survey put 9,500 cells of `p-1` cliff and sand tiles under a `p0` sea sheet
   the flat render draws them over, and its `swtr01`-`05` sheets above the crater floor build hidden.
+- **WORLD-52**, **A Godot `Color` set on a shader's `vec4` uniform arrives already linearised,
+  with or without a `source_color` hint; a shader that linearises it again passes a white tint
+  almost unchanged and sinks a dark one to nothing.** Test a colour path on the darkest authored
+  value, never on a white one. A double conversion takes C5's 25-grey fog-bank tint to about 2 and
+  leaves the bank invisible over the night city, while every white cloud deck reads normal. Passing
+  the same value as a `Vector4`, which Godot does not convert, is the A/B that names it.
 
 ## SHELL, Windows, PowerShell, and processes
 

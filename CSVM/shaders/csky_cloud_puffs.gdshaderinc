@@ -10,8 +10,10 @@ uniform float puff_layers = 1.0;
 // The largest in-plane turn, in degrees either way, and the size range, as factors on the card.
 uniform float puff_turn_deg = 0.0;
 uniform vec2 puff_size = vec2(1.0, 1.0);
-// The authored mask's own colour (sRGB) and peak opacity: the puff carries shape and shading only.
-uniform vec4 puff_tint = vec4(1.0);
+// The authored mask's own colour and peak opacity: the puff carries shape and shading only.
+// ⚠ Do not linearise it again in the shader. Godot already converts the Color it is set with, and a
+// second conversion sinks a dark tint to black (docs/verification.md WORLD-52).
+uniform vec4 puff_tint : source_color = vec4(1.0);
 // The layer and (cos, sin, mirror) turn vertex() writes from csky_puff_pose for fragment().
 varying flat float v_puff_layer;
 varying flat vec3 v_puff_pose;
@@ -55,7 +57,7 @@ vec2 csky_puff_uv(vec2 uv, vec3 pose) {
 // The posed puff, tinted by the authored mask, at the chapter's mip bias. Fragment stage only.
 vec4 csky_puff_sample(vec2 uv, vec3 pose, float layer) {
     vec4 puff = texture(puff_tex, vec3(csky_puff_uv(uv, pose), layer), csky_mip_bias);
-    return puff * vec4(csky_srgb_to_linear(puff_tint.rgb), puff_tint.a);
+    return puff * puff_tint;
 }
 
 #endif

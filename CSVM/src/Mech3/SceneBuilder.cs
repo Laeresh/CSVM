@@ -1972,11 +1972,15 @@ void fragment() {
         sb.AppendLine(AtmosphereInclude);
         // The clutter variant only: the authored far fade off the MultiMesh custom data. A discard
         // in the fragment stage is what keeps this out of every world shader.
+        // Enhanced only: a night zone darkens the clutter toward its fog over the extended reach.
+        bool clutterDark = clutterFade && fogged && GraphicsMode.Enhanced;
         if (clutterFade)
         {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
+        if (clutterDark)
+            sb.AppendLine("varying flat float v_clutter_dark;");
         // The race ghost reuses the clutter fade's dither; the include guard admits it once.
         if (raceGhost)
         {
@@ -2044,6 +2048,7 @@ void fragment() {
         string clutterVertex = clutterFade
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
+              + (clutterDark ? "    v_clutter_dark = csky_clutter_dark(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n" : "")
             : "";
         string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
         // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
@@ -2157,6 +2162,8 @@ void fragment() {{");
         if (fogged)
         {
             sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
+            if (clutterDark)
+                sb.AppendLine("    if (csky_night_fog(csky_fog_color_at(CAMERA_POSITION_WORLD))) { fog_amt = max(fog_amt, v_clutter_dark); }");
             // ⚠ The lit arms fog through FOG, never ALBEDO: Godot lights whatever ALBEDO holds, so
             // a fogged albedo still varies with its normal at full fog. csky_fog_color is linear,
             // the space FOG.rgb resolves in and the one the fullbright arm's mix lands in.
