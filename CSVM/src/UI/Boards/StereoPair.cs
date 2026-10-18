@@ -6,8 +6,10 @@ namespace CSVM.UI.Boards;
 /// <summary>
 /// A cutscene the theater screen plays as a stereo pair (<see cref="StereoPair"/>). It names the
 /// camera the session poses on the authored one, and the scene depth that lands on the screen plane.
+/// <c>FilmRows</c> is the gap between the letterbox bars, its top and height as fractions of the
+/// picture, while they are up. The screen shows the surround over the bars.
 /// </summary>
-public readonly record struct TheaterCutscene(Camera3D Camera, float ConvergenceM);
+public readonly record struct TheaterCutscene(Camera3D Camera, float ConvergenceM, Vector2? FilmRows = null);
 
 /// <summary>
 /// The 3D-cinema pair a cutscene plays as on the theater screen, engine-free. Two cameras stand on
@@ -25,9 +27,9 @@ public static class StereoPair
     /// was measured.</summary>
     public const float CardDepthM = 7.5f;
 
-    /// <summary>The convergence as a multiple of the card's depth. At 1 the letterbox bars stand on
-    /// the screen plane, so they frame the window and the scene lies behind it. Below 1 the scene
-    /// deepens and the bars recede behind the screen. TUNE at the headset.</summary>
+    /// <summary>The convergence as a multiple of the card's depth. At 1 the card's frame stands on
+    /// the screen plane, where the screen's mask over the bars frames the window. The scene lies
+    /// behind it, and below 1 it deepens. TUNE at the headset.</summary>
     public const float ConvergenceOfCard = 1f;
 
     /// <summary>The eyes' separation until the runtime reports its eyes: a typical adult's.</summary>

@@ -704,7 +704,7 @@ public partial class Launcher : Node3D
                 flightLive,
                 eyeFeed: true,
                 cutscene: () => rig is { Screening: true, Pane: { } pane } && _session?.Cutscene is { } film
-                    ? new UI.Boards.TheaterCutscene(pane.Camera, UI.Boards.StereoPair.ConvergenceM(Mathf.Abs(film.CardBox.GetCenter().Z)))
+                    ? new UI.Boards.TheaterCutscene(pane.Camera, UI.Boards.StereoPair.ConvergenceM(Mathf.Abs(film.CardBox.GetCenter().Z)), film.FilmRowsShown)
                     : null,
                 interocular: () => XrEyeFeed.InterocularM);
             AddChild(_theater);
@@ -963,7 +963,7 @@ public partial class Launcher : Node3D
         _audio.Tick((float)delta);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null);
+            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null || _spec.MovieName != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the

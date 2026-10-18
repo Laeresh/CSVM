@@ -593,9 +593,9 @@ cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher
 A stereo session's theater screen: the menus, boards, load screens, cinemas and cutscenes on a quad ahead of the
 seated eye, in the XR origin's frame and placed from `Launch/XrEyeFeed.cs` as the stereo cockpit is.
 `CanvasRehost.cs` moves every root canvas layer from `HudLayers.Board` up into its SubViewport, while
-the controls keep the root's layout and input. Its geometry and resolution are `TheaterLayout.cs`.
+the controls keep the root's layout and input. Its geometry and resolution are `TheaterLayout.cs`. Under a stereo root the boards and cinemas ground only the board's rect, so the surround shows where flat play letterboxes.
 With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
-or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board. For that frame the camera's mask is cut to `HeadsetLayer` alone, after the pair has read it, and put back before the next physics and process pass, so the headset draws no world, sky or sun shadow behind the surround.
+or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board, and shows only the film rows between the card's bars (`CutsceneController.FilmRows`). For that frame the camera's mask is cut to `HeadsetLayer` alone, after the pair has read it, and put back before the next physics and process pass, so the headset draws no world, sky or sun shadow behind the surround.
 Its geometry stands on `SplitScreen.HeadsetLayer`, which the pair leaves out, so it never draws into its own picture. Its render priorities sit over `HeadLockedQuads`'
 fade and under `ComfortQuads.cs`' fade, which `BoardShown` drops under it. `Launch/Launcher.cs` builds it beside `XrSession`; the laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
 
@@ -620,10 +620,10 @@ runtime. Pinned by `CSVM.Tests/TheaterLayoutTests.cs`.
 The 3D-cinema pair a cutscene plays as on the theater screen, engine-free, and `TheaterCutscene`, the
 camera and convergence the session hands the screen. Two cameras stand on the authored one, the
 runtime's interocular distance apart along its right axis, frusta shifted to meet the authored camera's at the
-convergence, so that depth lands on the screen plane. It converges on the letterbox card (7.5 m): the bars frame the window
-on the screen plane and the scene recedes behind it. On the default seat, framed at 55.76°, infinity lies 12.1 mm behind
+convergence, so that depth lands on the screen plane. It converges on the letterbox card (7.5 m): the card's frame stands on
+the screen plane, where the screen masks the bars, and the scene recedes behind it. On the default seat, framed at 55.76°, infinity lies 12.1 mm behind
 (0.6 % of the width) and appears 3.1 m away; a point 3 m from the camera stands out at 1.9 m. Converging at 1.45 m
-instead makes the screen an undistorted window but sinks the bars 13 m deep. `ConvergenceOfCard` is the knob.
+instead makes the screen an undistorted window but its far parallax reaches the interocular. `ConvergenceOfCard` is the knob.
 
 ## src/UI/Boards/ComfortQuads.cs
 The headset's comfort layers, one per process beside the theater: a black quad locked to the head

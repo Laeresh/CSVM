@@ -92,9 +92,9 @@ public sealed partial class BootCard : Node
     /// <inheritdoc/>
     public override void _Ready()
     {
-        // The block owns a black screen for its whole length, so what a gap between two films
-        // shows is black rather than whatever an empty viewport clears to.
-        var black = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
+        // The block owns a black screen for its whole length. A gap between two films then shows
+        // black, not what an empty viewport clears to. The theater's dark room stands in for it.
+        var black = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = !GetViewport().UseXR };
         black.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _view = ComposedBoardView.Build(_dataRoot);
 

@@ -379,7 +379,10 @@ public sealed partial class ComposedBoardView : Control
     {
         var size = GetViewportRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        DrawRect(new Rect2(Vector2.Zero, size), Colors.Black);
+        // A stereo root draws this on the theater screen, so only the board's own rect is grounded.
+        // The letterbox would frame it in black against the dark room.
+        DrawRect(GetViewport().UseXR ? new Rect2(fit.X(0f), fit.Y(0f), fit.Length(BoardFit.AuthoredWidth), fit.Length(BoardFit.AuthoredHeight))
+            : new Rect2(Vector2.Zero, size), Colors.Black);
         if (_board is not { } board)
         {
             return;

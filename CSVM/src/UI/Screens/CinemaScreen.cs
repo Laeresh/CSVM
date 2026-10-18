@@ -107,7 +107,8 @@ public sealed partial class CinemaScreen : Node
     public override void _Ready()
     {
         _texture = TextureUpload.Create(_cinema.Width, _cinema.Height, Image.Format.Rgba8, _cinema.Pixels);
-        _ground = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
+        // A stereo root shows the film on the theater screen, whose dark room stands in for the ground.
+        _ground = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = !GetViewport().UseXR };
         _ground.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _screen = new TextureRect
         {

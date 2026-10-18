@@ -194,6 +194,7 @@ public sealed partial class CutsceneController : Node
     private Node3D? _card;
     private Aabb _cardBox;
     private MeshInstance3D? _cardMesh;
+    private Vector2? _filmRows;
     // The bars node's authored scale, read alongside the card measurement and for the same reason:
     // PinBars re-asserts a pose every tick, and reading the scale back off a posed node would let
     // it compound. The pane's width factor rides on top of it, recomputed each frame from the live
@@ -294,6 +295,9 @@ public sealed partial class CutsceneController : Node
     /// the bound chapter ships no card mesh under the bars.</summary>
     public MeshInstance3D? CardMesh => _cardMesh;
 
+    /// <summary>The <see cref="FilmRows"/> of the bound card while its bars are up, else null.</summary>
+    public Vector2? FilmRowsShown => _bars is { Visible: true } ? _filmRows : null;
+
     // The scripted player's rig: P1's, the one aeroplane an authored `player` token means. It is
     // what an unclaimed episode owns, so a 1P session and every mission intro resolve to P1. On a
     // network guest that is the host's P1 rather than the guest's own pane.
@@ -340,6 +344,42 @@ public sealed partial class CutsceneController : Node
         }
 
         return Mathf.Max(1f, halfHeight * aspect / halfWidth);
+    }
+
+    /// <summary>The film's rows on a pane <see cref="FramingFovDeg"/> frames: the gap the two bars
+    /// leave. It is read off the card mesh's own <paramref name="cardFaces"/>, as its top and height
+    /// in fractions of the pane's height. Null when they are not a pair of bars round a gap.</summary>
+    public static Vector2? FilmRows(Vector3[]? cardFaces)
+    {
+        if (cardFaces == null || cardFaces.Length == 0)
+        {
+            return null;
+        }
+
+        float top = float.MinValue, bottom = float.MaxValue, topInner = float.MaxValue, bottomInner = float.MinValue;
+        foreach (var vertex in cardFaces)
+        {
+            top = Mathf.Max(top, vertex.Y);
+            bottom = Mathf.Min(bottom, vertex.Y);
+            if (vertex.Y > 0f)
+            {
+                topInner = Mathf.Min(topInner, vertex.Y);
+            }
+            else
+            {
+                bottomInner = Mathf.Max(bottomInner, vertex.Y);
+            }
+        }
+
+        float half = (top - bottom) * 0.5f;
+        if (!(half > 0f) || !(topInner < top) || !(bottomInner > bottom))
+        {
+            return null;
+        }
+
+        // The pane's half-height is the card's less the overscan, centred on the eye's axis.
+        float toPane = (1f + CardOverscan) / (2f * half);
+        return new Vector2(0.5f - (topInner * toPane), (topInner - bottomInner) * toPane);
     }
 
     /// <summary>Is this one of the story-mission opening definitions (<see cref="IntroAnims"/>)?
@@ -420,6 +460,8 @@ public sealed partial class CutsceneController : Node
             _cardBox = box;
             _cardMesh = MakeUnoccludable(_card);
         }
+
+        _filmRows = FilmRows(_cardMesh?.Mesh?.GetFaces());
 
         Log.Info("anim", $"cutscene: {(_cutsceneCamera != null ? "camera1" : "NO camera1")}, {(_card != null ? Log.Format($"letterbox card {_cardBox.Size}") : "NO letterbox bars")}");
     }

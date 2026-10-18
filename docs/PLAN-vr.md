@@ -2750,10 +2750,10 @@ The first plays sequence 0's intro straight away (C3/M01, `generic_intro`; a pro
 not exist is fine, and an `--xr-sim --no-det` run of it logged the pair); the second goes through the
 menu to a campaign mission, whose intro is the real path. Look for: (1) the
 intro opens on the screen in the dark room and reads as a window: the scene behind the glass, the
-black bars on the glass itself; the log has `theater: cutscene pair 1600x1200 per eye, <n> mm apart,
-converged at 7.5 m`; (2) the depth is comfortable through the whole intro, no doubled image on the
+dark room where the letterbox bars stood, no black frame; the log has `theater: cutscene pair 1600x1200 per eye, <n> mm apart,
+converged at 7.5 m, ..., film rows 0.1862 to 0.81`; (2) the depth is comfortable through the whole intro, no doubled image on the
 far sky and nothing straining on near aircraft, and it reads as 3D at all; (3) turning or leaning the
-head changes nothing inside the frame; (4) the framing and the bars match the flat intro; (5) Esc
+head changes nothing inside the frame; (4) the framing matches the flat intro's film band between its bars; (5) Esc
 raises the pause board over the playing cutscene; (6) the hand-back to the cockpit is one cut. The
 values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and sinks the bars),
 `TheaterLayout.CutsceneSize` and the surround. Frame pacing during the cutscene is in the

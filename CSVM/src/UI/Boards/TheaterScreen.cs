@@ -71,6 +71,7 @@ public sealed partial class TheaterScreen : Node3D
     private uint? _ownMask;
     private float _rootOversampling;
     private float _shownOpacity = -1f;
+    private Vector2 _filmRows = new(0f, 1f);
     private string _state = string.Empty;
 
     /// <summary>The 2D the screen shows: the hosted layers, drawn at
@@ -280,7 +281,8 @@ public sealed partial class TheaterScreen : Node3D
 
     // The surface on the quad, composited as the canvas would be: its premultiplied sRGB taken to
     // linear. Four taps across each pixel's footprint stand in for the mipmaps a viewport texture
-    // lacks. A playing cutscene fills its rect under the boards, each eye its own picture.
+    // lacks. A playing cutscene fills its rect under the boards, each eye its own picture. Only its
+    // film rows show, so the surround stands where its letterbox bars were.
     private static string ScreenShader(bool eyeFeed) => $$"""
         shader_type spatial;
         render_mode blend_premul_alpha, unshaded, cull_disabled, depth_draw_never, depth_test_disabled, shadows_disabled, fog_disabled{{(eyeFeed ? ", skip_vertex_transform" : "")}};
@@ -292,6 +294,7 @@ public sealed partial class TheaterScreen : Node3D
         uniform sampler2D cutscene_right : filter_linear, repeat_disable;
         uniform float cutscene_on = 0.0;
         uniform vec4 cutscene_rect = vec4(0.0, 0.0, 1.0, 1.0);
+        uniform vec2 film_rows = vec2(0.0, 1.0);
 
         vec4 four_taps(sampler2D tex, vec2 uv, vec2 dx, vec2 dy) {
             return 0.25 * (texture(tex, uv - dx - dy) + texture(tex, uv + dx - dy)
@@ -314,7 +317,7 @@ public sealed partial class TheaterScreen : Node3D
             vec3 left = four_taps(cutscene_left, at, adx, ady).rgb;
             vec3 right = four_taps(cutscene_right, at, adx, ady).rgb;
             vec3 picture = csky_srgb_to_linear(VIEW_INDEX == 0 ? left : right);
-            float inside = cutscene_on * step(0.0, at.x) * step(at.x, 1.0) * step(0.0, at.y) * step(at.y, 1.0);
+            float inside = cutscene_on * step(0.0, at.x) * step(at.x, 1.0) * step(film_rows.x, at.y) * step(at.y, film_rows.x + film_rows.y);
             ALBEDO = board + (picture * inside * (1.0 - c.a));
             ALPHA = max(c.a, inside);
         }
@@ -406,6 +409,13 @@ public sealed partial class TheaterScreen : Node3D
             return;
         }
 
+        var rows = shot.FilmRows ?? new Vector2(0f, 1f);
+        if (rows != _filmRows)
+        {
+            _filmRows = rows;
+            _screenMaterial.SetShaderParameter("film_rows", rows);
+        }
+
         var source = shot.Camera;
         var pose = source.GlobalTransform.Orthonormalized();
         float ipd = _interocular();
@@ -427,7 +437,7 @@ public sealed partial class TheaterScreen : Node3D
         if (started)
         {
             var inv = CultureInfo.InvariantCulture;
-            Log.Info("ui", $"theater: cutscene pair {TheaterLayout.CutsceneSize.X}x{TheaterLayout.CutsceneSize.Y} per eye, {(ipd * 1000f).ToString("0.#", inv)} mm apart, converged at {shot.ConvergenceM.ToString("0.##", inv)} m, framed at {source.Fov.ToString("0.##", inv)} deg");
+            Log.Info("ui", $"theater: cutscene pair {TheaterLayout.CutsceneSize.X}x{TheaterLayout.CutsceneSize.Y} per eye, {(ipd * 1000f).ToString("0.#", inv)} mm apart, converged at {shot.ConvergenceM.ToString("0.##", inv)} m, framed at {source.Fov.ToString("0.##", inv)} deg, film rows {rows.X.ToString("0.####", inv)} to {(rows.X + rows.Y).ToString("0.####", inv)}");
         }
     }
 

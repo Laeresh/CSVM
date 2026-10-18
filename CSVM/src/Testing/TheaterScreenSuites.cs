@@ -17,6 +17,9 @@ internal static class TheaterScreenSuites
     private const int PhotoRow = 1;
     private const int RowCount = 5;
 
+    // A cutscene's film rows between its bars, top and height, as a card measures them.
+    private static readonly Vector2 FilmRows = new(0.18f, 0.64f);
+
     /// <summary>Builds the screen over the root and raises a chrome pause board on a board layer.
     /// The board is then driven by key and by the pointer seam while it draws on the screen.</summary>
     [Suite("theater-screen",
@@ -119,7 +122,7 @@ internal static class TheaterScreenSuites
     /// and how its pair stands on the authored camera. It checks each eye's frustum against a flat
     /// camera's.</summary>
     [Suite("theater-cutscene",
-        "under the stereo path a presenting cutscene in flight brings the theater screen up in a full surround with the camera's plain environment, its two cameras stand one interocular apart on the authored camera with its orientation, its own layers less the headset's and pre-swap environment, while the headset's camera draws the headset layer alone for the frame, a point at the convergence lands on the same pixel in both eyes and on a flat 4:3 camera's, a far point carries the parallax law's disparity, a board raised over it keeps it playing, and its hand-back hides the screen, stops both renders and gives the camera its environment and layers back")]
+        "under the stereo path a presenting cutscene in flight brings the theater screen up in a full surround with the camera's plain environment, its two cameras stand one interocular apart on the authored camera with its orientation, its own layers less the headset's and pre-swap environment, while the headset's camera draws the headset layer alone for the frame, a point at the convergence lands on the same pixel in both eyes and on a flat 4:3 camera's, a far point carries the parallax law's disparity, only its film rows show so the surround stands over its letterbox bars, a board raised over it keeps it playing, and its hand-back hides the screen, stops both renders and gives the camera its environment and layers back")]
     internal static void TheaterPlaysACutscene(TestContext ctx)
     {
         var report = new StringBuilder();
@@ -146,7 +149,7 @@ internal static class TheaterScreenSuites
         ctx.Host.AddChild(authored);
         authored.GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(-0.31f, 1.9f, 0.12f)), new Vector3(-6120f, 412f, -3980f));
         var theater = TheaterScreen.Build(root, authored, () => origin, () => live, eyeFeed: false,
-            () => playing ? new TheaterCutscene(authored, convergence) : null, () => ipd);
+            () => playing ? new TheaterCutscene(authored, convergence, FilmRows) : null, () => ipd);
         ctx.Host.AddChild(theater);
         var flat = new SubViewport { Name = "theater-cutscene-flat", Size = TheaterLayout.CutsceneSize, RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
         var control = new Camera3D { Fov = fov, Near = authored.Near, Far = authored.Far, Current = true };
@@ -178,6 +181,8 @@ internal static class TheaterScreenSuites
             ctx.Check(authored.Environment != look && theater.CutsceneCameras[0].Environment == look && theater.CutsceneCameras[1].Environment == look,
                 $"the camera takes the plain environment while each eye keeps the look it wore before");
             Pair(ctx, theater, authored, control, ipd, convergence, report);
+            var shown = ((ShaderMaterial)theater.ScreenQuad.MaterialOverride).GetShaderParameter("film_rows").AsVector2();
+            ctx.Check(shown == FilmRows, $"the screen shows the picture's film rows alone, the surround over its bars ({shown})");
             Layers(ctx, theater, authored, ownMask);
 
             layer.Visible = true;

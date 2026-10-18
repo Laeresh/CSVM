@@ -1167,6 +1167,10 @@ internal static class CampaignSuites
             $"on a 1024x768 pane the film is the pane's full width by {narrow.Size.Y:0.####} of its height, {narrow.Position.Y:0.####} down");
         ctx.Check(wide.IsEqualApprox(narrow),
             $"on a 3840x1080 pane it is the same rect (x {wide.Position.X:0.####}, y {wide.Position.Y:0.####}, w {wide.Size.X:0.####}, h {wide.Size.Y:0.####})");
+        // The theater screen's mask over the bars reads the same rows through the engine's own helper.
+        var rows = CutsceneController.FilmRows(quads);
+        ctx.Check(rows is { } r && Mathf.IsEqualApprox(r.X, narrow.Position.Y) && Mathf.IsEqualApprox(r.Y, narrow.Size.Y),
+            $"the engine's film rows are that rect's ({rows})");
         ctx.Check(Mathf.IsEqualApprox(CutsceneController.BarsWidthScale(card, 4f / 3f), 1f),
             $"a 4:3 pane is framed by the authored card, unstretched");
         ctx.Note($"the film's rect is the pane's full width by {narrow.Size.Y:0.###} of its height, {narrow.Position.Y:0.###} down from the top, on a 4:3 pane and a 32:9 one alike");
