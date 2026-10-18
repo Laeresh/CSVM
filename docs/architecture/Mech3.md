@@ -140,14 +140,6 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
 mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`) and draws the sight's reticle collimated (`GunsightReticle.cs`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
-## src/Mech3/CockpitBackdrop.cs
-The stereo interior's dark backdrop. The authored panel is a facade that only had to close up from one
-eye, so a tracked head sees the world past a protruding centre stack's open sides and into the dials'
-recesses. `Panel` picks the panel polygons from the `gauges` group's bounds: opaque, facing the eye,
-at or below it, no gauge or driven state. `Extrude` turns each into the solid it fills from the eye
-back to one plane behind the panel (`Back`), so the authored eye sees none of it. The mesh draws dark,
-double-sided, in the interior's frame, and writes its stencil. `PlaneBuilder.cs` adds it to the
-stereo interior; `CSVM.Tests/CockpitBackdropTests.cs` checks it on every player airframe.
 ## src/Mech3/CockpitPlate.cs
 The flat head-and-shoulders plate every `cockpit1` carries behind the eye, as the polygons that draw
 it: one z plane 0 to 8 units aft (0.16-1.80 on ten interiors, 6.80 on the Warhawk), face normal aft,
