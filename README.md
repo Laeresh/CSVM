@@ -136,6 +136,27 @@ this engine matches. Those pages describe behaviour and constants, and name the 
 addresses so any claim can be re-checked at source. **No game code and no game assets are
 reproduced or redistributed here**; the engine is an independent implementation.
 
+## Supporting the project
+
+CSVM is free and will stay free. The engine is GPL-3.0, every release is
+on the releases page, and nothing is held back for supporters.
+
+If you'd like to support the work anyway, you can do so on
+[Ko-fi](https://ko-fi.com/Laeresh). Contributions go towards the
+monthly running costs of the master server, and towards development
+time on the engine, its documentation and its code. They buy no early
+access, no exclusive builds, no server privileges and no game content,
+because there is none to sell.
+
+The master server is optional: CSVM plays without it, and it is open
+to everyone whether they contribute or not.
+
+Playing CSVM still requires your own legally-owned copy of
+Crimson Skies. This is an unofficial fan project and is not affiliated
+with, endorsed by, or sponsored by Microsoft or Zipper Interactive.
+
+Not able to give? A clear bug report with a log file helps just as much.
+
 ## Legal
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by
