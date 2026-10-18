@@ -232,15 +232,15 @@
     {
       "name": "menu-original-xr-sim",
       "frame": 120,
-      "hash": "9f763799c1460d6f3e3f2c0b0ee48010",
+      "hash": "439478355dd335cb12f5e2e84d538c67",
       "exercises": "The Original top level on the stand-in headset's theater screen: the menu's layers drawn into the screen's surface, the CrimFlag movie playing, on a quad ahead of both eyes over the dark surround; frame-sensitive 7.89 %.",
       "args": ["--menu", "--presentation=original", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "campaign-intro-xr-sim",
       "frame": 120,
-      "hash": "cf30179c3e2c3df120ebccc01168f1b9",
-      "exercises": "A campaign intro on the stand-in headset's theater screen: each eye its own 4:3 picture of the letterboxed shot, converged on the card, in the full surround; assumes no csvm-golden profile in user://; frame-sensitive 0.50 %.",
+      "hash": "dc14743e89d5939709cf9d3ee800cb8e",
+      "exercises": "A campaign intro on the stand-in headset's theater screen: each eye its own picture of the film rows between the bars, converged on the card, the surround over the bars; assumes no csvm-golden profile in user://; frame-sensitive 0.50 %.",
       "args": ["--xr-sim", "--campaign=csvm-golden:0", "--plane=player_bhawk", "--det", "--mute"]
     },
     {

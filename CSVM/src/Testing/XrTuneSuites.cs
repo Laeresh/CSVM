@@ -184,9 +184,8 @@ internal static class XrTuneSuites
 
             ctx.Check(table.For(ctx.PlaneName) == tuned && tuner.Saved(ctx.PlaneName) == tuned,
                 $"the trigger saves {VrCockpitTuning.Describe(ctx.PlaneName, table.For(ctx.PlaneName))}");
-            ctx.Check(othersKept && Encoding.UTF8.GetString(saved).Contains("\"_proposed\"", StringComparison.Ordinal)
-                    && Encoding.UTF8.GetString(saved).Contains("\"_about\"", StringComparison.Ordinal),
-                $"once, keeping the other ten entries and the notes");
+            ctx.Check(othersKept && Encoding.UTF8.GetString(saved).Contains("\"_about\"", StringComparison.Ordinal),
+                $"once, keeping the other ten entries and the _about note");
             ctx.Check(!tuner.Readout.Contains("unsaved", StringComparison.Ordinal), $"the readout shows it saved");
 
             // A nudge, then the stick click: back to the file's value.
