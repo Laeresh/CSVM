@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Flight.Airframe;
 using CSVM.Mech3;
 using Godot;
@@ -179,6 +180,29 @@ public class ControlSurfaceMixTests
 
         Assert.Equal(Vector3.Right, ControlSurfaces.HingeAxis(ControlSurfaces.Kind.ElevatorLeft));
         Assert.Equal(Vector3.Up, ControlSurfaces.HingeAxis(ControlSurfaces.Kind.Rudder));
+    }
+
+    /// <summary>A list ends at its first missing index, counted over the whole plane, and the
+    /// remake-only names stand outside the numbering.</summary>
+    [Fact]
+    public void ASurfacePastAGapInItsNumberingIsNotDriven()
+    {
+        // The Hellhound: outside l_aileron1, interior l_aileron3, no l_aileron2 anywhere.
+        var hellhound = new HashSet<string> { "l_aileron1", "l_aileron3" };
+        Assert.True(ControlSurfaces.InNumbering("l_aileron1", hellhound));
+        Assert.False(ControlSurfaces.InNumbering("l_aileron3", hellhound));
+
+        // The Devastator's outside carries aileron1 and aileron2, so its interior aileron3 is reached.
+        var devastator = new HashSet<string> { "l_aileron1", "l_aileron2", "l_aileron3" };
+        Assert.True(ControlSurfaces.InNumbering("l_aileron3", devastator));
+
+        // Each of the six lists counts on its own: a left index does not fill a right gap.
+        Assert.False(ControlSurfaces.InNumbering("r_aileron2", new HashSet<string> { "l_aileron1", "r_aileron2" }));
+
+        var none = new HashSet<string>();
+        Assert.True(ControlSurfaces.InNumbering("l_rudder_rotate", none));
+        Assert.True(ControlSurfaces.InNumbering("r_elevator", none));
+        Assert.False(ControlSurfaces.InNumbering("l_aileron0", none));
     }
 
     private static float Target(SurfaceSlot slot, FlightInput input, float reverseAuthority = 1f) =>

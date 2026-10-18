@@ -1059,9 +1059,11 @@ constructor `FUN_004aff80` zeroes them and the destructor `FUN_004b0aa0` frees t
 deflecting rudder node is `l_rudder_rotate`, which no `l_rudder%d` lookup finds, so the original
 flies that plane with a frozen rudder; the digitless `l_elevator` shape misses the same way.
 CSVM's `RudderRe`/`ElevatorRe` accept those names and animate the surfaces, kept deliberately as
-an improvement over the shipped behavior. `ControlSurfaces`' regexes also ignore the original's
-stop at a gap in the numbering, so `AileronRe` moves the Hellhound's and Balmoral's interior
-`l/r_aileron3`, which the original never finds; that divergence is not a remake-only rule. The mixing, angles and smoothing on every matched node remain the decoded values above.
+an improvement over the shipped behavior. The numbered names keep the original's stop at a gap
+(`ControlSurfaces.InNumbering`, applied in `ControlSurfaceAnimator.Build`), so the Hellhound's and
+Balmoral's interior `l/r_aileron3` hold still as they do in the original. The widened names stand
+outside the numbering: they are always driven, and none fills a gap in a numbered list. The mixing,
+angles and smoothing on every matched node remain the decoded values above.
 
 The arithmetic per frame, with addresses:
 

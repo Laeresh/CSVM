@@ -1224,7 +1224,8 @@ is how an AI aircraft's surfaces stay frozen. Addresses and the list population 
 node takes which slot: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Airframe/ControlSurfaceAnimator.cs
-The node side of `ControlSurfaceMix`: collects every classified surface and poses it absolutely
+The node side of `ControlSurfaceMix`: collects every classified surface the original's numbered
+lists reach (`ControlSurfaces.InNumbering`) and poses it absolutely
 (`Basis = base · Rot(hingeAxis, slotAngle · scale)`) from its build-time local basis rather than
 accumulating, owning the two frame flips the original has no need of, a mount rotated by yaw π and a
 nose-mounted canard that raises the nose the other way. A surface inside the cockpit interior turns

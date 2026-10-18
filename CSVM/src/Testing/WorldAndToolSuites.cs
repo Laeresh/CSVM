@@ -2071,20 +2071,29 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The cockpit interior's control surfaces turn about their own leading edge (#149), while the
-    // outside surfaces keep turning about their origin. Able to fail: an interior surface turned
-    // about its origin moves its leading edge by the noted offset, up to 0.47 m on the Warhawk.
+    // The cockpit interior's control surfaces turn about their own leading edge, while the outside
+    // surfaces keep turning about their origin. Able to fail: an interior surface turned about its
+    // origin moves its leading edge by the noted offset, up to 0.47 m on the Warhawk. So does a
+    // Hellhound or Balmoral interior aileron that deflects, or any other interior surface that holds
+    // still.
     [Suite("cockpit-surface-hinges",
-        "at full roll, pitch and yaw every cockpit interior's ailerons, elevators and rudders keep their leading edge in place in the wing, each one's origin offset noted, while the outside surfaces still turn about their own origin")]
+        "at full roll, pitch and yaw every cockpit interior's ailerons, elevators and rudders deflect about their leading edge in place in the wing, each one's origin offset noted, except the Hellhound's and Balmoral's interior ailerons, which hold still past the gap in their numbering, while the outside surfaces still turn about their own origin")]
     internal static void CockpitSurfaceHinges(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
-        ctx.RequirePlane("player_warhawk");
+        ctx.RequirePlane("player_warhawk", "player_avenger", "player_balmoral");
         var gamez = GameZ.Load(ctx.PlanesGamezPath);
         using var textures = new TextureArchive(texturesPath);
-        int judged = 0;
+        // Past a gap in the plane's numbering, so the original never finds them: neither plane has
+        // an l/r_aileron2 (docs/org/cameraViews.md's interior table).
+        var heldStill = new HashSet<string>
+        {
+            "player_avenger/l_aileron3", "player_avenger/r_aileron3",
+            "player_balmoral/l_aileron3", "player_balmoral/r_aileron3",
+        };
+        int judged = 0, held = 0;
         foreach (string plane in CSVM.Flight.Hangar.StockAirframes.Nodes)
         {
             if (gamez.FindByName(plane) == null)
@@ -2097,7 +2106,7 @@ internal static class WorldAndToolSuites
                     continue;
                 var inside = interior.FindChildren("*", "Node3D", owned: false).OfType<Node3D>()
                     .Where(n => ControlSurfaces.Classify(n.Name.ToString()) != ControlSurfaces.Kind.None)
-                    .Select(n => (Node: n, Edge: ControlSurfaceAnimator.LeadingEdge(n))).ToList();
+                    .Select(n => (Node: n, Edge: ControlSurfaceAnimator.LeadingEdge(n), Before: n.Basis)).ToList();
                 var outside = model.FindChildren("*", "Node3D", owned: false).OfType<Node3D>()
                     .Where(n => ControlSurfaces.Classify(n.Name.ToString()) != ControlSurfaces.Kind.None
                         && !IsUnder(n, interior))
@@ -2107,7 +2116,15 @@ internal static class WorldAndToolSuites
                 animator?.Advance(5.0, new FlightInput { Roll = 1f, Pitch = 1f, Yaw = 1f }, animate: true);
                 for (int i = 0; i < inside.Count; i++)
                 {
-                    var (node, edge) = inside[i];
+                    var (node, edge, before) = inside[i];
+                    bool turned = !node.Basis.IsEqualApprox(before);
+                    if (heldStill.Contains($"{plane}/{node.Name}"))
+                    {
+                        ctx.Check(!turned, $"{plane} interior {node.Name} holds still, past the gap in its numbering");
+                        held++;
+                        continue;
+                    }
+                    ctx.Check(turned, $"{plane} interior {node.Name} deflects");
                     var axis = ControlSurfaces.HingeAxis(ControlSurfaces.Classify(node.Name.ToString()));
                     float off = (edge - (edge.Dot(axis) * axis)).Length() * PlaneBuilder.InteriorScale;
                     float moved = (AirframeTransform(node, interior) * edge).DistanceTo(rest[i]) * PlaneBuilder.InteriorScale;
@@ -2124,6 +2141,7 @@ internal static class WorldAndToolSuites
             }
         }
         ctx.Check(judged > 0, $"interior surfaces were judged count={judged}");
+        ctx.Check(held == heldStill.Count, $"every held-still interior aileron was found held={held}");
     }
 
     internal static Transform3D AirframeTransform(Node3D node, Node3D root)

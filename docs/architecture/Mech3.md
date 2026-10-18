@@ -192,7 +192,8 @@ Classifies a plane's control-surface mesh nodes and their hinge axes: the deflec
 hinge parent group whose transform places and orients the hinge line, ailerons and elevators
 hinging about local X and rudders about local Y. The name patterns are the original's own six
 `sprintf` node lists, which is why the elevators classify per side: they carry a differential roll
-term, so left and right settle at different angles. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
+term. `InNumbering` keeps the lists' stop at the first missing index over the whole plane,
+`cockpit1` included; the `_rotate` and digitless names are remake-only widenings outside it. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
 
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
