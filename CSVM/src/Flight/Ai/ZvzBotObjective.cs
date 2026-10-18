@@ -25,10 +25,10 @@ public readonly record struct EnemyPilot(object Source, Vector3 Position, Vector
 /// <summary>
 /// A bot's target in Zeppelin vs Zeppelin each step, a remake-only rule: the original seats no bots.
 /// The order is its own hull's attacker, an enemy on its tail inside its attack radius (the remake's
-/// limit), then the other hull. Only a torpedo damages a gas bag, so a bot
-/// carrying one stays on the nearest live gas bag, between launches too. Otherwise it takes the
-/// broadside cannons, then the turrets, then the engines, nearest first. Broadside arcs, aimed at the
-/// other hull, are not avoided.
+/// limit), then the other hull. Only a torpedo damages a gas bag, so a bot whose torpedo can fire
+/// now takes the nearest live gas bag. Otherwise, a torpedo bot between launches included, it takes
+/// the broadside cannons, then the turrets, then the engines, nearest first. Broadside arcs, aimed at
+/// the other hull, are not avoided.
 /// </summary>
 public static class ZvzBotObjective
 {
@@ -39,12 +39,12 @@ public static class ZvzBotObjective
         (HullPartKind.Engine, "attacks an engine"),
     };
 
-    /// <summary>The target for a bot at <paramref name="position"/> flying nose
-    /// <paramref name="nose"/>, <paramref name="torpedoes"/> whether it carries one. Null leaves the
-    /// gunner its own ranking. The bot keeps
+    /// <summary>The target for a bot at <paramref name="position"/> flying nose <paramref name="nose"/>,
+    /// <paramref name="torpedoReady"/> the gasbag gate's own test (<see cref="GunnerAcquisition.GasbagOrdnanceReady"/>),
+    /// so a locked-out torpedo bot guns the hull. Null leaves the gunner its own ranking. The bot keeps
     /// <paramref name="current"/> while the rule that chose it still offers it. A row of cannons is
     /// then fought one at a time. <paramref name="why"/> names the rule.</summary>
-    public static object? Pick(Vector3 position, Vector3 nose, float attackRange, bool torpedoes,
+    public static object? Pick(Vector3 position, Vector3 nose, float attackRange, bool torpedoReady,
         IReadOnlyList<EnemyPilot> enemies, IReadOnlyList<HullPart> enemyHull, object? current, out string why)
     {
         ArgumentNullException.ThrowIfNull(enemies);
@@ -74,7 +74,7 @@ public static class ZvzBotObjective
             return best;
         }
 
-        if (torpedoes && Nearest(HullPartKind.Gasbag) is { } gasbag)
+        if (torpedoReady && Nearest(HullPartKind.Gasbag) is { } gasbag)
         {
             why = "torpedoes a gas bag";
             return gasbag;

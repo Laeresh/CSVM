@@ -545,6 +545,8 @@
     "zeppelin-library-copy-hitch": 1.044,
     "zeppelin-motion": 0.131,
     "zeppelin-pandora-dead-end": 1.352,
+    "zeppelin-part-lead": 0.01,
+    "zeppelin-part-velocity": 0.97,
     "zeppelin-scripted-pose": 2.066,
     "zeppelin-zone-team": 0.93,
     "puffer-blend-flag": 0.018,

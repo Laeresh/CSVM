@@ -34,6 +34,7 @@ public readonly record struct AcquiringShooter(
 public sealed class GunnerAcquisition
 {
     private const int RetargetLogCap = 8;   // switches logged per shooter; a flight of twelve re-scores all mission
+    private const string ReadyWord = "ready";
 
     private readonly object _self;
     private readonly Func<AcquiringShooter> _shooter;
@@ -65,6 +66,12 @@ public sealed class GunnerAcquisition
     /// <summary>How many structures the last sweep's scan admitted, before the team gate drops any.
     /// The decoded structure list is the narrower one, so only the scan shows what was offered.</summary>
     public int ScannedStructureCount => _scan.Structures.Count;
+
+    /// <summary>Whether this fit's gasbag ordnance can fire now, the decoded gasbag gate's own test
+    /// (<c>FUN_00420070</c>). The Zeppelin vs Zeppelin bot rule asks it too, so a torpedo bot goes for
+    /// a gas bag exactly while the acquisition would offer one.</summary>
+    public static bool GasbagOrdnanceReady(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo) =>
+        GasbagOrdnanceState(loadout, rocketeer, infiniteAmmo) == ReadyWord;
 
     /// <summary>One gunner tick: keep the standing target while the hold holds it, else re-acquire
     /// through the ranking when <see cref="AiGunner.AutoTarget"/> allows, leaving the pick on
@@ -121,14 +128,17 @@ public sealed class GunnerAcquisition
     private static string BiasNameOf(object? source, AiGunner gunner) =>
         gunner.RatingBiases is { Count: > 0 } ? TargetPool.NameOf(source) : string.Empty;
 
+    private static string GasbagOrdnanceState(in AcquiringShooter shooter) =>
+        GasbagOrdnanceState(shooter.Loadout, shooter.Rocketeer, shooter.InfiniteAmmo);
+
     // The gasbag gate's verdict as a word. The decoded admission wants a DAMAGES_ZEPPELIN slot with
     // ammo whose two launch timers have run out (FUN_00420070, docs/org/aiPilot.md). Which condition
     // withheld the gasbags is what the log has to say.
-    private static string GasbagOrdnanceState(in AcquiringShooter shooter)
+    private static string GasbagOrdnanceState(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo)
     {
-        if (shooter.Loadout is not { Hardpoints.Count: > 0 } fit)
+        if (loadout is not { Hardpoints.Count: > 0 } fit)
             return "no pylons";
-        if (shooter.Rocketeer is not { } rocketeer)
+        if (rocketeer == null)
             return "no rocketeer";
         string state = "no gasbag pylon";
         for (int i = 0; i < fit.Hardpoints.Count; i++)
@@ -136,12 +146,12 @@ public sealed class GunnerAcquisition
             var hp = fit.Hardpoints[i];
             if (!hp.Weapon.DamagesZeppelin)
                 continue;
-            if (!hp.Armed(shooter.InfiniteAmmo))
+            if (!hp.Armed(infiniteAmmo))
                 state = "gasbag pylon empty";
             else if (!rocketeer.SlotReady(i))
                 state = "gasbag pylon locked";
             else
-                return "ready";
+                return ReadyWord;
         }
         return state;
     }
@@ -289,7 +299,7 @@ public sealed class GunnerAcquisition
 
         // Turrets and structures: the other two pools, neither with a primary_target term. An
         // unauthored structure is neutral and never ranked; a gasbag passes only the ordnance gate.
-        bool gasbagsAdmitted = GasbagOrdnanceState(shooter) == "ready";
+        bool gasbagsAdmitted = GasbagOrdnanceReady(shooter.Loadout, shooter.Rocketeer, shooter.InfiniteAmmo);
         AddRankedNonAircraft(_scan.Turrets, isTurret: true, ownTeam, gunner, shooter.StructBias, gasbagsAdmitted);
         AddRankedNonAircraft(_scan.Structures, isTurret: false, ownTeam, gunner, shooter.StructBias, gasbagsAdmitted);
 
