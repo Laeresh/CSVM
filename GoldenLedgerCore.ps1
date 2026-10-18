@@ -1,11 +1,12 @@
-# The goldens ledger: the history of every re-rendered Enhanced shot (a FLAKE, a move that stayed
-# moved, or a re-render that wrote no hash), appended by RunTests.ps1's goldens stage so the flips
-# outlive the run tree. GoldenLedger.ps1 is the command line over it; see docs/tooling.md.
+# The goldens ledger: the history of every golden move (an Enhanced FLAKE, a move that stayed
+# moved, a re-render that wrote no hash or that a deferral stopped, a Faithful red), appended by
+# RunTests.ps1's goldens stage so the moves outlive the run tree. GoldenLedger.ps1 is the command
+# line over it; see docs/tooling.md.
 #
-# Two kinds of JSON line: one "run" line per goldens stage that re-rendered anything, carrying the
-# machine census once, and one "shot" line per re-rendered shot, naming its run. The census is the
-# bulk of a line (the nvidia-smi table alone is several KB), so a run that moves many shots on
-# purpose writes it once.
+# Two kinds of JSON line: one "run" line per goldens stage that judged shots outside a regeneration,
+# so clean runs are counted too, and one "shot" line per move, naming its run. The nvidia-smi table
+# is the bulk of a census (several KB), so only a run with a move carries it, and a run that moves
+# many shots on purpose writes it once.
 #
 # The file is goldens-ledger.jsonl at the root of the main checkout, found through the git common
 # directory as New-ItemId.ps1 finds its counter, so every worktree appends to the one file. The root
@@ -58,6 +59,30 @@ function Add-GoldenLedgerEntry {
     }
 }
 
+# The goldens stage's append: a failure warns and never decides the stage.
+function Save-GoldenLedgerEntry {
+    param($Entry, [string]$What)
+    try {
+        Add-GoldenLedgerEntry $Entry
+    } catch {
+        Write-Host "  WARN goldens ledger: $What not recorded in $(Get-GoldenLedgerPath): $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
+# One shot line, naming its run line. A move with no re-render (a Faithful red, or a re-render a
+# deferral stopped) passes no -Rerender, so its rerender is null, not an empty hash.
+function New-GoldenLedgerShot {
+    param($Run, [string]$Shot, [string]$Verdict, [string]$Pin, [string]$FirstHash, $Rerender, [string]$Diff, [string]$Failures)
+    $entry = [ordered]@{
+        kind = "shot"; run = $Run.run; time = (Get-Date -Format s); tree = $Run.tree; commit = $Run.commit
+        shot = $Shot; verdict = $Verdict; pin = $Pin; firstHash = $FirstHash; rerender = $Rerender; diff = $Diff
+    }
+    $fields = ConvertTo-GoldenDiffFields $Diff
+    foreach ($k in $fields.Keys) { $entry[$k] = $fields[$k] }
+    $entry.failures = $Failures
+    return $entry
+}
+
 # Get-GoldenFrameDiff's sentence as fields, so flips can be compared by region: pixel count, largest
 # level difference and bounding box [x0, y0, x1, y1]. A diff that measured nothing has null fields.
 function ConvertTo-GoldenDiffFields {
@@ -101,26 +126,30 @@ function Format-GoldenLedgerLoad {
     return "$($Run.gaming); $reservations reservation(s), $(@($Run.godots).Count) CSVM Godot(s), $gpu"
 }
 
-# The ledger grouped by shot, most recent flip first: how many flakes, moves that stayed and
-# re-renders that wrote no hash, then the shot's last $Recent flips, each with its diff and its
-# run's load.
+# The ledger grouped by shot, most recent move first: how many flakes, moves that stayed,
+# re-renders that wrote no hash, Faithful reds and re-renders a deferral stopped, then the shot's
+# last $Recent moves, each with its diff and its run's load. A clean run judged shots, recorded no
+# move and had no shot that failed to render.
 function Format-GoldenLedger {
     param([string]$Path = (Get-GoldenLedgerPath), [int]$Recent = 5)
     $all = @(Read-GoldenLedger -Path $Path)
     $runs = @{}
     foreach ($r in @($all | Where-Object { $_.kind -eq "run" })) { $runs[[string]$r.run] = $r }
     $flips = @($all | Where-Object { $_.kind -eq "shot" })
-    $lines = @("goldens ledger ${Path}: $($flips.Count) flip(s) in $($runs.Count) run(s)")
+    $moving = @{}
+    foreach ($f in $flips) { $moving[[string]$f.run] = 1 }
+    $clean = @($runs.Values | Where-Object { [int]$_.judged -gt 0 -and [int]$_.broken -eq 0 -and -not $moving.ContainsKey([string]$_.run) }).Count
+    $lines = @("goldens ledger ${Path}: $($flips.Count) move(s) in $($runs.Count) run(s), $clean clean run(s)")
     if ($flips.Count -eq 0) { return $lines }
     $groups = @($flips | Group-Object -Property shot | ForEach-Object {
         [pscustomobject]@{ Shot = $_.Name; Flips = @($_.Group | Sort-Object -Property time -Descending) }
     } | Sort-Object -Property { $_.Flips[0].time } -Descending)
     $width = [math]::Max(4, ($groups | ForEach-Object { $_.Shot.Length } | Measure-Object -Maximum).Maximum)
-    $lines += ("  {0}  flake  moved  unrendered  last" -f "shot".PadRight($width))
+    $lines += ("  {0}  flake  moved  unrendered  red  deferred  last" -f "shot".PadRight($width))
     foreach ($g in $groups) {
         $count = { param($v) @($g.Flips | Where-Object { $_.verdict -eq $v }).Count }
-        $lines += ("  {0}  {1,5}  {2,5}  {3,10}  {4} {5}" -f $g.Shot.PadRight($width), (& $count "flake"), (& $count "moved"),
-            (& $count "unrendered"), $g.Flips[0].time, $g.Flips[0].verdict)
+        $lines += ("  {0}  {1,5}  {2,5}  {3,10}  {4,3}  {5,8}  {6} {7}" -f $g.Shot.PadRight($width), (& $count "flake"), (& $count "moved"),
+            (& $count "unrendered"), (& $count "red"), (& $count "deferred"), $g.Flips[0].time, $g.Flips[0].verdict)
         foreach ($f in @($g.Flips | Select-Object -First $Recent)) {
             $region = if ($null -ne $f.pixels -and $f.box) { "$($f.pixels) px, $($f.maxLevel) level(s), ($($f.box -join ','))" } else { "$($f.diff)" }
             $lines += "      $($f.time) $($f.verdict): $region; $(Format-GoldenLedgerLoad $runs[[string]$f.run])"

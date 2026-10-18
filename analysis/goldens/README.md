@@ -91,8 +91,9 @@ go to the headless instruments: `--tex-census` / `--tex-override` for "is this s
 shading and normals. The saved `.scratch/goldens/<shot>.png` is for eyeballing *which* thing moved so
 you know which instrument to reach for. The next run deletes it, so a moved shot's PNG and logs are
 also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL or FLAKE line names.
-A re-rendered Enhanced shot is also recorded in the goldens ledger, which outlives the run tree;
-`.\GoldenLedger.ps1` prints which shots flip, how often and when last (`docs/tooling.md`).
+Every moved shot, Faithful or Enhanced, and every run, clean or not, is also recorded in the goldens
+ledger, which outlives the run tree; `.\GoldenLedger.ps1` prints which shots move, how often and
+when last, against how many runs were clean (`docs/tooling.md`).
 
 ## What the set does and does not cover
 

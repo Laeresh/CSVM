@@ -2,11 +2,12 @@
 # dot-sources; see docs/tooling.md.
 #
 #   .\GoldenLedger.ps1             the ledger grouped by shot: flakes, moves that stayed, re-renders
-#                                  with no hash, and each shot's recent flips with their run's load
-#   .\GoldenLedger.ps1 -Recent N   N recent flips per shot (default 5)
+#                                  with no hash, Faithful reds, re-renders a deferral stopped, and
+#                                  each shot's recent moves with their run's load
+#   .\GoldenLedger.ps1 -Recent N   N recent moves per shot (default 5)
 #   .\GoldenLedger.ps1 -SelfTest   the path, the append from concurrent writers, the mutex timeout,
-#                                  the diff fields and the summary, against a private file, without
-#                                  Godot
+#                                  the shot lines, the diff fields and the summary, against a
+#                                  private file, without Godot
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md).
 
@@ -50,7 +51,7 @@ try {
     $fallback = Get-GoldenLedgerPath -Root $dir
     Assert-Ledger ($fallback -eq (Join-Path $dir "goldens-ledger.jsonl")) "a tree outside git falls back to its own root (and warns above)"
     $env:CSVM_GOLDEN_LEDGER = $ledger
-    Assert-Ledger (@(Format-GoldenLedger)[0] -like "*: 0 flip(s) in 0 run(s)") "a missing ledger reads as empty"
+    Assert-Ledger (@(Format-GoldenLedger)[0] -like "*: 0 move(s) in 0 run(s), 0 clean run(s)") "a missing ledger reads as empty"
 
     # Four writers at once, 200 lines each, every line long enough that a torn or interleaved write
     # would break its JSON. Without the mutex this loses about a tenth of the lines.
@@ -83,23 +84,41 @@ try {
     $d = ConvertTo-GoldenDiffFields "the re-render wrote no PNG"
     Assert-Ledger ($null -eq $d.pixels -and $null -eq $d.box) "a diff that measured nothing has null fields"
 
-    # A run line carries the census once; its shots' flips print with its load. An unparseable line
-    # is skipped.
-    Add-GoldenLedgerEntry ([ordered]@{ kind = "run"; run = "busy"; time = "2026-02-01T00:00:00"; gaming = "gaming mode: off"
+    # A run line carries the census once; its shots' moves print with its load. An unparseable line
+    # is skipped. A run that judged shots and recorded no move is clean; one that judged none is not.
+    $busy = [ordered]@{ kind = "run"; run = "busy"; time = "2026-02-01T00:00:00"; tree = "t"; commit = "c"; judged = 24; gaming = "gaming mode: off"
         memory = @("memory ledger x: 9.0 GB available, floor 8 GB, 3 live reservation(s)"); godots = @("a", "b")
-        gpu = @("|    0   N/A  N/A            2332    C+G   ...\SearchHost.exe      N/A      |", "| header |") })
-    Add-GoldenLedgerEntry ([ordered]@{ kind = "shot"; run = "busy"; time = "2026-02-01T00:00:01"; shot = "shot-a"; verdict = "moved"
-        pixels = 5; maxLevel = 1; box = @(10, 20, 12, 21); diff = "5 pixel(s) differ" })
-    Add-GoldenLedgerEntry ([ordered]@{ kind = "shot"; run = "busy"; time = "2026-02-01T00:00:02"; shot = "shot-b"; verdict = "unrendered"
-        diff = "the re-render wrote no PNG" })
+        gpu = @("|    0   N/A  N/A            2332    C+G   ...\SearchHost.exe      N/A      |", "| header |") }
+    Add-GoldenLedgerEntry $busy
+    Add-GoldenLedgerEntry ([ordered]@{ kind = "run"; run = "clean"; time = "2026-02-02T00:00:00"; judged = 24 })
+    Add-GoldenLedgerEntry ([ordered]@{ kind = "run"; run = "unjudged"; time = "2026-02-03T00:00:00"; judged = 0 })
+    $shots = @(
+        (New-GoldenLedgerShot -Run $busy -Shot "shot-a" -Verdict "moved" -Pin "p" -FirstHash "f" -Rerender "r" -Diff "5 pixel(s) differ, at most 1 level(s), inside (10,20)-(12,21)" -Failures "x"),
+        (New-GoldenLedgerShot -Run $busy -Shot "shot-b" -Verdict "unrendered" -Pin "p" -FirstHash "f" -Rerender "" -Diff "the re-render wrote no PNG" -Failures "x"),
+        (New-GoldenLedgerShot -Run $busy -Shot "shot-c" -Verdict "red" -Pin "p" -FirstHash "f" -Diff "not re-rendered: a Faithful shot" -Failures "x"),
+        (New-GoldenLedgerShot -Run $busy -Shot "shot-d" -Verdict "deferred" -Pin "p" -FirstHash "f" -Diff "not re-rendered: the run was deferred" -Failures "x"))
+    for ($i = 0; $i -lt $shots.Count; $i++) { $shots[$i].time = "2026-02-01T00:00:0$($i + 1)"; Add-GoldenLedgerEntry $shots[$i] }
     [System.IO.File]::AppendAllText($ledger, "not json`n")
+    $c = @(Read-GoldenLedger | Where-Object { $_.shot -eq "shot-c" })[0]
+    Assert-Ledger ($c.run -eq "busy" -and $c.tree -eq "t" -and $c.commit -eq "c" -and $c.pin -eq "p" -and $c.firstHash -eq "f" -and $null -eq $c.rerender -and $null -eq $c.pixels -and $null -eq $c.box -and $c.failures -eq "x") "a Faithful red names its run, pin and moved hash, with no re-render and no diff fields"
+    $a = @(Read-GoldenLedger | Where-Object { $_.shot -eq "shot-a" })[0]
+    Assert-Ledger ($a.rerender -eq "r" -and $a.pixels -eq 5 -and ($a.box -join ",") -eq "10,20,12,21") "a re-rendered shot's line carries its re-render hash and diff fields"
     $summary = @(Format-GoldenLedger -Recent 2)
-    Assert-Ledger ($summary[0] -like "*: 802 flip(s) in 1 run(s)") "flips and runs are counted apart, $($summary[0])"
-    Assert-Ledger ($summary[2] -match '^\s+shot-b\s+0\s+0\s+1\s+2026-02-01T00:00:02 unrendered$') "a re-render with no hash has its own column: '$($summary[2])'"
-    Assert-Ledger ($summary[3] -eq "      2026-02-01T00:00:02 unrendered: the re-render wrote no PNG; gaming mode: off; 3 reservation(s), 2 CSVM Godot(s), 1 GPU process(es)") "each flip prints its run's load: '$($summary[3])'"
-    Assert-Ledger ($summary[4] -match '^\s+shot-a\s+0\s+1\s+0\s+2026-02-01T00:00:01 moved$') "the summary groups by shot, most recent first: '$($summary[4])'"
-    Assert-Ledger ($summary[5] -like "      2026-02-01T00:00:01 moved: 5 px, 1 level(s), (10,20,12,21); gaming mode: off;*") "a flip prints its region from the diff fields: '$($summary[5])'"
-    Assert-Ledger ($summary[6] -match '^\s+shot-4\s+200\s+0\s+0\s+2026-01-04T000200 flake$' -and $summary[7] -eq "      2026-01-04T000200 flake: d; no census recorded" -and $summary[9] -eq "      ... 198 older") "a run with no census line, and the older flips folded: '$($summary[7])', '$($summary[9])'"
+    Assert-Ledger ($summary[0] -like "*: 804 move(s) in 3 run(s), 1 clean run(s)") "moves, runs and clean runs are counted apart, $($summary[0])"
+    Assert-Ledger ($summary[2] -match '^\s+shot-d\s+0\s+0\s+0\s+0\s+1\s+2026-02-01T00:00:04 deferred$') "a re-render a deferral stopped has its own column: '$($summary[2])'"
+    Assert-Ledger ($summary[3] -eq "      2026-02-01T00:00:04 deferred: not re-rendered: the run was deferred; gaming mode: off; 3 reservation(s), 2 CSVM Godot(s), 1 GPU process(es)") "each move prints its run's load: '$($summary[3])'"
+    Assert-Ledger ($summary[4] -match '^\s+shot-c\s+0\s+0\s+0\s+1\s+0\s+2026-02-01T00:00:03 red$' -and $summary[5] -like "      2026-02-01T00:00:03 red: not re-rendered: a Faithful shot; *") "a Faithful red has its own column: '$($summary[4])'"
+    Assert-Ledger ($summary[6] -match '^\s+shot-b\s+0\s+0\s+1\s+0\s+0\s+2026-02-01T00:00:02 unrendered$') "a re-render with no hash has its own column: '$($summary[6])'"
+    Assert-Ledger ($summary[8] -match '^\s+shot-a\s+0\s+1\s+0\s+0\s+0\s+2026-02-01T00:00:01 moved$') "the summary groups by shot, most recent first: '$($summary[8])'"
+    Assert-Ledger ($summary[9] -like "      2026-02-01T00:00:01 moved: 5 px, 1 level(s), (10,20,12,21); gaming mode: off;*") "a move prints its region from the diff fields: '$($summary[9])'"
+    Assert-Ledger ($summary[10] -match '^\s+shot-4\s+200\s+0\s+0\s+0\s+0\s+2026-01-04T000200 flake$' -and $summary[11] -eq "      2026-01-04T000200 flake: d; no census recorded" -and $summary[13] -eq "      ... 198 older") "a run with no census line, and the older moves folded: '$($summary[11])', '$($summary[13])'"
+
+    # The stage's append warns on a failed write instead of throwing.
+    $env:CSVM_GOLDEN_LEDGER = Join-Path $dir "missing\ledger.jsonl"
+    $threw = $false
+    try { Save-GoldenLedgerEntry ([ordered]@{ kind = "run" }) "a probe" } catch { $threw = $true }
+    Assert-Ledger (-not $threw -and -not (Test-Path $env:CSVM_GOLDEN_LEDGER)) "a failed append warns (above) and never throws"
+    $env:CSVM_GOLDEN_LEDGER = $ledger
 } finally {
     $env:CSVM_GOLDEN_LEDGER = $savedPath
     Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
