@@ -156,6 +156,9 @@ public sealed class CameraController
     private Quaternion _posFrame = Quaternion.Identity, _lookFrame = Quaternion.Identity;
     private bool _framesSeeded;
 
+    // The headset chase's up on the last frame, to see the unrolled frame turn over.
+    private Vector3? _xrChaseUp;
+
     // The enhanced cue's state, this frame's FOV widening in degrees. Only StepEnhancedCues writes
     // it, and only under the enhanced presentation, so on the faithful path it stays 0. ⚠ Enhanced
     // has no attitude lag of its own. It rides the decoded catch-up, which already trails a roll.
@@ -687,6 +690,14 @@ public sealed class CameraController
         {
             // The VR chase: no eased frames, no swing, no zoom and no speed in the distance.
             var mount = XrMount.Chase(planePos, attitude, VrChaseOffset(_camParams), frame);
+            // Through vertical flight the unrolled frame's up turns over, a half-turn roll in one
+            // frame. Counted as a cut, so the comfort fade covers it.
+            if (_xrChaseUp is { } lastUp && lastUp.Dot(mount.Basis.Y) < 0f)
+            {
+                Shot++;
+            }
+
+            _xrChaseUp = mount.Basis.Y;
             _framesSeeded = false;
             _camera.Position = mount.Origin;
             _camera.Basis = mount.Basis;
