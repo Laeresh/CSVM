@@ -5,8 +5,8 @@ using Godot;
 namespace CSVM.UI.Screens;
 
 /// <summary>
-/// The install folder picker: Godot's own <see cref="FileDialog"/> in directory mode, never the
-/// native one. It stays in the game window, so a controller or a touchscreen drives it like the
+/// The install folder picker: Godot's own <see cref="FileDialog"/> choosing a folder, or an
+/// <c>.iso</c> image of the game disc, never the native one. It stays in the game window, so a controller or a touchscreen drives it like the
 /// rest of the screen. Godot's navigation covers the list (d-pad, A opens a folder, B closes).
 /// Focus cannot leave the list without Tab, so two pad buttons are added. The left shoulder goes
 /// up a folder and Y takes the folder being shown. The chosen folder goes to <see cref="Chosen"/>.
@@ -25,17 +25,18 @@ public sealed partial class InstallPicker : FileDialog
     /// <summary>Gets or sets where a chosen folder goes.</summary>
     public Action<string>? Chosen { get; set; }
 
-    /// <summary>A picker over the whole file system in folder mode. The dialog's file-managing
-    /// extras are off, since this chooses a folder to read and never changes one.</summary>
+    /// <summary>A picker over the whole file system taking a folder or an <c>.iso</c> file. The
+    /// dialog's file-managing extras are off, since this chooses what to read and never changes it.</summary>
     public static InstallPicker Create(Theme theme)
     {
         var picker = new InstallPicker
         {
-            FileMode = FileModeEnum.OpenDir,
+            FileMode = FileModeEnum.OpenAny,
+            Filters = new[] { "*.iso ; Disc images" },
             Access = AccessEnum.Filesystem,
             UseNativeDialog = false,
             DisplayMode = DisplayModeEnum.List,
-            Title = "Choose your Crimson Skies install folder",
+            Title = "Choose your Crimson Skies install folder, game disc or .iso image",
             ModeOverridesTitle = false,
             FolderCreationEnabled = false,
             DeletingEnabled = false,
@@ -50,6 +51,7 @@ public sealed partial class InstallPicker : FileDialog
             Theme = theme,
         };
         picker.DirSelected += dir => picker.Chosen?.Invoke(Path.GetFullPath(dir));
+        picker.FileSelected += file => picker.Chosen?.Invoke(Path.GetFullPath(file));
         return picker;
     }
 

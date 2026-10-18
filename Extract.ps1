@@ -20,7 +20,8 @@
     so a worktree run never writes the primary tree's extracted\ by accident.
 
 .PARAMETER Install
-    The Crimson Skies install folder (the one holding ZBD and GOSDATA side by side).
+    The Crimson Skies install folder (the one holding ZBD and GOSDATA side by side),
+    or the game disc, its GAME folder, or an .iso image of it.
     Default: CrimsonSkiesGame next to this script, else under CSVM_DATA_ROOT.
 
 .PARAMETER DataRoot
@@ -39,6 +40,10 @@
 
 .PARAMETER Force
     Re-extract archives the stamp calls up to date (--extract-force).
+
+.PARAMETER AllowMissing
+    Extract an install that lacks some of the 184 expected ZBD archives, warning
+    about each instead of failing (--extract-allow-missing).
 
 .PARAMETER NoBuild
     Skip the `dotnet build` of CSVM\CSVM.sln before the run.
@@ -59,6 +64,7 @@ param(
     [string] $Unzbd,
     [switch] $Unzip,
     [switch] $Force,
+    [switch] $AllowMissing,
     [switch] $NoBuild
 )
 
@@ -103,6 +109,7 @@ if (-not $NoBuild) {
 $CsvmArgs = @("--extract=$Install", "--data-root=$DataRoot", "--unzbd=$Unzbd")
 if ($Unzip) { $CsvmArgs += "--extract-unzip" }
 if ($Force) { $CsvmArgs += "--extract-force" }
+if ($AllowMissing) { $CsvmArgs += "--extract-allow-missing" }
 
 # --headless opens no window at all, so no hidden desktop is needed. Real std handles are:
 # without them the GUI-subsystem exe attaches to this console and prints over it (SHELL-10).

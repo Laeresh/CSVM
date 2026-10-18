@@ -1011,7 +1011,7 @@ public partial class Launcher : Node3D
         SetProcessInput(false);
         SetProcessUnhandledInput(false);
         string unzbd = _spec.UnzbdPath is { } named ? Path.GetFullPath(named) : Extraction.ExtractionRun.DefaultUnzbd(repoRoot, _exported);
-        var request = new Extraction.ExtractionRequest(install, dataRoot, unzbd, _spec.ExtractForce, _spec.ExtractUnzip);
+        var request = new Extraction.ExtractionRequest(install, dataRoot, unzbd, _spec.ExtractForce, _spec.ExtractUnzip, _spec.ExtractAllowMissing);
         System.Threading.Tasks.Task.Run(() =>
         {
             int code;

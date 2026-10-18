@@ -1058,6 +1058,10 @@ public sealed record SessionSpec
     /// <summary><c>--extract-unzip</c>: also expand every produced zip into its sibling folder.</summary>
     public bool ExtractUnzip { get; private set; }
 
+    /// <summary><c>--extract-allow-missing</c>: extract an install that lacks some expected
+    /// archives, warning about each instead of failing.</summary>
+    public bool ExtractAllowMissing { get; private set; }
+
     /// <summary><c>--unzbd=</c> verbatim: the unzbd an extraction runs instead of the default.</summary>
     public string? UnzbdPath { get; private set; }
 
@@ -1659,6 +1663,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
             else if (arg == "--extract-force") { s.ExtractForce = true; }
             else if (arg == "--extract-unzip") { s.ExtractUnzip = true; }
+            else if (arg == "--extract-allow-missing") { s.ExtractAllowMissing = true; }
             else if (arg.StartsWith("--unzbd=")) { s.UnzbdPath = arg["--unzbd=".Length..]; }
             else if (arg.StartsWith("--gamez=")) { s.Gamez = arg["--gamez=".Length..]; }
             else if (arg.StartsWith("--textures=")) { s.Textures = arg["--textures=".Length..]; }
@@ -1825,7 +1830,7 @@ public sealed record SessionSpec
         // silently dropped. The unzbd path is not one, since the extraction screen runs that tool.
         if (s.ExtractInstall == null)
         {
-            foreach (var (given, name) in new[] { (s.ExtractForce, "--extract-force"), (s.ExtractUnzip, "--extract-unzip") })
+            foreach (var (given, name) in new[] { (s.ExtractForce, "--extract-force"), (s.ExtractUnzip, "--extract-unzip"), (s.ExtractAllowMissing, "--extract-allow-missing") })
             {
                 if (given)
                 {

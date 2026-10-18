@@ -34,6 +34,14 @@ reached three ways: the Extract screen a player sees when `extracted/` is missin
 another schema, the headless `--extract=<install>` flag ([cli.md](cli.md)), and the repo-root
 wrapper below. No script holds extraction logic.
 
+The install may also be the game disc, its `GAME` folder, or an ISO 9660 image of it. The disc
+ships each chapter folder as an LZX cabinet (`ZBD/C1.CAB`) and the texture tiers inside under 8.3
+aliases. `unzbd cs disc <disc> <folder>` copies `GAME` out, unpacks the cabinets in place and
+restores the `rtextureN` names (cabinet order is long-name order; the top tier per chapter is a
+table in the fork's `disc.rs`). The extraction runs it into `<data root>/.disc-install` and deletes
+that folder afterwards. The cabinets' chapter data is byte-identical to an install's; a localized
+disc (the German one) differs only in its sounds, `crimson.rof`, the string DLLs and the movies.
+
 The ZBD half walks the install's `ZBD` folder and runs `unzbd cs <mode>` on every archive as a
 child process, with the mode for its type, writing to the mirrored relative path under
 `extracted/`, basename kept:
