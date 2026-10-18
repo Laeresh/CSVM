@@ -63,6 +63,10 @@ CopyToOneDrive.ps1
 # only trusted regression instrument is a paired A/B measured back to back on one machine. It
 # lives at the repo root rather than in .scratch/ so CleanScratch.ps1 does not sweep it away.
 /perf-history.jsonl
+# The goldens ledger (GoldenLedgerCore.ps1): one JSON line per re-rendered Enhanced shot, appended by
+# every worktree's goldens stage to the main checkout's copy, which neither CleanScratch.ps1 nor a
+# worktree removal reaches. Machine-specific history, never committed.
+/goldens-ledger.jsonl
 
 # Personal backlog, ideas and other things
 NOTES.md

@@ -299,6 +299,27 @@ deferral stopped is named in the stage row and in `report.txt`. A Faithful shot'
 move under `-RegenGoldens`, is never re-rendered. The cause of these moves is unknown; #210 owns
 finding it from the kept frames.
 
+**Every re-rendered shot is also appended to the goldens ledger**, because the
+`goldens-failures` folder goes with its run tree's `.scratch`. The ledger is
+`goldens-ledger.jsonl` at the root of the main checkout (found through the git common directory,
+so every worktree writes the one file), git-ignored and beside `perf-history.jsonl`, where neither
+`CleanScratch.ps1` nor a worktree removal reaches it; a tree git cannot resolve writes to its own
+root and warns. A stage that re-renders anything writes one `run` line carrying the census once
+(`run`, `time`, `tree`, `commit`, `gaming`, `memory`, `godots` and `gpu`, the nvidia-smi table),
+then one `shot` line per re-rendered shot naming its `run`: `time`, `tree`, `commit`, `shot`,
+`verdict` (`flake`; `moved` when the re-render stayed off the pin; `unrendered` when it timed out
+or printed no hash), `pin`, `firstHash`, `rerender`, `diff` and its fields `pixels`, `maxLevel`
+and `box` (`[x0, y0, x1, y1]`), and `failures` (the run's `goldens-failures` folder). Each line is
+written whole under a machine-wide mutex, so two batteries finishing at once neither lose nor
+interleave a line; an append that fails, or waits 30 s for the mutex, prints a warning and never
+decides the stage. **`.\GoldenLedger.ps1`** prints the ledger grouped by shot, most recent first,
+with its counts per verdict, then its last flips (`-Recent N`, default 5), each with its region
+and its run's load (gaming mode, live reservations, CSVM Godots, GPU processes).
+`.\GoldenLedger.ps1 -SelfTest` checks the path and its fallback, the append from four concurrent
+writers, the mutex timeout, the diff fields and the summary against a private file named by
+`CSVM_GOLDEN_LEDGER` (test-only). The code is `GoldenLedgerCore.ps1`, which takes no parameters so
+that dot-sourcing it binds nothing in `RunTests.ps1`.
+
 **The hitch stage is opt-in (`-Hitch`), not part of the landing gate**, because it never changes
 the exit code: run it when landing a change to `HitchMonitor.cs`, `HitchSidecar.cs` or the hitch
 tick in `Launch/FrameInstruments.cs`. **`-SkipHitch`** forces it off even when `-Hitch` is given, and `-Quick`

@@ -36,9 +36,11 @@
                (--graphics=enhanced in its manifest args) is re-rendered once, serially, after the
                batch: back on its pin it is a FLAKE, which keeps the stage out of the red and keeps
                both frames, their diff and a machine census in .scratch/goldens-failures/<stamp>/;
-               off its pin it is MOVED. Each shot is launched under a per-shot timeout
-               ($GoldenTimeoutSec); a shot that exceeds it is killed, reported as FAIL, and has its
-               evidence preserved -- it never silently hangs the suite (BL-320).
+               off its pin it is MOVED. Every re-render is appended to the main checkout's
+               git-ignored goldens-ledger.jsonl (GoldenLedger.ps1 prints it). Each shot is
+               launched under a per-shot timeout ($GoldenTimeoutSec); a shot that exceeds it is
+               killed, reported as FAIL, and has its evidence preserved -- it never silently hangs
+               the suite (BL-320).
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
                --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
                the fixed clock advances one sim step per rendered frame, so a frame count is an
@@ -384,6 +386,8 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
 # refused, just visibly.
 # Every Godot launch below is admitted against the machine-wide memory ledger (Invoke-GodotPool).
 . (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
+# Every re-rendered Enhanced shot's outcome is appended to the goldens ledger.
+. (Join-Path $PSScriptRoot "GoldenLedgerCore.ps1")
 # Before the desktop and the job exist, so a run that gives up leaves nothing open in this session.
 if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
     Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; another CSVM Godot ran past -QuietTimeoutSec ${QuietTimeoutSec}s" -ForegroundColor Yellow
@@ -1876,8 +1880,19 @@ if ($SkipGoldensNow) {
     # no census from the moved attempt's moment: gaming mode names the user's own game, the ledger
     # other trees' scripted Godots, and nvidia-smi, where it is on PATH, any other application.
     if ($recheck.Count -gt 0 -and -not $script:Deferred) {
-        $census = @("machine after the batch, $(Get-Date -Format s), $(Format-GamingSummary $Gaming)")
-        $census += @(Format-MemLedger) + @(Get-CsvmGodots | ForEach-Object { "scripted CSVM Godot: pid $($_.Pid) $($_.Kind) $($_.Worktree)" })
+        # Under "Stop", git's stderr outside a repo, or no git at all, would end the run here.
+        $ErrorActionPreference = "Continue"
+        $ledgerCommit = [string](& git -C $RepoRoot rev-parse HEAD 2>$null | Select-Object -First 1)
+        $ErrorActionPreference = "Stop"
+        # The goldens ledger's run line: the census once, which each shot line names by its run.
+        $ledgerCensus = [ordered]@{
+            kind = "run"; run = [guid]::NewGuid().ToString("N").Substring(0, 12); time = (Get-Date -Format s)
+            tree = $RepoRoot; commit = $ledgerCommit
+            gaming = Format-GamingSummary $Gaming
+            memory = @(Format-MemLedger)
+            godots = @(Get-CsvmGodots | ForEach-Object { "scripted CSVM Godot: pid $($_.Pid) $($_.Kind) $($_.Worktree)" })
+            gpu = @()
+        }
         $smi = Get-Command nvidia-smi -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($smi) {
             try {
@@ -1886,13 +1901,21 @@ if ($SkipGoldensNow) {
                 $smiProc = [System.Diagnostics.Process]::Start($psi)
                 $smiOut = $smiProc.StandardOutput.ReadToEndAsync()
                 if ($smiProc.WaitForExit(10000)) {
-                    $census += @($smiOut.Result -split "`r?`n" | Where-Object { $_.Trim() })
+                    $ledgerCensus.gpu = @($smiOut.Result -split "`r?`n" | Where-Object { $_.Trim() })
                 } else {
                     $smiProc.Kill()
                 }
             } catch { }
         }
-        Add-Content -Path (Join-Path $failureRoot "report.txt") -Value $census
+        Add-Content -Path (Join-Path $failureRoot "report.txt") -Value (
+            @("machine after the batch, $($ledgerCensus.time), $($ledgerCensus.gaming)") + $ledgerCensus.memory + $ledgerCensus.godots + $ledgerCensus.gpu)
+        # The run tree's .scratch goes with a worktree; the ledger keeps the history
+        # (GoldenLedgerCore.ps1). A failed append warns and never decides the stage.
+        try {
+            Add-GoldenLedgerEntry $ledgerCensus
+        } catch {
+            Write-Host "  WARN goldens ledger: this run's census not recorded: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
     }
     $deferredMoves = @()
     foreach ($state in $recheck) {
@@ -1926,6 +1949,21 @@ if ($SkipGoldensNow) {
         Add-Content -Path (Join-Path $failureRoot "report.txt") -Value (
             "$($shot.name): pin $($shot.hash), $first, re-render (attempt $($state.Attempt)) $retryText, " +
             "$($verdict.ToUpper()); attempt $($state.FirstAttempt) against the re-render: $diff")
+        # A re-render that timed out or printed no hash says nothing about the pixels, so the
+        # ledger keeps it apart from a move that stayed.
+        $ledgerEntry = [ordered]@{
+            kind = "shot"; run = $ledgerCensus.run; time = (Get-Date -Format s); tree = $RepoRoot; commit = $ledgerCommit
+            shot = $shot.name; verdict = $(if ($verdict -eq "moved" -and -not $state.Hash) { "unrendered" } else { $verdict })
+            pin = $shot.hash; firstHash = $state.FirstHash; rerender = $state.Hash; diff = $diff
+        }
+        $diffFields = ConvertTo-GoldenDiffFields $diff
+        foreach ($k in $diffFields.Keys) { $ledgerEntry[$k] = $diffFields[$k] }
+        $ledgerEntry.failures = $failureRoot
+        try {
+            Add-GoldenLedgerEntry $ledgerEntry
+        } catch {
+            Write-Host "  WARN goldens ledger: $($shot.name) not recorded in $(Get-GoldenLedgerPath): $($_.Exception.Message)" -ForegroundColor Yellow
+        }
         if ($verdict -eq "flake") {
             $flakes += $shot.name
             Write-Host "  FLAKE $($shot.name): $($shot.hash) -> $($state.FirstHash), the re-render is on its pin; $diff" -ForegroundColor Yellow
