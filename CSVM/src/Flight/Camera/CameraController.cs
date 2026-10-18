@@ -108,9 +108,6 @@ public sealed class CameraController
     // wide pane's canopy rails and panel.
     private const float AssumedAspect = 4f / 3f;
 
-    // 20 deg in one frame: a flown pitch turns the level chase's up about 1 deg a frame at 90 Hz, 9 at 11 fps.
-    private const float LevelSwingCutRad = 0.349f;
-
     private readonly Camera3D _camera;
 
     // The view-selection controls' last readings, one slot per control (StepViewKeys).
@@ -159,8 +156,9 @@ public sealed class CameraController
     private Quaternion _posFrame = Quaternion.Identity, _lookFrame = Quaternion.Identity;
     private bool _framesSeeded;
 
-    // The headset chase's up on the last frame, to see the unrolled frame turn over.
-    private Vector3? _xrChaseUp;
+    // The level chase's right axis on its last frame, and the shot it was taken in.
+    private Vector3 _xrChaseRight;
+    private int _xrChaseShot = -1;
 
     // The enhanced cue's state, this frame's FOV widening in degrees. Only StepEnhancedCues writes
     // it, and only under the enhanced presentation, so on the faithful path it stays 0. ⚠ Enhanced
@@ -693,14 +691,15 @@ public sealed class CameraController
         {
             // The VR chase: no eased frames, no swing, no zoom and no speed in the distance.
             var mount = XrMount.Chase(planePos, attitude, VrChaseOffset(_camParams), frame);
-            // Near vertical flight the unrolled frame's up swings round within a few frames. A swing
-            // faster than any flown pitch counts as a cut, so the comfort fade covers it.
-            if (frame == XrChase.Level && _xrChaseUp is { } lastUp && lastUp.AngleTo(mount.Basis.Y) > LevelSwingCutRad)
+            if (frame == XrChase.Level)
             {
-                Shot++;
+                // The level chase's hand-over past vertical flight is a cut, so the comfort fade covers it.
+                var axes = XrMount.Unrolled(attitude, _xrChaseShot == Shot ? _xrChaseRight : null, out bool handOver);
+                Shot += handOver ? 1 : 0;
+                (_xrChaseRight, _xrChaseShot) = (axes.X, Shot);
+                mount = XrMount.Chase(planePos, axes, VrChaseOffset(_camParams));
             }
 
-            _xrChaseUp = mount.Basis.Y;
             _framesSeeded = false;
             _camera.Position = mount.Origin;
             _camera.Basis = mount.Basis;

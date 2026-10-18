@@ -698,8 +698,10 @@ nose, and the aircraft and the gun pipper on its nose axis keep the rig's angle 
 frame puts the pipper on the aircraft whenever the nose drops a few degrees. The unrolled frame
 keeps its up on the sky's side, so past vertical flight, at the top of every loop, it rolls the view
 half a turn in one frame; nose exactly vertical it takes the aircraft's own right axis. A loop passing
-a little off vertical spreads that turn over a few frames. An up turning more than 20 deg in one
-frame counts as a camera cut (`CameraController.Shot`), so the comfort fade covers it.
+a little off vertical would spread that turn over a few frames, so within 20 deg of vertical the
+frame holds its right axis (`XrMount.Unrolled`). Leaving that cone it snaps to the unrolled frame in
+one frame, counted as a camera cut (`CameraController.Shot`), so the comfort fade covers it: once
+going up a loop and once coming down.
 
 Every jump of the origin (a view change, a respawn, a new static spot, a new watched aircraft, a
 camera taken by another owner or handed back) raises `XrRig.Cut`, and the comfort fade lands it on a

@@ -105,6 +105,34 @@ public class XrViewsTests
     }
 
     [Fact]
+    public void ALoopOffVerticalHandsTheLevelChaseOverTwiceAndNeverSwingsBetween()
+    {
+        // A loop whose nose passes 3 deg beside vertical, so the unrolled right spins about it.
+        Vector3? held = null;
+        int handOvers = 0;
+        float worstTurn = 0f;
+        for (int deg = 0; deg <= 360; deg++)
+        {
+            var attitude = new Basis(Vector3.Up, 0.7f) * new Basis(Vector3.Right, Mathf.DegToRad(deg)) * new Basis(Vector3.Up, 0.05f);
+            var axes = XrMount.Unrolled(attitude, held, out bool handOver);
+            Assert.True((-axes.Z).IsEqualApprox(-attitude.Orthonormalized().Z), "the aircraft's own forward");
+            if (handOver)
+            {
+                handOvers++;
+            }
+            else if (held is { } last)
+            {
+                worstTurn = Mathf.Max(worstTurn, last.AngleTo(axes.X));
+            }
+
+            held = axes.X;
+        }
+
+        Assert.Equal(2, handOvers);
+        Assert.True(worstTurn < Mathf.DegToRad(2f), $"the right axis turned {Mathf.RadToDeg(worstTurn):0.##} deg in one step");
+    }
+
+    [Fact]
     public void AStaticCameraFacesTheTrackSoAPassCrossesTheView()
     {
         // The aircraft flies along -Z; the spot is 6 m to its right and 200 m ahead.

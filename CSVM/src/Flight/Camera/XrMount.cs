@@ -42,6 +42,14 @@ public enum XrChase
 /// </summary>
 public static class XrMount
 {
+    /// <summary>cos 20 deg: a nose within 20 deg of vertical holds the level chase's right axis
+    /// (<see cref="Unrolled"/>). TUNE.</summary>
+    public const float VerticalConeCos = 0.9397f;
+
+    /// <summary>15 deg: the level chase's right axis turns less than this a frame in flown turns,
+    /// even at 11 fps. A larger turn is a hand-over (<see cref="Unrolled"/>).</summary>
+    public const float HandOverRad = 0.2618f;
+
     // Below this horizontal length the eye looks straight up or down and has no heading of its own.
     private const float LevelEpsilon = 1e-4f;
 
@@ -80,10 +88,38 @@ public static class XrMount
     /// <paramref name="planePos"/>, in the frame <paramref name="frame"/> takes from
     /// <paramref name="attitude"/>, facing along that frame. Nothing eases, so the aircraft holds one
     /// place in the view however it manoeuvres.</summary>
-    public static Transform3D Chase(Vector3 planePos, Basis attitude, Vector3 offset, XrChase frame)
+    public static Transform3D Chase(Vector3 planePos, Basis attitude, Vector3 offset, XrChase frame) =>
+        Chase(planePos, frame == XrChase.Rigid ? attitude.Orthonormalized() : NoRoll(attitude), offset);
+
+    /// <summary>The VR chase pose in the given <paramref name="axes"/>.</summary>
+    public static Transform3D Chase(Vector3 planePos, Basis axes, Vector3 offset) =>
+        new(axes, planePos + (axes * offset));
+
+    /// <summary>The level chase's axes, given last frame's right axis <paramref name="heldRight"/>
+    /// (null on a fresh shot). Within <see cref="VerticalConeCos"/> of vertical the unrolled right
+    /// spins about the singular heading, so the held right is carried onto the new forward instead.
+    /// Elsewhere it is <see cref="NoRoll"/>. Where that stands more than <see cref="HandOverRad"/>
+    /// from the held right, as on leaving the cone past vertical, <paramref name="handOver"/> is set.
+    /// The view then snaps in one frame, for a cut's fade to cover.</summary>
+    public static Basis Unrolled(Basis attitude, Vector3? heldRight, out bool handOver)
     {
-        var axes = frame == XrChase.Rigid ? attitude.Orthonormalized() : NoRoll(attitude);
-        return new Transform3D(axes, planePos + (axes * offset));
+        var wanted = NoRoll(attitude);
+        handOver = false;
+        if (heldRight is not { } held)
+        {
+            return wanted;
+        }
+
+        var forward = -wanted.Z;
+        var carried = held - (forward * held.Dot(forward));
+        if (Mathf.Abs(forward.Y) > VerticalConeCos && carried.Length() > LevelEpsilon)
+        {
+            carried = carried.Normalized();
+            return new Basis(carried, carried.Cross(forward), -forward);
+        }
+
+        handOver = held.AngleTo(wanted.X) > HandOverRad;
+        return wanted;
     }
 
     /// <summary>The basis of <paramref name="attitude"/> with its roll taken out: the same forward
