@@ -654,7 +654,7 @@ In order. Each step names the file it touches and the test that proves it.
    bullet, no flag added. Keep every campaign pose on `CampaignAidProfiles`' scratch store.
 10. **Add the driven suites.** One in-engine suite per journey family in `CSVM/src/Testing/`, over
     a real `MenuHost` through `MenuSuiteHost`, standing for the presentation what
-    `menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
+    `menu-original-tracer-core`, `menu-original-instant-action`, `menu-original-hangar`,
     `menu-original-campaign`, `menu-original-cheats` and `menu-player-setup-seats` stand for
     Original;
     add the presentation's cases to `menu-launch-return`, which drives every exit and every

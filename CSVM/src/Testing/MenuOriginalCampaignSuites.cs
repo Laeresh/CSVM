@@ -290,9 +290,10 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && campaign.MissionSeq == 0,
             $"NEXT MISSION opens the briefing of the next story position ({shell.Screen}, seq {campaign.MissionSeq})");
         ctx.Check(shell.Rows.Count == 3 && shell.FocusedKey == "ReplayBriefing", $"three plaques, focus on REPLAY BRIEFING ({shell.FocusedKey})");
+        ctx.Check(campaign.Briefing is { Reveal: not null },
+            $"the briefing reads seq 0's dialog state and runs a reveal over it ({campaign.Briefing?.Mission.Desc ?? "no entry"})");
         if (campaign.Briefing is not { Reveal: not null } briefing)
         {
-            ctx.Note($"the extraction carries no briefing for seq 0; the reveal and narration checks did not run");
             return;
         }
 
@@ -842,10 +843,18 @@ internal static class MenuOriginalCampaignSuites
 
         shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
         closed = shell.Rows.Count;
-        // The starter's empty fourth gun group takes no cursor, so three downs reach the first rocket field.
-        shell.Campaign.RunAidScript("3da");
-        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
-            $"3da steps past the empty gun group to the first rocket field and stands its list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+        // An empty gun group takes no cursor, so one down per armed group reaches the first rocket
+        // field. The page's first four fields are the gun groups.
+        var fields = shell.Rows.Where(r => r.Key.StartsWith("FIELD:", StringComparison.Ordinal))
+            .Select(r => int.Parse(r.Key.AsSpan(6), CultureInfo.InvariantCulture)).ToList();
+        int guns = fields.Count(i => i < 4);
+        string rocket = "FIELD:" + fields.Where(i => i >= 4).DefaultIfEmpty(-1).Min().ToString(CultureInfo.InvariantCulture);
+        ctx.CheckShipped(guns == 3 && rocket == "FIELD:4",
+            $"the starter's empty fourth gun group leaves three downs to the first rocket field ({guns}, {rocket})");
+        string script = guns.ToString(CultureInfo.InvariantCulture) + "da";
+        shell.Campaign.RunAidScript(script);
+        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == rocket,
+            $"{script} steps past the gun groups to the first rocket field and stands its list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
 
         // The one verb Original cannot spell, since it binds no secondary press: refused whole, so
         // not even the two downs before it move the cursor and the run ends without a shot.

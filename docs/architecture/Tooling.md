@@ -119,12 +119,14 @@ The `voice` family copies `zrdr/voice.json`, the accent table dealing those ids.
 [../formats/sounds.md](../formats/sounds.md), [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Tooling/SyntheticMission.cs
-The synthetic tree's `mission` family, one invented mission scope `extracted/C1/PROBE1/zrdr/`: a
-`weather.json` whose two zones author different sun bearings under a cloud band inside the flight
-envelope, and a `net.json` of one 16-entry free-for-all block. The weather, sun and net-table suites
-read it where an install reads a shipped mission. No shipped mission name enters the tree, so a suite
-gated on one still skips. Shapes: [../formats/weather.md](../formats/weather.md),
-[../formats/net-spawns.md](../formats/net-spawns.md).
+The synthetic tree's `mission` family, `extracted/C1/PROBE1/zrdr/`: a `weather.json` of two zones
+with different sun bearings under a cloud band inside the flight envelope, and a `net.json` of one
+16-entry free-for-all block. Its `campaign` family is one story position: a `cm_sequence.json`
+entry for seq 0 at `C1/M09`, the `Briefing.json` state that address keys, and its `objectives.json`.
+Its `instant-action` family is an `ia.json` alone in `IA1/zrdr/` of the chapters the menu's presets
+fly; C1 has none, since a suite reads `C1/IA1` as an install's spawn lists. Otherwise no shipped
+mission address enters the tree, so a suite gated on one still skips. Shapes are in
+[../formats/](../formats/README.md): `weather.md`, `net-spawns.md`, `campaign-sequence.md`.
 
 ## src/Tooling/SyntheticEffects.cs
 The synthetic tree's `effects` family. Under `extracted/probe_effects/` it writes `gamez/`, one

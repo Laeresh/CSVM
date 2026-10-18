@@ -368,7 +368,7 @@
       ],
       "destroyable_parts",
       [
-        ["nose", 20, 20, "critical", "engine",
+        ["nose", 15, 15, "critical", "engine",
          "injure_anims", [[0.32, "pdpanel7", "player_autogyro"]]],
         ["tail", 14, 14,
          "injure_anims", [[0.32, "pdpanel8", "player_autogyro"]]],

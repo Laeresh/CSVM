@@ -227,8 +227,8 @@ every presentation, and the Original presentation keeps it. Under Enhanced the c
 banner instead (`Session/World/FlagBanner.cs`), on every machine and for every carrier; the flag at
 its base and the floating flag keep the billboard under every presentation. The original has no
 banner, so nothing here is decoded: the banner is kept so the carried flag reads as an aerial
-banner and reacts to how the carrier flies. Every value below was set by eye and awaits the owner's judgement
-at the controls:
+banner and reacts to how the carrier flies. Every value below is the remake's own, chosen by eye,
+and the banner they make reads right at the controls:
 
 - A tow line of 14 m in 4 segments runs back from `cf_light`, and a banner 9 m long and 3 m high in
   16 segments follows it.

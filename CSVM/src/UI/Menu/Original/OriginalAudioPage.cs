@@ -186,6 +186,8 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
             return;
         }
 
+        // A row with no slider of its own draws the first authored one's slot and thumb.
+        var artFrom = screen.Widget(SliderRowFallback.ControlKey!);
         foreach (var option in Options)
         {
             var place = Place(screen, option);
@@ -200,7 +202,7 @@ public sealed class OriginalAudioPage : IOriginalOptionsPage
                 {
                     option.Write(_choices, v);
                     _moved = option.Level;
-                }));
+                }, artFrom: artFrom));
         }
 
         _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey);

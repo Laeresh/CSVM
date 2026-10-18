@@ -686,7 +686,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket, shakes and messages.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
 - `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry, and the `voice.json` accent table.
-- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`.
+- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
 - `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez, a compiled anim archive, reader destructibles and two puffer readers.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
 
