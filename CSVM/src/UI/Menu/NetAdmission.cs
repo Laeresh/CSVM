@@ -23,6 +23,10 @@ public sealed class NetAdmission
     // The guests a host seated, in arrival order.
     internal IReadOnlyList<int> Admitted => _admitted;
 
+    // How many of its joined seats the host flies, as the last admission granted them. A host
+    // always flies its first, since it is the game.
+    internal int HostSeats { get; private set; } = 1;
+
     internal bool Refused(int peer)
     {
         foreach (var (refused, _) in _refused)
@@ -59,11 +63,20 @@ public sealed class NetAdmission
     // guest was given counting. ⚠ Turn one past it away off every peer list at once, not at its
     // hang-up. A bind or a launch's field inside its grace reads the lists, and ENet's hang-up lands
     // a step later.
-    internal void Admit(NetLobby lobby, int localPlayers, int cap)
+    internal void Admit(NetLobby lobby, int hostJoined, int cap)
     {
         var peers = lobby.AllPeers;
         _admitted.RemoveAll(peer => !Contains(peers, peer));
-        int seats = Math.Max(0, cap - localPlayers);
+        int guestSeats = 0;
+        foreach (int peer in _admitted)
+        {
+            guestSeats += GrantedTo(peer);
+        }
+
+        // ⚠ Never give a host seat out of a seat a guest was granted, first or further. A seat
+        // already in the lobby is never taken back, so a full lobby's launch stays at the cap.
+        HostSeats = Math.Min(hostJoined, Math.Max(Math.Max(1, HostSeats), cap - guestSeats));
+        int seats = Math.Max(0, cap - HostSeats);
         Grant(lobby, seats);
         int used = 0;
         foreach (int peer in _admitted)
@@ -158,6 +171,7 @@ public sealed class NetAdmission
 
     internal void Clear()
     {
+        HostSeats = 1;
         _admitted.Clear();
         _granted.Clear();
         _refused.Clear();

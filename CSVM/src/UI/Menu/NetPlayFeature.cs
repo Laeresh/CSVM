@@ -470,9 +470,13 @@ public sealed class NetPlayFeature : IMenuFeature
     public bool CoopFlightOver =>
         !IsCoopGuest || CoopFlow is not { Screen: NetCoopScreen.InMission } flow || (_flightEpoch is { } flown && flow.Epoch != flown);
 
-    // The seats this host's own machine flies against the cap: a campaign's local players, or a
-    // Dogfight's joined seats held to the cap. A joined seat past it sits out (SeatsShort).
-    private int HostSeats => _kind == NetSessionKind.CampaignCoop ? _localPlayers : Math.Min(_localSeats, HostCap);
+    // The seats this host's machine flies against the cap: a campaign's local players, or the
+    // Dogfight's joined seats its admission granted. A joined seat past them sits out
+    // (SeatsShort). One the host lets go leaves at once, before the next admission.
+    private int HostSeats => _kind == NetSessionKind.CampaignCoop ? _localPlayers : Math.Min(_localSeats, _admission.HostSeats);
+
+    // The seats this host's machine asks the admission for.
+    private int HostJoined => _kind == NetSessionKind.CampaignCoop ? _localPlayers : _localSeats;
 
     // The cap this host's advert names and its admission keeps: the chosen one inside its kind's.
     private int HostCap =>
@@ -1084,7 +1088,7 @@ public sealed class NetPlayFeature : IMenuFeature
         {
             _admission.RefuseClashing(_transport);
             _admission.RefuseTurnedAway(_transport);
-            _admission.Admit(_transport, HostSeats, HostCap);
+            _admission.Admit(_transport, HostJoined, HostCap);
             if (_kind == NetSessionKind.CampaignCoop)
             {
                 SendFlows();
