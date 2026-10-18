@@ -42,13 +42,17 @@ public class ZvzBotObjectiveTests
     }
 
     [Fact]
-    public void ATorpedoCarrierTakesAGasBagAndNothingElseDoes()
+    public void AReadyTorpedoTakesAGasBagAndALockedOutOneGunsTheHull()
     {
         var none = Array.Empty<EnemyPilot>();
         Assert.Same(Gasbag, Pick(true, none, Hull()));
 
-        // ABLE-TO-FAIL CONTROL: guns and rockets never aim at a bag, which only a torpedo damages.
-        Assert.NotSame(Gasbag, Pick(false, none, Hull()));
+        // ABLE-TO-FAIL CONTROL: guns never aim at a bag, which only a torpedo damages. A torpedo bot
+        // between launches takes the gun order like any other bot.
+        Assert.Same(Cannon, Pick(false, none, Hull()));
+
+        // The step the torpedo is ready again, the bag beats the cannon the bot was gunning.
+        Assert.Same(Gasbag, ZvzBotObjective.Pick(Vector3.Zero, Nose, Attack, true, none, Hull(), Cannon, out _));
     }
 
     [Fact]
@@ -79,6 +83,6 @@ public class ZvzBotObjectiveTests
         new HullPart(Cannon, HullPartKind.Cannon, new Vector3(0, 0, -400), cannons),
     };
 
-    private static object? Pick(bool torpedo, EnemyPilot[] enemies, HullPart[] hull) =>
-        ZvzBotObjective.Pick(Vector3.Zero, Nose, Attack, torpedo, enemies, hull, null, out _);
+    private static object? Pick(bool torpedoReady, EnemyPilot[] enemies, HullPart[] hull) =>
+        ZvzBotObjective.Pick(Vector3.Zero, Nose, Attack, torpedoReady, enemies, hull, null, out _);
 }

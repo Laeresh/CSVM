@@ -45,6 +45,9 @@ internal static class NetZvzBotSuites
     // How long the torpedo bot is watched between launches: the wingman rule's 20 s lockout.
     private const int LockoutSteps = 1200;
 
+    // How long the torpedo bot is given to take a gas bag again once its torpedo is ready.
+    private const int ReturnSteps = 120;
+
     // How far beyond the enemy hull the gun bot starts, facing away. That is past its 2000 m attack
     // radius, so the Deathmatch ranking alone never offers it a hull part.
     private const float StartRange = 2600f;
@@ -79,8 +82,8 @@ internal static class NetZvzBotSuites
         + "cannon it picked, and the host maps a kill of that cannon in the bot's name to the bot's "
         + "seat on both machines, while no part of its own hull is ever its target or carries its "
         + "rounds; a Black Hat Warhawk bot carrying torpedoes takes the enemy hull's nearest gas bag, "
-        + "flies in until its rocketeer launches a torpedo at it, and stays on a gas bag through the "
-        + "lockout; an enemy's hit on the bots' own hull turns the gun bot onto that enemy; and the "
+        + "flies in until its rocketeer launches a torpedo at it, guns a cannon, turret or engine of "
+        + "that hull while the torpedo is locked out, and takes a gas bag again once it is ready; an enemy's hit on the bots' own hull turns the gun bot onto that enemy; and the "
         + "ABLE-TO-FAIL CONTROL, the gun bot from the same start with the objective off, takes no "
         + "hull part")]
     internal static void BotsAttackTheEnemyHull(TestContext ctx)
@@ -189,8 +192,8 @@ internal static class NetZvzBotSuites
     }
 
     // The Black Hat Warhawk bot starts past its attack radius and takes the enemy's nearest live gas
-    // bag. It flies in, its rocketeer's torpedo match launches at the bag, and it stays on the bag
-    // while the lockout runs.
+    // bag. It flies in and its rocketeer's torpedo match launches at the bag. It guns the hull while
+    // the lockout runs, and takes a gas bag again once the torpedo is ready.
     private static void Torpedoes(TestContext ctx, GameSession[] peers)
     {
         var host = peers[0];
@@ -204,26 +207,41 @@ internal static class NetZvzBotSuites
         ctx.Check(carried > 0 && want != null && ReferenceEquals(gunner.Target, want),
             $"the Black Hat Warhawk bot, carrying {carried} torpedo(es), takes {EnemyHull}'s nearest gas bag from {Gap(host, bot):0} m ({TargetPool.TargetLabel(gunner.Target)} against {TargetPool.TargetLabel(want)})");
 
+        // The target the launch step started on: by the step's end the lockout already has the bot on
+        // the gun order.
         int steps = 0;
+        object? launchedAt = null;
         for (; steps < MaxFlightSteps && Torpedoes(bot) == carried; steps++)
         {
+            launchedAt = gunner.Target;
             Lockstep(1, peers);
         }
 
-        bool onBag = gunner.Target is DestructibleRegistry.Instance { Gasbag: true };
-        ctx.Check(Torpedoes(bot) < carried && onBag,
-            $"and flies in until its rocketeer launches a torpedo at {TargetPool.TargetLabel(gunner.Target)}, in {steps} step(s) ({carried} to {Torpedoes(bot)})");
-        var launchedAt = gunner.Target;
-        bool stayed = true;
+        ctx.Check(Torpedoes(bot) < carried && launchedAt is DestructibleRegistry.Instance { Gasbag: true },
+            $"and flies in until its rocketeer launches a torpedo at {TargetPool.TargetLabel(launchedAt)}, in {steps} step(s) ({carried} to {Torpedoes(bot)})");
+        // The gasbag gate hides the bags while the torpedo is locked out, so the bot guns the hull.
+        var enemy = Parts(host, 0);
+        object? gunned = null;
         int watched = 0;
         for (; watched < LockoutSteps && bot.Pilot.Rocketeer!.LockoutRemaining > 0f; watched++)
         {
             Lockstep(1, peers);
-            stayed &= bot.Crashed || gunner.Target is DestructibleRegistry.Instance { Gasbag: true };
+            if (gunner.Target is { } held && enemy.Contains(held) && held is not DestructibleRegistry.Instance { Gasbag: true })
+            {
+                gunned ??= held;
+            }
         }
 
-        ctx.Check(stayed && watched > 0 && launchedAt != null,
-            $"and between launches, its torpedo locked out but carried, it stays on a gas bag for the {watched} step(s) of the lockout ({TargetPool.TargetLabel(gunner.Target)})");
+        ctx.Check(watched > 0 && gunned != null,
+            $"and while its torpedo is locked out it guns a cannon, turret or engine of {EnemyHull} ({TargetPool.TargetLabel(gunned)} in {watched} step(s) of lockout)");
+        int back = 0;
+        for (; back < ReturnSteps && gunner.Target is not DestructibleRegistry.Instance { Gasbag: true }; back++)
+        {
+            Lockstep(1, peers);
+        }
+
+        ctx.Check(gunner.Target is DestructibleRegistry.Instance { Gasbag: true },
+            $"and once its torpedo is ready again it is back on a gas bag, in {back} step(s) ({TargetPool.TargetLabel(gunner.Target)})");
     }
 
     // The gun bot starts past its attack radius and takes the enemy hull's first standing class of
