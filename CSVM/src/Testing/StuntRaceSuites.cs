@@ -300,10 +300,37 @@ internal static class StuntRaceSuites
         ctx.Note($"a two-seat window ranked by best run, with a restart each and a final run");
     }
 
+    // Every stock airframe name, measured in the race table's row face at the authored page size,
+    // fits the aircraft's box. Only a custom plane's name then scrolls there.
+    internal static void WidestStockAirframeFits(TestContext ctx, BoardLine? line)
+    {
+        if (line == null)
+        {
+            return;
+        }
+
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var view = new ComposedBoardView();
+        try
+        {
+            var font = (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            var measure = ComposedBoardView.MeasureBox(fit, font, line.Size);
+            var (name, wide) = OriginalRosters.Airframes.Select(a => (a.Name, measure(a.Name, 100000f).X)).MaxBy(p => p.X);
+            ctx.Note($"the widest stock airframe name, {name}, measures {wide:0.0} px");
+            ctx.Check(wide > 0f && wide <= OriginalRaceTable.AircraftWidth,
+                $"the widest stock airframe name, {name}, measures {wide:0.0} px in the row face, inside the aircraft's {OriginalRaceTable.AircraftWidth:0} px box");
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
     [Suite("stunt-race-boards",
         "the session's race board: Original builds the lobby-scores board over "
         + "the install's art and strings, which wakes on the race's end with the sim halted, ranks "
-        + "the field on the scores page with each pilot's splits, rests on Photo Mode and offers "
+        + "the field on the scores page with each pilot's splits, the pilot's box stopping short of the "
+        + "aircraft's, both scrolling when wider and every stock airframe name fitting its box, rests on Photo Mode and offers "
         + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
         + "Photo Mode, and a sixteen-pilot field scrolls the scores page and the splits to the sixteenth "
         + "pilot by their arrows under the pointer and the pad, and by the wheel and a thumb drag; an install missing the art keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
@@ -402,6 +429,11 @@ internal static class StuntRaceSuites
             ctx.Check(shown.Backdrop.Any(p => p.Art.Name == OriginalRaceTable.PageArt && p.X == 314f && p.Y == 26f)
                     && pilot is { X: 335f, Y: 69f, Face: not null } && leader is { X: 338f, Y: 95f, Face: not null },
                 $"the standings stand on the scores page at its tab corner in the install's faces: header at ({pilot?.X}, {pilot?.Y}) face {pilot?.Face}, leader at ({leader?.X}, {leader?.Y}) face {leader?.Face}");
+            var plane = shown.Lines.FirstOrDefault(l => l.Text == "Kestrel" && l.Y == leader?.Y);
+            ctx.Check(leader is { Marquee: true } && plane is { Marquee: true, Justify: BoardJustify.Right, Width: OriginalRaceTable.AircraftWidth }
+                    && leader.X + leader.Width + OriginalRaceTable.PilotGap <= plane.X,
+                $"the pilot's box stops short of the aircraft's and both scroll when wider: pilot {leader?.X}+{leader?.Width}, aircraft {plane?.X}+{plane?.Width}");
+            WidestStockAirframeFits(ctx, plane);
             var p1Splits = shown.Lines.Where(l => l.Y == 413f && l.X >= 134f).Select(l => l.Text).ToList();
             ctx.Check(p1Splits.SequenceEqual(new[] { "0:03.0", "0:06.0", "0:09.5" }),
                 $"P1's best-run splits fill its line of the chat pane: {string.Join(", ", p1Splits)}");

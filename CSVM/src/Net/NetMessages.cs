@@ -1434,10 +1434,12 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
 
     /// <summary>The bytes one seat entry takes. ⚠ Do not change it in a patch release, only in a
     /// minor one: a reader refuses a roster of another width (docs/org/multiplayer-messages.md).</summary>
-    public const int EntrySize = 22;
+    public const int EntrySize = 6 + CallsignBytes;
 
-    /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded.</summary>
-    public const int CallsignBytes = 16;
+    /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded. It holds the
+    /// Callsign box's 12 characters at 3 bytes each, a further seat's " P4" and the terminator.
+    /// Every name the box can produce reaches the roster whole; a longer one is cut.</summary>
+    public const int CallsignBytes = 40;
 
     /// <summary>The most seats this message can carry. The original's spawn slot packs its index
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>

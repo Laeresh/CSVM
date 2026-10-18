@@ -1354,7 +1354,7 @@ public sealed class DogfightLobbyTests
         Assert.Equal(13, split.Bots.Count);
         Assert.Equal(NetSeats.MaxPlayers, split.FieldSeats);
         Assert.Equal(NetSeats.MaxPlayers, split.Players.Count);
-        Assert.Equal("P2", split.Players[1].Name);
+        Assert.Equal("Host P2", split.Players[1].Name);
     }
 
     [Fact]
@@ -1367,8 +1367,8 @@ public sealed class DogfightLobbyTests
         Assert.False(guest.PickSeat(0, 7, default));
         Settle(host, guests);
 
-        Assert.Equal(new[] { "Host", "P2", "Lucy", "P4" }, host.Players.Select(p => p.Name));
-        Assert.Equal(new[] { "Host", "P2", "Lucy", "P4" }, guest.Players.Select(p => p.Name));
+        Assert.Equal(new[] { "Host", "Host P2", "Lucy", "Lucy P2" }, host.Players.Select(p => p.Name));
+        Assert.Equal(new[] { "Host", "Host P2", "Lucy", "Lucy P2" }, guest.Players.Select(p => p.Name));
         Assert.Equal((4, 2, 2), (host.FieldSeats, guest.You, guest.SeatsFlown));
         Assert.Equal(7, host.Players[3].Airframe);
         Assert.Equal((-1, mesh[1].LocalPeer, mesh[1].LocalPeer), (host.PeerAt(1), host.PeerAt(2), host.PeerAt(3)));
@@ -1390,8 +1390,53 @@ public sealed class DogfightLobbyTests
         // ABLE-TO-FAIL CONTROL: a guest asking one seat stands on one row.
         var (single, alone, _) = Lobbies(2, "Lucy", localSeats: 2);
         Settle(single, alone);
-        Assert.Equal(new[] { "Host", "P2", "Lucy" }, single.Players.Select(p => p.Name));
+        Assert.Equal(new[] { "Host", "Host P2", "Lucy" }, single.Players.Select(p => p.Name));
         Assert.Equal(1, alone[0].SeatsFlown);
+    }
+
+    [Fact]
+    public void AFurtherSeatReadsItsMachinesCallsignAndItsPaneNumber()
+    {
+        // A guest that has not heard the host's list names its own seats the same way.
+        var (host, guests, _) = Lobbies(2, "Gabriel", localSeats: 2, guestSeats: 3);
+        Assert.Equal(new[] { "Gabriel", "Gabriel P2", "Gabriel P3" }, guests[0].Players.Select(p => p.Name));
+        Settle(host, guests);
+
+        // Each further seat counts its pane on its own machine, never its place in the whole list.
+        string[] names = { "Host", "Host P2", "Gabriel", "Gabriel P2", "Gabriel P3" };
+        Assert.Equal(names, host.Players.Select(p => p.Name));
+        Assert.Equal(names, guests[0].Players.Select(p => p.Name));
+        Assert.Equal((2, 3), (guests[0].You, guests[0].SeatsFlown));
+
+        // Machines with no callsign: each further seat reads the name its first row shows, before
+        // the guest hears the host's list and after.
+        var (bare, unnamed, _) = Lobbies(2, localSeats: 2, guestSeats: 3, hostName: "");
+        Assert.Equal(new[] { "Pilot", "Pilot P2", "Pilot P3" }, unnamed[0].Players.Select(p => p.Name));
+        Settle(bare, unnamed);
+        string[] stand = { "Host", "Host P2", "Pilot", "Pilot P2", "Pilot P3" };
+        Assert.Equal(stand, bare.Players.Select(p => p.Name));
+        Assert.Equal(stand, unnamed[0].Players.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void AFurtherSeatsWholeNameRidesTheRosterAndTheList()
+    {
+        Assert.Equal("Gabriel P2", NetSeats.FurtherSeatName("Gabriel", host: false, local: 1));
+        Assert.Equal("Host P2", NetSeats.FurtherSeatName(" ", host: true, local: 1));
+        Assert.Equal("Pilot P3", NetSeats.FurtherSeatName(null, host: false, local: 2));
+
+        // The widest name the Callsign box allows, twelve three-byte characters, keeps its pane tag
+        // on both wires.
+        string widest = NetSeats.FurtherSeatName(new string('€', NetPlayerInfo.CallsignLimit), host: false, local: 3);
+        var roster = new byte[SeatRosterMessage.SizeFor(1)];
+        new SeatRosterMessage(1u, new[] { new NetSeatEntry(0, 0, 0, true, widest) }).Write(roster);
+        Assert.True(SeatRosterMessage.TryRead(roster, out var seats));
+        Assert.Equal(widest, seats.Seats[0].Callsign);
+        var list = new byte[DogfightRosterMessage.Size];
+        new DogfightRosterMessage(1, 0, new[] { new DogfightLobbySeat(widest, 0, false, false) }).Write(list);
+        Assert.True(DogfightRosterMessage.TryRead(list, out var rows));
+        Assert.Equal(widest, rows.Rows[0].Name);
+        Assert.True(SeatRosterMessage.SizeFor(SeatRosterMessage.MaxSeats) <= NetSession.SendBufferBytes);
     }
 
     [Fact]
@@ -1457,11 +1502,11 @@ public sealed class DogfightLobbyTests
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
         int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null, int localSeats = 1,
-        Func<int, bool>? seated = null, int guestSeats = 1, Func<int, int>? seatsOf = null)
+        Func<int, bool>? seated = null, int guestSeats = 1, Func<int, int>? seatsOf = null, string hostName = "Host")
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
         var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
-        var host = new DogfightLobby(hostWire, () => "Host")
+        var host = new DogfightLobby(hostWire, () => hostName)
         {
             LocalSeats = () => localSeats,
             SeatsOf = seatsOf ?? hostWire.SeatsWanted,

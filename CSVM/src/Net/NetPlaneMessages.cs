@@ -333,7 +333,7 @@ public sealed class NetPlaneBuild : IEquatable<NetPlaneBuild>
     public const int Bytes = 26;
 
     /// <summary>How many name bytes a build carries.</summary>
-    public const int NameBytes = SeatRosterMessage.CallsignBytes;
+    public const int NameBytes = 16;
 
     // The stock builds' gun ids, slot by slot, read out of the template table at 0x00619f58.
     private static readonly byte[,] StockGuns =

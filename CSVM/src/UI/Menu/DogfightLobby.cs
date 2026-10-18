@@ -219,7 +219,7 @@ public sealed class DogfightLobby
 
     /// <summary>The machine and the place among its seats behind each person's row on a host's list.
     /// The host's own seats come first, then each seated guest's given seats side by side. A launch
-    /// seats them in this order, so a row's player tag is its seat's. Empty on a guest.</summary>
+    /// seats them in this order, so a row's place is its seat's. Empty on a guest.</summary>
     public IReadOnlyList<(int Peer, int Local)> SeatOwners
     {
         get
@@ -1302,11 +1302,7 @@ public sealed class DogfightLobby
     // Round 0 is a guest's "heard nothing", so the count wraps past it.
     private byte NextEpoch() => (byte)(_options.Epoch == byte.MaxValue ? 1 : _options.Epoch + 1);
 
-    private string OwnName()
-    {
-        string name = _name() ?? "";
-        return name.Length > 0 ? name : IsHost ? "Host" : "Pilot";
-    }
+    private string OwnName() => NetSeats.ShownName(_name(), IsHost);
 
     private void Add(LobbyChatMessage line)
     {
@@ -1324,10 +1320,10 @@ public sealed class DogfightLobby
         var rows = new List<DogfightLobbySeat>();
         foreach (var (peer, local) in SeatOwners)
         {
-            // A further seat goes by the player tag the launch's roster calls it by.
+            // ⚠ Do not map a row to its seat by name; only SeatOwners order does.
             bool own = peer == self;
             var pick = own ? null : _wire.PickAt(peer, local);
-            string name = local > 0 ? NetSeats.PlayerTag(rows.Count)
+            string name = local > 0 ? NetSeats.FurtherSeatName(own ? _name() : _wire.PickAt(peer, 0)?.Name, host: own, local: local)
                 : own ? OwnName()
                 : pick is { Name.Length: > 0 } named ? named.Name
                 : "Pilot " + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
@@ -1431,7 +1427,7 @@ public sealed class DogfightLobby
         rows[0] = new DogfightLobbySeat(OwnName(), Airframe, Ready, false, Plane: Build?.Name ?? "");
         for (int local = 1; local < rows.Length; local++)
         {
-            rows[local] = new DogfightLobbySeat(NetSeats.PlayerTag(local), _picks[local].Airframe, Ready, false);
+            rows[local] = new DogfightLobbySeat(NetSeats.FurtherSeatName(_name(), host: IsHost, local: local), _picks[local].Airframe, Ready, false);
         }
 
         return rows;

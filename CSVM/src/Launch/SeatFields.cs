@@ -94,9 +94,9 @@ internal static class SeatFields
         return (roster, seatFits.ToArray());
     }
 
-    /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first, any but the first by player tag. Each guest follows on its seats in
-    /// <paramref name="owners"/>, the lobby's rows (one each when null), each in its seat's pick.
+    /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats lead, then
+    /// each guest's in <paramref name="owners"/> (one each when null), each in its seat's pick.
+    /// A further seat is named as its lobby row is (<see cref="Net.NetSeats.FurtherSeatName"/>).
     /// ⚠ A guest with no pick on the wire, one whose lobby screen never stood, flies the host's first
     /// airframe on the stock fit. Each seat takes its machine's lobby team from
     /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
@@ -120,7 +120,10 @@ internal static class SeatFields
                 SeatIndex = seats.Count,
                 TeamId = teamOf(wire.LocalPeer),
                 FlownHere = true,
-                Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
+                // A host with no callsign is named as its lobby row is; every marker still reads it
+                // Unknown, as the original reads a nameless player.
+                Callsign = i > 0 ? Net.NetSeats.FurtherSeatName(hostName, host: true, local: i)
+                    : Net.NetSeats.ShownName(hostName, host: true),
                 Unnamed = i == 0 && hostName.Length == 0,
                 PlaneNode = planes[i],
                 // Only the first seat has a Player Information answer; a splitscreen seat has none.
@@ -148,8 +151,8 @@ internal static class SeatFields
                 PeerId = peer,
                 SeatIndex = seats.Count,
                 TeamId = teamOf(peer),
-                Callsign = name.Length > 0 ? name
-                    : local > 0 ? Net.NetSeats.PlayerTag(seats.Count)
+                Callsign = local > 0 ? Net.NetSeats.FurtherSeatName(lobby?.PickAt(peer, 0)?.Name, host: false, local: local)
+                    : name.Length > 0 ? name
                     : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 Unnamed = name.Length == 0 && local == 0,
                 PlaneNode = pick != null ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],

@@ -51,11 +51,13 @@ public class OriginalRaceBoardTests
             layers.Lines.Take(5).Select(l => l.Justify));
 
         // Each row from the row corner (+24, +69), 20 apart. The name column carries place and
-        // pilot at its left and the aircraft at its right, then come the next three cells.
+        // pilot at its left and the aircraft in its own box at its right, 4 px apart. Each box
+        // scrolls when wider. Then come the next three cells.
         var second = layers.Lines.Skip(5 + 5).Take(5).ToList();
         Assert.Equal(new[] { "2nd  P1", "Bloodhawk", "0:09.5", "+1.5", "1/2" }, second.Select(l => l.Text));
-        Assert.Equal(new[] { 338f, 338f, 492f, 554f, 615f }, second.Select(l => l.X));
-        Assert.Equal(new[] { 154f, 150f, 62f, 61f, 60f }, second.Select(l => l.Width));
+        Assert.Equal(new[] { 338f, 412f, 492f, 554f, 615f }, second.Select(l => l.X));
+        Assert.Equal(new[] { 70f, OriginalRaceTable.AircraftWidth, 62f, 61f, 60f }, second.Select(l => l.Width));
+        Assert.Equal(new[] { true, true, false, false, false }, second.Select(l => l.Marquee));
         Assert.Equal(new[] { BoardJustify.Left, BoardJustify.Right, BoardJustify.Center, BoardJustify.Center, BoardJustify.Center },
             second.Select(l => l.Justify));
         Assert.All(second, l => Assert.Equal(PageY + 69f + 20f, l.Y));

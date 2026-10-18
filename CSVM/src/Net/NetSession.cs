@@ -17,7 +17,7 @@ public sealed class NetSession : INetTransportListener
 {
     /// <summary>The send scratch's width, set by the widest message, a full roster. One buffer
     /// per session rather than one per send, since a send completes inside the call.</summary>
-    public const int SendBufferBytes = 512;
+    public const int SendBufferBytes = 1024;
 
     /// <summary>What a peer lookup returns when nothing on the transport answers to it.</summary>
     public const int NoPeer = -1;

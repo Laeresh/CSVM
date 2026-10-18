@@ -176,9 +176,13 @@ death, sends the scores, then sends `0x5C`, the death notice, and posts the line
 guest posts them from the notice, after the lives line the scores produced. A pilot is named by
 its seat's callsign. A lobby host's first seat takes the host's own callsign (Player Information's,
 carried on the wire as `NetLobby.LocalCallsign`), cut to the roster's width so every machine reads
-the same name, and its player tag only when that callsign is empty. The advert's name is the
-game's, not the host's, and never names a seat. A second local seat keeps its tag: the original's session-open paths make one local player
-each, so it has no counterpart there. Cause 3 is a Zeppelin vs Zeppelin hull's broadside: the dying
+the same name, and "Host" when that callsign is empty, as the lobby lists it (every machine's
+marker still reads that seat "Unknown", below). The advert's name is the
+game's, not the host's, and never names a seat. A machine's further splitscreen seat is named by
+the name its first lobby row shows and its pane number on that machine, "Gabriel P2"
+(`NetSeats.FurtherSeatName`; "Host P2" or "Pilot P2" for a machine with no callsign), the same in
+its lobby row, the kill lines and both score tables. That is remake-only: the original's
+session-open paths make one local player each, so it has no counterpart there. Cause 3 is a Zeppelin vs Zeppelin hull's broadside: the dying
 client names the hull by placement index in the report's source field, and the notice carries that
 hull's lobby team in its ninth byte, which names the line and sets the team's term on every guest
 ([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). Cause 4 with no killer is
@@ -1061,7 +1065,7 @@ CO-OP asks both boxes too. The cap is held to the kind's own: four humans for ca
 for a Dogfight. The game name is the advert's name, and the games list shows it and the chosen cap
 as they are. A host past its cap refuses a guest with the full notice, a Dogfight host as a co-op
 host does. The callsign names this machine's player in every roster, list and line. The voice
-rides the pick's flags byte, so the pick keeps its 36 bytes and a build a patch older reads the
+rides the pick's flags byte, so the pick keeps its width and a build a patch older reads the
 same pick without it. At launch the host writes each seat's voice into bits 1 to 3 of that seat's
 flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
 chosen voice; the voice takes no byte of its own.
@@ -1073,9 +1077,12 @@ reader refuses a roster with tier 3 or with skill bits on a person's entry. The 
 the airframe carry a bot's militia, its row in the Instant Action militia table, and the accent it
 speaks in, both drawn by the host with its plane and `0xFF` on a person's entry. Every machine arms,
 paints and voices the bot by them; a reader refuses a militia past the table's 13 rows, an accent
-past 16 (Fortune Hunter's re-roll ceiling), or either on a person's entry. They make the entry 22 bytes, and a reader refuses a roster of
-any other width, so the layout ships only in a minor release, never in a patch of a minor whose
-roster is 20 bytes wide. A
+past 16 (Fortune Hunter's re-roll ceiling), or either on a person's entry. The callsign field
+after them is 40 bytes, UTF-8 and zero padded: the Callsign box's 12 characters at up to three bytes
+each, a further seat's " P4" and the terminator, so no seat's name is cut. The pick, the Dogfight
+roster's rows and the lobby chat carry a name in the same 40 bytes. The entry is 46 bytes, and a
+reader refuses a roster of any other width, so the layout ships only in a minor release, never in
+a patch. A
 co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
 carries none. The callsign, the voice and the game name are remembered in `options.json`
 for the next session; a password never is. Game Information's password is the one the host asks,
@@ -1150,7 +1157,7 @@ reaches a session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the host's own seats at 14, how many seats after its player number the guest was given at 15 (0 for one), objectives mask at 16, cash at 20 (24 bytes) |
-| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none, bits 5 and 6 the seat's place among its machine's own, bit 7 another seat's pick follows), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
+| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none, bits 5 and 6 the seat's place among its machine's own, bit 7 another seat's pick follows), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (40 bytes, zero-padded; 60 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
@@ -1246,8 +1253,8 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture, bit 6 the host lands on Game Scores at the end, a remake bit), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, how many seats its machine was given at 7 (its rows side by side from its own, 0 from a host a patch older reading as one), then sixteen rows of 36 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 16 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (584 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
-| `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, how many seats its machine was given at 7 (its rows side by side from its own, 0 from a host a patch older reading as one), then sixteen rows of 60 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 40 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (968 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
+| `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 40 bytes at 4, the line in 84 bytes at 44 (128 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
 
@@ -1283,7 +1290,7 @@ counts are kept, since the pylons stay empty either way. A co-op launch sends th
 planes, and its guests fly stock.
 
 The roster names each row's custom plane so every end's player list can show it, where the build
-itself reaches only the host before the launch. The roster is 584 bytes, and a reader refuses any
+itself reaches only the host before the launch. The roster is 968 bytes, and a reader refuses any
 other width. Two builds share a lobby only on the same MAJOR.MINOR, so a change to the roster's
 width must not reach a patch release.
 

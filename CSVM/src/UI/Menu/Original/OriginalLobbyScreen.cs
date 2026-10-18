@@ -2530,7 +2530,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             float y = PageY + 69f + (ListPitch * i);
             var line = scores[top + i];
             float indent = teams && !line.IsTeam ? 12f : 0f;
-            layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f + indent, y, 150f - indent, Black, text: line.Name));
+            // A name wider than its column scrolls in place, as the player list's does.
+            layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f + indent, y, 150f - indent, Black, text: line.Name)
+                with
+            { Marquee = true });
             if (line.IsBot)
             {
                 // At the name column's end, clear of its rule, since a callsign holds 12 characters.

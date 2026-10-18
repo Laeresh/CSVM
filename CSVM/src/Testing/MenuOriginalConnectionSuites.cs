@@ -255,7 +255,7 @@ internal static class MenuOriginalConnectionSuites
     [Suite("menu-original-lobby-seats",
         "The Multiplayer Lobby with two seats at each machine, over the loopback: a host and a guest, "
         + "each with a second seat signed on, list four rows on both ends, each further seat by its "
-        + "player tag, and the advert counts four players. Each end's Ready walks its second seat through "
+        + "machine's callsign and pane number, and the advert counts four players. Each end's Ready walks its second seat through "
         + "the per-seat aircraft screen, whose last confirm is the Ready, the host's seat taking a fit "
         + "of its own. LAUNCH! hands out the host's two seats, the host's field builds four aircraft "
         + "with the guest's two on their own picks, and the guest launches two seats behind the host's "
@@ -2855,15 +2855,15 @@ internal static class MenuOriginalConnectionSuites
             $"the guest launches behind the host on the same chapter and rules in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 
-    // Both lists name four rows, each machine's second by its player tag, and the guest's two are its
-    // own. The advert and the list's header count every seat.
+    // Both lists name four rows, each machine's second by its callsign and pane number, and the
+    // guest's two are its own. The advert and the list's header count every seat.
     private static void ListEverySeat(TestContext ctx, End host, End guest, int guestPeer)
     {
         var hostLobby = host.Door.Dogfight!;
         var guestLobby = guest.Door.Dogfight!;
-        string[] names = { "Zachary", "P2", "Nathan", "P4" };
+        string[] names = { "Zachary", "Zachary P2", "Nathan", "Nathan P2" };
         ctx.Check(hostLobby.Players.Select(row => row.Name).SequenceEqual(names) && guestLobby.Players.Select(row => row.Name).SequenceEqual(names),
-            $"both lists name four rows, each second seat by its player tag (host {SeatRows(hostLobby.Players)}; guest {SeatRows(guestLobby.Players)})");
+            $"both lists name four rows, each second seat by its machine's callsign and pane number (host {SeatRows(hostLobby.Players)}; guest {SeatRows(guestLobby.Players)})");
         ctx.Check(guestLobby is { You: 2, SeatsFlown: 2 } && hostLobby is { SeatsFlown: 2, FieldSeats: 4 } && hostLobby.PeerAt(3) == guestPeer && hostLobby.PeerAt(1) == -1,
             $"the guest's two rows are its own, and the host's second row names no guest ({guestLobby.You}, {guestLobby.SeatsFlown}, {hostLobby.FieldSeats}, {hostLobby.PeerAt(1)})");
         ctx.Check(host.Door.Advertising?.Players == 4 && hostLobby.PeopleListed == 4,
@@ -2915,8 +2915,9 @@ internal static class MenuOriginalConnectionSuites
             owners: lobby.SeatOwners);
         var peers = roster.Select(seat => seat.PeerId).ToArray();
         ctx.Check(roster.Length == 4 && peers[1] == peers[0] && peers[2] == guestPeer && peers[3] == guestPeer
-                  && roster[2].Callsign == "Nathan" && roster[3].Callsign == "P4" && roster[3].PlaneNode == StockAirframes.Node(guestPlane),
-            $"the host's field builds four aircraft, the guest's two on their own picks ({string.Join(", ", roster.Select(s => $"{s.Callsign} {s.PlaneNode}"))})");
+                  && roster[1].Callsign == "Zachary P2" && roster[2].Callsign == "Nathan"
+                  && roster[3].Callsign == "Nathan P2" && roster[3].PlaneNode == StockAirframes.Node(guestPlane),
+            $"the host's field builds four aircraft named as the lobby's rows, the guest's two on their own picks ({string.Join(", ", roster.Select(s => $"{s.Callsign} {s.PlaneNode}"))})");
         ctx.Check(seatFits.Length == 4 && seatFits[1].AmmoAt(0) == 2 && seatFits[3].AmmoAt(0) == 1,
             $"each second seat flies the shell it picked, the host's armour-piercing and the guest's dumdum ({(seatFits.Length == 4 ? $"{seatFits[1].AmmoAt(0)}, {seatFits[3].AmmoAt(0)}" : "no field")})");
         var (one, _) = CSVM.Launch.SeatFields.VersusLaunchField(wire.Transport, planes, fits, stock, lobby.Rules, lobby.TeamOfPeer);

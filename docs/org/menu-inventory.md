@@ -390,8 +390,10 @@ constants rather than reading a layout.
   Every word on it but Game Scores is the remake's own. A guest's plane and ammo picks stay live,
   and a changed pick clears that guest's own Ready. Every seat signed on at a machine's join board
   flies the match, since the original has no split-screen network play: each further seat has a row
-  of its own under its machine's first, named by its player tag (its place in the list, which is its
-  seat at the launch) and drawn red on its own machine. One Ready stands for all of a machine's
+  of its own under its machine's first, named by the name that first row shows and its pane number
+  on that machine ("Gabriel P2", "Host P2" for a host with no callsign; the flight's name for the
+  seat too), scrolling in its column when wider, and drawn red on its own machine. The row's place
+  in the list is its seat at the launch. One Ready stands for all of a machine's
   seats, and a seat given or taken since clears it. Ready on a machine flying further seats walks
   each of them, in player order, through the per-seat aircraft screen over the eleven stock planes
   alone, its WEAPON LOADOUT included, and the last seat's confirm is the Ready; a further seat flies

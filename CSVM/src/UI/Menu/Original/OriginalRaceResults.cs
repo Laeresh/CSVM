@@ -366,7 +366,8 @@ public static class OriginalRaceResults
             var row = sheet.Splits[top + i];
             float y = ChatY + (OriginalRaceTable.RowPitch * (i + 1));
             var ink = row.Left ? Grey : Black;
-            layers.Lines.Add(Line(strings, 10575, row.Pilot, ChatX + 4f, y, ChatNameColumn - 8f, ink: ink));
+            // A pilot wider than the name column scrolls in place rather than wrapping.
+            layers.Lines.Add(Line(strings, 10575, row.Pilot, ChatX + 4f, y, ChatNameColumn - 8f, ink: ink) with { Marquee = true });
             for (int zone = 0; zone < zones && zone < row.Cells.Count; zone++)
             {
                 layers.Lines.Add(Line(strings, 10575, row.Cells[zone], left + (column * zone), y, column, BoardJustify.Center, ink));
