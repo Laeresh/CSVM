@@ -122,7 +122,7 @@ names them is `CSVM/openxr_action_map.tres`, Godot's own default map.
 | left stick click | Recenter Headset, beside `Home`. A deliberate press no flight action holds. The runtime's own recenter (holding the Meta button) does the same |
 | Y (left upper face) | Cycle Cockpit Views, beside `F8` and D-pad ↓ |
 | right trigger | click on the theater screen, where the right hand's laser points |
-| left trigger | hand the laser to the left hand, without clicking; its next pull clicks. The right trigger hands it back |
+| left trigger | hand the laser to the left hand, without clicking; its next pull clicks. The right trigger hands it back. Only while a screen is up: in flight a trigger moves no laser |
 
 All three actions sit on the left hand because the right hand holds the laser by
 default. The laser is a ray from the pointing hand's aim pose, drawn as a thin beam
@@ -132,9 +132,16 @@ reach the eye-size layout a headset gives the 2D). It shows only while the scree
 does. With no controller on, the desktop mouse is the pointer as before.
 
 Both Controls pages list the `xr` rows and capture them while a headset session is
-live: a hand button, or a hand stick pushed past half travel. The two triggers are
-never captured, for the reason the mouse's left button is not: they are how the
-laser confirms the row being rebound. Without a headset the pages hide the `xr`
+live: a hand button, a hand stick pushed past half travel, or a trigger pulled past
+half travel, which binds as "VR L Trigger" or "VR R Trigger" and fires past half its
+pull, as a pad trigger does. A capture takes a trigger only on a pull begun after it
+opened, so the pull that clicked the cell binds nothing, and while a capture listens
+the laser clicks nothing and changes no hand: the pull that binds is the capture's
+alone. With a capture open, Escape or pad B abandons it; every hand control binds. A
+bound trigger acts in flight while no screen is up. On a menu or a board both
+triggers keep the laser's click and hand switch, and the flight is not reading them
+then: a pause holds the clock (a network pause holds the seat instead), and a fire or
+other command bound to the pull that clicks Resume waits for it to be let go. Without a headset the pages hide the `xr`
 rows, so flat play's pages read as they always did, and the rows resolve to nothing.
 A keymap saved before the `xr` device existed (file version 3 or older) keeps the
 shipped `xr` row on every action it names.

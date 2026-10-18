@@ -114,9 +114,11 @@ public sealed partial class TheaterPointer : Node3D
             return;
         }
 
-        PickHand();
+        // A capture listening for a control owns both triggers: its pull binds, and clicks nothing.
+        bool capturing = ControlCapture.TakeListening();
+        PickHand(_theater.Shown && !capturing);
         _held = _hands.IsButtonDown(DeviceId.Xr, (int)XrControls.TriggerOf(Hand));
-        _swallow &= _held;
+        _swallow = (_swallow || capturing) && _held;
         Vector2? at = null;
         if (_theater.Shown && _hands.Aim(Hand) is { } aim && aim.IsFinite())
         {
@@ -210,13 +212,14 @@ public sealed partial class TheaterPointer : Node3D
         Log.Debug("ui", $"theater pointer: {(present ? $"controllers present, pointing with the {Hand.ToString().ToLowerInvariant()} hand" : "no controllers, the desktop mouse points")}");
     }
 
-    // The pointer goes to the other hand on a fresh pull of its trigger, or when its own hand leaves.
-    // ⚠ Swallow the pull that moved it: it is a gesture, not a click on whatever the ray lands on.
-    private void PickHand()
+    // The pointer goes to the other hand on a fresh pull of its trigger while it may switch, or when
+    // its own hand leaves. With no screen up a trigger is the flight's alone, so that pull switches
+    // nothing. ⚠ Swallow the pull that moved it: it is a gesture, not a click under the ray.
+    private void PickHand(bool switches)
     {
         var other = XrControls.Other(Hand);
         bool otherDown = _hands.IsButtonDown(DeviceId.Xr, (int)XrControls.TriggerOf(other));
-        bool pulled = otherDown && !_otherWasDown && _hands.Aim(other) != null;
+        bool pulled = switches && otherDown && !_otherWasDown && _hands.Aim(other) != null;
         if (pulled || (!_hands.Present(Hand) && _hands.Present(other)))
         {
             LetGo();

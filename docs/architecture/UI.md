@@ -654,11 +654,12 @@ TUNE. Pinned by `CSVM.Tests/XrComfortTests.cs`; the level is `Utils/VrVignetteSe
 ## src/UI/Boards/TheaterPointer.cs
 The hand controllers' laser on the theater screen: a ray from one hand's aim pose
 (`Bindings/XrControllers.cs`), drawn as a thin beam and a dot placed from the eye feed as the screen
-is, clicking with that hand's trigger. Godot controls and the event readers get its moves and clicks
-as mouse events pushed into the root at `TheaterScreen.LayoutPoint`; the polled readers get the same
-point through `ScreenPointer.cs`, which it overrides while a controller is present. The right hand
-points first, and a pull on the other trigger hands the laser over without a click. `Launch/Launcher.cs`
-builds it beside the screen; the `xr-pointer` suites drive it on the stand-in's hands.
+is, clicking with that hand's trigger. Godot controls and event readers get its moves and clicks as
+mouse events pushed at `TheaterScreen.LayoutPoint`; polled readers get the point through
+`ScreenPointer.cs`, which it overrides while a controller is present. The right hand points first;
+the other trigger hands the laser over without a click while the screen is up. While a capture
+listens (`ControlCapture.TakeListening`) a trigger pull clicks and switches nothing, since it binds.
+`Launch/Launcher.cs` builds it beside the screen; the `xr-pointer` suites drive it.
 
 ## src/UI/Boards/ScreenPointer.cs
 The one pointer every polled reader takes: the desktop mouse's viewport position and left button,

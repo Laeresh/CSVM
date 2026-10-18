@@ -29,7 +29,7 @@ public class XrBindingTests
     }
 
     /// <summary>Every button and axis names a hand and one of the action map's actions. The two
-    /// triggers are the only controls the pointer keeps for itself.</summary>
+    /// trigger clicks are the pointer's.</summary>
     [Fact]
     public void TheControlTableNamesEveryInputOnItsHand()
     {
@@ -152,10 +152,10 @@ public class XrBindingTests
         Assert.False(actions.Held(InputAction.Pause));
     }
 
-    /// <summary>A capture takes a hand button or a hand stick past its threshold, masks what was
-    /// held when it armed, and never takes a trigger.</summary>
+    /// <summary>A capture takes a hand button or a hand stick past its threshold and masks what was
+    /// held when it armed.</summary>
     [Fact]
-    public void ACaptureTakesHandButtonsAndSticksButNeverATrigger()
+    public void ACaptureTakesHandButtonsAndSticks()
     {
         var hands = new FakeHands();
         var xr = new XrControllers(hands);
@@ -164,10 +164,6 @@ public class XrBindingTests
         capture.Arm(xr);
 
         Assert.Null(capture.Poll(xr));
-        hands.Set(XrHand.Right, XrControls.TriggerClick, true);
-        hands.Set(XrHand.Right, XrControls.Trigger, 1f);
-        Assert.Null(capture.Poll(xr));
-
         hands.Set(XrHand.Left, "by_button", true);
         Assert.Equal(new Binding(DeviceId.Xr, BindingControl.Button((int)XrButton.LeftUpperFace)), capture.Poll(xr));
 
@@ -178,6 +174,62 @@ public class XrBindingTests
         Assert.Equal(
             new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.LeftStickY, -1, ControlCapture.CapturedDeadzone)),
             stick.Poll(xr));
+    }
+
+    /// <summary>A trigger binds as its axis, as a pad trigger does, and only on a pull begun after the
+    /// capture opened. The pull that opened it is masked until the trigger is let go, its click
+    /// included, so finishing that pull binds nothing.</summary>
+    [Fact]
+    public void ACaptureTakesATriggerOnlyOnAFreshPull()
+    {
+        var hands = new FakeHands();
+        var xr = new XrControllers(hands);
+        Trigger(hands, XrHand.Right, 0.1f, clicked: true);
+        var capture = new ControlCapture(Pad, readsKeyboard: true);
+        capture.Arm(xr);
+
+        Trigger(hands, XrHand.Right, 1f, clicked: true);
+        Assert.Null(capture.Poll(xr));
+        Trigger(hands, XrHand.Right, 0.1f, clicked: true);
+        Assert.Null(capture.Poll(xr));
+        Trigger(hands, XrHand.Right, 1f, clicked: true);
+        Assert.Null(capture.Poll(xr));
+
+        Trigger(hands, XrHand.Right, 0f, clicked: false);
+        Assert.Null(capture.Poll(xr));
+        Trigger(hands, XrHand.Right, 0.4f, clicked: true);
+        Assert.Null(capture.Poll(xr));
+        Trigger(hands, XrHand.Right, 1f, clicked: true);
+        Assert.Equal(
+            new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.RightTrigger, 1, ControlCapture.CapturedDeadzone)),
+            capture.Poll(xr));
+        Assert.True(ControlCapture.TakeListening());
+
+        var left = new ControlCapture(Pad, readsKeyboard: true);
+        hands.Clear();
+        left.Arm(xr);
+        Trigger(hands, XrHand.Left, 0.9f, clicked: true);
+        Assert.Equal(
+            new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.LeftTrigger, 1, ControlCapture.CapturedDeadzone)),
+            left.Poll(xr));
+    }
+
+    /// <summary>A bound trigger fires its action past half its pull, the pad trigger's threshold.
+    /// </summary>
+    [Fact]
+    public void ABoundTriggerFiresItsActionPastHalfItsPull()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        map.Assign(InputAction.FireGuns, new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.RightTrigger, 1, ControlCapture.CapturedDeadzone)));
+        var hands = new FakeHands();
+        var actions = new PlayerActions(map, readsKeyboard: false);
+
+        Trigger(hands, XrHand.Right, 0.3f, clicked: true);
+        actions.Poll(new XrControllers(hands));
+        Assert.False(actions.Held(InputAction.FireGuns));
+        Trigger(hands, XrHand.Right, 0.8f, clicked: true);
+        actions.Poll(new XrControllers(hands));
+        Assert.True(actions.Held(InputAction.FireGuns));
     }
 
     [Fact]
@@ -234,6 +286,8 @@ public class XrBindingTests
         Assert.Equal("VR L Stick Click", BindingLabels.Describe(new Binding(DeviceId.Xr, BindingControl.Button((int)XrButton.LeftStickClick))));
         Assert.Equal("VR R Stick Up", BindingLabels.Describe(new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.RightStickY, 1, 0.5f))));
         Assert.Equal("VR L Stick Left", BindingLabels.Describe(new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.LeftStickX, -1, 0.5f))));
+        Assert.Equal("VR R Trigger", BindingLabels.Describe(new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.RightTrigger, 1, 0.5f))));
+        Assert.Equal("VR L Trigger", BindingLabels.Describe(new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.LeftTrigger, 1, 0.5f))));
     }
 
     /// <summary>A prompt names a key or a pad control before a hand control, and the hand control
@@ -273,6 +327,13 @@ public class XrBindingTests
         Assert.Equal("Escape, Pad Start", feature.RowText(InputAction.Pause));
         feature.ResetSeat();
         Assert.Equal("Escape, Pad Start, VR Menu", feature.RowText(InputAction.Pause));
+    }
+
+    // One hand's trigger at a pull, with its click as the runtime thresholds it.
+    private static void Trigger(FakeHands hands, XrHand hand, float pull, bool clicked)
+    {
+        hands.Set(hand, XrControls.Trigger, pull);
+        hands.Set(hand, XrControls.TriggerClick, clicked);
     }
 
     // The trackers as a dictionary: which hands are bound, each action's reading and each aim.

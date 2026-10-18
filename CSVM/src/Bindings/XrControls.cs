@@ -113,8 +113,8 @@ public static class XrControls
     /// <summary>The other hand.</summary>
     public static XrHand Other(XrHand hand) => hand == XrHand.Left ? XrHand.Right : XrHand.Left;
 
-    /// <summary>Whether that button or axis is one of the two triggers. They are the screen
-    /// pointer's click, as the mouse's left button is, so a rebinding screen never captures them.
+    /// <summary>Whether that button or axis is one of the two triggers. Their clicks are the screen
+    /// pointer's, so a rebinding screen captures a trigger as its axis, as a pad's, never its click.
     /// </summary>
     public static bool IsTrigger(ControlKind kind, int index) => kind switch
     {

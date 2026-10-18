@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Bindings;
@@ -10,8 +11,8 @@ namespace CSVM.Bindings;
 /// <see cref="ActionMap.SameControl"/> and one to the player.
 /// ⚠ A pad's hat is not scanned: a d-pad direction arrives as a button and is captured as that.
 /// A pad axis is scanned rest-then-move (<see cref="MoveThreshold"/>), since a resting stick drifts.
-/// Sticks, hats included, are scanned by <see cref="StickCapture"/>, and the hand controllers bar
-/// their triggers on <see cref="DeviceId.Xr"/> (<see cref="XrControls.IsTrigger"/>).</summary>
+/// Sticks, hats included, are scanned by <see cref="StickCapture"/>, a hand trigger as its axis
+/// like a pad's, on a pull begun after <see cref="Arm"/>.</summary>
 public sealed class ControlCapture
 {
     /// <summary>The key that cancels a capture instead of being captured. A screen with no way out
@@ -61,15 +62,18 @@ public sealed class ControlCapture
     // against a stable index. Anything past SdlMax is device-specific and has no name to print.
     private static readonly JoyAxis[] Axes = BuildAxes();
 
-    // The hand controllers' buttons and axes, less the two triggers. Those are the screen pointer's
-    // click, left out for the reason the mouse's left button is.
+    // The hand controllers' buttons less the two trigger clicks, and every axis. A trigger binds as
+    // its axis, the way a pad trigger does (DefaultBindings), so its click is never the answer.
     private static readonly int[] XrButtons = XrScan(ControlKind.Button, XrControls.ButtonCount);
-    private static readonly int[] XrAxes = XrScan(ControlKind.Axis, XrControls.AxisCount);
+    private static readonly int[] XrAxes = Enumerable.Range(0, XrControls.AxisCount).ToArray();
 
     // The modifier keys, which are captured differently from every other key: held, they qualify the
     // key pressed after them, so one alone can only be meant once it is let go with nothing else
     // pressed. Without that a player reaching for Shift+E would latch Shift the moment it went down.
     private static readonly Key[] ModifierKeys = { Key.Shift, Key.Ctrl, Key.Alt };
+
+    // Whether a capture that can take a trigger has armed or polled since the last TakeListening.
+    private static bool _listening;
 
     private readonly HashSet<int> _maskedKeys = new();
     private readonly HashSet<int> _maskedButtons = new();
@@ -101,6 +105,17 @@ public sealed class ControlCapture
         _sticks = new StickCapture(row);
     }
 
+    /// <summary>Whether a capture that takes the hand triggers has armed or polled since the last call,
+    /// which clears it. The theater pointer reads it once a frame and swallows a trigger pull while one
+    /// listens, so the binding pull clicks nothing. A capture dropped unannounced
+    /// stops answering on its own.</summary>
+    public static bool TakeListening()
+    {
+        bool listening = _listening;
+        _listening = false;
+        return listening;
+    }
+
     /// <summary>Masks everything currently held, so a control still down from the press that opened
     /// the capture is not read as the player's choice. A masked control has to be released before
     /// it can be captured, and a masked axis has to be seen at rest.</summary>
@@ -113,6 +128,7 @@ public sealed class ControlCapture
         _maskedXrButtons.Clear();
         _maskedXrAxes.Clear();
         _pendingModifier = -1;
+        _listening |= !_sticksOnly;
         _sticks.Arm(state);
         foreach (var axis in Axes)
         {
@@ -128,7 +144,7 @@ public sealed class ControlCapture
 
         foreach (int axis in XrAxes)
         {
-            if (!InBand(state.AxisValue(DeviceId.Xr, axis)))
+            if (!InBand(state.AxisValue(DeviceId.Xr, axis)) || TriggerClicked(state, axis))
                 _maskedXrAxes.Add(axis);
         }
 
@@ -171,6 +187,7 @@ public sealed class ControlCapture
         if (_sticksOnly)
             return _sticks.PollPresses(state) ?? _sticks.PollAxes(state);
 
+        _listening = true;
         var modifiers = HeldModifiers(state);
         foreach (var key in Keys)
         {
@@ -213,6 +230,8 @@ public sealed class ControlCapture
 
         foreach (int axis in XrAxes)
         {
+            if (_maskedXrAxes.Contains(axis) && TriggerClicked(state, axis))
+                continue;
             if (Moved(_maskedXrAxes, axis, state.AxisValue(DeviceId.Xr, axis)) is { } sign)
                 return new Binding(DeviceId.Xr, BindingControl.Axis(axis, sign, CapturedDeadzone));
         }
@@ -289,6 +308,12 @@ public sealed class ControlCapture
             return 1;
         return travel <= -MoveThreshold ? -1 : null;
     }
+
+    // A trigger is at rest only with its click let go too, since a runtime may click inside the rest
+    // band. The pull that opened the capture must not finish as its answer.
+    private static bool TriggerClicked(IDeviceState state, int axis) =>
+        XrControls.IsTrigger(ControlKind.Axis, axis)
+        && state.IsButtonDown(DeviceId.Xr, (int)XrControls.TriggerOf(XrControls.Axis(axis)!.Value.Hand));
 
     private static int[] XrScan(ControlKind kind, int count)
     {

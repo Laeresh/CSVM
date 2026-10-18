@@ -19,8 +19,8 @@ The hand controllers' control table, engine-free: `XrButton` and `XrAxis` are th
 binding carries, named by role (lower and upper face button, menu, stick click, trigger, grip) so
 another controller maps onto them, each reading one action of the OpenXR action map on one hand's
 tracker. The action names are Godot's default map's, which `CSVM/openxr_action_map.tres` ships as
-generated. It holds the Touch captions and marks the two triggers, which are the screen pointer's
-click and never captured. Reading the trackers is `XrControllers.cs`.
+generated. It holds the Touch captions and marks the two triggers, whose clicks are the screen
+pointer's; a capture takes a trigger as its axis. Reading the trackers is `XrControllers.cs`.
 
 ## src/Bindings/XrControllers.cs
 The hand controllers behind the binding seam: an `IDeviceState` answering for `DeviceId.Xr` through
@@ -131,12 +131,12 @@ tick, each full axis on its action's side or as the lever's position, via `Conte
 ## src/Bindings/ControlCapture.cs
 What a rebinding screen may capture, and the scan that turns a press into a `Binding`: the bindable
 key list, Godot's pad button and SDL axis ranges, and the mouse buttons past the pointer's own. `Arm`
-masks everything already held. Every pad control is stamped with the seat's own identity, not a
-hardware GUID. A key pressed under Shift, Ctrl or Alt carries them; a modifier bound alone resolves
-on its release. A pad axis is rest-then-move, since a resting stick drifts, with a fixed
-`CapturedDeadzone`. A pad's hat is not scanned; sticks are, through `StickCapture`, steered by the
-constructor's `row` and `sticksOnly`, and so are the hand controllers bar their triggers. Escape
-and the pad's Back cancel and are never captured.
+masks everything already held; a pad control carries the seat's identity, not a GUID. A key under Shift,
+Ctrl or Alt carries them; a lone modifier resolves on release. A pad axis is rest-then-move with a
+fixed `CapturedDeadzone`. A pad's hat is not scanned; sticks are, through `StickCapture`, and so are
+the hand controllers. A hand trigger binds as its axis, like a pad's, on a pull begun after `Arm`
+with its click let go; `TakeListening` tells the theater pointer to swallow that pull. Escape and the
+pad's Back cancel and are never captured.
 
 ## src/Bindings/StickCapture.cs
 The stick half of a capture, over every identity the reader lists (`IStickDevices`): buttons 0..127,

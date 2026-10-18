@@ -1891,14 +1891,18 @@ fetched sources are in `.scratch/C11-src`.
 **Approach (landed; VR only at run time).**
 - `Bindings/XrControls.cs`: `XrButton` and `XrAxis` (the indices an `Xr` binding carries, named by
   role: lower and upper face, menu, stick click, trigger, grip), each one action of the map on one
-  hand, the Touch captions, and the two triggers marked as the pointer's. `Bindings/XrControllers.cs`:
+  hand, the Touch captions, and the two trigger clicks marked as the pointer's. `Bindings/XrControllers.cs`:
   the `IDeviceState` over `IXrHands` (the trackers through `XRServer`), plus each hand's aim pose.
   It reads nothing until `XrControllers.SessionLive`, which `XrSession.Build` sets, so a flat launch
   makes no XR call. `SeatDeviceState` hands every `Xr` read to it on the pad half.
 - `DefaultBindings`: the three rows above. `BindingStore` version 4 adds the `xr` device token
   (`xr/button:LeftMenu`, `xr/axis:RightStickY+@0.5`); a file older than 4 keeps the shipped `xr`
-  binding on every row it names, since it could name none. `ControlCapture` scans the hand buttons
-  and sticks bar the triggers. `BindingLabels` reads "VR Menu", "VR Y", "VR L Stick Click".
+  binding on every row it names, since it could name none. `ControlCapture` scans the hand buttons,
+  sticks and triggers; a trigger binds as its axis at half travel, as a pad trigger does, and only on
+  a pull begun after the capture opened, its click let go included. While a capture listens
+  (`ControlCapture.TakeListening`) the pointer clicks nothing and switches no hand, so the pull that
+  binds is the capture's alone. `BindingLabels` reads "VR Menu", "VR Y", "VR L Stick Click",
+  "VR R Trigger".
   `ActiveDevice` names an `Xr` binding last on the pad side; `ControlGlyphs` draws none for it.
 - `ControlsFeature.ShowsXr` (default: `SessionLive`) leaves `Xr` bindings out of every list it hands
   a screen, so both Controls pages read as before in flat play; under a headset the rows show and
@@ -1907,7 +1911,8 @@ fetched sources are in `.scratch/C11-src`.
   aim ray through `TheaterScreen.Hit`, a 3 mm beam and a 12 mm dot (priority 127, over the screen,
   placed from the eye feed), moves and trigger clicks pushed through the root's `PushInput(event,
   true)` at `LayoutPoint`, a click starting only on a fresh pull over the screen. The other hand's
-  trigger takes the laser over, swallowed; a hand that leaves hands it over too.
+  trigger takes the laser over, swallowed, while the screen is up; a hand that leaves hands it over
+  too. With no screen up a trigger is the flight's alone.
 - `UI/Boards/ScreenPointer.cs`, the one pointer source: `AuthoredPointer` (Original pause and race
   boards), `PauseBoard.SeatPointer`, `PausePreferences`, the campaign film's held press and seat 0's
   pointer in `Launcher` (the Original menus) read it. It is the desktop mouse call for call until
@@ -1929,7 +1934,8 @@ an unbound tracker.
 
 **Verify.** Units: `CSVM.Tests/XrBindingTests.cs` (the appended kind, the control table, the
 reader over a fake for present and absent hands, the shipped rows, a resolution, a rebind's steal,
-a capture that takes hand buttons and sticks and never a trigger, the file tokens and the version
+a capture that takes hand buttons and sticks, a trigger only on a fresh pull and never the pull that
+opened it, a bound trigger firing past half its pull, the file tokens and the version
 rule, the captions, the prompt order, the screen's `ShowsXr`), `TheaterLayoutTests.PointAtIsWhereAHandRayLands`,
 and the updated `DefaultBindingsTests`, `BindingStoreTests`, `ThrottleLeverTests`,
 `ControlsResetStickTests`. Suites `xr-pointer` and `xr-pointer-original-menu`, beside
@@ -1948,7 +1954,8 @@ when the trigger is pulled off the screen and swept onto a plaque; (2) Built-in'
 under the dot and click on the trigger; (3) the left trigger moves the laser to the left hand without
 clicking, and the right trigger moves it back; (4) Options, CONTROLS, KEYS AND BUTTONS, Other tab:
 Pause lists "VR Menu", Recenter Headset "VR L Stick Click", and Views 1's Cycle Cockpit Views
-"VR Y"; click a cell and press B: it binds "VR B", and a trigger pull binds nothing; (5) in flight,
+"VR Y"; click a cell and press B: it binds "VR B"; click a cell, let the trigger go and pull it
+again: it binds "VR R Trigger" and clicks nothing under the dot; (5) in flight,
 the left menu button pauses and the laser clicks Resume; Y cycles the views; the left stick click
 logs `xr: recentered (the recenter action)`; (6) the pointer's feel: beam and dot size and colour,
 the dot's steadiness on the screen, the click latency (`TheaterPointer.BeamWidthM`, `DotM`, the

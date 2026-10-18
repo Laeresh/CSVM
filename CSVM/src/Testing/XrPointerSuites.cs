@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CSVM.Bindings;
 using CSVM.Flight.Modes;
@@ -37,7 +38,7 @@ internal static class XrPointerSuites
     /// with the right trigger through the polled reader. A Godot button takes the pushed click, and
     /// the left trigger takes the pointer over without one.</summary>
     [Suite("xr-pointer",
-        "with the stand-in's hand controllers connected the hand buttons are a device in the binding seam: the left menu button holds Pause, Y holds Cycle Cockpit Views and the left stick click holds Recenter Headset through a seat's reader, and nothing reads once no session is live; the laser from the right hand's aim pose lands on a raised pause board's row with its beam and dot drawn, the polled reader moves the cursor there and a trigger pull fires the row, a Godot button on the screen takes the trigger as a pushed click, a pull on the left trigger hands the pointer to the left hand without clicking and its next pull clicks, and the desktop mouse is the pointer again once the laser leaves")]
+        "with the stand-in's hand controllers connected the hand buttons are a device in the binding seam: the left menu button holds Pause, Y holds Cycle Cockpit Views and the left stick click holds Recenter Headset through a seat's reader, and nothing reads once no session is live; the laser from the right hand's aim pose lands on a raised pause board's row with its beam and dot drawn, the polled reader moves the cursor there and a trigger pull fires the row, a Godot button on the screen takes the trigger as a pushed click, a pull on the left trigger hands the pointer to the left hand without clicking and its next pull clicks, with the screen down the other trigger moves nothing, and the desktop mouse is the pointer again once the laser leaves")]
     internal static void XrPointer(TestContext ctx)
     {
         if (XRServer.PrimaryInterface != null)
@@ -92,6 +93,13 @@ internal static class XrPointerSuites
             Frame(theater, pointer, board);
             ctx.Check(!theater.Shown && !pointer.BeamShown && pointer.At == null,
                 $"resuming takes the screen away, and the beam with it");
+            var pointing = pointer.Hand;
+            Trigger(sim, XrControls.Other(pointing), true);
+            Frame(theater, pointer, board);
+            Trigger(sim, XrControls.Other(pointing), false);
+            Frame(theater, pointer, board);
+            ctx.Check(pointer.Hand == pointing,
+                $"with no screen up the other trigger is the flight's and leaves the laser on the {pointing} hand ({pointer.Hand})");
         }
         finally
         {
@@ -119,7 +127,7 @@ internal static class XrPointerSuites
     /// polled reader the launcher gives seat 0. Its pulls open PREFERENCES, CONTROLS and KEYS AND
     /// BUTTONS and stand the Other tab, where the XR controls list beside the keys and pads.</summary>
     [Suite("xr-pointer-original-menu",
-        "on the Original presentation over the install's decoded layout, hosted on the theater screen, the right hand's laser and trigger, read by seat 0's polled pointer as the launcher wires it, open PREFERENCES, its CONTROLS door, KEYS AND BUTTONS and the Other tab, whose Pause and Recenter Headset rows list the left menu button and the left stick click while a stereo session is live and read as flat play's without one")]
+        "on the Original presentation over the install's decoded layout, hosted on the theater screen, the right hand's laser and trigger, read by seat 0's polled pointer as the launcher wires it, open PREFERENCES, its CONTROLS door, KEYS AND BUTTONS and the Other tab, whose Pause and Recenter Headset rows list the left menu button and the left stick click while a stereo session is live and read as flat play's without one; a capture the laser opens takes neither the pull that opened it nor a click, binds the right trigger on a fresh pull and the left trigger without moving the laser, and the left trigger still hands the laser over once no capture listens")]
     internal static void XrPointerOriginalMenu(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -202,6 +210,8 @@ internal static class XrPointerSuites
             var flatRecenter = Cell(shell, InputAction.RecenterHeadset);
             ctx.Check(!flatPause.B.Contains("VR") && !flatRecenter.B.Contains("VR"),
                 $"and without one both rows read as flat play's ({flatPause.A} | {flatPause.B}; {flatRecenter.A} | {flatRecenter.B})");
+            XrControllers.SessionLive = true;
+            TriggerCapture(ctx, sim, theater, pointer, host, shell, fit, other);
         }
         finally
         {
@@ -339,6 +349,62 @@ internal static class XrPointerSuites
         report.AppendLine($"hand over: {pointer.Hand}, pointer at {pointer.At}, photos {photos}");
     }
 
+    // A capture opened by the laser on the Pause row's cell, the seat reading the hands alone. The
+    // pull that opened it binds nothing. The next right pull binds the right trigger and clicks
+    // nothing. A left pull binds the left trigger and leaves the laser where it is. Outside a capture
+    // the left trigger still hands the laser over.
+    private static void TriggerCapture(
+        TestContext ctx, XrSimInterface sim, TheaterScreen theater, TheaterPointer pointer, MenuHost host,
+        OriginalShell shell, BoardFit fit, int tab)
+    {
+        var controls = host.Features.Get<ControlsFeature>();
+        controls.AddSeat(1, BindingProfile.Defaults(DefaultBindings.AnyPad, readsKeyboard: true), new HandCaptureDevices(), readsKeyboard: true);
+        int row = 0;
+        var rows = OriginalKeysPage.ControlTabs[tab].Rows;
+        while (row < rows.Count - 1 && rows[row].Action != InputAction.Pause)
+        {
+            row++;
+        }
+
+        string cell = OriginalKeysPage.CellKey(row, second: false);
+        var right = new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.RightTrigger, 1, ControlCapture.CapturedDeadzone));
+        var left = new Binding(DeviceId.Xr, BindingControl.Axis((int)XrAxis.LeftTrigger, 1, ControlCapture.CapturedDeadzone));
+        Pull(sim, theater, pointer, host, shell, fit, cell);
+        ctx.Check(controls.Capturing && controls.Focused == InputAction.Pause,
+            $"the laser's pull on the Pause row's cell opens a capture ({controls.Capturing}, {controls.Focused})");
+        ctx.Check(!controls.Bindings(InputContext.Flight, InputAction.Pause).Contains(right),
+            $"and the pull that opened it binds nothing ({controls.Status})");
+
+        Trigger(sim, XrHand.Right, true);
+        MenuFrame(theater, pointer, host);
+        MenuFrame(theater, pointer, host);
+        Trigger(sim, XrHand.Right, false);
+        MenuFrame(theater, pointer, host);
+        MenuFrame(theater, pointer, host);
+        ctx.Check(controls.Bindings(InputContext.Flight, InputAction.Pause).Contains(right) && controls.Status.Contains("VR R Trigger"),
+            $"a fresh right pull binds the right trigger ({controls.Status})");
+        ctx.Check(!controls.Capturing, $"and clicks nothing under the dot, which would open a capture again");
+
+        Pull(sim, theater, pointer, host, shell, fit, cell);
+        ctx.Check(controls.Capturing, $"the laser opens a second capture on the cell");
+        Aim(sim, theater, XrHand.Left, LeftHandAt, pointer.At ?? Vector2.Zero);
+        Trigger(sim, XrHand.Left, true);
+        MenuFrame(theater, pointer, host);
+        Trigger(sim, XrHand.Left, false);
+        MenuFrame(theater, pointer, host);
+        MenuFrame(theater, pointer, host);
+        ctx.Check(controls.Bindings(InputContext.Flight, InputAction.Pause).Contains(left) && !controls.Capturing,
+            $"a left pull during it binds the left trigger and clicks nothing ({controls.Status})");
+        ctx.Check(pointer.Hand == XrHand.Right, $"and leaves the laser on the right hand ({pointer.Hand})");
+
+        Trigger(sim, XrHand.Left, true);
+        MenuFrame(theater, pointer, host);
+        Trigger(sim, XrHand.Left, false);
+        MenuFrame(theater, pointer, host);
+        ctx.Check(pointer.Hand == XrHand.Left && !controls.Capturing,
+            $"with no capture listening the bound left trigger still hands the laser over, clicking nothing ({pointer.Hand})");
+    }
+
     // One click on an Original row through the laser: aimed at its middle, a frame to rest there,
     // then a pull and a release. Each is a frame of the theater, the pointer and the menu host.
     private static void Pull(
@@ -411,6 +477,14 @@ internal static class XrPointerSuites
         theater.Refresh();
         pointer.Step();
         host.Tick(Dt);
+    }
+
+    // A seat's capture readers that hear the stand-in's hands and nothing else.
+    private sealed class HandCaptureDevices : ICaptureDevices
+    {
+        public DeviceId PadOf(InputContext context) => MenuControlsSeats.PadOf(context);
+
+        public IDeviceState For(InputContext context) => XrControllers.Live;
     }
 
     // Seat 0's pad and keyboard half, reading nothing, so the laser is the only input.
