@@ -27,6 +27,13 @@ public sealed partial class ComfortQuads : Node3D
     /// and screen, so a cutscene's take and hand-back fade too.</summary>
     public const int FadePriority = 127;
 
+    /// <summary>Seconds the level chase's hand-over holds black, past the cut's own frame. TUNE: the
+    /// default cut's instant clear read too short over a loop.</summary>
+    public const float HandOverHoldS = 0.2f;
+
+    /// <summary>Seconds the level chase's hand-over takes to clear. TUNE.</summary>
+    public const float HandOverInS = 0.5f;
+
     // After the theater (2100), whose board state this frame decides the fade's order.
     private const int AfterTheater = 2110;
 
@@ -104,7 +111,15 @@ public sealed partial class ComfortQuads : Node3D
     /// <c>XrRig.Cut</c> by the composition.</summary>
     public void OnCut(string why)
     {
-        _fade.Cut();
+        if (why == Flight.Camera.XrRig.HandOverCut)
+        {
+            _fade.Cut(HandOverHoldS, HandOverInS);
+        }
+        else
+        {
+            _fade.Cut();
+        }
+
         _cutThisFrame = true;
     }
 

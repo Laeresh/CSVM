@@ -23,12 +23,17 @@ public sealed class XrFade
     // Step clears it, so a black nobody holds fades in on the next frame.
     private bool _held;
 
+    // The last cut's own black hold and clearing time (Cut's arguments).
+    private float _holdS;
+    private float _cutInS;
+
     /// <summary>A fade taking <paramref name="outS"/> to black and <paramref name="inS"/> back. A zero
     /// <paramref name="outS"/> covers at once.</summary>
     public XrFade(float outS = DefaultOutS, float inS = DefaultInS)
     {
         OutS = Math.Max(0f, outS);
         InS = Math.Max(1e-3f, inS);
+        _cutInS = InS;
     }
 
     /// <summary>Where the fade stands.</summary>
@@ -65,6 +70,7 @@ public sealed class XrFade
     public bool Cover()
     {
         _held = true;
+        (_holdS, _cutInS) = (0f, InS);
         if (State == Phase.Black)
         {
             return true;
@@ -81,13 +87,16 @@ public sealed class XrFade
         return false;
     }
 
-    /// <summary>The view cut this frame: black now, held through this frame's <see cref="Step"/>,
-    /// then clearing over <see cref="InS"/>.</summary>
-    public void Cut()
+    /// <summary>The view cut this frame: black now, held through this frame's <see cref="Step"/> and
+    /// <paramref name="holdS"/> more, then clearing over <paramref name="inS"/> (zero takes
+    /// <see cref="InS"/>).</summary>
+    public void Cut(float holdS = 0f, float inS = 0f)
     {
         Alpha = 1f;
         State = Phase.Black;
         _held = true;
+        _holdS = Math.Max(0f, holdS);
+        _cutInS = inS > 0f ? inS : InS;
     }
 
     /// <summary>Advances the fade by <paramref name="dt"/> seconds. Called once a frame, after this
@@ -105,10 +114,13 @@ public sealed class XrFade
                 }
 
                 break;
+            case Phase.Black when !_held && _holdS > 0f:
+                _holdS -= dt;
+                break;
             case Phase.Out:
             case Phase.Black when !_held:
             case Phase.In:
-                Alpha = Math.Max(0f, Alpha - (dt / InS));
+                Alpha = Math.Max(0f, Alpha - (dt / _cutInS));
                 State = Alpha > 0f ? Phase.In : Phase.Clear;
                 break;
         }

@@ -42,6 +42,35 @@ public class XrComfortTests
     }
 
     [Fact]
+    public void AHeldCutStaysBlackForItsHoldThenClearsOverItsOwnTime()
+    {
+        var fade = new XrFade();
+        fade.Cut(ComfortQuads.HandOverHoldS, ComfortQuads.HandOverInS);
+        fade.Step(Dt);
+        int black = 0, clearing = 0;
+        while (fade.Alpha >= 1f && black < 1000)
+        {
+            fade.Step(Dt);
+            black++;
+        }
+
+        while (fade.State != XrFade.Phase.Clear && clearing < 1000)
+        {
+            fade.Step(Dt);
+            clearing++;
+        }
+
+        Assert.InRange(black * Dt, ComfortQuads.HandOverHoldS - Dt, ComfortQuads.HandOverHoldS + (2 * Dt));
+        Assert.InRange(clearing * Dt, ComfortQuads.HandOverInS - (2 * Dt), ComfortQuads.HandOverInS + Dt);
+
+        // The next plain cut takes the default clearing time again.
+        fade.Cut();
+        fade.Step(Dt);
+        fade.Step(Dt);
+        Assert.InRange(fade.Alpha, 1f - (Dt / XrFade.DefaultInS) - 1e-4f, 1f - (Dt / XrFade.DefaultInS) + 1e-4f);
+    }
+
+    [Fact]
     public void ACoverDarkensOverTheFadeOutAndAnswersOnlyOnceTheViewIsBlack()
     {
         var fade = new XrFade();

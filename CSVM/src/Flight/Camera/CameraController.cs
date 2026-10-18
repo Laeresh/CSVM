@@ -271,6 +271,10 @@ public sealed class CameraController
     /// </summary>
     public int Shot { get; private set; }
 
+    /// <summary>The <see cref="Shot"/> the level chase's last hand-over past vertical flight made,
+    /// which the comfort fade holds longer (<c>XrRig.HandOverCut</c>).</summary>
+    public int HandOverShot { get; private set; } = -1;
+
     // The radius every forward-facing external pose reads. _radius itself never carries either
     // term; the look-behind takes its own bounds and no zoom at all.
     private float EffectiveRadius =>
@@ -695,7 +699,11 @@ public sealed class CameraController
             {
                 // The level chase's hand-over past vertical flight is a cut, so the comfort fade covers it.
                 var axes = XrMount.Unrolled(attitude, _xrChaseShot == Shot ? _xrChaseRight : null, out bool handOver);
-                Shot += handOver ? 1 : 0;
+                if (handOver)
+                {
+                    HandOverShot = ++Shot;
+                }
+
                 (_xrChaseRight, _xrChaseShot) = (axes.X, Shot);
                 mount = XrMount.Chase(planePos, axes, VrChaseOffset(_camParams));
             }

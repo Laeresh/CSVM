@@ -31,6 +31,10 @@ public interface IXrInterior
 /// </summary>
 public sealed class XrRig
 {
+    /// <summary>The <see cref="Cut"/> cause of the level chase's hand-over past vertical flight,
+    /// whose fade holds longer.</summary>
+    public const string HandOverCut = "the level chase's hand-over";
+
     private readonly Camera3D _fallback;
     private readonly Func<FlightController, IXrInterior?> _interiorOf;
     private PlayerRig? _pane;
@@ -205,7 +209,7 @@ public sealed class XrRig
         Anchor = anchor;
         string? why = !ReferenceEquals(pilot, was.Pilot) ? "a new aircraft"
             : _shot.Owns != was.Owns ? (_shot.Owns ? "the pilot's camera back" : "another owner took the camera")
-            : _shot.Shot != was.Shot ? "the camera cut"
+            : _shot.Shot != was.Shot ? (views?.HandOverShot == _shot.Shot ? HandOverCut : "the camera cut")
             : anchor != was.Anchor && !mount.IsEqualApprox(wasMount) ? $"{was.Anchor} to {anchor}"
             : null;
         if (why == null)
