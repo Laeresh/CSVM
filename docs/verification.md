@@ -255,6 +255,12 @@ member, and it does not go here.
   left all 19 shots hash-identical, `c5-city-night` included, whose camera stands 178 m up while
   the glow's authored fade closes it out by 150 m.
 
+- **GOLD-20**, **Two blended surfaces of one mesh instance at one render priority draw in an order
+  taken from the whole scene's cull output; before blaming a change for a small move, check whether
+  the moved pixels sit on such a pair.** Seven invisible boxes parked 100 km below C1 moved
+  `c1-rocket-hit-enhanced` by 3 pixels at the radio tower's two alpha sheets, as
+  `threading/worker_pool/max_threads=2` does (`analysis/goldens/README.md`).
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**
