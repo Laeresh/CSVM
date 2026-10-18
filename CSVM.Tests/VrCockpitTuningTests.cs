@@ -154,17 +154,17 @@ public class VrCockpitTuningTests
         byte[] file = File.ReadAllBytes(Shipped);
         var entry = new VrCockpit(0.875f, 0.06f);
 
-        Assert.True(VrCockpitTuning.TryRewrite(file, "player_warhawk", entry, out var rewritten, out var why), why);
+        Assert.True(VrCockpitTuning.TryRewrite(file, "player_bhawk", entry, out var rewritten, out var why), why);
 
         string before = Encoding.UTF8.GetString(file);
         string after = Encoding.UTF8.GetString(rewritten);
         var problems = new List<string>();
         var table = VrCockpits.Parse(rewritten, problems);
         Assert.Empty(problems);
-        Assert.Equal(entry, table.For("player_warhawk"));
-        Assert.Equal(VrCockpit.Default, table.For("player_bhawk"));
-        const string Was = "\"player_warhawk\": {\n      \"interiorScaleFactor\": 1.0,\n      \"eyeOffsetZ\": 0.0,\n";
-        const string Now = "\"player_warhawk\": {\n      \"interiorScaleFactor\": 0.875,\n      \"eyeOffsetZ\": 0.06,\n";
+        Assert.Equal(entry, table.For("player_bhawk"));
+        Assert.Equal(VrCockpit.Default, table.For("player_pfighter"));
+        const string Was = "\"player_bhawk\": { \"interiorScaleFactor\": 1.0, \"eyeOffsetZ\": 0.0 }";
+        const string Now = "\"player_bhawk\": { \"interiorScaleFactor\": 0.875, \"eyeOffsetZ\": 0.06 }";
         string beforeLf = before.Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.Contains(Was, beforeLf, StringComparison.Ordinal);
         Assert.Equal(beforeLf.Replace(Was, Now, StringComparison.Ordinal), after.Replace("\r\n", "\n", StringComparison.Ordinal));

@@ -1,31 +1,15 @@
 {
-  "_about": "Per-plane VR cockpit data, read once per VR session by src/Flight/Hud/VrCockpits.cs and applied only while a headset (or the --xr-sim stand-in) draws the interior; a flat launch never reads it. interiorScaleFactor multiplies the cockpit1 mount's scale (PlaneBuilder.InteriorScale, 0.04 m per interior unit). eyeOffsetZ moves the seated eye in metres along the mount's own Z axis, positive aft; eyeOffsetY, optional, along its Y, positive up. The collimated reticle keeps the gunsight on the guns from either. A plane left out, or a field left out, takes 1.0 and 0.0. Each plane takes the values judged at the headset with --xr-tune, which writes them here; the _proposed notes are the measured starting points to try. Fields and ranges: docs/architecture/Flight.md, src/Flight/Hud/VrCockpits.cs.",
+  "_about": "Per-plane VR cockpit data, read once per VR session by src/Flight/Hud/VrCockpits.cs and applied only while a headset (or the --xr-sim stand-in) draws the interior; a flat launch never reads it. interiorScaleFactor multiplies the cockpit1 mount's scale (PlaneBuilder.InteriorScale, 0.04 m per interior unit). eyeOffsetZ moves the seated eye in metres along the mount's own Z axis, positive aft; eyeOffsetY, optional, along its Y, positive up. The collimated reticle keeps the gunsight on the guns from either. A plane left out, or a field left out, takes 1.0 and 0.0. Each plane takes the values judged at the headset with --xr-tune, which writes them here. Fields and ranges: docs/architecture/Flight.md, src/Flight/Hud/VrCockpits.cs.",
 
   "planes": {
     "player_bhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_pfighter": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_fury": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
-    "player_warhawk": {
-      "interiorScaleFactor": 1.0,
-      "eyeOffsetZ": 0.0,
-      "_proposed": "eyeOffsetZ 0.06: the dials sit 0.32 m from the eye, under the 0.33 m reach floor; 6 cm aft gives 0.37 m and leaves 0.21 m to the head plate at 0.27 m behind the eye, which VR leaves out."
-    },
-    "player_autogyro": {
-      "interiorScaleFactor": 1.0,
-      "eyeOffsetZ": 0.0,
-      "_proposed": "an open tub 1.57 m wide; try interiorScaleFactor 0.875 (0.035 m per unit) first if it reads big."
-    },
-    "player_avenger": {
-      "interiorScaleFactor": 1.0,
-      "eyeOffsetZ": 0.0,
-      "_proposed": "the lowest median of the four cues; try interiorScaleFactor 0.875 first if it reads big."
-    },
-    "player_balmoral": {
-      "interiorScaleFactor": 1.0,
-      "eyeOffsetZ": 0.0,
-      "_proposed": "a tub 1.44 m wide; try interiorScaleFactor 0.875 first. Its interior wings read at half the hull's span at any scale."
-    },
-    "player_brigand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_warhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.18 },
+    "player_autogyro": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_avenger": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_balmoral": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_brigand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.06 },
     "player_fbrand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_kestrel": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_peacemaker": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 }
