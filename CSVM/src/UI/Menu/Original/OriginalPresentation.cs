@@ -38,8 +38,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Dogfight screen.</summary>
     public const string DogfightAid = "dogfight";
 
-    /// <summary>The Free Flight aid's argument that picks the first chapter and aircraft for
-    /// seat 0, so with <c>--debug-join</c> the per-seat aircraft screen shows.</summary>
+    /// <summary>The Free Flight aid's argument that presses FLY's walk, so with <c>--debug-join</c>
+    /// the per-seat aircraft screen shows.</summary>
     public const string SeatPlaneAid = "seat-plane";
 
     /// <summary>The aid value that opens the Options screen.</summary>
@@ -537,14 +537,14 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Campaign.OpenCampaign();
                     break;
                 case FreeFlightAid:
-                    _shell.Open(OriginalScreen.FreeFlight);
+                    _shell.LocalLobby.Enter(OriginalScreen.FreeFlight);
                     break;
                 case FreeFlightAid + ":" + SeatPlaneAid:
-                    _shell.Open(OriginalScreen.FreeFlight);
-                    _shell.PoseSortiePick();
+                    _shell.LocalLobby.Enter(OriginalScreen.FreeFlight);
+                    _shell.PoseSeatWalk();
                     break;
                 case DogfightAid:
-                    _shell.Open(OriginalScreen.Dogfight);
+                    _shell.LocalLobby.Enter(OriginalScreen.Dogfight);
                     break;
                 case OptionsAid:
                     _shell.Open(OriginalScreen.Options);

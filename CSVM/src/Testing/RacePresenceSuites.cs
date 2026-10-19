@@ -18,7 +18,7 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>Race presence, the rules a race session puts on its pilots. No aircraft rams another and
-/// nobody is armed. Another pilot is labelled but never a target, and draws as a ghost that fades by
+/// no round reaches one. Another pilot is labelled but never a target, and draws as a ghost that fades by
 /// the drawing camera's distance. Each rule is checked on a pair built through the session's roster
 /// with the race flag set, against the same pair built without it.</summary>
 internal static class RacePresenceSuites
@@ -47,8 +47,8 @@ internal static class RacePresenceSuites
         "two seats built through the session roster with the race flag set and without it: in the "
         + "race a seat flown nose on through a parked one passes through with no damage, no crash and "
         + "neither body on the aircraft layer, while without the flag the same pass rams (the "
-        + "control); a race seat holding both triggers is unarmed and puts no round in the pool "
-        + "while the control fires; the other race pilot is off every target cycle yet labelled, "
+        + "control); a race seat holding both triggers fires through the parked one, which loses "
+        + "no health, while the control fires too; the other race pilot is off every target cycle yet labelled, "
         + "while the control offers it on the Enemy cycle; and only the race build stamps the ghost "
         + "on the other airframe and compiles the ghost into its shaders")]
     internal static void RacePresence(TestContext ctx)
@@ -72,9 +72,9 @@ internal static class RacePresenceSuites
                 $"in the race the flown seat passes {race.Closest:0.00} m from the parked one's origin with no ram: health {race.Health}, crashed={race.Crashed}, bodies off the aircraft layer={race.BodiesOff}");
             ctx.Check(plain.Rammed,
                 $"ABLE-TO-FAIL CONTROL: without the race flag the same pass rams, stopped {plain.Closest:0.00} m short: health {plain.Health}, crashed={plain.Crashed}");
-            ctx.Check(race.Unarmed && race.Rounds == 0,
-                $"a race seat holding both triggers is unarmed, no fire control and no weapon gauge, and puts {race.Rounds} round(s) in the pool");
-            ctx.Check(!plain.Unarmed && plain.Rounds > 0,
+            ctx.Check(race.Armed && race.Rounds > 0 && race.FireLost == 0f && !race.FireCrashed,
+                $"a race seat holding both triggers fires {race.Rounds} round(s) through the parked one, which loses {race.FireLost:0.#} health (crashed={race.FireCrashed})");
+            ctx.Check(plain.Armed && plain.Rounds > 0,
                 $"ABLE-TO-FAIL CONTROL: the plain seat holding the same triggers fires {plain.Rounds} round(s)");
             ctx.Check(!race.Offered,
                 $"in the race the other pilot is on no target cycle: enemy {race.EnemyCount}, ally {race.AllyCount}");
@@ -92,7 +92,7 @@ internal static class RacePresenceSuites
             textures.Dispose();
         }
 
-        ctx.Note($"a race seat neither rams, fires nor targets another, and only the race ghosts it");
+        ctx.Note($"a race seat neither rams, shoots nor targets another, and only the race ghosts it");
     }
 
     [Suite("race-ghost-fade",
@@ -171,7 +171,7 @@ internal static class RacePresenceSuites
             Targets(flown, parked, pool, ref result);
             Ghost(parked, ref result);
             Ram(flown, parked, ref result);
-            Fire(flown, pool, ref result);
+            Fire(flown, parked, pool, ref result);
             return result;
         }
         finally
@@ -219,9 +219,12 @@ internal static class RacePresenceSuites
     private static float Lost(FlightController rig) =>
         rig.Damage is { } d ? d.WholeHealthMax - d.WholeHealth : 0f;
 
-    // Both triggers held through the scripted switches for a second, from a fresh airframe.
-    private static void Fire(FlightController flown, ProjectilePool pool, ref PairResult r)
+    // Both triggers held through the scripted switches for a second, from a fresh airframe nose on
+    // at the parked one. The parked one's health and crash state are read across the burst.
+    private static void Fire(FlightController flown, FlightController parked, ProjectilePool pool, ref PairResult r)
     {
+        float lostBefore = Lost(parked);
+        bool crashedBefore = parked.Crashed;
         flown.Rerun();
         flown.AutoFire = true;
         flown.AutoFireRockets = true;
@@ -230,6 +233,8 @@ internal static class RacePresenceSuites
         for (int i = 0; i < 60; i++)
         {
             flown.SimStep(Dt);
+            parked.SimStep(Dt);
+            pool.SimStep(Dt);
             rounds.Clear();
             pool.CollectLiveRounds(rounds);
             most = Mathf.Max(most, rounds.Count);
@@ -238,8 +243,9 @@ internal static class RacePresenceSuites
         flown.AutoFire = false;
         flown.AutoFireRockets = false;
         r.Rounds = most;
-        r.Unarmed = flown.Loadout == null && flown.PilotHud.Gauges is not { GunGauge: not null }
-            && flown.PilotHud.Gauges is not { MissileGauge: not null };
+        r.Armed = flown.Loadout != null && flown.PilotHud.Gauges is { GunGauge: not null };
+        r.FireLost = Lost(parked) - lostBefore;
+        r.FireCrashed = parked.Crashed && !crashedBefore;
     }
 
     // Seat 0's own target pool over the session's aircraft roster, and its HUD's race labels.
@@ -317,7 +323,9 @@ internal static class RacePresenceSuites
         public bool BodiesOff;
         public string Health;
         public int Rounds;
-        public bool Unarmed;
+        public bool Armed;
+        public float FireLost;
+        public bool FireCrashed;
         public bool Offered;
         public bool Labelled;
         public string Label;

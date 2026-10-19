@@ -18,7 +18,7 @@ public enum NetRaceRun : byte
     /// <summary>The run cleared every zone, in the run time carried.</summary>
     Finished = 3,
 
-    /// <summary>The run was thrown away by a rerun.</summary>
+    /// <summary>The run was thrown away by a rerun, or stopped by a crash in the final run.</summary>
     Abandoned = 4,
 }
 

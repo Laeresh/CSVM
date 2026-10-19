@@ -30,14 +30,16 @@ public sealed class ControlSurfaceAnimator
 
     public int Count => _surfaces.Count;
 
-    /// <summary>Walks the built plane tree and collects every control-surface node;
-    /// null if the model has none (the autogyro has only its two ailerons, absence
-    /// of any kind is normal and per-surface).</summary>
+    /// <summary>Walks the built plane tree and collects every control-surface node the original's
+    /// numbered lists reach (<see cref="ControlSurfaces.InNumbering"/>). Null if the model has none
+    /// (the autogyro has only its two ailerons, absence of any kind is normal and per-surface).</summary>
     public static ControlSurfaceAnimator? Build(Node3D planeRoot)
     {
         var surfaces = new List<Surface>();
         foreach (var child in planeRoot.GetChildren())
             Collect(child, Transform3D.Identity, surfaces, interior: false);
+        var names = surfaces.Select(s => s.Node.Name.ToString()).ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+        surfaces.RemoveAll(s => !ControlSurfaces.InNumbering(s.Node.Name, names));
         return surfaces.Count > 0 ? new ControlSurfaceAnimator(surfaces) : null;
     }
 

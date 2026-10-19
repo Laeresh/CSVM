@@ -28,14 +28,20 @@ public enum PlaneRefusal : byte
 }
 
 /// <summary>
-/// One seat's plane build. A guest sends its own under <see cref="Mine"/> with its pick, and a host
-/// sends every seat's to every guest at a launch, before the session's opener. A null
-/// <see cref="Build"/> is a stock pick, which clears an earlier build. Kept in the lobby.
+/// One seat's plane build. A guest sends each of its seats' own with its pick, under
+/// <see cref="MineAt"/>. A host sends every seat's to every guest at a launch, before the session's
+/// opener. A null <see cref="Build"/> is a stock pick, which clears an earlier build. Kept in the
+/// lobby.
 /// </summary>
 public readonly record struct PlaneBuildMessage(byte Seat, NetPlaneBuild? Build) : INetMessage<PlaneBuildMessage>
 {
-    /// <summary>The seat a guest's own pick names, since a guest has no seat until launch.</summary>
+    /// <summary>The seat a guest's first seat's pick names, since a guest has no seat until launch.
+    /// Its further seats count down from here.</summary>
     public const byte Mine = byte.MaxValue;
+
+    /// <summary>The lowest seat byte a guest's own pick names, its fourth seat's. Every launch seat
+    /// lies below it.</summary>
+    public const byte LowestMine = Mine - CoopPickMessage.MaxLocal;
 
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 2 + NetPlaneBuild.Bytes + NetPlaneBuild.NameBytes;
@@ -45,6 +51,15 @@ public readonly record struct PlaneBuildMessage(byte Seat, NetPlaneBuild? Build)
 
     /// <inheritdoc/>
     public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>The seat byte a guest's seat <paramref name="local"/> names its own build under,
+    /// counted from 0 among its own. Throws past the fourth seat, which has no byte.</summary>
+    public static byte MineAt(int local) => local is >= 0 and <= CoopPickMessage.MaxLocal
+        ? (byte)(Mine - local)
+        : throw new ArgumentOutOfRangeException(nameof(local), local, "a machine flies at most four seats");
+
+    /// <summary>The guest's own seat a seat byte names, or -1 for a launch seat.</summary>
+    public static int LocalOf(byte seat) => seat >= LowestMine ? Mine - seat : -1;
 
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out PlaneBuildMessage message)
@@ -333,7 +348,7 @@ public sealed class NetPlaneBuild : IEquatable<NetPlaneBuild>
     public const int Bytes = 26;
 
     /// <summary>How many name bytes a build carries.</summary>
-    public const int NameBytes = SeatRosterMessage.CallsignBytes;
+    public const int NameBytes = 16;
 
     // The stock builds' gun ids, slot by slot, read out of the template table at 0x00619f58.
     private static readonly byte[,] StockGuns =

@@ -2077,7 +2077,7 @@ judgement from headset density, TUNE for the author).** Tools and captures are i
   (272 px, at most 4 levels, on the collimated reticle's lines alone). The two Cockpit shots show no
   panel texel (the surface was read back fully clear at frame 100); hiding the quad restores both
   hashes while the HUD stays on the surface, and the same move remains with the quad's screen read
-  removed (verification GOLD-20, and the finding for C13b below). `c1-cockpit-xr-sim-far`,
+  removed (verification GOLD-21, and the finding for C13b below). `c1-cockpit-xr-sim-far`,
   `stage-gunsight-xr-sim` and `menu-original-xr-sim` are unmoved; the 24 flat shots are
   hash-identical.
 

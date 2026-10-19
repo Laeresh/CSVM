@@ -724,28 +724,6 @@ internal static class OrdnanceSuites
         ctx.Check(weapons.All.Count(w => w.Targetable) == 1 && weapons.All.Count(w => w.FlyoutHealth is > 0) == 1,
             $"and nothing else in the table authors either key");
 
-        // --- the pair's arithmetic, off the round's own state ------------------------------------
-        var seeded = ProjectilePool.SeedFlyout(torpedo, 3);
-        ctx.Check(seeded is { Targetable: true, Armour: 0f } && seeded.Health == pool0 && seeded.HealthMax == pool0
-                  && seeded.Name == $"{torpedo.Id}#3",
-            $"a torpedo's pair seeds from weapon +0x8c/+0x90: armour {seeded?.Armour} (the parser's literal 0) and health {seeded?.Health}");
-        ctx.Check(ProjectilePool.SeedFlyout(rocket, 0) == null,
-            $"an ordinary rocket gets no flyout state at all, which is the −1.0 sentinel's outcome without the per-round allocation");
-        seeded!.Spend(999f, 4f);
-        ctx.Check(seeded.Armour == 0f && seeded.Health == pool0 - 4f,
-            $"the first hit spends HEALTH directly because the armour pool is already empty health={seeded.Health}");
-        seeded.Spend(0f, 100f);
-        ctx.Check(seeded is { Health: 0f, Destroyed: true },
-            $"an overkill hit clamps the pool at zero rather than going negative, which is what the equality test reads");
-
-        // The sentinel, on a lab def carrying TARGETABLE and no FLYOUT_HEALTH: the pool the original
-        // seeds to −1.0 must never satisfy the == 0.0 test however hard it is hit.
-        var labSentinel = ProjectilePool.SeedFlyout(
-            new WeaponDef { Id = "lab_targetable", Targetable = true }, 0);
-        labSentinel!.Spend(500f, 500f);
-        ctx.Check(labSentinel is { Health: ProjectilePool.Flyout.NotShootable, Destroyed: false },
-            $"a TARGETABLE round with no FLYOUT_HEALTH holds the −1.0 sentinel and is never destroyed health={labSentinel.Health}");
-
         // --- the live pool: admission, the cycle, and the end -----------------------------------
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -758,6 +736,29 @@ internal static class OrdnanceSuites
             };
             pool = live;
             ctx.Host.AddChild(live);
+
+            // --- the pair's arithmetic, off the round's own state --------------------------------
+            var seeded = live.SeedFlyout(torpedo, 3);
+            ctx.Check(seeded is { Targetable: true, Armour: 0f } && seeded.Health == pool0 && seeded.HealthMax == pool0
+                      && seeded.Name == $"{torpedo.Id}#3",
+                $"a torpedo's pair seeds from weapon +0x8c/+0x90: armour {seeded?.Armour} (the parser's literal 0) and health {seeded?.Health}");
+            ctx.Check(live.SeedFlyout(rocket, 0) == null,
+                $"an ordinary rocket gets no flyout state at all, which is the −1.0 sentinel's outcome without the per-round allocation");
+            seeded!.Spend(999f, 4f);
+            ctx.Check(seeded.Armour == 0f && seeded.Health == pool0 - 4f,
+                $"the first hit spends HEALTH directly because the armour pool is already empty health={seeded.Health}");
+            seeded.Spend(0f, 100f);
+            ctx.Check(seeded is { Health: 0f, Destroyed: true },
+                $"an overkill hit clamps the pool at zero rather than going negative, which is what the equality test reads");
+
+            // The sentinel, on a lab def carrying TARGETABLE and no FLYOUT_HEALTH. The pool the
+            // original seeds to −1.0 must never satisfy the == 0.0 test, however hard it is hit.
+            var labSentinel = live.SeedFlyout(
+                new WeaponDef { Id = "lab_targetable", Targetable = true }, 0);
+            labSentinel!.Spend(500f, 500f);
+            ctx.Check(labSentinel is { Health: ProjectilePool.Flyout.NotShootable, Destroyed: false },
+                $"a TARGETABLE round with no FLYOUT_HEALTH holds the −1.0 sentinel and is never destroyed health={labSentinel.Health}");
+
 
             var origin = new Vector3(3000f, 2000f, 0f);
             var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);

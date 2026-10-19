@@ -462,5 +462,8 @@ public sealed partial class SpectatorCamera : Node
         _padActions.Poll(_padState);
         return _padActions.Held(action);
     }
+
+    // The target key's press, for a suite whose seat has no device to raise the event on.
+    internal void PressLockForTest() => CycleLock();
 #pragma warning restore SA1202
 }

@@ -604,13 +604,6 @@ public sealed partial class ProjectilePool : Node3D
     public static bool FlyoutUnhittableAtLaunch(WeaponDef weapon) =>
         weapon.FlyoutHealth is > 0 && weapon.RangeMinimum is > 0f;
 
-    /// <summary>Seeds one round's shootable-flyout state, or null for a round that is neither
-    /// shootable nor targetable (every gun round, and every ordnance type but the torpedo), which
-    /// is what keeps this allocation off the hot path. <paramref name="slot"/> only names the
-    /// round for <c>--target=</c>.</summary>
-    public static Flyout? SeedFlyout(WeaponDef weapon, int slot) =>
-        weapon.FlyoutHealth is > 0 || weapon.Targetable ? new Flyout(weapon, slot) : null;
-
     /// <summary>The splash share at a squared surface distance: <c>1 − d² / IMPACT_PROXIMITY²</c>
     /// (<c>FUN_005acac0</c>, docs/org/ordnanceTypes.md "Half two, the splash"), applied to both
     /// damage pools. Quadratic in distance, so 0.75 at half the radius where a linear curve gives
@@ -760,28 +753,26 @@ public sealed partial class ProjectilePool : Node3D
         return null;
     }
 
+    /// <summary>Seeds one round's shootable-flyout state. It is null for a round that is neither
+    /// shootable nor targetable (every gun round, and every ordnance type but the torpedo).
+    /// That keeps this allocation off the hot path. The slot names the round for
+    /// <c>--target=</c> and is where the state reads the round's live pose in this pool.</summary>
+    public Flyout? SeedFlyout(WeaponDef weapon, int slot) =>
+        weapon.FlyoutHealth is > 0 || weapon.Targetable ? new Flyout(weapon, slot, this) : null;
+
     /// <summary>Appends this pool's live rounds to the engine's fourth candidate list: a round is on
     /// it when its def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/> OR
     /// <c>TARGETABLE</c>, which are <c>FUN_00441830</c>'s two independent reasons to wrap a round.
     /// Reads the round's own <c>Team</c>, stamped once at <see cref="Spawn"/>; a round nobody owns
     /// lands on <see cref="AimAssist.NeutralTeam"/> and is rejected by the scorer's team gate.</summary>
-    public void CollectFusedOrdnance(AimCandidateSet into)
-    {
-        for (int i = 0; i < _proj.Length; i++)
-        {
-            ref var p = ref _proj[i];
-            if (!p.Alive || (p.Weapon.DetonationDistance is not > AimAssist.MinFuseDistance
-                             && !p.Weapon.Targetable))
-            {
-                continue;
-            }
-            // The SOURCE is the round's flyout state, present only for a TARGETABLE round: it is
-            // the identity the player's target registry holds a selection by, and a merely fused
-            // round hands null, which is the admission byte clear (FUN_00441830).
-            into.AddOrdnance(p.Pos, WorldVelocity(in p), p.Team,
-                source: p.Shootable is { Targetable: true } ? p.Shootable : null);
-        }
-    }
+    public void CollectFusedOrdnance(AimCandidateSet into) =>
+        CollectOrdnance(into, targetableOnly: false);
+
+    /// <summary>Appends every live <c>TARGETABLE</c> round, its flyout state as the source. This is
+    /// the fourth list the AI pilot and the turret walk, which skips a wrapper whose <c>+0x6c</c>
+    /// byte is clear. Decode: docs/org/aiPilot.md "The fourth list".</summary>
+    public void CollectTargetableOrdnance(AimCandidateSet into) =>
+        CollectOrdnance(into, targetableOnly: true);
 
     /// <summary>Appends every live round's flyout state, in slot order, skipping a round carrying
     /// neither <c>FLYOUT_HEALTH</c> nor <c>TARGETABLE</c>. The seam a scripted run reads the health
@@ -951,8 +942,22 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Registers the session's world emplacements for
-    /// <see cref="CollectTurrets"/>, the same one-live-roster rule as the aircraft list.</summary>
+    /// <summary>The world emplacements, narrowed to those a turret on <paramref name="team"/> can pick,
+    /// as <see cref="CollectTurretStructures"/> narrows. The team is read before the engine calls; the
+    /// turret's own pass applies the team rule. A carried gunner is never one (docs/org/targeting.md).</summary>
+    public void CollectTurretEmplacements(AimCandidateSet into, int team)
+    {
+        foreach (var turret in _worldTurrets)
+        {
+            if (AimAssist.Hostile(team, turret.Team) && turret.Alive)
+            {
+                into.AddTurret(turret.WorldPosition, turret.PlatformVelocity, turret.Team, live: true, turret);
+            }
+        }
+    }
+
+    /// <summary>Registers the session's world emplacements for <see cref="CollectTurrets"/> and
+    /// <see cref="CollectTurretEmplacements"/>, the same one-live-roster rule as the aircraft list.</summary>
     public void RegisterWorldTurrets(IReadOnlyList<TurretController> turrets) =>
         _worldTurrets.AddRange(turrets);
 
@@ -2225,6 +2230,24 @@ public sealed partial class ProjectilePool : Node3D
             ApplyDamage(weapon, outcome, point, normal, collider is AircraftBody ? null : collider, shooter, owner);
     }
 
+    // Both walks of the fourth list, bounded by the high-water slot: no live round stands past it.
+    // The SOURCE is the round's flyout state, present only for a TARGETABLE round, the identity a
+    // selection is held by. A merely fused round hands null: its admission byte is clear.
+    private void CollectOrdnance(AimCandidateSet into, bool targetableOnly)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            var round = p.Shootable is { Targetable: true } admitted ? admitted : null;
+            bool fused = p.Weapon.DetonationDistance is > AimAssist.MinFuseDistance;
+            if (!p.Alive || (round == null && (targetableOnly || !fused)))
+            {
+                continue;
+            }
+            into.AddOrdnance(p.Pos, WorldVelocity(in p), p.Team, source: round);
+        }
+    }
+
     // The nearest live flyout the segment from→to passes through, or null. Kept in the pool rather
     // than on a Godot body: the engine has ONE intersect database and its swept query finds a
     // flyout node in it exactly as it finds a wall, so the two answers compete on distance
@@ -2407,7 +2430,7 @@ public sealed partial class ProjectilePool : Node3D
             foreach (var plane in _aircraft)
             {
                 var rig = plane.Rig;
-                if (!rig.InPlay)
+                if (!rig.Shootable)
                     continue;
                 float distanceSq = rig.WorldPosition.DistanceSquaredTo(cloud.Centre);
                 if (distanceSq >= cloud.RadiusSq)
@@ -2437,7 +2460,7 @@ public sealed partial class ProjectilePool : Node3D
         float best = float.PositiveInfinity;
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || plane.Rig.Team == team || !plane.Rig.InPlay)
+            if (plane.PlayerIndex == shooter || plane.Rig.Team == team || !plane.Rig.Shootable)
                 continue;
             // Cheap reject: the segment cannot come within fuse range of any box while it stays
             // outside the plane's bounding sphere by more than that range.
@@ -2694,7 +2717,7 @@ public sealed partial class ProjectilePool : Node3D
         _blastCandidates.Clear();
     }
 
-    // Every registered flying plane inside the radius, never one out of play, and never the
+    // Every registered flying plane inside the radius, never one out of play or racing, and never the
     // shooter's own on the damage pass. The fuse's roster-walk caveat applies. Each is measured to
     // the nearest point on its collision boxes (0 inside, the engulf clamp). The hit lands at that
     // box, so part mapping and kill attribution run the direct-hit path. ⚠ Keep the damage pass's
@@ -2704,7 +2727,7 @@ public sealed partial class ProjectilePool : Node3D
     {
         foreach (var plane in _aircraft)
         {
-            if ((plane.PlayerIndex == shooter && !includeShooter) || !plane.Rig.InPlay)
+            if ((plane.PlayerIndex == shooter && !includeShooter) || !plane.Rig.Shootable)
                 continue;
             int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
             if (shapeIdx < 0 || distance * distance >= radiusSq)
@@ -3420,8 +3443,13 @@ public sealed partial class ProjectilePool : Node3D
         /// against zero safe on a round that was never shootable.</summary>
         public const float NotShootable = -1f;
 
-        internal Flyout(WeaponDef weapon, int slot)
+        private readonly ProjectilePool _pool;
+        private readonly int _slot;
+
+        internal Flyout(WeaponDef weapon, int slot, ProjectilePool pool)
         {
+            _pool = pool;
+            _slot = slot;
             Weapon = weapon;
             Targetable = weapon.Targetable;
             Name = $"{weapon.Id}#{slot}";
@@ -3454,6 +3482,15 @@ public sealed partial class ProjectilePool : Node3D
 
         /// <summary>False once the round has left the pool, so a stale selection drops.</summary>
         public bool Live { get; internal set; } = true;
+
+        /// <summary>The live round's position, the wrapper's <c>+0x00</c> virtual (round
+        /// <c>+0x48</c>); zero once the round has left the pool.</summary>
+        public Vector3 Position => Live ? _pool._proj[_slot].Pos : Vector3.Zero;
+
+        /// <summary>The live round's world velocity, the wrapper's <c>+0x04</c> virtual (round
+        /// <c>+0x60</c>), which an AI scorer's closing term dots. Zero once the round has left the
+        /// pool.</summary>
+        public Vector3 Velocity => Live ? WorldVelocity(in _pool._proj[_slot]) : Vector3.Zero;
 
         /// <summary>Whether the per-frame test <c>FUN_005af720</c> runs before anything else has
         /// tripped: health exactly zero. A sentinel round never satisfies it.</summary>

@@ -1,15 +1,15 @@
 ---
 name: backlog
-description: Explain a backlog item in plain language — its goal, the problem it solves, its traps, how it gets done, and what it's related to; then decode it out of `crimson.exe`, and make the fix in the same session when it is localized. Use when the user names a BL-NNN item or a GitHub issue (#N, "issue N"), asks what a backlog entry or issue means, or asks to fix one.
+description: Explain a backlog item in plain language — its goal, the problem it solves, its traps, how it gets done, and what it's related to; then decode it out of `crimson.exe`, and make the fix in the same session when it is localized. Use when the user names a GitHub issue (#N, "issue N") or a historical BL-NNN item, asks what a backlog issue means, or asks to fix one.
 ---
 
-Explain one backlog item so it can be understood cold, months later, without re-reading 1800 lines
-of prose or chasing its references by hand. An item is either a `BL-NNN` entry in `backlog.md`
-(filed before the tracker moved) or a GitHub issue on `Laeresh/CSVM` carrying the `backlog` label;
-`docs/agents/issue-tracker.md` is the contract for the latter and this skill follows it. Wherever
-this file says "the entry", an issue's body plus its comments is the entry.
+Explain one backlog item so it can be understood cold, months later, without re-reading a long
+thread or chasing its references by hand. An item is a GitHub issue on `Laeresh/CSVM` carrying the
+`backlog` label; `docs/agents/issue-tracker.md` is the contract and this skill follows it. Wherever
+this file says "the entry", the issue's body plus its comments is the entry. A `BL-NNN` id is a
+closed historical item, explained from its commits (§1).
 
-The explanation phase is **read-only**: never edit `backlog.md`, never build, never run tests. That
+The explanation phase is **read-only**: never edit an issue, never build, never run tests. That
 holds for the whole of §1–§4, and for §5's decode, which runs only after the user picks the decode
 handoff and whose every write is offered and approved first. The restriction lifts wholesale the
 moment the user picks *work it here* (§6), because that is the work: edits, a build and
@@ -23,36 +23,35 @@ any other tool) to pose one; that turns the text it was meant to close into betw
 the user sees only the question. Menu options are plain text at the end of the message they close.
 
 The sibling skill for **active-plan** items (`A1`, `B11`) is [`/plan-item`](../plan-item/SKILL.md) —
-a `BL-NNN` already scheduled into the active plan is better explained there, since that skill reads
+an issue already scheduled into the active plan is better explained there, since that skill reads
 the plan's ground rules and dependency notes too and can start, close, or defer the item. The
 binary-decode **rule** below (§3's provenance triage, §5's Ghidra read-only charter, its
 what-a-decode-reports contract and its write-it-down contract) is mirrored in that skill; keep those
 in sync. The **handoffs deliberately diverge**, and syncing them is the mistake: a plan item carries
-an Approach and a Verify step to work from, a bare `BL-NNN` carries neither, so this skill sizes the
+an Approach and a Verify step to work from, a bare issue carries neither, so this skill sizes the
 work itself (§3) before it offers to do it.
 
 ## 1. Resolve the item
 
 The argument may be `BL-242`, `#12`, "issue 12", a bare `242`, or a phrase like "rocket pylon".
 
-- `BL-NNN`: grep `backlog.md` for the tag. An exact ID match wins outright — explain that item.
-  IDs are assigned once and never reused or renumbered, so a missing ID means the item was
-  **deleted**, not moved. Say that rather than offering a near-numbered substitute.
-- `#N` or "issue N": run `gh issue view N --comments` and
+- `#N`, "issue N" or a bare number: run `gh issue view N --comments` and
   `gh issue view N --json state,labels,title` via the PowerShell tool. GitHub shares one number
   space across issues and PRs, so if the number is a PR say so and stop; a PR is not an item. A
   closed issue is still explainable: its **Status** is closed, with the closing comment as evidence.
-- A bare number: `backlog.md` first, the issue tracker second. If both exist, say which you took and
-  name the other in one line.
-- A phrase: grep `backlog.md`, and search the tracker with
+- `BL-NNN`: a closed historical item. Read what its commits say with `git log --grep=BL-NNN`
+  (`git log -S'BL-NNN'` when the grep finds nothing) and explain it as history: what it was, how it
+  closed, and the commit that closed it. **Status** is closed; §4's handoff does not apply, and
+  live work that grows out of it is a new issue.
+- A phrase: search the tracker with
   `gh issue list --state open --label backlog --search "<phrase>" --json number,title`. List the few
-  candidates with their section headings or titles and **ask which one**. Never guess silently.
+  candidates with their titles and **ask which one**. Never guess silently.
 
 One item per invocation. If several IDs are given at once, explain them one after another in the
 same reply.
 
-Once the ID is resolved, set the terminal window title to it — `$Host.UI.RawUI.WindowTitle = "BL-NNN"`
-or `"#N"` via the PowerShell tool — so the session is identifiable at a glance. Skip this for a
+Once the ID is resolved, set the terminal window title to it — `$Host.UI.RawUI.WindowTitle = "#N"`
+via the PowerShell tool — so the session is identifiable at a glance. Skip this for a
 multi-ID invocation (no single ID to title the window with).
 
 ## 2. Read it, inline
@@ -60,13 +59,12 @@ multi-ID invocation (no single ID to title the window with).
 Do the reading yourself — no Explore subagent. The item text and code need to stay in context for
 follow-up questions and the handoff.
 
-- Read the entry **and its enclosing section heading** — the heading carries status (e.g. "Merged
-  into `m3-polishing` — pending playtest"). For an issue the status lives in its state, its
-  triage label (`docs/agents/triage-labels.md`) and the comment thread, so read the whole thread,
-  latest comment last; a later comment can overturn the body.
+- Read the whole entry. Its status lives in its state, its triage label
+  (`docs/agents/triage-labels.md`) and the comment thread, so read the whole thread, latest comment
+  last; a later comment can overturn the body.
 - Follow the references the entry actually names: code files and symbols (`AnimRuntime.cs:214-216`,
-  `FlightController.NextArmedHardpoint`), commit messages (`git log --grep=BL-NNN`, or
-  `git log --grep='#N'` for an issue), the archived
+  `FlightController.NextArmedHardpoint`), commit messages (`git log --grep='#N'`, and
+  `git log --grep=BL-NNN` for a historical id the entry cites), the archived
   development log (`git show docs-archive:docs/HISTORY.md`), and doc sections: a module's entry in
   `docs/architecture/<Namespace>.md` (found through the index in `docs/architecture.md`),
   `docs/verification.md`.
@@ -99,7 +97,7 @@ them is noise that trains the reader to skip the flag.
 
 Use these headings, in this order:
 
-- **Status** — one line: still live, or looks landed/superseded. Cite the evidence (section heading,
+- **Status** — one line: still live, or looks landed/superseded. Cite the evidence (issue state,
   a landing commit or an entry in the archived development log, a merged-and-pending-playtest table).
 - **Goal** — what will be true when the item is done.
 - **The problem** — what's wrong today, and why it matters at the controls.
@@ -123,8 +121,7 @@ Use these headings, in this order:
   adjacency guessing; don't invent links nobody authored.
 
 If the entry looks stale, already landed, or self-contradictory, say so under **Status** and *offer*
-to fix the entry — write nothing to `backlog.md`, and post no issue comment, without approval. For
-an issue the fix is a comment (`gh issue comment N --body-file <file>`), never a silent body edit;
+to fix the entry — post no issue comment without approval. The fix is a comment (`gh issue comment N --body-file <file>`), never a silent body edit;
 the thread is the record.
 
 ## 4. Offer the handoff
@@ -209,9 +206,7 @@ disk, it goes to whichever fits:
 - **`analysis/<slug>/FINDINGS.md`** when it does not — dated, with the method stated.
 
 **In either case, also offer the one-line amendment to the entry**: the number, its address, and
-the pointer to the write-up. For a `backlog.md` entry that is an edit to its text, with no date,
-since `backlog.md` is live prose and the date of the decode belongs in the commit message that
-lands it. For an issue it is a comment (`gh issue comment N --body-file <file>`), posted after the
+the pointer to the write-up. It is a comment (`gh issue comment N --body-file <file>`), posted after the
 write-up's commit so the comment can cite the commit hash. Without that line the next `/backlog`
 on this item re-reads the stale footage number, re-flags it under **Traps**, and re-recommends the
 decode that was already done.
@@ -228,8 +223,8 @@ is now spent.
 - **`/grill-me` first** — Size: LARGER, then work from what that settles;
 - **`/new-plan`** — the decode opened a body of work rather than a fix;
 - **close it** — the decode settled the item and there is nothing to build: `/close-backlog-item
-  <BL-NNN>` for a `backlog.md` entry, or for an issue the close-out in
-  `docs/agents/issue-tracker.md` (`gh issue close N --comment "..."` citing the write-up's commit);
+  #N`, or the close-out in `docs/agents/issue-tracker.md` (`gh issue close N --comment "..."` citing
+  the write-up's commit);
 - **stop here.**
 
 **Mark exactly one line recommended**, picked from the decode's outcome against §3's **Size**, with a
@@ -248,27 +243,25 @@ decode's write-ups, in one commit window.
 
 - Read each touched module's entry in `docs/architecture/<Namespace>.md`, found through the index in
   `docs/architecture.md`, before modifying that module, then the comments on the members you touch.
-  Dead ends are recorded in the landing commits (`git log --grep=BL-NNN`, or `git log --grep='#N'`),
-  so search those before re-chasing one.
+  Dead ends are recorded in the landing commits (`git log --grep='#N'`, and `git log --grep=BL-NNN`
+  for a historical id the entry cites), so search those before re-chasing one.
 - **Take every value from the extracted JSON or from the decode, never from a guess.** A guessed
   number is the failure §3's provenance flags exist to catch, and it is no better for having arrived
   during the fix instead of during the write-up.
 - Land it complete: the code change, whatever `docs/architecture` or `docs/formats` entry the change
   requires, and `.\RunTests.ps1` green. That runner is the landing gate for anything under `CSVM/`.
-- The verification record goes in the commit message, not into `backlog.md` and not into the docs.
+- The verification record goes in the commit message, not into the issue body and not into the
+  docs.
 
 When it is done, say in one line what `.\RunTests.ps1` reported, a failure included. Then:
 
 - **offer the commit, do not make it.** One line, then stop. Commits happen when the user asks.
-  For an issue, the commit message body must name `#N` so `git log --grep='#N'` finds it.
-- **if the fix resolves a `backlog.md` entry, offer `/close-backlog-item <BL-NNN>`, unmodified.**
-  That skill owns the closure kind, deleting the entry, the closure record in the closing commit's
-  message, retiring any `CAP-nn`/`PT-nn`, and the restated-caveat sweep. Do not pre-empt its
-  closure record.
-- **if the fix resolves an issue, offer the close from `docs/agents/issue-tracker.md`**:
-  `gh issue close N --comment "..."` naming the landing commit, run after that commit exists.
-  Follow-up work left over becomes its own issue with a `⚠ Traps` section, never a comment on the
-  closed one.
+  The commit message body must name `#N` so `git log --grep='#N'` finds it.
+- **if the fix resolves the issue, offer `/close-backlog-item #N`, unmodified.** That skill owns
+  the closure kind, the closing comment (`gh issue close N --comment "..."` naming the landing
+  commit, run after that commit exists), retiring any `CAP-nn`/`PT-nn`, and the restated-caveat
+  sweep. Do not pre-empt its closure record. Follow-up work left over becomes its own issue with a
+  `⚠ Traps` section, never a comment on the closed one.
 
 If the work turns out LARGER than §3 sized it (a new mechanism appears, a fixture is needed, the
 change spreads past the files the entry names), say so and stop rather than pushing through. That

@@ -14,8 +14,7 @@ say nothing about how they are drawn. Our implementation is `CSVM/src/Flight/Wea
 page is the original's runtime: what the engine does with the `FLYOUT MODEL` a weapon names.
 
 ⚠ **This page is a decode, not a proposal.** Where it disagrees with a footage measurement, the
-decode wins and the disagreement is a note (see
-[`video-measurements-unreliable`](../../backlog.md)'s worked case). Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
+decode wins and the disagreement is a note. Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
 
 **The headline: there is no tracer code.** No string, symbol or branch in the executable mentions a
 tracer. A tracer is a piece of *authored geometry*, a 4.5 m crossed-quad streak inside the round's

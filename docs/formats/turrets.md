@@ -220,10 +220,17 @@ axis whose limits are equal is left unrotated.
 
 Three gates, in order:
 
-1. The **`HEALTHY_NODE`** must be alive. If it dies the turret goes permanently quiet. A node
-   under a site the mission's `.gw` switched off (`NodeSetActive off b_turret1`, C3/M03) is out
-   of the world with its subtree, so the gate reads the node's visibility in the tree, never its
-   own flag alone; CSVM's `TurretController.Alive` does the same (`mission-off-turrets` suite).
+1. The **`HEALTHY_NODE`** must be alive. If it dies the turret goes permanently quiet. The gate
+   is the turret's alive byte `+0x6c`, and the original reads the ancestors only on a tick that
+   starts alive ([../org/targeting.md](../org/targeting.md) "What a turret's candidate set
+   holds" decodes both branches). A turret whose own node a `.gw` switched off
+   (`NodeSetActive off b_turret1`, C3/M03) stays quiet. One whose own nodes stay active under an
+   ancestor switched off (a ring under a hidden hull root) is dead on one tick and revived on the
+   next, because `gwNodeSetActive` does not recurse and the revive branch reads no ancestor.
+   ⚠ CSVM's `TurretController.Alive` reads the healthy node's visibility in the tree instead, so
+   any gun under a switched-off site is dead on every tick (`mission-off-turrets` suite). That is a
+   remake-only rule: a gun is no target and fires at nothing while the hull it stands on is
+   unseen.
 2. The **`DEACTIVATE`** node, if the entry names one, must *also* be alive, destroying it
    disables the turret without destroying it. (Unauthored in retail; the mechanism exists.)
 3. **`ACTIVATED`** must be set. **22 entries ship `ACTIVATED 0`** and are inert until something

@@ -158,6 +158,8 @@ internal sealed class NetRaceLink
 
         run.RunStarted += () => Report(seat, NetRaceRun.Started);
         run.RunReset += () => Report(seat, NetRaceRun.Abandoned);
+        // The host stops a run lost in its final run as it stops one thrown away.
+        run.RunStopped += () => Report(seat, NetRaceRun.Abandoned);
         run.ZoneCompleted += zone =>
         {
             for (int i = 0; i < run.Zones.Count; i++)

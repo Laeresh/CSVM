@@ -72,6 +72,7 @@
     "scorch-decals": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "spyglass-sun": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "stunt-race-bot": "makes shader texts no other windowed suite makes",
+    "stunt-race-bot-field": "makes shader texts no other windowed suite makes",
     "stunt-race-bot-menu": "makes shader texts no other windowed suite makes",
     "texture-alpha-nibble": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "versus-local-bot": "makes shader texts no other windowed suite makes",
@@ -84,6 +85,6 @@
     "texture_2d_get \\(\\./servers/rendering/dummy/": "the dummy renderer holds no texture data to read back",
     "(_shaped_text_add_string|_ensure_cache_for_size|_font_get_(ascent|descent)) \\(modules/text_server_adv/": "a headless font has no rasterised size cache, so shaping at a measured size of 0 fails",
     "The new image dimensions must match the texture size\\. at: update \\(scene/resources/image_texture\\.cpp": "a graphics switch re-uploads an alpha-depth texture in place (TextureUpload.Replace), and a headless process reports a size mismatch the windowed battery does not",
-    "Parameter \"(material|m)\" is null\\. at: \\w+ \\(servers/rendering/dummy/storage/(material|mesh)_storage\\.(cpp|h)": "the dummy renderer keeps materials and meshes in RID owners that are not thread-safe in Godot 4.7, so under the separate render thread a lookup intermittently misses a live RID; a game-free GDScript loop reproduces it, and it prints at no fixed count because it is a race (godotengine/godot#121949, fixed by #121958 for 4.8; remove this entry when the project moves to 4.8)"
+    "Parameter \"(material|m)\" is null\\. at: \\w+ \\(servers/rendering/dummy/storage/(material|mesh)_storage\\.(cpp|h)|Condition \"!F\" is true\\. Continuing\\. at: update_end \\(\\./servers/rendering/storage/utilities\\.h": "the dummy renderer keeps materials and meshes in RID owners that are not thread-safe in Godot 4.7, so under the separate render thread a lookup intermittently misses a live RID; a game-free GDScript loop reproduces it, a dependency tracker updated in the same instant can then miss its entry in update_end, and it prints at no fixed count because it is a race (godotengine/godot#121949, fixed by #121958 for 4.8; remove this entry when the project moves to 4.8)"
   }
 }

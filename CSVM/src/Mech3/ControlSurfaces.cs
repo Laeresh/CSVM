@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Godot;
 
@@ -19,6 +21,7 @@ public static class ControlSurfaces
     private static readonly Regex AileronRe = new("^([lr])_aileron[0-9]+$", RegexOptions.IgnoreCase);
     private static readonly Regex ElevatorRe = new("^([lr])_elevator[0-9]*$", RegexOptions.IgnoreCase);
     private static readonly Regex RudderRe = new("^[lr]_rudder([0-9]+|_rotate)$", RegexOptions.IgnoreCase);
+    private static readonly Regex IndexRe = new("^(.*?)([0-9]+)$");
 
     // Side matters on the elevators too: the original mixes a differential roll term into them,
     // so left and right settle at different angles for the same stick.
@@ -34,6 +37,25 @@ public static class ControlSurfaces
             return IsLeft(elev) ? Kind.ElevatorLeft : Kind.ElevatorRight;
         if (RudderRe.IsMatch(name)) return Kind.Rudder;
         return Kind.None;
+    }
+
+    /// <summary>Whether the original's list reaches this surface, counting up from 1 to its first
+    /// missing index. The set is every surface name in the plane, since outside and <c>cockpit1</c>
+    /// share one numbering. The remake-only names (digitless elevators, <c>_rotate</c> rudders)
+    /// stand outside it, always driven and never filling a gap. Decode: docs/org/flightModel.md.
+    /// </summary>
+    public static bool InNumbering(string name, IReadOnlySet<string> planeNames)
+    {
+        var m = IndexRe.Match(name);
+        if (!m.Success)
+            return true;
+        int index = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+        if (index < 1)
+            return false;
+        for (int k = 1; k < index; k++)
+            if (!planeNames.Contains(m.Groups[1].Value + k.ToString(CultureInfo.InvariantCulture)))
+                return false;
+        return true;
     }
 
     /// <summary>The hinge axis in the surface node's local frame: spanwise X for

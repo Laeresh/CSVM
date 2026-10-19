@@ -163,9 +163,10 @@ public sealed partial class ZeppelinRuntime : Node
     }
 
     /// <summary>Completes the record-team fan onto the guns standing on each airship, which is the
-    /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist; a record authoring
+    /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist. A record authoring
     /// no team leaves its guns on their own <c>TURRET</c> default, since substituting one there is
-    /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved.</summary>
+    /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved. Every
+    /// airship's guns also take the round preference its build walk sets (<c>FUN_004bf050</c>).</summary>
     public int FanTeamsOntoTurrets(TurretEmplacementRuntime turrets)
     {
         // Adopted here because the caller holds them, not so a later team write can work: that one
@@ -174,6 +175,8 @@ public sealed partial class ZeppelinRuntime : Node
         int moved = 0;
         foreach (var zep in _live)
         {
+            // Every airship's guns, team or none: the record parse makes this walk unconditionally.
+            turrets.PreferOrdnanceUnder(zep.Host);
             if (zep.Team is not { } team)
             {
                 continue;
@@ -395,11 +398,11 @@ public sealed partial class ZeppelinRuntime : Node
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
 
     /// <summary>Appends every live zeppelin's damage zones (gasbags, engines, cannons) to
-    /// <paramref name="into"/>, one candidate per part, each riding its hull so it carries the
-    /// airship's own velocity rather than zero. A plain list and NOT
-    /// <see cref="AimCandidateSet"/>'s <c>Structures</c>: the only channel by which a structure
-    /// becomes selectable, and the pool takes it only while the pilot's selected ordnance carries
-    /// <c>LOCK_ON</c>, which is what that divergence buys (<c>Flight.Weapons.TargetPool.Rebuild</c>).</summary>
+    /// <paramref name="into"/>, one candidate per part, each carrying its own centre's velocity
+    /// rather than zero. A plain list and NOT <see cref="AimCandidateSet"/>'s <c>Structures</c>:
+    /// this is the only channel by which a structure becomes selectable. The pool takes it only
+    /// while the pilot's selected ordnance carries <c>LOCK_ON</c>, which is what that divergence
+    /// buys (<c>Flight.Weapons.TargetPool.Rebuild</c>).</summary>
     public void CollectTargetParts(List<AimCandidate> into, int team = AimAssist.WorldTeam)
     {
         foreach (var zep in _live)
@@ -408,21 +411,20 @@ public sealed partial class ZeppelinRuntime : Node
             {
                 continue;   // not in the world yet; its script wake-up is what puts it there
             }
-            var vel = zep.Motion.Forward * zep.Motion.Speed;
             int zepTeam = zep.Team ?? team;
             foreach (var inst in zep.GasbagZones.Values)
             {
-                AddPart(into, inst, zepTeam, vel);
+                AddPart(into, inst, zepTeam);
             }
 
             foreach (var inst in zep.EngineZones.Values)
             {
-                AddPart(into, inst, zepTeam, vel);
+                AddPart(into, inst, zepTeam);
             }
 
             foreach (var cannon in zep.CannonZones)
             {
-                AddPart(into, cannon.Instance, zepTeam, vel);
+                AddPart(into, cannon.Instance, zepTeam);
             }
         }
     }
@@ -562,6 +564,7 @@ public sealed partial class ZeppelinRuntime : Node
                 // Placed, not stepped: either waiting on the mission script's WAKEUP_ENEMIES (the
                 // record's own `deactivated`, see Wake) or switched off by Instant Action's own
                 // builder (F12, see Hold).
+                StillParts(zep);
                 continue;
             }
             if (!zep.Dead && Driven(zep.Host))
@@ -604,12 +607,50 @@ public sealed partial class ZeppelinRuntime : Node
                     Log.Info("flight", $"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s pitch {Mathf.RadToDeg(zep.Motion.PitchRad):0.#}° toward node {zep.Motion.Follower.CurrentIndex}{(zep.Motion.Follower.Holding ? ", holding on its stop point" : "")}");
                 }
             }
+            StepPartVelocities(zep, dt);
             PollDamage(zep);
             if (!zep.Dead)
             {
                 StepBroadside(zep, dt);   // F19: a dead zeppelin's cannons go quiet
             }
         }
+    }
+
+    // The decoded per-frame refresh (FUN_004a2730): a part's velocity is its own centre's change
+    // across the step. A part far out on a turning hull is then led along its own track. Zero
+    // on the first step and past the 447 m/s cut, which a re-seated hull's jump trips.
+    private static void StepPartVelocities(LiveZeppelin zep, float dt)
+    {
+        foreach (var inst in ZonePools(zep))
+        {
+            if (!GodotObject.IsInstanceValid(inst.DamageNode) || !inst.DamageNode.IsInsideTree())
+            {
+                continue;
+            }
+
+            var centre = inst.Centre;
+            var vel = dt > 0f && zep.LastCentres.TryGetValue(inst, out var last)
+                ? (centre - last) / dt
+                : Vector3.Zero;
+            inst.Velocity = vel.Length() <= TurretController.MaxPlatformSpeed ? vel : Vector3.Zero;
+            zep.LastCentres[inst] = centre;
+        }
+    }
+
+    // A hull that is not stepped stands still, and its next step starts the differencing afresh.
+    private static void StillParts(LiveZeppelin zep)
+    {
+        if (zep.LastCentres.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var inst in zep.LastCentres.Keys)
+        {
+            inst.Velocity = Vector3.Zero;
+        }
+
+        zep.LastCentres.Clear();
     }
 
     // ---- the F18 damage half (static helpers first, per ordering rules) ----
@@ -722,8 +763,7 @@ public sealed partial class ZeppelinRuntime : Node
     private static Node3D? StateChild(AnimRuntime runtime, Node3D host, ZeppelinHealthyZone zone) =>
         ZoneNode(runtime, host, zone.Node) is { } group ? ZoneNode(runtime, group, zone.Kind) : null;
 
-    private static void AddPart(List<AimCandidate> into, DestructibleRegistry.Instance? inst,
-        int team, Vector3 velocity)
+    private static void AddPart(List<AimCandidate> into, DestructibleRegistry.Instance? inst, int team)
     {
         if (inst == null || !GodotObject.IsInstanceValid(inst.Anchor) || !inst.Anchor.IsInsideTree())
         {
@@ -733,7 +773,7 @@ public sealed partial class ZeppelinRuntime : Node
         into.Add(new AimCandidate
         {
             Position = inst.Centre,
-            Velocity = velocity,
+            Velocity = inst.Velocity,
             Team = team,
             Live = ZoneIsAlive(inst),
             ConeOverride = AimAssist.NoConeOverride,
@@ -1086,6 +1126,10 @@ public sealed partial class ZeppelinRuntime : Node
             new(StringComparer.OrdinalIgnoreCase);
 
         public List<CannonZone> CannonZones { get; } = new();
+
+        /// <summary>Each part pool's centre at the last step, what its velocity is differenced
+        /// from; empty while the hull is not stepped.</summary>
+        public Dictionary<DestructibleRegistry.Instance, Vector3> LastCentres { get; } = new();
 
         /// <summary>Zones whose kill line has printed (one line per zone).</summary>
         public HashSet<string> DeadZones { get; } = new(StringComparer.OrdinalIgnoreCase);

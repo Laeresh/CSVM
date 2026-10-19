@@ -951,10 +951,11 @@ public readonly record struct SpawnMessage(byte Seat, NetSpawnKind Kind, ushort 
 }
 
 /// <summary>
-/// Where the host has placed a seat on its return, as a point and a heading in degrees rather than
-/// a table entry. Reliable, and the answer to a <see cref="SpawnRequestMessage"/> where the return
-/// is computed. That is Zeppelin vs Zeppelin's, off the field and the seat's own hull
-/// (<c>docs/org/multiplayer-zvz.md</c>).</summary>
+/// Where a seat came back, as a point and a heading in degrees rather than a table entry. Reliable.
+/// In a match it is the host's answer to a <see cref="SpawnRequestMessage"/> where the return is
+/// computed. That is Zeppelin vs Zeppelin's, off the field and the seat's own hull
+/// (<c>docs/org/multiplayer-zvz.md</c>). Outside a match it is the owner's own return from a death,
+/// a Stunt Race's tap or rerun, relayed by the host.</summary>
 public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float HeadingDeg)
     : INetMessage<SpawnAtMessage>
 {
@@ -1434,10 +1435,12 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
 
     /// <summary>The bytes one seat entry takes. ⚠ Do not change it in a patch release, only in a
     /// minor one: a reader refuses a roster of another width (docs/org/multiplayer-messages.md).</summary>
-    public const int EntrySize = 22;
+    public const int EntrySize = 6 + CallsignBytes;
 
-    /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded.</summary>
-    public const int CallsignBytes = 16;
+    /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded. It holds the
+    /// Callsign box's 12 characters at 3 bytes each, a further seat's " P4" and the terminator.
+    /// Every name the box can produce reaches the roster whole; a longer one is cut.</summary>
+    public const int CallsignBytes = 40;
 
     /// <summary>The most seats this message can carry. The original's spawn slot packs its index
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>

@@ -32,18 +32,19 @@ item slot; they are short and read-only, and only one review runs at a time.
 
 ## 2. Choose items
 
-Read `backlog.md` and the open `backlog` issues
+Read the open `backlog` issues
 (`gh issue list --state open --label backlog --json number,title,labels,body`, per
 `docs/agents/issue-tracker.md`). Prefer, in this order: items the user just filed from a playtest
 (they say so, or a peer session relays it with a queue order, which you keep); issues labelled
-`ready-for-agent`; `[Next: code]` items with `[Evidence: decoded]` or `[Evidence: data]`; decodes
-(`[Next: decode]`, Ghidra is read-only for agents); disproof candidates. Skip `[Next: look]`,
-`[Next: decide]`, issues labelled `needs-info` or `ready-for-human`, and anything whose close
+`ready-for-agent`; `next:code` items with `evidence:decoded` or `evidence:data`; decodes
+(`next:decode`, Ghidra is read-only for agents); disproof candidates. Skip `next:look`,
+`next:decide`, issues labelled `needs-info` or `ready-for-human`, and anything whose close
 needs the user at the controls, unless the user asked for it; an item may still land and OWE a
-look.
+look. A `BL-NNN` the user names is a closed historical item (`git log --grep=BL-NNN`); say so and
+dispatch nothing for it.
 
-An item's id is `BL-NNN` or `#N` throughout the run; in a path (`.scratch\<run>\<id>\`) an issue
-is `issue-N`, since `#` is not a path character.
+An item's id is `#N` throughout the run; in a path (`.scratch\<run>\<id>\`) it is `issue-N`, since
+`#` is not a path character.
 
 Serialise items that share a hot file or a subsystem (the pause board, the HUD text block, one
 suite file) rather than running them side by side; say in the log which item waits on which. An
@@ -54,13 +55,13 @@ agents fork from the run branch's HEAD.
 
 One `Agent` call per item: `subagent_type: general-purpose`, `model: "opus"`, `isolation:
 "worktree"`, a `description` of a few words. The prompt names: the item id; the brief's path; the
-reading order (CLAUDE.md, PROJECT_CONTEXT.md, the entry, the decode pages, the files); the task in
-the entry's own fix shape, with anything the user steered quoted; what NOT to touch (a sibling's
+reading order (CLAUDE.md, PROJECT_CONTEXT.md, the issue, the decode pages, the files); the task in
+the issue's own fix shape, with anything the user steered quoted; what NOT to touch (a sibling's
 landed or running code); the suites to run and whether a golden is expected to move; the
 commit-message path `.scratch\<run>\<id>\commit.txt` inside the agent's worktree; "do not
-commit"; "no em dashes"; "no foreground game windows"; "no `gh` writes"; and the report shape. For
-an issue, paste the thread into the prompt or name the `gh issue view N --comments` read; the
-agent reads the tracker but never writes to it. Do not read the agent's transcript file; wait for
+commit"; "no em dashes"; "no foreground game windows"; "no `gh` writes"; and the report shape.
+Paste the thread into the prompt or name the `gh issue view N --comments` read; the agent reads
+the tracker but never writes to it. Do not read the agent's transcript file; wait for
 its completion notification.
 
 While agents run: land finished ones, merge main in when it moves, answer the user, and reply to
@@ -71,7 +72,7 @@ but never let it stand in for the user's approval of a merge to main.
 
 Every step in order, for one agent at a time:
 
-1. Copy `<agent worktree>\.scratch\<run>\<id>\*` (message, crops, diffs, and for an issue the
+1. Copy `<agent worktree>\.scratch\<run>\<id>\*` (message, crops, diffs, and the
    `close.txt`, `comment.txt` or `new-issue-*.md` files the brief has the agent write) to
    `Z:\CSVM\.scratch\<run>\<id>\` before anything else; the worktree removal deletes them.
    Then read the report's verification line. A red result (any failing suite, unit or golden the
@@ -81,7 +82,7 @@ Every step in order, for one agent at a time:
    branch's HEAD without the change) and write the waiver. A waiver reported with `#NEW` as its
    owner comes with a `new-issue-*.md`: file that issue now (step 9's command) and add the line to
    the message with its number. Run
-   `.\CheckWaiver.ps1 -MessageFile <message> -Root <agent>` for the form. A waiver is a record,
+   `.\CheckWaiver.ps1 -MessageFile <message>` for the form. A waiver is a record,
    not a way past the owner: never waive a failure the item itself caused.
 2. Check the message's trailer names the model the agent ran as, per `PROJECT_CONTEXT.md`'s
    AI-assistance rule (e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`); never
@@ -94,8 +95,7 @@ Every step in order, for one agent at a time:
    costs no battery. `<fork>` is the run-branch commit the agent forked from
    (`git -C <agent> merge-base HEAD <run>`). The args name the fixed point, the spec and the
    standards so the skill never asks the user: the diff `git -C <agent> diff <fork>...HEAD`; the
-   spec, a `BL-NNN` entry from `git show <fork>:backlog.md` (a close deletes it from the tree) or
-   `gh issue view N --comments`, plus any steer quoted in the dispatch prompt; the standards,
+   spec, `gh issue view N --comments`, plus any steer quoted in the dispatch prompt; the standards,
    `PROJECT_CONTEXT.md`'s coding conventions, `CLAUDE.md`'s writing style and `CONTEXT.md`. Pass
    `model: "opus"` on both of its Agent calls. Save the aggregated report to
    `Z:\CSVM\.scratch\<run>\<id>\review.md`, then act on it:
@@ -108,7 +108,7 @@ Every step in order, for one agent at a time:
      back as above.
    - A baseline smell is a judgement call: fix it when it is cheap and local, otherwise name it in
      the log line and move on.
-   - A finding that rests on a misread of the entry or of a decode is declined, with the reason in
+   - A finding that rests on a misread of the issue or of a decode is declined, with the reason in
      the log line.
    After two rounds on one item, land what is green and file each remaining finding as a
    `backlog` issue (step 9's command), logging the number.
@@ -161,7 +161,7 @@ Every step in order, for one agent at a time:
 
 Before each merge to main and whenever a peer says main moved: `git -C Z:\CSVM log --oneline -1`
 and `git -C <run> rev-list --count <run>..main`. If main moved: `git -C <run> merge --no-commit
---no-ff main`, resolve (backlog append points union), gate, commit with a message file
+--no-ff main`, resolve (append points union), gate, commit with a message file
 ("Merge main into <run>: ..."), log it. Check `git -C Z:\CSVM status --short` first; a dirty main
 checkout is another session mid-edit, wait a moment and re-read rather than merging over it.
 
@@ -175,8 +175,8 @@ On `Review first`: one `Agent` call, `subagent_type: general-purpose`, `model: "
 isolation, `description: "Review <run> before main"`. Its prompt tells it to invoke the
 `code-review` skill on the run worktree with fixed point `main` (`git -C <run> diff main...HEAD`,
 run after main is merged in, so the diff is the run's own work); the spec is every item landed
-since the last fast-forward, from the log's `## Items` lines, each `BL-NNN` entry from
-`git show main:backlog.md` and each `#N` from `gh issue view N --comments`; the per-item
+since the last fast-forward, from the log's `## Items` lines, each `#N` from
+`gh issue view N --comments`; the per-item
 `review.md` files are context, so a finding already declined there is not raised again. It is
 read-only (no edits, no commits, no `gh` writes), passes `model: "opus"` on its own Agent calls,
 runs the two axes one after the other itself when it cannot spawn them, and reports under 60
@@ -207,18 +207,18 @@ hidden desktop is shared and a rebuild under a shot breaks it.
 
 `Z:\CSVM\.scratch\<run>\orchestration-log.md`, updated as things happen, ASCII only, written with
 `[IO.File]::WriteAllText(path, text, [Text.UTF8Encoding]::new($false))`. Under `## Items`, one
-bullet per event in order: `- **BL-NNN** landed as <sha> (agent forked at <sha>, <clean squash |
+bullet per event in order: `- **#N** landed as <sha> (agent forked at <sha>, <clean squash |
 the conflict and its resolution>): <two to four sentences of what is now true, suites added,
 goldens moved>. Review: <clean | each finding and whether it was fixed, kept or declined, and
 why>. On the merged tree <counts>. Owed: <one line or nothing>. Not on main yet.`;
-`- Dispatched (freed slot): BL-NNN (<what>), forked from <sha>.`; `- **Merge main** as <sha>`;
+`- Dispatched (freed slot): #N (<what>), forked from <sha>.`; `- **Merge main** as <sha>`;
 `- **Run review** on <sha>: <per axis, clean or the finding count and the worst finding>`;
 `- **Main fast-forwarded** from <sha> to <sha> at the user's request (<items>)`; `- **Your
 steer**: <quoted>`; `- Battery N ...`; `- **#N filed** (<what>)`; `- **#N closed** after the
-fast-forward`. Item ids in the log are `BL-NNN` or `#N`.
+fast-forward`. Item ids in the log are `#N`.
 
 Under `## Owed to you`: one bullet per landed item that still wants the user's eye or decision,
-`- **BL-NNN (landed)**: <the exact sortie, door or question, the crops' folder>`. When a peer
+`- **#N (landed)**: <the exact sortie, door or question, the crops' folder>`. When a peer
 relays verdicts, drop the passed ones into the section's summary line and keep the rest.
 
 ## 8. The user's messages during the run
@@ -231,8 +231,7 @@ relays verdicts, drop the passed ones into the section's summary line and keep t
   (`gh issue create --title "..." --label backlog --body-file <file>`, body written to a file
   first, citing the still by absolute path and written for a reader who did not run the session),
   log the number, do not dispatch a fourth agent. `New-ItemId.ps1` is for nothing new.
-- A question ("what do I test for BL-NNN?" or "for #12?") is answered from the docs and the
-  entry, no tool work.
+- A question ("what do I test for #12?") is answered from the docs and the issue, no tool work.
 - "an agent is starting windows in the foreground": message every running agent with the
   no-foreground rule at once, check `Get-CimInstance Win32_Process` for Godot, log which agent it
   was when it reports, and stop that agent if it happens again.

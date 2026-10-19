@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-Mints the next backlog/playtest item ID (BL-nnn, CAP-nn, PT-nn), safe under concurrent sessions.
+Mints the next playtest item ID (CAP-nn, PT-nn), safe under concurrent sessions.
 
 .DESCRIPTION
 The counter lives in the shared git common dir (.git/item-id-counters.json), so every worktree
 sees the same one, and it is read-increment-written under an exclusive file lock, so two sessions
-can never be handed the same number. This replaced the hand-bumped "next free ID" lines in
-backlog.md / playtest.md after BL-253 and BL-262 were each minted twice by concurrent sessions.
+can never be handed the same number. New work is a GitHub issue, which takes no minted id; this
+guards the PT-/CAP- ids in playtest.md until that file empties.
 
 The JSON stores the LAST ISSUED number per kind. If the file is ever lost (fresh clone), re-seed
 it from the highest ID ever used (scan every *.md), since retired IDs are never reused.
@@ -17,12 +17,12 @@ the next call hands the same number out again and the duplicate-id pre-commit ho
 commit (often someone else's). Use -Count to reserve a block when you need several at once.
 
 .EXAMPLE
-./New-ItemId.ps1 -Kind BL           # -> BL-283
+./New-ItemId.ps1 -Kind PT           # -> PT-38
 ./New-ItemId.ps1 -Kind CAP -Count 3 # -> CAP-28  CAP-29  CAP-30 (reserve a block up front)
 #>
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('BL', 'CAP', 'PT')]
+    [ValidateSet('CAP', 'PT')]
     [string]$Kind,
 
     [ValidateRange(1, 50)]
@@ -39,7 +39,7 @@ $counterPath = Join-Path $gitCommon 'item-id-counters.json'
 if (-not (Test-Path $counterPath)) {
     throw ("Counter file missing: $counterPath`n" +
         'Re-seed it with the highest ID EVER used per kind (scan all *.md AND git log --all, ' +
-        'since retired IDs live only in history and are never reused), e.g.: {"BL":282,"CAP":27,"PT":37}')
+        'since retired IDs live only in history and are never reused), e.g.: {"CAP":27,"PT":37}')
 }
 
 # Exclusive open is the lock: a concurrent minter gets IOException and retries.
@@ -63,7 +63,7 @@ try {
     $data = [System.Text.Encoding]::UTF8.GetString($buf) | ConvertFrom-Json
     $last = [int]$data.$Kind
 
-    $width = if ($Kind -eq 'BL') { 3 } else { 2 }
+    $width = 2
     for ($i = 1; $i -le $Count; $i++) {
         '{0}-{1}' -f $Kind, ($last + $i).ToString("D$width")
     }

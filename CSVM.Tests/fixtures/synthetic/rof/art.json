@@ -516,6 +516,26 @@
       "height": 3200
     },
     {
+      "name": "PX_ICON_0_0_0.TGA",
+      "width": 240,
+      "height": 160
+    },
+    {
+      "name": "PX_ICON_0_0_1.TGA",
+      "width": 240,
+      "height": 160
+    },
+    {
+      "name": "PX_ICON_0_0_2.TGA",
+      "width": 240,
+      "height": 160
+    },
+    {
+      "name": "PX_ICON_0_0_3.TGA",
+      "width": 240,
+      "height": 160
+    },
+    {
       "name": "PH_B_Paper.png",
       "width": 160,
       "height": 112

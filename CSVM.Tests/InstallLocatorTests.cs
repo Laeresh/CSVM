@@ -144,6 +144,28 @@ public class InstallLocatorTests
     }
 
     [Fact]
+    public void TheDiscItsGameFolderAndAnIsoImageCheckAsADisc()
+    {
+        string disc = TestData.TempDir();
+        string game = Path.Combine(disc, "GAME");
+        Directory.CreateDirectory(Path.Combine(game, "GOSDATA", "ASSETS"));
+        Directory.CreateDirectory(Path.Combine(game, "ZBD"));
+        File.WriteAllBytes(Path.Combine(game, "ZBD", "C1.CAB"), new byte[] { 0 });
+        File.WriteAllBytes(Path.Combine(game, "ZBD", "zrdr.zbd"), new byte[] { 0 });
+        string iso = Path.Combine(TestData.TempDir(), "CrimsonSkies.ISO");
+        File.WriteAllBytes(iso, new byte[] { 0 });
+
+        Assert.All(new[] { disc, game, iso }, pick =>
+        {
+            var check = InstallLocator.Check(pick);
+            Assert.Equal(InstallCheckKind.Disc, check.Kind);
+            Assert.True(check.IsInstall);
+            Assert.Equal(pick, check.InstallRoot);
+        });
+        Assert.Equal(InstallCheckKind.Missing, InstallLocator.Check(Path.Combine(disc, "notes.txt")).Kind);
+    }
+
+    [Fact]
     public void WindowsCandidatesComeRememberedFirstThenProgramFilesThenEachDrive()
     {
         string machine = TestData.TempDir();

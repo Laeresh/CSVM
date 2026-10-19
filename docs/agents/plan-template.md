@@ -38,7 +38,7 @@ commit deletes this file, records the completion in its message, and clears the 
 pointer; any live prose linking this file by path is unlinked in the same commit.
 
 <!-- [core] Scope paragraph(s). State what this plan delivers, and, just as important, what it
-     deliberately excludes and why. If the plan draws items from backlog.md, record that EACH was
+     deliberately excludes and why. If the plan draws `backlog` issues, record that EACH was
      re-verified still-open against BOTH the record (git log --grep) AND the code (a backlog entry
      is not proof the work is undone). Convert any relative dates to absolute. -->
 <One or two paragraphs: the goal, the explicit boundaries ("X is out of scope, it's M<n+1>"), and
@@ -76,7 +76,7 @@ plan pointedly does NOT do, so scope creep has a name to bump against.>
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | <ids> | Confirm the trace, then implement. |
-| **Direction sound, magnitude a judgement call** | <ids> | The *what* is settled; the *how much* is TUNE, add it to `backlog.md`'s TUNE list, don't invent it as fact. |
+| **Direction sound, magnitude a judgement call** | <ids> | The *what* is settled; the *how much* is TUNE, file it as a `type:tuning` issue, don't invent it as fact. |
 | **Leads only, no mechanism yet** | <ids> | Budget for investigation; this may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
@@ -91,15 +91,14 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
 ## Ground rules <!-- [core], carried verbatim from every prior plan here (self-contained history). Keep as-is unless a rule genuinely doesn't apply. -->
 
 - **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
-  never guess a value. Inventing content is the trap this project falls into most often.
+  never guess a value. Inventing content is the mistake this project makes most often.
 - **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
 - **`PROJECT_CONTEXT.md` + the module's entry in `docs/architecture/<Namespace>.md` (plus its index
   bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
-  item; a landed item gets its record in the landing commit's message and is **deleted** from
-  `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
+  item; a landed item gets its record in the landing commit's message and its issue is **closed**. New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything**, the instruments here mislead; cite the
   rule that bites per item.
 - **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same

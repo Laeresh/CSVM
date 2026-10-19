@@ -484,7 +484,12 @@ public sealed partial class FogVolumeClutter : Node3D
         // authored colour, and it clamps in the framebuffer's own gamma space. COLOR is still in
         // that space here.
         string vcol = lit ? "clamp(COLOR.rgb * v_light, 0.0, 1.0)" : "COLOR.rgb";
-        string source = enhanced ? "graded" : "col.rgb";
+        // Every fvol card is `fog: false`, so no zone fog hides it. Under a night zone Enhanced darkens
+        // it toward the fog over the extended reach, as it does the city clutter.
+        string source = enhanced
+            ? "mix(graded, csky_fog_color_at(CAMERA_POSITION_WORLD), "
+              + "csky_night_fog(csky_fog_color_at(CAMERA_POSITION_WORLD)) ? v_dark : 0.0)"
+            : "col.rgb";
         string albedo = fogged
             ? "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
               + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
@@ -496,9 +501,10 @@ public sealed partial class FogVolumeClutter : Node3D
         string decls = enhanced
             ? "\nuniform sampler2D depth_texture : hint_depth_texture, filter_nearest;"
               + $"\nuniform float rim_lod = {Literal(EnhancedRimBlurLod)};"
-              + "\nvarying flat vec3 v_face_n;" + (pooled ? "\n" + CloudPuffs.Include : string.Empty) : string.Empty;
+              + "\nvarying flat vec3 v_face_n;\nvarying flat float v_dark;" + (pooled ? "\n" + CloudPuffs.Include : string.Empty) : string.Empty;
         string carryNormal = enhanced
-            ? "\n    v_face_n = INSTANCE_CUSTOM.xyz * 2.0 - 1.0;" + (pooled ? "\n" + CloudPuffs.PoseLines : string.Empty)
+            ? "\n    v_face_n = INSTANCE_CUSTOM.xyz * 2.0 - 1.0;"
+              + "\n    v_dark = csky_clutter_dark(origin, CAMERA_POSITION_WORLD, fade);" + (pooled ? "\n" + CloudPuffs.PoseLines : string.Empty)
             : string.Empty;
         // A pooled card samples its own layer through its pose; every other card samples its mask.
         string sample = pooled

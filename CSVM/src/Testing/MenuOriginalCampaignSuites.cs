@@ -59,7 +59,7 @@ internal static class MenuOriginalCampaignSuites
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
         + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
-        + "from the sortie roster until one EXPORT press crosses it, a purchase over a profile at the "
+        + "from the shared roster until one EXPORT press crosses it, a purchase over a profile at the "
         + "decoded slot cap is refused in the original's own words until a plane is sold back, the "
         + "screenshot aids' input script stands the pilot's plane list and the ammo screen's rocket "
         + "list open and draws them through idle frames while export is still the EXPORT press and a "
@@ -290,9 +290,10 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && campaign.MissionSeq == 0,
             $"NEXT MISSION opens the briefing of the next story position ({shell.Screen}, seq {campaign.MissionSeq})");
         ctx.Check(shell.Rows.Count == 3 && shell.FocusedKey == "ReplayBriefing", $"three plaques, focus on REPLAY BRIEFING ({shell.FocusedKey})");
+        ctx.Check(campaign.Briefing is { Reveal: not null },
+            $"the briefing reads seq 0's dialog state and runs a reveal over it ({campaign.Briefing?.Mission.Desc ?? "no entry"})");
         if (campaign.Briefing is not { Reveal: not null } briefing)
         {
-            ctx.Note($"the extraction carries no briefing for seq 0; the reveal and narration checks did not run");
             return;
         }
 
@@ -708,8 +709,8 @@ internal static class MenuOriginalCampaignSuites
             $"Back cancels the build and resumes the cabin on the row that opened it ({shell.Screen}, {shell.FocusedKey})");
     }
 
-    // The export crossing over a scratch profile store and a scratch build store of its own: a plane
-    // built with the campaign's wallet is not in the sortie roster, one EXPORT press puts it there.
+    // The export crossing over a scratch profile store and a scratch build store of its own. A plane
+    // built with the campaign's wallet is not in the shared roster; one EXPORT press puts it there.
     private static void ExportGate(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
         CampaignFeature campaign, string root)
     {
@@ -754,7 +755,7 @@ internal static class MenuOriginalCampaignSuites
             $"a build funded by the wallet is saved waiting for EXPORT ({committed}, {hangar.Message})");
         int stock = OriginalRosters.Airframes.Count;
         ctx.Check(OriginalRosters.Roster(planes.List()).Count == stock,
-            $"and the sortie roster still offers the stock airframes alone ({OriginalRosters.Roster(planes.List()).Count} of {stock})");
+            $"and the shared roster still offers the stock airframes alone ({OriginalRosters.Roster(planes.List()).Count} of {stock})");
 
         profile.SelectedPlane = profile.Planes.Count - 1;
         profiles.Save(profile);
@@ -766,7 +767,7 @@ internal static class MenuOriginalCampaignSuites
             $"the FIRST EXPORT press clears the marker in the stored record ({planes.Load(Built)?.AwaitingExport})");
         var roster = OriginalRosters.Roster(planes.List());
         ctx.Check(roster.Count == stock + 1 && roster[stock].Name == Built,
-            $"which is what puts it in the sortie roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
+            $"which is what puts it in the shared roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
         ctx.Check(wallet.OwnedBuilds().Count == 3 && profile.Planes.Count == 3,
             $"and the campaign still owns all three, the two starters included ({wallet.OwnedBuilds().Count})");
     }
@@ -842,10 +843,18 @@ internal static class MenuOriginalCampaignSuites
 
         shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
         closed = shell.Rows.Count;
-        // The starter's empty fourth gun group takes no cursor, so three downs reach the first rocket field.
-        shell.Campaign.RunAidScript("3da");
-        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
-            $"3da steps past the empty gun group to the first rocket field and stands its list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+        // An empty gun group takes no cursor, so one down per armed group reaches the first rocket
+        // field. The page's first four fields are the gun groups.
+        var fields = shell.Rows.Where(r => r.Key.StartsWith("FIELD:", StringComparison.Ordinal))
+            .Select(r => int.Parse(r.Key.AsSpan(6), CultureInfo.InvariantCulture)).ToList();
+        int guns = fields.Count(i => i < 4);
+        string rocket = "FIELD:" + fields.Where(i => i >= 4).DefaultIfEmpty(-1).Min().ToString(CultureInfo.InvariantCulture);
+        ctx.CheckShipped(guns == 3 && rocket == "FIELD:4",
+            $"the starter's empty fourth gun group leaves three downs to the first rocket field ({guns}, {rocket})");
+        string script = guns.ToString(CultureInfo.InvariantCulture) + "da";
+        shell.Campaign.RunAidScript(script);
+        ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == rocket,
+            $"{script} steps past the gun groups to the first rocket field and stands its list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
 
         // The one verb Original cannot spell, since it binds no secondary press: refused whole, so
         // not even the two downs before it move the cursor and the run ends without a shot.

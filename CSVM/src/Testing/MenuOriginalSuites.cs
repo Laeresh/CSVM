@@ -34,16 +34,14 @@ internal static class MenuOriginalSuites
     // Its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
     private const float BookTabRight = 672f;
 
-    // The [@GameOptions@] section's authored plate: its corner, the art's own height, the pitch
-    // between row panels, and the line its two plaques stand on. Held here rather than read off
-    // the layout so the check has something of its own to compare the composed page against.
+    // The install's [@GameOptions@] plate: its corner, the art's own height, the pitch between row
+    // panels, and the line its two plaques stand on. The pitch is the art's band, which the page
+    // holds too. The other three are pins on the install's values; the walk reads them off the layout.
     private const float AuthoredPlateY = 215f;
     private const float AuthoredPlateHeight = 289f;
     private const float AuthoredGameOptionPitch = 62f;
     private const float AuthoredPlaqueY = 457f;
 
-    // How many rows the tracer's roster runs past the aircraft column's window.
-    private const int ScrollingCustoms = 3;
 
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -53,22 +51,85 @@ internal static class MenuOriginalSuites
     private static readonly MenuCommands Back = new() { Back = true };
 
     [Suite("menu-original-tracer",
+        "Original's hold on the display server over the install's decoded layout: shown at the top "
+        + "level with the OS pointer hidden while it draws its own, the VIDEO page's Monitor row "
+        + "offering one label per screen the engine reports and a sideways step taking one of them, "
+        + "and the pointer back once the presentation hides")]
+    internal static void MenuOriginalTracer(TestContext ctx)
+    {
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer");
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+        {
+            Planes = planes,
+        });
+        var host = new MenuHost(registry, new RecordingAudio(), _ => { });
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        host.AddSeat(seat);
+        try
+        {
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var shell = (host.Active as OriginalPresentation)?.Shell;
+            ctx.Check(shell is { Screen: OriginalScreen.TopLevel } && Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
+                $"the OS pointer is hidden while Original draws its own ({shell?.Screen}, {Godot.Input.MouseMode})");
+            if (shell == null)
+            {
+                return;
+            }
+
+            WalkTo(host, seat, shell, "MM_B_PREFERENCES");
+            Press(host, seat, Accept);
+            WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
+            Press(host, seat, Accept);
+            // The monitor row's words are this machine's screens, so the claim is the count rather than
+            // the labels. That is one per screen the engine reports.
+            ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.MonitorWords.Count == Godot.DisplayServer.GetScreenCount(),
+                $"the monitor row offers one label per screen ({shell.Screen}, {string.Join(" ", shell.Options.Video.MonitorWords)})");
+            Press(host, seat, Right);
+            ctx.Check(shell.Options.Video.MonitorChoice != null
+                && OptionsStore.TryParseMonitorIndex(shell.Options.Video.MonitorChoice, out int picked) && picked < shell.Options.Video.MonitorWords.Count,
+                $"and a sideways step on it takes a screen this machine has ({shell.Options.Video.MonitorChoice ?? "unset"} of {shell.Options.Video.MonitorWords.Count})");
+            host.Deactivate();
+            ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Visible,
+                $"and the OS pointer is back once the presentation hides ({Godot.Input.MouseMode})");
+        }
+        finally
+        {
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-tracer");
+        }
+    }
+
+    [Suite("menu-original-tracer-core",
         "Original Free Flight through the presentation boundary over the install's decoded layout: "
-        + "selected by the CLI override, shown at the top level with the pointer hidden and the "
+        + "selected by the CLI override, shown at the top level with the "
         + "Free Flight door focused and the roster's builds read from a scratch store of the suite's "
         + "own, a pointer frame over Quit takes focus and cues the rollover, a "
         + "press on a plaque arms it and opens nothing while the pointer over it draws the active "
         + "bitmap, a release on another plaque activates neither, a "
-        + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
-        + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
+        + "click on the door opens Free Flight on the lobby's layout with its rules greyed, keyboard "
+        + "frames pick a map on Mission Options and an aircraft on Select Plane and FLY leaves as one "
+        + "LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
         + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
         + "to hold them where each row stands wholly inside one band and one band carries the pair "
         + "the canvas leaves no band for and each checkbox row's title stands on its own box's "
         + "centre line at the dropdown rows' column, and whose CANCEL CHANGES "
-        + "drops them, a wheel step over the "
-        + "aircraft column and over Instant Action's contents window moves each one row and clamps "
-        + "at the head, a drag down each thumb's track lands the window on its last row without "
+        + "drops them, a wheel step over "
+        + "Instant Action's contents window moves it one row and clamps "
+        + "at the head, a drag down its thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, "
         + "a seat whose pad drops off the roster holds it through the grace and leaves once the "
         + "device stays gone past it, the Instant Action screen reads the roster without opening "
@@ -89,7 +150,7 @@ internal static class MenuOriginalSuites
         + "ends the preview, and its ACCEPT CHANGES leaves as "
         + "one more apply exit carrying the levels, an unknown override resolves to Original and a "
         + "missing layout keeps Original selected with the request kept")]
-    internal static void MenuOriginalTracer(TestContext ctx)
+    internal static void MenuOriginalTracerCore(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
@@ -104,13 +165,11 @@ internal static class MenuOriginalSuites
         var audio = new RecordingAudio();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
-        // The aircraft column scrolls only once the roster outruns its window. The scratch store
-        // carries enough builds past the stock airframes for the wheel and the drag to move.
-        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer",
-            OriginalShell.AirframeWindow - OriginalRosters.Airframes.Count + ScrollingCustoms);
+        // One build past the stock airframes, so the roster check below has a custom to compare.
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer-core", 1);
         // ⚠ The debrief return below opens the campaign, so the presentation is pointed at a
         // scratch store: nothing here may read or write user://Profiles.
-        string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer", "Profiles");
+        string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer-core", "Profiles");
         var player1 = new MenuInput { Keyboard = true };
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
@@ -138,22 +197,22 @@ internal static class MenuOriginalSuites
             Return(ctx, host, shell, exits);
             Lists(ctx, host, seat, shell);
             Seats(ctx, host, seat, shell, player1);
-            OriginalOptionsRoute(ctx, host, seat, shell, exits);
+            OriginalOptionsRoute(ctx, host, seat, shell, exits, layout);
             SwitchMidSetup(ctx, host, seat, shell);
             // The VIDEO route runs on the shell the switch creates, and last of the Original walks.
             // Its ACCEPT CHANGES hides the presentation for the launcher, so nothing after it can
             // drive the same shell.
-            OriginalVideoRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits);
+            OriginalVideoRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits, layout);
             // The AUDIO route needs a shell of its own for the same reason, the VIDEO route's
             // ACCEPT CHANGES having hidden the presentation the walk before it drove.
-            OriginalAudioRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits, audio);
+            OriginalAudioRoute(ctx, host, seat, SwitchBackToOriginal(ctx, host), exits, audio, layout);
             Recovery(ctx, host, registry, audio);
         }
         finally
         {
             host.Deactivate();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
-            MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-tracer");
+            MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-tracer-core");
         }
 
         ctx.Check(host.Active == null && !host.Shown, $"Deactivate leaves the host holding no presentation");
@@ -308,8 +367,6 @@ internal static class MenuOriginalSuites
         ctx.Check(shell?.FocusedKey == OriginalShell.FreeFlightKey,
             $"with the Free Flight door focused ({shell?.FocusedKey})");
         ctx.Check(shell?.Rows.Count == 9, $"the top level is the six decoded rows plus the three doors ({shell?.Rows.Count})");
-        ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
-            $"the OS pointer is hidden while Original draws its own ({Godot.Input.MouseMode})");
         return shell;
     }
 
@@ -365,25 +422,35 @@ internal static class MenuOriginalSuites
         ctx.Check(audio.Cues.Contains(OriginalCues.Click), $"with a click cue ({string.Join(",", audio.Cues)})");
     }
 
-    // Keyboard frames: down the chapter column, across to the airframe column, up onto FLY.
+    // Keyboard frames on the local lobby: the map box, three rows down its list, then Select Plane's
+    // box the same way, then FLY.
     private static void Fly(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        ctx.Check(shell.FocusedKey == OriginalLobbyScreen.MissionTabKey && Row(shell, OriginalLobbyScreen.TimeKey) is { Enabled: false }
+            && Row(shell, OriginalLobbyScreen.TimeRadioKey) is { Enabled: false } && Row(shell, OriginalLobbyScreen.LimitedLivesKey) is { Enabled: false },
+            $"Free Flight opens on the lobby's Mission Options tab with the mission rules greyed ({shell.FocusedKey})");
+        WalkTo(host, seat, shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(host, seat, Accept);
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.PickedChapter == "C2", $"three rows down the chapter column and Accept picks Hollywood ({shell.PickedChapter})");
+        ctx.Check(shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight) == "C2", $"three rows down the map list and Accept picks Hollywood ({shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight)})");
         ctx.Check(host.Features.Get<FreeFlightFeature>().Chapter?.Code == "C2",
             $"and the shared feature holds the pick ({host.Features.Get<FreeFlightFeature>().Chapter?.Code})");
-        Press(host, seat, Right);
+        WalkTo(host, seat, shell, OriginalLobbyScreen.PlaneTabKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.PickedAirframe == "player_bhawk",
-            $"Right lands on the same row of the airframe column, Accept picks it ({shell.PickedAirframe})");
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        ctx.Check(shell.FocusedKey == OriginalShell.FlyKey, $"Up past the column's top wraps onto FLY ({shell.FocusedKey})");
+        WalkTo(host, seat, shell, OriginalLobbyScreen.PlaneKey);
+        Press(host, seat, Accept);
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.LocalLobby.Tab == LobbyTab.Plane && setup.Roster[setup.Seats[0].Cursor].Node == "player_bhawk",
+            $"Select Plane's box three rows down picks seat 0's aircraft ({setup.Roster[setup.Seats[0].Cursor].Node})");
+        WalkTo(host, seat, shell, OriginalShell.FlyKey);
+        ctx.Check(shell.FocusedKey == OriginalShell.FlyKey, $"the cursor reaches FLY ({shell.FocusedKey})");
         Press(host, seat, Accept);
         ctx.Check(exits.Count == 1 && exits[0] is LaunchExit,
             $"FLY leaves through the host as one LaunchExit ({exits.Count})");
@@ -396,8 +463,6 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(!host.Shown, $"the host hid the presentation on the exit (shown={host.Shown})");
-        ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Visible,
-            $"and the OS pointer is back ({Godot.Input.MouseMode})");
         Press(host, seat, Accept);
         ctx.Check(exits.Count == 1, $"a frame while hidden reaches nothing ({exits.Count})");
         seat.Clear();
@@ -409,8 +474,8 @@ internal static class MenuOriginalSuites
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(ReferenceEquals(before, host.Active) && host.Shown,
             $"a return shows the same Original instance again (shown={host.Shown})");
-        ctx.Check(shell.Screen == OriginalScreen.TopLevel && shell.PickedAirframe == null,
-            $"on the top level with the airframe pick dropped ({shell.Screen}, {shell.PickedAirframe ?? "none"})");
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<PlayerSetupFeature>().Seats[0].Confirmed,
+            $"on the top level with seat 0's confirmation dropped ({shell.Screen})");
         ctx.Check(exits.Count == 1, $"and nothing relaunched on the way back in ({exits.Count})");
         // The scratch store holds no such profile, so the return opens the campaign on its
         // profile screen rather than the book; menu-original-campaign drives the seated case.
@@ -422,24 +487,12 @@ internal static class MenuOriginalSuites
             $"and a top-level show closes that campaign again ({shell.Screen})");
     }
 
-    // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
-    // own record of the pad seat 0 last steered with, and the join through the feature, which is
-    // where a pad's Start lands; the per-screen rule itself is read off the shell.
-    // The pointer's wheel and thumb over the two lists this screen graph reaches: the sortie
-    // screens' aircraft column and Instant Action's contents window, each wheeled a row, dragged
-    // down its track and left back at its head, with the list's own arrows still stepping it.
+    // The pointer's wheel and thumb over Instant Action's contents window. It is wheeled a row,
+    // dragged down its track and left back at its head, the list's own arrows still stepping it.
     private static void Lists(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
         var size = ctx.Host.GetViewport().GetVisibleRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
-        Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.FreeFlight, $"the Free Flight door opens the aircraft column again ({shell.Screen})");
-        WheelAndDrag(ctx, host, seat, shell, fit, "AIRFRAMES", "the sortie screens' aircraft column");
-        ctx.Check(shell.PickedAirframe == null && shell.Screen == OriginalScreen.FreeFlight,
-            $"and the wheel and the drag picked nothing and left no screen ({shell.PickedAirframe ?? "none"}, {shell.Screen})");
-        Press(host, seat, Back);
-
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.InstantAction, $"Instant Action opens its contents window ({shell.Screen})");
@@ -496,6 +549,9 @@ internal static class MenuOriginalSuites
         ctx.Check(List(shell, key)?.Window.Top == 0, $"and the wheel brings it home ({List(shell, key)?.Window.Top})");
     }
 
+    // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
+    // own record of the pad seat 0 last steered with. The join goes through the feature, where a
+    // pad's Start lands; the per-screen rule itself is read off the shell.
     private static void Seats(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuInput player1)
     {
         var original = host.Active as OriginalPresentation;
@@ -616,6 +672,8 @@ internal static class MenuOriginalSuites
     private static void SwitchMidSetup(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
         Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(host, seat, Accept);
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.FreeFlight && host.Features.Get<FreeFlightFeature>().Chapter != null,
@@ -628,7 +686,8 @@ internal static class MenuOriginalSuites
     // Preferences page, and its GAME OPTIONS door the decoded page. That page's rows take every
     // choice, and its CANCEL CHANGES drops them. The walk leaves the top level as it found it.
     // The first three rows are the original's own, in its order, the two after them this port's.
-    private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
+    private static void OriginalOptionsRoute(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits, MenuLayout layout)
     {
         WalkTo(host, seat, shell, "MM_B_PREFERENCES");
         Press(host, seat, Accept);
@@ -638,18 +697,20 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalGameOptionsPage.DifficultyKey,
             $"GAME OPTIONS opens the decoded page on its Difficulty dropdown, the first row ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
+        string tab = Words(layout, "GameOptions", "GO_T_TITLE");
+        ctx.CheckShipped(tab == "GAME OPTIONS", $"the GAME OPTIONS tab title is the install's ({tab})");
         int titles = 0;
         int menuTitles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Default View" or "Auto Head Turn"
+            titles += line.Text == tab || line.Text is "Difficulty" or "Default View" or "Auto Head Turn"
                 or "Next Target" or "Rumble" ? 1 : 0;
             menuTitles += line.Text is "Menu" ? 1 : 0;
         }
 
-        ctx.Check(titles == 6 && menuTitles == 0,
+        ctx.Check(tab.Length > 0 && titles == 6 && menuTitles == 0,
             $"drawing the section's own tab title over the five row titles and no Menu row ({titles} of 6, {menuTitles} Menu)");
-        OriginalGameOptionsPlate(ctx, shell, board);
+        OriginalGameOptionsPlate(ctx, shell, board, layout.Screen("GameOptions"));
         Press(host, seat, Accept);
         ctx.Check(shell.Options.GameOptions.OpenOption == OriginalGameOptionsPage.DifficultyKey && shell.Rows.Count == 3
             && List(shell, OriginalGameOptionsPage.DifficultyKey) == null,
@@ -696,12 +757,22 @@ internal static class MenuOriginalSuites
     // reaches a whole band further down than the art it is cut from. The two plaques stand that
     // same band below their authored line. Every row stands wholly inside one band, a single band
     // carries two of them, and no row's own reach crosses the moved plaque line.
-    private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board)
+    private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board, MenuLayoutScreen? section)
     {
+        string art = section?.Widget("GO_BACKGROUND")?.Art.FirstOrDefault() ?? string.Empty;
+        float plateY = section?.Widget("GO_BACKGROUND")?.Int("Y") ?? -1f;
+        float plaqueY = section?.Widget(OriginalGameOptionsPage.AcceptKey)?.Int("Y") ?? -1f;
+        float plateHeight = ((IOriginalScreenHost)shell).Measure(art)?.Height ?? -1f;
+        // The rows step at the section's own title pitch, which on the install is the art's band.
+        float rowPitch = (section?.Widget("GO_T_VIEWTITLE")?.Int("Y") ?? 0) - (section?.Widget("GO_T_DIFFTITLE")?.Int("Y") ?? 0);
+        ctx.CheckShipped(art.Equals("GO_BackGround.png", StringComparison.OrdinalIgnoreCase)
+            && plateY == AuthoredPlateY && plateHeight == AuthoredPlateHeight && plaqueY == AuthoredPlaqueY
+            && rowPitch == AuthoredGameOptionPitch,
+            $"the plate is the install's own art at its authored corner and height, the plaques on their authored line and the rows a band apart ({art}, {plateY}, {plateHeight}, {plaqueY}, {rowPitch})");
         var plate = new List<BoardPicture>();
         foreach (var picture in board.Backdrop)
         {
-            if (picture.Art.Name.Equals("GO_BackGround.png", StringComparison.OrdinalIgnoreCase))
+            if (picture.Art.Name.Equals(art, StringComparison.OrdinalIgnoreCase))
             {
                 plate.Add(picture);
             }
@@ -719,16 +790,16 @@ internal static class MenuOriginalSuites
 
         ctx.Check(plate.Count >= 4 && cropped,
             $"the plate is tiled from crops of its own art rather than drawn once or stretched ({plate.Count} pieces, crops {cropped})");
-        ctx.Check(Math.Abs(top - AuthoredPlateY) < 0.5f && Math.Abs(bottom - (AuthoredPlateY + AuthoredPlateHeight + AuthoredGameOptionPitch)) < 0.5f,
+        ctx.Check(Math.Abs(top - plateY) < 0.5f && Math.Abs(bottom - (plateY + plateHeight + AuthoredGameOptionPitch)) < 0.5f,
             $"standing at its authored corner and reaching one whole band further down ({top}, {bottom})");
 
         float accept = RowY(shell, OriginalGameOptionsPage.AcceptKey);
         float cancel = RowY(shell, OriginalGameOptionsPage.CancelKey);
-        ctx.Check(Math.Abs(accept - (AuthoredPlaqueY + AuthoredGameOptionPitch)) < 0.5f && Math.Abs(cancel - accept) < 0.5f,
+        ctx.Check(Math.Abs(accept - (plaqueY + AuthoredGameOptionPitch)) < 0.5f && Math.Abs(cancel - accept) < 0.5f,
             $"with ACCEPT CHANGES and CANCEL CHANGES that same band below their authored line ({accept}, {cancel})");
 
-        // The first band opens one band above the head crop's bottom edge, so every band after it is
-        // a whole pitch down from there; a row wholly inside one of them stands on drawn panel.
+        // The first band opens one art band above the head crop's bottom edge. Every band after it
+        // is a whole row pitch down from there. A row wholly inside one of them stands on drawn panel.
         float first = plate.Count > 0 ? plate[0].Y + (plate[0].Crop?.Height ?? 0f) - AuthoredGameOptionPitch : 0f;
         var held = new int[Math.Max(1, plate.Count)];
         bool banded = plate.Count > 0;
@@ -741,9 +812,9 @@ internal static class MenuOriginalSuites
             }
 
             lowest = Math.Max(lowest, row.Y + row.Height);
-            int band = (int)Math.Floor((row.Y - first) / AuthoredGameOptionPitch);
+            int band = rowPitch > 0f ? (int)Math.Floor((row.Y - first) / rowPitch) : -1;
             banded &= band >= 0 && band < held.Length
-                && row.Y + row.Height <= first + ((band + 1) * AuthoredGameOptionPitch);
+                && row.Y + row.Height <= first + ((band + 1) * rowPitch);
             held[Math.Clamp(band, 0, held.Length - 1)]++;
         }
 
@@ -754,7 +825,7 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(banded && shared == 1,
-            $"every option row standing wholly inside one band, one band carrying the pair the canvas leaves no band for ({banded}, {shared} shared)");
+            $"every option row standing wholly inside one band, one band carrying the pair the canvas leaves no band for ({banded}, {shared} shared, bands from {first}: {string.Join(" ", shell.Rows.Select(r => $"{r.Key}@{r.Y}+{r.Height}"))})");
         ctx.Check(lowest > 0f && lowest <= accept,
             $"and no option row reaching past that line, which would take one press for two rows ({lowest} of {accept})");
 
@@ -786,6 +857,10 @@ internal static class MenuOriginalSuites
             $"each checkbox row's title on its own box's centre line at the dropdown rows' column ({aligned} of 3 at {column})");
     }
 
+    // A text widget's words, read off the layout so a check holds over the invented tree too.
+    private static string Words(MenuLayout layout, string section, string key) =>
+        layout.Screen(section)?.Widget(key)?.Text ?? string.Empty;
+
     private static float RowY(OriginalShell shell, string key)
     {
         foreach (var row in shell.Rows)
@@ -811,16 +886,17 @@ internal static class MenuOriginalSuites
         var shell = (host.Active as OriginalPresentation)?.Shell;
         ctx.Check(host.Selected == PresentationId.Original && reason == null && shell != null,
             $"an Original request re-selects it and Show creates a fresh instance ({host.Selected})");
-        ctx.Check(shell is { Screen: OriginalScreen.TopLevel, PickedChapter: null, FocusedKey: OriginalShell.FreeFlightKey },
-            $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.PickedChapter ?? "none"}, {shell?.FocusedKey})");
+        ctx.Check(shell is { Screen: OriginalScreen.TopLevel, FocusedKey: OriginalShell.FreeFlightKey } && shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight) == null,
+            $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.LocalLobby.PickedChapter(OriginalScreen.FreeFlight) ?? "none"}, {shell?.FocusedKey})");
         return shell;
     }
 
-    // Original's VIDEO route over the install's decoded sections: the Preferences page's third door
-    // opens the decoded page on its monitor dropdown, the rows under it take a screen, a size, a
-    // display mode and a frame cap, the checkbox flips the graphics word, CANCEL CHANGES drops them
-    // all without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
-    private static void OriginalVideoRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits)
+    // Original's VIDEO route over the install's decoded sections. The Preferences page's third door
+    // opens the decoded page on its monitor dropdown. The rows under it take a size, a display mode
+    // and a frame cap, and the checkbox flips the graphics word. CANCEL CHANGES drops them all
+    // without an exit, and ACCEPT CHANGES on a second visit leaves as one apply exit carrying them.
+    private static void OriginalVideoRoute(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits, MenuLayout layout)
     {
         if (shell == null)
         {
@@ -835,14 +911,16 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalVideoPage.MonitorKey,
             $"VIDEO opens the decoded page on its Monitor row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
+        string tab = Words(layout, "Video", "VP_T_TITLE");
+        ctx.CheckShipped(tab == "VIDEO", $"the VIDEO tab title is the install's ({tab})");
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync"
+            titles += line.Text == tab || line.Text is "Monitor" or "Resolution" or "Display Mode" or "V-Sync"
                 or "Render Scale" or "Anti-aliasing" or "Shadow Quality" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 9, $"drawing the section's own tab title over the eight row titles ({titles} of 9)");
+        ctx.Check(tab.Length > 0 && titles == 9, $"drawing the section's own tab title over the eight row titles ({titles} of 9)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -850,14 +928,6 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
-        // The monitor row's words are this machine's screens, so the claim is the count rather than
-        // the labels: one per screen the engine reports, which is one on a single-screen machine.
-        ctx.Check(shell.Options.Video.MonitorWords.Count == Godot.DisplayServer.GetScreenCount(),
-            $"the monitor row offers one label per screen ({string.Join(" ", shell.Options.Video.MonitorWords)})");
-        Press(host, seat, Right);
-        ctx.Check(shell.Options.Video.MonitorChoice != null
-            && OptionsStore.TryParseMonitorIndex(shell.Options.Video.MonitorChoice, out int picked) && picked < shell.Options.Video.MonitorWords.Count,
-            $"and a sideways step on it takes a screen this machine has ({shell.Options.Video.MonitorChoice ?? "unset"} of {shell.Options.Video.MonitorWords.Count})");
         // The size row under the borderless default, which owns the size. It draws dead and the
         // walk cannot land on it, so the row the walk ends on is what the check names.
         WalkTo(host, seat, shell, OriginalVideoPage.ResolutionKey);
@@ -913,7 +983,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.Video.GraphicsChoice == GraphicsMode.Default
             && shell.Options.Video.VSyncChoice == null && shell.Options.Video.DisplayModeChoice == null && shell.Options.Video.ResolutionChoice == null
             && shell.Options.Video.MonitorChoice == null && shell.Options.Video.Choice(ShadowQualitySetting.Lookup) == null && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with all six edits dropped and no exit ({shell.Screen}, {shell.Options.Video.GraphicsChoice}, {shell.Options.Video.VSyncChoice ?? "unset"}, {shell.Options.Video.DisplayModeChoice ?? "unset"}, {shell.Options.Video.ResolutionChoice ?? "unset"}, {shell.Options.Video.MonitorChoice ?? "unset"})");
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped and no exit ({shell.Screen}, {shell.Options.Video.GraphicsChoice}, {shell.Options.Video.VSyncChoice ?? "unset"}, {shell.Options.Video.DisplayModeChoice ?? "unset"}, {shell.Options.Video.ResolutionChoice ?? "unset"}, {shell.Options.Video.MonitorChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
         Press(host, seat, Accept);
@@ -997,7 +1067,9 @@ internal static class MenuOriginalSuites
     // to the host every frame and names the level a frame moved only when one did, CANCEL CHANGES
     // drops the edits without an exit and ends the preview, and ACCEPT CHANGES on a second visit
     // leaves as one apply exit.
-    private static void OriginalAudioRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits, RecordingAudio audio)
+    private static void OriginalAudioRoute(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell? shell, List<MenuExit> exits, RecordingAudio audio,
+        MenuLayout layout)
     {
         if (shell == null)
         {
@@ -1012,19 +1084,25 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.Audio && shell.FocusedKey == OriginalAudioPage.MasterKey,
             $"AUDIO opens the decoded page on its Master row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
+        string tab = Words(layout, "Audio", "AP_T_TITLE");
+        // Every slider row draws the thumb the section's music slider authors, Master included.
+        var slider = layout.Screen("Audio")?.Widget("AP_S_MVOLUME")?.Art;
+        string thumb = slider is { Count: > 1 } ? slider[1] : string.Empty;
+        ctx.CheckShipped(tab == "AUDIO" && thumb == "PF_B_Slider.png",
+            $"the AUDIO tab title and the slider thumb are the install's ({tab}, {thumb})");
         int titles = 0;
         int thumbs = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "AUDIO" or "Master" or "Music Volume" or "Effects Volume" or "Voice Volume" ? 1 : 0;
+            titles += line.Text == tab || line.Text is "Master" or "Music Volume" or "Effects Volume" or "Voice Volume" ? 1 : 0;
         }
 
         foreach (var picture in board.Pictures)
         {
-            thumbs += picture.Art.Name == "PF_B_Slider.png" ? 1 : 0;
+            thumbs += thumb.Length > 0 && picture.Art.Name == thumb ? 1 : 0;
         }
 
-        ctx.Check(titles == 5, $"drawing the section's own tab title over the four row titles ({titles} of 5)");
+        ctx.Check(tab.Length > 0 && titles == 5, $"drawing the section's own tab title over the four row titles ({titles} of 5)");
         ctx.Check(thumbs == 4, $"with the authored thumb drawn once per row ({thumbs} of 4)");
         // The store is a scratch one under --run-tests, so the page opens on the shipped mix: every
         // level never set, each row standing at its own default.

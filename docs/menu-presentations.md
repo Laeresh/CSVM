@@ -104,7 +104,7 @@ concrete members and composes them its own way.
 |---|---|---|
 | `FreeFlightFeature` | the chapter roster it offers, the chapter pick, the launch gate over the setup's seats, `BuildExit` | seats, aircraft, stores |
 | `InstantActionFeature` | every decoded option set, the environment, mission type, lives, four waves, wingmen and their fit, the player plane, presets, the base def, `BuildExit` | which screens the fields appear on, the wizard order |
-| `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, Dogfight's kill target and time limit with their steppers, `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
+| `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, a local Dogfight's mission rules (`MatchOptions`), `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
 | `HangarFeature` | one scratch build at a time over a `CustomPlaneStore` and an optional `IHangarWallet`, the three starts, the airframe pick with its changed-since gate and the defaults ask's three answers, the per-tab operations, the purchase gate in the original's words, `Commit`, `DeleteSaved`, the labels and name rules | the nine-screen walk or the tab bar, the dropdowns, the dialog idiom |
 | `ControlsFeature` | the seats it can edit and their staged keymaps, the context and action cursors, the capture and the steal it names first, `Accept`, `Cancel`, `ResetSeat` | which page the rows are split across, the tabs or columns they are drawn in, the join that raises a second seat's row |
 | `NetPlayFeature` | the port and the address, the socket a host or a join opens, the stage, link, peer and port-mapping readouts, the timeout on a join, `BuildLaunch`, `Close` | the carrier and the port mapper (both injected as delegates), the board's rows, the roster, the seats and the session |
@@ -157,21 +157,20 @@ Original draws a seat strip over every campaign board and over the Instant Actio
 overlay; a solo campaign shows the authored board alone. That strip is a chip row, the player tags
 alone in the top-right corner each in its seat's identity colour over a dark ground
 (`CSVM/src/UI/Boards/SeatStrip.cs` holds its shape, and the Instant Action screen asks for the more
-opaque ground its light paper needs). The sortie screens keep their own strip lower down, where the
-device and the pick status stand beside the tag. A presentation with a pointer maps the window-pixel
+opaque ground its light paper needs). The local lobby names the seats in its own player list, where the
+device and the aircraft stand beside the tag. A presentation with a pointer maps the window-pixel
 pointer into its own space; Original does it through the same `BoardFit` its board view draws with.
 
 Under Original a seat picks its aircraft on a screen of its own, not down a list every seat shares.
-Seat 0 picks on the sortie screen or in the Instant Action Pilot Plane row; then each joined seat in
-player order gets the per-seat aircraft screen (`OriginalSeatPlane.cs`), the campaign plane-selection
-board's shape over the sortie roster, where Accept selects and a second Accept confirms. Back and
+Seat 0 picks on the local lobby's Select Plane tab or in the Instant Action Pilot Plane row; then, at FLY or
+FLY MISSION, each joined seat in player order gets the per-seat aircraft screen (`OriginalSeatPlane.cs`), the
+campaign plane-selection board's shape over the shared roster, where Accept selects and a second Accept confirms. Back and
 CANCEL SELECTIONS each take back a selection, and over the open list each leaves the walk for the
 screen it came from with every seat kept, so no press on that screen unjoins: a pilot leaves the
-sortie with Back on the Instant Action screen or with their device. Joining stays closed on that
-screen. The last seat's confirm is the launch, on either sortie screen as on Instant Action, so seat
-0's pick is the ready and the walk is the launch; where FLY's own gate is unmet (Dogfight without a
-second seat, a sortie with no map picked) the screen the walk came from returns instead with FLY to
-press, FLY going live only when every joined seat is Confirmed. Over a selection the screen also
+match with Back on the Instant Action screen or with their device. Joining stays closed on that
+screen. The last seat's confirm is the launch, on either local screen as on Instant Action, so FLY
+is seat 0's ready and the walk is the launch; where FLY's own gate is unmet (a Dogfight a seat left
+mid-walk) the screen the walk came from returns instead with FLY to press. Over a selection the screen also
 offers WEAPON LOADOUT, which opens the loadout chrome on that seat's own fit and airframe and
 returns to the picker, so every joined pilot picks weapons as well as an aeroplane and the choice
 rides that seat's own `Fit` into the launch; the original has no second pilot, so this is a remake
@@ -210,8 +209,7 @@ ACCEPT CHANGES, whose top stands level with the box and whose centre lies below 
 
 The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
 drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and
-Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the
-sortie screens' aircraft column. An open dropdown on Instant Action shows at most the authored
+Original's own for the hangar's dropdowns and Instant Action's dropdowns and contents window. An open dropdown on Instant Action shows at most the authored
 `TotalDisplayed` rows and keeps every item as a row keyed `<key>:<index>`, drawn and hit only inside
 the window, so a scripted pose and a suite walk still pick by index whatever the window shows. Every
 one of those thumbs is as long as the share of the list its window shows, its scroll tile drawn
@@ -379,8 +377,8 @@ around rectangles the layout authors at differing widths.
 ## Audio
 
 `IMenuAudio` (`CSVM/src/UI/Menu/IMenuAudio.cs`): `Cue(MenuCue)` plays one semantic cue by name,
-`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
-`EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
+`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music to
+silence, `EndNarration()` stops it and brings the music back, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
 mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
 service (`MenuAudioService`, `CSVM/src/Launch/MenuAudioService.cs`) owns lookup, decoding,
 playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a
@@ -456,14 +454,13 @@ these exits (`FreeFlightFeature.BuildExit`, `InstantActionFeature.BuildExit`,
 of its own beyond handing the feature the seats. The host hides the presentation before the sink
 runs, and a failed build shows the same instance again where it stood.
 
-Dogfight's two match rules, the kill target that ends a match early and the match clock in minutes,
-are the `PlayerSetupFeature`'s (`KillTarget`, `TimeLimitMinutes`, stepped by `StepKillTarget` and
-`StepTimeLimit`, either at 0 disabling that limit). They start at the command line's own defaults of
-5 kills and 5 minutes, ride `LaunchExit.Match` into `SessionSpec.FromMenu`, and lose to an explicit
-`--vs-kills=`/`--vs-time=`, one flag beating only the rule it names. Original's Dogfight screen offers them as two
-remake-only rows on its heading line over the aircraft column, stepped sideways and by a press that
-wraps past the top to no limit. A presentation reads the feature's two values and steps them;
-nothing in the launch leg changes.
+A local Dogfight's mission rules are the `PlayerSetupFeature`'s `MatchOptions`, the network lobby's own
+shape: the victory condition (Time, Score or both) with its two boxes, Limited Lives with its box and
+Auto Respawn. They open on the lobby's values (`DogfightLobby.OpeningOptions`, 10 minutes armed and 40 in
+the Score box), so a local and a network Dogfight start in the same place, and ride `LaunchExit.Match`
+into `SessionSpec.FromMenu` as `DogfightLobby.RulesOf` reads them. An explicit `--vs-kills=`/`--vs-time=`,
+whose own defaults for a scripted launch are 5 and 5, beats only the rule it names. Original edits
+them on its local lobby's Mission Options (`OriginalLocalLobby.cs`); nothing in the launch leg changes.
 
 A networked Dogfight leaves through the same exit with one more field. `MenuNetLaunch` is the open
 transport and which end owns the match, built by `NetPlayFeature.BuildLaunch` and taken by the
@@ -668,7 +665,7 @@ In order. Each step names the file it touches and the test that proves it.
    bullet, no flag added. Keep every campaign pose on `CampaignAidProfiles`' scratch store.
 10. **Add the driven suites.** One in-engine suite per journey family in `CSVM/src/Testing/`, over
     a real `MenuHost` through `MenuSuiteHost`, standing for the presentation what
-    `menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
+    `menu-original-tracer-core`, `menu-original-instant-action`, `menu-original-hangar`,
     `menu-original-campaign`, `menu-original-cheats` and `menu-player-setup-seats` stand for
     Original;
     add the presentation's cases to `menu-launch-return`, which drives every exit and every

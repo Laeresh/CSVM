@@ -23,18 +23,16 @@ internal static class MenuPlayerSetupSuites
 
     [Suite("menu-player-setup-seats",
         "Scripted seats through the shared player setup in Original: the Dogfight door opens the "
-        + "Dogfight screen, FLY waits for a second seat with the hint "
-        + "naming it, a joined seat gets its own aircraft screen where seat 0's cursor and buttons "
-        + "move nothing, Back leaves the walk with "
-        + "the seat kept and seat 0's pick undone, seat 0 picking again reopens it at the same "
-        + "seat, CANCEL SELECTIONS and Back over a closed list each drop the selection without "
-        + "leaving, a selected seat's WEAPON LOADOUT opens the decoded ammo chrome on its own fit and "
-        + "airframe with the walk and its own reach kept there, CANCEL LOADOUT restores the picks and "
-        + "ACCEPT keeps them, two Accepts select and confirm, and that last confirm is the Dogfight "
-        + "launch for both seats carrying seat 1's own loadout and seat 0's stock fit; on Free Flight "
-        + "with no map picked it launches nothing and leaves FLY dark "
-        + "until the map is picked, when seat 0's own press flies both, and a guest's Back unjoins "
-        + "from the top level")]
+        + "local lobby on the network lobby's opening rules, FLY waits for a second seat with the hint "
+        + "naming it, with a seat joined FLY walks it through its own aircraft screen where seat 0's "
+        + "cursor and buttons move nothing, Back leaves the walk with the seat kept, FLY again reopens "
+        + "it at the same seat, CANCEL SELECTIONS and Back over a closed list each drop the selection "
+        + "without leaving, a selected seat's WEAPON LOADOUT opens the decoded ammo chrome on its own "
+        + "fit and airframe with the walk and its own reach kept there, CANCEL LOADOUT restores the "
+        + "picks and ACCEPT keeps them, two Accepts select and confirm, and that last confirm is the "
+        + "Dogfight launch for both seats carrying seat 1's own loadout, seat 0's stock fit and the "
+        + "opening rules; Free Flight greys the rules, takes a map off its list and launches both "
+        + "seats the same way, and a guest's Back unjoins from the top level")]
     internal static void MenuPlayerSetupSeats(TestContext ctx) => OriginalSeats(ctx);
     // Original: seat 0 is a scripted keyboard, a second scripted seat joins through the feature
     // and is polled by the presentation's Tick like a pad would be.
@@ -61,6 +59,7 @@ internal static class MenuPlayerSetupSuites
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat0);
         var setup = host.Features.Get<PlayerSetupFeature>();
+        const string Fly = CSVM.UI.Menu.Original.OriginalShell.FlyKey;
         try
         {
             host.Select("original");
@@ -76,23 +75,22 @@ internal static class MenuPlayerSetupSuites
             Press(host, seat0, Accept);
             ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight,
                 $"Down from the Free Flight door and Accept opens the Dogfight screen ({shell.Screen})");
-            Press(host, seat0, Accept);
-            Press(host, seat0, Right);
-            Press(host, seat0, Accept);
-            ctx.Check(shell.PickedDogfightChapter == "C1" && shell.PickedAirframe == "player_autogyro",
-                $"seat 0 picks the first chapter and the first airframe ({shell.PickedDogfightChapter}, {shell.PickedAirframe})");
-            var fly = Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey);
-            ctx.Check(fly is { Enabled: false }, $"FLY stands disabled with one seat in Dogfight");
-            Press(host, seat0, Up);
-            ctx.Check(shell.FocusedKey != CSVM.UI.Menu.Original.OriginalShell.FlyKey, $"and Up wraps past it ({shell.FocusedKey})");
-            Press(host, seat0, Down);
+            ctx.Check(Row(shell, CSVM.UI.Menu.Original.OriginalLobbyScreen.TimeKey) is { Label: "10", Enabled: true }
+                && Row(shell, CSVM.UI.Menu.Original.OriginalLobbyScreen.ScoreKey) is { Label: "40", Enabled: false },
+                $"its rules open on the network lobby's: 10 minutes armed, the Score box at 40");
+            ctx.Check(Row(shell, Fly) is { Enabled: false }, $"FLY stands disabled with one seat in Dogfight");
             ctx.Check(HasLine(shell, "Dogfight needs a second seat"), $"the hint names the missing seat");
 
             var s2 = new ScriptedSeat();
             ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2, $"a second seat joins ({host.Seats.Count})");
             host.Tick(Dt);
-            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1,
-                $"seat 0's pick standing, the join opens the second seat's own aircraft screen ({shell.Screen}, picking {shell.PickingSeat})");
+            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight && Row(shell, Fly) is { Enabled: true },
+                $"the join opens no screen of its own and FLY stands ({shell.Screen})");
+            ctx.Check(WalkTo(host, seat0, shell, Fly), $"seat 0's cursor reaches FLY ({shell.FocusedKey})");
+            Press(host, seat0, Accept);
+            ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1
+                && shell.SeatReturn == CSVM.UI.Menu.Original.OriginalScreen.Dogfight && exits.Count == 0,
+                $"FLY opens the second seat's own aircraft screen and launches nothing ({shell.Screen}, picking {shell.PickingSeat})");
             Press(host, seat0, Down);
             Press(host, seat0, Accept);
             Press(host, seat0, Back);
@@ -100,14 +98,12 @@ internal static class MenuPlayerSetupSuites
                 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1,
                 $"seat 0's cursor, Accept and Back move nothing on seat 1's screen ({shell.Screen}, picking {shell.PickingSeat}, row {setup.Seats[1].Cursor}, locked={setup.Seats[1].Locked})");
             Press(host, s2, Back);
-            ctx.Check(host.Seats.Count == 2 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight
-                && Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: false },
-                $"its Back there keeps the seat, returns to the Dogfight screen and leaves FLY dark ({host.Seats.Count}, {shell.Screen})");
-            ctx.Check(!setup.Seats[0].Locked,
-                $"seat 0's own pick going with it, so the screen does not put the walk straight back up");
+            ctx.Check(host.Seats.Count == 2 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.Dogfight && exits.Count == 0,
+                $"its Back there keeps the seat and returns to the Dogfight screen ({host.Seats.Count}, {shell.Screen})");
+            WalkTo(host, seat0, shell, Fly);
             Press(host, seat0, Accept);
             ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && shell.PickingSeat == 1,
-                $"and seat 0 picking again reopens the walk at the same seat ({shell.Screen}, picking {shell.PickingSeat})");
+                $"and FLY again reopens the walk at the same seat ({shell.Screen}, picking {shell.PickingSeat})");
             Press(host, s2, Down);
             Press(host, s2, Accept);
             ctx.Check(setup.Seats[1].Locked && setup.Seats[1].Cursor == 1,
@@ -136,34 +132,34 @@ internal static class MenuPlayerSetupSuites
             if (exits.Count == 1 && exits[0] is LaunchExit dogfight)
             {
                 ctx.Check(dogfight.Chapter == "C1" && dogfight.Seats[0].PlaneNode == "player_autogyro" && dogfight.Seats[1].PlaneNode == "player_avenger",
-                    $"carrying the chapter and each seat's airframe ({dogfight.Chapter}, {dogfight.Seats[0].PlaneNode}, {dogfight.Seats[1].PlaneNode})");
+                    $"carrying the map box's first chapter and each seat's airframe ({dogfight.Chapter}, {dogfight.Seats[0].PlaneNode}, {dogfight.Seats[1].PlaneNode})");
                 ctx.Check(dogfight.Seats[0].Fit == null && ReferenceEquals(dogfight.Seats[1].Fit, setup.Seats[1].Fit),
                     $"and seat 1's own loadout while seat 0, having picked none, flies stock ({dogfight.Seats[1].Fit != null})");
+                ctx.Check(dogfight.Match is { KillTarget: 0, TimeLimitMinutes: 10, Lives: 0, AutoRespawn: true },
+                    $"on the lobby's opening rules, ten minutes and no score limit ({dogfight.Match})");
             }
 
             host.Show(MenuReturnDestination.TopLevel);
-            ctx.Check(host.Seats.Count == 2 && shell.PickedAirframe == null && !setup.Seats[1].Locked,
+            ctx.Check(host.Seats.Count == 2 && !setup.Seats[0].Confirmed && !setup.Seats[1].Locked,
                 $"a return keeps both seats and drops every pick ({host.Seats.Count})");
             Press(host, seat0, Up);
             Press(host, seat0, Accept);
             ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.FreeFlight, $"Up onto the Free Flight door and Accept opens Free Flight ({shell.Screen}, {shell.FocusedKey})");
-            Press(host, seat0, Right);
+            ctx.Check(Row(shell, CSVM.UI.Menu.Original.OriginalLobbyScreen.TimeRadioKey) is { Enabled: false }
+                && Row(shell, CSVM.UI.Menu.Original.OriginalLobbyScreen.AutoRespawnKey) is { Enabled: false },
+                $"whose rule rows stand greyed");
+            WalkTo(host, seat0, shell, CSVM.UI.Menu.Original.OriginalLobbyScreen.EnvironmentKey);
+            Press(host, seat0, Accept);
+            Press(host, seat0, Down);
+            Press(host, seat0, Accept);
+            ctx.Check(shell.LocalLobby.PickedChapter(CSVM.UI.Menu.Original.OriginalScreen.FreeFlight) == "C1B" && host.Features.Get<FreeFlightFeature>().Chapter?.Code == "C1B",
+                $"Accept opens the map list and a row down picks the second map ({shell.LocalLobby.PickedChapter(CSVM.UI.Menu.Original.OriginalScreen.FreeFlight)})");
+            WalkTo(host, seat0, shell, Fly);
             Press(host, seat0, Accept);
             Press(host, s2, Accept);
             Press(host, s2, Accept);
-            ctx.Check(exits.Count == 1 && shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.FreeFlight
-                && Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: false },
-                $"with no map picked the last confirm launches nothing and leaves FLY dark ({exits.Count}, {shell.Screen})");
-            Press(host, seat0, Left);
-            Press(host, seat0, Accept);
-            ctx.Check(Row(shell, CSVM.UI.Menu.Original.OriginalShell.FlyKey) is { Enabled: true },
-                $"the map picked, FLY stands with every seat ready");
-            Press(host, seat0, Right);
-            Press(host, seat0, Up);
-            ctx.Check(shell.FocusedKey == CSVM.UI.Menu.Original.OriginalShell.FlyKey, $"Up from the first airframe wraps onto it ({shell.FocusedKey})");
-            Press(host, seat0, Accept);
-            ctx.Check(exits.Count == 2 && exits[1] is LaunchExit { Mode: MenuMode.Free, Seats.Count: 2 },
-                $"and its press launches both seats through the Free Flight feature ({exits.Count})");
+            ctx.Check(exits.Count == 2 && exits[1] is LaunchExit { Mode: MenuMode.Free, Seats.Count: 2, Chapter: "C1B", Match: null },
+                $"and FLY's walk launches both seats through the Free Flight feature, carrying no rules ({exits.Count})");
 
             host.Show(MenuReturnDestination.TopLevel);
             var s3 = new ScriptedSeat();

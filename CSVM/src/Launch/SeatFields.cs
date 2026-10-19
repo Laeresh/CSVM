@@ -94,9 +94,9 @@ internal static class SeatFields
         return (roster, seatFits.ToArray());
     }
 
-    /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first, any but the first by player tag. Each guest follows on its seats in
-    /// <paramref name="owners"/>, the lobby's rows (one each when null), each in its seat's pick.
+    /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats lead, then
+    /// each guest's in <paramref name="owners"/> (one each when null), each in its seat's pick.
+    /// A further seat is named as its lobby row is (<see cref="Net.NetSeats.FurtherSeatName"/>).
     /// ⚠ A guest with no pick on the wire, one whose lobby screen never stood, flies the host's first
     /// airframe on the stock fit. Each seat takes its machine's lobby team from
     /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
@@ -120,7 +120,10 @@ internal static class SeatFields
                 SeatIndex = seats.Count,
                 TeamId = teamOf(wire.LocalPeer),
                 FlownHere = true,
-                Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
+                // A host with no callsign is named as its lobby row is; every marker still reads it
+                // Unknown, as the original reads a nameless player.
+                Callsign = i > 0 ? Net.NetSeats.FurtherSeatName(hostName, host: true, local: i)
+                    : Net.NetSeats.ShownName(hostName, host: true),
                 Unnamed = i == 0 && hostName.Length == 0,
                 PlaneNode = planes[i],
                 // Only the first seat has a Player Information answer; a splitscreen seat has none.
@@ -148,8 +151,8 @@ internal static class SeatFields
                 PeerId = peer,
                 SeatIndex = seats.Count,
                 TeamId = teamOf(peer),
-                Callsign = name.Length > 0 ? name
-                    : local > 0 ? Net.NetSeats.PlayerTag(seats.Count)
+                Callsign = local > 0 ? Net.NetSeats.FurtherSeatName(lobby?.PickAt(peer, 0)?.Name, host: false, local: local)
+                    : name.Length > 0 ? name
                     : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 Unnamed = name.Length == 0 && local == 0,
                 PlaneNode = pick != null ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
@@ -181,17 +184,21 @@ internal static class SeatFields
     }
 
     /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
-    /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
-    /// when <paramref name="rules"/> admit it. Without rules a guest's pick seats no build; a co-op
-    /// guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
+    /// <paramref name="customs"/> in menu order. Each guest seat takes the build its lobby pick sent
+    /// for that seat when <paramref name="rules"/> admit it. Without rules a guest's pick seats no
+    /// build; a co-op guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
     /// </summary>
     internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
         IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
     {
         var builds = new Net.NetPlaneBuild?[roster.Count];
-        var picks = (wire as Net.NetLobby)?.PickBuilds;
+        var lobby = wire as Net.NetLobby;
+        int local = 0;
         for (int seat = 0; seat < roster.Count; seat++)
         {
+            // A machine's seats stand side by side in the roster. A seat's place among them is the
+            // count of same-peer seats directly before it.
+            local = seat > 0 && roster[seat - 1].PeerId == roster[seat].PeerId ? local + 1 : 0;
             if (roster[seat].HasPane)
             {
                 int menu = Net.NetSeats.LocalOrdinal(roster, seat);
@@ -199,10 +206,8 @@ internal static class SeatFields
                 continue;
             }
 
-            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot. A
-            // guest's build is its first seat's; its further seats fly stock.
-            bool further = seat > 0 && roster[seat - 1].PeerId == roster[seat].PeerId;
-            if (roster[seat].IsBot || further || rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot.
+            if (roster[seat].IsBot || rules is not { } admitting || lobby?.BuildAt(roster[seat].PeerId, local) is not { } build)
             {
                 continue;
             }

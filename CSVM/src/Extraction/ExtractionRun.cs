@@ -39,6 +39,13 @@ public static class ExtractionRun
     // per archive, against a .rof half that only inflates and copies.
     private const double ZbdShare = 0.85;
 
+    // The install a disc is laid out into, under the data root, deleted once the run ends. Only
+    // unzbd's own regular files are ever in it.
+    private const string DiscStagingFolder = ".disc-install";
+
+    // Up to this many missing archives are named; the rest are counted.
+    private const int MissingNamed = 12;
+
     /// <summary>The unzbd an extraction uses when none is named. An exported build carries it in
     /// <c>tools/</c> beside the executable in <paramref name="root"/>. A checkout uses the fork's
     /// release build under <paramref name="root"/>, the tool the extraction scripts defaulted to.</summary>
@@ -95,16 +102,36 @@ public static class ExtractionRun
         }
 
         string install = check.InstallRoot!;
-        if (!RunZbd(install, request, result, progress, cancel))
+        string? staged = null;
+        try
         {
+            if (check.Kind == InstallCheckKind.Disc)
+            {
+                staged = Path.Combine(request.DataRoot, DiscStagingFolder);
+                install = LayOutDisc(check.Folder, staged, request.Unzbd, result, progress, cancel);
+                if (!result.Succeeded)
+                {
+                    Report(progress, ExtractionPhase.Done, 1.0, Array.Empty<string>(), null);
+                    return result;
+                }
+            }
+
+            CheckManifest(install, request.AllowMissing, result);
+            if (!result.Succeeded || !RunZbd(install, request, result, progress, cancel))
+            {
+                Report(progress, ExtractionPhase.Done, 1.0, Array.Empty<string>(), null);
+                return result;
+            }
+
+            cancel.ThrowIfCancellationRequested();
+            RunRof(install, request, result, progress, cancel);
             Report(progress, ExtractionPhase.Done, 1.0, Array.Empty<string>(), null);
             return result;
         }
-
-        cancel.ThrowIfCancellationRequested();
-        RunRof(install, request, result, progress, cancel);
-        Report(progress, ExtractionPhase.Done, 1.0, Array.Empty<string>(), null);
-        return result;
+        finally
+        {
+            DeleteStaging(staged);
+        }
     }
 
     /// <summary>Runs <paramref name="request"/> for a command line. The header, every progress line
@@ -138,6 +165,66 @@ public static class ExtractionRun
     {
         int done = step.Step == ZbdStep.Extracting ? step.Index - 1 : step.Index;
         return step.Total <= 0 ? 0 : ZbdShare * Math.Clamp(done, 0, step.Total) / step.Total;
+    }
+
+    private static void CheckManifest(string install, bool allowMissing, ExtractionResult result)
+    {
+        string? zbd = InstallLocator.ResolveDirectory(install, "ZBD");
+        var missing = zbd == null ? ZbdManifest.Expected : ZbdManifest.Missing(zbd);
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        string names = string.Join(", ", missing.Take(MissingNamed)) + (missing.Count > MissingNamed ? $" and {Count(missing.Count - MissingNamed)} more" : string.Empty);
+        string what = $"{Count(missing.Count)} of {Count(ZbdManifest.Expected.Count)} game archives are missing from ZBD: {names}";
+        if (allowMissing)
+        {
+            result.Warnings.Add(what + "; extracting the rest (--extract-allow-missing)");
+        }
+        else
+        {
+            result.Failures.Add(what + ". Reinstall or recopy the game; --extract-allow-missing extracts the rest anyway");
+        }
+    }
+
+    private static string LayOutDisc(string disc, string staged, string unzbd, ExtractionResult result, Action<ExtractionProgress>? progress, CancellationToken cancel)
+    {
+        Report(progress, ExtractionPhase.Zbd, 0, new[] { string.Empty, "Game disc:", "  copying the install out of " + disc }, null);
+        DeleteStaging(staged);
+        try
+        {
+            var run = UnzbdTool.Run(unzbd, new[] { "cs", "disc", disc, staged }, cancel);
+            if (run.ExitCode != 0)
+            {
+                result.Failures.Add("reading the game disc failed: " + (run.Stderr.Count > 0 ? string.Join(" ", run.Stderr.Take(3)) : "unzbd exit code " + Count(run.ExitCode)));
+            }
+            else
+            {
+                Report(progress, ExtractionPhase.Zbd, 0, run.Stdout.Select(line => "  " + line).ToList(), null);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Win32Exception or InvalidOperationException)
+        {
+            result.Failures.Add("reading the game disc stopped: " + e.Message);
+        }
+
+        return staged;
+    }
+
+    // Best effort: a staging folder left behind is replaced by the next disc run.
+    private static void DeleteStaging(string? staged)
+    {
+        try
+        {
+            if (staged != null && Directory.Exists(staged))
+            {
+                Directory.Delete(staged, recursive: true);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     // The exceptions caught are what a disk, a permission or an unzbd that cannot start raise. A bad
@@ -250,9 +337,10 @@ public static class ExtractionRun
 
 /// <summary>One whole extraction: the install to read, the data root to write under, and the
 /// unzbd to run. With <see cref="Force"/> set it redoes every output however new. With
-/// <see cref="Unzip"/> set it expands every zip into its sibling folder. The Extract button runs
-/// both off.</summary>
-public sealed record ExtractionRequest(string InstallFolder, string DataRoot, string Unzbd, bool Force = false, bool Unzip = false)
+/// <see cref="Unzip"/> set it expands every zip into its sibling folder. With
+/// <see cref="AllowMissing"/> set an archive missing from <see cref="ZbdManifest"/> is a warning
+/// rather than a failure. The Extract button runs all three off.</summary>
+public sealed record ExtractionRequest(string InstallFolder, string DataRoot, string Unzbd, bool Force = false, bool Unzip = false, bool AllowMissing = false)
 {
     /// <summary>Gets the extraction root, <c>&lt;data root&gt;/extracted</c>.</summary>
     public string ExtractedDir => Path.Combine(DataRoot, ExtractionRun.ExtractedFolder);

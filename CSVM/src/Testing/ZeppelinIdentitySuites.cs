@@ -32,7 +32,8 @@ internal static class ZeppelinIdentitySuites
         + "cargozep* exclusion reaches a gasbag only through its hull's name and not through "
         + "the zone's own, and over C1/MP3's built world the record team fans onto every "
         + "emplacement standing on the ally hull while the unauthored sibling's guns keep "
-        + "their TURRET default")]
+        + "their TURRET default; the same walk makes every gun on both hulls prefer a TARGETABLE "
+        + "round, and no ground emplacement")]
     internal static void ZeppelinIdentity(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -202,6 +203,7 @@ internal static class ZeppelinIdentitySuites
                 ctx.Check(allyBefore > 0 && plainBefore > 0,
                     $"both hulls carry emplacements at all (ally {allyBefore}, unauthored {plainBefore})");
 
+                bool noneBefore = emplacements.Emplacements.All(t => !t.PrefersOrdnance);
                 int moved = runtime.FanTeamsOntoTurrets(emplacements);
                 var allyTeams = TeamsUnder(world, emplacements, AllyZep);
                 var plainTeams = TeamsUnder(world, emplacements, PlainZep);
@@ -211,6 +213,16 @@ internal static class ZeppelinIdentitySuites
                     $"…every gun on '{AllyZep}' now answers to its airship's team, not to the TURRET default");
                 ctx.Check(plainTeams.Count > 0 && plainTeams.All(t => t == TurretDef.DefaultTeamId),
                     $"…while '{PlainZep}', whose record authors no team, keeps its guns on the authored TURRET default {TurretDef.DefaultTeamId}");
+
+                // The round preference rides the same walk, on every hull whether it authors a team.
+                var hullGuns = GunsUnder(world, emplacements, AllyZep)
+                    .Concat(GunsUnder(world, emplacements, PlainZep)).ToList();
+                var groundGuns = emplacements.Emplacements.Except(hullGuns).ToList();
+                int preferring = hullGuns.Count(t => t.PrefersOrdnance);
+                ctx.Check(noneBefore && hullGuns.Count > 0 && preferring == hullGuns.Count,
+                    $"…and the fan makes every gun on both hulls, authored team or none, prefer a TARGETABLE round ({preferring}/{hullGuns.Count}, none before {noneBefore})");
+                ctx.Check(groundGuns.Count > 0 && groundGuns.All(t => !t.PrefersOrdnance),
+                    $"…while no emplacement off the hulls does ({groundGuns.Count(t => t.PrefersOrdnance)}/{groundGuns.Count})");
 
                 ctx.Same(0, runtime.FanTeamsOntoTurrets(emplacements),
                     $"a second fan moves nothing: SetTeam reports a write only when the value changes");
@@ -259,12 +271,16 @@ internal static class ZeppelinIdentitySuites
     }
 
     private static List<int> TeamsUnder(TestWorld world,
+        TurretEmplacementRuntime emplacements, string node) =>
+        GunsUnder(world, emplacements, node).Select(t => t.Team).ToList();
+
+    private static List<TurretController> GunsUnder(TestWorld world,
         TurretEmplacementRuntime emplacements, string node)
     {
-        var teams = new List<int>();
+        var guns = new List<TurretController>();
         if (world.Runtime.FindNodes(node, null) is not { Count: > 0 } hits)
         {
-            return teams;
+            return guns;
         }
         var root = hits[0];
         foreach (var t in emplacements.Emplacements)
@@ -272,9 +288,9 @@ internal static class ZeppelinIdentitySuites
             if (t.Site is { } site && GodotObject.IsInstanceValid(site)
                 && (site == root || root.IsAncestorOf(site)))
             {
-                teams.Add(t.Team);
+                guns.Add(t);
             }
         }
-        return teams;
+        return guns;
     }
 }

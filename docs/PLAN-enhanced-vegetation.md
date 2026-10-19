@@ -1,0 +1,570 @@
+# Enhanced vegetation
+
+**ACTIVE PLAN** (written 2026-10-19). It sits in `docs/`, which by this repo's convention makes it
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. When every item lands, the closing
+commit deletes this file, records the completion in its message, and clears the "Current status"
+pointer; any live prose linking this file by path is unlinked in the same commit.
+
+This plan extends the original's clutter system in Enhanced mode, as PLAN-enhanced-ocean extended
+its water: a Vegetation Quality setting whose Rich value breaks up the template's repeated layout,
+gives forests mass past the card fade, dresses ground the original leaves bare, and draws 3D trees
+and ground cover up close. Each of those four is one wave, prototyped and judged at the controls
+before it ships. The scope came from a grilling in this session; its calls are the Decisions table,
+which is the authority where the prose disagrees. The plan draws no `backlog` issues. #57 (CM23
+co-op host perf) is a constraint the budget holds, not an item here; #142 and #205 (Enhanced C5
+city look) touch clutter but are city bugs and stay separate.
+
+The plan assumes the decode in [`org/clutter.md`](org/clutter.md) and leaves it untouched: the
+faithful stamp, its seed and its streams are the Original setting, and nothing here changes them.
+
+## Milestone goal
+
+- A **Vegetation Quality** setting, Original or Rich, under Enhanced only, switching live.
+- A per-chapter **vegetation sidecar** naming the vegetation kinds and their tuned values, edited in
+  a **vegetation lab** in `--freecam` with a paint tool (texture picks and a brush mask).
+- Under Rich: per-stamp variation and better card shading (Wave A), forest mass past the card
+  fade (Wave B), dressing for ground the original leaves bare (Wave C), and 3D look-alike trees and
+  ground cover up close (Wave D), shipped for C1, C1B, C2, C3 and C4.
+
+**The Original setting and Original mode are untouched, bit for bit.** Every remake addition reads
+the sidecar under Rich and nothing else; an Original golden that moves is a defect in this plan.
+
+## Decisions (2026-10-19)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | What does the first wave solve? | **All four goals, one wave each**, every wave prototyped before it ships |
+| 2 | Wave order | **Pattern, mass, density, near**. Pattern is cheapest and lays down the per-stamp data the later waves read; near may need new art |
+| 3 | Gating | **Enhanced + a Vegetation Quality word setting (Original / Rich)**, live switch like Water Quality; Rich on desktop, Original on the Deck and Linux until measured |
+| 4 | Which decorations count as vegetation | **An explicit per-chapter list in a shipped sidecar JSON** (like `ocean_seas.json`). Unlisted kinds keep the faithful stamp, so city blocks, cars and lamp posts are never touched |
+| 5 | Undressed green ground (C3's jungle, C1's fields) and close-up grass | **In scope** |
+| 6 | Art source | **The chapter's own cards first for new ground; new art for grass and crops; procedural ground cover explored beside it.** 3D trees and bushes are Blender models |
+| 7 | Where new ground and grass go | **New ground rides the density wave, grass the near wave** |
+| 8 | Tuning | **A vegetation lab in `--freecam`** with live values saved to the sidecar |
+| 9 | The lab's paint tool | **Both texture picks and a brush mask.** A pick assigns a ground texture a vegetation set; the mask is world-space and only gates and scales density, so placement stays in texture space |
+| 10 | The mask's reach | **Every listed vegetation kind, the original's stamps included**, so a strip can be cleared or an edge thickened. Original ignores the mask |
+| 11 | C3's jungle (a painted canopy seen from above) | **A canopy volume over the painted canopy, with palms on its transition textures**, never cards stood on the painted treetops |
+| 12 | Mass technique | **Prototype canopy shells against impostor clumps on C1 and pick at the controls** |
+| 13 | C1's fields and grassland in the density wave | **Sparse original cards** (bushes, the odd fir; hedgerows by mask). Crops and grass wait for the near wave |
+| 14 | Chapters shipped | **Every chapter with ground**: C1, C1B, C2, C3, C4. C1 and C3 are the prototypes. C1C and C2B have no ground; C5 is city only |
+| 15 | Collision of 3D trees | **Not solid**, like the cards, so the setting is visual only and co-op peers on different settings play the same game |
+| 16 | 3D trees vs cards | **A Blender look-alike per card species within a near radius, dithering over to the original card beyond it**, on the same stamps |
+| 17 | Who models | **Agents, with scripted Blender run headless**, exporting glTF; you judge renders beside the card |
+| 18 | Budget | **Measured per wave** with `--perf` at a fixed worst-case view per chapter; the ceiling is set from Wave A's measurement; CM23's co-op host (#57) must not get slower; the Deck stays Original until a Deck item measures it |
+| 19 | Card shader upgrades (sway, sun-side shading, contact shadow) | **Wave A**, beside jitter and tint |
+
+Defaults set without a question, open to change: the variation comes from a fixed seed (identical on
+every launch and machine); the brush mask is one image per chapter beside the sidecar; the Blender
+scripts and exported models live in the repo; Enhanced goldens are re-pinned at the end of each wave.
+
+## What the data actually ships
+
+From [`analysis/veg-ground-survey/FINDINGS.md`](../analysis/veg-ground-survey/FINDINGS.md)
+(measured areas and inventory; the green verdicts are read from names and images, not judged):
+
+| Chapter | Templated ground | Undressed vegetation-bearing ground |
+|---|---|---|
+| C1 | `terpat02` 84.9 km² (firs), `river1/2` (bushes) | `terpat03` grassland 10.7, `crop04` 6.8 and `crop05` 4.2 fields, `terpat03b` 2.5, `grass1` 0.7, transitions ~2 |
+| C1B | `vegrocktop` 0.13 | grey-green rock only (`rocktop` 0.49, `rocktop128` 0.22) |
+| C2 | 17 templates (scrub, suburbs, `parkfront` palms) | two sports fields, 0.05 each |
+| C3 | `cliff1_sandtrans` 0.93 (palm1) | **~26 km² of jungle canopy**: `forest1` 10.5, `forest1-128` 8.1, `cliff1` 3.4, `cliff1_watertrans2` 2.9, `cliff1_toptrans` 2.5, smaller transitions |
+| C4 | `terpat01` 109.7, `terpat01-128` 8.0, `river5` | dry grass and rock transitions ~8 (`cliff01-trans1` 3.9, `cliff01-trans3` 3.3) |
+| C1C, C2B | none | no ground |
+| C5 | city blocks, all templated | none |
+
+**No grass, reed or crop card exists anywhere in the install**; the smallest plant cards are C2's
+`brush1/2` (~2.4 × 2.1 m). Every sprite card is CylindricalY. Unplaced cards worth reusing: C3's
+`palm2`/`palm3`, C4's second `firtree2`. The original's own variation keys (`translate_uv_range`,
+`rotation_range`, `align_normal`, the slope pair) are decoded and authored by no chapter
+([`org/clutter.md`](org/clutter.md), "The kind block").
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
+  never guess a value. Inventing content is the mistake this project makes most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data/code before building on it; **a correct disproof that lands no code is a success here**, not a
+  failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
+  TUNE / lead-only).
+- **`PROJECT_CONTEXT.md` + the module's entry in `docs/architecture/<Namespace>.md` (plus its index
+  bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
+  item; a landed item gets its record in the landing commit's message and its issue is **closed**. New decodes land with their `docs/formats/` page.
+- **Read `docs/verification.md` before measuring anything**, the instruments here mislead; cite the
+  rule that bites per item.
+- **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
+  mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
+  location the report came from.
+- **Read the module's entry in `docs/architecture/<Namespace>.md` (found through the index in
+  `docs/architecture.md`) before modifying it,** then the comments on the members you touch; dead
+  ends are in the landing commits (`git log --grep=<ID>`), so search those before re-chasing one.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+
+### Wave A, pattern
+
+1. ☐ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
+2. ☐ The vegetation sidecar: per-chapter kind list and values, read under Rich
+3. ☐ Per-stamp jitter, rotation and tint for listed kinds
+4. ☐ Card shading: wind sway, sun-side shading, contact shadow
+5. ☐ Vegetation lab in `--freecam`: live values saved to the sidecar
+6. ☐ The lab's paint tool: texture picks and a brush mask
+7. ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
+
+### Wave B, mass
+
+11. ☐ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
+12. ☐ Prototype: canopy shells on C1
+13. ☐ Prototype: impostor clumps on C1
+14. ☐ Pick the mass technique at the controls and productionise it
+15. ☐ C3's canopy volume over its painted jungle, palms on the transitions
+16. ☐ Wave B budget and goldens
+
+### Wave C, density
+
+21. ☐ Remake-added stamps on picked textures, in texture space, under the mask
+22. ☐ C1's grassland and fields: sparse original cards, hedgerows by mask
+23. ☐ C1B, C2 and C4 tuned in the lab
+24. ☐ Wave C budget and goldens
+
+### Wave D, near
+
+31. ☐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
+32. ☐ Near-radius 3D draw with a dither handover to the card
+33. ☐ Look-alike models for every listed card species
+34. ☐ Ground cover prototype: new-art grass and crop cards
+35. ☐ Ground cover prototype: procedural shells; pick at the controls
+36. ☐ Deck and Linux: measure Rich and set their default
+37. ☐ Wave D budget and goldens
+
+## Dependency and parallelism notes
+
+A1 and A2 block everything: every later item reads the setting and the sidecar. A3 and A4 both edit
+`ClutterBuilder`'s stamp and shader (`CSVM/src/Mech3/Clutter.cs`), so they run in sequence, not in
+parallel worktrees. A5 → A6 is a chain, and A6 blocks B11 (C3's mask comes from texture picks) and
+C21 (picks and mask drive added stamps). B12 and B13 can run in parallel worktrees once B11 lands if
+each owns its own new module and neither edits `Clutter.cs`. B14 needs both. C21 blocks C22 and C23.
+D31 blocks D33; D32 can start beside D31 against a placeholder mesh. D34 and D35 run in parallel if
+each owns its own module. D36 waits for every look item. Each wave's budget item closes that wave.
+
+---
+
+# Wave A, pattern
+
+## A1 ☐ Vegetation Quality setting (Original / Rich) under Enhanced, live switch
+
+**Goal.** A Vegetation Quality word setting in the video options, Original or Rich, that only acts
+under Enhanced and switches live without a relaunch. Rich is the desktop default; the Deck and
+Linux default to Original.
+
+**Evidence (confidence: lead-only).** The pattern to copy is Water Quality from PLAN-enhanced-ocean
+(`git log --grep=PLAN-enhanced-ocean`); the live clutter path already exists:
+`EnhancedLook.FollowClutterFade` (`CSVM/src/Launch/EnhancedLook.cs:201`) and
+`ClutterBuilder.Recut` (`CSVM/src/Mech3/Clutter.cs:519`). Word settings register once and every
+settings site walks the registry (`git log --grep="#162"`). <TODO: where Water Quality is declared
+and how its platform default is chosen.>
+
+**Approach.** Register the word setting beside Water Quality; resolve it in `EnhancedLook` with the
+other Enhanced words; a live change rebuilds or recuts the clutter. <TODO: whether a live switch can
+recut (A3's variation lives in instance data) or must rebuild the clutter root.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO: the live-switch check; at minimum, Original leaves every golden unchanged.>
+
+**⚠ Traps.** Original must stay bit-identical: an Original golden that moves is a defect.
+
+## A2 ☐ The vegetation sidecar: per-chapter kind list and values, read under Rich
+
+**Goal.** A shipped per-chapter JSON that names the vegetation kinds and carries their tuned values;
+under Rich the clutter reads it, under Original nothing reads it.
+
+**Evidence (confidence: lead-only).** Decision 4. `ocean_seas.json` is the precedent
+(`git log --grep=E41`). Kinds are keyed by model name (`Kind.Model`, `Clutter.cs:961`), which is
+what the original's own `templates.zrd` keys on ([`org/clutter.md`](org/clutter.md)).
+
+**Approach.** <TODO: the schema (kind list, jitter, tint, mask path, texture picks) and where the
+file ships.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** Key by model name, not by mesh index: C5 ships one building as several meshes, and a
+substitution target resolves to one model however many templates mention it (`Clutter.cs:1001`).
+
+## A3 ☐ Per-stamp jitter, rotation and tint for listed kinds
+
+**Goal.** Under Rich, each listed stamp moves by a small offset, turns and takes a slight tint and
+brightness, so the template's layout no longer repeats visibly from altitude.
+
+**Evidence (confidence: traced for the placement path, lead-only for the look).** Every texture
+repeat stamps the same layout because the original authors no jitter or rotation
+([`org/clutter.md`](org/clutter.md), "The kind block"; stamp loop `Clutter.cs:556`). The fade draw
+already runs on its own stream so a fade A/B leaves species and scale alone (`Clutter.cs:634`).
+
+**Approach.** Draw the Rich variation from a stream of its own on a fixed seed, after the point is
+kept and after the substitute/scale/fade draws, so Original's streams are untouched. Jitter in UV
+units, so it follows the painted ground. Carry the tint in per-instance data. <TODO: which instance
+slot the tint goes in, given custom data already carries the fade (`Clutter.cs:791`).>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO: a montage from altitude over C1, Original against Rich, judged by you.>
+
+**⚠ Traps.**
+- Never add a world grid or a world-space offset (`Clutter.cs:17`, `:554`); jitter in texture space.
+- Never draw from `rng` or `fadeRng`: one extra draw moves every later species and scale, and with
+  them the goldens.
+- A jitter can carry a stamp off its source triangle; the `InSourceTriangle` check (`Clutter.cs:616`)
+  counts that, so clamp or re-test.
+- The exported placements feed MapEdgeExtender's copies past the map edge (`Clutter.cs:455`), so
+  the variation must be in the placements, not added in the shader, or the copies differ.
+
+## A4 ☐ Card shading: wind sway, sun-side shading, contact shadow
+
+**Goal.** Under Rich, cards sway in a wind, brighten on their sun side, and sit on a soft contact
+shadow.
+
+**Evidence (confidence: lead-only).** The card shader is generated in `ShaderCode`
+(`Clutter.cs:814`) with its facing in `FaceBasisLines` (`:865`).
+
+**Approach.** Emit the three as a Rich-only variant of the card shader. <TODO: the wind source
+(a global, or WeatherRig), and whether the contact shadow is a ground decal or a card-base darkening.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.**
+- Never declare an instance uniform below `csky_instance_uniforms.gdshaderinc` (`Clutter.cs:829`).
+- A blended card takes `depth_prepass_alpha`, never `depth_draw_never` (`Clutter.cs:812`).
+- A hidden or cratered stamp has a zero basis that the vertex stage reads (`Clutter.cs:841`); sway
+  must not revive it.
+- A live mode switch must find the other variant's compiled shader (ShaderTwins, `Clutter.cs:70`).
+
+## A5 ☐ Vegetation lab in `--freecam`: live values saved to the sidecar
+
+**Goal.** A lab panel in `--freecam` with live sliders for the sidecar's values that rebuilds the
+clutter and saves the chapter's entry to the sidecar.
+
+**Evidence (confidence: lead-only).** Decision 8; the ocean lab is the precedent
+(`git log --grep=E41`).
+
+**Approach.** <TODO: reuse the ocean lab's panel and save path.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** Save through `AtomicFile` with explicit UTF-8, as every repo writer does. <TODO: confirm
+the ocean lab's save path, "Save keeps the file" (`git log --grep="review 2"`).>
+
+## A6 ☐ The lab's paint tool: texture picks and a brush mask
+
+**Goal.** In the lab you click a ground texture to give it a vegetation set, and brush a world-space
+mask that thins, thickens or clears listed vegetation, the original's stamps included.
+
+**Evidence (confidence: lead-only).** Decisions 9 and 10.
+
+**Approach.** Texture picks are entries in the sidecar. The mask is one image per chapter beside it;
+a stamp samples it at its world position and is dropped or kept by density. <TODO: mask resolution
+and world mapping; the brush UI; how a pick names a vegetation set.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.**
+- The mask gates and scales; it never places. Placement stays per texture repeat (no world grid).
+- The mask acts only on listed kinds: a C5 block or a C2 car must be unreachable by the brush.
+- `no_clutter` selects which coplanar layer decorates, it does not mean bare ground
+  ([`org/clutter.md`](org/clutter.md)); a pick must not be read as overriding it.
+
+## A7 ☐ Wave A budget: the perf baseline, the ceiling, CM23 unchanged; goldens re-pinned
+
+**Goal.** Wave A's cost measured, a ceiling for the plan set from it, CM23's co-op host no slower,
+and the Enhanced goldens Wave A moved re-pinned.
+
+**Evidence (confidence: lead-only).** Decision 18. The CM23 measurement method is
+`analysis/cm23-host-perf/FINDINGS.md`.
+
+**Approach.** <TODO: the fixed worst-case view per chapter (low over C1's forest, C3's jungle).>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** Read `docs/verification.md` first. A golden that flips under external GPU load is a
+determinism defect to name and track, not one to re-pin.
+
+# Wave B, mass
+
+## B11 ☐ Canopy mask bake: from stamp density (C1) and from texture picks (C3)
+
+**Goal.** A per-chapter canopy mask that says where forest mass is drawn: baked from the placed
+stamps' density where the forest is cards (C1), and from the texture picks where it is painted (C3).
+
+**Evidence (confidence: lead-only).** Decisions 11 and 12. `OceanMask` (`CSVM/src/Effects/OceanMask.cs`)
+is the baked-mask precedent, with a cached bake (PLAN-enhanced-ocean Wave B).
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** A mask baked from stamps must bake from the Rich placements (after A3 and A6), or the
+mass and the cards disagree.
+
+## B12 ☐ Prototype: canopy shells on C1
+
+**Goal.** Stacked alpha-tested shells over C1's forest that take over as the cards fade, so the
+forest reads as mass from altitude.
+
+**Evidence (confidence: lead-only).** The layered-forest technique for distant views is in the
+literature (TU Wien 2006 report on forest rendering); Decision 12.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO: a montage from several altitudes against the Original fade, for B14.>
+
+**⚠ Traps.** <TODO>
+
+## B13 ☐ Prototype: impostor clumps on C1
+
+**Goal.** Pre-rendered cards of several trees placed past the card fade on C1, as MSFS does.
+
+**Evidence (confidence: lead-only).** Decision 12.
+
+**Approach.** <TODO: how the clump textures are made (rendered from the original cards, or from
+D31's models).>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO: the same montage poses as B12.>
+
+**⚠ Traps.** <TODO>
+
+## B14 ☐ Pick the mass technique at the controls and productionise it
+
+**Goal.** One technique chosen by you from B12 and B13, made production quality on C1.
+
+**Evidence (confidence: lead-only).** Decision 12.
+
+**Approach.** Show both side by side (montage, then the controls) and ask with AskUserQuestion.
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** The look call is yours. A luminance distance never settles it.
+
+## B15 ☐ C3's canopy volume over its painted jungle, palms on the transitions
+
+**Goal.** C3's `forest1`/`cliff1` canopy gains a volume with depth, and its transition textures
+(`cliff1_toptrans`, `cliff1_sidetrans`, `cliff1_watertrans2`) carry palm1, palm2 and palm3.
+
+**Evidence (confidence: measured areas, lead-only look).** The survey table above; palm2/palm3 are
+in C3's gamez unplaced. Decision 11.
+
+**Approach.** The B14 technique fed by the C3 mask from texture picks; palms through A6's texture
+picks. <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** No cards on the painted treetops: the texture already shows them from above.
+
+## B16 ☐ Wave B budget and goldens
+
+**Goal.** As A7, for Wave B.
+
+**Evidence (confidence: lead-only).** Decision 18.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** As A7.
+
+# Wave C, density
+
+## C21 ☐ Remake-added stamps on picked textures, in texture space, under the mask
+
+**Goal.** Under Rich, a picked texture gets stamps from its vegetation set, once per texture repeat
+like the original's, and the mask thins or thickens them.
+
+**Evidence (confidence: traced for the lattice, lead-only for the rest).** The lattice and its rules
+are `PlaceOnTriangle` (`Clutter.cs:556`) and [`org/clutter.md`](org/clutter.md), "The lattice rule".
+
+**Approach.** <TODO: how a vegetation set is laid out in the unit cell (a generated scatter on a
+fixed seed), and whether it reuses `PlaceOnTriangle` or a sibling.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.**
+- No world grid: added stamps walk the same UV lattice.
+- Keep the strict edge test and the quarter-metre dedup (`Clutter.cs:604`) on added stamps too.
+- C5 already draws about 139k sprites; density must not reach unlisted chapters' cities.
+
+## C22 ☐ C1's grassland and fields: sparse original cards, hedgerows by mask
+
+**Goal.** C1's `terpat03`/`terpat03b`/`grass1` carry scattered bush1/bush2 and the odd fir, and its
+`crop04`/`crop05` fields stay sparse, with hedgerows painted in by mask where wanted.
+
+**Evidence (confidence: measured areas, lead-only look).** The survey table above; Decision 13.
+
+**Approach.** Lab work over C21. <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** Grassland must stay grassland: the sparseness is the brief.
+
+## C23 ☐ C1B, C2 and C4 tuned in the lab
+
+**Goal.** Each of C1B, C2 and C4 has a sidecar entry tuned by you in the lab.
+
+**Evidence (confidence: lead-only).** Decision 14; the survey table above.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** C2's suburbs and parked cars are solid decorations: never list them.
+
+## C24 ☐ Wave C budget and goldens
+
+**Goal.** As A7, for Wave C.
+
+**Evidence (confidence: lead-only).** Decision 18.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** As A7.
+
+# Wave D, near
+
+## D31 ☐ Scripted Blender pipeline: one generator per species, headless glTF export, renders beside the card
+
+**Goal.** A Blender Python script per species that an agent runs headless to produce a glTF model
+and a render beside the original card, for your judgement.
+
+**Evidence (confidence: measured for the tools).** Blender 4.3, 4.4 and 5.2 are installed under
+`C:\Program Files\Blender Foundation`. Decision 17.
+
+**Approach.** <TODO: the Blender version to pin, the repo location for scripts and models, the
+generator (the bundled Sapling add-on or hand-built geometry), scale and pivot conventions.>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** The models are new art made by the remake; nothing traced from the original's textures
+ships as a model texture without a copyright check.
+
+## D32 ☐ Near-radius 3D draw with a dither handover to the card
+
+**Goal.** Within a near radius a listed stamp draws its 3D model, dithering over to the original card
+beyond it; from altitude nothing changes.
+
+**Evidence (confidence: lead-only).** Decision 16; X-Plane 12 draws trees the same way (developer
+docs, "building custom 3D trees"). The card fade already dithers (`csky_clutter_dither_keep`,
+`Clutter.cs:850`).
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** Not solid (Decision 15): give the 3D draw no collider.
+
+## D33 ☐ Look-alike models for every listed card species
+
+**Goal.** A Blender model per listed card species: C1's firs and bushes, C2's spruce, palms and
+brushes, C3's palms, C4's firs.
+
+**Evidence (confidence: measured sizes).** Card sizes are in the survey's FINDINGS.
+
+**Approach.** D31's pipeline per species, judged beside its card.
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** Match the card's silhouette and colour, or the handover in D32 shows.
+
+## D34 ☐ Ground cover prototype: new-art grass and crop cards
+
+**Goal.** Close-up grass and crop cover drawn from new-art cards on picked textures.
+
+**Evidence (confidence: measured).** No grass or crop card exists in the install (survey); Decision 6.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** <TODO>
+
+## D35 ☐ Ground cover prototype: procedural shells; pick at the controls
+
+**Goal.** The same ground cover drawn procedurally (shells or generated blades), shown beside D34 so
+you pick one.
+
+**Evidence (confidence: lead-only).** Decision 6.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** The look call is yours.
+
+## D36 ☐ Deck and Linux: measure Rich and set their default
+
+**Goal.** Rich measured on the Deck and on Linux, and their default set from the measurement.
+
+**Evidence (confidence: lead-only).** Decisions 3 and 18. PLAN-enhanced-ocean measured and budgeted
+the Deck the same way.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** <TODO>
+
+## D37 ☐ Wave D budget and goldens
+
+**Goal.** As A7, for Wave D.
+
+**Evidence (confidence: lead-only).** Decision 18.
+
+**Approach.** <TODO>
+
+**Model recommendation.** <TODO>
+
+**Verify.** <TODO>
+
+**⚠ Traps.** As A7.

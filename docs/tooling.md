@@ -34,6 +34,14 @@ reached three ways: the Extract screen a player sees when `extracted/` is missin
 another schema, the headless `--extract=<install>` flag ([cli.md](cli.md)), and the repo-root
 wrapper below. No script holds extraction logic.
 
+The install may also be the game disc, its `GAME` folder, or an ISO 9660 image of it. The disc
+ships each chapter folder as an LZX cabinet (`ZBD/C1.CAB`) and the texture tiers inside under 8.3
+aliases. `unzbd cs disc <disc> <folder>` copies `GAME` out, unpacks the cabinets in place and
+restores the `rtextureN` names (cabinet order is long-name order; the top tier per chapter is a
+table in the fork's `disc.rs`). The extraction runs it into `<data root>/.disc-install` and deletes
+that folder afterwards. The cabinets' chapter data is byte-identical to an install's; a localized
+disc (the German one) differs only in its sounds, `crimson.rof`, the string DLLs and the movies.
+
 The ZBD half walks the install's `ZBD` folder and runs `unzbd cs <mode>` on every archive as a
 child process, with the mode for its type, writing to the mirrored relative path under
 `extracted/`, basename kept:
@@ -187,7 +195,9 @@ non-failure, so the local battery is unchanged. The tier checks mechanisms on in
 data and never replaces the full local battery. A suite whose install reads sit in a few legs
 splits rather than staying off: those legs keep the original name and its `RequireData` gates, the
 rest move to a `<name>-core` suite on the tier, and no leg runs in both, so the local battery still
-makes every check once.
+makes every check once. A check that pins a value the install ships reads what it expects from the
+data root, and keeps its literal pin as a `TestContext.CheckShipped`, which only a real extraction
+makes, so a decode that garbles the shipped value still goes red on the install.
 
 **`RunCiSuites.ps1` is the CI engine stage, and runs locally on Linux or macOS the same way.** The
 `engine` job in `.github/workflows/checks.yml` runs it on `ubuntu-latest` after `dotnet build
@@ -292,6 +302,36 @@ deferral stopped is named in the stage row and in `report.txt`. A Faithful shot'
 move under `-RegenGoldens`, is never re-rendered. The cause of these moves is unknown; #210 owns
 finding it from the kept frames.
 
+**Every goldens run and every golden move is also appended to the goldens ledger**, because the
+`goldens-failures` folder goes with its run tree's `.scratch`. The ledger is
+`goldens-ledger.jsonl` at the root of the main checkout (found through the git common directory,
+so every worktree writes the one file), git-ignored and beside `perf-history.jsonl`, where neither
+`CleanScratch.ps1` nor a worktree removal reaches it; a tree git cannot resolve writes to its own
+root and warns. Every goldens stage outside `-RegenGoldens` writes one `run` line carrying the
+census once (`run`, `time`, `tree`, `commit`, `judged`, the count of shots the batch judged,
+`broken`, the count that did not render, `gaming`, `memory`, `godots` and `gpu`, the nvidia-smi table), then one `shot` line
+per move naming its `run`: `time`, `tree`, `commit`, `shot`, `verdict`, `pin`, `firstHash` (the
+moved hash), `rerender`, `diff` and its fields `pixels`, `maxLevel` and `box` (`[x0, y0, x1, y1]`),
+and `failures` (the run's `goldens-failures` folder). The verdict of a re-rendered Enhanced shot is
+`flake`, `moved` when the re-render stayed off the pin, or `unrendered` when it timed out or
+printed no hash; `deferred` is an Enhanced move whose re-render a deferral stopped, and `red` a
+Faithful move, which is never re-rendered. Those two have no `rerender` and no diff fields, since
+the stage measured no second frame. **A clean run writes its run line too**, so the ledger counts
+the batteries that ran clean against the moves it records, and whether a shot flips more under
+load than the clean runs ran under. The nvidia-smi table is the bulk of a run line (a run line is
+about 0.5 KB without it and 5.7 KB with it), so it is read only for a run that records a move; a
+clean run's load is its gaming mode, live reservations and CSVM Godots. At one battery an hour
+that is about 4 MB a year. Each line is written whole under a machine-wide mutex, so two batteries
+finishing at once neither lose nor interleave a line; an append that fails, or waits 30 s for the
+mutex, prints a warning and never decides the stage. **`.\GoldenLedger.ps1`** prints the ledger's
+move, run and clean-run counts, then the moves grouped by shot, most recent first, with its counts
+per verdict, then its last moves (`-Recent N`, default 5), each with its region and its run's load
+(gaming mode, live reservations, CSVM Godots, GPU processes). `.\GoldenLedger.ps1 -SelfTest`
+checks the path and its fallback, the append from four concurrent writers, the mutex timeout, the
+shot lines and diff fields of every verdict, the clean-run count and the summary against a private
+file named by `CSVM_GOLDEN_LEDGER` (test-only). The code is `GoldenLedgerCore.ps1`, which takes no
+parameters so that dot-sourcing it binds nothing in `RunTests.ps1`.
+
 **The hitch stage is opt-in (`-Hitch`), not part of the landing gate**, because it never changes
 the exit code: run it when landing a change to `HitchMonitor.cs`, `HitchSidecar.cs` or the hitch
 tick in `Launch/FrameInstruments.cs`. **`-SkipHitch`** forces it off even when `-Hitch` is given, and `-Quick`
@@ -348,8 +388,7 @@ themselves, so one still alive is stuck and ours; any other Godot here is left a
 **All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value, as the
 controller-disconnect freeze workaround: Godot's bundled SDL hangs the main thread forever when a
 >255-button DirectInput device disconnects, and disabling that backend removes the phantom views
-while real pads keep working via XInput/HIDAPI. Removal conditions are in `backlog.md` under "Drop
-the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
+while real pads keep working via XInput/HIDAPI. Removal conditions are in #227.
 
 ## Exporting a release build
 
@@ -843,7 +882,7 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   prints them; bindings and profiles key on the model.
 - **Windows only:** `InstallSdl2.ps1`, which pins the `win32-x64` zip; the three SDL2 files
   `ExportRelease.ps1` ships in the zip, with the DLL's hash in `BUILD-INFO.txt`; and
-  `SDL_JOYSTICK_DIRECTINPUT=0` in the launch scripts, a workaround for Godot's SDL3 (BL-033).
+  `SDL_JOYSTICK_DIRECTINPUT=0` in the launch scripts, a workaround for Godot's SDL3 (#227).
 
 ## The WebRTC library and the master server
 

@@ -37,7 +37,7 @@ internal static class ExtractionScreenSuites
     }
 
     [Suite("extraction-picker",
-        "the install picker is Godot's own directory dialog over the whole file system, opens on the folder "
+        "the install picker is Godot's own folder-or-disc-image dialog over the whole file system, opens on the folder "
         + "it is given, the left shoulder goes up a folder, Y takes the folder shown into the field with the "
         + "check's message when it is not an install, and Esc during a run cancels it instead of quitting")]
     internal static void ExtractionPicker(TestContext ctx)
@@ -51,9 +51,9 @@ internal static class ExtractionScreenSuites
             try
             {
                 var picker = screen.Picker;
-                ctx.Check(picker.FileMode == FileDialog.FileModeEnum.OpenDir && !picker.UseNativeDialog
+                ctx.Check(picker.FileMode == FileDialog.FileModeEnum.OpenAny && !picker.UseNativeDialog
                     && picker.Access == FileDialog.AccessEnum.Filesystem,
-                    $"the picker is Godot's own dialog choosing a folder anywhere on disk (mode {picker.FileMode}, native {picker.UseNativeDialog}, access {picker.Access})");
+                    $"the picker is Godot's own dialog choosing a folder or a disc image anywhere on disk (mode {picker.FileMode}, native {picker.UseNativeDialog}, access {picker.Access})");
 
                 screen.OpenPicker(inside);
                 ctx.Check(picker.Visible, $"Choose folder shows the picker");

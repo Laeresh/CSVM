@@ -219,16 +219,16 @@ public class JoinBoardBotTests
         Assert.Equal(-1, shell.JoinBoard.PickedBot);
         Assert.Contains(shell.Compose().Lines, l => l.Text == "ARTICLES OF THE CREW");
 
-        // The Dogfight screen counts the bots: one seat flies with them, and the strip names them.
+        // The local Dogfight counts the bots: one seat flies with them, and its player list names
+        // each one under its tag.
         Press(shell, OriginalJoinBoard.ContinueKey);
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == OriginalShell.BotStripLine(setup.Bots.Count));
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready");
+        var lines = shell.Compose().Lines;
+        Assert.All(setup.Bots.Rows, b => Assert.Contains(lines, l => l.Text == b.Callsign));
+        Assert.Equal(setup.Bots.Count, lines.Count(l => l.Text == OriginalLobbyScreen.BotTag));
+        Assert.Contains(lines, l => l.Text == OriginalLocalLobby.ReadyHint);
         var step = Click(shell, shell.Rows.Single(r => r.Key == OriginalShell.FlyKey));
         var launch = Assert.IsType<LaunchExit>(step.Exit);
         Assert.Single(launch.Seats);
@@ -240,9 +240,6 @@ public class JoinBoardBotTests
     {
         var shell = Shell(out _);
         shell.Step(Down);
-        shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
         shell.Step(Accept);
         Assert.Contains(shell.Compose().Lines,
             l => l.Text == "Dogfight needs a second seat or a bot, from the JOIN BOARD");

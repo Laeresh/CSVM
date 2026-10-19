@@ -32,9 +32,15 @@ public enum InstallCheckKind
     EmptyZbd,
 
     /// <summary><c>ZBD</c> holds only its root archives, and no chapter folder (<c>C1</c>,
-    /// <c>C3</c>…) holds one. It is a disc's contents or a partial install. The menus would load
-    /// from it and every flight would fail on its missing chapter world.</summary>
+    /// <c>C3</c>…) holds one. It is a partial install, or a disc copy without its chapter
+    /// cabinets. The menus would load from it and every flight would fail on its missing chapter
+    /// world.</summary>
     NoChapters,
+
+    /// <summary>The pick is the game disc, its <c>GAME</c> folder, or an <c>.iso</c> image of it:
+    /// <c>ZBD</c> holds the chapters as cabinets (<c>C1.CAB</c>). Extraction first lays an install
+    /// out from it with <c>unzbd cs disc</c>.</summary>
+    Disc,
 }
 
 /// <summary>The answer for one picked folder. <see cref="InstallRoot"/> is the install itself on
@@ -43,8 +49,9 @@ public enum InstallCheckKind
 /// <see cref="Message"/>, null on an install.</summary>
 public sealed record InstallCheck(InstallCheckKind Kind, string Folder, string? InstallRoot, string? Message)
 {
-    /// <summary>Whether extraction can run from <see cref="Folder"/>.</summary>
-    public bool IsInstall => Kind == InstallCheckKind.Install;
+    /// <summary>Whether extraction can run from <see cref="Folder"/>: an install, or a disc it
+    /// lays one out from.</summary>
+    public bool IsInstall => Kind is InstallCheckKind.Install or InstallCheckKind.Disc;
 }
 
 /// <summary>Where <see cref="InstallLocator.Candidates"/> looks. These are values rather than
@@ -175,10 +182,20 @@ public static class InstallLocator
                 $"No folder was chosen. Choose your Crimson Skies install folder, {ExpectedFolder}.");
         }
 
+        if (File.Exists(folder) && folder.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
+        {
+            return new InstallCheck(InstallCheckKind.Disc, folder, folder, null);
+        }
+
         if (!Directory.Exists(folder))
         {
             return new InstallCheck(InstallCheckKind.Missing, folder, null,
                 $"The folder '{folder}' does not exist. Choose your Crimson Skies install folder, {ExpectedFolder}.");
+        }
+
+        if (HasCabinets(ResolveDirectory(folder, "GAME/ZBD")) || HasCabinets(ResolveDirectory(folder, "ZBD")))
+        {
+            return new InstallCheck(InstallCheckKind.Disc, folder, folder, null);
         }
 
         string? zbd = ResolveDirectory(folder, "ZBD");
@@ -195,7 +212,7 @@ public static class InstallLocator
                 ? new InstallCheck(InstallCheckKind.Install, folder, folder, null)
                 : new InstallCheck(InstallCheckKind.NoChapters, folder, null,
                     $"The folder '{zbd}' has no chapter folders (C1, C2, C3 and the others), so no mission could be flown. "
-                    + $"'{folder}' looks like the contents of the game disc or a partial install. Install the game in full, "
+                    + $"'{folder}' looks like a partial install. Install the game in full, "
                     + $"then choose that install: {ExpectedFolder}.");
         }
 
@@ -380,12 +397,17 @@ public static class InstallLocator
         return folded;
     }
 
-    private static bool HasArchives(string zbd)
+    private static bool HasArchives(string zbd) => HasFiles(zbd, "*.zbd", recurse: true);
+
+    // The disc ships each chapter folder as a cabinet at ZBD's root; an install never has one.
+    private static bool HasCabinets(string? zbd) => zbd != null && HasFiles(zbd, "*.cab", recurse: false);
+
+    private static bool HasFiles(string folder, string pattern, bool recurse)
     {
         try
         {
-            var options = new EnumerationOptions { RecurseSubdirectories = true, MatchCasing = MatchCasing.CaseInsensitive };
-            return Directory.EnumerateFiles(zbd, "*.zbd", options).Any();
+            var options = new EnumerationOptions { RecurseSubdirectories = recurse, MatchCasing = MatchCasing.CaseInsensitive };
+            return Directory.EnumerateFiles(folder, pattern, options).Any();
         }
         catch (IOException)
         {

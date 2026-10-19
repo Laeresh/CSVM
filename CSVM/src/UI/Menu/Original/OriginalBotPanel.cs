@@ -392,7 +392,7 @@ internal sealed class OriginalBotPanel
         }
     }
 
-    // A stock airframe's name as the sortie screens list it.
+    // A stock airframe's name as the local lobby lists it.
     private static string AirframeName(int airframe)
     {
         string node = StockAirframes.Node(airframe);

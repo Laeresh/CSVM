@@ -107,6 +107,10 @@ public sealed class AircraftLifecycle
     /// regardless.</summary>
     public float? AutoRespawnAfter { get; set; }
 
+    /// <summary>How long a crash holds the crash camera: <see cref="AutoRespawnAfter"/>, else
+    /// <see cref="AutoRespawnDelay"/>.</summary>
+    public float CrashCameraSeconds => AutoRespawnAfter ?? AutoRespawnDelay;
+
     /// <summary>Whether a crash waits for the pilot's Fire Guns press once
     /// <see cref="AutoRespawnAfter"/> has run. It is the lobby's Auto Respawn turned off
     /// (docs/org/multiplayer-scoring.md).</summary>
@@ -191,7 +195,7 @@ public sealed class AircraftLifecycle
             return default;   // one death, one report, and nothing may double-fire it
         _crashed = true;
         _destroyed = true;
-        _autoRespawnIn = AutoRespawnAfter ?? AutoRespawnDelay;
+        _autoRespawnIn = CrashCameraSeconds;
         _wreckFalling = destroyDef != null;
         return new DestroyOutcome
         {
@@ -218,7 +222,7 @@ public sealed class AircraftLifecycle
         _wreckFalling = false;
         _crashed = true;
         if (!wreckLanding)
-            _autoRespawnIn = AutoRespawnAfter ?? AutoRespawnDelay;
+            _autoRespawnIn = CrashCameraSeconds;
         LastCrashDef = CrashDefs?.DefForSurfaceId(surfaceId);
         return new CrashOutcome
         {

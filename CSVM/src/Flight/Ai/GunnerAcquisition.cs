@@ -26,14 +26,15 @@ public readonly record struct AcquiringShooter(
     bool InfiniteAmmo);
 
 /// <summary>One AI aircraft's target acquisition. The decoded hold keeps a standing target while it
-/// re-scores valid. Once it does not, the sweep ranks the VehicleList, the turrets and the structures
-/// for one global minimum. The gasbag gate admits a gasbag only while the shooter's zeppelin ordnance
+/// re-scores valid. Once it does not, the sweep ranks the VehicleList, the turrets, the structures
+/// and the TARGETABLE rounds in flight for one global minimum. The gasbag gate admits a gasbag only while the shooter's zeppelin ordnance
 /// is ready. It runs on the sim step and shares no accumulator with forces, contact or damage. The
 /// host supplies the shooter's view and fires on the target this leaves on the gunner
 /// (docs/org/aiPilot.md "Target acquisition").</summary>
 public sealed class GunnerAcquisition
 {
     private const int RetargetLogCap = 8;   // switches logged per shooter; a flight of twelve re-scores all mission
+    private const string ReadyWord = "ready";
 
     private readonly object _self;
     private readonly Func<AcquiringShooter> _shooter;
@@ -59,12 +60,19 @@ public sealed class GunnerAcquisition
 
     /// <summary>The last sweep's ranked pool, one source per candidate in the order ranked: a
     /// <see cref="FlightController"/>, a <see cref="SurfaceVehicle"/>, a
-    /// <see cref="TurretController"/> or a <see cref="DestructibleRegistry.Instance"/>.</summary>
+    /// <see cref="TurretController"/>, a <see cref="DestructibleRegistry.Instance"/> or a
+    /// <see cref="ProjectilePool.Flyout"/>.</summary>
     public IReadOnlyList<object?> RankedSources => _sources;
 
     /// <summary>How many structures the last sweep's scan admitted, before the team gate drops any.
     /// The decoded structure list is the narrower one, so only the scan shows what was offered.</summary>
     public int ScannedStructureCount => _scan.Structures.Count;
+
+    /// <summary>Whether this fit's gasbag ordnance can fire now, the decoded gasbag gate's own test
+    /// (<c>FUN_00420070</c>). The Zeppelin vs Zeppelin bot rule asks it too, so a torpedo bot goes for
+    /// a gas bag exactly while the acquisition would offer one.</summary>
+    public static bool GasbagOrdnanceReady(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo) =>
+        GasbagOrdnanceState(loadout, rocketeer, infiniteAmmo) == ReadyWord;
 
     /// <summary>One gunner tick: keep the standing target while the hold holds it, else re-acquire
     /// through the ranking when <see cref="AiGunner.AutoTarget"/> allows, leaving the pick on
@@ -121,14 +129,17 @@ public sealed class GunnerAcquisition
     private static string BiasNameOf(object? source, AiGunner gunner) =>
         gunner.RatingBiases is { Count: > 0 } ? TargetPool.NameOf(source) : string.Empty;
 
+    private static string GasbagOrdnanceState(in AcquiringShooter shooter) =>
+        GasbagOrdnanceState(shooter.Loadout, shooter.Rocketeer, shooter.InfiniteAmmo);
+
     // The gasbag gate's verdict as a word. The decoded admission wants a DAMAGES_ZEPPELIN slot with
     // ammo whose two launch timers have run out (FUN_00420070, docs/org/aiPilot.md). Which condition
     // withheld the gasbags is what the log has to say.
-    private static string GasbagOrdnanceState(in AcquiringShooter shooter)
+    private static string GasbagOrdnanceState(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo)
     {
-        if (shooter.Loadout is not { Hardpoints.Count: > 0 } fit)
+        if (loadout is not { Hardpoints.Count: > 0 } fit)
             return "no pylons";
-        if (shooter.Rocketeer is not { } rocketeer)
+        if (rocketeer == null)
             return "no rocketeer";
         string state = "no gasbag pylon";
         for (int i = 0; i < fit.Hardpoints.Count; i++)
@@ -136,12 +147,12 @@ public sealed class GunnerAcquisition
             var hp = fit.Hardpoints[i];
             if (!hp.Weapon.DamagesZeppelin)
                 continue;
-            if (!hp.Armed(shooter.InfiniteAmmo))
+            if (!hp.Armed(infiniteAmmo))
                 state = "gasbag pylon empty";
             else if (!rocketeer.SlotReady(i))
                 state = "gasbag pylon locked";
             else
-                return "ready";
+                return ReadyWord;
         }
         return state;
     }
@@ -205,8 +216,8 @@ public sealed class GunnerAcquisition
         return false;
     }
 
-    // The sweep: the decoded ranking over the VehicleList, the turrets and the structures
-    // (TargetVehicle/TargetTurret/TargetStruct), for one global minimum. It uses the aim assist's
+    // The sweep: the decoded ranking over the VehicleList, the turrets, the structures and the
+    // rounds (TargetVehicle/TargetTurret/TargetStruct/TargetProjectile), for one global minimum. It uses the aim assist's
     // roster and team gate. A live PrimaryTargetName is picked outright; its "player" token resolves
     // to the nearest human, which only an aeroplane can be. Decode: docs/org/aiPilot.md.
     // ⚠ Deconfliction (AiTargetRanking) stays zero outside a mission.
@@ -289,9 +300,10 @@ public sealed class GunnerAcquisition
 
         // Turrets and structures: the other two pools, neither with a primary_target term. An
         // unauthored structure is neutral and never ranked; a gasbag passes only the ordnance gate.
-        bool gasbagsAdmitted = GasbagOrdnanceState(shooter) == "ready";
+        bool gasbagsAdmitted = GasbagOrdnanceReady(shooter.Loadout, shooter.Rocketeer, shooter.InfiniteAmmo);
         AddRankedNonAircraft(_scan.Turrets, isTurret: true, ownTeam, gunner, shooter.StructBias, gasbagsAdmitted);
         AddRankedNonAircraft(_scan.Structures, isTurret: false, ownTeam, gunner, shooter.StructBias, gasbagsAdmitted);
+        AddRankedOrdnance(shooter.Pools, ownTeam);
 
         bool byRole = primary == null && nearestHuman != null;
         primary ??= nearestHuman;
@@ -358,6 +370,26 @@ public sealed class GunnerAcquisition
                     BiasNameOf(c.Source, gunner), _biasOwners,
                     gunner.RatingBiases, isTurret),
                 AlliedAttackers = AlliedAttackers(c.Source, ownTeam),
+            });
+            _sources.Add(c.Source);
+        }
+    }
+
+    // The fourth list, a TARGETABLE round in flight (TargetProjectile), on the same team gate.
+    // ⚠ Do not add a class bias or an objective term; the decoded pass adds neither. It is no
+    // structure, so the aircraft-first preference leaves it ranked.
+    private void AddRankedOrdnance(ProjectilePool pools, int ownTeam)
+    {
+        pools.CollectTargetableOrdnance(_scan);
+        foreach (var c in _scan.Ordnance)
+        {
+            if (!AimAssist.Hostile(ownTeam, c.Team))
+                continue;
+            _candidates.Add(new RankedTargetCandidate
+            {
+                Position = c.Position,
+                Velocity = c.Velocity,
+                AlliedAttackers = AlliedAttackers(c.Source!, ownTeam),
             });
             _sources.Add(c.Source);
         }

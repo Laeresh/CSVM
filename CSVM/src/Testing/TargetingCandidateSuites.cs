@@ -628,7 +628,7 @@ internal static class TargetingCandidateSuites
             ctx.Check(ReferenceEquals(GunPick(true), enemy),
                 $"the turret gunner agrees with the wingmen beside it target={TargetPool.NameOf(gun.TargetSource)}");
             ctx.Check(ReferenceEquals(GunPick(false), near),
-                $"and under the decoded order it takes the nearest candidate of any class target={TargetPool.NameOf(gun.TargetSource)}");
+                $"and under the decoded order it takes the cheapest candidate of any class target={TargetPool.NameOf(gun.TargetSource)}");
         }
         finally
         {

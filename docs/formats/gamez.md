@@ -111,7 +111,7 @@ This page documents format facts only and contains no game asset data.
     `facdsticks` and `genx12` are the opposite case: each ships as **exactly one** record, so
     their own concurrency (if any, `facdsticks`' original A/B shows several call sites' copies
     running in parallel, `BL-253`'s CAP-24) cannot be read from the data at all and is a `TUNE`
-    entry (`CSVM/data/effect_pools.json`'s `localCallRoots`, `backlog.md`'s `BL-231` list) like
+    entry (`CSVM/data/effect_pools.json`'s `localCallRoots`) like
     every other pool size this engine invents.
   - ⚠ `genx12` must stay unbuilt by `WorldSession`'s lazy library-root pool. Its own `Targets`
     rescue (`AnimRuntime`'s `CallAnimation` case) redirects its meshless `pt*` parameter nodes onto

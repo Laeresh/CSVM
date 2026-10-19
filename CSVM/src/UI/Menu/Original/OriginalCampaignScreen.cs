@@ -211,6 +211,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // The host's last local check launches, and it waits while any seated guest is not Ready.
     private bool LaunchWaits => _campaign?.CoopLaunchWaits(_net()) == true;
 
+    // The local players a host flies: a co-op host's admission may sit out one signed on in a full
+    // lobby.
+    private int LocalFlown =>
+        _net() is { IsCoopHost: true } net ? Math.Min(_setup.Seats.Count, net.CoopSeats) : _setup.Seats.Count;
+
     /// <summary>Whether a screen is one of the campaign's.</summary>
     public bool Owns(OriginalScreen screen) =>
         screen >= OriginalScreen.CampaignRoster && screen <= OriginalScreen.CampaignScrapbookZoom;
@@ -406,7 +411,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>Drops the open campaign, if any: the feature's transient state and the pages.
-    /// Re-reads the build store into the sortie roster, since an EXPORT inside may have crossed a
+    /// Re-reads the build store into the shared roster, since an EXPORT inside may have crossed a
     /// plane into it. Every door out of the campaign and every return to the top level comes
     /// through here.</summary>
     public void CloseCampaign()
@@ -417,7 +422,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _flow = null;
         _host.CloseDialog();
 
-        // An EXPORT inside the campaign just crossed a plane into the sortie lists. Those are
+        // An EXPORT inside the campaign just crossed a plane into the shared roster. Those are
         // reached from the top level without another Activate to re-read the store on.
         if (_planes != null)
         {
@@ -797,10 +802,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// setup's.</summary>
     internal void SyncField()
     {
-        // A co-op guest's players fly the seats its host gave them, which its cap may cut short.
+        // A co-op machine's players fly the seats its cap gave them, which may cut them short.
         if (_host.Screen == OriginalScreen.CampaignFlightCheck && _campaign != null)
         {
-            _campaign.Field.SetPlayers(IsGuest ? _net()?.CoopSeats ?? 1 : _setup.Seats.Count);
+            _campaign.Field.SetPlayers(IsGuest ? _net()?.CoopSeats ?? 1 : LocalFlown);
         }
     }
 
@@ -1710,7 +1715,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                     return null;
                 }
 
-                _campaign.Field.SetPlayers(_setup.Seats.Count);
+                int flown = LocalFlown;
+                _campaign.Field.SetPlayers(flown);
                 if (LaunchWaits)
                 {
                     return null;
@@ -1722,10 +1728,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                     return null;
                 }
 
-                var pads = new List<IReadOnlyList<int>>(_setup.Seats.Count);
-                foreach (var seat in _setup.Seats)
+                var pads = new List<IReadOnlyList<int>>(flown);
+                for (int seat = 0; seat < flown; seat++)
                 {
-                    pads.Add(_flightDevices(seat));
+                    pads.Add(_flightDevices(_setup.Seats[seat]));
                 }
 
                 // A co-op host's guests fly with it, so the door's wire leaves with the launch.

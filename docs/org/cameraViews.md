@@ -209,6 +209,29 @@ the hinge, 0.65 to 0.67 m on the Warhawk's ailerons and elevators and 0.04 to 0.
 turning about the origin swings each surface out of its wing. The outside surfaces, whose origins
 lie on the hinge, turn about their origin as before.
 
+**Which interior surfaces move.** The original and CSVM move a surface only when it is a named
+node; a surface baked into a static interior mesh holds still in both. The original finds its
+surface nodes with one by-name search of the whole plane tree, `cockpit1` included, and stops each
+of the six lists at the first missing index (decode: `docs/org/flightModel.md`, "The original's
+control-surface animation"). An interior surface therefore moves only when every lower index of its
+name exists somewhere in the plane. CSVM applies the same stop
+(`Mech3.ControlSurfaces.InNumbering`, used by `Flight.Airframe.ControlSurfaceAnimator.Build`), so
+the table holds for both.
+
+| Airframe (node) | Interior surface nodes | Moves |
+|---|---|---|
+| Warhawk (`player_warhawk`) | `l/r_aileron2`, `l/r_elevator2`, `l/r_rudder2` | all |
+| Peacemaker (`player_peacemaker`) | `l_aileron2`, `l/r_elevator2`, `l/r_rudder2` | all |
+| Kestrel (`player_kestrel`) | `l/r_elevator2`, `l/r_rudder2` | all |
+| Devastator (`player_pfighter`) | `l/r_aileron3`, `l/r_elevator2` | all |
+| Bloodhawk (`player_bhawk`), Firebrand (`player_fbrand`), Brigand (`player_brigand`) | `l/r_aileron2` | all |
+| Hellhound (`player_avenger`), Balmoral (`player_balmoral`) | `l/r_aileron3` | **none**: no `l/r_aileron2` exists, so the lists stop there |
+| Fury (`player_fury`), Hoplite (`player_autogyro`) | none | none |
+
+The Devastator's `l/r_aileron3` move because its outside wings carry both `aileron1` and `aileron2`.
+The Fury's interior wings, their trailing-edge surfaces and the wingtip fins are polygons of the one
+`outside` model, so nothing in its cockpit view deflects.
+
 ## FOV constants and aspect correction
 
 The two base numbers are stored **in radians as horizontal half-angle constants**, side by side in

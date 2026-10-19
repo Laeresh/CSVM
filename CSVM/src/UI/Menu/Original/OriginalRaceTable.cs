@@ -33,6 +33,14 @@ public static class OriginalRaceTable
     /// <summary>The first row's top relative to the page.</summary>
     public const float RowY = 69f;
 
+    /// <summary>The aircraft's box at the name column's right. It holds the widest stock airframe
+    /// name in the row face, Peacemaker at 71 px, as stunt-race-boards measures. A wider
+    /// custom plane's name scrolls inside it.</summary>
+    internal const float AircraftWidth = 76f;
+
+    /// <summary>The space between the pilot's box and the aircraft's.</summary>
+    internal const float PilotGap = 4f;
+
     /// <summary>The page's own column headers: id, corner relative to the page and box width. The
     /// first is left-justified, the rest centred, as the script's just_left and just_all say
     /// (docs/org/menu-inventory.md, the lobby's Game Scores).</summary>
@@ -126,8 +134,14 @@ public static class OriginalRaceTable
             float x = pageX + RowX;
             float y = pageY + RowY + (RowPitch * i);
             var ink = row.Left ? FlaggedInk : Ink;
-            layers.Lines.Add(Line(strings, NameFace, row.Pilot, x, y, Cells[0].Width, BoardJustify.Left, ink));
-            layers.Lines.Add(Line(strings, NameFace, row.Aircraft, x, y, Cells[0].Width - AircraftInset, BoardJustify.Right, ink));
+            // Each text keeps to its own box and scrolls there when wider, so the two never meet.
+            float aircraftX = x + Cells[0].Width - AircraftInset - AircraftWidth;
+            layers.Lines.Add(Line(strings, NameFace, row.Pilot, x, y, aircraftX - PilotGap - x, BoardJustify.Left, ink)
+                with
+            { Marquee = true });
+            layers.Lines.Add(Line(strings, NameFace, row.Aircraft, aircraftX, y, AircraftWidth, BoardJustify.Right, ink)
+                with
+            { Marquee = true });
             AddFigures(new[] { row.Best, row.Gap, row.Runs }, x, y, strings, layers, ink);
         }
 

@@ -182,6 +182,21 @@ public static class NetSeats
     /// seat with no callsign is called on every machine.</summary>
     public static string PlayerTag(int seat) => "P" + (seat + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>The name a Dogfight machine's first seat shows in the lobby and flies under: its
+    /// <paramref name="callsign"/>, or "Host" or "Pilot" for a machine with none.</summary>
+    public static string ShownName(string? callsign, bool host)
+    {
+        string name = (callsign ?? "").Trim();
+        return name.Length > 0 ? name : host ? "Host" : "Pilot";
+    }
+
+    /// <summary>The name of a Dogfight machine's further seat <paramref name="local"/>, counted from 0
+    /// there: its first seat's <see cref="ShownName"/>, a space and its pane tag ("Gabriel P2"). The
+    /// lobby's rows and the launch's roster both name the seat by it, so the two agree. A name the
+    /// Callsign box can produce fits a roster entry whole; a longer one is cut there.</summary>
+    public static string FurtherSeatName(string? callsign, bool host, int local) =>
+        ShownName(callsign, host) + " " + PlayerTag(local);
+
     /// <summary>A host's field: one seat per plane in <paramref name="localPlanes"/> flown here,
     /// then one per peer in <paramref name="peers"/> flying <paramref name="remotePlane"/>, cut at
     /// <see cref="MaxPlayers"/>. Local seats are called P1 upward and a remote one after its peer,

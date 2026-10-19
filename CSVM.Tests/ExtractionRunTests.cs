@@ -84,7 +84,7 @@ public class ExtractionRunTests
     {
         string root = TestData.TempDir();
         string install = OddlySpelledInstall(root, withPatch: true);
-        var request = new ExtractionRequest(install, Path.Combine(root, "data"), Path.Combine(root, "absent.exe"));
+        var request = new ExtractionRequest(install, Path.Combine(root, "data"), Path.Combine(root, "absent.exe"), AllowMissing: true);
 
         var result = ExtractionRun.Run(request);
 
@@ -104,7 +104,7 @@ public class ExtractionRunTests
 
         string root = TestData.TempDir();
         string install = OddlySpelledInstall(root, withPatch: true);
-        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root));
+        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root), AllowMissing: true);
         var phases = new List<ExtractionProgress>();
 
         var result = ExtractionRun.Run(request, phases.Add);
@@ -145,7 +145,7 @@ public class ExtractionRunTests
         string root = TestData.TempDir();
         string install = OddlySpelledInstall(root, withPatch: true);
         Touch(install, "Zbd", "C2", "gamez.zbd");
-        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root));
+        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root), AllowMissing: true);
 
         var result = ExtractionRun.Run(request);
 
@@ -166,13 +166,43 @@ public class ExtractionRunTests
         string root = TestData.TempDir();
         string install = OddlySpelledInstall(root, withPatch: true);
         File.Delete(Path.Combine(install, "gosdata", "Assets", "CRIMSON.ROF"));
-        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root));
+        var request = new ExtractionRequest(install, Path.Combine(root, "data"), FakeUnzbd(root), AllowMissing: true);
 
         var result = ExtractionRun.Run(request);
 
         Assert.False(result.Succeeded);
         Assert.Contains("crimson.rof", result.Failures[0], StringComparison.Ordinal);
         Assert.Null(result.RofStamp);
+    }
+
+    [Fact]
+    public void TheManifestHoldsEveryChaptersCoreAndMissionArchivesOnce()
+    {
+        Assert.Equal(184, ZbdManifest.Expected.Count);
+        Assert.Equal(ZbdManifest.Expected.Count, ZbdManifest.Expected.Distinct().Count());
+        Assert.Contains("C2B/rtexture9.zbd", ZbdManifest.Expected);
+        Assert.Contains("C1/M05/mis_anim.zbd", ZbdManifest.Expected);
+        Assert.All(ZbdManifest.Expected, p => Assert.Equal(ZbdTree.Canonical(p), p));
+    }
+
+    [Fact]
+    public void AMissingArchiveFailsTheRunUnlessAllowedThenItIsAWarning()
+    {
+        string root = TestData.TempDir();
+        string install = OddlySpelledInstall(root, withPatch: true);
+        foreach (string path in ZbdManifest.Expected.Where(p => p != "C4/M03/zrdr.zbd"))
+        {
+            Touch(install, new[] { "Zbd" }.Concat(path.Split('/')).ToArray());
+        }
+
+        var strict = ExtractionRun.Run(new ExtractionRequest(install, Path.Combine(root, "data"), Path.Combine(root, "absent.exe")));
+        var soft = ExtractionRun.Run(new ExtractionRequest(install, Path.Combine(root, "data"), Path.Combine(root, "absent.exe"), AllowMissing: true));
+
+        Assert.Single(strict.Failures);
+        Assert.Contains("1 of 184 game archives are missing from ZBD: C4/M03/zrdr.zbd", strict.Failures[0], StringComparison.Ordinal);
+        Assert.Null(strict.Zbd);
+        Assert.Contains(soft.Warnings, w => w.Contains("C4/M03/zrdr.zbd", StringComparison.Ordinal));
+        Assert.StartsWith("unzbd not found", soft.Failures[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -185,17 +215,18 @@ public class ExtractionRunTests
         cancel.Cancel();
 
         Assert.ThrowsAny<OperationCanceledException>(() =>
-            ExtractionRun.Run(new ExtractionRequest(install, Path.Combine(root, "data"), Path.Combine(root, "unzbd.exe")), null, cancel.Token));
+            ExtractionRun.Run(new ExtractionRequest(install, Path.Combine(root, "data"), Path.Combine(root, "unzbd.exe"), AllowMissing: true), null, cancel.Token));
     }
 
     [Fact]
     public void TheExtractFlagsAreValuesAndMakeAScriptedExtractRun()
     {
-        var s = SessionSpec.Parse(new[] { "--headless", "--extract=C:/Games/Crimson Skies", "--extract-force", "--extract-unzip", "--unzbd=u.exe", "--data-root=d" });
+        var s = SessionSpec.Parse(new[] { "--headless", "--extract=C:/Games/Crimson Skies", "--extract-force", "--extract-unzip", "--extract-allow-missing", "--unzbd=u.exe", "--data-root=d" });
 
         Assert.Equal("C:/Games/Crimson Skies", s.ExtractInstall);
         Assert.True(s.ExtractForce);
         Assert.True(s.ExtractUnzip);
+        Assert.True(s.ExtractAllowMissing);
         Assert.Equal("u.exe", s.UnzbdPath);
         Assert.Equal("d", s.DataRoot);
         Assert.Equal("extract", s.ModeName);
@@ -219,9 +250,9 @@ public class ExtractionRunTests
         Assert.Null(plain.ExtractInstall);
         Assert.False(plain.IsScripted);
 
-        var stray = SessionSpec.Parse(new[] { "--extract-force", "--extract-unzip", "--unzbd=u.exe" });
+        var stray = SessionSpec.Parse(new[] { "--extract-force", "--extract-unzip", "--extract-allow-missing", "--unzbd=u.exe" });
         Assert.Null(stray.ExtractInstall);
-        Assert.Equal(2, stray.Warnings.Count);
+        Assert.Equal(3, stray.Warnings.Count);
         Assert.All(stray.Warnings, w => Assert.Contains("without --extract=", w.Message, StringComparison.Ordinal));
 
         // The extraction screen honours --unzbd=, so a menu launch carrying it is not warned about.

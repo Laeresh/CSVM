@@ -254,6 +254,52 @@ public class StuntRaceTests
     }
 
     [Fact]
+    public void ACrashInTheFinalRunStopsTheRunWhereItStoodAndTheLastOneEndsTheRace()
+    {
+        var race = new StuntRace(1f, 3);
+        var a = race.Add(0, "Bloodhawk");
+        var b = race.Add(1, "Kestrel");
+        race.BeginOpening(0f);
+        var runA = FakeMission(3);
+        var runB = FakeMission(3);
+        race.Follow(0, runA);
+        race.Follow(1, runB);
+        runA.Tick(Dt);
+        runB.Tick(Dt);
+        SetElapsed(runA, 0.5f);
+        Complete(runA, runA.Zones[1]);
+
+        // ABLE-TO-FAIL CONTROL: before time up the race offers every respawn, and the run stands.
+        Assert.True(race.MayRespawn);
+        Assert.Equal((true, 1), (a.InRun, a.CurrentZones));
+
+        Advance(race, 1f);
+        Assert.Equal(StuntRacePhase.FinalRun, race.Phase);
+        Assert.False(race.MayRespawn);
+        int completed = 0;
+        race.RaceCompleted += () => completed++;
+
+        // A's aeroplane is lost: its run stops counting the zone it reached, and its clock stands.
+        runA.Stop();
+        float stood = runA.Elapsed;
+        runA.Tick(Dt);
+        Assert.Equal((false, 1, 0, stood), (a.InRun, a.MostZones, a.RunsFinished, runA.Elapsed));
+        Assert.Equal(new float?[] { null, 0.5f, null }, a.Splits);
+        Assert.False(race.Ended);
+
+        // B's is the last run in progress, so its loss ends the race with nobody left in a run.
+        runB.Stop();
+        Assert.True(race.Ended);
+        Assert.Equal(1, completed);
+        Assert.DoesNotContain(race.Racers, r => r.InRun);
+        Assert.Null(b.BestTime);
+
+        // A rerun's reset makes the run live again.
+        runA.Reset();
+        Assert.False(runA.Stopped);
+    }
+
+    [Fact]
     public void APilotWhoLeftKeepsTheirBestAndRanksAsItStoodMarkedOnEveryNameAndCountingNothingMore()
     {
         var race = OpenRace(3, out var a, out var b, out _);
@@ -342,6 +388,16 @@ public class StuntRaceTests
 
     // ---- helpers ----
 
+    internal static StuntMission FakeMission(int zoneCount)
+    {
+        var zones = new List<StuntZone>();
+        for (int i = 0; i < zoneCount; i++)
+            zones.Add(new StuntZone { DzName = $"dz{i}" });
+        var ctor = typeof(StuntMission).GetConstructor(
+            BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(List<StuntZone>) }, null)!;
+        return (StuntMission)ctor.Invoke(new object[] { zones });
+    }
+
     private static StuntRace OpenRace(int zones, out Racer a, out Racer b, out Racer c)
     {
         var race = new StuntRace(60f, zones);
@@ -373,16 +429,6 @@ public class StuntRaceTests
         int steps = (int)Math.Round(seconds / Dt);
         for (int i = 0; i < steps; i++)
             race.Advance(Dt);
-    }
-
-    private static StuntMission FakeMission(int zoneCount)
-    {
-        var zones = new List<StuntZone>();
-        for (int i = 0; i < zoneCount; i++)
-            zones.Add(new StuntZone { DzName = $"dz{i}" });
-        var ctor = typeof(StuntMission).GetConstructor(
-            BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(List<StuntZone>) }, null)!;
-        return (StuntMission)ctor.Invoke(new object[] { zones });
     }
 
     private static void SetElapsed(StuntMission mission, float elapsed) =>

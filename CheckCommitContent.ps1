@@ -243,7 +243,7 @@ function Invoke-Checks {
         if (-not $Message) { continue }
         $waiver = Join-Path $scriptRoot 'CheckWaiver.ps1'
         if (-not (Test-Path -LiteralPath $waiver -PathType Leaf)) { continue }
-        $out = & $waiver -Root $r -Message $Message 2>&1
+        $out = & $waiver -Message $Message 2>&1
         if ($LASTEXITCODE -eq 0) { continue }
         $failures += [pscustomobject]@{
             Root  = $r
@@ -417,8 +417,8 @@ function Invoke-SelfTest {
         $fx = Join-Path $base 'fx'
         New-Item -ItemType Directory -Path $fx -Force | Out-Null
         git -C $fx init -q 2>&1 | Out-Null
-        Write-Chars -File (Join-Path $fx 'backlog.md') -Codes (
-            [int[]][char[]]("- ``BL-001`` one" + [char]10 + "- ``BL-001`` two" + [char]10))
+        Write-Chars -File (Join-Path $fx 'playtest.md') -Codes (
+            [int[]][char[]]("- ``PT-001`` one" + [char]10 + "- ``PT-001`` two" + [char]10))
         Write-Chars -File (Join-Path $fx 'analysis/goldens/manifest.json') -Codes (
             [int[]][char[]]('{"shots":[{"name":"s","exercises":"pinned 2026-01-02"}]}'))
         Write-Chars -File (Join-Path $fx 'CSVM/src/Bad.cs') -Codes ([int[]][char[]](
@@ -470,25 +470,22 @@ function Invoke-SelfTest {
         # Row 12: the waiver form. The check reads a message, so these rows drive the message
         # extraction from every commit form accepted, then the validator against every form refused.
         $fxW = Join-Path $base 'fxwaiver'
-        Write-Chars -File (Join-Path $fxW 'backlog.md') -Codes ([int[]][char[]](
-            '- `BL-100` `[Bug]` an open failure' + [char]10))
+        New-Item -ItemType Directory -Path $fxW -Force | Out-Null
         $why = 'pre-existing on main and filed; this change cannot reach that suite'
-        $good = 'Waiver: instant-action-end (owned by BL-100): ' + $why
-        $goodIssue = 'Waiver: goldens/c1-flight-kill (owned by #7): ' + $why
+        $good = 'Waiver: instant-action-end (owned by #7): ' + $why
         function Test-Waiver {
-            param([string]$Text, [string]$In = $fxW)
-            & (Join-Path $scriptRoot 'CheckWaiver.ps1') -Root $In -Message $Text | Out-Null
+            param([string]$Text)
+            & (Join-Path $scriptRoot 'CheckWaiver.ps1') -Message $Text | Out-Null
             return ($LASTEXITCODE -eq 0)
         }
         Assert-Row 'row 12 a message without a waiver passes' (Test-Waiver 'Close #2: a thing')
-        Assert-Row 'row 12 a waiver owned by an open BL passes' (Test-Waiver ('Subject' + [char]10 + [char]10 + $good))
-        Assert-Row 'row 12 a waiver owned by an issue passes' (Test-Waiver $goodIssue)
+        Assert-Row 'row 12 a waiver owned by an issue passes' (Test-Waiver ('Subject' + [char]10 + [char]10 + $good))
         Assert-Row 'row 12 prose merely naming waivers passes' (Test-Waiver 'Waivers are records, not permissions.')
         Assert-Row 'row 12 a waiver with no owner blocks' (-not (Test-Waiver ('Waiver: instant-action-end: ' + $why)))
-        Assert-Row 'row 12 a waiver with no suite blocks' (-not (Test-Waiver ('Waiver: (owned by BL-100): ' + $why)))
-        Assert-Row 'row 12 a waiver with no reason blocks' (-not (Test-Waiver 'Waiver: instant-action-end (owned by BL-100):'))
-        Assert-Row 'row 12 a waiver with a token reason blocks' (-not (Test-Waiver 'Waiver: instant-action-end (owned by BL-100): known'))
-        Assert-Row 'row 12 a waiver owned by a closed BL blocks' (-not (Test-Waiver ($good -replace 'BL-100', 'BL-101')))
+        Assert-Row 'row 12 a waiver with no suite blocks' (-not (Test-Waiver ('Waiver: (owned by #7): ' + $why)))
+        Assert-Row 'row 12 a waiver with no reason blocks' (-not (Test-Waiver 'Waiver: instant-action-end (owned by #7):'))
+        Assert-Row 'row 12 a waiver with a token reason blocks' (-not (Test-Waiver 'Waiver: instant-action-end (owned by #7): known'))
+        Assert-Row 'row 12 a waiver owned by a BL id blocks' (-not (Test-Waiver ($good -replace '#7', 'BL-100')))
         Assert-Row 'row 12 a lowercase waiver line blocks' (-not (Test-Waiver ('waiver: ' + $good.Substring(8))))
         Assert-Row 'row 12 an unowned-form waiver = line blocks' (-not (Test-Waiver 'WAIVER = the battery was red'))
         Assert-Row 'row 12 a missing message file blocks' (

@@ -288,7 +288,8 @@ internal sealed class ZeppelinVersusRuntime
             }
 
             var target = ZvzBotObjective.Pick(bot.WorldPosition, bot.NoseDirection, bot.Pilot.Machine?.AttackRange ?? 0f,
-                CarriesTorpedoes(bot), _enemies, _hullParts[1 - own], gunner.Target, out string why);
+                GunnerAcquisition.GasbagOrdnanceReady(bot.Loadout, bot.Pilot.Rocketeer, bot.InfiniteAmmo),
+                _enemies, _hullParts[1 - own], gunner.Target, out string why);
             if (target == null)
             {
                 continue;
@@ -323,20 +324,6 @@ internal sealed class ZeppelinVersusRuntime
 
         int winner = _in.Match.ObjectiveWinner;
         Speak(_localTeam > 0 && winner > 0 && _localTeam != winner && _rules.HullOf(_localTeam) >= 0 ? HullLostLine : HullDestroyedLine);
-    }
-
-    // Whether the bot has a DAMAGES_ZEPPELIN round left on any pylon, launchable now or after its lockout.
-    private static bool CarriesTorpedoes(FlightController bot)
-    {
-        foreach (var hp in bot.Loadout?.Hardpoints ?? (IReadOnlyList<Hardpoint>)Array.Empty<Hardpoint>())
-        {
-            if (hp.Weapon.DamagesZeppelin && hp.Armed(bot.InfiniteAmmo))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     // Every machine hears a gas bag's scoring event. The host alone scores it, to the seat whose

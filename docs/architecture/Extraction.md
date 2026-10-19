@@ -13,14 +13,14 @@ Traps do not live here; the rule is in `docs/architecture.md`. The output layout
 [../formats/strings.md](../formats/strings.md).
 
 ## src/Extraction/InstallLocator.cs
-Finds the install and every file in it without regard to case. `ResolveDirectory` and
-`ResolveFile` walk a relative path one segment at a time and answer the disk's spelling (an exact
-match wins where a case-sensitive folder holds two), never renaming. `IsInstall` is the silent rule:
-`ZBD` plus `GOSDATA/ASSETS`. `Check` judges a picked folder, and names the install when the pick sits
-inside it or holds it up to two levels down. A `ZBD` with archives at its root alone is refused
-(`NoChapters`): a disc's contents extract the menus and no chapter world. `Candidates` lists valid
-installs: the remembered path, then Program Files and each fixed drive on Windows, or Wine and every
-Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
+Finds the install and every file in it without regard to case. `ResolveDirectory`/`ResolveFile`
+walk a path one segment at a time and answer the disk's spelling (an exact match wins), never
+renaming. `IsInstall` is the silent rule: `ZBD` plus `GOSDATA/ASSETS`. `Check` judges a pick, naming
+the install when the pick sits inside it or holds it two levels down. A `ZBD` with archives at its
+root alone is refused (`NoChapters`). The disc, its `GAME` folder or an `.iso` is a `Disc` (chapter
+`.cab`s in `ZBD`), which `ExtractionRun` lays out with `unzbd cs disc` into a temporary install.
+`Candidates` lists the remembered path, then Program Files and each fixed drive on Windows, or Wine
+and every Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
 
 ## src/Extraction/RememberedInstall.cs
 The install folder the last extraction read, stored as `OptionsDef.InstallPath` in
@@ -108,6 +108,13 @@ The rules `ZbdExtraction` applies, each testable alone. `ModeFor` maps a lower-c
 path through `ZbdTree.Canonical`. An output as new as its source is up to date. `AlwaysUnzipped` names the root `rimage.zip`, whose PNGs the HUD reads loose. `Classify` counts stderr notes: "object3d transform fail" (matrix recomposed inexactly, the
 stored one is kept) and "VAL FAIL" or "anim def duplicate anim ref" (anim fields kept as read); every
 other line is a warning.
+
+## src/Extraction/ZbdManifest.cs
+`Expected` lists the 184 ZBD archives a complete install holds (the six root archives, then per
+chapter its `cam_anim`, `gamez`, `texture`, `zrdr` and texture tiers, and per mission its
+`mis_anim` and `zrdr`), the same on the English install and the German disc. `Missing(zbdRoot)`
+looks each one up without regard to case and is checked before the ZBD half runs, since the walk
+extracts whatever it finds and a missing archive would otherwise fail only when its chapter loads.
 
 ## src/Extraction/ZbdTree.cs
 The one case the ZBD half writes under `extracted/`, the retail install's: folders upper case

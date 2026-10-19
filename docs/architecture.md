@@ -578,7 +578,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
 - `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, the one place a pad signs onto a seat, and a Dogfight's bot rows.
 - `src/UI/Menu/Original/OriginalBotPanel.cs`, the join board's bot rows: the Bots block with Add Bot and Fill to, and the Edit Bot panel in the lobby's bot faces.
-- `src/UI/Menu/Original/OriginalSeats.cs`, the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
+- `src/UI/Menu/Original/OriginalSeats.cs`, the seat rules every Original screen shares (a `partial`): joining, a later seat's frame, the campaign strip.
+- `src/UI/Menu/Original/OriginalLocalLobby.cs`, the local Free Flight and Dogfight screens on the Multiplayer Lobby's layout as one standalone module: the map, the rules, seat 0's aircraft, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs`, the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
 - `src/UI/Menu/Original/OriginalInstantActionScreen.cs`, the Instant Action screen and its Weapon Loadout as one standalone module: the contents list, dropdowns, enemy pages, the Build door, and the decoded ammo chrome over one aeroplane's fit.
 - `src/UI/Menu/Original/OriginalWrapupScreen.cs`, the Instant Action wrap-up page as one standalone module: one ended mission's frozen numbers on the notepad, prints that open full size, CONTINUE back to the screen.
@@ -599,7 +600,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalAvailability.cs`, Original's availability answer before entry: a refusal reason, or the loaded layout.
 - `src/UI/Menu/Original/SyntheticShell.cs`, the synthetic tree's Original shell: the fixture layout decoded, invented string rows, one generated picture per recorded art size, and the whole tree's family list.
 - `src/UI/Menu/Original/OriginalAssetManifest.cs`, the required/optional file manifest derived from the layout, the backdrop movies among the optional, and the check over a tree.
-- `src/UI/Menu/Original/OriginalRosters.cs`, the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.
+- `src/UI/Menu/Original/OriginalRosters.cs`, the Original local lobby's chapter labels and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs`, the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs`, seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
 - `src/UI/Menu/InstantActionPresets.cs`, the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
@@ -716,7 +717,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export 
 - `src/Tooling/SyntheticPlane.cs`, the synthetic tree's stand-in aircraft `probe_plane`: its box-built model, plane records, one gun, one rocket, shakes and messages.
 - `src/Tooling/SyntheticImages.cs`, the flat-block JPEG and uncompressed TGA writers the synthetic menu art needs beside PNG.
 - `src/Tooling/SyntheticSounds.cs`, the synthetic tree's sound archive: the fixture `sounds.json` plus one generated ADPCM WAV per manifest entry, and the `voice.json` accent table.
-- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`.
+- `src/Tooling/SyntheticMission.cs`, the synthetic tree's one invented mission scope `C1/PROBE1`: its `weather.json` and `net.json`; the campaign's one story position at `C1/M09`; and an Instant Action `ia.json` per preset chapter.
 - `src/Tooling/SyntheticEffects.cs`, the synthetic tree's anim and effect records: a box-built template gamez, a compiled anim archive, reader destructibles and two puffer readers.
 - `src/Tooling/WavWriter.cs`, encodes mono samples as a PCM or MS ADPCM WAV in the layout `WavFile` decodes.
 
@@ -806,6 +807,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/Roster/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.
 - `src/Session/Roster/SharedSpawnStarts.cs`, a time-attack race's start: every pilot on player 1's one spawn point and start state.
 - `src/Session/Roster/SpectateHandoff.cs`, the shared pane handoff for a downed pilot whose teammates fly on: the wreck pinned, a spectator camera in the freed pane.
+- `src/Session/Roster/RaceSpectate.cs`, a race's final-run spectators: a pane with no run left watches a racer still in one, after the crash camera's time.
 - `src/Session/Roster/AirframeSwap.cs`, the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
 - `src/Session/Roster/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
 - `src/Session/Roster/AiGeneratorRuntime.cs`, runs a mission's egen generators (`--generators`): the load drops, the cycle stepping, each launch's spawn or release, and a guest's replay of the host's launches.
@@ -953,6 +955,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/MenuLayoutDecoder.cs`, `LAYOUT.CSV`, `SCRAPBOOK.CSV`, `RESOURCE.H` and the GUI scripts decoded into `menu_layout.json`.
 - `src/Extraction/ZbdExtraction.cs`, the ZBD half of extraction: every archive through unzbd, then `messages.json`, the optional unzip and the stamp, off the main thread.
 - `src/Extraction/ZbdPlan.cs`, the ZBD half's pure rules: the archive-name mode map, output naming, the up-to-date and unzip rules, and the stderr notes.
+- `src/Extraction/ZbdManifest.cs`, the 184 ZBD archives a complete install holds, and the ones an install is missing, checked before the ZBD half runs.
 - `src/Extraction/ZbdTree.cs`, the one case the ZBD half writes (folders upper, file names lower) and the chapter and mission path mapping its writer and readers share.
 - `src/Extraction/ZbdProgress.cs`, the ZBD runner's options, per-step progress report with its console lines, and result totals with the closing summary.
 - `src/Extraction/UnzbdTool.cs`, the bundled unzbd as a child process: its platform file name and release path, one run with both streams drained, and its identity for the stamp.

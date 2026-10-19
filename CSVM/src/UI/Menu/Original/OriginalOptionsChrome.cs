@@ -143,10 +143,11 @@ internal sealed class OriginalOptionsChrome
     /// <see cref="SliderControl"/> drives it and the shell draws it.</summary>
     internal OriginalRow SliderRow(
         MenuLayoutWidget? widget, string key, float fallbackX, float fallbackY,
-        int min, int max, int value, Action<int> setValue, bool enabled = true, int column = 0)
+        int min, int max, int value, Action<int> setValue, bool enabled = true, int column = 0,
+        MenuLayoutWidget? artFrom = null)
     {
-        var slot = SliderArt(widget, 0, SliderSlotArt);
-        var thumb = SliderArt(widget, 1, SliderThumbArt);
+        var slot = SliderArt(widget ?? artFrom, 0, SliderSlotArt);
+        var thumb = SliderArt(widget ?? artFrom, 1, SliderThumbArt);
         var slotSize = StripSize(slot, FallbackSlotWidth, FallbackSlotHeight);
         var thumbSize = StripSize(thumb, FallbackThumbWidth, FallbackThumbHeight);
         float x = widget?.Int("X", (int)fallbackX) ?? fallbackX;

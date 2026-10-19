@@ -559,7 +559,8 @@ internal static class NetCombatSuites
     // in a kill line.
     private static void NamedHostKills(TestContext ctx, SessionSpec spec, int seed, MatchWording words)
     {
-        const string HostName = "Montgomery Fairweather";
+        // Three-byte characters take it past the roster's 40 bytes while it still fits a kill line.
+        const string HostName = "Montgomery Fairweather €€€€€€";
         const string GameName = "Friday Fliers";
         const string GuestName = "Laeresh";
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));

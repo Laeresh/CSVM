@@ -5,13 +5,13 @@ description: Analyse an owed capture (CAP-nn, or a `capture` GitHub issue) — f
 
 Turn one recording of **the original game** into evidence a backlog item can close on. The
 capture is a `CAP-nn` row in `playtest.md`, or a `capture`-labelled GitHub issue on
-`Laeresh/CSVM` (`docs/agents/issue-tracker.md`); the items it unblocks are `backlog.md` entries or
-`backlog` issues.
+`Laeresh/CSVM` (`docs/agents/issue-tracker.md`); the items it unblocks are `backlog` issues. A
+`BL-NNN` in a capture's Unblocks column is a closed historical item: `git log --grep=BL-NNN` says
+how it closed, and it needs no answer from the footage.
 
 The capture exists because a question could not be answered from extracted data or from our own
 build — so the whole value is in reading the footage honestly. This skill is **watch-and-describe**;
-it edits `backlog.md`/`playtest.md` or comments on the issues only at the end, and never commits
-unless asked.
+it edits `playtest.md` or comments on the issues only at the end, and never commits unless asked.
 
 ⚠ **Never answer from the filename or from the backlog's expectation of what the clip shows.**
 Every claim must cite a timestamp or a frame number you actually produced. If the footage does not
@@ -30,7 +30,7 @@ send it to a decode instead of measuring frames.
 ## 0. Work in a worktree
 
 Enter a git worktree with `EnterWorktree` before touching anything else — name it after the
-capture (e.g. `worktree-cap-08`). The skill edits `backlog.md` and `playtest.md`
+capture (e.g. `worktree-cap-08`). The skill edits `playtest.md`
 and can span several sessions, so isolating the work keeps `main` clean and lets
 other captures run in parallel. Exit with `action: "keep"` when you report (Section 6), so the user
 can review and merge the branch themselves — never merge or push it yourself.
@@ -41,8 +41,7 @@ Argument may be `CAP-16`, `#14`, "issue 14", a bare `16`, or a phrase like "the 
 
 Read the `CAP-nn` row in [`playtest.md`](playtest.md) §0, or the issue's thread with
 `gh issue view N --comments` — it gives the capture's **purpose**, what must be in frame, and the
-`BL-NNN`s or `#N`s it unblocks. Then read each of those backlog entries in full (an entry with its
-enclosing section heading, an issue with its comments). They carry the traps, the competing
+`#N`s it unblocks. Then read each of those issues in full, with its comments. They carry the traps, the competing
 hypotheses, and the specific thing to look for; going to the footage without them produces a
 description instead of an answer.
 
@@ -133,11 +132,10 @@ haven't a preference. Do not stack up questions you could answer by looking hard
 
 ## 5. Record the finding
 
-Write to the entry that owns the question, in its own voice. For a `backlog.md` entry that is an
-edit to its text; for an issue it is a comment (`gh issue comment N --body-file <file>`), never a
-silent body edit, since the thread is the record:
+Write to the issue that owns the question, in its own voice, as a comment
+(`gh issue comment N --body-file <file>`), never a silent body edit, since the thread is the record:
 
-- **Answers a `BL-NNN` or `#N`** → update the entry with what the footage shows and where, then
+- **Answers a `#N`** → update the entry with what the footage shows and where, then
   offer `/close-backlog-item` rather than closing it here.
 - **Refines it** → edit or comment so the next reader gets the sharper question, and note which
   hypothesis the footage rules out.
@@ -166,7 +164,7 @@ the backlog items — that prose is stale and must be updated (a row edit, or a 
 issue) so the capture doesn't contradict the backlog it points to. Do not silently leave a
 discharged capture reading as if it is still needed.
 
-Give the user: which files were analysed, the finding per `BL-NNN` or `#N` in plain prose with
+Give the user: which files were analysed, the finding per `#N` in plain prose with
 its evidence cited by timestamp or frame, what remains open, and the files touched or comments
 posted. Quote real observations and real command output — never a summary of what a run "should"
 produce.

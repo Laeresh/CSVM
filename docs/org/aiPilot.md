@@ -176,7 +176,7 @@ RTTI names survive in the binary.
 | `TargetVehicle` | `DAT_0071dabc` | `FUN_004a6330` | `0x0060886c` | `0x004a5b20`: `+0x91d` clear, `+0x944` set, hostile team | candidate `+0x340` |
 | `TargetTurret` | `DAT_0071d914` | `FUN_004a6370` | `0x006088cc` | `0x004a5bd0`: `+0x6c` and `+0x6d` set, hostile team | scorer `+0x344` |
 | `TargetStruct` | `DAT_0071d33c`–`DAT_0071d340` | inline | `0x0060364c` | `FUN_004a5b90`: `+0x8c` and `+0x90` set, hostile team; plus object `+0x8d` set and `+0x65` needs gasbag ordnance | scorer `+0x344` |
-| `TargetProjectile` | `DAT_0064f78c` | `FUN_004a63b0` | `0x00608920` | object `+0x6c` set | none |
+| `TargetProjectile` | `DAT_0064f78c` | `FUN_004a63b0` | `0x00608920` | object `+0x6c` set; `0x004a5c10`: hostile team | none (see below) |
 
 `FUN_0041f9c0` carries one running minimum across all four lists, so the pick is the global minimum;
 the return chain resolves projectile, struct, turret, vehicle only because a later list records a
@@ -185,6 +185,44 @@ winner solely when it already beat the earlier ones. The Admission column is the
 whose own second arm (reject a candidate below the query's Y) is inert here because the query
 builder `FUN_00421e00` zeroes the enable byte at query `+0x14`. `TargetProjectile` is the consumer
 of the `TARGETABLE` weapon flag.
+
+### The fourth list: a `TARGETABLE` round
+
+The projectile pass is the last of `FUN_0041f9c0`'s four, and an AI pilot and a turret run the
+same code, so both take an incoming torpedo on the same terms.
+
+- **Admission.** The pass walks `DAT_0064f78c` and skips an entry whose object `+0x6c` byte is clear
+  (the `CMP byte [+0x6c]` ahead of the `FUN_004a63b0` wrap). `FUN_00441830` sets that byte on the
+  `TARGETABLE` path alone ([`ordnanceTypes.md`](ordnanceTypes.md) "The shootable flyout"), so a
+  round wrapped only for its fuse distance is on the list and never ranked.
+- **Hostility.** The wrapper's `+0x34` slot (vtable `0x00608920`) is `0x004a5c10`: the object's
+  `+0x8` against the query team, hostile when they differ and neither is 0, with no liveness bytes
+  read. The object's `+0x8` is the shooter's own team, the `&shooter+8` both callers of
+  `FUN_00441830` push (the aircraft fire path at `0x004b6e8c`, the turret fire at `0x004ab3e0`),
+  copied by the base constructor `FUN_00441b90`. Then `FUN_00422890`'s Y arm, inert for a pilot.
+- **Geometry.** The object's vtable `0x006063c4` answers position from round `+0x48`
+  (`0x004416e0`) and its second slot from round `+0x60`, the velocity (`0x004416f0`). So the
+  scorer's closing term dots the round's velocity, and a torpedo flying at the scorer is the
+  unfavourable arm. The object's `+0x04` is 0 from `FUN_00441b90`, so `FUN_00421ad0`'s `+0x04 >= 3`
+  reject never fires on a round.
+- **Score.** The pass compares the scorer's cost straight against the running minimum: no
+  `target_bias` (`+0x340` is added on the vehicle pass only) and no `struct_bias` (the second
+  argument is added on the turret and structure passes only). The weight is the plain `1.0`: a round
+  is never the player, never a `TargetVehicle`, and its `+0x1c` slot is the constant-false
+  `0x00422720`. `FUN_0041ae40`'s objective term casts to neither `TargetVehicle` nor `TargetTurret`
+  and walks the rating list against the round's scene node and its parents, which no roster names,
+  so it is 0. A `jet` scores `1200 × (1.0 ± 0.2 ± 0.2 ± 0.2) + distance`, any other scorer
+  `1200 + distance`.
+- **The win.** Strict `<` against the running minimum, as every pass takes it, so a tie keeps the
+  earlier list's candidate. A projectile that wins returns at once, but it can only win by beating
+  every vehicle, turret and structure already walked: the early return is the return order, not a
+  priority. Against an aeroplane on a wingman def, whose `target_bias` is `-100.0`, a torpedo wins
+  only when it is 100 m nearer, and against a `struct_bias` of `-200.0` structure, 200 m nearer.
+
+The turret's own cost function weights a round differently; see
+[`targeting.md`](targeting.md) "The picker's cost". CSVM's `GunnerAcquisition` ranks the round through
+`ProjectilePool.CollectTargetableOrdnance` with no class or objective bias, and the remake-only
+aircraft-first preference leaves it ranked, since it withdraws turrets and structures alone.
 
 ### `target_bias` and `struct_bias` are the two class-dependent rank terms
 
@@ -195,17 +233,21 @@ entity in `FUN_00475820`, `def+0x138` to `+0x340` and `def+0x13c` to `+0x344`
 both at `0x004b088e`/`0x004b0894`, so a def that authors neither spends nothing.
 
 - **`target_bias`, candidate `+0x340`,** added when this entity is the candidate and only on the
-  `TargetVehicle` arm. Shipped: `-300.0` on `player_pfighter`, `-100.0` on the twelve AI aeroplane
-  defs, and unauthored on `patrolboat`, `t_truck` and every zeppelin.
+  `TargetVehicle` arm. Shipped: `-300.0` on `player_airplane`, which every human's def inherits,
+  `-100.0` on the twelve wingman defs (`wingman`, `wbloodhawk` and their siblings, not every AI
+  aeroplane), and unauthored on `patrolboat`, `t_truck` and every zeppelin.
 - **`struct_bias`, scorer `+0x344`,** added to every turret and structure candidate and to no
   aircraft. Shipped: `-200.0` on eleven aeroplane defs, unauthored elsewhere.
 
 ⚠ **Both are negative, so under minimisation both ATTRACT.** An equidistant structure is therefore
 ranked about 100 m AHEAD of an equidistant AI aeroplane by an aeroplane that authors both, and
 about 100 m behind the player. Read `+0x344` as a structure preference, not as the handicap its
-position in the arithmetic suggests. A turret's own picker spends neither: `FUN_004aabb0` pushes a
-literal `0` for both the second and third arguments (`0x004aaf95` and `0x004aaf99`, EBX zeroed at
-`0x004aaf93`), so `struct_bias` is an AI aircraft's term alone and a turret admits no gasbag.
+position in the arithmetic suggests. A turret's own picker spends no `struct_bias`:
+`FUN_004aabb0` pushes a literal `0` for both the second and third arguments (`0x004aaf95` and
+`0x004aaf99`, EBX zeroed at `0x004aaf93`), so `struct_bias` is an AI aircraft's term alone and a
+turret admits no gasbag. It does spend `target_bias`, because `FUN_0041f9c0` adds a candidate
+vehicle's `+0x340` on its vehicle pass for every caller ([`targeting.md`](targeting.md) "The
+picker's cost").
 
 ### A dead vehicle's surviving parts stay candidates
 
@@ -1637,9 +1679,27 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    course is never completed.
 2. Each try at a zone enters from the ribbon end nearer the bot. A stunt course authors no `aiv`
    net between its zones, so between them the bot steers freely, on bare heading and altitude
-   orders, for a lead-in point 600 m short of that end along the ribbon's line into it
-   (`LeadInM`), cruising 150 m above the end's height while far and coming down to it over the
-   last 600 m to the lead-in point (`CruiseAboveM`).
+   orders, onto its own approach line into that end. Each bot has its own line and lead-in, so a
+   field does not fly one path: the line is turned up to 15 degrees either way off the ribbon's line
+   into the end (`ApproachSpreadDeg`), and the lead-in point stands 450 to 750 m short of the end
+   along it (`LeadInM` 600 plus or minus `LeadInSpreadM` 150). Both are drawn per bot
+   (`StuntBotObjective.Spread`) on a seeded stream of the bot's seat, apart from the fluff draws, so a
+   suite repeats and the spread moves no fluff.
+   The bot never aims at a fixed point. Flying in, it aims at its line 400 m (`LookAheadM`) short of
+   its own place along it, or as far short as it is off the line when that is more, so it meets the
+   line at 45 degrees at most and settles onto it. When that point would lie past the entry it flies
+   out instead, aiming at its line 400 m beyond its own place along it, and turns in once it is past
+   its lead-in, by as much again as it is more than 400 m off the line. A heading more than 90
+   degrees off its track is ordered as a 90 degree turn to one held side: the flight law barely
+   rolls for an aim straight astern, and a bot so ordered flies about 800 m on before it turns. With the aim within 30 degrees of dead astern
+   the turn goes against the try's last such turn, toward the entry for the first, so going out and
+   coming back in is an S rather than a full circle. It cruises 150 m above the end's height while
+   far and comes down to it over its lead-in's length to its lead-in point (`CruiseAboveM`).
+   ⚠ A bot steered straight for a point circles it when it meets it from the side, and bots crowded
+   onto one path climb out of each other's way and so meet it from the side. The
+   `stunt-race-bot-field` suite flies eight bots over C1 and fails a turn of 300 degrees either way
+   over one leg of steering for a zone; its control steers for the ribbon's lead-in point
+   (`StuntBotObjective.OnLine` off) and circles.
 3. Once it is short of the end by more than the 105 m lock range and at most 900 m (`ConeReachM`),
    within 30 degrees of the ribbon's line, and tracking within 30 degrees of the end
    (`ConeHalfAngleDeg`), the zone goes to `AiPilot.FlyDangerZone`: the decoded approach and rail
@@ -1678,8 +1738,20 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
 A bot is seated by a lobby's Stunt Race, by `--stunt` with `--vs-bots=` or `--vs-bot=`, or by the
 join board's bot rows on a menu Stunt Flying run with its race toggle on, which they make a race.
 
-A race seat carries no weapons, so a race bot's pilot has no gunner and no ordnance and takes no
-quarry. Every value above is the remake's own.
+A race seat carries its stock guns, because C2's hangar zone has a weapon-hit gate (`kkgate`, rooted
+on `propane`) that must be shot open. No round reaches an aircraft in a race
+(`FlightController.Shootable`). A race bot's pilot has no ordnance, and its gunner takes no target of
+its own, so it chases no quarry. While on a run it is ordered onto the nearest live weapon-hit
+structure the zone's route runs into (a world ray along each route chord, the struck body owned by
+the nearest pool anchor up its chain), and fires on it in any mode, the rail included. It takes that
+target while it steers for the zone too. A hit counts only on the pool's own damage node, so an end
+whose route cast strikes another part of a standing target first is shut, as a refused end is: C2's
+`dzpath1` far end meets the closed gate leaf (`kkgate/healthy`) before the propane, and a bot there
+comes round to the near end, shoots the tank and flies through. The end opens once the target is
+down. Regression: the `stunt-race-bot-gate` suite. A short named
+list adds optional targets that the route clears, each taken on the zone whose gate it stands within
+50 m of: C2's Ramses Tomb wall (`ramses`, rooted on `trigger`, beside dz2). The Hollywood sign's
+letters frame dzpath7's gate as closely and are left standing. Every value above is the remake's own.
 
 Measured with the ace bot over every shipped course (the `stunt-race-bot` suite, `--chapter=` for
 each, a 16 minute window, one injected crash after the second zone in each run, from which it
@@ -1687,12 +1759,12 @@ returned to that zone's exit every time):
 
 | Course | Zones cleared | Finish | Zone ends with a lead-in |
 |---|---|---|---|
-| C1 | 5 of 5 | 3:22.0 | none |
-| C1B | 5 of 5 | 3:03.9 | `dzpath6`, `dzpath7` |
-| C2 | 9 of 9 | 4:29.3 | `dzpath4` |
-| C3 | 4 of 4 | 3:14.8 | `dzpath4` from either end |
-| C4 | 14 of 14 | 8:19.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
-| C5 | 17 of 17 | 10:41.3 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
+| C1 | 5 of 5 | 3:19.5 | none |
+| C1B | 5 of 5 | 2:52.4 | `dzpath6`, `dzpath7` |
+| C2 | 9 of 9 | 4:02.0 | `dzpath4` |
+| C3 | 4 of 4 | 2:32.1 | `dzpath4` from either end |
+| C4 | 14 of 14 | 7:46.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
+| C5 | 17 of 17 | 9:02.1 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
 
 Every lead-in in the table probes clear of the world in that suite. A zone end not listed keeps its
 own entry (`StuntBotObjectiveTests` pins the list).

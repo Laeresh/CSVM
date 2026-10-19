@@ -19,7 +19,7 @@ public sealed record OriginalInstantActionInks(
 /// dropdowns, the paged enemy rows, the radio pair, the five buttons, and one aeroplane's fit.
 /// Decoded rules bound here: a contents row applies its preset, View Story writes its name, and
 /// the ace duel blanks every enemy control. The wingman plane blanks at zero wingmen, stunt
-/// flying bars the clouds, and the Pilot Plane list is the sortie screens' roster. Build opens
+/// flying bars the clouds, and the Pilot Plane list is the local lobby's roster. Build opens
 /// the hangar wallet-free, Weapon Loadout the loadout screen for the seat the radio names, the
 /// per-seat picker's door that seat's own fit. The loadout half stands on the campaign's own ammo
 /// chrome: ACCEPT LOADOUT keeps the picks, CANCEL LOADOUT and Back restore
@@ -222,7 +222,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <summary>The open dropdown's key, or null when none is open.</summary>
     public string? OpenDropdown => _iaOpen;
 
-    /// <summary>The Pilot Plane list: the roster the sortie screens read, the eleven stock
+    /// <summary>The Pilot Plane list: the roster the local lobby reads, the eleven stock
     /// airframes and then the saved builds, as of the last <see cref="RefreshRoster"/>.</summary>
     public IReadOnlyList<MenuAircraft> PilotRoster => _iaPilotRoster;
 
@@ -266,7 +266,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <summary>Whose loadout the Weapon Loadout button targets: 0 the pilot, 1 the wingmen.</summary>
     public int LoadoutTarget => _iaRadio;
 
-    /// <summary>The pilot's fit, seat 0's own so the sortie screens and this one edit one choice.
+    /// <summary>The pilot's fit, seat 0's own, the one fit its launch carries.
     /// A shell with no seat joined keeps a spare so the screen still works.</summary>
     public LoadoutChoice PilotFit => Seat0?.Fit ?? (_iaSpareFit ??= new LoadoutChoice());
 
@@ -306,7 +306,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.InstantAction);
     }
 
-    /// <summary>Re-reads the saved builds into the Pilot Plane list through the sortie screens'
+    /// <summary>Re-reads the saved builds into the Pilot Plane list through the local lobby's
     /// roster rule. Every entry to the screen calls it, and a return from the hangar calls it too.
     /// A build saved there is therefore offered without leaving the screen.</summary>
     public void RefreshRoster() =>

@@ -150,7 +150,7 @@ internal static class NetLobbyEnvironmentSuites
         + "with no lives limit, no Instant Action mission, no AI and no Dogfight match, load the same Danger "
         + "Zone course, put both seats on the one spawn (each local seat on the opening count's rails "
         + "behind it), and build a race holding both pilots with a 420 s window under the seats' "
-        + "callsigns, the guest's a replica of the host's. No aircraft on either machine carries a loadout and every one races. Each machine stamps its own "
+        + "callsigns, the guest's a replica of the host's. Every aircraft on either machine races with its loadout, out of every round's reach. Each machine stamps its own "
         + "seat's ghost with that seat's first-person layer and the remote seat's with the layer every "
         + "camera draws, and both windows open after the opening count on one step with each local seat "
         + "rolled onto the spawn")]
@@ -223,7 +223,7 @@ internal static class NetLobbyEnvironmentSuites
                 $"both machines put both seats on the one spawn, {spawn.DistanceTo(railed):0} m of rails ahead of each local seat ({spawn:F1}, {railed:F1})");
 
             Raced(ctx, peers, roster);
-            Unarmed(ctx, peers);
+            Armed(ctx, peers);
             Ghosts(ctx, peers);
             Opened(ctx, peers, spawn);
         }
@@ -289,12 +289,13 @@ internal static class NetLobbyEnvironmentSuites
         ctx.Check(both, $"each machine's race holds both seats with a {RaceMinutes * 60} s window under their callsigns, the guest's a replica ({string.Join(" | ", read)})");
     }
 
-    // Every aircraft on both machines races, and none carries a loadout or a carried gunner.
-    private static void Unarmed(TestContext ctx, GameSession[] peers)
+    // Every aircraft on both machines races out of every round's reach, with its loadout and no
+    // carried gunner.
+    private static void Armed(TestContext ctx, GameSession[] peers)
     {
         var all = peers.SelectMany(p => p.SeatRigs.Select(r => r.Controller!)).ToArray();
-        ctx.Check(all.All(c => c.Racing && c.Loadout == null && (c.Turrets == null || c.Turrets.Length == 0)),
-            $"no aircraft on either machine carries a weapon, and every one races ({string.Join(", ", all.Select(c => $"{c.Racing}/{c.Loadout != null}"))})");
+        ctx.Check(all.All(c => c.Racing && !c.Shootable && c.Loadout != null && (c.Turrets == null || c.Turrets.Length == 0)),
+            $"every aircraft on either machine races unshootable with its loadout and no carried gunner ({string.Join(", ", all.Select(c => $"{c.Racing}/{c.Shootable}/{c.Loadout != null}"))})");
     }
 
     // The ghost stamp on each machine. Its own seat names that seat's first-person layer. The seat

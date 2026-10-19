@@ -156,16 +156,16 @@ public sealed class BotSeatsTests
             .Select(b => b.Accent).Distinct().Count());
     }
 
-    // A race seat carries no weapons whatever its militia or a named fit. Out of a race the militia
+    // A race seat takes the race's arms whatever its militia or a named fit. Out of a race the militia
     // def arms a bot unless --loadout= names a fit.
     [Fact]
-    public void ARaceSeatIsUnarmedWhateverItsMilitia()
+    public void ARaceSeatTakesTheRacesArmsWhateverItsMilitia()
     {
         foreach (bool named in new[] { false, true })
         {
             foreach (bool militia in new[] { false, true })
             {
-                Assert.Equal(SeatArms.None, BotSeats.ArmsFor(racing: true, named, militia));
+                Assert.Equal(SeatArms.Race, BotSeats.ArmsFor(racing: true, named, militia));
             }
         }
 

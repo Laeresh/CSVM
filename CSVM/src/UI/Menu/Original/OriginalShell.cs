@@ -20,14 +20,15 @@ public enum OriginalScreen
     /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight and Dogfight doors.</summary>
     TopLevel,
 
-    /// <summary>The remake-only Free Flight screen: a chapter list, the aircraft list, the seats, BACK and FLY.</summary>
+    /// <summary>The remake-only local Free Flight screen on the Multiplayer Lobby's layout: the map,
+    /// the seats and seat 0's aircraft, its rules greyed (<see cref="OriginalLocalLobby"/>).</summary>
     FreeFlight,
 
-    /// <summary>The remake-only Dogfight screen: the Free Flight screen's shape over the Dogfight gate.</summary>
+    /// <summary>The remake-only local Dogfight screen on the same layout, its mission rules live.</summary>
     Dogfight,
 
     /// <summary>The remake-only per-seat aircraft screen: the campaign plane-selection board's
-    /// shape over the sortie roster, one joined seat picking at a time.</summary>
+    /// shape over the shared roster, one joined seat picking at a time.</summary>
     SeatPlane,
 
     /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS,
@@ -217,7 +218,7 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 /// <summary>
 /// The Original presentation's screen graph, engine-free, driven by each seat's semantic commands
 /// and composed into a <see cref="ComposedBoard"/> in the authored 800x600 space. It holds the
-/// decoded top level with the remake-only Free Flight and Dogfight doors, the sortie screens, and
+/// decoded top level with the remake-only Free Flight and Dogfight doors, the local lobby, and
 /// the Options screen over the Preferences chrome. The Game Options, AUDIO and VIDEO pages stand
 /// behind its three live doors, the Instant Action, loadout, campaign and hangar screens over
 /// their shared features. Seat 0's pointer arrives mapped into that space, and hovering a live
@@ -244,10 +245,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The join board's door on the top level.</summary>
     public const string JoinBoardKey = "JOINBOARD";
 
-    /// <summary>The Free Flight screen's leave button.</summary>
+    /// <summary>The local lobby's leave button, and the Options screen's where its section is missing.</summary>
     public const string BackKey = "BACK";
 
-    /// <summary>The Free Flight screen's launch button.</summary>
+    /// <summary>The local lobby's launch button.</summary>
     public const string FlyKey = "FLY";
 
     /// <summary>A one-answer dialog's OK (<see cref="OriginalShellDialog.OkKey"/>).</summary>
@@ -285,22 +286,13 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private const float DoorX = 42f;
     private const float DoorY = 293f;
 
-    // The join board's door, a third plaque under the two sortie doors.
+    // The join board's door, a third plaque under the two local match doors.
     private const float JoinBoardDoorY = DoorY + 72f;
 
-    // The remake-only screens' list geometry. It is two columns under the logo, one authored text
-    // height (STDTEXTH, 16) plus air per row, and the two plaques on the bottom margin.
-    private const float ListTop = 286f;
-    private const float RowPitch = 22f;
-    private const float RowHeight = 20f;
-    private const float ListWidth = 300f;
-    private const float LeftColumnX = 60f;
-    private const float RightColumnX = 440f;
-    private const float PlaqueY = 540f;
+    // The remake-only Options hub's text: one authored text height (STDTEXTH, 16) per row, its
+    // heading, and the plaque column.
     private const float RowFont = 16f;
     private const float HeadingFont = 20f;
-    private const float FooterY = 578f;
-    private const float FooterFont = 12f;
     private const float OptionsX = 319f;
     private const float OptionsTop = 300f;
     private const float OptionsPitch = 40f;
@@ -390,7 +382,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private CopyWay _copyWay;
     // A thumb drag in progress: which list, where the pointer took hold and where the window stood.
     private (string Key, float StartY, int StartTop)? _drag;
-    private int _pickedChapter = -1;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. The measurer
     /// <paramref name="measure"/> answers an art name with its strip's pixel size, null when the file is
@@ -466,9 +457,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             BeginLobbySeatWalk);
         Connection = new OriginalConnectionScreen(
             () => _net, this, dataRoot, Lobby.OpenHost, (hosting, then, password) => AskNetInfo(hosting, then, asksPassword: password));
+        LocalLobby = new OriginalLocalLobby(this, Lobby, _setup, _free, _chapters, _flightDevices, _stock ?? (() => null), BeginLocalSeatWalk);
         _modules = Hangar != null
-            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby }
-            : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard, Connection, Lobby };
+            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby, LocalLobby }
+            : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard, Connection, Lobby, LocalLobby };
         _cheats = new OriginalCheats(Campaign, Hangar);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -543,10 +535,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
             switch (_screen)
             {
-                case OriginalScreen.FreeFlight:
-                case OriginalScreen.Dogfight:
-                    SortieLists(lists);
-                    break;
                 case var _ when ModuleFor(_screen) is { } module:
                     module.Lists(lists);
                     break;
@@ -572,7 +560,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public bool CapturingText =>
         _box.Standing == null
         && (NetInfo.CapturingText || TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
-            || Connection.CapturingText || Lobby.CapturingText || JoinBoard.CapturingText);
+            || Connection.CapturingText || Lobby.CapturingText || JoinBoard.CapturingText || LocalLobby.CapturingText);
 
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
     /// on a shell built without a hangar feature.</summary>
@@ -609,6 +597,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// or joined.</summary>
     public OriginalLobbyScreen Lobby { get; }
 
+    /// <summary>The module behind the local Free Flight and Dogfight screens, the lobby's layout
+    /// with no network behind it.</summary>
+    public OriginalLocalLobby LocalLobby { get; }
+
     /// <summary>The GAME INFORMATION and PLAYER INFORMATION boxes. While one stands over a page its
     /// rows are the only rows, as a messagebox's are, and a messagebox can stand over it.</summary>
     public OriginalNetInfoBox NetInfo { get; }
@@ -625,9 +617,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The slider row the pointer is dragging, or null. Kept apart from
     /// <see cref="Dragging"/> so a drag can never change which of the two it belongs to.</summary>
     public string? DraggingSlider => _slider.Held;
-
-    /// <summary>The picked chapter's code, or null.</summary>
-    public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
@@ -900,6 +889,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             OriginalScreen.Connection => Connection.TypeText(commands, cues),
             OriginalScreen.Lobby => Lobby.TypeText(commands, cues),
             OriginalScreen.JoinBoard => JoinBoard.TypeText(commands),
+            OriginalScreen.Dogfight => LocalLobby.TypeText(commands),
             _ => Hangar?.TypeName(commands, cues) ?? false,
         };
 
@@ -1107,7 +1097,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             // belonging to no one screen, then the network box or the screen's own module. Only a
             // step that changes no value moves the focus.
             if (SliderControl.StepValue(rows, focus, commands.MoveX)
-                || StepSortieRule(rows, focus, commands.MoveX)
                 || (_box.Standing == null && NetInfo.IsOpen && NetInfo.StepSideways(rows, focus, commands.MoveX))
                 || (_box.Standing == null && !NetInfo.IsOpen && ModuleFor(_screen) is { } module
                     && module.StepSideways(rows, focus, commands.MoveX)))
@@ -1137,12 +1126,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         else if (exit == null && commands.Back)
         {
             exit = Back();
-            changed = true;
-        }
-
-        // With seat 0's aircraft picked, a joined seat still to confirm gets its own screen.
-        if (exit == null && IsSortie && BeginSeatWalkIfDue())
-        {
             changed = true;
         }
 
@@ -1184,10 +1167,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 break;
             case OriginalScreen.SeatPlane:
                 ComposeSeatPlane(focus, layers);
-                break;
-            case OriginalScreen.FreeFlight:
-            case OriginalScreen.Dogfight:
-                ComposeSortie(rows, layers);
                 break;
             case OriginalScreen.Options:
                 ComposeOptions(layers);
@@ -1403,8 +1382,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return false;
     }
 
-    // The rows of a screen that has no page of its own, which are the top level, the sortie screens
-    // and the Options screen. They draw a decoded strip in its state frame, a paper plaque with its
+    // The rows of a screen that has no page of its own, which are the top level and the
+    // Options screen. They draw a decoded strip in its state frame, a paper plaque with its
     // label, and list text. A plaque whose art is missing takes an outlined label. Nothing is
     // focused or pressed while a dialog stands over the screen. A row outside its list's window
     // draws nothing, since the window is what the pointer scrolls.
@@ -1441,11 +1420,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
                     break;
                 default:
-                    if (IsPicked(row))
-                    {
-                        layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.18f));
-                    }
-
                     layers.Lines.Add(new BoardLine(row.Label, row.X + 6f, row.Y + 1f, row.Width - 12f, RowFont,
                         focused ? BoardInk.RowFocused : BoardInk.Row, i));
                     break;
@@ -1601,10 +1575,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 switch (row.Key)
                 {
                     case FreeFlightKey:
-                        Open(OriginalScreen.FreeFlight);
+                        LocalLobby.Enter(OriginalScreen.FreeFlight);
                         break;
                     case DogfightKey:
-                        Open(OriginalScreen.Dogfight);
+                        LocalLobby.Enter(OriginalScreen.Dogfight);
                         break;
                     case JoinBoardKey:
                         JoinBoard.Open();
@@ -1629,9 +1603,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 }
 
                 break;
-            case OriginalScreen.FreeFlight:
-            case OriginalScreen.Dogfight:
-                return ActivateSortie(row);
             case OriginalScreen.Credits:
                 return ActivateCredits(row);
             case var _ when ModuleFor(_screen) is { } module:
@@ -1666,10 +1637,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     }
 
     // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
-    // On a sortie screen it undoes seat 0's pick a stage at a time, then leaves. The per-seat
-    // screen has its own, whose meaning depends on who pressed it. A module answers it on its own
-    // screens, each page's own declining answer. The campaign and the hangar walk their graphs
-    // back, and the top level quits as MAINMENU.SCRIPT's Quit does.
+    // The per-seat screen has its own, whose meaning depends on who pressed it. A module answers it
+    // on its own screens, each page's own declining answer. The campaign and the hangar walk their
+    // graphs back, and the top level quits as MAINMENU.SCRIPT's Quit does.
     private MenuExit? Back()
     {
         if (_box.Standing is { } dialog)
@@ -1692,11 +1662,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         if (_screen == OriginalScreen.SeatPlane)
         {
             return BackSeatPlane();
-        }
-
-        if (IsSortie && Seat0 is { } seat && _setup.Back(seat) != SeatBack.Browsing)
-        {
-            return null;
         }
 
         // A module answers Back on its own screens. Instant Action leaves one case to the shell's
@@ -1757,10 +1722,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                         seatPage, CurrentCombo, _ => true, _campaignLayout, Measure, rows);
                 }
 
-                break;
-            case OriginalScreen.FreeFlight:
-            case OriginalScreen.Dogfight:
-                SortieRows(rows);
                 break;
             case OriginalScreen.Options:
                 BuildOptionsRows(rows);

@@ -11,12 +11,13 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The remake-only per-seat aircraft screen, nothing on it decoded.
-/// Each further seat picks its own aircraft here in player order, after seat 0's sortie pick,
+/// Each further seat picks its own aircraft here in player order, after the local lobby's FLY,
 /// Instant Action's FLY MISSION or the lobby's Ready. It wears the campaign plane-selection board
-/// over the sortie roster, the lobby's walk over the stock rows alone. Accept selects, Accept again
-/// confirms and hands on, and WEAPON LOADOUT opens that seat's own fit. Back and CANCEL SELECTIONS
-/// drop a selection, then leave the walk with every seat kept. The picking seat's device and seat
-/// 0's mouse drive it, and the last confirm is the launch, the Ready or FLY's return.
+/// over the shared roster, the lobby's walk over the stock rows alone unless the host allows custom
+/// planes. Accept selects, Accept again confirms and hands on, and WEAPON LOADOUT opens that seat's
+/// own fit. Back and CANCEL SELECTIONS drop a selection, then leave the walk with every seat kept.
+/// The picking seat's device and seat 0's mouse drive it, and the last confirm is the launch, the
+/// Ready or FLY's return.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -27,8 +28,8 @@ public sealed partial class OriginalShell
     private PlayerSeat? _pickingSeat;
     private OriginalScreen _seatReturn = OriginalScreen.FreeFlight;
 
-    // The stock rows the shared roster leads with, all a lobby's further seat may fly. Taken once
-    // as a lobby walk begins.
+    // The rows a lobby's further seat may fly, taken once as a lobby walk begins. That is the whole
+    // shared roster while the host allows custom planes, else the stock rows it leads with.
     private IReadOnlyList<MenuAircraft> _lobbyRoster = Array.Empty<MenuAircraft>();
 
     /// <summary>The seat picking on the per-seat screen, as its index, or -1 off that screen.</summary>
@@ -45,33 +46,13 @@ public sealed partial class OriginalShell
         _screen == OriginalScreen.SeatPlane
         || (_screen == OriginalScreen.InstantActionLoadout && InstantAction.OnSeatLoadout);
 
-    // The rows the walk offers: the stock ones alone over the lobby, else the whole sortie roster.
+    // The rows the walk offers: the lobby's own over the lobby, else the whole shared roster.
     private IReadOnlyList<MenuAircraft> WalkRoster => _seatReturn == OriginalScreen.Lobby ? _lobbyRoster : _setup.Roster;
 
-    /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
-    /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
-    /// screen opens at once. Nothing happens off the sortie screens.</summary>
-    public void PoseSortiePick()
-    {
-        if (!IsSortie || Seat0 is not { } seat)
-        {
-            return;
-        }
-
-        PickedChapterIndex = 0;
-        if (_screen == OriginalScreen.FreeFlight)
-        {
-            _free.SelectChapter(_chapters[0].Code);
-        }
-
-        if (!seat.Locked)
-        {
-            _setup.Browse(seat, 0);
-            _setup.Select(seat);
-        }
-
-        BeginSeatWalkIfDue();
-    }
+    /// <summary>Opens the per-seat aircraft screen over the local lobby showing, as its FLY does with
+    /// a joined seat still to pick, the screenshot aid's pose. Nothing happens off the local lobby or
+    /// with every seat picked.</summary>
+    public void PoseSeatWalk() => BeginLocalSeatWalk();
 
     // Seat 0's frame as the screen showing takes it: whole, except on a screen standing for another
     // seat, where only the pointer is kept. That is a walk's screens while another seat is picking,
@@ -112,11 +93,11 @@ public sealed partial class OriginalShell
         return null;
     }
 
-    // On a sortie screen, once seat 0 has picked, a joined seat still to confirm gets the per-seat
-    // screen. Read every frame, so a seat joining after seat 0's pick is walked too.
-    private bool BeginSeatWalkIfDue()
+    // The local lobby's FLY with a joined seat still to confirm: that seat's own screen, the walk
+    // returning to the lobby showing. False once every seat has confirmed.
+    private bool BeginLocalSeatWalk()
     {
-        if (!IsSortie || Seat0 is not { Locked: true } || NextUnconfirmed() is not { } next)
+        if (!LocalLobby.Owns(_screen) || NextUnconfirmed() is not { } next)
         {
             return false;
         }
@@ -154,13 +135,15 @@ public sealed partial class OriginalShell
     }
 
     // The lobby's Ready with a further seat in the match. Each such seat picks again from browsing.
-    // A seat the host gave no place stands confirmed, so the walk passes it. ⚠ Keep a cursor inside
-    // the stock rows; a further seat flies no custom plane over the wire.
+    // A seat the host gave no place stands confirmed, so the walk passes it. ⚠ Keep the shared
+    // roster's indices; the seat's loadout reads its cursor against that roster.
     private void BeginLobbySeatWalk()
     {
         var seats = _setup.Seats;
         int places = _net?.Dogfight?.SeatsFlown ?? 1;
-        _lobbyRoster = _setup.Roster.TakeWhile(row => !row.IsCustom).ToList();
+        _lobbyRoster = _net?.Dogfight?.Rules.AllowCustom == true
+            ? _setup.Roster
+            : _setup.Roster.TakeWhile(row => !row.IsCustom).ToList();
         for (int i = 1; i < seats.Count; i++)
         {
             // Two steps back reach browsing from any stage: confirmed, then selected.
@@ -205,9 +188,8 @@ public sealed partial class OriginalShell
 
     // Every seat confirmed: the launch, whichever screen the walk came from, the last seat's
     // confirm standing in for seat 0's press there. The screen it returns to opens first, so a
-    // sortie launch reads that screen's own chapter and mode. ⚠ Leave the gate to FLY's own rule:
-    // Dogfight without a second seat, or a sortie with no map picked, must return the screen with
-    // FLY to press rather than fly.
+    // local launch reads that screen's own mode. ⚠ Leave the gate to FLY's own rule: a Dogfight
+    // a seat left mid-walk must return the screen with FLY to press rather than fly.
     private MenuExit? FinishSeatWalk()
     {
         var back = _seatReturn;
@@ -220,7 +202,7 @@ public sealed partial class OriginalShell
 
         if (back != OriginalScreen.InstantAction)
         {
-            return IsSortie ? Fly() : null;
+            return LocalLobby.Owns(back) ? LocalLobby.Launch() : null;
         }
 
         if (Seat0 is not { } seat)
@@ -232,10 +214,8 @@ public sealed partial class OriginalShell
         return _instantAction.BuildExit(_setup.Choices(_flightDevices), bots: _setup.Bots.LaunchEntries());
     }
 
-    // Back's one way out of the walk, whoever pressed it: the screen it came from returns with
-    // every seat kept, so a pick made again walks them again. ⚠ Unwind seat 0 all the way to
-    // browsing; a sortie screen reopens the walk every frame seat 0's pick still stands, so a
-    // single stage back would put the walk straight up again and Back would have no exit.
+    // Back's one way out of the walk, whoever pressed it. The screen it came from returns with
+    // every seat kept and seat 0 browsing, and a launch pressed again walks them again.
     private void CancelSeatWalk()
     {
         if (Seat0 is { } seat)
@@ -382,9 +362,9 @@ public sealed partial class OriginalShell
 
     /// <summary>
     /// One seat's picker as a campaign page, so <c>CampaignBoards.For</c> draws it in the
-    /// plane-selection board's shape: the list field over the sortie roster, the silhouette of
-    /// the row under the cursor, its ratings and weapon column, WEAPON LOADOUT over a selection, and
-    /// ACCEPT and CANCEL SELECTIONS. The page composes only; the shell applies every press itself,
+    /// plane-selection board's shape. That is the list field over the shared roster, the silhouette
+    /// of the row under the cursor and its ratings and weapon column. WEAPON LOADOUT stands over a
+    /// selection, then ACCEPT and CANCEL SELECTIONS. The page composes only; the shell applies every press itself,
     /// since the picks are the shared setup's stages and not a profile's slots.
     /// </summary>
     private sealed class SeatPlanePage : ICampaignPage

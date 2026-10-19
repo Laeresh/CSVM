@@ -392,7 +392,7 @@ public class NetMessagesTests
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
 
-        Assert.Equal(SeatRosterMessage.PrefixSize + (22 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.Equal(SeatRosterMessage.PrefixSize + (46 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
         Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(seats, got.Seats.ToList());
         int Entry(int seat) => SeatRosterMessage.PrefixSize + (seat * SeatRosterMessage.EntrySize);
@@ -909,9 +909,9 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void ACoopPickRoundTripsItsRoundReadyAirframePlaneFitNameAndLeaveInThirtySixBytes()
+    public void ACoopPickRoundTripsItsRoundReadyAirframePlaneFitNameAndLeaveInSixtyBytes()
     {
-        Assert.Equal(36, CoopPickMessage.Size);
+        Assert.Equal(60, CoopPickMessage.Size);
         Span<byte> buffer = stackalloc byte[CoopPickMessage.Size];
         var fit = CoopFit.Of(new[] { 2, 4, -1, 0 }, new[] { 0, 3, 12, 0, 0, 0, 0, 1 });
         foreach (var sent in new[]
@@ -1042,7 +1042,7 @@ public class NetMessagesTests
             new DogfightLobbySeat("Lucy", 1, false, false, 2),
             new DogfightLobbySeat("Red Baron Jr", 10, true, false, Plane: "Flying Dutchman"),
         });
-        Assert.Equal(584, DogfightRosterMessage.Size);
+        Assert.Equal(968, DogfightRosterMessage.Size);
         Assert.Equal(DogfightRosterMessage.Size, sent.Write(buffer));
         Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);

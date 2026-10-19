@@ -82,19 +82,26 @@ internal static class OriginalWalk
             first = Search(rows, lists, from, moves, valued, row => OriginalFocus.TakesValue(row) && row.Kind != OriginalRowKind.Radio);
         }
 
+        // A dropdown the screen moves off sideways, the local lobby's map box, is tried only where
+        // no other walk reaches the row. A press that takes a value is learned in valued.
+        if (!first.ContainsKey(goal))
+        {
+            first = Search(rows, lists, from, moves, valued, row => row.Kind == OriginalRowKind.Slider);
+        }
+
         return goal != from && first.TryGetValue(goal, out var press) ? new MenuCommands { MoveX = press.X, MoveY = press.Y } : null;
     }
 
     /// <summary>The rows arrow presses reach from <paramref name="from"/>. A dropdown, a slider or
-    /// a radio takes its sideways press as a value. The radios in <paramref name="radiosThatMove"/>
+    /// a radio takes its sideways press as a value. The rows in <paramref name="movesSideways"/>
     /// are the exception: their screen moves the focus off them sideways.</summary>
     internal static IReadOnlyCollection<int> Reachable(
-        IReadOnlyList<OriginalRow> rows, IReadOnlyList<OriginalList> lists, int from, IReadOnlySet<string> radiosThatMove)
+        IReadOnlyList<OriginalRow> rows, IReadOnlyList<OriginalList> lists, int from, IReadOnlySet<string> movesSideways)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(radiosThatMove);
+        ArgumentNullException.ThrowIfNull(movesSideways);
         return Search(rows, lists, from, new[] { (0, 1), (1, 0), (0, -1), (-1, 0) }, null,
-            row => OriginalFocus.TakesValue(row) && !radiosThatMove.Contains(row.Key)).Keys;
+            row => OriginalFocus.TakesValue(row) && !movesSideways.Contains(row.Key)).Keys;
     }
 
     // Every row the shell's own step reaches from one, breadth first, each with the first press of

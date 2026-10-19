@@ -271,7 +271,8 @@ public partial class FlightController : Node3D
     public VersusStatusLine? VersusStatusLine;
 
     /// <summary>The time-attack race this plane is one seat of, or null flying solo. Set, a
-    /// rerun of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>. Once
+    /// rerun of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>, and any
+    /// respawn only while <see cref="StuntRace.MayRespawn"/>. Once
     /// the race has ended, R is a new window for every pilot through <see cref="RerunRace"/>.</summary>
     public StuntRace? Race;
 
@@ -555,9 +556,10 @@ public partial class FlightController : Node3D
                                                  // since it re-aims at the falling wreck
     private FlightController? _watchedPrev;      // the aircraft last frame's spectating view held
     private Camera3D? _viewCamera;
-    private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
+    private CanvasLayer? _hudCanvas;             // the whole HUD layer; ApplyHudCanvas hides it (the
                                                  // original's crash camera shows no HUD, footage);
                                                  // never built on an AI rig
+    private bool _staticCamera;                  // a crash or death camera holds the view (ApplyHudCanvas)
     private CanvasLayer? _messageCanvas;         // the message stack's own layer, which the crash
                                                  // hide above deliberately leaves up
     private Vector3 _spawnPos;
@@ -999,6 +1001,9 @@ public partial class FlightController : Node3D
         set => _lifecycle.AutoRespawnAfter = value;
     }
 
+    /// <summary>How long a crash holds this pane's crash camera (<see cref="AircraftLifecycle.CrashCameraSeconds"/>).</summary>
+    public float CrashCameraSeconds => _lifecycle.CrashCameraSeconds;
+
     /// <summary>Whether the crash, once <see cref="AutoRespawnAfter"/> has run, waits for a Fire
     /// Guns press, the lobby's Auto Respawn off. R still respawns at any time.</summary>
     public bool RespawnOnFire
@@ -1024,7 +1029,7 @@ public partial class FlightController : Node3D
     /// <summary>Whether R, pad Y or the armed timer would bring this pilot back once crashed. The
     /// crashed step and the HUD's respawn prompt both read this one answer, so the prompt cannot
     /// offer a respawn the step refuses.</summary>
-    public bool RespawnOffered => !Spectating && !CrashIsFinal && !CommandsHeld;
+    public bool RespawnOffered => !Spectating && !CrashIsFinal && !CommandsHeld && !RaceRefusesRespawn;
 
     /// <summary>An aircraft that has been BUILT but held completely out of the session, not
     /// stepped, drawn, collidable, hittable, or a targeting candidate. The original's wave
@@ -1071,6 +1076,10 @@ public partial class FlightController : Node3D
     /// ranking's standing-target check, the HUD hostile tracker and the E11 wave-clear walk. A
     /// consumer that tests <see cref="Crashed"/> alone silently sees inert aircraft.</summary>
     public bool InPlay => _lifecycle.InPlay;
+
+    /// <summary>Whether a weapon may reach this aircraft: in play and not <see cref="Racing"/>. The
+    /// body's layer and the projectile pool's fuse, blast and tangler walks read it.</summary>
+    public bool Shootable => InPlay && !Racing;
 
     /// <summary>Another machine flies this airframe and this one only shows it
     /// (<see cref="RemotePoses"/>). While set the sim step reads no device and runs no
@@ -1156,6 +1165,9 @@ public partial class FlightController : Node3D
     // Whether the respawn control splits into a tap and a hold. A seat whose return somebody else
     // grants keeps the one press it asks with.
     private bool StuntRespawnSplits => Stunt != null && RespawnRequest == null;
+
+    // A race's final run, which offers no respawn of any kind.
+    private bool RaceRefusesRespawn => Race is { MayRespawn: false };
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
@@ -1440,8 +1452,8 @@ public partial class FlightController : Node3D
         }
         _sweep.Reset();
         _grazeReactionCooldown = 0f;
-        if (_hudCanvas != null)
-            _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
+        _staticCamera = false;   // flying again
+        ApplyHudCanvas();
         // ⚠ An INERT airframe must stay off-screen and off the aircraft layer through a respawn too.
         // Setup() calls Respawn before _Ready builds the body, so this is also that first assertion.
         ApplyPresence();
@@ -1816,6 +1828,16 @@ public partial class FlightController : Node3D
     /// per rig and holds no HUD of its own.</summary>
     public void SetPilotHudVisible(bool visible) => _pilotHud.SetVisible(visible);
 
+    /// <summary>A spectating pane's HUD (<see cref="FlightHud.SetSpectatorView"/>), up over a wreck
+    /// too. A stunt run HUD names the racer <paramref name="watchedRacer"/> answers.</summary>
+    public void SetSpectatorHud(bool on, Func<Racer?>? watchedRacer = null)
+    {
+        _pilotHud.SetSpectatorView(on);
+        if (_pilotHud.StuntRun is { } runHud)
+            runHud.WatchedRacer = on ? watchedRacer : null;
+        ApplyHudCanvas();
+    }
+
     /// <summary>Photo mode takes this pane: the pause key goes silent until
     /// <see cref="EndPhotoMode"/> (<see cref="SeatPause.BeginPhotoMode"/>).</summary>
     public void BeginPhotoMode() => Pause.BeginPhotoMode();
@@ -2125,6 +2147,9 @@ public partial class FlightController : Node3D
             // reads the same answer. A hull that dies inside a hold keeps falling.
             if (!RespawnOffered)
             {
+                // Otherwise the race would wait on this wreck's run until the final run's cap.
+                if (RaceRefusesRespawn)
+                    Stunt?.Stop();
                 StepWreckFall(dt);
                 return;
             }
@@ -2688,6 +2713,12 @@ public partial class FlightController : Node3D
     internal bool WorldBlocksLine(Vector3 from, Vector3 to) =>
         World.Ray(from, to, CollisionLayers.World, null, out _);
 
+    /// <summary>The static world body the segment strikes first, and where, or null on a clear
+    /// line. A stunt race bot reads it for the structures across a zone's route.</summary>
+    internal (Node Body, Vector3 At)? WorldStruckAlong(Vector3 from, Vector3 to) =>
+        World.Ray(from, to, CollisionLayers.World, null, out var report) && report.Collider is { } body
+            ? (body, report.Position) : null;
+
     /// <summary>What blocks the AI's avoid-crash lookahead along the segment, the static world or
     /// another aircraft, never this plane's own body, as the struck body's name, or null for a
     /// clear path. Not <see cref="WorldBlocksLine"/>; decode: docs/org/aiPilot.md, "What the ray
@@ -3001,7 +3032,7 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = true;
         // A race keeps every body off the layer for the whole session. That one rule stops a ram from
         // either side of the pair, and the contact resolver never learns of it.
-        Body?.SetHittable(InPlay && !Racing);
+        Body?.SetHittable(Shootable);
     }
 
     // The selected firable gun group, the one the trigger fires. Null with no fire control, no
@@ -3093,7 +3124,9 @@ public partial class FlightController : Node3D
         if (outcome.GunShots.Count > 0 && Projectiles != null)
         {
             _aimCandidates.Clear();
-            Projectiles.CollectAircraft(_aimCandidates);
+            // A racer's rounds reach no aircraft, so its assist must not bend them toward one.
+            if (!Racing)
+                Projectiles.CollectAircraft(_aimCandidates);
             SurfaceVehicles?.CollectVehicles(_aimCandidates);
             Projectiles.CollectTurrets(_aimCandidates);
             Projectiles.CollectFusedOrdnance(_aimCandidates);
@@ -3464,9 +3497,17 @@ public partial class FlightController : Node3D
     // shows none) and no first-person dressing, since all of them are outside vantages.
     private void HideHudForStaticCamera()
     {
-        if (_hudCanvas != null)
-            _hudCanvas.Visible = false;
+        _staticCamera = true;
+        ApplyHudCanvas();
         LeaveFirstPerson();
+    }
+
+    // The HUD layer's one rule: down under a static camera, but for a spectator's view. That
+    // stays up over a wreck and over a held aeroplane's crash alike.
+    private void ApplyHudCanvas()
+    {
+        if (_hudCanvas != null)
+            _hudCanvas.Visible = !_staticCamera || _pilotHud.SpectatorView;
     }
 
     // The crash camera is an external vantage, so the first-person hiding comes off with the cut.
@@ -3780,7 +3821,7 @@ public partial class FlightController : Node3D
         // and that branch's own read is what brings a crashed pilot back.
         if (StuntRespawnSplits)
         {
-            if (AllowLiveRespawn)
+            if (AllowLiveRespawn && !RaceRefusesRespawn)
                 Perform(_run.StepLive(RespawnPressed(), dt));
             else
                 _run.StepLiveRefused(dt); // the button is not read where the pin refuses it

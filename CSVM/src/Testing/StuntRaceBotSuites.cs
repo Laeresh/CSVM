@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.UI.Screens;
@@ -27,6 +30,7 @@ internal static class StuntRaceBotSuites
     private const int BotSeat = 1;
 
     private const string Callsign = "Racer";
+    private const string Rival = "Rival";
 
     // A window long enough for the longest course, minutes: the race may not end before the bot does.
     private const int WindowMinutes = 16;
@@ -40,9 +44,23 @@ internal static class StuntRaceBotSuites
     // How often the world's moved colliders reach the physics server, in steps.
     private const int SyncSteps = 30;
 
+    // How far out along a shielded end's approach the gate cell starts the bot, metres. Then how long
+    // it is given to clear that zone, seconds.
+    private const float ShieldedStartM = 400f;
+    private const float ShieldedSeconds = 120f;
+
+    // How long the field suite flies, seconds, and the turn either way over one leg of steering for a
+    // zone it fails, degrees. Then the bearing about an entry inside which two seats' handovers count as
+    // one path, and the share of seat pairs that may. Then the order a bot steers in by.
+    private const float FieldSeconds = 360f;
+    private const float FieldTurnDeg = 300f;
+    private const float OnePathDeg = 2f;
+    private const float OnePathShare = 0.15f;
+    private const string SteersIn = "steers for the zone";
     [Suite("stunt-race-bot",
         "a local stunt race of one pane and one ace bot over the run chapter's IA1 course: the launch seats "
-        + "the bot, which carries no weapons and races under its callsign; the bot flies every Danger Zone "
+        + "the bot, which carries guns but no ordnance and takes no target of its own, and races under its "
+        + "callsign; it shoots open every weapon-hit structure blocking a zone, and C2's optional Ramses wall; the bot flies every Danger Zone "
         + "through its own gate test, steering between them and running each on its ribbon, locking on no "
         + "faster than the rail check's top lock speed; crashed "
         + "once after its second zone it returns unattended to that zone's exit with its zones and clock "
@@ -61,6 +79,30 @@ internal static class StuntRaceBotSuites
         {
             int steps = Fly(ctx, spec, objective: true, limit: null);
             Fly(ctx, spec, objective: false, steps);
+        }
+        finally
+        {
+            ambient.Restore();
+        }
+    }
+
+    [Suite("stunt-race-bot-gate",
+        "a local C2 stunt race of one pane and one ace bot, started on the far side of the Seaplane Hangar's "
+        + "closed gate (kkgate) and heading in: a cast along the zone's route from that end strikes the gate "
+        + "leaf before the propane tank, and from the other end the tank first; the bot comes round to the "
+        + "open end, its own rounds destroy the tank, and it clears the hangar without crashing; ABLE-TO-FAIL "
+        + "CONTROL: with no end shut, the same start crashes or clears it with the tank never shot")]
+    internal static void ABotComesRoundToShootAShieldedGate(TestContext ctx)
+    {
+        string chapter = Course(ctx, "C2");
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
+            bots: new[] { new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign) });
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            Shielded(ctx, spec, shut: true);
+            Shielded(ctx, spec, shut: false);
         }
         finally
         {
@@ -133,6 +175,105 @@ internal static class StuntRaceBotSuites
             }
 
             ctx.Check(racer.MostZones > 0, $"[{cell}] the bot clears a Danger Zone ({racer.MostZones} zone(s), {steps} steps)");
+        }
+        finally
+        {
+            end.Close();
+            ambient.Restore();
+        }
+    }
+
+    [Suite("stunt-race-bot-final-run",
+        "a local C1 stunt race of one pane and two ace bots, its window run down to time up after the opening: "
+        + "the pane, crashed with half its crash camera's time left in the window, is still down with the "
+        + "prompt offered when time up arrives (the control), and on the next step the prompt is withdrawn and "
+        + "its run stops, and a tap returns nothing; the first bot, crashed in the final run, stays down past "
+        + "its crash camera's time with its run stopped and is handed no view, while the pane, past its own "
+        + "crash camera's time, spectates the second bot, the only racer its target key offers; the second "
+        + "bot's crash stops the last run and ends the race, every seat down and nobody respawned")]
+    internal static void AFinalRunKeepsEveryCrashDown(TestContext ctx)
+    {
+        const string cell = "final run";
+        string chapter = Course(ctx, "C1");
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
+            bots: new[] { new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign), new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Rival) });
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        if (roster is not { Length: 3 })
+        {
+            ctx.Check(false, $"[{cell}] the local launch seats a pane and two bots ({roster?.Length ?? 0} seat(s))");
+            return;
+        }
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end.Session;
+            var seats = end.Built ? session.SeatRigs.Select(r => r.Controller).ToArray() : Array.Empty<FlightController?>();
+            if (session.Race is not { } race || seats is not [{ Stunt: { } paneRun } pane, { Stunt: { } firstRun, IsBotSeat: true } first, { Stunt: not null, IsBotSeat: true } second])
+            {
+                ctx.Check(false, $"[{cell}] the session builds a race of a pane and two bots, each on its own run");
+                return;
+            }
+
+            pane.UseKeyboard = false;
+            pane.PadDevices = Array.Empty<int>();
+            pane.HoldActionForTest(InputAction.Respawn, false);
+            int steps = 0;
+            void Run(int n)
+            {
+                for (int i = 0; i < n && !race.Ended; i++)
+                {
+                    Step(session, ++steps);
+                }
+            }
+
+            while (!(race.Phase == StuntRacePhase.Open && race.Racers.All(r => r.InRun)) && steps < Steps(WaitSeconds))
+            {
+                Run(1);
+            }
+
+            // Half the crash camera's time short of time up, so the prompt still stands when it arrives.
+            race.Advance(race.TimeLeft - (pane.CrashCameraSeconds / 2f));
+            bool flying = !pane.Crashed;
+            pane.DebugForceCrash();
+            var respawns = seats.Select(s => s!.RespawnCount).ToArray();
+            bool offered = true;
+            while (race.Phase == StuntRacePhase.Open && steps < Steps(WaitSeconds * 2f))
+            {
+                offered &= pane.Crashed && pane.RespawnOffered;
+                Run(1);
+            }
+
+            ctx.Check(flying && offered && race.Phase == StuntRacePhase.FinalRun && race.Racers.All(r => r.InRun),
+                $"ABLE-TO-FAIL CONTROL: [{cell}] the pane, crashed short of time up, is down with the prompt offered until time up arrives, every racer in a run ({race.Phase}, flying before={flying}, offered throughout={offered})");
+
+            Run(1);
+            bool withdrawn = pane.Crashed && !pane.RespawnOffered && paneRun.Stopped && !race.Of(PaneSeat)!.InRun;
+            pane.HoldActionForTest(InputAction.Respawn, true);
+            Run(2);
+            pane.HoldActionForTest(InputAction.Respawn, false);
+            Run(1);
+            ctx.Check(withdrawn && pane.Crashed && pane.RespawnCount == respawns[PaneSeat] && !race.Ended,
+                $"[{cell}] on the step after time up the prompt is withdrawn and the pane's run stops, and a tap returns nothing (withdrawn={withdrawn}, stopped={paneRun.Stopped}, crashed={pane.Crashed}, {pane.RespawnCount - respawns[PaneSeat]} respawn(s))");
+
+            first.DebugForceCrash();
+            Run(Steps(Mathf.Max(pane.CrashCameraSeconds, first.CrashCameraSeconds)) + 10);
+            ctx.Check(first.Crashed && first.RespawnCount == respawns[BotSeat] && firstRun.Stopped && !race.Of(BotSeat)!.InRun
+                      && race.Of(BotSeat + 1)!.InRun && !race.Ended,
+                $"[{cell}] the first bot's crash in the final run stays down past its crash camera's time and stops its run, the race running on ({first.RespawnCount - respawns[BotSeat]} respawn(s), stopped={firstRun.Stopped}, ended={race.Ended})");
+            var watcher = session.SpectatorCameras.Count == 1 ? session.SpectatorCameras[0] : null;
+            var candidates = watcher?.LockCandidates?.Invoke().ToList();
+            ctx.Check(!first.Spectating && !first.CameraOwned && pane.Spectating && ReferenceEquals(watcher?.Follow, second)
+                      && candidates is { Count: 1 } && ReferenceEquals(candidates[0], second),
+                $"[{cell}] the bot is handed no view, while the pane spectates the second bot, the only racer its target key offers ({session.SpectatorCameras.Count} spectator(s), bot spectating={first.Spectating}, pane spectating={pane.Spectating}, {candidates?.Count} offered)");
+
+            second.DebugForceCrash();
+            Run(Steps(WaitSeconds));
+            ctx.Check(race.Ended && seats.All(s => s!.Crashed) && seats.Select(s => s!.RespawnCount).SequenceEqual(respawns)
+                      && race.Racers.All(r => !r.InRun),
+                $"[{cell}] the second bot's crash stops the last run and ends the race, every seat down and nobody respawned (ended={race.Ended}, crashed {string.Join("/", seats.Select(s => s!.Crashed))}, in a run {string.Join("/", race.Racers.Select(r => r.InRun))})");
         }
         finally
         {
@@ -215,6 +356,49 @@ internal static class StuntRaceBotSuites
         }
     }
 
+    [Suite("stunt-race-bot-field",
+        "a local C1 stunt race of one pane and eight veteran bots in mixed planes, all starting from the race's one point, "
+        + "flown six minutes: no bot circles on its way into a zone, its track turning under 300 degrees either way over any "
+        + "leg of steering for one zone; and the bots' approaches differ, at most 15 percent of the seat pairs that steer into "
+        + "one zone handing it to their pilots within 2 degrees of each other about its entry; ABLE-TO-FAIL CONTROL: the same "
+        + "field with its line steering off, each bot steering straight for the zone's one lead-in point, circles there and "
+        + "hands its zones over from bunched approaches")]
+    internal static void ABotFieldReachesEachApproachWithoutCircling(TestContext ctx)
+    {
+        string chapter = Course(ctx, "C1");
+        string[] planes = { "player_bhawk", "player_fury", "player_pfighter", "player_peacemaker", "player_fbrand", "player_kestrel", "player_warhawk", "player_brigand" };
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
+            bots: planes.Select((plane, i) => new VsBotEntry(plane, NetBotSkill.Veteran, 0, $"Field{i + 1}")).ToArray());
+        var ambient = NetCombatSuites.Ambient.Save();
+        try
+        {
+            if (Field(ctx, spec, planes, lineSteering: true) is { } on)
+            {
+                ctx.Check(on.Worst is { PeakTurnDeg: < FieldTurnDeg },
+                    $"[field] no bot's track turns {FieldTurnDeg:0} degrees either way over a leg of steering for one zone ({on.Legs} legs, worst {on.Worst})");
+                ctx.Check(on.Pairs > 0 && on.OnePath <= on.Pairs * OnePathShare,
+                    $"[field] the bots' approaches differ: {on.OnePath} of {on.Pairs} seat pairs hand one zone over within {OnePathDeg:0} degrees of each other, at most {OnePathShare * 100f:0} percent");
+            }
+
+            if (Field(ctx, spec, planes, lineSteering: false) is { } off)
+            {
+                ctx.Check(off.Worst is { PeakTurnDeg: >= 360f } && off.OnePath > off.Pairs * OnePathShare,
+                    $"ABLE-TO-FAIL CONTROL: [point] with line steering off a bot circles a lead-in point (worst {off.Worst}) and the approaches bunch ({off.OnePath} of {off.Pairs} seat pairs within {OnePathDeg:0} degrees)");
+            }
+        }
+        finally
+        {
+            ambient.Restore();
+        }
+    }
+
+    // The live structures any zone's bots shoot: those its route runs into, and any optional target.
+    private static List<DestructibleRegistry.Instance> Targets(StuntMission run, FlightController bot) =>
+        bot.Destructibles is { } structures
+            ? run.Zones.SelectMany(z => StuntRaceBots.Targets(z, structures, bot.WorldStruckAlong)).Distinct().ToList()
+            : new List<DestructibleRegistry.Instance>();
+
     // The course's data gates, and its chapter.
     private static string Course(TestContext ctx, string chapter)
     {
@@ -251,8 +435,8 @@ internal static class StuntRaceBotSuites
             }
 
             var racer = race.Of(BotSeat);
-            ctx.Check(racer?.Callsign == Callsign && bot.Loadout == null && pilot.Gunner == null && pilot.Rocketeer == null,
-                $"[{cell}] the bot races as '{racer?.Callsign}' and carries no weapons (loadout {bot.Loadout != null}, gunner {pilot.Gunner != null})");
+            ctx.Check(racer?.Callsign == Callsign && bot.Loadout != null && pilot.Gunner is { AutoTarget: false, Target: null } && pilot.Rocketeer == null,
+                $"[{cell}] the bot races as '{racer?.Callsign}' with guns and no target of its own (loadout {bot.Loadout != null}, gunner auto {pilot.Gunner?.AutoTarget}, rocketeer {pilot.Rocketeer != null})");
             ctx.Check(bots.RunsSawWorld,
                 $"ABLE-TO-FAIL CONTROL: [{cell}] the run table's world ray, at fill time, strikes the built world below {run.Zones[0].PathName}'s entry");
             bots.BotObjective = objective;
@@ -273,6 +457,7 @@ internal static class StuntRaceBotSuites
         var run = bot.Stunt!;
         var racer = race.Of(BotSeat)!;
         LeadInsClear(ctx, run, bot);
+        var targets = Targets(run, bot);
         var cleared = new List<string>();
         run.ZoneCompleted += zone => cleared.Add($"{zone.DzName}@{zone.CompletedAt:0.0}");
         int steps = 0;
@@ -308,6 +493,10 @@ internal static class StuntRaceBotSuites
             $"[{cell}] the bot completes a run of all {run.TotalCount} zones (best {Time(racer)}, {racer.MostZones} zones at most, {steps} steps)");
         ctx.Check(locks > 0 && fastestLockMps <= StuntBotObjective.TopLockSpeedMps,
             $"[{cell}] the bot locks onto each ribbon no faster than the rail check's top lock speed ({locks} locks, fastest {fastestLockMps:0.0} m/s, top {StuntBotObjective.TopLockSpeedMps:0} m/s)");
+        // A ram destroys a structure too, with no shooter, so only the bot's own id proves it shot.
+        var shot = targets.Where(s => s.Status == DestructibleRegistry.State.Destroyed && s.LastShooter == bot.PlayerIndex).ToList();
+        ctx.Check(shot.Count == targets.Count,
+            $"[{cell}] the bot's own rounds destroy every weapon-hit structure a zone's route runs into, and every optional target: {shot.Count} of {targets.Count} ({string.Join(", ", targets.Select(s => $"{s.Def.Name} {s.Status} by {s.LastShooter}"))})");
         var row = RaceRows.Of(race.Standings(), race.ZoneCount).FirstOrDefault(r => r.Racer.Index == BotSeat);
         ctx.Check(row != null && row.Name == Callsign && row.Best == Time(racer),
             $"[{cell}] the race board shows its time under its callsign ({row?.Place} {row?.Name} {row?.Best} {row?.Runs})");
@@ -384,6 +573,156 @@ internal static class StuntRaceBotSuites
         return steps;
     }
 
+    // The field flown for FieldSeconds or until every bot finishes a run. It keeps each seat's steering
+    // legs, and its handovers about each entry where the bot steered into the zone.
+    private static FieldRun? Field(TestContext ctx, SessionSpec spec, string[] planes, bool lineSteering)
+    {
+        string cell = lineSteering ? "field" : "point";
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var end = roster?.Length == planes.Length + 1 ? NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster) : null;
+        try
+        {
+            if (end is not { Built: true, Session: { Race: { } race, RaceBots: { } bots } session })
+            {
+                ctx.Check(false, $"[{cell}] the session builds a race of a pane and {planes.Length} bots ({roster?.Length ?? 0} seat(s))");
+                return null;
+            }
+
+            bots.LineSteering = lineSteering;
+            var seats = Enumerable.Range(1, planes.Length).ToArray();
+            var open = new Dictionary<int, SteerLeg>();
+            var legs = new List<SteerLeg>();
+            var prior = new Dictionary<int, StuntBotOrder>();
+            var fluffs = new Dictionary<int, int>();
+            var handovers = new Dictionary<string, Dictionary<int, float>>();
+            int limit = Steps(FieldSeconds);
+            int steps = 0;
+            while (steps < limit && !seats.All(s => race.Of(s)!.RunsFinished > 0))
+            {
+                Step(session, ++steps);
+                foreach (int seat in seats)
+                {
+                    var bot = session.SeatRigs[seat].Controller!;
+                    var order = bots.Orders.GetValueOrDefault(seat);
+                    var before = prior.GetValueOrDefault(seat);
+                    prior[seat] = order;
+                    if (order.Leg == StuntBotLeg.Fluff && before.Leg != StuntBotLeg.Fluff)
+                    {
+                        fluffs[seat] = fluffs.GetValueOrDefault(seat) + 1;
+                    }
+
+                    bool steering = !bot.Crashed && order.Leg == StuntBotLeg.Steer;
+                    if (open.TryGetValue(seat, out var leg) && !(steering && leg.Zone == order.Zone && leg.Far == order.FarEnd))
+                    {
+                        legs.Add(leg);
+                        open.Remove(seat);
+                    }
+
+                    if (order.Zone < 0 || bot.Stunt!.Zones[order.Zone].Route is not { } route)
+                    {
+                        continue;
+                    }
+
+                    if (order.StartsRun && before.Leg == StuntBotLeg.Steer && before.Zone == order.Zone)
+                    {
+                        // Its bearing about the entry, off the ribbon's line.
+                        var into = route.EndTangentInto(order.FarEnd);
+                        var to = route.End(order.FarEnd) - bot.WorldPosition;
+                        to.Y = 0f;
+                        into = new Vector3(into.X, 0f, into.Z).Normalized();
+                        string zone = route.Name + (order.FarEnd ? " far" : "");
+                        handovers.TryAdd(zone, new Dictionary<int, float>());
+                        handovers[zone].TryAdd(seat, Mathf.RadToDeg(Mathf.Atan2(to.Cross(into).Y, to.Dot(into))));
+                    }
+
+                    if (steering)
+                    {
+                        var v = bot.WorldVelocity;
+                        float heading = Mathf.Atan2(v.X, v.Z);
+                        open.TryAdd(seat, new SteerLeg(seat, order.Zone, order.FarEnd, route.Name, steps, heading));
+                        open[seat].Step(heading, order.Why, steps);
+                    }
+                }
+            }
+
+            legs.AddRange(open.Values);
+            var gaps = handovers.Values.SelectMany(h => h.Values.SelectMany((a, i) => h.Values.Skip(i + 1).Select(b => Mathf.Abs(a - b)))).ToList();
+            var run = new FieldRun(legs.MaxBy(l => l.PeakTurnDeg), legs.Count, gaps.Count(g => g < OnePathDeg), gaps.Count, legs.Sum(l => l.Misses));
+            ctx.Note($"[{cell}] steering legs (seat, zone, seconds, largest turn either way, misses sent round): {string.Join("; ", legs)}");
+            ctx.Note($"[{cell}] after {steps * GameClock.FixedDt:0} s, best runs and zones: {string.Join(", ", seats.Select(s => $"{planes[s - 1]} {Time(race.Of(s)!)} {race.Of(s)!.MostZones}"))}");
+            ctx.Note($"[{cell}] handover bearings about each entry, degrees: {string.Join("; ", handovers.Select(h => $"{h.Key} {string.Join(" ", h.Value.Values.Select(b => Mathf.RoundToInt(b)))}"))}");
+            ctx.Note($"[{cell}] fluffs per seat: {string.Join(", ", seats.Select(s => $"s{s} {fluffs.GetValueOrDefault(s)}"))}");
+            ctx.Note($"[{cell}] {run.Misses} misses of the cone sent round; worst leg {run.Worst}; {run.OnePath} of {run.Pairs} seat pairs within {OnePathDeg:0} degrees");
+            return run;
+        }
+        finally
+        {
+            end?.Close();
+        }
+    }
+
+    // The bot started out along the approach to a zone's shielded end, flown until it clears that
+    // zone or first crashes.
+    private static void Shielded(TestContext ctx, SessionSpec spec, bool shut)
+    {
+        string cell = shut ? "gate" : "gate unshut";
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        var end = roster == null ? null : NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end?.Session;
+            var bot = end is { Built: true } && session!.SeatRigs.Count > BotSeat ? session.SeatRigs[BotSeat].Controller : null;
+            var structures = bot?.Destructibles;
+            var zone = bot?.Stunt?.Zones.FirstOrDefault(z => z.Route is { } r && structures != null
+                && StuntRaceBots.Unseen(r, true, structures, bot.WorldStruckAlong) != null);
+            if (session?.RaceBots is not { } bots || structures == null || zone?.Route is not { } route
+                || StuntRaceBots.Unseen(route, true, structures, bot!.WorldStruckAlong) is not { } gate)
+            {
+                ctx.Check(false, $"[{cell}] the race builds, and a cast along a zone's route from its far end strikes a structure off its damage node first");
+                return;
+            }
+
+            if (shut)
+            {
+                ctx.Check(StuntRaceBots.Unseen(route, false, structures, bot.WorldStruckAlong) == null,
+                    $"[{cell}] a cast along {zone.PathName} from its far end strikes '{gate.Def.Name}' off its damage node first, and from its near end on it");
+            }
+
+            // Every other zone counts as cleared, so this one is the bot's only pick.
+            foreach (var other in bot.Stunt!.Zones)
+            {
+                other.Completed = other != zone;
+            }
+
+            bots.EndsShut = shut;
+            var into = route.EndTangentInto(true);
+            into = new Vector3(into.X, 0f, into.Z).Normalized();
+            bot.RespawnAt(route.End(true) - (into * ShieldedStartM), route.End(true));
+            int steps = 0;
+            bool crashed = false;
+            while (!zone.Completed && !crashed && steps < Steps(ShieldedSeconds))
+            {
+                Step(session, ++steps);
+                crashed = bot.Crashed;
+            }
+
+            bool shot = gate.Status == DestructibleRegistry.State.Destroyed && gate.LastShooter == bot.PlayerIndex;
+            string seen = $"{zone.PathName} {(zone.Completed ? "cleared" : "open")}, {(crashed ? "crashed" : "no crash")}, '{gate.Def.Name}' {gate.Status} by {gate.LastShooter}, {steps} steps";
+            if (shut)
+            {
+                ctx.Check(zone.Completed && shot && !crashed, $"[{cell}] the bot comes round to the open end, shoots the tank and clears the zone ({seen})");
+            }
+            else
+            {
+                ctx.Check(!shot, $"ABLE-TO-FAIL CONTROL: [{cell}] with no end shut the bot never shoots the tank ({seen})");
+            }
+        }
+        finally
+        {
+            end?.Close();
+        }
+    }
+
     // ABLE-TO-FAIL CONTROL: the same bot from the same start with its objective off clears nothing.
     private static int Idles(TestContext ctx, StuntRace race, StuntMission run, GameSession session, int limit)
     {
@@ -425,5 +764,41 @@ internal static class StuntRaceBotSuites
                 PhysicsServer3D.BodySetState(body.GetRid(), PhysicsServer3D.BodyState.Transform, body.GlobalTransform);
             }
         }
+    }
+    // One field run: its worst steering leg and leg count, then its handover seat pairs within OnePathDeg
+    // and in all. Misses counts the times its bots went round after a pass that missed the cone.
+    private sealed record FieldRun(SteerLeg? Worst, int Legs, int OnePath, int Pairs, int Misses);
+
+    // One leg of a bot steering for one zone end. PeakTurnDeg is the largest its signed track turn
+    // reached either way since the leg began, degrees, so a full circle is 360. Misses counts the times
+    // it was sent round after steering in.
+    private sealed class SteerLeg(int seat, int zone, bool far, string name, int from, float heading)
+    {
+        private readonly int _from = from;
+        private float _lastHeading = heading;
+        private float _turnRad;
+        private string _why = "";
+        private int _to = from;
+
+        public int Zone => zone;
+
+        public bool Far => far;
+
+        public float PeakTurnDeg { get; private set; }
+
+        public int Misses { get; private set; }
+
+        public void Step(float heading, string why, int step)
+        {
+            _turnRad += Mathf.Wrap(heading - _lastHeading, -Mathf.Pi, Mathf.Pi);
+            _lastHeading = heading;
+            PeakTurnDeg = Mathf.Max(PeakTurnDeg, Mathf.Abs(Mathf.RadToDeg(_turnRad)));
+            Misses += _why == SteersIn && why != SteersIn ? 1 : 0;
+            _why = why;
+            _to = step;
+        }
+
+        public override string ToString() =>
+            $"s{seat} {name}{(far ? " far" : "")} {(_to - _from) * GameClock.FixedDt:0} s {PeakTurnDeg:0} deg {Misses}";
     }
 }

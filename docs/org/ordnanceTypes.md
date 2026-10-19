@@ -501,6 +501,12 @@ The wrapper's `+0x6c` byte is set to **1 only on the `TARGETABLE` path** and lef
 wrapper, which is exactly the admission byte [`aiPilot.md`](aiPilot.md) names for `TargetProjectile`.
 So `TARGETABLE` is what makes a round appear in the target list, while `FLYOUT_HEALTH` is what lets
 it absorb damage; the two flags do different halves of "shootable" and the torpedo carries both.
+The target list is every picker's: the player's cycle, and the shared AI sweep `FUN_0041f9c0` an AI
+pilot and a turret both run, where a zeppelin's gun weighs the round at 0.6
+([`aiPilot.md`](aiPilot.md) "The fourth list", [`targeting.md`](targeting.md) "The picker's cost").
+A round with `TARGETABLE` and no `FLYOUT_HEALTH` is picked and fired at but never struck, since it is
+not in the intersect database; one with the health alone is struck by a stray round and picked by
+nobody.
 
 The name string id `0x2f6a` is a **literal**, not a read of the weapon's `DESC`: it is 12138,
 `MSG_WEAP_AERIAL_TORPEDO`, "Aerial torpedo". Every wrapper the engine builds carries that one

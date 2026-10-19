@@ -86,6 +86,9 @@ public static class Rng
     public const string ZeppelinVersus = "zvz";
     // A stunt race bot's fluff draws (StuntRaceBots), apart for the same reason.
     public const string StuntBots = "stuntbots";
+    // Each stunt race bot's own approach (StuntRaceBots), one stream per seat with the seat appended.
+    // It stands apart from the fluffs, so drawing it moves none of them.
+    public const string StuntBotApproaches = "stuntapproach";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

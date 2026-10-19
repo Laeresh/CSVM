@@ -1163,7 +1163,7 @@ public class NetPlayFeatureTests
         PumpAll();
         Assert.Equal(2, pair.Dogfight.SeatsFlown);
         Assert.Equal("", pair.SeatsShort);
-        Assert.Equal(new[] { "Zachary", "Pilot", "P3" }, host.Dogfight.Players.Select(p => p.Name));
+        Assert.Equal(new[] { "Zachary", "Pilot", "Pilot P2" }, host.Dogfight.Players.Select(p => p.Name));
     }
 
     // A Dogfight host with more players joined than its own cap flies the cap's worth of them and
@@ -1183,7 +1183,7 @@ public class NetPlayFeatureTests
             Pump(host, guest);
             if (cap == 2)
             {
-                Assert.Equal(new[] { "Zachary", "P2" }, host.Dogfight!.Players.Select(p => p.Name));
+                Assert.Equal(new[] { "Zachary", "Zachary P2" }, host.Dogfight!.Players.Select(p => p.Name));
                 Assert.Equal(CoopDoorText.SeatsShort(2, 3), host.SeatsShort);
                 Assert.Equal(0, host.Peers);
                 Assert.Equal(CoopDoorText.GameFull, guest.Fault);

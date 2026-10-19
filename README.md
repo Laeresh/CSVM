@@ -52,8 +52,8 @@ and what to read when the game vanishes after it starts.
 Bugs go in an [issue](https://github.com/Laeresh/CSVM/issues/new?template=bug_report.yml).
 The form asks for the build version and the newest log file from the `logs\` folder beside
 `CSVM.exe`, which between them usually identify a fault without a round trip. A report is
-worked on in its own issue; this repository's `backlog.md` is the author's internal list and
-is not mirrored, so the issue is the thread to follow.
+worked on in its own issue and is not copied into the author's `backlog` issues, so the issue
+is the thread to follow.
 
 Small self-contained pull requests are welcome for `packaging/`, the repo scripts,
 the documentation and typo fixes. A change under `CSVM/src` needs an issue first, because
@@ -138,6 +138,24 @@ flight model, the weapon and particle runtimes, the AI, and the rest of the orig
 this engine matches. Those pages describe behaviour and constants, and name the function
 addresses so any claim can be re-checked at source. **No game code and no game assets are
 reproduced or redistributed here**; the engine is an independent implementation.
+
+## Supporting the project
+
+CSVM is free and will stay free. The engine is GPL-3.0, every release is
+on the releases page, and nothing is held back for supporters.
+
+If you'd like to support the work anyway, you can do so on
+[Ko-fi](https://ko-fi.com/Laeresh). Contributions go towards the
+monthly running costs of the master server, and towards development
+time on the engine, its documentation and its code. They buy no early
+access, no exclusive builds, no server privileges and no game content.
+
+The master server is optional: CSVM plays without it, and it is open
+to everyone whether they contribute or not. You can even host your own.
+
+Playing CSVM still requires your own legally-owned copy of
+Crimson Skies. This is an unofficial fan project and is not affiliated
+with, endorsed by, or sponsored by Microsoft or Zipper Interactive.
 
 ## Legal
 
