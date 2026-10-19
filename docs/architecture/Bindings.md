@@ -131,12 +131,12 @@ tick, each full axis on its action's side or as the lever's position, via `Conte
 ## src/Bindings/ControlCapture.cs
 What a rebinding screen may capture, and the scan that turns a press into a `Binding`: the bindable
 key list, Godot's pad button and SDL axis ranges, and the mouse buttons past the pointer's own. `Arm`
-masks everything already held; a pad control carries the seat's identity, not a GUID. A key under Shift,
-Ctrl or Alt carries them; a lone modifier resolves on release. A pad axis is rest-then-move with a
-fixed `CapturedDeadzone`. A pad's hat is not scanned; sticks are, through `StickCapture`, and so are
-the hand controllers. A hand trigger binds as its axis, like a pad's, on a pull begun after `Arm`
-with its click let go; `TakeListening` tells the theater pointer to swallow that pull. Escape and the
-pad's Back cancel and are never captured.
+masks everything already held; a pad control carries the seat's identity, not a GUID. A key under
+Shift, Ctrl or Alt carries them; a lone modifier resolves on release. A pad axis is rest-then-move,
+stamped by `PadDeadzoneFor(row)`: the stick's `DeadzoneFor(row)` on a flight row, `CapturedDeadzone`
+(0.5) elsewhere. Sticks are scanned through `StickCapture` (steered by `row` and `sticksOnly`), and so
+are the hand controllers: a trigger binds as its axis on a pull begun after `Arm`, its click let go,
+and `TakeListening` has the theater pointer swallow that pull. Escape and the pad's Back cancel.
 
 ## src/Bindings/StickCapture.cs
 The stick half of a capture, over every identity the reader lists (`IStickDevices`): buttons 0..127,

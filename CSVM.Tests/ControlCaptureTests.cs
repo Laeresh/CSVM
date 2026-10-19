@@ -191,6 +191,22 @@ public class ControlCaptureTests
         Assert.Equal(ControlCapture.CapturedDeadzone, binding.Control.Deadzone);
     }
 
+    [Theory]
+    [InlineData(InputAction.YawRight, StickCapture.FlightDeadzone)]
+    [InlineData(InputAction.ThrottleDown, StickCapture.RateThrottleDeadzone)]
+    [InlineData(InputAction.FireGuns, ControlCapture.CapturedDeadzone)]
+    public void ATriggerCapturedOnAFlightRowTakesTheSticksDeadzoneAndAnyOtherRowTheSwitchOne(
+        InputAction row, float deadzone)
+    {
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true, row);
+        capture.Arm(state);
+
+        state.Axes[(Seat, (int)JoyAxis.TriggerLeft)] = 0.9f;
+
+        Assert.Equal(deadzone, capture.Poll(state)!.Value.Control.Deadzone);
+    }
+
     [Fact]
     public void AnAxisDeflectedWhenTheCaptureArmedMustCentreBeforeItCanBeCaptured()
     {

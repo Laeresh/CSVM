@@ -36,8 +36,9 @@ public sealed class ControlCapture
 
     /// <summary>The deadzone stamped on a captured axis, which is also its digital threshold
     /// (<see cref="BindingControl.Deadzone"/>). It is a constant rather than the travel the capture
-    /// saw, because the value a stick crosses is not the value it settles at. TUNE, judged with a
-    /// real pad.
+    /// saw, because the value a stick crosses is not the value it settles at. A flight row's axis
+    /// takes <see cref="StickCapture.DeadzoneFor"/> instead (<see cref="PadDeadzoneFor"/>). TUNE,
+    /// judged with a real pad.
     /// </summary>
     public const float CapturedDeadzone = 0.5f;
 
@@ -87,6 +88,7 @@ public sealed class ControlCapture
     private readonly HashSet<int> _maskedAxes = new();
 
     private readonly DeviceId _pad;
+    private readonly InputAction? _row;
     private readonly bool _readsKeyboard;
     private readonly bool _sticksOnly;
     private readonly StickCapture _sticks;
@@ -100,6 +102,7 @@ public sealed class ControlCapture
     public ControlCapture(DeviceId pad, bool readsKeyboard, InputAction? row = null, bool sticksOnly = false)
     {
         _pad = pad;
+        _row = row;
         _readsKeyboard = readsKeyboard;
         _sticksOnly = sticksOnly;
         _sticks = new StickCapture(row);
@@ -115,6 +118,12 @@ public sealed class ControlCapture
         _listening = false;
         return listening;
     }
+
+    /// <summary>The deadzone a pad axis captured on that row is stamped with. A flight row wants its
+    /// travel from near zero, so it takes the stick's <see cref="StickCapture.DeadzoneFor"/>. Every
+    /// other row is a switch at <see cref="CapturedDeadzone"/>.</summary>
+    public static float PadDeadzoneFor(InputAction? row) =>
+        row is { } r && AxisPairs.TakesFullAxis(r) ? StickCapture.DeadzoneFor(r) : CapturedDeadzone;
 
     /// <summary>Masks everything currently held, so a control still down from the press that opened
     /// the capture is not read as the player's choice. A masked control has to be released before
@@ -225,7 +234,7 @@ public sealed class ControlCapture
         {
             if (Moved(state, axis) is not { } sign)
                 continue;
-            return new Binding(_pad, BindingControl.Axis((int)axis, sign, CapturedDeadzone));
+            return new Binding(_pad, BindingControl.Axis((int)axis, sign, PadDeadzoneFor(_row)));
         }
 
         foreach (int axis in XrAxes)
