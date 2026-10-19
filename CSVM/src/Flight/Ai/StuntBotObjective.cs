@@ -71,9 +71,27 @@ public sealed class StuntBotObjective
     /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float MaxLeadInM = 300f;
 
+    /// <summary>Remake-only rule: the most a bot's own approach line turns off the ribbon's line,
+    /// either way, degrees (<see cref="Spread"/>). It stays well inside the cone's half angle.
+    /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float ApproachSpreadDeg = 15f;
+
+    /// <summary>Remake-only rule: how far a bot's own lead-in may stand either side of
+    /// <see cref="LeadInM"/>, metres (<see cref="Spread"/>). Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float LeadInSpreadM = 150f;
+
+    /// <summary>Remake-only rule: how far ahead along its approach line a bot aims, metres. It is longer
+    /// than any plane's turn radius, so the bot settles onto the line rather than circling a point on it.
+    /// A bot farther off the line than this aims as far ahead as it is off, meeting the line at 45 degrees.
+    /// Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
+    public const float LookAheadM = 400f;
+
     /// <summary>Remake-only rule: the fastest lock state <see cref="RailClears"/> flies from, m/s. A bot
     /// must lock no faster, or it outruns the check. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float TopLockSpeedMps = 135f;
+
+    // The sine of the bearing off the track's reverse inside which an aim counts as dead astern: 30 degrees.
+    private const float AsternSin = 0.5f;
 
     // Remake-only rule: how far below level the diving lock state RailClears flies points, degrees.
     private const float LockPitchDeg = 20f;
@@ -94,6 +112,12 @@ public sealed class StuntBotObjective
     private bool _running;
     private HashSet<(DangerZoneRibbon, bool)>? _unlisted;
 
+    // Whether the bot flies in along its approach line or out along it. A try's first steer decides it.
+    // Then the side a turn past 90 degrees is held to, or 0, and the try's last such side.
+    private bool? _inbound;
+    private int _turnSide;
+    private int _lastSide;
+
     /// <summary>A bot of tier <paramref name="tier"/> whose fluffs draw on <paramref name="rng"/>.</summary>
     public StuntBotObjective(NetBotSkill tier, Random rng)
     {
@@ -106,6 +130,15 @@ public sealed class StuntBotObjective
     /// <summary>The run from each zone end, <see cref="RunsFrom"/>'s table, shared by every bot of a
     /// session. Without one every end runs its own route.</summary>
     public RunTable? Runs { get; init; }
+
+    /// <summary>This bot's own approach to every zone: its line's turn off the ribbon's line, degrees,
+    /// and its lead-in, metres. A field is given one each (<see cref="Spread"/>), so its bots do not fly
+    /// one path. The default is the ribbon's own line and <see cref="LeadInM"/>.</summary>
+    public (float BearingDeg, float LeadInM) Approach { get; init; } = (0f, LeadInM);
+
+    /// <summary>Whether the bot steers onto its own approach line. Off, it steers straight for the ribbon's
+    /// lead-in point and ignores <see cref="Approach"/>, which a suite's control flies to show it circles.</summary>
+    public bool OnLine { get; set; } = true;
 
     /// <summary>Whether a run may not enter a route from the end named, for now, as it may not from a
     /// refused one. Null shuts none. StuntRaceBots shuts an end that cannot see a structure to shoot.</summary>
@@ -128,6 +161,17 @@ public sealed class StuntBotObjective
         NetBotSkill.Veteran => 0.2f,
         _ => 0.35f,
     };
+
+    /// <summary>One bot's own approach, drawn on <paramref name="rng"/>: a line within
+    /// <see cref="ApproachSpreadDeg"/> of the ribbon's and a lead-in within <see cref="LeadInSpreadM"/>
+    /// of <see cref="LeadInM"/>.</summary>
+    public static (float BearingDeg, float LeadInM) Spread(Random rng)
+    {
+        ArgumentNullException.ThrowIfNull(rng);
+        float Either() => (float)((rng.NextDouble() * 2.0) - 1.0);
+        float bearing = Either() * ApproachSpreadDeg;
+        return (bearing, LeadInM + (Either() * LeadInSpreadM));
+    }
 
     /// <summary>The straight a bot's run on <paramref name="zone"/> adds before the entry, its last
     /// vertex when <paramref name="far"/> and else its first, metres. It is 0 when <see cref="RailClears"/> passes without
@@ -274,9 +318,18 @@ public sealed class StuntBotObjective
             return new StuntBotOrder(StuntBotLeg.Run, next, entry, _farEnd, "flies the zone") { StartsRun = true, Ribbon = _route };
         }
 
-        var leadIn = entry - (into * LeadInM);
-        float above = CruiseAboveM * Mathf.Clamp(Flat(leadIn - at).Length() / LeadInM, 0f, 1f);
-        return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, "steers for the zone");
+        float lead = OnLine ? Approach.LeadInM : LeadInM;
+        var leadIn = LeadInPoint(entry, into);
+        float above = CruiseAboveM * Mathf.Clamp(Flat(leadIn - at).Length() / lead, 0f, 1f);
+        if (!OnLine)
+        {
+            return new StuntBotOrder(StuntBotLeg.Steer, next, leadIn + (Vector3.Up * above), _farEnd, "steers for the zone");
+        }
+
+        var aim = AimOnLine(entry, Line(into), at);
+        var heading = Heading(aim - at, velocity, entry - at);
+        return new StuntBotOrder(StuntBotLeg.Steer, next, at + (heading * LookAheadM) + (Vector3.Up * (entry.Y + above - at.Y)), _farEnd,
+            _inbound == true ? "steers for the zone" : "goes round for the zone");
     }
 
     /// <summary>A crash's return, or a rerun's: the next order picks its zone afresh, after any ride
@@ -329,6 +382,56 @@ public sealed class StuntBotObjective
         return green && red;
     }
 
+    // Where the bot aims on its own approach line into `entry`: a point that moves with it, never a
+    // fixed one. In, it is LookAheadM (or the bot's offset, if more) short of the bot's place along the
+    // line; out, LookAheadM beyond it. ⚠ Do not aim at a fixed point: a bot meeting it from the side circles it.
+    private Vector3 AimOnLine(Vector3 entry, Vector3 line, Vector3 at)
+    {
+        var to = Flat(entry - at);
+        float along = to.Dot(line);
+        float ahead = Mathf.Max(LookAheadM, (to - (line * along)).Length());
+
+        // Out once it would meet the line past the entry. In again once it is past its lead-in, by as much
+        // again as it is off the line beyond LookAheadM.
+        _inbound = _inbound switch
+        {
+            null or true => along - ahead >= 0f,
+            false => along >= Approach.LeadInM + ahead - LookAheadM,
+        };
+        return entry - (line * (_inbound.Value ? along - ahead : along + LookAheadM));
+    }
+
+    // The flat heading toward `aim`, at most 90 degrees off the track. ⚠ Do not order a heading astern:
+    // the law barely rolls for it, and the bot flies on. A turn that wide holds its side. With the aim
+    // dead astern it turns against the try's last such turn, toward `toEntry` for the first.
+    private Vector3 Heading(Vector3 aim, Vector3 velocity, Vector3 toEntry)
+    {
+        var want = Flat(aim).Normalized();
+        var track = Flat(velocity);
+        if (track.LengthSquared() < 1e-6f || want.Dot(track) >= 0f)
+        {
+            _turnSide = 0;
+            return want;
+        }
+
+        track = track.Normalized();
+        if (_turnSide == 0)
+        {
+            float side = track.Cross(want).Y;
+            int first = track.Cross(Flat(toEntry)).Y >= 0f ? 1 : -1;
+            _turnSide = Mathf.Abs(side) > AsternSin ? Math.Sign(side) : (_lastSide != 0 ? -_lastSide : first);
+            _lastSide = _turnSide;
+        }
+
+        return new Basis(Vector3.Up, _turnSide * Mathf.Pi / 2f) * track;
+    }
+
+    // This bot's own approach line into an entry whose ribbon runs along `into`.
+    private Vector3 Line(Vector3 into) => new Basis(Vector3.Up, Mathf.DegToRad(Approach.BearingDeg)) * into;
+
+    // The lead-in point the bot measures from: its own on its line, or the ribbon's with OnLine off.
+    private Vector3 LeadInPoint(Vector3 entry, Vector3 into) =>
+        OnLine ? entry - (Line(into) * Approach.LeadInM) : entry - (into * LeadInM);
     // The open zone whose lead-in point is nearest, on the end and run a pick of it would take.
     private int Nearest(IReadOnlyList<StuntZone> zones, Vector3 at)
     {
@@ -342,7 +445,7 @@ public sealed class StuntBotObjective
             }
 
             var (far, route) = EndFrom(ribbon, at);
-            float sq = at.DistanceSquaredTo(route.End(far) - (Into(route, far) * LeadInM));
+            float sq = at.DistanceSquaredTo(LeadInPoint(route.End(far), Into(route, far)));
             if (sq < bestSq)
             {
                 best = i;
@@ -353,7 +456,13 @@ public sealed class StuntBotObjective
         return best;
     }
 
-    private void PickEnd(StuntZone zone, Vector3 at) => (_farEnd, _route) = EndFrom(zone.Route!, at);
+    private void PickEnd(StuntZone zone, Vector3 at)
+    {
+        (_farEnd, _route) = EndFrom(zone.Route!, at);
+        _inbound = null;
+        _turnSide = 0;
+        _lastSide = 0;
+    }
 
     // The ribbon end nearer `at`, or the other when only that one is open, and the route its run
     // flies from there. A refused or shut end is closed. With both closed it is the nearer end's own route.

@@ -52,15 +52,15 @@ public class StuntBotObjectiveTests
         var zones = Course();
         var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99));
 
-        // Far off to the side: it steers for the lead-in short of the nearer end, high while far.
+        // Far off to the side and flying west, it cannot meet the line short of the entry. It heads out
+        // along the line, aiming 400 m beyond its own place on it, high while far.
         var far = new Vector3(3000, 400, 2000);
-        var steer = bot.Decide(zones, far, North, zoneRun: false);
+        var steer = bot.Decide(zones, far, new Vector3(-70, 0, 0), zoneRun: false);
         Assert.Equal(StuntBotLeg.Steer, steer.Leg);
         Assert.Equal(0, steer.Zone);
         Assert.False(steer.FarEnd);
-        var leadIn = FirstNear + new Vector3(0, 0, StuntBotObjective.LeadInM);
-        Assert.Equal(leadIn.X, steer.Point.X, 3);
-        Assert.Equal(leadIn.Z, steer.Point.Z, 3);
+        var outward = FirstNear + new Vector3(0, 0, 2000 + StuntBotObjective.LookAheadM);
+        Assert.Equal(AiPilot.HeadingDegOf(outward - far), AiPilot.HeadingDegOf(steer.Point - far), 3);
         Assert.Equal(FirstNear.Y + StuntBotObjective.CruiseAboveM, steer.Point.Y, 3);
 
         // ABLE-TO-FAIL CONTROL: in the cone, tracking toward the entry, it starts the run there.
@@ -70,6 +70,69 @@ public class StuntBotObjectiveTests
 
         // While the pilot flies it the order holds without starting another.
         Assert.True(bot.Decide(zones, FirstFar, North, zoneRun: true) is { Leg: StuntBotLeg.Run, StartsRun: false });
+    }
+
+    [Fact]
+    public void ABotCrossingTheLeadInSettlesOntoItsLineRatherThanCirclingIt()
+    {
+        // Over the lead-in point flying east, across the line, it turns in along the line toward the
+        // entry. It does not come round to the point it crossed.
+        var zones = Course();
+        var east = new Vector3(70, 0, 0);
+        var at = FirstNear + new Vector3(0, 0, StuntBotObjective.LeadInM);
+        var steer = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)).Decide(zones, at, east, zoneRun: false);
+        Assert.Equal(StuntBotLeg.Steer, steer.Leg);
+        Assert.Equal(AiPilot.HeadingDegOf(FirstNear - at), AiPilot.HeadingDegOf(steer.Point - at), 3);
+
+        // ABLE-TO-FAIL CONTROL: 500 m aside, outside the cone, it aims at the line as far ahead as it
+        // is off, not at the entry.
+        var aside = at + new Vector3(500, 0, 0);
+        var settle = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)).Decide(zones, aside, North, zoneRun: false);
+        var ahead = FirstNear + new Vector3(0, 0, StuntBotObjective.LeadInM - 500);
+        Assert.Equal(AiPilot.HeadingDegOf(ahead - aside), AiPilot.HeadingDegOf(settle.Point - aside), 3);
+        Assert.NotEqual(AiPilot.HeadingDegOf(FirstNear - aside), AiPilot.HeadingDegOf(settle.Point - aside), 0);
+    }
+
+    [Fact]
+    public void AnAimAsternTurnsTheBotNinetyDegreesAndHoldsTheSide()
+    {
+        // Just past the entry, flying on along the ribbon: the line's far point is dead astern.
+        var zones = Course();
+        var bot = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99));
+        var at = FirstNear + new Vector3(0, 0, -50);
+        float first = AiPilot.HeadingDegOf(bot.Decide(zones, at, North, zoneRun: false).Point - at);
+        Assert.Equal(90f, Mathf.Abs(first), 3);
+
+        // A step later, drifted a little the other way, the turn keeps its side.
+        var drifted = at + new Vector3(-5, 0, 0);
+        Assert.Equal(first, AiPilot.HeadingDegOf(bot.Decide(zones, drifted, North, zoneRun: false).Point - drifted), 3);
+
+        // ABLE-TO-FAIL CONTROL: with the aim ahead of the track it steers straight for it.
+        var behind = FirstNear + new Vector3(0, 0, 2000);
+        Assert.Equal(0f, AiPilot.HeadingDegOf(bot.Decide(zones, behind, North, zoneRun: false).Point - behind), 3);
+    }
+
+    [Fact]
+    public void EachBotFliesItsOwnApproach()
+    {
+        // The spread is the seeded stream's, so a field repeats, and it stays inside its bounds.
+        Assert.Equal(StuntBotObjective.Spread(new Random(7)), StuntBotObjective.Spread(new Random(7)));
+        var rng = new Random(7);
+        var drawn = Enumerable.Range(0, 64).Select(_ => StuntBotObjective.Spread(rng)).ToList();
+        Assert.All(drawn, d => Assert.InRange(d.BearingDeg, -StuntBotObjective.ApproachSpreadDeg, StuntBotObjective.ApproachSpreadDeg));
+        Assert.All(drawn, d => Assert.InRange(d.LeadInM, StuntBotObjective.LeadInM - StuntBotObjective.LeadInSpreadM, StuntBotObjective.LeadInM + StuntBotObjective.LeadInSpreadM));
+
+        // Two bots from one point steer for different lines into the same entry.
+        var zones = Course();
+        var at = FirstNear + new Vector3(0, 0, 2000);
+        var own = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)) { Approach = (StuntBotObjective.ApproachSpreadDeg, 750f) };
+        var plain = new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99));
+        Assert.NotEqual(AiPilot.HeadingDegOf(plain.Decide(zones, at, North, zoneRun: false).Point - at),
+            AiPilot.HeadingDegOf(own.Decide(zones, at, North, zoneRun: false).Point - at), 0);
+
+        // ABLE-TO-FAIL CONTROL: two bots on the default approach steer alike.
+        Assert.Equal(AiPilot.HeadingDegOf(plain.Decide(zones, at, North, zoneRun: false).Point - at),
+            AiPilot.HeadingDegOf(new StuntBotObjective(NetBotSkill.Ace, new Fixed(0.99)).Decide(zones, at, North, zoneRun: false).Point - at), 3);
     }
 
     [Fact]

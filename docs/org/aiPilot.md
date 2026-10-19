@@ -1679,9 +1679,27 @@ it reuses. A stunt race's bots (`Flight/Ai/StuntBotObjective.cs`, stepped by
    course is never completed.
 2. Each try at a zone enters from the ribbon end nearer the bot. A stunt course authors no `aiv`
    net between its zones, so between them the bot steers freely, on bare heading and altitude
-   orders, for a lead-in point 600 m short of that end along the ribbon's line into it
-   (`LeadInM`), cruising 150 m above the end's height while far and coming down to it over the
-   last 600 m to the lead-in point (`CruiseAboveM`).
+   orders, onto its own approach line into that end. Each bot has its own line and lead-in, so a
+   field does not fly one path: the line is turned up to 15 degrees either way off the ribbon's line
+   into the end (`ApproachSpreadDeg`), and the lead-in point stands 450 to 750 m short of the end
+   along it (`LeadInM` 600 plus or minus `LeadInSpreadM` 150). Both are drawn per bot
+   (`StuntBotObjective.Spread`) on a seeded stream of the bot's seat, apart from the fluff draws, so a
+   suite repeats and the spread moves no fluff.
+   The bot never aims at a fixed point. Flying in, it aims at its line 400 m (`LookAheadM`) short of
+   its own place along it, or as far short as it is off the line when that is more, so it meets the
+   line at 45 degrees at most and settles onto it. When that point would lie past the entry it flies
+   out instead, aiming at its line 400 m beyond its own place along it, and turns in once it is past
+   its lead-in, by as much again as it is more than 400 m off the line. A heading more than 90
+   degrees off its track is ordered as a 90 degree turn to one held side: the flight law barely
+   rolls for an aim straight astern, and a bot so ordered flies about 800 m on before it turns. With the aim within 30 degrees of dead astern
+   the turn goes against the try's last such turn, toward the entry for the first, so going out and
+   coming back in is an S rather than a full circle. It cruises 150 m above the end's height while
+   far and comes down to it over its lead-in's length to its lead-in point (`CruiseAboveM`).
+   ⚠ A bot steered straight for a point circles it when it meets it from the side, and bots crowded
+   onto one path climb out of each other's way and so meet it from the side. The
+   `stunt-race-bot-field` suite flies eight bots over C1 and fails a turn of 300 degrees either way
+   over one leg of steering for a zone; its control steers for the ribbon's lead-in point
+   (`StuntBotObjective.OnLine` off) and circles.
 3. Once it is short of the end by more than the 105 m lock range and at most 900 m (`ConeReachM`),
    within 30 degrees of the ribbon's line, and tracking within 30 degrees of the end
    (`ConeHalfAngleDeg`), the zone goes to `AiPilot.FlyDangerZone`: the decoded approach and rail
@@ -1741,12 +1759,12 @@ returned to that zone's exit every time):
 
 | Course | Zones cleared | Finish | Zone ends with a lead-in |
 |---|---|---|---|
-| C1 | 5 of 5 | 3:22.0 | none |
-| C1B | 5 of 5 | 3:03.9 | `dzpath6`, `dzpath7` |
-| C2 | 9 of 9 | 4:10.1 | `dzpath4` |
-| C3 | 4 of 4 | 3:14.8 | `dzpath4` from either end |
-| C4 | 14 of 14 | 8:19.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
-| C5 | 17 of 17 | 10:41.3 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
+| C1 | 5 of 5 | 3:19.5 | none |
+| C1B | 5 of 5 | 2:52.4 | `dzpath6`, `dzpath7` |
+| C2 | 9 of 9 | 4:02.0 | `dzpath4` |
+| C3 | 4 of 4 | 2:32.1 | `dzpath4` from either end |
+| C4 | 14 of 14 | 7:46.4 | `dzpath7`, `dzpath9`, `dzpath12`, `dzpath11` from either end |
+| C5 | 17 of 17 | 9:02.1 | `dzpath14`, `dzpath15`, `dzpath16`, each from either end |
 
 Every lead-in in the table probes clear of the world in that suite. A zone end not listed keeps its
 own entry (`StuntBotObjectiveTests` pins the list).

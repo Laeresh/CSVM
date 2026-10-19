@@ -618,12 +618,12 @@ fly `AiPilot.ObjectiveRun`. `Session/World/FlagRuntime.cs` feeds it on the host.
 
 ## src/Flight/Ai/StuntBotObjective.cs
 One stunt race bot's way round the course, a remake-only rule kept per bot and engine-free: the
-nearest open zone first, a free steer for a lead-in point short of that zone's nearer ribbon end,
-and inside the approach cone the zone handed to `AiPilot.FlyDangerZone`, the campaign racers'
-approach and rail. Where the rail misses the gates (`RailClears`) the route gains a straight
-lead-in (`LeadInFor`), refused where the world blocks it; `RunsFrom` decides every zone end once, a
-table the session's bots share. Its tier sets `CruiseThrottle` and the odds of a fluff.
-`Session/World/StuntRaceBots.cs` feeds it. Rule and values:
+nearest open zone first, a steer onto the bot's own line into its nearer ribbon end (`Approach`,
+drawn by `Spread`; `OnLine` off is a suite control), and in the approach cone the zone handed to
+`AiPilot.FlyDangerZone`, the campaign racers' approach and rail. Where the rail misses the gates
+(`RailClears`) the route gains a straight lead-in (`LeadInFor`), refused where the world blocks
+it; `RunsFrom` decides every zone end once for the session's bots. Its tier sets `CruiseThrottle`
+and the odds of a fluff. `Session/World/StuntRaceBots.cs` feeds it. Rule and values:
 [../org/aiPilot.md](../org/aiPilot.md) "Stunt race bots"; read `StuntBotObjectiveTests.cs`.
 
 ## src/Flight/Ai/PursuitQuarry.cs
