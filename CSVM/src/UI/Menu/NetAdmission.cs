@@ -191,16 +191,25 @@ public sealed class NetAdmission
         return false;
     }
 
-    // Each seated guest's seats: its first, then as many more as its picks ask, in arrival order out
-    // of what the first seats leave. ⚠ Never take a guest's first seat for another's further one; a
-    // machine's later pad must not unseat a player already flying. A guest cut short is told so.
+    // Each seated guest keeps its first seat and the further ones it was granted and still asks for.
+    // What is left goes to the picks still waiting, in arrival order. ⚠ Never take a guest's
+    // seat, first or further, for another's added pad; a machine's later pad must not unseat a
+    // player already flying. A guest cut short is told so.
     private void Grant(NetLobby lobby, int seats)
     {
         int free = seats - _admitted.Count;
+        var kept = new Dictionary<int, int>();
         foreach (int peer in _admitted)
         {
-            int extra = Math.Clamp(lobby.SeatsWanted(peer) - 1, 0, Math.Max(0, free));
-            _granted[peer] = 1 + extra;
+            int extra = Math.Clamp(Math.Min(GrantedTo(peer), lobby.SeatsWanted(peer)) - 1, 0, Math.Max(0, free));
+            kept[peer] = extra;
+            free -= extra;
+        }
+
+        foreach (int peer in _admitted)
+        {
+            int extra = Math.Clamp(lobby.SeatsWanted(peer) - 1 - kept[peer], 0, Math.Max(0, free));
+            _granted[peer] = 1 + kept[peer] + extra;
             free -= extra;
         }
 

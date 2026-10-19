@@ -29,7 +29,9 @@ internal static class NetAdmissionSuites
         + "takes the place a leaving guest frees before a later arrival, which is refused as full; "
         + "the host's added seat never takes a guest's granted second seat, and wins a place freed in "
         + "the same step a newcomer arrives; a pad a guest drops frees its place to the host's waiting "
-        + "seat ahead of a newcomer arriving in the same step and ahead of another guest's waiting seat")]
+        + "seat ahead of a newcomer arriving in the same step and ahead of another guest's waiting seat; "
+        + "an earlier guest's added pad sits out rather than take a later guest's granted second seat, "
+        + "and takes the place that guest's dropped pad frees")]
     internal static void ALaunchSeatsOnlyTheListedPeers(TestContext ctx)
     {
         DogfightLaunch(ctx);
@@ -191,6 +193,20 @@ internal static class NetAdmissionSuites
             rig.Settle();
             ctx.Check(lobby.SeatOwners.Count == Cap && lobby.SeatsFlown == 2 && guests[1].Dogfight?.SeatsFlown == 1,
                 $"a pad a guest drops frees its place to the host's waiting seat ahead of a guest's waiting seat ({lobby.SeatOwners.Count} seats, host flies {lobby.SeatsFlown}, later guest {guests[1].Dogfight?.SeatsFlown})");
+        });
+
+        InAFullLobby(ctx, 8, new[] { 1, 2 }, (rig, lobby) =>
+        {
+            var guests = rig.Guests;
+            guests[0].LocalSeats = 2;
+            rig.Settle();
+            ctx.Check(lobby.SeatOwners.Count == Cap && guests[1].Dogfight?.SeatsFlown == 2 && guests[0].Dogfight?.SeatsFlown == 1 && guests[0].SeatsShort.Length > 0,
+                $"an earlier guest's added seat sits out rather than take a later guest's granted second ({lobby.SeatOwners.Count} seats, earlier guest {guests[0].Dogfight?.SeatsFlown}, later guest {guests[1].Dogfight?.SeatsFlown})");
+
+            guests[1].LocalSeats = 1;
+            rig.Settle();
+            ctx.Check(lobby.SeatOwners.Count == Cap && guests[0].Dogfight?.SeatsFlown == 2 && guests[1].Dogfight?.SeatsFlown == 1,
+                $"the later guest's dropped pad frees its place to the earlier guest's waiting seat ({lobby.SeatOwners.Count} seats, earlier guest {guests[0].Dogfight?.SeatsFlown}, later guest {guests[1].Dogfight?.SeatsFlown})");
         });
     }
 
