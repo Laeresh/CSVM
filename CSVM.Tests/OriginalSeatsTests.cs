@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Hangar;
+using CSVM.Net;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
@@ -11,14 +12,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Original shell's sortie screens over the shared player setup, on the hand-authored layout
-/// fixture: the Dogfight door and its gate, seat 0's pick opening the per-seat aircraft screen
-/// for each joined seat in turn (its plane-selection shape, the list open while browsing, the
-/// picking seat's device and the mouse driving it and seat 0's stick nothing), its WEAPON LOADOUT
-/// row over that seat's own fit and what the launch then carries per seat, the last seat's
-/// confirm as the launch on both sortie screens and on Instant Action, the sortie screen returning
-/// with FLY to press when FLY's own gate is unmet, the hint at each stage, and the aircraft window
-/// over a roster with saved customs.
+/// The Original shell's local lobby over the shared player setup, on the hand-authored layout
+/// fixture. It covers the Dogfight door and its gate, and the network lobby's opening rules with a
+/// rule change reaching the launch. It covers Free Flight's greyed rules and seat 0's aircraft on
+/// Select Plane. FLY opens the per-seat aircraft screen for each joined seat in turn. The picking
+/// seat's device and the mouse drive it, and seat 0's stick does not. Its WEAPON LOADOUT row
+/// edits that seat's own fit, and the last seat's confirm is the launch, here and on Instant Action.
 /// </summary>
 public class OriginalSeatsTests
 {
@@ -31,77 +30,163 @@ public class OriginalSeatsTests
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Left = new() { MoveX = -1 };
 
     [Fact]
-    public void TheDogfightDoorOpensTheDogfightScreenWhoseFlyWaitsForASecondSeat()
+    public void TheDogfightDoorOpensTheLocalLobbyWhoseFlyWaitsForASecondPilot()
     {
         var shell = Shell(out var setup, out _);
 
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "DOGFIGHT");
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then an aircraft");
+        var board = shell.Compose();
+        Assert.Contains(board.Backdrop, p => p.Art.Name == "MP_LOBBY_BACKGROUND.JPG");
+        Assert.Contains(board.Lines, l => l.Text == "DOGFIGHT");
+        Assert.Contains(board.Lines, l => l.Text == OriginalLocalLobby.SecondPilotHint);
+        Assert.Contains(board.Lines, l => l.Text == "P1  scripted");
         Assert.False(Fly(shell).Enabled);
 
-        shell.Step(Accept);
-        Assert.Equal("C1", shell.PickedDogfightChapter);
-        Assert.Null(shell.PickedChapter);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick an aircraft");
-        shell.Step(Right);
-        shell.Step(Accept);
-        Assert.Equal("player_autogyro", shell.PickedAirframe);
-        Assert.True(setup.Seats[0].Locked);
-        Assert.False(Fly(shell).Enabled);
-        Assert.Contains(shell.Compose().Lines, l => l.Text.StartsWith("Dogfight needs a second seat", StringComparison.Ordinal));
-
-        // A disabled FLY takes no keyboard focus and no click.
+        // A disabled FLY takes no click.
         var fly = Fly(shell);
-        var step = Click(shell, fly.X + 4f, fly.Y + 4f);
-        Assert.Null(step.Exit);
+        Assert.Null(Click(shell, fly.X + 4f, fly.Y + 4f).Exit);
         Assert.False(setup.Seats[0].Confirmed);
+
+        // A join board bot is the second pilot, listed with its tag.
+        setup.AddBot();
+        Assert.True(Fly(shell).Enabled);
+        board = shell.Compose();
+        Assert.Contains(board.Lines, l => l.Text == setup.Bots.Rows[0].Callsign);
+        Assert.Contains(board.Lines, l => l.Text == OriginalLobbyScreen.BotTag);
+        Assert.Contains(board.Lines, l => l.Text == OriginalLocalLobby.ReadyHint);
     }
 
-    /// <summary>The Dogfight screen's two remake-only match rules stand over the aircraft column.
-    /// Up from its first row walks onto Time, then Kills. A sideways press steps a rule, clamped,
-    /// and a press steps it up, past its top round to no limit. Free Flight shows neither.</summary>
+    /// <summary>A local Dogfight opens on the network lobby's own rules, the Time box at 10 armed
+    /// and the Score box at 40 unarmed. The lobby's radios, boxes and checkboxes change them, and the
+    /// launch carries them as the lobby's own launch reads them.</summary>
     [Fact]
-    public void TheDogfightScreenStepsItsKillTargetAndTimeLimit()
+    public void TheDogfightOpensOnTheLobbysRulesAndARuleChangeReachesTheLaunch()
+    {
+        var shell = Shell(out var setup, out _);
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Equal(DogfightLobby.OpeningOptions, setup.MatchOptions);
+        Assert.Equal("10", Row(shell, OriginalLobbyScreen.TimeKey).Label);
+        Assert.True(Row(shell, OriginalLobbyScreen.TimeKey).Enabled);
+        Assert.Equal("40", Row(shell, OriginalLobbyScreen.ScoreKey).Label);
+        Assert.False(Row(shell, OriginalLobbyScreen.ScoreKey).Enabled);
+        Assert.False(Row(shell, OriginalLobbyScreen.LivesKey).Enabled);
+
+        // Right from the map box crosses to the rules, the box taking no value sideways.
+        var map = Row(shell, OriginalLobbyScreen.EnvironmentKey);
+        shell.Step(Pointer(map.X + 4f, map.Y + 4f));
+        shell.Step(Right);
+        Assert.Equal(OriginalLobbyScreen.TimeRadioKey, shell.FocusedKey);
+
+        // The Score radio arms the score beside the clock, and its box takes typed digits.
+        Press(shell, OriginalLobbyScreen.ScoreRadioKey);
+        Assert.Equal(DogfightVictory.Both, setup.MatchOptions.Victory);
+        var score = Row(shell, OriginalLobbyScreen.ScoreKey);
+        shell.Step(Pointer(score.X + 4f, score.Y + 4f));
+        Assert.Equal(OriginalLobbyScreen.ScoreKey, shell.FocusedKey);
+        Assert.True(shell.CapturingText);
+        shell.Step(new MenuCommands { Erase = true });
+        shell.Step(new MenuCommands { Erase = true });
+        shell.Step(new MenuCommands { Typed = "25" });
+        Assert.Equal(25, setup.MatchOptions.Score);
+
+        // Then the Time radio disarms the clock, which leaves the score alone to end the match.
+        Press(shell, OriginalLobbyScreen.TimeRadioKey);
+        Assert.Equal(DogfightVictory.Score, setup.MatchOptions.Victory);
+        Press(shell, OriginalLobbyScreen.LimitedLivesKey);
+        Assert.True(Row(shell, OriginalLobbyScreen.LivesKey).Enabled);
+        Press(shell, OriginalLobbyScreen.AutoRespawnKey);
+
+        setup.AddBot();
+        var launch = Assert.IsType<LaunchExit>(Press(shell, OriginalShell.FlyKey).Exit);
+        Assert.Equal(MenuMode.Versus, launch.Mode);
+        Assert.Equal(new VersusRules(25, 0, DogfightLobby.DefaultLives, AutoRespawn: false), launch.Match);
+        Assert.Single(launch.Bots!);
+    }
+
+    [Fact]
+    public void FreeFlightGreysTheRuleRowsAndFliesOneSeat()
+    {
+        var shell = Shell(out _, out var free);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "FREE FLIGHT");
+        foreach (string key in new[]
+        {
+            OriginalLobbyScreen.TypeKey, OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.TimeKey,
+            OriginalLobbyScreen.ScoreRadioKey, OriginalLobbyScreen.ScoreKey, OriginalLobbyScreen.LimitedLivesKey,
+            OriginalLobbyScreen.LivesKey, OriginalLobbyScreen.AutoRespawnKey,
+        })
+        {
+            Assert.False(Row(shell, key).Enabled, key);
+        }
+
+        Assert.True(Row(shell, OriginalLobbyScreen.EnvironmentKey).Enabled);
+        Assert.False(Row(shell, OriginalLobbyScreen.AmmoTabKey).Enabled);
+        Assert.False(Row(shell, OriginalLobbyScreen.ScoresTabKey).Enabled);
+
+        Press(shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey + ":1");
+        Assert.Equal("C1B", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
+        Assert.Equal("C1B", free.Chapter?.Code);
+
+        var launch = Assert.IsType<LaunchExit>(Press(shell, OriginalShell.FlyKey).Exit);
+        Assert.Equal(MenuMode.Free, launch.Mode);
+        Assert.Equal("C1B", launch.Chapter);
+        Assert.Null(launch.Match);
+    }
+
+    /// <summary>Each mode keeps its own map, as the two screens did. A Free Flight pick does not
+    /// carry into a Dogfight, and a Dogfight launches on its own.</summary>
+    [Fact]
+    public void EachModeKeepsItsOwnMap()
+    {
+        var shell = Shell(out var setup, out var free);
+        shell.LocalLobby.Enter(OriginalScreen.FreeFlight);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey + ":1");
+
+        shell.LocalLobby.Enter(OriginalScreen.Dogfight);
+        Assert.Null(shell.LocalLobby.PickedChapter(OriginalScreen.Dogfight));
+        Assert.Equal("Sea Haven (night)", Row(shell, OriginalLobbyScreen.EnvironmentKey).Label);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey + ":5");
+        setup.AddBot();
+        var launch = Assert.IsType<LaunchExit>(Press(shell, OriginalShell.FlyKey).Exit);
+        Assert.Equal("C3", launch.Chapter);
+        Assert.Equal("C3", setup.MatchChapter);
+        Assert.Equal("C1B", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
+        Assert.Equal("C1B", free.Chapter?.Code);
+    }
+
+    [Fact]
+    public void SeatZerosAircraftIsSelectPlanesBoxWhoseListOpensOnAccept()
     {
         var shell = Shell(out var setup, out _);
         shell.Step(Accept);
-        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        Assert.DoesNotContain(shell.Rows, r => r.Key is OriginalShell.KillTargetKey or OriginalShell.TimeLimitKey);
-        shell.Step(Back);
+        Press(shell, OriginalLobbyScreen.PlaneTabKey);
+        var plane = Row(shell, OriginalLobbyScreen.PlaneKey);
+        Assert.Equal("Autogyro", plane.Label);
+        Assert.Contains(shell.Compose().Pictures, p => p.Art.Name == "MP_PLANEICONSTOPFRONT.PNG");
 
+        // A sideways press moves off the box rather than stepping its value. A press opens its list
+        // on the seat's own row, and Accept a row down picks the next.
+        shell.Step(Pointer(plane.X + 4f, plane.Y + 4f));
+        shell.Step(Right);
+        Assert.Equal(0, setup.Seats[0].Cursor);
+        Press(shell, OriginalLobbyScreen.PlaneKey);
+        Assert.Equal(OriginalLobbyScreen.PlaneKey, shell.LocalLobby.OpenDropdown);
+        Assert.Equal(setup.Roster.Count, shell.Rows.Count);
         shell.Step(Down);
         shell.Step(Accept);
-        Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
-        Assert.Contains(shell.Rows, r => r.Key == OriginalShell.KillTargetKey && r.Label == "Kills  5");
-        Assert.Contains(shell.Rows, r => r.Key == OriginalShell.TimeLimitKey && r.Label == "Time  5 min");
-
-        shell.Step(Right);
-        Assert.Equal(OriginalShell.AirframeKey(0), shell.FocusedKey);
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.TimeLimitKey, shell.FocusedKey);
-        shell.Step(Right);
-        Assert.Equal(6, setup.TimeLimitMinutes);
-        Assert.Equal(OriginalShell.TimeLimitKey, shell.FocusedKey);
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.KillTargetKey, shell.FocusedKey);
-        shell.Step(new MenuCommands { MoveX = -1 });
-        Assert.Equal(4, setup.KillTarget);
-        for (int i = 0; i < PlayerSetupFeature.MaxKillTarget; i++)
-        {
-            shell.Step(Right);
-        }
-
-        Assert.Equal(PlayerSetupFeature.MaxKillTarget, setup.KillTarget);
-        shell.Step(Accept);
-        Assert.Equal(0, setup.KillTarget);
-        Assert.Contains(shell.Rows, r => r.Key == OriginalShell.KillTargetKey && r.Label == "Kills  no limit");
-        shell.Step(Accept);
-        Assert.Equal(1, setup.KillTarget);
+        Assert.Equal(1, setup.Seats[0].Cursor);
+        Assert.Equal("Hellhound", Row(shell, OriginalLobbyScreen.PlaneKey).Label);
+        Assert.False(setup.Seats[0].Locked);
     }
 
     [Fact]
@@ -111,14 +196,13 @@ public class OriginalSeatsTests
         var shell = Shell(out setup, out _, seat => ReferenceEquals(seat, setup.Seats[1]) ? new[] { 3 } : Array.Empty<int>());
         shell.Step(Down);
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var pad = new ScriptedMenuSeat();
         var second = setup.Join(pad)!;
 
-        // The join lands between frames; seat 0's next frame opens the second seat's screen.
-        Assert.True(shell.Step(None).Changed);
+        // The join opens nothing by itself; FLY opens the second seat's screen.
+        shell.Step(None);
+        Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
+        Assert.Null(Press(shell, OriginalShell.FlyKey).Exit);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(1, shell.PickingSeat);
         Assert.Equal(OriginalScreen.Dogfight, shell.SeatReturn);
@@ -144,19 +228,21 @@ public class OriginalSeatsTests
         Assert.Contains(shell.Compose().Lines, l => l.Text == "P2  scripted   A again to confirm, B to change");
         Assert.Contains(shell.Compose().Lines, l => l.Text.StartsWith("AGILITY:", StringComparison.Ordinal));
 
-        // The last seat's confirm is the launch: the Dogfight screen returns behind it with both
-        // seats confirmed, so nobody has to reach FLY.
+        // The last seat's confirm is the launch: the lobby returns behind it with both seats
+        // confirmed, so nobody has to reach FLY again.
         var step = shell.StepSeat(1, Accept);
         Assert.True(second.Confirmed);
         Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
         Assert.Equal(-1, shell.PickingSeat);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "P2  scripted   Hellhound  READY");
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "P2  scripted");
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "Hellhound");
         var launch = Assert.IsType<LaunchExit>(step.Exit);
         Assert.Equal(MenuMode.Versus, launch.Mode);
         Assert.Equal("C1", launch.Chapter);
         Assert.Equal(new[] { "player_autogyro", "player_avenger" }, launch.Seats.Select(s => s.PlaneNode));
         Assert.Empty(launch.Seats[0].Pads);
         Assert.Equal(new[] { 3 }, launch.Seats[1].Pads);
+        Assert.Equal(DogfightLobby.RulesOf(DogfightLobby.OpeningOptions), launch.Match);
         Assert.True(setup.Seats[0].Confirmed);
     }
 
@@ -165,12 +251,13 @@ public class OriginalSeatsTests
     {
         var shell = Shell(out var setup, out var free);
         shell.Step(Accept);
-        shell.Step(Down);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey + ":1");
+        Press(shell, OriginalLobbyScreen.PlaneTabKey);
+        Press(shell, OriginalLobbyScreen.PlaneKey);
+        Press(shell, OriginalLobbyScreen.PlaneKey + ":1");
         var second = setup.Join(new ScriptedMenuSeat())!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         shell.StepSeat(1, Down);
         shell.StepSeat(1, Down);
@@ -188,64 +275,36 @@ public class OriginalSeatsTests
     }
 
     [Fact]
-    public void AWalkEndingWithNoMapPickedReturnsTheSortieScreenWithFlyToPress()
+    public void AWalkLosingTheSecondPilotReturnsTheDogfightWithFlyToPress()
     {
         var shell = Shell(out var setup, out _);
-        shell.Open(OriginalScreen.FreeFlight);
-        var first = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        Click(shell, first.X + 4f, first.Y + 4f);
-        Assert.Null(shell.PickedChapter);
+        shell.Step(Down);
+        shell.Step(Accept);
         var second = setup.Join(new ScriptedMenuSeat())!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
 
-        // Every seat confirmed but FLY's own gate unmet: the screen returns, nothing launches.
-        shell.StepSeat(1, Accept);
-        Assert.Null(shell.StepSeat(1, Accept).Exit);
-        Assert.True(second.Confirmed);
-        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
+        // The walk ends with every seat left confirmed, but the Dogfight's own gate is unmet.
+        setup.Unjoin(second);
+        Assert.Null(shell.Step(None).Exit);
+        Assert.Equal(OriginalScreen.Dogfight, shell.Screen);
         Assert.False(Fly(shell).Enabled);
         Assert.False(setup.Seats[0].Confirmed);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then FLY");
-
-        // The map picked, FLY stands and seat 0's own press is the launch.
-        var map = shell.Rows.Single(r => r.Key == "C1");
-        Click(shell, map.X + 4f, map.Y + 4f);
-        var fly = Fly(shell);
-        Assert.True(fly.Enabled);
-        var launch = Assert.IsType<LaunchExit>(
-            Click(shell, fly.X + 4f, fly.Y + 4f).Exit);
-        Assert.Equal("C1", launch.Chapter);
-        Assert.Equal(2, launch.Seats.Count);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == OriginalLocalLobby.SecondPilotHint);
     }
 
     [Fact]
-    public void TheSortieHintNamesWhatIsOutstandingRatherThanTheMapAlone()
+    public void TheHintNamesFourSeatsAsTheMaximum()
     {
-        var shell = Shell(out _, out _);
-        shell.Open(OriginalScreen.FreeFlight);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then an aircraft");
+        var shell = Shell(out var setup, out _);
+        shell.Step(Accept);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == OriginalLocalLobby.ReadyHint);
+        for (int i = 0; i < 3; i++)
+        {
+            setup.Join(new ScriptedMenuSeat());
+        }
 
-        // The aircraft picked and no map: the press is what is left, so the hint names FLY rather
-        // than the aircraft already chosen.
-        var plane = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        Click(shell, plane.X + 4f, plane.Y + 4f);
-        Assert.Null(shell.PickedChapter);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick a map, then FLY");
-
-        // The map picked, the hint stops naming it.
-        var map = shell.Rows.Single(r => r.Key == "C1");
-        Click(shell, map.X + 4f, map.Y + 4f);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready");
-
-        // A Dogfight short of its second seat names that seat even with no map picked, the press
-        // being further off than one press.
-        var dogfight = Shell(out _, out _);
-        dogfight.Open(OriginalScreen.Dogfight);
-        var versusPlane = dogfight.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        Click(dogfight, versusPlane.X + 4f, versusPlane.Y + 4f);
-        Assert.Null(dogfight.PickedDogfightChapter);
-        Assert.Contains(dogfight.Compose().Lines, l => l.Text.StartsWith("Dogfight needs a second seat", StringComparison.Ordinal));
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "Four seats signed on, the maximum. " + OriginalLocalLobby.ReadyHint);
     }
 
     [Fact]
@@ -253,12 +312,9 @@ public class OriginalSeatsTests
     {
         var shell = Shell(out var setup, out _);
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var second = setup.Join(new ScriptedMenuSeat())!;
         var third = setup.Join(new ScriptedMenuSeat())!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(1, shell.PickingSeat);
 
         // Seat 0's stick and buttons move nothing on a screen that is not its own.
@@ -295,7 +351,6 @@ public class OriginalSeatsTests
         Assert.Equal(3, Assert.IsType<LaunchExit>(last.Exit).Seats.Count);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.True(Fly(shell).Enabled);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready");
     }
 
     [Fact]
@@ -303,71 +358,26 @@ public class OriginalSeatsTests
     {
         var shell = Shell(out var setup, out _);
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var second = setup.Join(new ScriptedMenuSeat())!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
 
-        // Back here belongs to the picking seat, so seat 0's leaves nothing and keeps its pick.
+        // Back here belongs to the picking seat, so seat 0's leaves nothing.
         Assert.False(shell.Step(Back).Changed);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
-        Assert.NotNull(shell.PickedAirframe);
 
         // CANCEL SELECTIONS over the open list is the pointer's own way out of the walk.
         var cancel = shell.Rows.Single(r => r.Key == "CancelSelections");
         Assert.Null(Click(shell, cancel.X + 4f, cancel.Y + 4f).Exit);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        Assert.Null(shell.PickedAirframe);
         Assert.True(second.Joined);
         Assert.Equal(2, setup.Seats.Count);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Pick an aircraft");
+        Assert.False(setup.Seats[0].Locked);
 
-        // Picking again walks the seat again; a frame with nothing pressed changes nothing.
-        shell.Step(Accept);
+        // FLY again walks the seat again; a frame with nothing pressed changes nothing.
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.False(shell.Step(None).Changed);
-    }
-
-    [Fact]
-    public void BackOnSeatZerosPickUndoesItBeforeLeavingTheScreen()
-    {
-        var shell = Shell(out var setup, out _);
-        shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
-        Assert.NotNull(shell.PickedAirframe);
-
-        Assert.Null(shell.Step(Back).Exit);
-        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        Assert.Null(shell.PickedAirframe);
-        Assert.Equal("C1", shell.PickedChapter);
-
-        Assert.Null(shell.Step(Back).Exit);
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
-        Assert.Single(setup.Seats);
-    }
-
-    [Fact]
-    public void AClickOnAnotherAircraftRePicksAndTheSameRowAgainChangesNothing()
-    {
-        var shell = Shell(out var setup, out _);
-        shell.Open(OriginalScreen.FreeFlight);
-        var first = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        var third = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(2));
-
-        Click(shell, first.X + 4f, first.Y + 4f);
-        Assert.Equal("player_autogyro", shell.PickedAirframe);
-        Click(shell, first.X + 4f, first.Y + 4f);
-        Assert.Equal("player_autogyro", shell.PickedAirframe);
-        Assert.True(setup.Seats[0].Locked);
-
-        Click(shell, third.X + 4f, third.Y + 4f);
-        Assert.Equal("player_balmoral", shell.PickedAirframe);
-        Assert.True(setup.Seats[0].Locked);
-        Assert.Contains(shell.Compose().Fills, f => f.X == third.X && f.Y == third.Y);
     }
 
     [Fact]
@@ -382,11 +392,8 @@ public class OriginalSeatsTests
         Assert.False(shell.StepSeat(1, Back).Changed);
 
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var second = setup.Join(pad)!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         shell.StepSeat(1, Accept);
         Assert.True(second.Locked);
@@ -397,22 +404,20 @@ public class OriginalSeatsTests
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.True(shell.Rows.Count > 4);
 
-        // Over the open list Back leaves the walk with both seats kept, seat 0's pick going with
-        // it so the sortie screen does not put the walk straight back up.
+        // Over the open list Back leaves the walk with both seats kept.
         shell.StepSeat(1, Back);
         Assert.True(second.Joined);
         Assert.Equal(2, setup.Seats.Count);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        Assert.Null(shell.PickedAirframe);
-        Assert.False(Fly(shell).Enabled);
+        Assert.True(Fly(shell).Enabled);
 
-        // Seat 0 picking again reopens the walk at the same seat, so the return is not a dead end.
-        shell.Step(Accept);
+        // FLY again reopens the walk at the same seat, so the return is not a dead end.
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(1, shell.PickingSeat);
 
         // CANCEL SELECTIONS drops the selection and reopens the list, leaving neither the walk nor
-        // the sortie.
+        // the lobby.
         shell.StepSeat(1, Accept);
         Assert.True(second.Locked);
         var cancel = shell.Rows.Single(r => r.Key == "CancelSelections");
@@ -430,7 +435,6 @@ public class OriginalSeatsTests
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.True(second.Joined);
         Assert.Equal(2, setup.Seats.Count);
-        Assert.Null(shell.PickedAirframe);
     }
 
     [Fact]
@@ -470,12 +474,9 @@ public class OriginalSeatsTests
     {
         var shell = Shell(out var setup, out _);
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var second = setup.Join(new ScriptedMenuSeat())!;
         var third = setup.Join(new ScriptedMenuSeat())!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         Assert.Equal(1, shell.PickingSeat);
 
         // While the seat browses there is no loadout row: a fit needs an aeroplane to hang on.
@@ -537,12 +538,9 @@ public class OriginalSeatsTests
     {
         var shell = Shell(out var setup, out _);
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var second = setup.Join(new ScriptedMenuSeat())!;
         setup.Join(new ScriptedMenuSeat());
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         shell.StepSeat(1, Accept);
         shell.StepSeat(1, Down);
         shell.StepSeat(1, Up);
@@ -558,76 +556,26 @@ public class OriginalSeatsTests
     }
 
     [Fact]
-    public void TheAircraftColumnIsAWindowThatFollowsTheFocusAndHidesTheRest()
-    {
-        var customs = Enumerable.Range(1, 7).Select(i => new CustomPlaneDef { Name = $"Custom {i}", Airframe = i }).ToArray();
-        var shell = Shell(out _, out _, customs: customs);
-        shell.Step(Accept);
-        var column = shell.Rows.Where(r => r.Column == 1 && r.Kind == OriginalRowKind.ListRow).ToList();
-        Assert.Equal(18, column.Count);
-        Assert.Equal(OriginalShell.AirframeWindow, column.Count(r => r.Visible));
-        Assert.Equal(0, shell.AirframeTop);
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == "▲");
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "▼");
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == "Custom 7");
-
-        shell.Step(Right);
-        for (int i = 0; i < OriginalShell.AirframeWindow; i++)
-        {
-            shell.Step(Down);
-        }
-
-        Assert.Equal(OriginalShell.AirframeKey(11), shell.FocusedKey);
-        Assert.Equal(1, shell.AirframeTop);
-        var hidden = shell.Rows.Single(r => r.Key == OriginalShell.AirframeKey(0));
-        Assert.False(hidden.Visible);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "▲");
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == "Autogyro");
-
-        // The hidden row's rectangle is above the window; a pointer there hits nothing.
-        shell.Step(Pointer(hidden.X + 4f, hidden.Y + 4f));
-        Assert.Equal(-1, shell.Hover);
-
-        for (int i = 0; i < 6; i++)
-        {
-            shell.Step(Down);
-        }
-
-        Assert.Equal(OriginalShell.AirframeKey(17), shell.FocusedKey);
-        Assert.Equal(7, shell.AirframeTop);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "Custom 7");
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text == "▼");
-
-        // At the list's end Down leaves it. FLY is disabled with nothing picked, so the press wraps
-        // to the band's far end, the window's top row, and the window stays.
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.AirframeKey(7), shell.FocusedKey);
-        Assert.Equal(7, shell.AirframeTop);
-    }
-
-    [Fact]
     public void AReturnToTheTopLevelResetsEverySeatsPickAndKeepsTheSeats()
     {
         var shell = Shell(out var setup, out _);
         shell.Step(Accept);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Accept);
         var second = setup.Join(new ScriptedMenuSeat())!;
-        shell.Step(None);
+        Press(shell, OriginalShell.FlyKey);
         shell.StepSeat(1, Accept);
         shell.StepSeat(1, Accept);
 
         shell.ReturnToTopLevel();
 
         Assert.Equal(2, setup.Seats.Count);
-        Assert.Null(shell.PickedAirframe);
+        Assert.False(setup.Seats[0].Locked || setup.Seats[0].Confirmed);
         Assert.False(second.Locked || second.Confirmed);
-        Assert.Equal("C1", shell.PickedChapter);
         Assert.Equal(-1, shell.PickingSeat);
     }
 
-    private static OriginalRow Fly(OriginalShell shell) => shell.Rows.Single(r => r.Key == OriginalShell.FlyKey);
+    private static OriginalRow Fly(OriginalShell shell) => Row(shell, OriginalShell.FlyKey);
+
+    private static OriginalRow Row(OriginalShell shell, string key) => shell.Rows.Single(r => r.Key == key);
 
     // Seat 0 is a scripted source over the three-stock-plus-customs roster the fixture's shell picks from.
     private static OriginalShell Shell(
@@ -659,5 +607,12 @@ public class OriginalSeatsTests
     {
         shell.Step(Pointer(x, y, pressed: true, clicked: true));
         return shell.Step(Pointer(x, y));
+    }
+
+    // The same click, just inside the corner of the row carrying a key.
+    private static OriginalStep Press(OriginalShell shell, string key)
+    {
+        var row = Row(shell, key);
+        return Click(shell, row.X + 2f, row.Y + 2f);
     }
 }

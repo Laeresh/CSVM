@@ -81,21 +81,6 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>How many seats may join, the splitscreen rig's own maximum.</summary>
     public const int MaxSeats = 4;
 
-    /// <summary>The kill target a screen may step up to. Remake-only rule: the original's Multiplayer
-    /// is network play and authors no such box. The ceiling is picked to keep the row one press
-    /// per kill rather than a ladder of invented round numbers.</summary>
-    public const int MaxKillTarget = 20;
-
-    /// <summary>The match clock a screen may step up to, in minutes, remake-only for the same
-    /// reason as <see cref="MaxKillTarget"/>.</summary>
-    public const int MaxTimeLimitMinutes = 30;
-
-    /// <summary>The shipped kill target, the same default <c>--vs-kills=</c> carries.</summary>
-    public const int DefaultKillTarget = 5;
-
-    /// <summary>The shipped match clock in minutes, the same default <c>--vs-time=</c> carries.</summary>
-    public const int DefaultTimeLimitMinutes = 5;
-
     private readonly List<PlayerSeat> _seats = new();
     private readonly SourceView _sources;
     private IReadOnlyList<MenuAircraft> _roster = Array.Empty<MenuAircraft>();
@@ -114,12 +99,14 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>The roster every seat picks from: the stock airframes, then the saved customs.</summary>
     public IReadOnlyList<MenuAircraft> Roster => _roster;
 
-    /// <summary>Dogfight's kill target, 0 meaning no kill limit. Rides a Versus
-    /// <see cref="BuildExit"/> and is ignored by every other mode.</summary>
-    public int KillTarget { get; private set; } = DefaultKillTarget;
+    /// <summary>A local Dogfight's mission rules, in the network lobby's own shape and on its opening
+    /// values (<see cref="DogfightLobby.OpeningOptions"/>). A Versus <see cref="BuildExit"/> carries
+    /// them as <see cref="DogfightLobby.RulesOf"/> reads them; every other mode ignores them.</summary>
+    public Net.DogfightOptionsMessage MatchOptions { get; set; } = DogfightLobby.OpeningOptions;
 
-    /// <summary>Dogfight's match clock in minutes, 0 meaning no time limit.</summary>
-    public int TimeLimitMinutes { get; private set; } = DefaultTimeLimitMinutes;
+    /// <summary>A local Dogfight's map, a chapter code, or null until one is picked. Free Flight
+    /// keeps its own (<see cref="FreeFlightFeature.Chapter"/>).</summary>
+    public string? MatchChapter { get; set; }
 
     /// <summary>Bumps on every join and unjoin, so a presentation holding per-seat state can tell
     /// the seat list moved without comparing it.</summary>
@@ -213,16 +200,6 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>Renames bot row <paramref name="id"/>; refused for a blank name or one a seat's
     /// player tag or another row holds.</summary>
     public bool RenameBot(int id, string callsign) => Bots.Rename(id, callsign, PaneNames());
-
-    /// <summary>Steps the kill target, clamped to 0 (no kill limit) and
-    /// <see cref="MaxKillTarget"/>.</summary>
-    public void StepKillTarget(int direction) =>
-        KillTarget = Math.Clamp(KillTarget + direction, 0, MaxKillTarget);
-
-    /// <summary>Steps the match clock in minutes, clamped to 0 (no time limit) and
-    /// <see cref="MaxTimeLimitMinutes"/>.</summary>
-    public void StepTimeLimit(int direction) =>
-        TimeLimitMinutes = Math.Clamp(TimeLimitMinutes + direction, 0, MaxTimeLimitMinutes);
 
     /// <summary>Replaces the roster. Cursors are left where they are; a presentation clamps its
     /// own, since it may keep a row of its own past the roster.</summary>
@@ -467,18 +444,19 @@ public sealed class PlayerSetupFeature : IMenuFeature
         }
 
         bool versus = mode == MenuMode.Versus;
-        var rules = versus ? new VersusRules(KillTarget, TimeLimitMinutes) : null;
+        var rules = versus ? DogfightLobby.RulesOf(MatchOptions) : null;
         var bots = versus && Bots.Count > 0 ? Bots.LaunchEntries() : null;
         return new LaunchExit(chapter, Choices(flightDevices), mode, null, rules, Bots: bots);
     }
 
     /// <summary>Drops every seat but the first, every stage of its pick (cursor included) and every
-    /// bot row. The match rules go back to the shipped defaults. Unfinished setup does not survive a
-    /// presentation switch. The roster stays; it is read from the store, not chosen.</summary>
+    /// bot row. The match rules go back to the lobby's opening values and the map to none.
+    /// Unfinished setup does not survive a presentation switch. The roster stays; it is read from
+    /// the store, not chosen.</summary>
     public void Discard()
     {
-        KillTarget = DefaultKillTarget;
-        TimeLimitMinutes = DefaultTimeLimitMinutes;
+        MatchOptions = DogfightLobby.OpeningOptions;
+        MatchChapter = null;
         Bots.Clear();
         while (_seats.Count > 1)
         {

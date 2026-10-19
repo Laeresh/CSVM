@@ -165,69 +165,80 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void FreeFlightPicksAChapterAndAnAirframeAcrossTwoColumnsThenFliesThroughTheFeature()
+    public void FreeFlightPicksAMapAndAnAircraftOnTheLobbysTabsThenFliesThroughTheFeature()
     {
         var shell = Shell(out var free);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
-        Assert.Equal("C1", shell.FocusedKey);
-        Assert.False(shell.Rows.Single(r => r.Key == OriginalShell.FlyKey).Enabled);
-
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal("C1C", shell.PickedChapter);
-        Assert.Equal("C1C", free.Chapter?.Code);
-
-        shell.Step(Right);
-        Assert.Equal(1, shell.Rows[shell.Focus].Column);
-        Assert.Equal(OriginalShell.AirframeKey(2), shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal("player_balmoral", shell.PickedAirframe);
+        Assert.Equal(OriginalLobbyScreen.MissionTabKey, shell.FocusedKey);
+        Assert.Contains(shell.Compose().Backdrop, p => p.Art.Name == "MP_LOBBY_BACKGROUND.JPG");
         Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.FlyKey).Enabled);
 
-        // Up from the top of the airframe column wraps onto FLY, the column's last row.
-        shell.Step(Up);
-        shell.Step(Up);
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.FlyKey, shell.FocusedKey);
-        var step = shell.Step(Accept);
+        // Down from the tab onto the map box; Accept opens its list on the first map, and two rows
+        // down Accept picks the third.
+        shell.Step(Down);
+        Assert.Equal(OriginalLobbyScreen.EnvironmentKey, shell.FocusedKey);
+        shell.Step(Accept);
+        Assert.Equal(OriginalLobbyScreen.EnvironmentKey, shell.LocalLobby.OpenDropdown);
+        shell.Step(Down);
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Null(shell.LocalLobby.OpenDropdown);
+        Assert.Equal("C1C", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
+        Assert.Equal("C1C", free.Chapter?.Code);
+        Assert.Equal(OriginalLobbyScreen.EnvironmentKey, shell.FocusedKey);
+
+        // Select Plane's box is seat 0's aircraft, read beside it as the lobby reads the pilot's own.
+        Click(shell, OriginalLobbyScreen.PlaneTabKey);
+        Assert.Equal(LobbyTab.Plane, shell.LocalLobby.Tab);
+        Click(shell, OriginalLobbyScreen.PlaneKey);
+        Click(shell, OriginalLobbyScreen.PlaneKey + ":2");
+        Assert.Equal("Balmoral", Row(shell, OriginalLobbyScreen.PlaneKey).Label);
+
+        var step = Click(shell, OriginalShell.FlyKey);
         var launch = Assert.IsType<LaunchExit>(step.Exit);
         Assert.Equal("C1C", launch.Chapter);
         Assert.Equal(MenuMode.Free, launch.Mode);
+        Assert.Null(launch.Match);
         Assert.Equal("player_balmoral", Assert.Single(launch.Seats).PlaneNode);
         Assert.Contains(OriginalCues.Click, step.Cues);
     }
 
     [Fact]
-    public void ListRowsUnderThePointerTakeFocusWithoutARolloverCueAndAClickPicks()
+    public void AnOpenListsRowsUnderThePointerTakeFocusWithoutARolloverCueAndAClickPicks()
     {
         var shell = Shell(out _);
-        shell.Open(OriginalScreen.FreeFlight);
-        var hawaii = shell.Rows.Single(r => r.Key == "C3");
+        shell.LocalLobby.Enter(OriginalScreen.FreeFlight);
+        Click(shell, OriginalLobbyScreen.EnvironmentKey);
+        var hawaii = Row(shell, OriginalLobbyScreen.EnvironmentKey + ":5");
+        Assert.Equal("Hawaii", hawaii.Label);
 
         var step = shell.Step(Pointer(hawaii.X + 10f, hawaii.Y + 5f));
-        Assert.Equal("C3", shell.FocusedKey);
+        Assert.Equal(hawaii.Key, shell.FocusedKey);
         Assert.Empty(step.Cues);
 
         step = Click(shell, hawaii.X + 10f, hawaii.Y + 5f);
-        Assert.Equal("C3", shell.PickedChapter);
+        Assert.Equal("C3", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
         Assert.Empty(step.Cues);
-        Assert.Contains(shell.Compose().Fills, f => f.X == hawaii.X && f.Y == hawaii.Y && !f.Border);
+        Assert.Equal("Hawaii", Row(shell, OriginalLobbyScreen.EnvironmentKey).Label);
     }
 
     [Fact]
-    public void BackLeavesFreeFlightForTheTopLevelAndQuitsFromTheTopLevel()
+    public void BackClosesAnOpenListThenLeavesFreeFlightForTheTopLevelAndQuitsFromTheTopLevel()
     {
         var shell = Shell(out _);
         shell.Step(Accept);
-        shell.Step(Down);
-        shell.Step(Accept);
+        Click(shell, OriginalLobbyScreen.EnvironmentKey);
+        Click(shell, OriginalLobbyScreen.EnvironmentKey + ":1");
+        Click(shell, OriginalLobbyScreen.EnvironmentKey);
 
         var step = shell.Step(Back);
+        Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
+        Assert.Null(shell.LocalLobby.OpenDropdown);
+        step = shell.Step(Back);
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         Assert.Null(step.Exit);
-        Assert.Equal("C1B", shell.PickedChapter);
+        Assert.Equal("C1B", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
 
         step = shell.Step(Back);
         Assert.IsType<QuitExit>(step.Exit);
@@ -240,59 +251,50 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void AReturnToTheTopLevelKeepsTheListCursorsAndDropsTheAirframePick()
+    public void AReturnToTheTopLevelKeepsTheMapAndSeatZerosAircraft()
     {
         var shell = Shell(out _);
         shell.Step(Accept);
-        shell.Step(Down);
-        shell.Step(Accept);
-        shell.Step(Right);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.NotNull(shell.PickedAirframe);
+        Click(shell, OriginalLobbyScreen.EnvironmentKey);
+        Click(shell, OriginalLobbyScreen.EnvironmentKey + ":1");
+        Click(shell, OriginalLobbyScreen.PlaneTabKey);
+        Click(shell, OriginalLobbyScreen.PlaneKey);
+        Click(shell, OriginalLobbyScreen.PlaneKey + ":2");
 
         shell.ReturnToTopLevel();
 
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
-        Assert.Null(shell.PickedAirframe);
-        Assert.Equal("C1B", shell.PickedChapter);
+        Assert.Equal("C1B", shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight));
         shell.Step(Accept);
-        Assert.Equal(OriginalShell.AirframeKey(2), shell.FocusedKey);
+        Assert.Equal(LobbyTab.Mission, shell.LocalLobby.Tab);
+        Click(shell, OriginalLobbyScreen.PlaneTabKey);
+        Assert.Equal("Balmoral", Row(shell, OriginalLobbyScreen.PlaneKey).Label);
     }
 
-    /// <summary>A drag holds the pointer, so the click that took hold of a thumb is spent on it
-    /// and the row the thumb is drawn over is not activated. The shell makes that distinction once
-    /// for anything that holds the pointer; the list thumb is the hold an engine-free screen has,
-    /// and a slider row joins the same gate (<see cref="SliderControlTests"/> drives that
-    /// side).</summary>
+    /// <summary>A drag holds the pointer, so the click that took hold of a thumb is spent on it.
+    /// The row the thumb is drawn over is not activated. The shell makes that distinction once for
+    /// anything that holds the pointer. Instant Action's contents window is the engine-free list
+    /// thumb, and a slider row joins the same gate (<see cref="SliderControlTests"/>).</summary>
     [Fact]
     public void ADragHoldsThePointerSoItsClickActivatesNoRowUnderIt()
     {
-        // A roster longer than the eleven-row window, so the aircraft column has a thumb at all.
-        var setup = new PlayerSetupFeature();
-        var roster = OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()).ToList();
-        roster.AddRange(roster.Take(3).ToList());
-        setup.SetRoster(roster);
-        setup.Join(new ScriptedMenuSeat());
-        var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure);
-        shell.Open(OriginalScreen.FreeFlight);
-
-        var window = shell.Lists.Single(l => l.Key == "AIRFRAMES").Window;
+        var shell = Shell(out _);
+        shell.InstantAction.OpenInstantAction();
+        var window = shell.Lists.Single(l => l.Key == OriginalInstantActionScreen.ContentsKey).Window;
         Assert.True(window.Scrolls);
-        // The thumb runs down the column's own right edge, so the point it stands on is an
-        // aircraft row that a click would otherwise pick.
         float x = window.ThumbX + 1f;
         float y = window.ThumbY + 1f;
-        Assert.StartsWith("AIRFRAME", HitTestKey(shell, x, y), System.StringComparison.Ordinal);
+        int top = shell.InstantAction.ContentsTop;
 
-        shell.Step(Pointer(x, y, pressed: true, clicked: true));
-        Assert.Equal("AIRFRAMES", shell.Dragging);
-        Assert.Null(shell.PickedAirframe);
+        var step = shell.Step(Pointer(x, y, pressed: true, clicked: true));
+        Assert.Equal(OriginalInstantActionScreen.ContentsKey, shell.Dragging);
 
-        shell.Step(Pointer(x, y + window.Height, pressed: true));
-        shell.Step(Pointer(x, y + window.Height));
+        step = shell.Step(Pointer(x, y + window.Height, pressed: true));
+        Assert.NotEqual(top, shell.InstantAction.ContentsTop);
+        step = shell.Step(Pointer(x, y + window.Height));
         Assert.Null(shell.Dragging);
-        Assert.Null(shell.PickedAirframe);
+        Assert.Null(step.Exit);
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
     }
 
     [Fact]

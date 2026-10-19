@@ -167,14 +167,13 @@ lines**.
   is the list walk; a downed seat respawns on a rotated list point clear of the living field and
   its killer)
 - `--vs-kills=N` (with `--vs`, the kill target that ends a match early once a player reaches it.
-  Default 5; `0` disables the kill limit, so the match runs to `--vs-time=` alone. The Original
-  Dogfight screen carries the same setting as a heading row, and spelling this flag out beats
-  what that row is left at)
+  Default 5; `0` disables the kill limit, so the match runs to `--vs-time=` alone. A menu Dogfight
+  opens on the lobby's own rules instead, and spelling this flag out beats its Score box)
 - `--vs-time=N` (with `--vs`, the match time limit **in minutes**. Default 5; `0` disables the time
   limit, so the match runs to `--vs-kills=` alone. Both limits at `0` is a match with no end
-  condition, accepted, not guarded against, since the mode's win/lose flow is a later item. The
-  Original Dogfight screen carries this as a heading row too, under the same rule, each flag
-  beating only the row it names)
+  condition, accepted, not guarded against, since the mode's win/lose flow is a later item. A menu
+  Dogfight opens on the lobby's 10 minutes instead, and spelling this flag out beats its Time box,
+  each flag beating only the rule it names)
 - `--vs-lives=N` (with `--vs`, how many deaths a pilot has before it stays down and watches the
   rest of the match, on every machine. Default `0`, no limit. The Multiplayer Lobby's Limited Lives
   box carries the same setting, and spelling this flag out beats it)
@@ -411,7 +410,7 @@ lines**.
 - `--sound-range-scale=<f>` (**remake-only departure**, default `2.5`: multiplies both `RANGE` radii of every positional voice that runs `SoundFalloff` (world emitters and one-shots, AI gun loops and dry cues, mount gun voices) and their 1.1x cull, so the decoded curve keeps its shape at `f` times the reach. The default is the reach the world emitters read the original's at; `=1` is the data's own radii, and nothing decoded stands behind the factor (`docs/formats/sounds.md`). The `sound` log prints it (`range=x2.5`). A value that is not a positive number is ignored with a `WARN`)
 - `--debug-collision` (draw the plane's collision probe)
 - `--players=N` (splitscreen, M2.5 item 5: fly N planes 1–4 in one shared world, each with its own pane/camera/sky/HUD/device, 2P stacked top/bottom, or side by side on a window 2:1 or wider, 3–4P a 2×2 grid; P1 = keyboard + the first pad, P2–P4 the next pads in roster order; needs `--fly`/`--stunt`, falls back to 1 with a note otherwise. Each player spawns at the next index in the mission's spawn list. With `--stunt` this is a race, per-player zones/marker/clock and a shared ranked board (item 7). Launched from the menu instead, the item-6 join flow sets the count and binds the pads)
-- `--debug-join=N` (menu only: seat N device-less players through the shared player setup so the aircraft screens can be screenshot without N controllers; they can never act (and the last one starts selected, so both states show), making the shot deterministic. Original seats them on the Free Flight and Dogfight screens' seat strip and aircraft column)
+- `--debug-join=N` (menu only: seat N device-less players through the shared player setup so the aircraft screens can be screenshot without N controllers; they can never act (and the last one starts selected, so both states show), making the shot deterministic. Original lists them in the local lobby's player list and walks them through the per-seat aircraft screen)
 - `--debug-pointer=x,y[,down][,right]` (the menu only: stand seat 0's pointer at that authored 800x600 point for the run, a button held per word after the pair, `down` the primary and `right` the secondary the credits screen's hidden line answers, so those states are shot with nobody at the controls. Authored not window pixels, so the shot lands on the same widget whatever the window; the press arrives as an edge once and never releases, leaving the held frame standing rather than firing. **Quote it in PowerShell** (SHELL-18); fewer than two numbers stands no pointer)
 - `--debug-graphics-switch=N[,N...]` (**flip the graphics mode on the running session at each named sim frame**, the scripted twin of the Toggle Graphics Mode action and the Options apply, under the same `SwitchCover` (the sim held at frame N while it stands) and never saved. Each flip logs `graphics mode: ... (switched live by --debug-graphics-switch at sim frame N)`; with `--debug-load=<dir>` the cover's frame is saved as `pump00_0.00.png`. A network session refuses it)
 - `--debug-shaders` (**what the renderer compiles and when it stalls for it**, `Tooling/ShaderDiagnostics.cs`: a `[perf] shader-diag census` of the distinct shaders the tree draws by family at sim frame 240 and after every live switch, the wall time and pipeline compilations of the twelve frames after a switch, every frame over 33 ms with its pipeline counts, and a summary every 600 frames. Pair it with `RunProbe.ps1 -EngineArgs --verbose` to read Godot's own shader-cache hits and misses)

@@ -411,7 +411,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>Drops the open campaign, if any: the feature's transient state and the pages.
-    /// Re-reads the build store into the sortie roster, since an EXPORT inside may have crossed a
+    /// Re-reads the build store into the shared roster, since an EXPORT inside may have crossed a
     /// plane into it. Every door out of the campaign and every return to the top level comes
     /// through here.</summary>
     public void CloseCampaign()
@@ -422,7 +422,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _flow = null;
         _host.CloseDialog();
 
-        // An EXPORT inside the campaign just crossed a plane into the sortie lists. Those are
+        // An EXPORT inside the campaign just crossed a plane into the shared roster. Those are
         // reached from the top level without another Activate to re-read the store on.
         if (_planes != null)
         {

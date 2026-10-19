@@ -1084,8 +1084,8 @@ missions with every objective bit set, plus the scratch build store the export a
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
-from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box is the one `OriginalShellDialog` it holds beside its `OriginalCheats`; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action, join-board and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door) and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, a cursor press that changes no value moving the focus through `OriginalFocus.cs`, `Compose` is
+from `[MainMenu]`'s own rows, the remake-only local lobby behind the Free Flight and Dogfight doors, the Options hub over the decoded Preferences chrome, and the messagebox
+idiom every refusal and confirm goes through, whose box is the one `OriginalShellDialog` it holds beside its `OriginalCheats`; the seat rules and the credits screen are its own partials, below, while the campaign, hangar, Instant Action, join-board, local lobby and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door), `OriginalLocalLobby.cs` and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard`, `LocalLobby` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, a cursor press that changes no value moving the focus through `OriginalFocus.cs`, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -1254,22 +1254,30 @@ keyboard is never listed, since it holds seat 1 whatever the manifest says and t
 
 ## src/UI/Menu/Original/OriginalBotPanel.cs
 The join board's bot rows, the keyboard's and the mouse's to edit: the Bots block under the articles (ADD BOT, FILL TO and its 2-to-16 count, then a row per bot in two columns with its tier) and the Edit Bot panel (Callsign, Plane with Random and the eleven stock airframes, Skill from langui 3695 to 3697, REMOVE, ACCEPT, the stock plane's icon and ratings).
-The rows are `PlayerSetupFeature.Bots`, so the Dogfight screen counts them and its launch carries them; the pilot names load from the message table on the first add. A local Dogfight has no teams, so the panel offers none.
+The rows are `PlayerSetupFeature.Bots`, so the local Dogfight lobby lists and counts them and its launch carries them; the pilot names load from the message table on the first add. A local Dogfight has no teams, so the panel offers none.
 Words, boxes and lists take the Multiplayer Lobby's bot faces through `MultiplayerBoardText`, the plaques the board's own paper strip. The lobby's twin: `OriginalLobbyScreen.cs`.
 
 ## src/UI/Menu/Original/OriginalSeats.cs
-The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
-seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
-the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
-joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
-gate is met (a Dogfight counting the join board's bots, which its strip names) and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
-`JoiningOpen` is the per-screen joining rule the presentation reads, true on the join board alone, so these screens read the roster that board wrote and take no join gesture of their own. `CampaignSeatPanel` is the
+The seat rules every Original screen shares, a shell partial: the Dogfight door's key, a later seat's
+frame (`StepSeat`) and the strip over the campaign boards. The local match screens behind the Free
+Flight and Dogfight doors are `OriginalLocalLobby.cs`.
+`JoiningOpen` is the per-screen joining rule the presentation reads, true on the join board alone, so every other screen reads the roster that board wrote and takes no join gesture of its own. `CampaignSeatPanel` is the
 seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
 has joined, a chip row on `SeatStrip`'s shape, a co-op chip named by `NetPlayFeature.CoopSeatName`. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
 
+## src/UI/Menu/Original/OriginalLocalLobby.cs
+The local Free Flight and Dogfight screens, one `IOriginalScreenModule` on the Multiplayer Lobby's
+layout with no network behind it, its rows and drawing built by `OriginalLobbyScreen`'s builders.
+Mission Options holds the map box over the shell's chapters (each mode's pick its own) and the
+lobby's victory and lives rules, which a Dogfight edits into `PlayerSetupFeature.MatchOptions` and
+Free Flight greys. Select Plane holds seat 0's aircraft, and the player list names each seat and a
+Dogfight's join board bots. FLY walks every
+further seat through `OriginalSeatPlane.cs` and launches on the walk's last confirm. Remake-only:
+[../org/menu-inventory.md](../org/menu-inventory.md).
+
 ## src/UI/Menu/Original/OriginalSeatPlane.cs
-The remake-only per-seat aircraft screen, a shell partial. Once seat 0 has picked on a sortie
-screen, pressed FLY MISSION on Instant Action with a second pilot joined, or pressed the lobby's
+The remake-only per-seat aircraft screen, a shell partial. Once seat 0 has pressed FLY on the local
+lobby, pressed FLY MISSION on Instant Action with a second pilot joined, or pressed the lobby's
 Ready, each further seat picks here in player order; the lobby's walk lists the stock rows alone
 unless the host allows custom planes. `SeatPlanePage` is an `ICampaignPage` over the roster, so `CampaignBoards.For` draws it in the
 plane-selection board's shape with the seat strip over it. The picking seat's own device drives
@@ -1413,7 +1421,7 @@ fault with its section, row and file. `Schema` carries the rule for its own bump
 and the reconciliation against what the screens draw are [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalRosters.cs
-The two rosters the Original sortie screens list. `Chapters` is the shared `MenuChapters` roster
+The two rosters the Original local lobby lists. `Chapters` is the shared `MenuChapters` roster
 with a short label per code; `Airframes` is the eleven stock names in the string table's own
 order, resolved to their `planes.zbd` nodes through the Instant Action decode, so the
 name-to-node map has one home. `Roster(customs)` appends the saved custom planes through the
@@ -1453,7 +1461,7 @@ order, with `For(mode)` (Stunt Flying only the six carrying Danger Zones), `Find
 `DangerZonesFor`. The codes are separate terrain databases, not lighting variants
 ([../formats/spawns.md](../formats/spawns.md)); the flag says whether the chapter's `ia.json`
 ships a `dzones` list, which is why Stunt Flying withholds the other two. Shared so that the
-Free Flight feature, the Instant Action feature and the Original sortie screens read one roster. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`.
+Free Flight feature, the Instant Action feature and the Original local lobby read one roster. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`.
 
 ## src/UI/Menu/FreeFlightFeature.cs
 Free Flight as a shared `IMenuFeature`: the chapter
@@ -1480,7 +1488,7 @@ seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAi
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
-the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit, or a Stunt Flying one with its race toggle on through `InstantActionFeature.BuildExit`, and survive a return from flight. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
+the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit, or a Stunt Flying one with its race toggle on through `InstantActionFeature.BuildExit`, and survive a return from flight. It also holds a local Dogfight's map (`MatchChapter`) and mission rules, `MatchOptions` in the network lobby's own shape, opening on its values (`DogfightLobby.OpeningOptions`) and riding a Versus exit as `DogfightLobby.RulesOf` reads them. `Choices`
 and `BuildExit` are the typed result; a networked launch skips the minimum in `Refusal` and `BuildExit` alike, given the one answer the caller gated on. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs

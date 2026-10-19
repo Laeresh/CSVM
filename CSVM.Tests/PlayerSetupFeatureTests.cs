@@ -223,52 +223,24 @@ public class PlayerSetupFeatureTests
         Assert.Equal(new[] { 2 }, choices[1].Pads);
     }
 
-    /// <summary>The two Dogfight match rules: the shipped values are the flags' own, each steps by
-    /// one and clamps at 0 (that limit off) and its ceiling, and neither reaches the other.</summary>
+    /// <summary>A local Dogfight opens on the network lobby's own rules: 10 minutes armed and 40 in
+    /// the Score box. A local and a network Dogfight start in the same place.</summary>
     [Fact]
-    public void TheMatchRulesStepByOneAndClampAtNoLimitAndTheCeiling()
+    public void TheMatchRulesOpenOnTheNetworkLobbysOwn()
     {
         var setup = Setup();
 
-        Assert.Equal(5, PlayerSetupFeature.DefaultKillTarget);
-        Assert.Equal(5, PlayerSetupFeature.DefaultTimeLimitMinutes);
-        Assert.Equal(PlayerSetupFeature.DefaultKillTarget, setup.KillTarget);
-        Assert.Equal(PlayerSetupFeature.DefaultTimeLimitMinutes, setup.TimeLimitMinutes);
-
-        setup.StepKillTarget(1);
-        Assert.Equal(6, setup.KillTarget);
-        Assert.Equal(5, setup.TimeLimitMinutes);
-        for (int i = 0; i < 40; i++)
-        {
-            setup.StepKillTarget(-1);
-        }
-
-        Assert.Equal(0, setup.KillTarget);
-        for (int i = 0; i < 40; i++)
-        {
-            setup.StepKillTarget(1);
-        }
-
-        Assert.Equal(PlayerSetupFeature.MaxKillTarget, setup.KillTarget);
-
-        setup.StepTimeLimit(-5);
-        Assert.Equal(0, setup.TimeLimitMinutes);
-        for (int i = 0; i < 60; i++)
-        {
-            setup.StepTimeLimit(1);
-        }
-
-        Assert.Equal(PlayerSetupFeature.MaxTimeLimitMinutes, setup.TimeLimitMinutes);
+        Assert.Equal(DogfightLobby.OpeningOptions, setup.MatchOptions);
+        Assert.Equal(new VersusRules(0, 10), DogfightLobby.RulesOf(setup.MatchOptions));
+        Assert.Equal(40, setup.MatchOptions.Score);
     }
-
     /// <summary>Only a Dogfight exit carries match rules: they are that mode's, and a Free Flight
     /// exit carrying them would hand the launcher a rule nothing reads.</summary>
     [Fact]
     public void OnlyAVersusExitCarriesTheMatchRules()
     {
         var setup = Seated(2, 2);
-        setup.StepKillTarget(3);
-        setup.StepTimeLimit(-5);
+        setup.MatchOptions = setup.MatchOptions with { Victory = CSVM.Net.DogfightVictory.Score, Score = 8 };
 
         var dogfight = setup.BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>());
         var free = setup.BuildExit("C4", MenuMode.Free, _ => Array.Empty<int>());
@@ -287,7 +259,7 @@ public class PlayerSetupFeatureTests
         Assert.Equal("C4", exit.Chapter);
         Assert.Equal(MenuMode.Versus, exit.Mode);
         Assert.Null(exit.InstantAction);
-        Assert.Equal(new VersusRules(5, 5), exit.Match);
+        Assert.Equal(new VersusRules(0, DogfightLobby.DefaultTimeMinutes), exit.Match);
         Assert.Equal(2, exit.Seats.Count);
         Assert.Throws<InvalidOperationException>(() => Seated(1, 1).BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>()));
         Assert.Single(Seated(1, 1).BuildExit("C4", MenuMode.Versus, _ => Array.Empty<int>(), networked: true).Seats);
@@ -406,14 +378,14 @@ public class PlayerSetupFeatureTests
         setup.Browse(first, 2);
         setup.Select(first);
         first.Fit.SetPylon(1, "wep_14");
-        setup.StepKillTarget(2);
-        setup.StepTimeLimit(2);
+        setup.MatchOptions = setup.MatchOptions with { TimeMinutes = 20 };
+        setup.MatchChapter = "C3";
         int revision = setup.Revision;
 
         setup.Discard();
 
-        Assert.Equal(PlayerSetupFeature.DefaultKillTarget, setup.KillTarget);
-        Assert.Equal(PlayerSetupFeature.DefaultTimeLimitMinutes, setup.TimeLimitMinutes);
+        Assert.Equal(DogfightLobby.OpeningOptions, setup.MatchOptions);
+        Assert.Null(setup.MatchChapter);
 
         Assert.Single(setup.Seats);
         Assert.Same(first, setup.Seats[0]);

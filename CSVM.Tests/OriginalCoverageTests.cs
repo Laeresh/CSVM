@@ -39,6 +39,9 @@ public class OriginalCoverageTests : IDisposable
     private const string ScrapStep = "*scrap";
     private const string JoinStep = "*join";
 
+    // The driving seat's own Back, the way back for a screen whose rows a cursor cannot leave by.
+    private const string SeatBackStep = "*seatback";
+
     // The wrap-up page is opened by a flown mission's ending, not by any row, so the walk hands the
     // shell an ended run the way the presentation's return does.
     private const string WrapupStep = "*wrapup";
@@ -58,12 +61,19 @@ public class OriginalCoverageTests : IDisposable
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
 
-    // The radios a screen moves the focus off sideways, taking no value from the press. The
-    // lobby's StepSideways takes a dropdown's alone, so Right from the time radio reaches the
-    // MPL_E_TIME box and Left from Ready reaches MPL_B_TEAM. Every other radio is a value.
-    private static readonly Dictionary<OriginalScreen, HashSet<string>> RadiosThatMove = new()
+    // The radios and dropdowns a screen moves the focus off sideways, taking no value from the
+    // press. The lobby's StepSideways takes a dropdown's alone, so Right from the time radio reaches
+    // the MPL_E_TIME box and Left from Ready reaches MPL_B_TEAM. The local lobby takes none, so its
+    // map box and its rules move too. Every other radio is a value.
+    private static readonly Dictionary<OriginalScreen, HashSet<string>> RowsThatMove = new()
     {
         [OriginalScreen.Lobby] = [OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ReadyKey],
+        [OriginalScreen.FreeFlight] = [OriginalLobbyScreen.EnvironmentKey],
+        [OriginalScreen.Dogfight] =
+        [
+            OriginalLobbyScreen.EnvironmentKey, OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ScoreRadioKey,
+            OriginalLobbyScreen.LimitedLivesKey, OriginalLobbyScreen.AutoRespawnKey,
+        ],
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
@@ -88,10 +98,10 @@ public class OriginalCoverageTests : IDisposable
         new("join-board-continue", OriginalScreen.TopLevel,
             new[] { OriginalShell.JoinBoardKey, OriginalJoinBoard.ContinueKey }, Array.Empty<string>()),
         // ⚠ The cursor families walk this screen as the picking seat, not as seat 0, which drives
-        // nothing here; only the pointer stays seat 0's. ⚠ Leave the map unpicked: the way off by
-        // row is the walk's completion, which is the launch itself once FLY's gate is met.
-        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, OriginalShell.AirframeKey(0) },
-            new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", OriginalShell.BackKey }),
+        // nothing here; only the pointer stays seat 0's. ⚠ Leave by the seat's Back over the open
+        // list, which a cursor cannot walk off: the walk's completion is the launch itself.
+        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, OriginalShell.FlyKey },
+            new[] { SeatBackStep, OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey },
             new[] { OriginalGameOptionsPage.CancelKey, OriginalShell.OptionsBackKey }),
@@ -191,7 +201,9 @@ public class OriginalCoverageTests : IDisposable
         new("apply-video", null,
             new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.VideoDoorKey, OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
-        new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
+        new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
+        new("dogfight-launch", null, new[] { OriginalShell.DogfightKey, JoinStep, OriginalShell.FlyKey, OriginalShell.SeatPlaneFieldKey, "AcceptSelections" },
+            Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("campaign-launch", null, Then(Cabin, "NextMission", "GoToFlightCheck", "FlyMission"), Array.Empty<string>(), Exit: typeof(CampaignMissionExit)),
         new("purchase", OriginalScreen.InstantAction, Then(Hub, OriginalHangarScreen.ReadyKey, OriginalHangarScreen.PurchaseNowKey), new[] { OriginalInstantActionScreen.ExitKey }),
@@ -370,7 +382,7 @@ public class OriginalCoverageTests : IDisposable
             return;
         }
 
-        var seen = OriginalWalk.Reachable(rows, lists, focus, RadiosThatMove.GetValueOrDefault(shell.Screen, []));
+        var seen = OriginalWalk.Reachable(rows, lists, focus, RowsThatMove.GetValueOrDefault(shell.Screen, []));
         var stranded = Enumerable.Range(0, rows.Count)
             .Where(i => !seen.Contains(i) && OriginalFocus.IsStop(rows[i], rows, lists)).Select(i => rows[i].Key).ToList();
         Assert.True(stranded.Count == 0,
@@ -495,7 +507,7 @@ public class OriginalCoverageTests : IDisposable
 
         foreach (string key in journey.Leave)
         {
-            Assert.Null(Press(shell, family, key));
+            Assert.Null(key == SeatBackStep ? shell.StepSeat(Driver(shell), Back).Exit : Press(shell, family, key));
         }
 
         AssertHome(shell, campaign, hangar, "the way back");

@@ -84,7 +84,7 @@ public interface IOriginalScreenHost
     /// <summary>Re-reads Instant Action's Pilot Plane list off the build store.</summary>
     void RefreshInstantActionRoster();
 
-    /// <summary>Re-reads the sortie roster off the build store after it changes.</summary>
+    /// <summary>Re-reads the shared roster off the build store after it changes.</summary>
     void RefreshRosterFromStore();
 
     /// <summary>Opens the hangar, wallet-free from Instant Action's Build Custom Plane and over

@@ -42,8 +42,6 @@ internal static class MenuOriginalSuites
     private const float AuthoredGameOptionPitch = 62f;
     private const float AuthoredPlaqueY = 457f;
 
-    // How many rows the tracer's roster runs past the aircraft column's window.
-    private const int ScrollingCustoms = 3;
 
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -121,16 +119,17 @@ internal static class MenuOriginalSuites
         + "own, a pointer frame over Quit takes focus and cues the rollover, a "
         + "press on a plaque arms it and opens nothing while the pointer over it draws the active "
         + "bitmap, a release on another plaque activates neither, a "
-        + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
-        + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
+        + "click on the door opens Free Flight on the lobby's layout with its rules greyed, keyboard "
+        + "frames pick a map on Mission Options and an aircraft on Select Plane and FLY leaves as one "
+        + "LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
         + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
         + "to hold them where each row stands wholly inside one band and one band carries the pair "
         + "the canvas leaves no band for and each checkbox row's title stands on its own box's "
         + "centre line at the dropdown rows' column, and whose CANCEL CHANGES "
-        + "drops them, a wheel step over the "
-        + "aircraft column and over Instant Action's contents window moves each one row and clamps "
-        + "at the head, a drag down each thumb's track lands the window on its last row without "
+        + "drops them, a wheel step over "
+        + "Instant Action's contents window moves it one row and clamps "
+        + "at the head, a drag down its thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, "
         + "a seat whose pad drops off the roster holds it through the grace and leaves once the "
         + "device stays gone past it, the Instant Action screen reads the roster without opening "
@@ -165,10 +164,8 @@ internal static class MenuOriginalSuites
         var audio = new RecordingAudio();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
-        // The aircraft column scrolls only once the roster outruns its window. The scratch store
-        // carries enough builds past the stock airframes for the wheel and the drag to move.
-        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer-core",
-            OriginalShell.AirframeWindow - OriginalRosters.Airframes.Count + ScrollingCustoms);
+        // One build past the stock airframes, so the roster check below has a custom to compare.
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-tracer-core", 1);
         // ⚠ The debrief return below opens the campaign, so the presentation is pointed at a
         // scratch store: nothing here may read or write user://Profiles.
         string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer-core", "Profiles");
@@ -424,25 +421,35 @@ internal static class MenuOriginalSuites
         ctx.Check(audio.Cues.Contains(OriginalCues.Click), $"with a click cue ({string.Join(",", audio.Cues)})");
     }
 
-    // Keyboard frames: down the chapter column, across to the airframe column, up onto FLY.
+    // Keyboard frames on the local lobby: the map box, three rows down its list, then Select Plane's
+    // box the same way, then FLY.
     private static void Fly(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        ctx.Check(shell.FocusedKey == OriginalLobbyScreen.MissionTabKey && Row(shell, OriginalLobbyScreen.TimeKey) is { Enabled: false }
+            && Row(shell, OriginalLobbyScreen.TimeRadioKey) is { Enabled: false } && Row(shell, OriginalLobbyScreen.LimitedLivesKey) is { Enabled: false },
+            $"Free Flight opens on the lobby's Mission Options tab with the mission rules greyed ({shell.FocusedKey})");
+        WalkTo(host, seat, shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(host, seat, Accept);
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.PickedChapter == "C2", $"three rows down the chapter column and Accept picks Hollywood ({shell.PickedChapter})");
+        ctx.Check(shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight) == "C2", $"three rows down the map list and Accept picks Hollywood ({shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight)})");
         ctx.Check(host.Features.Get<FreeFlightFeature>().Chapter?.Code == "C2",
             $"and the shared feature holds the pick ({host.Features.Get<FreeFlightFeature>().Chapter?.Code})");
-        Press(host, seat, Right);
+        WalkTo(host, seat, shell, OriginalLobbyScreen.PlaneTabKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.PickedAirframe == "player_bhawk",
-            $"Right lands on the same row of the airframe column, Accept picks it ({shell.PickedAirframe})");
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        Press(host, seat, Up);
-        ctx.Check(shell.FocusedKey == OriginalShell.FlyKey, $"Up past the column's top wraps onto FLY ({shell.FocusedKey})");
+        WalkTo(host, seat, shell, OriginalLobbyScreen.PlaneKey);
+        Press(host, seat, Accept);
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.LocalLobby.Tab == LobbyTab.Plane && setup.Roster[setup.Seats[0].Cursor].Node == "player_bhawk",
+            $"Select Plane's box three rows down picks seat 0's aircraft ({setup.Roster[setup.Seats[0].Cursor].Node})");
+        WalkTo(host, seat, shell, OriginalShell.FlyKey);
+        ctx.Check(shell.FocusedKey == OriginalShell.FlyKey, $"the cursor reaches FLY ({shell.FocusedKey})");
         Press(host, seat, Accept);
         ctx.Check(exits.Count == 1 && exits[0] is LaunchExit,
             $"FLY leaves through the host as one LaunchExit ({exits.Count})");
@@ -466,8 +473,8 @@ internal static class MenuOriginalSuites
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(ReferenceEquals(before, host.Active) && host.Shown,
             $"a return shows the same Original instance again (shown={host.Shown})");
-        ctx.Check(shell.Screen == OriginalScreen.TopLevel && shell.PickedAirframe == null,
-            $"on the top level with the airframe pick dropped ({shell.Screen}, {shell.PickedAirframe ?? "none"})");
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<PlayerSetupFeature>().Seats[0].Confirmed,
+            $"on the top level with seat 0's confirmation dropped ({shell.Screen})");
         ctx.Check(exits.Count == 1, $"and nothing relaunched on the way back in ({exits.Count})");
         // The scratch store holds no such profile, so the return opens the campaign on its
         // profile screen rather than the book; menu-original-campaign drives the seated case.
@@ -479,24 +486,12 @@ internal static class MenuOriginalSuites
             $"and a top-level show closes that campaign again ({shell.Screen})");
     }
 
-    // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
-    // own record of the pad seat 0 last steered with, and the join through the feature, which is
-    // where a pad's Start lands; the per-screen rule itself is read off the shell.
-    // The pointer's wheel and thumb over the two lists this screen graph reaches: the sortie
-    // screens' aircraft column and Instant Action's contents window, each wheeled a row, dragged
-    // down its track and left back at its head, with the list's own arrows still stepping it.
+    // The pointer's wheel and thumb over Instant Action's contents window. It is wheeled a row,
+    // dragged down its track and left back at its head, the list's own arrows still stepping it.
     private static void Lists(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
         var size = ctx.Host.GetViewport().GetVisibleRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
-        Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.FreeFlight, $"the Free Flight door opens the aircraft column again ({shell.Screen})");
-        WheelAndDrag(ctx, host, seat, shell, fit, "AIRFRAMES", "the sortie screens' aircraft column");
-        ctx.Check(shell.PickedAirframe == null && shell.Screen == OriginalScreen.FreeFlight,
-            $"and the wheel and the drag picked nothing and left no screen ({shell.PickedAirframe ?? "none"}, {shell.Screen})");
-        Press(host, seat, Back);
-
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.InstantAction, $"Instant Action opens its contents window ({shell.Screen})");
@@ -553,6 +548,9 @@ internal static class MenuOriginalSuites
         ctx.Check(List(shell, key)?.Window.Top == 0, $"and the wheel brings it home ({List(shell, key)?.Window.Top})");
     }
 
+    // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
+    // own record of the pad seat 0 last steered with. The join goes through the feature, where a
+    // pad's Start lands; the per-screen rule itself is read off the shell.
     private static void Seats(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuInput player1)
     {
         var original = host.Active as OriginalPresentation;
@@ -672,6 +670,8 @@ internal static class MenuOriginalSuites
     // Deactivate discards the feature's pick, so the fresh instance the switch shows has none.
     private static void SwitchMidSetup(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
+        Press(host, seat, Accept);
+        WalkTo(host, seat, shell, OriginalLobbyScreen.EnvironmentKey);
         Press(host, seat, Accept);
         Press(host, seat, Down);
         Press(host, seat, Accept);
@@ -885,8 +885,8 @@ internal static class MenuOriginalSuites
         var shell = (host.Active as OriginalPresentation)?.Shell;
         ctx.Check(host.Selected == PresentationId.Original && reason == null && shell != null,
             $"an Original request re-selects it and Show creates a fresh instance ({host.Selected})");
-        ctx.Check(shell is { Screen: OriginalScreen.TopLevel, PickedChapter: null, FocusedKey: OriginalShell.FreeFlightKey },
-            $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.PickedChapter ?? "none"}, {shell?.FocusedKey})");
+        ctx.Check(shell is { Screen: OriginalScreen.TopLevel, FocusedKey: OriginalShell.FreeFlightKey } && shell.LocalLobby.PickedChapter(OriginalScreen.FreeFlight) == null,
+            $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.LocalLobby.PickedChapter(OriginalScreen.FreeFlight) ?? "none"}, {shell?.FocusedKey})");
         return shell;
     }
 

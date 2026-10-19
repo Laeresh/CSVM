@@ -59,7 +59,7 @@ internal static class MenuOriginalCampaignSuites
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
         + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
-        + "from the sortie roster until one EXPORT press crosses it, a purchase over a profile at the "
+        + "from the shared roster until one EXPORT press crosses it, a purchase over a profile at the "
         + "decoded slot cap is refused in the original's own words until a plane is sold back, the "
         + "screenshot aids' input script stands the pilot's plane list and the ammo screen's rocket "
         + "list open and draws them through idle frames while export is still the EXPORT press and a "
@@ -709,8 +709,8 @@ internal static class MenuOriginalCampaignSuites
             $"Back cancels the build and resumes the cabin on the row that opened it ({shell.Screen}, {shell.FocusedKey})");
     }
 
-    // The export crossing over a scratch profile store and a scratch build store of its own: a plane
-    // built with the campaign's wallet is not in the sortie roster, one EXPORT press puts it there.
+    // The export crossing over a scratch profile store and a scratch build store of its own. A plane
+    // built with the campaign's wallet is not in the shared roster; one EXPORT press puts it there.
     private static void ExportGate(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
         CampaignFeature campaign, string root)
     {
@@ -755,7 +755,7 @@ internal static class MenuOriginalCampaignSuites
             $"a build funded by the wallet is saved waiting for EXPORT ({committed}, {hangar.Message})");
         int stock = OriginalRosters.Airframes.Count;
         ctx.Check(OriginalRosters.Roster(planes.List()).Count == stock,
-            $"and the sortie roster still offers the stock airframes alone ({OriginalRosters.Roster(planes.List()).Count} of {stock})");
+            $"and the shared roster still offers the stock airframes alone ({OriginalRosters.Roster(planes.List()).Count} of {stock})");
 
         profile.SelectedPlane = profile.Planes.Count - 1;
         profiles.Save(profile);
@@ -767,7 +767,7 @@ internal static class MenuOriginalCampaignSuites
             $"the FIRST EXPORT press clears the marker in the stored record ({planes.Load(Built)?.AwaitingExport})");
         var roster = OriginalRosters.Roster(planes.List());
         ctx.Check(roster.Count == stock + 1 && roster[stock].Name == Built,
-            $"which is what puts it in the sortie roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
+            $"which is what puts it in the shared roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
         ctx.Check(wallet.OwnedBuilds().Count == 3 && profile.Planes.Count == 3,
             $"and the campaign still owns all three, the two starters included ({wallet.OwnedBuilds().Count})");
     }

@@ -211,12 +211,10 @@ internal static class MenuLaunchReturnSuites
             var fit = BoardFit.For(size.X, size.Y);
             ctx.Check(shell.Screen == OriginalScreen.FreeFlight, $"the cold start opens on the aid's screen ({shell.Screen})");
 
-            // Free Flight from the aid's screen: the first chapter, the first airframe, FLY.
-            run.Press(Accept);
-            run.Press(Right);
-            run.Press(Accept);
-            run.Press(Up);
-            run.Press(Accept);
+            // Free Flight from the aid's screen: FLY on the map box's first chapter and seat 0's
+            // first aircraft, as the local lobby opens.
+            var fly = Row(shell, OriginalShell.FlyKey)!;
+            run.Click(Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
             var launch = run.Expect<LaunchExit>();
             ctx.Check(launch is { Mode: MenuMode.Free, Chapter: "C1", Seats.Count: 1 },
                 $"FLY leaves as one Free LaunchExit for C1 with one seat ({launch?.Chapter}, {launch?.Seats.Count})");
@@ -294,18 +292,18 @@ internal static class MenuLaunchReturnSuites
 
         run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.Dogfight, $"the door opens Dogfight ({shell.Screen})");
-        run.Press(Accept);
-        run.Press(Right);
-        run.Press(Accept);
         var guest = new ScriptedSeat();
         ctx.Check(setup.Join(guest) != null && run.Host.Seats.Count == 2, $"a second seat joins ({run.Host.Seats.Count})");
+        var fly = Row(shell, OriginalShell.FlyKey)!;
+        run.Click(Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.SeatPlane, $"FLY walks the second seat through its own aircraft screen ({shell.Screen})");
         run.Press(guest, Down);
         run.Press(guest, Accept);
         run.Press(guest, Accept);
         ctx.Check(setup.Seats[1].Confirmed, $"the guest confirms through the presentation's poll");
         var dogfight = run.Expect<LaunchExit>();
-        ctx.Check(dogfight is { Mode: MenuMode.Versus, Seats.Count: 2 },
-            $"and that last confirm leaves as one Versus LaunchExit for both seats ({dogfight?.Mode}, {dogfight?.Seats.Count})");
+        ctx.Check(dogfight is { Mode: MenuMode.Versus, Seats.Count: 2, Match: { KillTarget: 0, TimeLimitMinutes: DogfightLobby.DefaultTimeMinutes } },
+            $"and that last confirm leaves as one Versus LaunchExit for both seats on the lobby's opening rules ({dogfight?.Mode}, {dogfight?.Seats.Count}, {dogfight?.Match})");
         run.Show(MenuReturnDestination.TopLevel);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && run.Host.Seats.Count == 2 && !setup.Seats[1].Locked,
             $"the return lands on the top level with both seats kept and the picks dropped ({shell.Screen}, {run.Host.Seats.Count})");

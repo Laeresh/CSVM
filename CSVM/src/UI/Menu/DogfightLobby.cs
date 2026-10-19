@@ -132,9 +132,7 @@ public sealed class DogfightLobby
 
     // Each seat's pick by its place among this machine's seats, seat 0 first.
     private readonly SeatPicked[] _picks = SeatPicked.All();
-    private DogfightOptionsMessage _options = new(
-        1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
-        false, DefaultLives, true);
+    private DogfightOptionsMessage _options = OpeningOptions;
 
     // Clear until a lobby screen first stands on a host, which ticks Allow Custom Planes (Show).
     private NetPlaneRules _rules;
@@ -163,6 +161,13 @@ public sealed class DogfightLobby
         _hostPeer = hostPeer;
         _teams = new NetTeamBook(team => _bots.Rows.Any(bot => bot.Team == team));
     }
+
+    /// <summary>The Mission Options a lobby opens on: a Deathmatch on the first environment, won on
+    /// <see cref="DefaultTimeMinutes"/> with <see cref="DefaultScore"/> in the Score box. A local
+    /// match opens on them too.</summary>
+    public static DogfightOptionsMessage OpeningOptions => new(
+        1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
+        false, DefaultLives, true);
 
     /// <summary>Whether a host lists and tells a peer on the wire. Every peer is, unless the door
     /// refused it, as it refuses a guest past its chosen cap.</summary>
@@ -609,6 +614,21 @@ public sealed class DogfightLobby
         return victory == limit ? victory : DogfightVictory.Both;
     }
 
+    /// <summary><paramref name="options"/> with the Time box at <paramref name="minutes"/>, or null
+    /// outside 1 to 99. The local lobby's box takes the same range.</summary>
+    public static DogfightOptionsMessage? WithTimeMinutes(DogfightOptionsMessage options, int minutes) =>
+        minutes is >= 1 and <= MaxTimeMinutes ? options with { TimeMinutes = (byte)minutes } : null;
+
+    /// <summary><paramref name="options"/> with the Score box at <paramref name="score"/>, or null
+    /// outside 1 to 999 and in a Stunt Race.</summary>
+    public static DogfightOptionsMessage? WithScore(DogfightOptionsMessage options, int score) =>
+        score is >= 1 and <= MaxScore && !IsStuntRace(options) ? options with { Score = (ushort)score } : null;
+
+    /// <summary><paramref name="options"/> with the Lives box at <paramref name="lives"/>, clamped to
+    /// 1..99, or null in a Stunt Race and while Limited Lives is clear.</summary>
+    public static DogfightOptionsMessage? WithLives(DogfightOptionsMessage options, int lives) =>
+        options.LimitedLives && !IsStuntRace(options) ? options with { Lives = (byte)ClampLives(lives) } : null;
+
     /// <summary>A life count held to 1..99. The original clamps nothing, so its empty box launches
     /// on 0 lives and a pilot on 0 counts as alive after its first death.</summary>
     public static int ClampLives(int lives) => Math.Clamp(lives, 1, MaxLives);
@@ -789,20 +809,17 @@ public sealed class DogfightLobby
     }
 
     /// <summary>Sets the Time box, in minutes. Refused on a guest and outside 1 to 99.</summary>
-    public bool SetTimeMinutes(int minutes) =>
-        minutes is >= 1 and <= MaxTimeMinutes && Change(_options with { TimeMinutes = (byte)minutes });
+    public bool SetTimeMinutes(int minutes) => WithTimeMinutes(_options, minutes) is { } options && Change(options);
 
     /// <summary>Sets the Score box. Refused on a guest, outside 1 to 999 and in a Stunt Race.</summary>
-    public bool SetScore(int score) =>
-        score is >= 1 and <= MaxScore && !IsStuntRace(_options) && Change(_options with { Score = (ushort)score });
+    public bool SetScore(int score) => WithScore(_options, score) is { } options && Change(options);
 
     /// <summary>Checks or clears Limited Lives. Refused on a guest and in a Stunt Race.</summary>
     public bool SetLimitedLives(bool limited) => !IsStuntRace(_options) && Change(_options with { LimitedLives = limited });
 
     /// <summary>Sets the Lives box, clamped to 1..99. Refused on a guest, in a Stunt Race and while
     /// Limited Lives is clear, which is when the box is greyed.</summary>
-    public bool SetLives(int lives) =>
-        _options.LimitedLives && !IsStuntRace(_options) && Change(_options with { Lives = (byte)ClampLives(lives) });
+    public bool SetLives(int lives) => WithLives(_options, lives) is { } options && Change(options);
 
     /// <summary>Checks or clears Auto Respawn. Refused on a guest and in a Stunt Race.</summary>
     public bool SetAutoRespawn(bool auto) => !IsStuntRace(_options) && Change(_options with { AutoRespawn = auto });

@@ -14,16 +14,16 @@ using CSVM.Utils;
 namespace CSVM.Testing;
 
 /// <summary>A local Dogfight's bot rows on the join board, over the install's decoded layout and
-/// string tables. The board adds and edits them. The Dogfight screen counts them toward its
-/// two-pilot minimum and carries them on its launch. The board is pressed in its own authored space
-/// through the shell, as the pointer reaches it.</summary>
+/// string tables. The board adds and edits them. The local Dogfight lobby lists them, counts them
+/// toward its two-pilot minimum and carries them on its launch. The board is pressed in its own
+/// authored space through the shell, as the pointer reaches it.</summary>
 internal static class MenuJoinBoardBotSuites
 {
     [Suite("menu-join-board-bots",
         "The join board's bot rows over the install's decoded layout: a lone seat's Dogfight waits for "
         + "a second pilot and its hint offers a bot; Add Bot lists a row named from the shipped pilot "
         + "names; the row's Edit Bot panel puts it on a stock Fury at ace; Fill to fills the field to "
-        + "its count; the Dogfight screen's strip names the bots, FLY stands for the one seat, and the "
+        + "its count; the local Dogfight lobby's player list names the bots, FLY stands for the one seat, and the "
         + "launch carries the seat and every bot row in order")]
     internal static void JoinBoardBots(TestContext ctx)
     {
@@ -121,8 +121,8 @@ internal static class MenuJoinBoardBotSuites
     private static void FlyWithTheBots(TestContext ctx, OriginalShell shell, PlayerSetupFeature setup)
     {
         Pick(shell, ctx.Chapter);
-        ctx.Check(HasLine(shell, OriginalShell.BotStripLine(setup.Bots.Count)) && HasLine(shell, "FLY when ready"),
-            $"the Dogfight strip names the bots and the hint says FLY");
+        ctx.Check(setup.Bots.Rows.All(b => HasLine(shell, b.Callsign)) && HasLine(shell, "+ 3 bots") && HasLine(shell, OriginalLocalLobby.ReadyHint),
+            $"the player list names every bot, its header counts them, and the hint says the match is ready");
         var fly = Row(shell, OriginalShell.FlyKey);
         ctx.Check(fly.Enabled, $"FLY stands for the one seat beside its bots");
         var launch = Click(shell, fly).Exit as LaunchExit;
@@ -134,12 +134,13 @@ internal static class MenuJoinBoardBotSuites
             $"and carries every bot row in order, the edited one on its Fury at ace and the rest Random ({string.Join(", ", bots.Select(b => $"{b.Callsign}:{b.Plane ?? "random"}:{b.Skill}"))})");
     }
 
-    // The Dogfight screen with a map and seat 0's first aircraft picked.
+    // The local Dogfight lobby with its map picked off the map list.
     private static void Pick(OriginalShell shell, string chapter)
     {
-        shell.Open(OriginalScreen.Dogfight);
-        Press(shell, chapter);
-        Press(shell, OriginalShell.AirframeKey(0));
+        shell.LocalLobby.Enter(OriginalScreen.Dogfight);
+        int map = OriginalRosters.Chapters.ToList().FindIndex(c => c.Code == chapter);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey);
+        Press(shell, OriginalLobbyScreen.EnvironmentKey + ":" + map.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static OriginalRow Row(OriginalShell shell, string key) => shell.Rows.Single(r => r.Key == key);

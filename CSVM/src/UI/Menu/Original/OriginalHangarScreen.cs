@@ -1150,7 +1150,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         if (_hangar.Wallet == null)
         {
             // Wallet-free the removal is a delete, and there is nowhere to export to. The export
-            // door's own store is the one the sortie pickers already read. So the Export row is
+            // door's own store is the one the shared pickers already read. So the Export row is
             // not built at all rather than built dead, and Sell takes the delete word.
             Relabel(rows, InventorySellKey, DeleteLabel);
         }
