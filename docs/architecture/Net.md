@@ -390,7 +390,7 @@ guest's own rows marked (its first and how many seats it was given), and `LobbyC
 `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
 team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
 session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.
-Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`, which outside a match carries an owner's own return from a death instead. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetRaceMessages.cs
 A network stunt race's four session messages, all reliable. `RaceCallMessage` (`NetRaceCall`) is the window's end one machine decides for the rest: the host's rerun and return to the lobby, a guest's leaving. `RaceRunMessage` is one event of a

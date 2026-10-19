@@ -947,6 +947,16 @@ still-closed window, which refuses it. A round trip measured across the held sta
 since neither clock moves while held, so a guest asks the host's clock again on its first flown
 step.
 
+**A return from a crash.** A race builds no Dogfight match, so no host grants a return: each owner
+places its own, a tap at the exit of the zone cleared last or a rerun to the shared spawn. Its
+death goes out as the death report (`0x12`), which plays the wreck on every other machine, and its
+return from that death as Zeppelin vs Zeppelin's placed return (`0x65`, "Capture the Flag" below)
+at the pose it took, the heading its nose's yaw. A guest sends it to the host, which takes it only
+from the machine flying that seat and relays it to the other guests. Every copy of that seat
+leaves its wreck there and its owner's poses fly it on, so a pose alone never ends a copy's wreck.
+A return in flight sends nothing, since the poses carry it. The same holds in every network
+session without a match.
+
 **Wire compatibility.** A build without these ids drops them as unknown. Builds share a lobby only
 on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.
 
@@ -1383,7 +1393,7 @@ events, and its `0x1f` and `0x20` part deaths ride the pool events as every dest
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x65` | Spawn at | reliable, host to all | the seat at 4, three reserved bytes, the position as three floats at 8, the heading in degrees at 20 (24 bytes) |
+| `0x65` | Spawn at | reliable, host to all in a match; outside one, the seat's owner to all, through the host | the seat at 4, three reserved bytes, the position as three floats at 8, the heading in degrees at 20 (24 bytes) |
 
 ### LAN discovery
 

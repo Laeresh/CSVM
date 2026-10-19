@@ -391,6 +391,18 @@ internal sealed class SessionNet
             net.On<Net.DeathNoticeMessage>((_, notice) => _dogfight?.TakeDeathNotice(notice));
         }
 
+        // Outside a match no host grants a return. Each owner places its own and names it in the
+        // match's placed-return word, so every copy of its wreck flies again there.
+        if (dogfight == null)
+        {
+            net.On<Net.SpawnAtMessage>((_, spawn) => TakeReturn(spawn));
+            if (net.IsHost)
+            {
+                net.RequireSeatOwner<Net.SpawnAtMessage>(spawn => spawn.Seat);
+                net.RelayToOthers<Net.SpawnAtMessage>();
+            }
+        }
+
         for (int i = 0; i < _seatRigs.Count && i < Seats.Count; i++)
         {
             WireSeatCombat(i);
@@ -803,7 +815,52 @@ internal sealed class SessionNet
         // down only when this report plays the wreck there.
         if (_dogfight == null)
         {
-            rig.Downed += (_, killer) => ReportDeath(seat, killer);
+            // Only a return from a death is reported. One in flight reaches the copies by its poses.
+            bool down = false;
+            rig.Downed += (_, killer) =>
+            {
+                down = true;
+                ReportDeath(seat, killer);
+            };
+            rig.Respawned += () =>
+            {
+                if (down)
+                {
+                    down = false;
+                    ReportReturn(seat, rig);
+                }
+            };
+        }
+    }
+
+    // A seat flown here is back from its death, at the pose its own return placed it on.
+    private void ReportReturn(int seat, FlightController rig)
+    {
+        if (Link is not { } net)
+        {
+            return;
+        }
+
+        var nose = rig.NoseDirection;
+        var spawn = new Net.SpawnAtMessage((byte)seat, rig.WorldPosition, Mathf.RadToDeg(Mathf.Atan2(-nose.X, -nose.Z)));
+        if (net.IsHost)
+        {
+            net.Broadcast(spawn, Net.NetChannels.Events);
+        }
+        else
+        {
+            net.Send(net.HostPeer, spawn, Net.NetChannels.Events);
+        }
+    }
+
+    // A return somebody else's machine reported: the copy leaves its wreck there, and its owner's
+    // poses fly it on from that step. Never on a pose alone, which keeps arriving through a death.
+    private void TakeReturn(in Net.SpawnAtMessage spawn)
+    {
+        if (spawn.Seat < _seatRigs.Count && _seatRigs[spawn.Seat].Controller is { RemoteOwned: true } copy)
+        {
+            var point = new SpawnPoint(spawn.Position, spawn.HeadingDeg);
+            copy.RespawnAt(point.Position, point.Position + point.Forward);
         }
     }
 

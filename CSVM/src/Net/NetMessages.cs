@@ -951,10 +951,11 @@ public readonly record struct SpawnMessage(byte Seat, NetSpawnKind Kind, ushort 
 }
 
 /// <summary>
-/// Where the host has placed a seat on its return, as a point and a heading in degrees rather than
-/// a table entry. Reliable, and the answer to a <see cref="SpawnRequestMessage"/> where the return
-/// is computed. That is Zeppelin vs Zeppelin's, off the field and the seat's own hull
-/// (<c>docs/org/multiplayer-zvz.md</c>).</summary>
+/// Where a seat came back, as a point and a heading in degrees rather than a table entry. Reliable.
+/// In a match it is the host's answer to a <see cref="SpawnRequestMessage"/> where the return is
+/// computed. That is Zeppelin vs Zeppelin's, off the field and the seat's own hull
+/// (<c>docs/org/multiplayer-zvz.md</c>). Outside a match it is the owner's own return from a death,
+/// a Stunt Race's tap or rerun, relayed by the host.</summary>
 public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float HeadingDeg)
     : INetMessage<SpawnAtMessage>
 {
