@@ -37,7 +37,7 @@ internal static class SpectateHandoff
             // A pilot still flying (a race's finished run) leaves the cockpit and its HUD, as a wreck
             // does at the crash cut. Its aeroplane flies on as trimmed: the pane's controls are the camera's.
             pilot.SetViewedFromOutside(true);
-            pilot.SetPilotHudVisible(false);
+            pilot.SetSpectatorHud(true);
             pilot.ControlHold = FlightControlHold.All;
         }
 
@@ -104,7 +104,7 @@ internal static class SpectateHandoff
 
             pilot.Spectating = false;
             pilot.CameraOwned = false;
-            pilot.SetPilotHudVisible(true);
+            pilot.SetSpectatorHud(false);
             pilot.SetViewedFromOutside(false);
         }
     }

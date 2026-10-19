@@ -54,6 +54,23 @@ public sealed partial class StuntRunHud : Control
     /// <summary>Whether the status line and the leaderboard line draw this frame.</summary>
     public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
 
+    /// <summary>Set while this pane spectates the race: the racer it watches, or null on a free
+    /// camera. Read afresh each frame, so the name follows the spectator's target key.</summary>
+    public Func<Racer?>? WatchedRacer { get; set; }
+
+    /// <summary>The line under the leaderboard naming the racer watched, or null for none.</summary>
+    public string? WatchingLine => WatchedRacer?.Invoke() is { } racer ? $"WATCHING {racer.Callsign}" : null;
+
+    /// <summary>The status lines' font size at HUD scale <paramref name="s"/>, never rounded down
+    /// to 0, since a quarter-height 4P pane scales hard.</summary>
+    public static int StatusFontSize(float s) =>
+        Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
+
+    /// <summary>The top of status line <paramref name="line"/> (0 the run status, 1 the leaderboard,
+    /// 2 the racer watched) at HUD scale <paramref name="s"/>, each line <paramref name="lineHeight"/> tall.</summary>
+    public static float LineTop(int line, float s, float lineHeight) =>
+        ((RefStatusY + (line * RefRaceLineGap)) * s) + (line * lineHeight);
+
     /// <summary>Binds the run and subscribes to the completion flash. Add to the HUD canvas;
     /// nothing needs feeding per frame.</summary>
     public static StuntRunHud Build(StuntMission mission)
@@ -87,16 +104,16 @@ public sealed partial class StuntRunHud : Control
         if (s <= 0f)
             return;
         var font = ChromeType.Face(this);
-        // Never round a scaled font down to 0, a quarter-height 4P pane scales hard.
-        int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
+        int statusFont = StatusFontSize(s);
         int bannerFont = Mathf.Max(1, Mathf.RoundToInt(RefBannerFont * s));
+        float lineHeight = font.GetHeight(statusFont);
         float cx = Size.X / 2f;
 
         // Run-status: elapsed time + zones done, top-centre under the compass tape.
         bool status = StatusShown;
         if (status)
         {
-            DrawLines(font, new Vector2(cx, RefStatusY * s),
+            DrawLines(font, new Vector2(cx, LineTop(0, s, lineHeight)),
                 new[] { $"{StuntMission.FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}" },
                 statusFont, HudBlue, topAnchored: true);
         }
@@ -105,10 +122,19 @@ public sealed partial class StuntRunHud : Control
         // between the compass tape and the message slots.
         if (status && Race != null)
         {
-            float y = (RefStatusY + RefRaceLineGap) * s + font.GetHeight(statusFont);
-            DrawLines(font, new Vector2(cx, y), new[] { Race.LeaderboardLine(PlayerIndex) },
+            DrawLines(font, new Vector2(cx, LineTop(1, s, lineHeight)), new[] { Race.LeaderboardLine(PlayerIndex) },
                 statusFont, HudBlue, topAnchored: true);
+            // Centred on the pane's width like the leaderboard's leader name, so no name box scrolls.
+            if (WatchingLine is { } watching)
+            {
+                DrawLines(font, new Vector2(cx, LineTop(2, s, lineHeight)), new[] { watching },
+                    statusFont, HudBlue, topAnchored: true);
+            }
         }
+
+        // A spectating pane's middle belongs to the racer it watches: no banner, flash or count.
+        if (WatchedRacer != null)
+            return;
 
         // One-shot intro banner (fades over the last second of its window).
         if (_mission.Elapsed < IntroDuration && !_mission.AllComplete && _mission.IntroLine.Length > 0)

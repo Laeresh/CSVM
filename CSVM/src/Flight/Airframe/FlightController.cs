@@ -550,9 +550,10 @@ public partial class FlightController : Node3D
                                                  // since it re-aims at the falling wreck
     private FlightController? _watchedPrev;      // the aircraft last frame's spectating view held
     private Camera3D? _viewCamera;
-    private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
+    private CanvasLayer? _hudCanvas;             // the whole HUD layer; ApplyHudCanvas hides it (the
                                                  // original's crash camera shows no HUD, footage);
                                                  // never built on an AI rig
+    private bool _staticCamera;                  // a crash or death camera holds the view (ApplyHudCanvas)
     private CanvasLayer? _messageCanvas;         // the message stack's own layer, which the crash
                                                  // hide above deliberately leaves up
     private Vector3 _spawnPos;
@@ -1422,8 +1423,8 @@ public partial class FlightController : Node3D
         }
         _sweep.Reset();
         _grazeReactionCooldown = 0f;
-        if (_hudCanvas != null)
-            _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
+        _staticCamera = false;   // flying again
+        ApplyHudCanvas();
         // ⚠ An INERT airframe must stay off-screen and off the aircraft layer through a respawn too.
         // Setup() calls Respawn before _Ready builds the body, so this is also that first assertion.
         ApplyPresence();
@@ -1797,6 +1798,16 @@ public partial class FlightController : Node3D
     /// <summary>Photo mode's forward onto <see cref="FlightHud.SetVisible"/>: the session drives it
     /// per rig and holds no HUD of its own.</summary>
     public void SetPilotHudVisible(bool visible) => _pilotHud.SetVisible(visible);
+
+    /// <summary>A spectating pane's HUD (<see cref="FlightHud.SetSpectatorView"/>), up over a wreck
+    /// too. A stunt run HUD names the racer <paramref name="watchedRacer"/> answers.</summary>
+    public void SetSpectatorHud(bool on, Func<Racer?>? watchedRacer = null)
+    {
+        _pilotHud.SetSpectatorView(on);
+        if (_pilotHud.StuntRun is { } runHud)
+            runHud.WatchedRacer = on ? watchedRacer : null;
+        ApplyHudCanvas();
+    }
 
     /// <summary>Photo mode takes this pane: the pause key goes silent until
     /// <see cref="EndPhotoMode"/> (<see cref="SeatPause.BeginPhotoMode"/>).</summary>
@@ -3453,9 +3464,17 @@ public partial class FlightController : Node3D
     // shows none) and no first-person dressing, since all of them are outside vantages.
     private void HideHudForStaticCamera()
     {
-        if (_hudCanvas != null)
-            _hudCanvas.Visible = false;
+        _staticCamera = true;
+        ApplyHudCanvas();
         LeaveFirstPerson();
+    }
+
+    // The HUD layer's one rule: down under a static camera, but for a spectator's view. That
+    // stays up over a wreck and over a held aeroplane's crash alike.
+    private void ApplyHudCanvas()
+    {
+        if (_hudCanvas != null)
+            _hudCanvas.Visible = !_staticCamera || _pilotHud.SpectatorView;
     }
 
     // The crash camera is an external vantage, so the first-person hiding comes off with the cut.

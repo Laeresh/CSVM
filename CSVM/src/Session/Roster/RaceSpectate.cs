@@ -67,7 +67,9 @@ internal sealed class RaceSpectate
                 continue;
             if (!SpectateHandoff.Begin(pane, running, _worldRoot, Candidates, _cameras, out var follow))
                 continue;
-            _watchers[pane] = _cameras[^1];
+            var watcher = _cameras[^1];
+            _watchers[pane] = watcher;
+            pilot.SetSpectatorHud(true, () => watcher.Follow is FlightController watched ? _race.Of(watched.PlayerIndex) : null);
             Log.Info("flight", $"stunt race: P{pilot.PlayerIndex + 1} is out of a run in the final run, spectating P{follow!.PlayerIndex + 1}");
         }
     }

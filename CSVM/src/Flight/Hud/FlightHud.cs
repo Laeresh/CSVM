@@ -207,6 +207,7 @@ public sealed class FlightHud
     private Label? _text;                        // the flight text block; never on an AI rig, nor while TextBlockEnabled is off
     private bool _shown = true;                  // SetVisible: off in a cutscene and in photo mode
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
+    private bool _spectatorView;                 // SetSpectatorView: on while a race pane spectates
     private bool _cockpitView;                   // the cockpit interior is on the screen this frame
     private float _textScale = -1f;              // last applied HudMetrics scale (window and pane)
     private float _textLeft = -1f;               // last applied reading-box left edge (0 at 16:9)
@@ -243,6 +244,9 @@ public sealed class FlightHud
     /// <see cref="FlightHudState.StuntStatusLine"/>: only where there is a text block to hold it
     /// and no run HUD, which normally carries it instead.</summary>
     public bool NeedsStuntStatusLine => _text != null && StuntRun == null;
+
+    /// <summary>Whether the pane shows a spectator's view, see <see cref="SetSpectatorView"/>.</summary>
+    public bool SpectatorView => _spectatorView;
 
     /// <summary>Height over ground from the last <see cref="StepAgl"/>, or
     /// <see cref="float.MaxValue"/> where the ray reached nothing (or there are no dials to hold
@@ -542,11 +546,20 @@ public sealed class FlightHud
         ApplyVisibility();
     }
 
+    /// <summary>A spectator's view: every readout and the message stack off, the stunt run HUD
+    /// alone left up. A race pane spectating keeps its race clock that way. <see cref="SetVisible"/>
+    /// still hides the run HUD too.</summary>
+    public void SetSpectatorView(bool on)
+    {
+        _spectatorView = on;
+        ApplyVisibility();
+    }
+
     /// <summary>Whether the cockpit interior is on the screen this frame. Its own panel carries
     /// the dials, so the screen-space dials, the compass tape and the text block come off while it
-    /// is; the pipper and the marker HUDs stay, since the panel has no counterpart for them. Keyed
-    /// to the frame's pose, the same rule the interior itself follows, so a look-behind or a held
-    /// numpad view brings the overlay back with the outside camera. Independent of the two
+    /// is. The pipper and the marker HUDs stay, since the panel has no counterpart for them. It is keyed
+    /// to the frame's pose, the rule the interior itself follows. A look-behind or a held
+    /// numpad view therefore brings the overlay back with the outside camera. Independent of the three
     /// switches above: leaving the cockpit never overrides a cutscene's or photo mode's hide.</summary>
     public void SetCockpitView(bool cockpitView)
     {
@@ -658,15 +671,17 @@ public sealed class FlightHud
         return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
 
-    // The three switches composed onto each node: the cockpit view takes the overlay off, the
-    // spectate switch the instruments, and the session-level hide everything.
+    // The four switches composed onto each node. The cockpit view takes the overlay off and the
+    // spectate switch the instruments. The spectator's view takes all but the run HUD, and the
+    // session-level hide takes everything.
     private void ApplyVisibility()
     {
-        bool overlay = _shown && !_cockpitView;
+        bool readouts = _shown && !_spectatorView;
+        bool overlay = readouts && !_cockpitView;
         if (Gauges != null)
             Gauges.Visible = overlay && _instrumentsShown;
         if (Reticle != null)
-            Reticle.Visible = _shown && _instrumentsShown;
+            Reticle.Visible = readouts && _instrumentsShown;
         if (Compass != null)
             Compass.Visible = overlay;
         if (_text != null)
@@ -674,13 +689,13 @@ public sealed class FlightHud
         if (StuntRun != null)
             StuntRun.Visible = _shown;
         if (TargetHud != null)
-            TargetHud.Visible = _shown;
+            TargetHud.Visible = readouts;
         if (MessageStack != null)
-            MessageStack.Visible = _shown; // screen-space, so the cockpit panel does not replace it
+            MessageStack.Visible = readouts; // screen-space, so the cockpit panel does not replace it
         if (AutoDock != null)
-            AutoDock.Visible = _shown;     // a message, not an instrument: the panel carries no twin
+            AutoDock.Visible = readouts;   // a message, not an instrument: the panel carries no twin
         if (CrashPrompt != null)
-            CrashPrompt.Visible = _shown;  // a cutscene and photo mode take it; the crash cut cannot
+            CrashPrompt.Visible = readouts; // a cutscene and photo mode take it; the crash cut cannot
     }
 
     // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down. With

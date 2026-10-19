@@ -817,7 +817,7 @@ The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`:
 zones-cleared status line, in a race the live leaderboard on the line under it
 (`StuntRace.LeaderboardLine`: the window clock or FINAL RUN, place, the leader's best, the gap),
 the one-shot intro banner, the zone-cleared flash, the completion banner (in a race this run
-against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). The status and leaderboard lines step aside while `StatusHiddenWhile` answers true, which `HumanFlightAdapter` sets to the seat's held scores. It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
+against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). The status and leaderboard lines step aside while `StatusHiddenWhile` answers true, which `HumanFlightAdapter` sets to the seat's held scores. While the pane spectates a race, `WatchedRacer` names the racer watched on a third line (`WatchingLine`) and no banner, flash or count draws. It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
 
 ## src/Flight/Modes/StuntCapture.cs
@@ -1332,7 +1332,7 @@ dials and their two weapon gauges, the gun pipper, the stunt marker, the targeti
 message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block.
 The text block is remake-only telemetry the original has no counterpart for, built only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
-crash camera leaves up. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
+crash camera leaves up. `SetSpectatorView` leaves the stunt run HUD alone up, the message stack off too, for a spectating pane. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
 `ComposeTextLines`, and both prompt gates and composers). Both composers return a `UI/Boards/ControlLine.cs` filled through the message table's own `%1` slot, so the seat's control reaches the line as words or as a glyph without either composer knowing which.
 

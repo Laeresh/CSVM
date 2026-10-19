@@ -63,7 +63,8 @@ internal static class NetStuntRaceSuites
         + "guest's; both boards agree on the order and the best splits before and after a final run; a "
         + "guest run finished after time up counts while the guest's restart there is refused; the "
         + "guest, out of a run, then spectates the host's copy after the crash camera's time, its own "
-        + "aeroplane taking no input and its target key offering only the racers still in a run; the "
+        + "aeroplane taking no input and its target key offering only the racers still in a run, its run "
+        + "HUD up alone and naming the host's pilot while the lock holds; the "
         + "guest's race does not end at its own cap but on the host's, after the host's race has ended")]
     internal static void ANetworkRaceKeepsOneBoard(TestContext ctx)
     {
@@ -124,7 +125,8 @@ internal static class NetStuntRaceSuites
         + "a tap with the run kept, and after either return the other machine's copy, a wreck until then, "
         + "flies again near its owner; in the final run the tap in flight is refused and a crash stays "
         + "down, stopping its run on the host, and past the crash camera's time the host's pane "
-        + "spectates the guest's copy, in play there; the last one ends the race on both machines")]
+        + "spectates the guest's copy, in play there, its run HUD naming the guest's pilot; the last one "
+        + "ends the race on both machines")]
     internal static void ANetworkRaceRespawnsInFlight(TestContext ctx)
     {
         const string cell = "respawn";
@@ -315,6 +317,10 @@ internal static class NetStuntRaceSuites
             && watcher?.LockCandidates?.Invoke() is { Count: 1 } offered && ReferenceEquals(offered[0], guestCopy);
         ctx.Check(onCrashCamera && handed && !s.Guest.Spectating && s.HostRace.Of(1)!.InRun,
             $"[{cell}] the host's pane holds the crash camera for its time, then spectates the guest's copy, in play here after the guest's earlier crashes, the guest's own pane flying on (crash camera first={onCrashCamera}, copy in play={copyFlies}, spectating={s.Host.Spectating}, following the copy={ReferenceEquals(watcher?.Follow, guestCopy)}, guest spectating={s.Guest.Spectating})");
+        var hostHud = s.Host.PilotHud.StuntRun;
+        string guestName = s.HostRace.Of(1)!.Callsign;
+        ctx.Check(hostHud is { StatusShown: true } && hostHud.IsVisibleInTree() && hostHud.WatchingLine == $"WATCHING {guestName}",
+            $"[{cell}] the host's spectating pane keeps its run HUD over its wreck and names the guest's pilot it watches ({hostHud?.IsVisibleInTree()}, '{hostHud?.WatchingLine}', guest '{guestName}')");
 
         s.Guest.DebugForceCrash();
         Press(s.Peers, new[] { s.Guest }, TapFrames);
@@ -764,10 +770,18 @@ internal static class NetStuntRaceSuites
         ctx.Check(!early && guest.Spectating && waited >= due - 3 && ReferenceEquals(watcher?.Follow, hostCopy)
                   && guest.ControlHold == FlightControlHold.All && !host.Spectating,
             $"[{cell}] the guest, its run finished while the host's pilot flies on, spectates the host's copy after the crash camera's time, its own aeroplane taking no input, and the host's pane flies on ({waited} steps of {due}, following the copy={ReferenceEquals(watcher?.Follow, hostCopy)}, hold {guest.ControlHold}, host spectating={host.Spectating})");
+        var runHud = guest.PilotHud.StuntRun;
+        string hostName = guestRace.Of(0)!.Callsign;
+        string? named = runHud?.WatchingLine;
         watcher?.FollowNode(null);
+        string? released = runHud?.WatchingLine;
         watcher?.PressLockForTest();
         ctx.Check(offered is { Count: 1 } && ReferenceEquals(offered[0], hostCopy) && ReferenceEquals(watcher!.Follow, hostCopy),
             $"[{cell}] its target key offers the racers still in a run, the host's copy and not its own aeroplane still flying, and locks back onto it ({offered?.Count} offered)");
+        ctx.Check(runHud is { StatusShown: true } && runHud.IsVisibleInTree() && runHud.Race == guestRace
+                  && guest.PilotHud.MessageStack is not { Visible: true }
+                  && named == $"WATCHING {hostName}" && released == null && runHud.WatchingLine == named,
+            $"[{cell}] the guest's spectating pane keeps its run HUD alone, the race clock, and names the host's pilot it watches, the name following the lock off and back ({runHud?.IsVisibleInTree()}, '{named}' then '{released}' then '{runHud?.WatchingLine}', host '{hostName}')");
 
         // The race-presence rule keeps every race body off the aircraft layer, so no ram can happen.
         var pair = new[] { guest, hostCopy, host, peers[0].SeatRigs[1].Controller! };
