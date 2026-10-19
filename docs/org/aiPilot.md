@@ -216,8 +216,8 @@ same code, so both take an incoming torpedo on the same terms.
 - **The win.** Strict `<` against the running minimum, as every pass takes it, so a tie keeps the
   earlier list's candidate. A projectile that wins returns at once, but it can only win by beating
   every vehicle, turret and structure already walked: the early return is the return order, not a
-  priority. Against an AI aeroplane's `target_bias` of `-100.0`, a torpedo wins only when it is
-  100 m nearer, and against a `struct_bias` of `-200.0` structure, 200 m nearer.
+  priority. Against an aeroplane on a wingman def, whose `target_bias` is `-100.0`, a torpedo wins
+  only when it is 100 m nearer, and against a `struct_bias` of `-200.0` structure, 200 m nearer.
 
 The turret's own cost function weights a round differently; see
 [`targeting.md`](targeting.md) "The picker's cost". CSVM's `GunnerAcquisition` ranks the round through
@@ -233,8 +233,9 @@ entity in `FUN_00475820`, `def+0x138` to `+0x340` and `def+0x13c` to `+0x344`
 both at `0x004b088e`/`0x004b0894`, so a def that authors neither spends nothing.
 
 - **`target_bias`, candidate `+0x340`,** added when this entity is the candidate and only on the
-  `TargetVehicle` arm. Shipped: `-300.0` on `player_pfighter`, `-100.0` on the twelve wingman
-  defs (`wingman`, `wbloodhawk` and their siblings, not every AI aeroplane), and unauthored on `patrolboat`, `t_truck` and every zeppelin.
+  `TargetVehicle` arm. Shipped: `-300.0` on `player_airplane`, which every human's def inherits,
+  `-100.0` on the twelve wingman defs (`wingman`, `wbloodhawk` and their siblings, not every AI
+  aeroplane), and unauthored on `patrolboat`, `t_truck` and every zeppelin.
 - **`struct_bias`, scorer `+0x344`,** added to every turret and structure candidate and to no
   aircraft. Shipped: `-200.0` on eleven aeroplane defs, unauthored elsewhere.
 

@@ -667,7 +667,7 @@ covers it.
   zero.** One `_Process(6.0)` on the host moved the guests' `NetClockSlew` target to 6.000 s.
 - **INSTR-94**, **Hand a suite that reads a `user://` store a scratch store, and prove nothing reads
   the production one by making its accessor throw for one run.** `menu-original-tracer-core`'s
-  aircraft column scrolled only on a profile holding a saved custom plane.
+  sortie-screen aircraft column scrolled only on a profile holding a saved custom plane.
 - **INSTR-95**, **Measure a draw-order overpaint against the same pose with the suspect surface
   forced first, never by counting pixels equal to the backdrop: a sub-one alpha paints over an edge
   without erasing it.** A C1 ground strip read 0 erased pixels and 1125 reordered ones.

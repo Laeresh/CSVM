@@ -552,7 +552,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, the one place a pad signs onto a seat, and a Dogfight's bot rows.
 - `src/UI/Menu/Original/OriginalBotPanel.cs`, the join board's bot rows: the Bots block with Add Bot and Fill to, and the Edit Bot panel in the lobby's bot faces.
 - `src/UI/Menu/Original/OriginalSeats.cs`, the seat rules every Original screen shares (a `partial`): joining, a later seat's frame, the campaign strip.
-- `src/UI/Menu/Original/OriginalLocalLobby.cs`, the local Free Flight and Dogfight screens on the Multiplayer Lobby's layout: the map, the rules, seat 0's aircraft, FLY.
+- `src/UI/Menu/Original/OriginalLocalLobby.cs`, the local Free Flight and Dogfight screens on the Multiplayer Lobby's layout as one standalone module: the map, the rules, seat 0's aircraft, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs`, the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
 - `src/UI/Menu/Original/OriginalInstantActionScreen.cs`, the Instant Action screen and its Weapon Loadout as one standalone module: the contents list, dropdowns, enemy pages, the Build door, and the decoded ammo chrome over one aeroplane's fit.
 - `src/UI/Menu/Original/OriginalWrapupScreen.cs`, the Instant Action wrap-up page as one standalone module: one ended mission's frozen numbers on the notepad, prints that open full size, CONTINUE back to the screen.

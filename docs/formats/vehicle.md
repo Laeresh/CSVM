@@ -767,9 +767,10 @@ entity's `+0x340` and `def+0x13c` to `+0x344` (`FUN_00475820`), and the picker a
 this entity's own rank when it is a candidate vehicle and the scorer's `+0x344` to every turret
 and structure candidate. Both go in raw, in the same rank units as metres of distance, so the
 ranking's `1200` weight scale does not touch them. ⚠ **Both are authored NEGATIVE and the rank is
-MINIMISED, so both attract.** `target_bias` is `-300.0` on `player_pfighter` and `-100.0` on the
-twelve wingman defs (`wingman`, `wbloodhawk` and their siblings), unauthored on `patrolboat`, `t_truck` and the zeppelins; `struct_bias` is
-`-200.0` on eleven aeroplane defs and unauthored elsewhere. The net effect is that an aeroplane
+MINIMISED, so both attract.** `target_bias` is `-300.0` on `player_airplane` (every human's def
+inherits it) and `-100.0` on the twelve wingman defs (`wingman`, `wbloodhawk` and their siblings),
+unauthored on `patrolboat`, `t_truck` and the zeppelins; `struct_bias` is `-200.0` on eleven
+aeroplane defs and unauthored elsewhere. The net effect is that an aeroplane
 authoring both ranks an equidistant structure about 100 m ahead of an equidistant AI aeroplane.
 The vehicle constructor zeroes both, so an unauthored def spends nothing, and a turret's own picker
 passes a literal `0` in place of `struct_bias`. CSVM reads both into
