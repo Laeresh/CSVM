@@ -718,7 +718,7 @@ box's keystroke and reject sounds are attached to (Original plays `MOUSEOVER` an
 a plaque, nothing on a row or a scrap, `ENTERTEXT` per taken character and `ENTERTEXT_ERROR` per
 refused one); whether REPLAY BRIEFING restarts the narration from its start (never pressed;
 Original begins the wav again) and whether leaving the briefing cuts the voice (Original ends it
-and lifts the music duck); whether a mission's end starts any narration on the book (Original
+and brings back the music its stay held silent); whether a mission's end starts any narration on the book (Original
 starts none); whether a scrap whose region column reads `0,0,0,0` is clickable on its picture
 (Original hit-tests the picture's bounds); the delete confirm (never pressed; Original focuses
 Yes); and whether any keyboard or pad focus exists on these screens at all and where Back lands

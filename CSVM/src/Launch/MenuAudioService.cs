@@ -9,15 +9,12 @@ using Godot;
 namespace CSVM.Launch;
 
 /// <summary>
-/// The menu host's <see cref="IMenuAudio"/> over the process's own playback: the music channel
-/// and the sound archive <c>Launcher</c> already keeps, plus the briefing narration player, which
-/// used to be the launchscreen's, and a cue player for the menu's own sounds. Narration ducks the
-/// music for as long as it is begun and lifts the duck on end, the whole-stay duck the briefing
-/// asks for; a missing stream is silence, not a refusal. A cue resolves through
-/// <see cref="MenuCueTable"/> to a wav under the extracted rof tree's sounds folder, decoded once
-/// and replayed from the start on every ask; a name the table lacks or a file the tree lacks is
-/// logged once and stays silent. A mix page's live preview lands here too: the page states four
-/// levels and which one moved, this applies them and sounds that category's own clip.
+/// The menu host's <see cref="IMenuAudio"/> over the process's own playback: the music channel,
+/// the briefing narration player and a cue player. Narration ducks the music to silence until it
+/// ends, the whole-stay silence the briefing asks for, and a missing stream is silence too. A cue
+/// resolves through <see cref="MenuCueTable"/> to a wav under the extracted sounds folder, decoded
+/// once and replayed from the start on every ask. A name or file the install lacks is logged once
+/// and stays silent. A mix page's live preview applies its levels and sounds the moved category.
 /// </summary>
 public sealed partial class MenuAudioService : Node, IMenuAudio
 {

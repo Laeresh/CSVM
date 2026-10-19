@@ -363,8 +363,8 @@ around rectangles the layout authors at differing widths.
 ## Audio
 
 `IMenuAudio` (`CSVM/src/UI/Menu/IMenuAudio.cs`): `Cue(MenuCue)` plays one semantic cue by name,
-`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
-`EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
+`BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music to
+silence, `EndNarration()` stops it and brings the music back, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
 mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
 service (`MenuAudioService`, `CSVM/src/Launch/MenuAudioService.cs`) owns lookup, decoding,
 playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a

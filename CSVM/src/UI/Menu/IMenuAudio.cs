@@ -36,7 +36,8 @@ public interface IMenuAudio
     void Cue(MenuCue cue);
 
     /// <summary>Starts spoken narration from the named WAV, replacing any already playing. The
-    /// service ducks and restores whatever music it runs; the caller only names the file.</summary>
+    /// service silences whatever music it runs until <see cref="EndNarration"/> restores it; the
+    /// caller only names the file.</summary>
     void BeginNarration(string wavName);
 
     /// <summary>Stops narration if any is playing.</summary>

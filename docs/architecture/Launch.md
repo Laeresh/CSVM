@@ -94,8 +94,8 @@ spacing, the graphics keys). It sits in `Launch` so that `Utils.Config` names no
 it serves. A module newly wired to `Config` adds its line here. `Launcher._Ready` is the one caller.
 
 ## src/Launch/MenuAudioService.cs
-The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music and restarts the narration player on
-the resolved stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it every frame
+The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music to silence and restarts the narration player
+on the resolved stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it every frame
 no briefing shows. `Cue` resolves a semantic name through `MenuCueTable` to a file under the constructor's cue directory,
 decodes it once and replays it from the start; an unknown name, a missing file or a failed decode is logged once and
 cached as silence. `PreviewMix` applies a mix page's levels as they move and sounds the moved category over the original's

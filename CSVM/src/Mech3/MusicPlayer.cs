@@ -56,12 +56,12 @@ public sealed partial class MusicPlayer : Node
     /// silent, from the shared sound object <c>GLOBALS.SCRIPT</c> creates.</summary>
     public const int MenuLoopCount = 5;
 
-    /// <summary>⚠ TUNE. The share of its own gain the channel keeps while <see cref="Ducked"/> is
-    /// set. The briefing ducks for the whole of its stay, not just while a line plays: its narration
-    /// is one dry voice against a full-band track, and the words are hard to follow under it. The
-    /// level a duck is a share of is the player's Music level, applied on the Music bus by
-    /// <see cref="Utils.AudioMix"/>, so this is a ratio and never a mix level itself.</summary>
-    public const float DuckLevel = 0.1f;
+    /// <summary>The share of its own gain the channel keeps while <see cref="Ducked"/> is set: none.
+    /// The briefing ducks for the whole of its stay, not just while a line plays. The original's
+    /// cabin pauses the splash object before it opens the briefing (docs/org/music.md). The level
+    /// a duck is a share of is the player's Music level on the Music bus
+    /// (<see cref="Utils.AudioMix"/>). This is a ratio, never a mix level itself.</summary>
+    public const float DuckLevel = 0f;
 
     /// <summary>Gain per second the duck moves at, so opening or leaving a ducking screen dips the
     /// channel over a fifth of a second instead of cutting it.</summary>
@@ -116,8 +116,8 @@ public sealed partial class MusicPlayer : Node
     public float Gain => _gain;
 
     /// <summary>Whether a screen is holding the channel down to <see cref="DuckLevel"/>. Separate
-    /// from <see cref="Gain"/> so the two never fight: the fade is the decode's own ramp and the
-    /// duck is a mix decision on top of it. A ducking screen sets this while it shows and clears it
+    /// from <see cref="Gain"/> so the two never fight: the fade is the battle ramp and the duck
+    /// is the briefing's silence on top of it. A ducking screen sets this while it shows and clears it
     /// when it stops showing; the track underneath keeps playing and keeps its place.</summary>
     public bool Ducked { get; set; }
 

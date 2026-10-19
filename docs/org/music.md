@@ -199,7 +199,12 @@ Out of mission there is exactly one track. `GLOBALS.SCRIPT` creates one sound ob
 `music_splash.wav` with loop count 5, and every out-of-mission screen drives that same object with
 mailbox `11003` (stop) and `11004` (start). **The cabin's background music is the splash track**, which
 is what `CAP-44` heard; no script assigns the cabin, the briefing or the flight check a track of
-its own.
+its own. The briefing plays no music: the cabin's Next Mission mails `11003` to that object
+before `gosCallback` 6 opens the briefing, and the flight check mails `11004` on entry
+([`formats/campaign-screens.md`](../formats/campaign-screens.md)). The flight check's Return to
+Briefing mails no `11003`, and whether the executable's briefing dialog stops the object itself is not
+traced. The remake holds the music silent for every stay on the briefing, ducked to zero by
+`MenuAudioService` from the narration's start until the screen is left.
 
 ## Named gaps and disproofs
 

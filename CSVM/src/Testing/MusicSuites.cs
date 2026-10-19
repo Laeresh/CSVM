@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CSVM.Launch;
 using CSVM.Mech3;
 
 namespace CSVM.Testing;
@@ -20,8 +21,8 @@ internal static class MusicSuites
         + "re-entering the playing state never restarts it, the objective stingers alternate "
         + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
         + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
-        + "out over four; and the briefing's duck rides over that fade without touching it, "
-        + "holding the channel down while the screen shows and lifting when it goes; a cinema's "
+        + "out over four; and the briefing's narration ducks the channel to silence over that fade "
+        + "without touching it, for as long as the screen shows, and its end brings it back; a cinema's "
         + "pause holds the track in place, a cue taken under it starts held, and the film's end "
         + "releases it")]
     internal static void MusicStates(TestContext ctx)
@@ -159,33 +160,44 @@ internal static class MusicSuites
         ctx.Check(guard * Step > 3f, $"the fade takes the decoded four seconds, not a cut steps={guard}");
     }
 
+    // Through the menu audio seam a briefing drives, so the check is what the briefing hears.
     private static void CheckDuck(TestContext ctx, MusicPlayer music, Random rng, StringBuilder report)
     {
-        music.Enter(MusicState.Menu, rng);
-        music.Ducked = true;
-        int guard = 0;
-        while (music.Duck > MusicPlayer.DuckLevel && guard++ < 1000)
+        var menu = new MenuAudioService(music, _ => null) { Name = "DuckMenuAudio" };
+        ctx.Host.AddChild(menu);
+        try
         {
-            music.Tick(Step, rng);
+            music.Enter(MusicState.Menu, rng);
+            menu.BeginNarration("brief01.wav");
+            int guard = 0;
+            while (music.Duck > 0f && guard++ < 1000)
+            {
+                music.Tick(Step, rng);
+            }
+
+            report.AppendLine($"duck reached {music.Duck:0.###} in {guard} steps, gain={music.Gain:0.###}");
+            ctx.Check(music.Duck == 0f, $"a briefing holds the channel silent duck={music.Duck:0.###}");
+            ctx.Check(guard * Step <= 1f, $"the silence arrives inside a second steps={guard}");
+
+            // The duck sits on top of the fade, so the track keeps playing and keeps its place.
+            ctx.Check(music.Current.Length > 0, $"the silenced track keeps playing current={music.Current}");
+            ctx.Check(music.Gain >= 0.999f, $"ducking leaves the decoded fade gain alone gain={music.Gain:0.###}");
+
+            menu.EndNarration();
+            guard = 0;
+            while (music.Duck < 1f && guard++ < 1000)
+            {
+                music.Tick(Step, rng);
+            }
+
+            ctx.Check(music.Duck >= 0.999f, $"leaving the briefing brings the music back duck={music.Duck:0.###}");
+            music.Enter(MusicState.Silent, rng);
         }
-
-        report.AppendLine($"duck reached {music.Duck:0.###} in {guard} steps, gain={music.Gain:0.###}");
-        ctx.Check(music.Duck <= MusicPlayer.DuckLevel + 0.001f, $"a ducking screen holds the channel down duck={music.Duck:0.###}");
-        ctx.Check(guard * Step <= 1f, $"the duck arrives inside a second steps={guard}");
-
-        // The duck is a mix decision over the fade, so the track keeps playing and keeps its place.
-        ctx.Check(music.Current.Length > 0, $"the ducked track keeps playing current={music.Current}");
-        ctx.Check(music.Gain >= 0.999f, $"ducking leaves the decoded fade gain alone gain={music.Gain:0.###}");
-
-        music.Ducked = false;
-        guard = 0;
-        while (music.Duck < 1f && guard++ < 1000)
+        finally
         {
-            music.Tick(Step, rng);
+            ctx.Host.RemoveChild(menu);
+            menu.Free();
         }
-
-        ctx.Check(music.Duck >= 0.999f, $"leaving the screen lifts the duck duck={music.Duck:0.###}");
-        music.Enter(MusicState.Silent, rng);
     }
 
     private static void CheckPause(TestContext ctx, MusicPlayer music, Random rng, StringBuilder report)
