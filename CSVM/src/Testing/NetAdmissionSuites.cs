@@ -28,7 +28,8 @@ internal static class NetAdmissionSuites
         + "guests sits out the second seat it signs on, as a guest's added seat sits out, and that seat "
         + "takes the place a leaving guest frees before a later arrival, which is refused as full; "
         + "the host's added seat never takes a guest's granted second seat, and wins a place freed in "
-        + "the same step a newcomer arrives")]
+        + "the same step a newcomer arrives; a pad a guest drops frees its place to the host's waiting "
+        + "seat ahead of a newcomer arriving in the same step and ahead of another guest's waiting seat")]
     internal static void ALaunchSeatsOnlyTheListedPeers(TestContext ctx)
     {
         DogfightLaunch(ctx);
@@ -157,6 +158,39 @@ internal static class NetAdmissionSuites
             rig.Settle();
             ctx.Check(lobby.SeatOwners.Count == Cap && first.Dogfight?.SeatsFlown == 2,
                 $"and the guest keeps both its seats ({lobby.SeatOwners.Count} seats, guest {first.Dogfight?.SeatsFlown})");
+        });
+
+        InAFullLobby(ctx, 6, new[] { 2, 1 }, (rig, lobby) =>
+        {
+            var first = rig.Guests[0];
+            rig.Host.LocalSeats = 2;
+            rig.Settle();
+
+            // The guest's dropped pad reaches the host in the step the newcomer arrives.
+            first.LocalSeats = 1;
+            first.Step(0.0);
+            rig.Carrier.Unarrived.Clear();
+            rig.Host.Step(0.0);
+            ctx.Check(rig.Host.Peers == 2 && lobby.SeatsFlown == 2 && lobby.SeatOwners.Count == Cap && !lobby.SeatOwners.Any(owner => owner.Peer == rig.Late),
+                $"a pad a guest drops frees its place to the host's waiting seat ahead of the newcomer, refused as full ({lobby.SeatOwners.Count} seats, host flies {lobby.SeatsFlown}, {rig.Host.Peers} guests)");
+            rig.Settle();
+            ctx.Check(lobby.SeatOwners.Count == Cap && lobby.SeatsFlown == 2 && first.Dogfight?.SeatsFlown == 1,
+                $"and the host keeps that seat ({lobby.SeatOwners.Count} seats, host flies {lobby.SeatsFlown}, guest {first.Dogfight?.SeatsFlown})");
+        });
+
+        InAFullLobby(ctx, 7, new[] { 2, 1 }, (rig, lobby) =>
+        {
+            var guests = rig.Guests;
+            rig.Host.LocalSeats = 2;
+            guests[1].LocalSeats = 2;
+            rig.Settle();
+            ctx.Check(lobby.SeatsFlown == 1 && guests[1].Dogfight?.SeatsFlown == 1,
+                $"ABLE-TO-FAIL CONTROL: the host's and the later guest's added seats both wait (host flies {lobby.SeatsFlown}, guest {guests[1].Dogfight?.SeatsFlown})");
+
+            guests[0].LocalSeats = 1;
+            rig.Settle();
+            ctx.Check(lobby.SeatOwners.Count == Cap && lobby.SeatsFlown == 2 && guests[1].Dogfight?.SeatsFlown == 1,
+                $"a pad a guest drops frees its place to the host's waiting seat ahead of a guest's waiting seat ({lobby.SeatOwners.Count} seats, host flies {lobby.SeatsFlown}, later guest {guests[1].Dogfight?.SeatsFlown})");
         });
     }
 

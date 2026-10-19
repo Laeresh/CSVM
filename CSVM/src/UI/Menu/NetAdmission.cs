@@ -67,10 +67,11 @@ public sealed class NetAdmission
     {
         var peers = lobby.AllPeers;
         _admitted.RemoveAll(peer => !Contains(peers, peer));
+        // A pad a guest let go since the last grant frees its place now, for the host's waiting one.
         int guestSeats = 0;
         foreach (int peer in _admitted)
         {
-            guestSeats += GrantedTo(peer);
+            guestSeats += Math.Min(GrantedTo(peer), lobby.SeatsWanted(peer));
         }
 
         // ⚠ Never give a host seat out of a seat a guest was granted, first or further. A seat
