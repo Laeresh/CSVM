@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
@@ -29,6 +30,7 @@ internal static class StuntRaceBotSuites
     private const int BotSeat = 1;
 
     private const string Callsign = "Racer";
+    private const string Rival = "Rival";
 
     // A window long enough for the longest course, minutes: the race may not end before the bot does.
     private const int WindowMinutes = 16;
@@ -165,6 +167,105 @@ internal static class StuntRaceBotSuites
             }
 
             ctx.Check(racer.MostZones > 0, $"[{cell}] the bot clears a Danger Zone ({racer.MostZones} zone(s), {steps} steps)");
+        }
+        finally
+        {
+            end.Close();
+            ambient.Restore();
+        }
+    }
+
+    [Suite("stunt-race-bot-final-run",
+        "a local C1 stunt race of one pane and two ace bots, its window run down to time up after the opening: "
+        + "the pane, crashed with half its crash camera's time left in the window, is still down with the "
+        + "prompt offered when time up arrives (the control), and on the next step the prompt is withdrawn and "
+        + "its run stops, and a tap returns nothing; the first bot, crashed in the final run, stays down past "
+        + "its crash camera's time with its run stopped and is handed no view, while the pane, past its own "
+        + "crash camera's time, spectates the second bot, the only racer its target key offers; the second "
+        + "bot's crash stops the last run and ends the race, every seat down and nobody respawned")]
+    internal static void AFinalRunKeepsEveryCrashDown(TestContext ctx)
+    {
+        const string cell = "final run";
+        string chapter = Course(ctx, "C1");
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), chapter, new[] { "player_pfighter" },
+            MenuMode.Stunt, vsTimeMinutes: WindowMinutes, missionType: DogfightMissionType.StuntRace,
+            bots: new[] { new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Callsign), new VsBotEntry("player_fury", NetBotSkill.Ace, 0, Rival) });
+        var roster = SeatFields.LocalVersusField(spec, ctx.MessagesPath);
+        if (roster is not { Length: 3 })
+        {
+            ctx.Check(false, $"[{cell}] the local launch seats a pane and two bots ({roster?.Length ?? 0} seat(s))");
+            return;
+        }
+
+        var ambient = NetCombatSuites.Ambient.Save();
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster);
+        try
+        {
+            var session = end.Session;
+            var seats = end.Built ? session.SeatRigs.Select(r => r.Controller).ToArray() : Array.Empty<FlightController?>();
+            if (session.Race is not { } race || seats is not [{ Stunt: { } paneRun } pane, { Stunt: { } firstRun, IsBotSeat: true } first, { Stunt: not null, IsBotSeat: true } second])
+            {
+                ctx.Check(false, $"[{cell}] the session builds a race of a pane and two bots, each on its own run");
+                return;
+            }
+
+            pane.UseKeyboard = false;
+            pane.PadDevices = Array.Empty<int>();
+            pane.HoldActionForTest(InputAction.Respawn, false);
+            int steps = 0;
+            void Run(int n)
+            {
+                for (int i = 0; i < n && !race.Ended; i++)
+                {
+                    Step(session, ++steps);
+                }
+            }
+
+            while (!(race.Phase == StuntRacePhase.Open && race.Racers.All(r => r.InRun)) && steps < Steps(WaitSeconds))
+            {
+                Run(1);
+            }
+
+            // Half the crash camera's time short of time up, so the prompt still stands when it arrives.
+            race.Advance(race.TimeLeft - (pane.CrashCameraSeconds / 2f));
+            bool flying = !pane.Crashed;
+            pane.DebugForceCrash();
+            var respawns = seats.Select(s => s!.RespawnCount).ToArray();
+            bool offered = true;
+            while (race.Phase == StuntRacePhase.Open && steps < Steps(WaitSeconds * 2f))
+            {
+                offered &= pane.Crashed && pane.RespawnOffered;
+                Run(1);
+            }
+
+            ctx.Check(flying && offered && race.Phase == StuntRacePhase.FinalRun && race.Racers.All(r => r.InRun),
+                $"ABLE-TO-FAIL CONTROL: [{cell}] the pane, crashed short of time up, is down with the prompt offered until time up arrives, every racer in a run ({race.Phase}, flying before={flying}, offered throughout={offered})");
+
+            Run(1);
+            bool withdrawn = pane.Crashed && !pane.RespawnOffered && paneRun.Stopped && !race.Of(PaneSeat)!.InRun;
+            pane.HoldActionForTest(InputAction.Respawn, true);
+            Run(2);
+            pane.HoldActionForTest(InputAction.Respawn, false);
+            Run(1);
+            ctx.Check(withdrawn && pane.Crashed && pane.RespawnCount == respawns[PaneSeat] && !race.Ended,
+                $"[{cell}] on the step after time up the prompt is withdrawn and the pane's run stops, and a tap returns nothing (withdrawn={withdrawn}, stopped={paneRun.Stopped}, crashed={pane.Crashed}, {pane.RespawnCount - respawns[PaneSeat]} respawn(s))");
+
+            first.DebugForceCrash();
+            Run(Steps(Mathf.Max(pane.CrashCameraSeconds, first.CrashCameraSeconds)) + 10);
+            ctx.Check(first.Crashed && first.RespawnCount == respawns[BotSeat] && firstRun.Stopped && !race.Of(BotSeat)!.InRun
+                      && race.Of(BotSeat + 1)!.InRun && !race.Ended,
+                $"[{cell}] the first bot's crash in the final run stays down past its crash camera's time and stops its run, the race running on ({first.RespawnCount - respawns[BotSeat]} respawn(s), stopped={firstRun.Stopped}, ended={race.Ended})");
+            var watcher = session.SpectatorCameras.Count == 1 ? session.SpectatorCameras[0] : null;
+            var candidates = watcher?.LockCandidates?.Invoke().ToList();
+            ctx.Check(!first.Spectating && !first.CameraOwned && pane.Spectating && ReferenceEquals(watcher?.Follow, second)
+                      && candidates is { Count: 1 } && ReferenceEquals(candidates[0], second),
+                $"[{cell}] the bot is handed no view, while the pane spectates the second bot, the only racer its target key offers ({session.SpectatorCameras.Count} spectator(s), bot spectating={first.Spectating}, pane spectating={pane.Spectating}, {candidates?.Count} offered)");
+
+            second.DebugForceCrash();
+            Run(Steps(WaitSeconds));
+            ctx.Check(race.Ended && seats.All(s => s!.Crashed) && seats.Select(s => s!.RespawnCount).SequenceEqual(respawns)
+                      && race.Racers.All(r => !r.InRun),
+                $"[{cell}] the second bot's crash stops the last run and ends the race, every seat down and nobody respawned (ended={race.Ended}, crashed {string.Join("/", seats.Select(s => s!.Crashed))}, in a run {string.Join("/", race.Racers.Select(r => r.InRun))})");
         }
         finally
         {
