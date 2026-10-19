@@ -278,6 +278,29 @@ public sealed class WorldFlareRig
         }
     }
 
+    /// <summary>Takes every pane's quads and wash out of the tree and off its rig's world overlays. A
+    /// live graphics switch then builds the screen rig in its place.</summary>
+    public void Drop()
+    {
+        foreach (var inst in _instances)
+        {
+            inst.Rig.WorldOverlays.Remove(inst.Overlay);
+            Free(inst.Overlay);
+            foreach (var e in inst.Elements)
+            {
+                Free(e.Mesh);
+            }
+        }
+
+        _instances.Clear();
+
+        static void Free(Node node)
+        {
+            node.GetParent()?.RemoveChild(node);
+            node.QueueFree();
+        }
+    }
+
     /// <summary>Every element quad with the index of the pane it was built for, in build order: the
     /// suite reads their layers.</summary>
     internal IEnumerable<(int Pane, MeshInstance3D Quad)> Quads()

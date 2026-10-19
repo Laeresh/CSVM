@@ -1877,29 +1877,13 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", $"--xr-chase={want} is not rigid or level, ignoring it"));
                 }
             }
-            else if (arg.StartsWith(VrRenderScaleSetting.Flag + "="))
+            else if (TryWordFlag(arg, VrRenderScaleSetting.Lookup, notes, out string? renderScaleWord))
             {
-                string want = arg[(VrRenderScaleSetting.Flag.Length + 1)..];
-                if (VrRenderScaleSetting.Lookup.IsWord(want))
-                {
-                    s.XrRenderScale = want;
-                }
-                else
-                {
-                    notes.Add(new Note("core", $"{VrRenderScaleSetting.Flag}={want} is not one of {string.Join("/", VrRenderScaleSetting.Words)}, ignoring it"));
-                }
+                s.XrRenderScale = renderScaleWord ?? s.XrRenderScale;
             }
-            else if (arg.StartsWith(VrVignetteSetting.Flag + "="))
+            else if (TryWordFlag(arg, VrVignetteSetting.Lookup, notes, out string? vignetteWord))
             {
-                string want = arg[(VrVignetteSetting.Flag.Length + 1)..].ToLowerInvariant();
-                if (VrVignetteSetting.Lookup.IsWord(want))
-                {
-                    s.XrVignette = want;
-                }
-                else
-                {
-                    notes.Add(new Note("core", $"{VrVignetteSetting.Flag}={want} is not one of {string.Join("/", VrVignetteSetting.Words)}, ignoring it"));
-                }
+                s.XrVignette = vignetteWord ?? s.XrVignette;
             }
             else if (TryWordFlag(arg, VrQuality.Lookup, notes, out string? xrQualityWord))
             {

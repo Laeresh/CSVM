@@ -78,7 +78,8 @@ What follows the switch, and how:
   the render scale, on every live 3D viewport (`ViewportQuality.ReapplyAll`).
 - Built or freed: the ground shadow, the scorch field, the heat shimmer pool,
   the world lights' omni pool and burst lights, and the clutter's cells (`ClutterInstances.Recut`).
-  A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
+  A flat session's sun flare swaps rigs (`SkyStage.FollowGraphicsMode`): the screen rig in
+  Original, the world rig in Enhanced unless `--screen-flare`. A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
 - Uploaded again, first of all: a texture's alpha depth. The faithful path uploads an alpha-plane
   texture at the original's 16 alpha levels and Enhanced keeps 256. `EnhancedLook.FollowAlphaDepth`
   decodes each one the archive handed out again from the archive and updates it in place, then

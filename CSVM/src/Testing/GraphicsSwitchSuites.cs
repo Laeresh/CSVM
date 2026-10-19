@@ -229,6 +229,44 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("graphics-flare-switch",
+        "a flat C3 flight built in Enhanced draws the world flare rig; switched live to Original it "
+        + "drops that rig and draws the calibrated screen rig in its place, and switched back it draws "
+        + "the world rig again, each with one flare per pane and no overlay left behind on the pane")]
+    internal static void FlareFollowsSwitch(TestContext ctx)
+    {
+        RequireData(ctx);
+        ctx.RequireData(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"), $"C3 zrdr");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            var rig = Open(ctx, enhanced: true, chapter: "C3", extra: "--fly");
+            try
+            {
+                if (!rig.Built)
+                {
+                    ctx.Check(false, $"the Enhanced C3 session builds");
+                    return;
+                }
+
+                int overlays = rig.Session.Rigs[0].WorldOverlays.Count;
+                FlareRig(ctx, rig, world: true, overlays, "fresh Enhanced");
+                Switch(rig, false);
+                FlareRig(ctx, rig, world: false, overlays + 1, "switched to Original");
+                Switch(rig, true);
+                FlareRig(ctx, rig, world: true, overlays, "switched back to Enhanced");
+            }
+            finally
+            {
+                rig.Close();
+            }
+        }
+        finally
+        {
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-view-distance",
         "the Enhanced clutter cells follow a live View Distance change: moved from Normal to Very Far "
         + "the cells are cut and ranged as a session built at Very Far cuts them, farther than at "
@@ -1292,6 +1330,21 @@ internal static class GraphicsSwitchSuites
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
         EnhancedLook.ReapplyWordSettings("a suite's restore");
+    }
+
+    // Which flare rig the session holds, with one flare per pane. The screen rig hangs two canvases on
+    // a pane's overlays and the world rig one, so the count shows a dropped rig's left behind.
+    private static void FlareRig(TestContext ctx, Rig rig, bool world, int overlays, string label)
+    {
+        var session = rig.Session;
+        int panes = session.Rigs.Count;
+        int worldCount = session.WorldFlare?.InstanceCount ?? -1, screenCount = session.ScreenFlare?.InstanceCount ?? -1;
+        ctx.Check(world ? worldCount == panes && session.ScreenFlare == null : screenCount == panes && session.WorldFlare == null,
+            $"{label}: the session draws the {(world ? "world" : "screen")} flare rig alone, one per pane (world {worldCount}, screen {screenCount}, {panes} pane(s))");
+        int quads = session.WorldFlare?.Quads().Count(q => q.Quad.IsInsideTree()) ?? 0;
+        ctx.Check(world ? quads > 0 : quads == 0, $"{label}: {quads} world flare quad(s) in the tree");
+        int held = session.Rigs[0].WorldOverlays.Count;
+        ctx.Check(held == overlays, $"{label}: pane 1 holds {held} world overlay(s), {overlays} expected");
     }
 
     // One copy for the whole session, matching the session's sun after one frame of its own. The

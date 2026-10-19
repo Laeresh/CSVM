@@ -309,32 +309,38 @@ public sealed class CameraController
     /// headset with a <see cref="Fade"/> the presses wait for black and land together.</summary>
     public void StepViewKeys(bool cycleKey, bool chaseKey, bool cyclePad, bool chasePad, bool flyby)
     {
+        bool cycleKeyEdge = ViewKeyEdge(0, cycleKey);
+        bool chaseKeyEdge = ViewKeyEdge(1, chaseKey);
+        bool cyclePadEdge = ViewKeyEdge(2, cyclePad);
+        bool chasePadEdge = ViewKeyEdge(3, chasePad);
+        bool flybyEdge = ViewKeyEdge(4, flyby);
+
         if (_headset == null || Fade == null)
         {
             _askedView = null;
             _askedFlyby = false;
-            if (ViewKeyEdge(0, cycleKey))
+            if (cycleKeyEdge)
                 CycleCockpitViews();
-            if (ViewKeyEdge(1, chaseKey))
+            if (chaseKeyEdge)
                 SelectChase();
-            if (ViewKeyEdge(2, cyclePad))
+            if (cyclePadEdge)
                 CycleCockpitViews();
-            if (ViewKeyEdge(3, chasePad))
+            if (chasePadEdge)
                 SelectChase();
-            if (ViewKeyEdge(4, flyby))
+            if (flybyEdge)
                 EnterFlyby();
             return;
         }
 
-        if (ViewKeyEdge(0, cycleKey))
+        if (cycleKeyEdge)
             AskView(PilotView.Cycle(_askedView ?? ViewMode));
-        if (ViewKeyEdge(1, chaseKey))
+        if (chaseKeyEdge)
             AskView(PilotViewMode.Chase);
-        if (ViewKeyEdge(2, cyclePad))
+        if (cyclePadEdge)
             AskView(PilotView.Cycle(_askedView ?? ViewMode));
-        if (ViewKeyEdge(3, chasePad))
+        if (chasePadEdge)
             AskView(PilotViewMode.Chase);
-        if (ViewKeyEdge(4, flyby) && !FlybyActive)
+        if (flybyEdge && !FlybyActive)
             _askedFlyby = true;
         LandAskedViews(Fade);
     }

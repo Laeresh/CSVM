@@ -91,6 +91,7 @@ if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogD
 # A window belongs to the desktop its process was started on; falls back to a visible run
 # rather than failing (same policy as RunTests.ps1).
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
+. (Join-Path $PSScriptRoot "XrSimFeature.ps1")
 $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
 # The launch joins this job, so killing this script kills the probe (JobObjectCore.ps1).
 $null = Open-RunJob

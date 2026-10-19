@@ -151,9 +151,10 @@ internal static class XrViewSuites
     }
 
     /// <summary>Every head-look input held over a flight in each view leaves the origin where it
-    /// was. The flat rig is the control: the same inputs swing its camera.</summary>
+    /// was. Look Forward and Look Behind each recenter once per press. The flat rig is the
+    /// control: the same inputs swing its camera and recenter nothing.</summary>
     [Suite("xr-view-head-look",
-        "under a headset the numpad snap, the look stick, free-look, the centre key, look-behind and the padlock key change neither the origin nor the head in Cockpit, Nose or Chase, while the flat rig's camera swings on the same inputs")]
+        "under a headset the numpad snap, the look stick, free-look, the centre key, look-behind and the padlock key change neither the origin nor the head in Cockpit, Nose or Chase, and the centre key and look-behind each fire the headset recenter once per press, while the flat rig's camera swings on the same inputs and nothing recenters")]
     internal static void XrViewHeadLook(TestContext ctx)
     {
         var report = new StringBuilder();
@@ -162,6 +163,9 @@ internal static class XrViewSuites
             string view = PilotView.Name(mode);
             bool flown = WithHeadsetFlight(ctx, mode, "0,0,0,0.6", XrChase.Rigid, (clock, plane, rig, _) =>
             {
+                // A count in place of the seat's recenter, so the origin the checks read stays put.
+                int recenters = 0;
+                plane.RecenterHeadset = () => recenters++;
                 Settle(clock, plane, rig);
                 var before = InPlane(rig.Origin.GlobalTransform, plane);
                 var worst = (Metres: 0f, Degrees: 0f);
@@ -173,19 +177,36 @@ internal static class XrViewSuites
                 }
 
                 var head = plane.Head;
-                report.AppendLine($"{view}: inputs held 90 frames, origin moved {worst.Metres * 1000f:0.###} mm {worst.Degrees:0.####} deg, head az {head?.Azimuth:0.####} el {head?.Elevation:0.####} mode {head?.Mode}");
+                report.AppendLine($"{view}: inputs held 90 frames, origin moved {worst.Metres * 1000f:0.###} mm {worst.Degrees:0.####} deg, head az {head?.Azimuth:0.####} el {head?.Elevation:0.####} mode {head?.Mode}, recenters {recenters}");
                 ctx.Check(worst.Metres < PoseTolM && worst.Degrees < PoseTolDeg,
                     $"{view}: every look input held leaves the origin put ({worst.Metres * 1000f:0.###} mm, {worst.Degrees:0.####}°)");
                 ctx.Check(head is { Azimuth: 0f, Elevation: 0f, Mode: LookMode.Snap },
                     $"{view}: the head stays level, forward and in snap ({head?.Azimuth:0.####}, {head?.Elevation:0.####}, {head?.Mode})");
+                ctx.Check(recenters == 1, $"{view}: the inputs held 90 frames recenter once, not every frame (read {recenters})");
                 Look(plane, false);
+                Step(clock, plane, rig);
+
+                foreach (var key in new[] { InputAction.LookCenter, InputAction.LookBack })
+                {
+                    recenters = 0;
+                    plane.HoldActionForTest(key, true);
+                    Step(clock, plane, rig);
+                    Step(clock, plane, rig);
+                    plane.HoldActionForTest(key, false);
+                    Step(clock, plane, rig);
+                    ctx.Check(recenters == 1, $"{view}: one press of {key} recenters the headset once (read {recenters})");
+                }
 
                 // The control: the same inputs on the flat rig move the camera.
                 plane.Headset = null;
+                recenters = 0;
                 Settle(clock, plane, rig);
                 var flatBefore = InPlane(ctx.Camera.GlobalTransform, plane);
                 var flat = (Metres: 0f, Degrees: 0f);
                 Look(plane, true, all: false);
+                plane.HoldActionForTest(InputAction.LookCenter, true);
+                Step(clock, plane, rig);
+                plane.HoldActionForTest(InputAction.LookCenter, false);
                 for (int i = 0; i < 90; i++)
                 {
                     Step(clock, plane, rig);
@@ -194,8 +215,10 @@ internal static class XrViewSuites
 
                 Look(plane, false);
                 plane.Headset = XrChase.Rigid;
-                report.AppendLine($"{view} flat control: camera moved {flat.Metres:0.###} m {flat.Degrees:0.###} deg");
+                plane.RecenterHeadset = null;
+                report.AppendLine($"{view} flat control: camera moved {flat.Metres:0.###} m {flat.Degrees:0.###} deg, recenters {recenters}");
                 ctx.Check(flat.Degrees > 5f, $"{view}: control, the flat rig's camera turns {flat.Degrees:0.#}° on the same inputs");
+                ctx.Check(recenters == 0, $"{view}: control, the flat rig's look keys recenter nothing (read {recenters})");
             });
             ctx.Check(flown, $"{view}: the view builds an aircraft to fly");
         }

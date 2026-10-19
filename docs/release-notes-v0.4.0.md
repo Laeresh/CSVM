@@ -23,7 +23,7 @@ been flown on one machine, and the known issues below are the ones found so far.
   in VR. Splitscreen is not available in VR.
 - **Views:** a flight opens in the 3D cockpit, and the headset is your head. `F8`, D-pad down or the
   left controller's Y button cycles Cockpit, Nose and a Chase view fixed to the aircraft.
-- **A virtual screen** in front of you carries the menus, briefings, films and the pause board. The
+- **A theater screen** in front of you carries the menus, briefings, films and the pause board. The
   right hand controller's laser points at it and its trigger clicks; a pad and the keyboard drive it
   as in flat play. Campaign cutscenes play on it in 3D, like looking through a window.
 - **The HUD** sits on a panel fixed to the cockpit. Target boxes, the gun pipper and the arrows to
@@ -34,7 +34,8 @@ been flown on one machine, and the known issues below are the ones found so far.
   fly with a gamepad, a flight stick or the keyboard.
 - **Comfort:** every cut, respawn and view change fades through black. A Comfort Vignette (Off,
   Mild, Strong; off by default) darkens the edge of view while the aircraft turns, and VR Render
-  Scale (50 to 125 %) trades sharpness for GPU time. `Home` recenters your view on the pilot's eye.
+  Scale (50 to 125 %) trades sharpness for GPU time. `Home`, `numpad 5`, `numpad 0` or a pad's right-stick
+  click recenters your view on the pilot's eye.
 - **Performance:** a VR quality profile replaces your graphics options in the headset (no
   anti-aliasing filter over 4x MSAA, Low shadows, no foveated rendering), sized for 90 Hz. Set your
   runtime to 90 Hz at its default resolution. Starting with `CSVM-VR.cmd -- --xr-quality=flat` flies
@@ -65,11 +66,9 @@ The `README.md` in the zip has a "VR (experimental)" section with the details.
   headset's colour grading applies to them a second time.
 - **Cockpit size:** every aircraft uses the same cockpit scale and eye position for now. Some
   cockpits may feel slightly too large or too small.
-- **Recenter on an Xbox pad:** no pad button is free for it, so use `Home`, the left controller's
-  stick click or the runtime's own recenter, or bind it on the Controls page.
 - **Starting with VR Mode on** shows the flat window for a moment before the game restarts in the
   headset.
-- **The desktop mouse** does not line up with the virtual screen. Use a hand controller's laser, a
+- **The desktop mouse** does not line up with the theater screen. Use a hand controller's laser, a
   pad or the keyboard in the headset's menus.
 - **Cutscenes** have shallow depth, and something close to the camera at the edge of the picture is
   cut off by the screen's edge. The campaign films play flat on the screen, as they were made.

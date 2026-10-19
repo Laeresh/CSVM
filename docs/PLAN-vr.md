@@ -7,7 +7,7 @@ pointer; any live prose linking this file by path is unlinked in the same commit
 
 This plan adds seated PC VR to the Windows build through Godot's OpenXR interface. Flight, the
 in-flight HUD and cutscenes become stereo; everything that is authored 2D (the 800x600 boards, menus,
-briefings, MPEG cinemas) is shown on a floating virtual screen in the headset rather than rebuilt.
+briefings, MPEG cinemas) is shown on a floating theater screen in the headset rather than rebuilt.
 VR is one local seat in every play mode, entered through an Options toggle that relaunches the
 executable with OpenXR on, and it ships in the next minor release labelled experimental. Out of
 scope: standalone Quest (an Android port with a different renderer and on-device extraction), Linux
@@ -27,7 +27,7 @@ A3 can redirect the whole plan to a custom engine build.
 - A player with a PC VR headset turns on "VR mode" in Options, the game relaunches into the headset,
   and every flight session (campaign, Instant Action, stunt race, network play) is flown in stereo
   from the 3D cockpit, with Nose and a rigid Chase view available.
-- Menus, boards, briefings and cinemas appear on a virtual screen operated by a controller laser
+- Menus, boards, briefings and cinemas appear on a theater screen operated by a controller laser
   pointer or the pad; campaign cutscenes play on that screen as a stereo 3D-cinema pair.
 - The HUD reads in the headset: flat chrome on a cockpit-locked panel, world-tied markers at their
   real depth.
@@ -50,21 +50,21 @@ judgement.
 | # | Question | Decision |
 |---|---|---|
 | 1 | Platform | **PC VR, Windows only**, OpenXR in the existing Forward+ build; reference rig is the author's Quest over Steam Link/SteamVR and over Virtual Desktop (VDXR), RTX 5080. Linux VR and standalone Quest are out. |
-| 2 | How much is stereo | **Flight, the in-flight HUD and cutscenes in stereo; menus, boards, briefings and cinemas on a floating virtual screen** (a SubViewport on a quad), so there is one UI codebase and no menu redesign. |
+| 2 | How much is stereo | **Flight, the in-flight HUD and cutscenes in stereo; menus, boards, briefings and cinemas on a floating theater screen** (a SubViewport on a quad), so there is one UI codebase and no menu redesign. |
 | 3 | Views and head look | **Cockpit is the VR default, Nose stays, Chase is offered rigidly attached to the plane** (no spring lag, no speed FOV, no swing). Head tracking replaces snap, free and padlock head look; padlock may return later as an optional aid. |
 | 4 | float32 precision near the eye | **Spike a render-only floating origin first; if it cannot reach sub-pixel per eye without touching sim or physics, fall back to a double-precision Godot build** (editor, export templates, .NET glue, WebRTC extension). The stock engine is kept if possible.** Superseded by Decision 17. |
 | 5 | HUD | **Split: flat chrome (gauges, compass, messages, chat, scores) on a cockpit-locked quad 1.5-2 m ahead and slightly low; world-tied markers (target boxes, impact reticle, lead) as 3D billboards at real depth; edge markers as a head-relative arrow ring.** |
-| 6 | Motion controllers | **Laser pointer on the virtual screen plus a few actions (recenter, pause, view cycle) through a new `DeviceKind.Xr`** in the binding seam, rebindable like any device. Flying stays on pad, stick or keyboard; a virtual stick is a follow-up. |
+| 6 | Motion controllers | **Laser pointer on the theater screen plus a few actions (recenter, pause, view cycle) through a new `DeviceKind.Xr`** in the binding seam, rebindable like any device. Flying stays on pad, stick or keyboard; a virtual stick is a follow-up. |
 | 7 | Play modes | **One local seat, all modes** (campaign, Instant Action, stunt race, network play). With VR on, local splitscreen is refused. |
 | 8 | Cutscenes | **Theater screen, rendered as a 3D-cinema stereo pair**: two cameras on the authored camera, IPD apart, each eye's image picked on the screen quad by `VIEW_INDEX`. Framing and letterbox stay as authored; head motion changes nothing inside the frame. The author's own phrase: "so it is like looking through a window". |
 | 9 | Activation | **One build, OpenXR off in `project.godot`; an Options toggle saves the choice and relaunches with `--xr-mode on`**, and the release ships a VR shortcut with the flag. No runtime or headset falls back to flat with a clear message. |
 | 10 | Performance and screen-space effects | **90 Hz floor on the 5080 at the runtime's 1.0 resolution with Enhanced on, using at most half the 11 ms frame** (headroom as a proxy for mid-range GPUs). Soft particles, the fog-volume fade and heat shimmer are ported to multiview; the clutter dither stays if it reads fine per eye. The separate render thread is part of the spike. A VR render scale and the Original look remain the lower-end levers. |
 | 11 | Verification | **A `--xr-sim` stand-in interface with a pinned head pose** puts the VR path into suites and new goldens on the hidden desktop under `--det`. Comfort, feel, controller binding and runtime quirks are the author's at-the-headset playtests. |
-| 12 | Comfort | **Core set**: recenter (bound to key, pad and XR button), fade to black instead of a hard cut on respawn, mission end and view switch, an optional tunnel vignette scaled by angular rate (off by default), and a VR render-scale slider. No horizon lock, no snap turn. |
-| 13 | Cockpit scale | **No asset edits; a per-plane VR world scale and seated eye offset in committed `data/vr_cockpits.json`**, tuned by the author at the headset. Defaults (1.0, zero offset) ship until each of the 11 planes is judged. |
+| 12 | Comfort | **Core set**: recenter (bound to key, pad and XR button; under a headset Look Back and Look Forward recenter too, so a standard Xbox pad reaches it on the right-stick click), fade to black instead of a hard cut on respawn, mission end and view switch, an optional tunnel vignette scaled by angular rate (off by default), and a VR render-scale slider. No horizon lock by default: the level chase (`--xr-chase=level`), which drops the roll, is a command-line A/B beside the rigid default. No snap turn. |
+| 13 | Cockpit scale | **No asset edits; a per-plane VR world scale, seated eye offset and placement of the stereo store copies (`storeOffsetZ`, `storeOffsetY`, `storeSpread`) in committed `data/vr_cockpits.json`**, tuned by the author at the headset. Defaults (1.0, zero offset) ship until each of the 11 planes is judged. |
 | 14 | Release | **Lands on main behind the off-by-default option and ships in v0.4.0 as "VR (experimental)"** with a known-issues list; the label drops in a later release once the playtests and community reports are clean. |
-| 15 | Dev modes, spyglass, photograph (defaults proposed in the grilling, not objected to) | **`--viewer`, `--freecam`, `--anim-lab` and the labs stay flat-only; the spyglass is a mono zoom picture on a binocular-style quad; the Danger Zone photograph and the screenshot capture keep reading a mono camera.** |
-| 16 | The lens flare and full-pane effects in VR | **One angle-based world flare rig, used by VR always and by flat Enhanced once the author has judged a C3 montage in Chase and Cockpit; Original keeps the calibrated screen-space `LensFlareRig`.** Whiteout, flash and fade become head-locked near quads in VR. The Enhanced adoption is the one deliberate exception to the boundary rule, argued on its own merits: partial occlusion of the core and HDR glow. |
+| 15 | Dev modes, spyglass, photograph (defaults proposed in the grilling, not objected to) | **`--viewer`, `--freecam`, `--anim-lab` and the labs never take the saved VR option (the relaunch skips them); an explicit `--xr-mode on` brings stereo up in them for development; the spyglass is a mono zoom picture on a binocular-style quad; the Danger Zone photograph and the screenshot capture keep reading a mono camera.** |
+| 16 | The lens flare and full-pane effects in VR | **One angle-based world flare rig, used by VR always and by flat Enhanced once the author has judged a C3 montage in Chase and Cockpit; Original keeps the calibrated screen-space `LensFlareRig`; a flat session swaps the rigs on a live switch between Enhanced and Original.** Whiteout, flash and fade become head-locked near quads in VR. The Enhanced adoption is the one deliberate exception to the boundary rule, argued on its own merits: partial occlusion of the core and HDR glow. |
 | 17 | float32 precision near the eye, after A3 found no render-only fix | **Accept the shimmer and continue on the stock single-precision engine.** The cockpit interior and the HUD panel shimmer 5-8 px per eye at 10-20 km from the chapter origin at headset density; rigid chase is unaffected. It ships as a known issue of the experimental release. The double-precision build and a game-wide floating origin stay open as later work (A3's write-up), not items of this plan. Note: A3b draws the interior from the XR origin's frame with the render thread's own eyes and measures 0.04 px per eye at 20 km on the stand-in; the author's headset judgement is owed before the known issue is dropped. **Superseded for the cockpit by A3b:** at the headset the interior held steady at the C1 map centre and a far corner, in both render-thread modes, with no swim on head turns, so the cockpit shimmer is no known issue. The HUD panel (C12) and the near quads are to use A3b's pieces too. |
 
 ## ⚠ Read this before implementing anything
@@ -173,7 +173,7 @@ second.
 ## Ground rules
 
 - **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
-  never guess a value. Inventing content is the trap this project falls into most often.
+  never guess a value. Inventing content is the mistake this project makes most often.
 - **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
@@ -1482,11 +1482,11 @@ The suites' reports are `.scratch/test-xr-view-*.txt`, the captures `.scratch/B9
   Every loop carries that cut. Comfort confidence: lead-only.
 
 **Resolved TODOs.**
-- `LookCenter` (`numpad 5`) and `LookBack` (`numpad 0`, right-stick click) are inert under VR, as are
-  the numpad cluster, MMB free-look, `K`/`L`/`J`, the look stick and the chase zoom. Proposal for
-  C11 (not rebound here): under VR both `LookCenter` and `LookBack` fire `RecenterHeadset`. The
-  centre key already means "look forward", and the right-stick click is the one recenter a standard
-  Xbox pad can reach, since it has neither the touchpad nor the back paddle B7 bound.
+- The numpad cluster, MMB free-look, `K`/`L`/`J`, the look stick and the chase zoom are inert under
+  VR. `LookCenter` (`numpad 5`) and `LookBack` (`numpad 0`, right-stick click) recenter there, as
+  `RecenterHeadset` does: the centre key already means "look forward", and the right-stick click is
+  the one recenter a standard Xbox pad can reach, since it has neither the touchpad nor the back
+  paddle B7 bound.
 - The view cycle stays `CycleCockpitViews` and already walks only Cockpit, Nose and Chase; the flyby
   (`F7`) stays reachable and holds its spot.
 - Cutscenes: a presenting cutscene sets `CameraOwned`, so the origin follows the cutscene camera by
@@ -3037,10 +3037,13 @@ from the world origin (a Godot bug, fixed in 4.7.2). A VR quality profile (anti-
 the project's 4x MSAA, shadow quality `low`, foveation off) flies every headset session at 5.7-6.3 ms
 there and 2.7-3.2 ms at the author's 2112x2304, and a cutscene no longer draws the world behind its
 opaque surround. At 1.0 resolution the profile sits 0.2-0.7 ms over Decision 10's half frame
-(5.55 ms) and well inside the full 11.1 ms; the trades that close the gap are the author's (below).
+(5.55 ms) and well inside the full 11.1 ms; the Godot 4.7.2 upgrade, which lets the soft shadow
+back, is what would close that gap, and it is deferred.
 
-**Goal.** A VR flight on the 5080 at the runtime's 1.0 resolution with Enhanced on holds 90 Hz using
-at most half of the 11 ms frame.
+**Goal.** A VR flight on the 5080 with Enhanced on holds the headset's refresh rate on the
+profile: 90 Hz on VDXR at 2112x2304 (88.7-88.9 fps mean in the batch's logs) and 120 Hz on SteamVR
+(117.8 fps). Decision 10's half frame at the runtime's 1.0 resolution is the target the deferred
+upgrade would meet.
 
 **Budget (GPU ms per stereo frame, `--xr-sim` at `fov=96`, `--det --perf --no-vsync`, the median of
 five 60-frame windows after two dropped; no other Godot ran during any row).** "Flat" is the author's
@@ -3265,7 +3268,7 @@ judgement, TUNE for the author).** Captures and instruments are in `.scratch/D19
   draws them, and the spyglass camera draws the pane's mask. On layer 1 the whiteout, flash, sun
   wash and fade would wash the picture and the disc would sample itself. The two pieces:
   `SplitScreen.HeadsetLayer` (D15's finding; panel, theater, comfort quads), and a new
-  `SplitScreen.HeadOverlayLayer` (bit 5, free) for the head-locked quads, the marker cards and the
+  `SplitScreen.HeadOverlayLayer` (bit 28) for the head-locked quads, the marker cards and the
   disc, which every pane camera and the cutscene pair still draw (D15's fade over a held film
   stands). `SpyglassView.DiscMask(..., headset: true)` drops both while `TargetHud.MarksInWorld`
   holds; flat play keeps the old mask bit for bit, and nothing flat stands on either layer.

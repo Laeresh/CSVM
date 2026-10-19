@@ -285,9 +285,12 @@ public class XrComfortTests
     [Fact]
     public void TheComfortFlagsParseAndAnUnknownWordIsIgnoredWithANote()
     {
-        var spec = SessionSpec.Parse(new[] { "--fly", "--xr-render-scale=70", "--xr-vignette=Strong" });
+        var spec = SessionSpec.Parse(new[] { "--fly", "--xr-render-scale=70", "--xr-vignette=strong" });
         Assert.Equal("70", spec.XrRenderScale);
         Assert.Equal("strong", spec.XrVignette);
+
+        // Like every word flag, the word is read exactly as typed.
+        Assert.Null(SessionSpec.Parse(new[] { "--fly", "--xr-vignette=Strong" }).XrVignette);
 
         var none = SessionSpec.Parse(new[] { "--fly" });
         Assert.Null(none.XrRenderScale);

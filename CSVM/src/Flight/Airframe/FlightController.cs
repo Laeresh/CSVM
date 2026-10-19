@@ -285,9 +285,10 @@ public partial class FlightController : Node3D
     /// plane's. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
     public Action? ToggleGraphicsMode;
 
-    /// <summary>What <see cref="InputAction.RecenterHeadset"/> does: the VR seat's recenter, set by
-    /// the session for the seat the headset flies. Null, in every flat session, leaves the action
-    /// inert.</summary>
+    /// <summary>What <see cref="InputAction.RecenterHeadset"/> does, and under a headset
+    /// <see cref="InputAction.LookCenter"/> and <see cref="InputAction.LookBack"/> too: the VR seat's
+    /// recenter, set by the session for the seat the headset flies. Null, in every flat session,
+    /// leaves the action inert.</summary>
     public Action? RecenterHeadset;
 
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
@@ -3701,10 +3702,15 @@ public partial class FlightController : Node3D
     }
 
     // The recenter's edge, polled beside the graphics switch so it works over a halted sim too.
-    // Silent where the options pages own the keyboard.
+    // Silent where the options pages own the keyboard. Under a headset Look Forward and Look Behind
+    // recenter as well, since the head turns by itself there. The right-stick click is the one
+    // recenter a standard pad reaches.
     private void PollRecenterHeadset()
     {
-        bool down = RecenterHeadset != null && !Pause.Silenced && _controls.Seat.Held(InputAction.RecenterHeadset);
+        var seat = _controls.Seat;
+        bool down = RecenterHeadset != null && !Pause.Silenced
+            && (seat.Held(InputAction.RecenterHeadset)
+                || (_headset != null && (seat.Held(InputAction.LookCenter) || seat.Held(InputAction.LookBack))));
         if (down && !_recenterPrev)
             RecenterHeadset!();
         _recenterPrev = down;

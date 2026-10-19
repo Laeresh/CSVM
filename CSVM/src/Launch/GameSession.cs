@@ -443,6 +443,10 @@ public partial class GameSession : Node3D
     /// the suites.</summary>
     internal WorldFlareRig? WorldFlare => _sky?.WorldFlare;
 
+    /// <summary>The screen flare rig, null where the session drew the world rig or no flare. Read by
+    /// the suites.</summary>
+    internal LensFlareRig? ScreenFlare => _sky?.Flare;
+
     /// <summary>The whole match's roster in seat order: a network match's, or a local match's with
     /// bots. Empty in any other session.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _wire.Seats;
@@ -893,6 +897,7 @@ public partial class GameSession : Node3D
         _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
+        _sky?.FollowGraphicsMode();
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
         SwitchProfile.Mark("lights");

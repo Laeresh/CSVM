@@ -923,8 +923,8 @@ every saved option (DET-8). A resolution-sensitive artefact is invisible at the 
 
 **`--xr-sim` launches.** `RunTests.ps1`, `RunProbe.ps1` and `RunGame.ps1` give a launch whose user
 arguments carry `--xr-sim` the `csvm_xr_sim` feature tag, through `GODOT_EDITOR_CUSTOM_FEATURES`
-set around that one process start and put back after it (`HiddenDesktop.ps1`'s
-`Invoke-WithXrSimFeature`; `RunGame.ps1` inline). The tag is what turns Godot's multiview shader
+set around that one process start and put back after it (`Invoke-WithXrSimFeature` in
+`XrSimFeature.ps1`, which all three dot-source). The tag is what turns Godot's multiview shader
 variants on and the shared shader cache off ([cli.md](cli.md)'s last section, LOG-25), so the golden
 workers launched beside an `--xr-sim` shot, and every later launch from the same shell, never see it.
 

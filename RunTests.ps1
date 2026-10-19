@@ -390,6 +390,7 @@ if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
     exit $MemDeferredExitCode
 }
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
+. (Join-Path $PSScriptRoot "XrSimFeature.ps1")
 $HiddenDesktop = Open-HiddenDesktop
 # Every child below joins this job, held until the summary, so a killed runner takes them with it.
 $null = Open-RunJob
