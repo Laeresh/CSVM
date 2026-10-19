@@ -90,7 +90,8 @@ public sealed class StuntBotObjective
     /// must lock no faster, or it outruns the check. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public const float TopLockSpeedMps = 135f;
 
-    // The sine of the bearing off the track's reverse inside which an aim counts as dead astern: 30 degrees.
+    // Remake-only rule: the sine of the bearing off the track's reverse inside which an aim counts as
+    // dead astern, 30 degrees. Rule: docs/org/aiPilot.md "Stunt race bots".
     private const float AsternSin = 0.5f;
 
     // Remake-only rule: how far below level the diving lock state RailClears flies points, degrees.
