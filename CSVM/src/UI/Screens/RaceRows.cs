@@ -52,7 +52,7 @@ public static class RaceRows
         ArgumentNullException.ThrowIfNull(racer);
         return racer.BestTime is { } best
             ? StuntMission.FormatTime(best)
-            : string.Format(CultureInfo.InvariantCulture, "{0}/{1} ZONES", racer.MostZones, zoneCount);
+            : string.Format(CultureInfo.InvariantCulture, "{0}/{1}", racer.MostZones, zoneCount);
     }
 
     /// <summary>A board's gap column for one pilot: behind <paramref name="winner"/>'s best, and

@@ -27,7 +27,7 @@ public class OriginalRaceBoardTests
 
         Assert.Equal(new[] { "1st  P2", "2nd  P1", "3rd  P3" }, rows.Select(r => r.Pilot));
         Assert.Equal(new[] { "Kestrel", "Bloodhawk", "Hoplite" }, rows.Select(r => r.Aircraft));
-        Assert.Equal(new[] { "0:08.0", "0:09.5", "1/3 ZONES" }, rows.Select(r => r.Best));
+        Assert.Equal(new[] { "0:08.0", "0:09.5", "1/3" }, rows.Select(r => r.Best));
         Assert.Equal(new[] { "", "+1.5", "at 0:04.0" }, rows.Select(r => r.Gap));
         Assert.Equal(new[] { "1/1", "1/2", "0/1" }, rows.Select(r => r.Runs));
     }

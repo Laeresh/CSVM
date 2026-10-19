@@ -609,7 +609,7 @@ internal static class StuntRaceSuites
                 $"the race's end wakes the Original board with the sim halted: visible={board.Visible} halted={pause.Halted} composed={shown != null}");
             ctx.Check(board.Rows.Count == 3 && board.Rows[0].StartsWith("1st  P2  Kestrel  0:08.0", StringComparison.Ordinal)
                     && board.Rows[1].StartsWith("2nd  P1  Bloodhawk  0:09.5  +1.5  1/1", StringComparison.Ordinal)
-                    && board.Rows[2].StartsWith("3rd  P3  Hoplite  1/3 ZONES  at 0:04.0  0/1", StringComparison.Ordinal),
+                    && board.Rows[2].StartsWith("3rd  P3  Hoplite  1/3  at 0:04.0  0/1", StringComparison.Ordinal),
                 $"the board ranks the field by best run: {string.Join(" | ", board.Rows)}");
             if (shown == null)
             {
