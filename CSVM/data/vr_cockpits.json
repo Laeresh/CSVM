@@ -4,14 +4,14 @@
   "planes": {
     "player_bhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_pfighter": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
-    "player_fury": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
-    "player_warhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_fury": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05 },
+    "player_warhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05 },
     "player_autogyro": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_avenger": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
     "player_balmoral": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
-    "player_brigand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_brigand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05 },
     "player_fbrand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
-    "player_kestrel": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
-    "player_peacemaker": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 }
+    "player_kestrel": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05 },
+    "player_peacemaker": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.12, "eyeOffsetY": -0.05 }
   }
 }
