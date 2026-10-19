@@ -2,12 +2,14 @@
 
 Everything that needs a human at the controls (or the original game open for A/B), consolidated.
 **This file holds only what is actionable *today*.** Anything whose test is blocked on an unlanded
-fix lives on its `backlog.md` entry as a `*Playtest after fix:*` line instead, so an empty section
-here means the work is queued, not forgotten. Deep evidence and traps live in
-[`backlog.md`](backlog.md); the two are kept in step.
+fix lives on its `backlog` issue as a *Playtest after fix* note instead, so an empty section
+here means the work is queued, not forgotten. Deep evidence and traps live in the issue the
+item blocks; the two are kept in step. New owed checks and captures are `playtest`/`capture`
+issues (`docs/agents/issue-tracker.md`); this file only empties.
 
 **Every item carries a stable ID**, `CAP-nn` for an owed capture, `PT-nn` for something to fly.
-Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
+Cite them from issues and in conversation by that ID. A `BL-NNN` an item cites is a closed item
+of the retired backlog file (`git log --grep=BL-NNN`). IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below, run
 **`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
@@ -27,15 +29,15 @@ command. Sections sort by chapter then plane; items within a section by ascendin
 to choose its plane or chapter piggybacks on an existing profile, it never opens a section of its
 own. Every PT item is one bullet:
 
-    - `PT-nn` `[A/B: <ref>]`-or-`[Own]` **What to check (`BL-NNN`).** context… *Look for:* … *Blocks:* …
+    - `PT-nn` `[A/B: <ref>]`-or-`[Own]` **What to check (#N).** context… *Look for:* … *Blocks:* …
 
 `[A/B: <ref>]` names the capture or `OriginalScreenshots/` shot to have open *before* launching;
 `[Own]` is a judgement call on our own remake with no original reference. A mixed item takes
 `[A/B]`, the per-check references stay in their bullets. *Look for:* holds one sub-bullet per
 check, lettered `(a)(b)(c)` when there is more than one. *Blocks:* is mandatory, name what a pass
-closes, or state outright that nothing tracks the outcome and a fail mints a new `BL` item.
+closes, or state outright that nothing tracks the outcome and a fail files a new issue.
 Optional: context prose between title and *Look for:* (a few lines at most, deep evidence lives
-in `backlog.md`), and *Variations:* for extra flags or re-runs beyond the section's command.
+in the issue), and *Variations:* for extra flags or re-runs beyond the section's command.
 
 **Captures staged for an item live in `playtest/<ID>/`**, git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -72,7 +74,7 @@ hypothesis to check, not a target to build against.
 ## 0 · Owed captures (`CAP-nn`)
 
 **One sit-down list.** These are recordings and screenshots of *the original game*, not our build.
-Most of the items below and a large part of `backlog.md` are blocked on one of these, so filming
+Most of the items below and many `backlog` issues are blocked on one of these, so filming
 them in a batch unblocks far more than doing them one at a time.
 
 ⚠ **No capture here answers a flight-model question, and none may be filed.** A number off the
@@ -98,24 +100,9 @@ draws its authored 800x600 space one-to-one.
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-50` | The **Instant Action screen's VIEW STORY**, pressed | The first take (`CAP-50.mkv`, 2:27, silent) settled the screen's composition and every dropdown, the wave paging, the ace duel, the radio, the militia reset, BUILD CUSTOM PLANE and WEAPON LOADOUT; the findings are in `docs/org/menu-inventory.md` Part 4, and the page's opening preset and when its name is written are the user's own design rather than corrections. One thing was never pressed: **VIEW STORY**. Film it on two presets and hold the page it opens. *Look for:* whether it opens the same riveted spread FLY MISSION does (headed by the mission type at `CAP-50.mkv` t=142) or a page of its own, what its title reads (the preset's name, the mission type, or the `IDS_IA_STORYTITLE` format's text) and how the take gets back. Sound rides `CAP-52`'s re-record | `docs/org/menu-inventory.md` Part 4 |
-| `CAP-51` | **The AUDIO page with sound, and a leaf re-entered after CANCEL** | The first take (`CAP-51.mkv`, 2:16, silent) settled Preferences and all five leaves' composition, their option lists and their exits; the findings are in `docs/org/menu-inventory.md` Part 4. Two halves are still owed. (a) **Sound.** With the game's output routed into the recorder, open AUDIO, hold still for two seconds before touching anything, then move each of the three volume sliders in turn, then press CANCEL CHANGES. ⚠ The page's preview is decoded from `ASSETS/SCRIPTS/AUDIO.SCRIPT` (a sound object per category over `music_loop.wav`, `sfx_loop.wav` and `voice_loop.wav`, all three started at page open, only a volume set as a slider moves, and a cancel that restores from the saved settings); do not re-derive it from the film. *Look for:* whether all three loops are already running at page open or a clip fires per move, how long a clip runs (`ZB = 0` stands on every `@ctl@SK` object, so the script cannot say), and whether CANCEL restores the levels audibly. This port fires a clip on the level that moved instead, a deliberate departure, so the film changes nothing about it. (b) **The revert.** On Game Options change Auto Head Turn, press CANCEL CHANGES, then **re-enter the page and hold it**, since the first take never re-entered a leaf after a Cancel. Also press RETURN TO GAME if Preferences is ever reachable in flight (`PF_B_RETURNTOGAME`; the first take never left the menu tree) | the AUDIO page's preview against the decoded script, and whether a leaf's CANCEL CHANGES reverts a setting |
+| `CAP-51` | **A Preferences leaf re-entered after CANCEL** | The first take (`CAP-51.mkv`, 2:16, silent) settled Preferences and all five leaves' composition, their option lists and their exits; the findings are in `docs/org/menu-inventory.md` Part 4. The AUDIO page's preview is decoded from `ASSETS/SCRIPTS/AUDIO.SCRIPT`, and this port departs from it on purpose, so no sound is owed. On Game Options change Auto Head Turn, press CANCEL CHANGES, then **re-enter the page and hold it**, since the first take never re-entered a leaf after a Cancel. Also press RETURN TO GAME if Preferences is ever reachable in flight (`PF_B_RETURNTOGAME`; the first take never left the menu tree) | whether a leaf's CANCEL CHANGES reverts a setting |
 | `CAP-52` | **Menu audio, keyboard focus and the briefing**, across screens, re-recorded **with sound** | The first take (`CAP-52.mkv`, 2:28) settled the pointer (which bitmap where, the top-left hotspot, the swap on enter and leave only), the three lettering states, the press firing on the release, the two message boxes and where every Back lands, all of which Original now draws; the findings are `docs/org/menu-inventory.md` Part 4. Its audio track is digital silence, as are `CAP-49`'s, `CAP-50`'s and `CAP-51`'s, so the recorder had no game output routed to it: **check the recorder hears the game before the take**. Then one continuous walk, main menu, Instant Action, back, Campaign, roster (type a character and a refused one), cabin, scrapbook, briefing, flight check, back out. *Look for:* (a) which sound a rollover makes and which a press makes, on a main-menu plaque, a campaign plaque, a roster row, a contents row, a scrap and a dropdown row (CSVM's Original menu plays `MOUSEOVER` on entering a button and `MOUSECLICK` on a press and nothing over a row, unconfirmed); (b) what the edit-box keystroke and reject sounds are attached to (`ENTERTEXT` per taken character, `ENTERTEXT_ERROR` per refused one, unconfirmed); (c) where the splash music starts, stops and resumes, and whether the briefing's narration ducks it; (d) **REPLAY BRIEFING pressed** mid-narration, then RETURN TO CABIN mid-narration (Original restarts the wav from its top, and ends it and lifts the duck on leaving); (e) **DELETE PLAYER pressed** and cancelled (Original opens the two-button box focused on Yes); (f) **a keyboard and a pad pressed on every screen**, arrows, Tab, Enter and the pad's stick and A, since no take has pressed a key outside an edit box and CSVM's Original focus walk is a remake equivalence with no film behind it. The take is judged against Original | `A4` (the audio and menu-input contracts), `D33`, the focus walk `docs/org/menu-inventory.md` Part 4 still calls a remake equivalence |
 | `CAP-53` | The **Plane Construction tab bar out of order, Purchase, and the two refusals** | Two walks exist already, `CAP-50.mkv` t=118 to 140 from Instant Action's door and `CAP-52.mkv` t=110 to 145 from the cabin's, and they settled the name dialog, the tab art, the running total, the dropdowns, both doors' strips and scraps, SELL PLANES and its INVENTORY, and CANCEL, all of which Original now draws; the findings are `docs/org/menu-inventory.md` Part 4. Both walks ran the tabs strictly 1 to 6 and neither purchased. The langui 206 defaults ask is settled without film: `AIRFRAME.SCRIPT`'s own mailbox arms carry its gate and all three answers (`docs/org/hangar.md`, "When the airframe swap asks"). Film from the cabin: **clear** Load Default Configuration on the name dialog and read what the Airframe tab opens on; visit the tabs **out of order** (Paint, then Engine, then Airframe); enter a name the game refuses (langui 203, a duplicate or empty one); then press READY TO PURCHASE and hold the totals page, and buy. *Look for:* whether picks survive leaving a tab and whether Purchase commits them all at once, what the totals page shows, and what the refusal looks like. Sound rides `CAP-52`'s re-record | `C23` |
-
-### Audio
-
-| ID | Capture | What must be audible | Unblocks |
-|---|---|---|---|
-| `CAP-48` | Does the original play the train-destroyed line during CM16's Sparks pickup? | Fly `CM16` (`C4/M01`, Rocky Mountains - Raid on the Rocky Express) in the original to the Sparks pickup, and film the pickup cutscene from the moment it takes the screen through to the mission ending, clean audio on the take. The film destroys the Rocky Express itself about 16.7 s in (large fireball at the engine, all four cars sliding to a stop) and wins the mission about 5 s after that, so the whole clip is roughly 25 s. **What is owed is the audio over that window**: whether Zachary's `VO_c4-RM-m1_Zachary_59.wav` plays over the explosion and the fade to black. Play `extracted/soundsh/VO_c4-RM-m1_Zachary_59.wav` first, 4.3 s, so the line is known by ear before the sortie. Note the debrief's primary rows on the same take if the ending reaches them, in particular whether "Rescue Sparks" is marked. Our build plays that line there and leaves that row unmarked, and both follow from the decode: the film's own `CALL_ANIMATION [destroy_car01]` completes the objective watching `train01`'s healthy subtree, which plays the line and kills the rescue objective 4.85 s before `got_sparks` can reach EXECUTED (`git log --grep=CAP-48`). The gates that could have made this ours alone are closed in the exe: `FUN_0046a490` suspends the objectives runtime only on the code-20 slot, which this film never raises, and `FUN_004ed8c0` refuses a call by runtime state, never by authored activation, so a `WeaponHit` destructible starts on a `CALL_ANIMATION` | Nothing tracks the outcome. A match closes the question as faithful; a silent original, or one that marks the rescue, mints a new `BL` for the objective the film's own explosion retires |
-
-### Damage & collision
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a struck plane; a fused burst reads the `default` row in the original and in ours (`docs/org/ordnanceTypes.md` "Which row a burst reads"), so the beeper's near miss draws nothing and the seeker's draws its white flare at the round. The ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether a direct strike shows the large fireball on the plane, something smaller, or nothing beyond the paint; whether a near miss shows nothing (beeper) or the flare (seeker); and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
-| `CAP-47` | A gasbag burning out, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and set the Gemini's gasbags alight, holding one bag in frame from ignition through to whatever ends it, close enough to read both the fire and the envelope under it. *Look for:* what a finished gasbag looks like (a collapsed or missing envelope, a scorched one that stays, or a fire that simply stops), and what the zeppelin does once **three of its five** have finished, which is the authored death gate (`all_gmzep_gasbags` carries `MINIMUM_TO_SATISFY 3` over the five `finish_gmzepgasbagN` animations). Qualitative only: no burn duration is read off this clip as a constant | `BL-639` |
-| `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull (ours sheds five, and the eye agrees with the data), and whether every one of them stays on the water, since ours drops the front and back bags through it (`BL-698`); (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) where the hull itself stops, on the water or in the air, since ours halts it some 47 m over the sea when the sections break away, and the waterline against the three left broadside bays and their hatches if it does come down; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-698` and `PT-119` (b) and (d): whether the original leaves a bay unreachable at all, where ours no longer needs one, since the hull's own death demolishes every bay |
-| `CAP-57` | The Barracuda taking flak rockets on the hull, CM04 (C3/M03) | In the original, fly the mission to the submarine and put three flak rockets into its hull from outside the hangar, external view, the hull and the hangar mouth both in frame; then, whether it survives or not, keep firing into the open hangar and count what it costs there. *Look for:* whether the hull takes damage at all (a hit effect, a damage readout, the mission's voice), and how many rockets into the hangar mouth end it, against the six the authored 200 HP pool and flak's 35 per hit predict. The data is settled and the remake follows it: the pool sits on the hangar doors, not the hull, and a round anywhere else on the boat costs it nothing. This take is the check on that at the controls. Qualitative on the hull, a count on the hangar; no hit-point figure is read off this clip | Nothing tracks the outcome; a hull that takes damage in the original, or a hangar count that is not six, mints a new `BL` |
 
 ### AI flight, an AI aircraft flying itself, external view
 
@@ -179,7 +166,7 @@ draws its authored 800x600 space one-to-one.
     push still takes it where you meant, and letting go returns it at the speed it always did.
     `HeadLook.PadAimSmoothRate` 25/s (a 40 ms lag) and `PadAimCentreBand` 0.02 are the two to raise
     if it still shimmers and to lower if the view feels like it is catching up with your thumb;
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (d)-(g) failed.
+  *Blocks:* nothing tracks the outcome; a fail files a new issue naming which of (d)-(g) failed.
   ⚠ The rumble carries no direction and no camera shake of its own. Both are deliberate
   (`docs/org/input.md`) and neither is a gap to report.
 
@@ -202,7 +189,7 @@ draws its authored 800x600 space one-to-one.
     the fogged deck shows through beyond it, the near-saturated wall of white being gone;
   - (c) at the 1,700 m rung the cloud tops sit at the original's brightness rather than above it;
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
+  *Blocks:* nothing tracks the outcome; a fail files a new issue naming which of (a)-(d) failed.
 
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
@@ -285,7 +272,7 @@ reasons that have nothing to do with any of these checks.
     usefully, that element deliberately keeps the pane, since the box is not where the target
     left;
   - (c) nothing has moved at 16:9: the same sortie windowed looks exactly as it did.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
+  *Blocks:* nothing tracks the outcome; a fail files a new issue. The per-element choice and the
   one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
 - `PT-174` `[Own]` **The original's keyboard table is under the hand on a fresh profile.** The flight
   defaults are the original's decoded 64-entry table (`docs/org/input.md`, `git log
@@ -298,7 +285,7 @@ reasons that have nothing to do with any of these checks.
     allies and non-aircraft, Q the nearest of anything and T clear, and a bare E does nothing while
     Shift is held;
   - (c) Space and X fire, Shift+S opens the spyglass, and F8 cycles the cockpit views to chase.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+  *Blocks:* nothing tracks the outcome; a fail files a new issue.
 
 ### C1 · two pilots, Dogfight (splitscreen VS)
 
@@ -319,7 +306,7 @@ reasons that have nothing to do with any of these checks.
   the OTHER player turns or flies away (the shared-alpha tell); (c) flying through an emitter still
   culls it in the pane that flew through it rather than filling that screen.
   *Blocks:* the fidelity verdict for the nearest/union boundary rule, per-pane alpha (one MultiMesh per pane) is
-  reached for only if (b) visibly fails, and a fail mints its own `BL` item.
+  reached for only if (b) visibly fails, and a fail files its own issue.
   *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
   `--players=4` for the same question with four alphas competing.
   *Also carries B12 (`BL-340` landed 2026-08-15):* the `FBFX_COLOR_FROM_TO` screen wash now paints
@@ -341,7 +328,7 @@ reasons that have nothing to do with any of these checks.
   - (b) the full-size HUD in each pane reads as correct rather than oversized;
   - (c) dragging the window back under 2:1 flips it to stacked while the sortie runs, and back;
   - (d) the plane select before the sortie splits the same way the flight then does.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The threshold's reasoning is in the
+  *Blocks:* nothing tracks the outcome; a fail files a new issue. The threshold's reasoning is in the
   landing commit (`git log --grep=BL-777`). A stacked pane's first-person views hold their vertical
   angle and widen horizontally like any other viewport, so a cropped cockpit in one is a new fault
   rather than a known one.
@@ -353,7 +340,7 @@ reasons that have nothing to do with any of these checks.
   section's Dogfight launch above, two pilots. *Look for:* camp one spawn, kill the other pilot
   there, and say whether the respawn reads as away from the camper; then repeat from the same camp
   and say whether the sequence of spawns becomes predictable. *Blocks:* nothing; a retune is the two
-  constants, a fail mints its own `BL`. The playtest steps the item wrote are in its landing commit
+  constants, a fail files its own issue. The playtest steps the item wrote are in its landing commit
   (`git log --grep=BL-301`).
 
 ### C1 · two pilots, the victim-routed screen wash
@@ -390,8 +377,7 @@ the constant: a decode is not contested with a measurement read off a running pi
     too, as in the original, whose self-hit guard exempts only the damage pair.)
 
   *Blocks:* nothing tracks the outcome; (a)/(b) passed at the controls and only (c) is still owed.
-  a fail on routing mints a new
-  `BL`.
+  a fail on routing files a new issue.
   *Variations:* `--debug-wash=3` in a two-pane session, which answers to no pane and must paint
   nothing at all.
 
@@ -420,7 +406,7 @@ against #226 rather than against the wash routing.
   - (e) frame cost holds up with four panes and a dense burst (`--debug-fps`), since every splash
     candidate now costs a cover ray.
 
-  *Blocks:* nothing tracks the outcome: a fail on routing mints a new `BL`; a fail on loudness is
+  *Blocks:* nothing tracks the outcome: a fail on routing files a new issue; a fail on loudness is
   #226.
 
 - `PT-76` `[Own]` **The same pass under Dogfight rules, four viewers hostile.** `--coop` puts every human on one team, so the beeper's hostility
@@ -436,8 +422,7 @@ against #226 rather than against the wash routing.
     facing rule still holding for the flash;
   - (d) the match keeps scoring normally: none of the no-damage types registers a hit or a kill.
 
-  *Blocks:* nothing tracks the outcome: a fail mints a new
-  `BL`.
+  *Blocks:* nothing tracks the outcome: a fail files a new issue.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
 
@@ -468,7 +453,7 @@ against #226 rather than against the wash routing.
   (a) the first burst from another pilot lands as damage at once, with no free pass; (b) whether
   the fight reads as sharper for it or as fragile, with a pilot dead before they could react;
   (c) nothing else changed: guns, rockets and the kill order all as in a two-pane match.
-  *Blocks:* nothing tracks the outcome; a "fragile" verdict mints a new `BL` naming what the
+  *Blocks:* nothing tracks the outcome; a "fragile" verdict files a new issue naming what the
   Dogfight should shield.
 
 ### C4 · two pilots, Instant Action stunt run
@@ -487,7 +472,7 @@ against #226 rather than against the wash routing.
     and Back closes it with focus on that print;
   - (c) a marker entered during the 3 s hold after the finish takes no photograph.
   *Variations:* `--presentation=original` for (c). *Blocks:* nothing tracks the outcome; a fail
-  mints a new `BL` item.
+  files a new issue.
 
 ### C1 · the stunt run's time-attack rules, one pilot then two, sound on
 
@@ -507,7 +492,7 @@ against #226 rather than against the wash routing.
     arriving there;
   - (c) the 0.25 s hold is long enough not to throw a run away by accident;
   - (d) the walk into a start line backed by structure looks acceptable.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+  *Blocks:* nothing tracks the outcome; a fail files a new issue.
 - `PT-178` `[Own]` **A two-seat split screen stunt race reads as a time attack.** Menu path:
   Instant Action → C1 → Stunt Flying with a second seat joined, Race Time 3 minutes, then the same
   with `--presentation=original` and with Enhanced graphics. *Look for:*
@@ -521,7 +506,7 @@ against #226 rather than against the wash routing.
     aside; the end board ranks by best run with the splits, and Back returns to Instant Action;
   - (e) P1's RUN COMPLETE banner and a "zone CLEARED" flash overlap in a half-height pane: judge
     whether that needs moving.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+  *Blocks:* nothing tracks the outcome; a fail files a new issue.
 
 ### C1 · Instant Action, Dogfighting an Ace, sound on
 
@@ -542,7 +527,7 @@ against #226 rather than against the wash routing.
   - (d) in the session's log under `.scratch/logs/`, no `owns the clips but none was prewarmed`
     warning for `ai1_player_peacemaker`.
 
-  *Blocks:* nothing tracks the outcome; a silent ace with that warning absent mints a new `BL`
+  *Blocks:* nothing tracks the outcome; a silent ace with that warning absent files a new issue
   naming the trigger that stayed silent.
 
 ### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
@@ -567,7 +552,7 @@ is a judgement on our own remake.
   - (d) B on a guest's pad drops that guest back out (roster, briefing or flight check alike)
     without disturbing P1's own flow, which keeps its ordinary Back/Next meaning throughout.
   *Blocks:* nothing tracks the outcome (`C21`/`C22` landed on screenshots and code review alone,
-  with no scripted-input driver for a pad press on a menu screen): a fail mints a new `BL`.
+  with no scripted-input driver for a pad press on a menu screen): a fail files a new issue.
 
 - `PT-92` `[Own]` **A downed human spectates, and the last one lost ends the mission.**
   Fly two humans into CM01 and crash one, into the sea or a hillside, `R` to restart the pane if
@@ -582,7 +567,7 @@ is a judgement on our own remake.
   - (d) `--no-crash-loss` (`--campaign=<profile>:0 --players=2 --no-crash-loss`) turns all of this
     off together: a crashed human keeps flying, no pane is taken and nothing ends.
   *Blocks:* nothing tracks the outcome (`B13` landed on an engine suite alone, with no scripted
-  input to force a specific human's crash headlessly): a fail mints a new `BL`.
+  input to force a specific human's crash headlessly): a fail files a new issue.
 
 - `PT-93` `[Own]` **A cutscene fills the window, and the skipper is named.**
   CM01's own mission intro plays fullscreen on launch. Two pads (or pad + keyboard); have the
@@ -595,7 +580,7 @@ is a judgement on our own remake.
   - (c) the skip (or the intro's own end) restores every pane and HUD exactly as they were before
     the collapse, with nobody's pad input lost in the process.
   *Blocks:* nothing tracks the outcome (`B14` landed on an engine suite and a code-review pass at
-  the controls, with no scripted-input driver for a pad-button skip): a fail mints a new `BL`.
+  the controls, with no scripted-input driver for a pad-button skip): a fail files a new issue.
 
 ### CM02 (C3/M05) · guest capture, the Balmoral wing-walk
 
@@ -615,7 +600,7 @@ is a judgement on our own remake.
   - (d) relaunching and letting P1 trigger it instead puts P1 in the Balmoral and leaves the guest's
     own airframe alone, the same behaviour, the other human.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
-  driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
+  driver to fly a human into a world trigger headlessly): a fail files a new issue.
 
 ### CM14 (C2B/M04) · the Gemini, both kill orders
 
@@ -637,7 +622,7 @@ is a judgement on our own remake.
   - (d) whether a bay under the water is still reachable, and whether it needs to be, since the
     hull death should already have taken it.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
-  state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
+  state files a new issue.
 
 ### The exported package · a recipient's first run, no arguments
 
@@ -656,7 +641,7 @@ is a judgement on our own remake.
   - (b) with no `extracted\`, the in-game extraction screen comes up with the install folder field
     and Extract focused, and stays up until Extract finishes or Esc quits, rather than a menu over
     a world that cannot build.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The export's own default is what
+  *Blocks:* nothing tracks the outcome; a fail files a new issue. The export's own default is what
   is under test here; a player retunes the mix on Preferences' AUDIO page afterwards.
 
 ### The VIDEO page · a second monitor plugged in
@@ -682,7 +667,7 @@ is a judgement on our own remake.
   - (e) with that monitor then unplugged or disabled, the next launch comes up on the remaining
     screen rather than erroring or opening off the desktop, since the saved index is the one
     setting that can name something absent.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
+  *Blocks:* nothing tracks the outcome; a fail files a new issue. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
 ### The CONTROLS page · a pad plugged in
@@ -700,7 +685,7 @@ is a judgement on our own remake.
   - (b) the face buttons, bumpers, triggers, sticks and d-pad are told apart at a glance at the
     page's own size, with the weight and colour of the surrounding plaque art;
   - (c) a rebinding capture shows the new control's glyph as soon as it is pressed.
-  *Blocks:* a pass closes the question; a fail mints a `BL` for a texture set behind the same
+  *Blocks:* a pass closes the question; a fail files an issue for a texture set behind the same
   seam (`ControlGlyphs.Set`), which is why the seam is kept.
 
 ### Any campaign mission · enemy skill under the difficulty offset
@@ -719,24 +704,7 @@ is a judgement on our own remake.
   before the landing, an ace noticeably better than its wingmen, and a neutral (team 0) roster
   block, where one exists, unchanged either way. Enemies that feel wrong at the default tier, or an
   ace that feels no different from the rest, mean the offset or the exemption is mis-wired, since
-  the ratings themselves are the roster's own. *Blocks:* nothing; a fail mints a new `BL`.
-
-### Any campaign mission · the pause chart's icons against the compass
-
-```powershell
-./RunGame.ps1 --campaign=<profile>
-```
-
-- `PT-146` `[Own]` **The pause chart's plane icon points where the compass tape says, on every
-  heading.** The chart's turn is the compass reading, and the player's own icon art is drawn an
-  eighth of a turn counter-clockwise of the top of the sheet, which the sheet now takes back off
-  (`git log --grep=BL-895`); a suite pins the agreement on seven headings, but only an eye at the
-  controls says the drawn nose looks right on the drawn chart. Fly a mission whose chart shows the
-  plane (CM05's window holds its own spawn), note the compass, then pause. *Look for:* (a) the
-  plane icon's nose along the heading the tape read, the chart being north up; (b) the same after
-  turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
-  zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
-  a fail mints a new `BL`.
+  the ratings themselves are the roster's own. *Blocks:* nothing; a fail files a new issue.
 
 ### CM07 (C1/M02) · the Danger Zone photograph in the scrapbook
 
@@ -752,14 +720,14 @@ is a judgement on our own remake.
   and the request was "should work in missions too for the scrapbook photos". CM07 authors four
   zones (objectives 18 to 21, `C1/M02/zrdr/dzones.zrd.json`). Fly through at least one zone, win
   the mission, and open the scrapbook. *Look for:* (a) the sting on the crossing and one hitch-free
-  frame (a hitch there is a new `BL`); (b) the photograph on the mission's spread
+  frame (a hitch there is a new issue); (b) the photograph on the mission's spread
   with its photo-corner mount, and the zoom showing the full 164x123 still; (c) a lost attempt
   leaving no photograph behind; (d) whether the framing reads like the original's photographs, a
   head-on view of the aeroplane from outside it. *Blocks:* nothing tracks the outcome; a
-  missing photograph mints a new `BL`.
+  missing photograph files a new issue.
 
 ## Everything else
 
-Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
-`*Playtest after fix:*` line. Do not re-add those here; the entry brings its own test when the
+Everything blocked on an unlanded fix is tracked in its `backlog` issue with its own
+*Playtest after fix* note. Do not re-add those here; the issue brings its own test when the
 fix lands.

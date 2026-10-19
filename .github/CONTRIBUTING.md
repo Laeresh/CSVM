@@ -15,10 +15,10 @@ to give you: an issue is read, and what happens to it, including a decision not 
 is written in that issue. So the issue is the thread to follow, and subscribing to it is how
 you hear about it.
 
-**`backlog.md` in this repository is the author's internal list, and public reports are not
-mirrored into it.** It carries scheduled and deferred engine work in a private id scheme
-(`BL-`, `PT-`, `CAP-`) that a public report never enters. Your issue not appearing there
-does not mean it was dropped, and a `BL-` number is not something you can be given.
+**The author's internal work list is the `backlog`-labelled issues, and public reports are
+not copied into it.** Those carry scheduled and deferred engine work; `playtest.md` carries the
+older entries in a private id scheme (`PT-`, `CAP-`) that a public report never enters. Your
+issue not being linked from one does not mean it was dropped.
 
 Questions and suggestions go in a blank issue. Discussions are off, so issues are the one
 place to watch.
@@ -78,7 +78,7 @@ dotnet test CSVM/CSVM.sln                                                 # unit
 The content gate runs these checks, each also a script of its own:
 
 - `CheckEncoding.ps1`: no double-encoded UTF-8 anywhere in the tree.
-- `CheckItemIds.ps1`: no item id defined twice in `backlog.md` or `playtest.md`.
+- `CheckItemIds.ps1`: no item id defined twice in `playtest.md`.
 - `CheckGoldenProse.ps1`: the golden manifest's descriptions stay short and current.
 - `CheckCommentCaps.ps1`: comment length caps under `CSVM/src` and `CSVM.Tests`, and
   sentence length in the comments you changed. The caps are in `PROJECT_CONTEXT.md`'s coding

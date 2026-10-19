@@ -55,7 +55,8 @@ Two findings will not be guessed correctly from the screenshots:
 | `FUN_004a64e0` | The death/despawn hook. Drops a dead entity from every target field and both lists |
 | `0x004a36e0` / `0x004a36f0` | A mission structure's position and velocity getters, vtable `0x00608848` slots 0 and 1: `LEA EAX, [ECX + 0x74]` / `[ECX + 0x80]` |
 | `FUN_004a2570` | The structure constructor. Stores the scene node at `+0xc` and fills `+0x74` from `FUN_004cf2c0` |
-| `FUN_004a2730` | The per-frame refresh of `+0x74`/`+0x80`, gated on the `+0x8f` moving flag |
+| `FUN_004a2730` | The per-frame refresh of `+0x74`/`+0x80`, gated on the `+0x8f` moving flag; `+0x80` is the centre's change over the frame dt, zeroed past 447.04 m/s |
+| `FUN_004bee10` | Sets `+0x8f` on every structure in a node subtree, recursively; the zeppelin record reader `FUN_004bd8d0` runs it over the hull through `FUN_004bee50` |
 | `FUN_004cf2c0` | Node → point: the active bbox (`FUN_004cd960`, six floats at `node + 0x70`), its midpoint (`FUN_004d8b10`), in the frame `FUN_004cef20` builds |
 | `0x004ac720` | **The turret's cost function**, slot 0 of the query vtable `0x00608b68`. Range gate, then `1200 * weight + distance` |
 | `FUN_004b9770` | The take-a-hit path. Appends the shooter to the attacker queue |
@@ -676,6 +677,16 @@ origin.** The constructor `FUN_004a2570` stores the scene node at `+0xc` and fil
 `FUN_004cef20` builds up the parent chain. `FUN_004a2730` recomputes the same value every frame for
 a structure whose `+0x8f` moving flag is set, and derives `+0x80` as the frame-to-frame delta over
 the tick, which is why a structure on a flying node is marked where it now is.
+
+The velocity is each structure's own: `(new centre - old centre) / DAT_009ad744`, the frame dt. A
+zeppelin's part far from the hull's pivot therefore carries the swing of a turn as well as the
+hull's travel. Two cases write zero instead: a dt of 0, and a squared speed over `199844.73`
+(447.04 m/s), the same cut the turret's moving-platform estimate takes. A structure whose flag is
+clear keeps the constructor's zero vector (`DAT_0075d1b8`) for good. The flag is set two ways: the
+zeppelin record reader `FUN_004bd8d0` calls `FUN_004bee50`, which walks the hull's node subtree
+through `FUN_004bee10` and sets `+0x8f = 1` on every structure under it; and the mission-structure
+builder `FUN_004a2e00` sets it from a byte of each entry (`SETZ` at `0x004a310f`, so a zero byte
+means moving).
 
 ⚠ **A group node's own origin is not its site.** Two shipped cases prove it: C2's `sghangar` carries
 the no-transform `"Initial"` and so stands at the world origin 8 km from the building, and C1/M05's

@@ -700,9 +700,9 @@ anchor)` pair seeded from the authored `HEALTH`, plus a coarse healthy/damaged/d
 `DamageStage`. Built in `AnimRuntime`'s bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`,
 damaged via `DamageAt`. `Resolve(struck)` climbs to the nearest claiming pool, which answers for its damage node and
 everything under it (what the original stamps its handler over) and, through its anchor alone, for nothing. `Instance`
-carries its `Centre` (the damage node's box centre, the one position every reader takes), what a mission record
-authors (`Team`, `Owner`, `Gasbag`, `Dormant`, `Reseed`), and the anchor's name and gamez ancestors for `TargetPool`,
-cached under the parent's id. Schema: docs/formats/destructibles.md; teams and position docs/org/targeting.md.
+carries its `Centre` (the damage node's box centre, the one position every reader takes) and that centre's
+`Velocity` (stepped by `ZeppelinRuntime` for a zeppelin's zones, else zero), a mission record's fields (`Team`,
+`Owner`, `Gasbag`, `Dormant`, `Reseed`), and the anchor's name and gamez ancestors for `TargetPool`, cached under the parent's id. Schema: docs/formats/destructibles.md; teams, position and velocity docs/org/targeting.md.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies:

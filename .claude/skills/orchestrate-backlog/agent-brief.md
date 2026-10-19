@@ -1,10 +1,11 @@
 # Brief for every item agent of orchestration run <RUN>
 
 You are one subagent of an orchestration run. You land ONE backlog item (or the small bundle named
-in your prompt) completely, in your own git worktree, and you NEVER commit. The item is a `BL-NNN`
-entry in `backlog.md` or a `#N` GitHub issue (read it with `gh issue view N --comments`; in a path
-it is `issue-N`). The orchestrator commits your tree, runs a two-axis code review on it (the
-repo's documented standards, and the item's entry or issue as the spec), may send you the findings
+in your prompt) completely, in your own git worktree, and you NEVER commit. The item is a `#N`
+GitHub issue (read it with `gh issue view N --comments`; in a path it is `issue-N`). A `BL-NNN`
+cited in it is a closed historical item: `git log --grep=BL-NNN` says what it settled. The
+orchestrator commits your tree, runs a two-axis code review on it (the repo's documented
+standards, and the item's issue as the spec), may send you the findings
 to fix, then squashes it onto the orchestration branch and runs the full battery on the merged
 tree. Do what the item asks and no more; unrequested changes come back as scope creep. The user is away: nothing you
 do may wait on them.
@@ -38,7 +39,7 @@ do may wait on them.
 - NEVER write to the tracker: no `gh issue create`, `comment`, `edit` or `close`. `gh issue view`
   and `gh issue list` are fine. Anything you would post is written to a file beside your commit
   message (below) and the orchestrator posts it after your work has landed.
-- Never mint a new `BL-`/`PT-`/`CAP-` id; a new item is a GitHub issue, and you write its body to
+- Never mint a new `PT-`/`CAP-` id; a new item is a GitHub issue, and you write its body to
   `.scratch\<RUN>\<id>\new-issue-<slug>.md` INSIDE your worktree, first line `Title: ...`, second
   line `Label: backlog|playtest|capture`, then the body, written for a reader who did not run the
   session and with a `⚠ Traps` section when there is one. The orchestrator files it.
@@ -63,7 +64,7 @@ it on the merged tree.
 
 A red result is fixed, or proved not yours (red on your base commit without your change) and
 waived: one line per failing suite in `commit.txt`,
-`Waiver: <suite> (owned by <BL-NNN or #N>): <why the landing does not wait for it>`, naming the
+`Waiver: <suite> (owned by #N): <why the landing does not wait for it>`, naming the
 open item that owns the failure. When nothing owns it, write a `new-issue-*.md` for it, leave the
 waiver out of `commit.txt` and give the line in your report with `#NEW` as the owner; the
 orchestrator files the issue and writes the line with its number. Check the form with `.\CheckWaiver.ps1 -MessageFile <commit.txt>
@@ -95,29 +96,27 @@ run. Kill any Godot you started before you report.
 ## Closing the item
 
 When the item is settled (fixed, answered, disproved or superseded), do the `close-backlog-item`
-steps yourself: for a `BL-NNN`, delete the entry from `backlog.md` and retire any `PT-`/`CAP-` it
-alone owned in `playtest.md`; for either kind, sweep the restated caveat out of docs and comments,
-and grep the id (no hits in any live file). Write the closing commit message to
+steps yourself: retire any `PT-`/`CAP-` row it alone owned in `playtest.md`, sweep the restated
+caveat out of docs and comments, and grep the id (no live file still cites it for evidence). Write
+the closing commit message to
 `.scratch\<RUN>\<id>\commit.txt` INSIDE your worktree (create the folder; the orchestrator copies
-it out before removing your tree): subject `Close BL-NNN: <what is now true>` or
-`Close #N: <what is now true>`, body in prose with what settled it, how it was measured, the honest
+it out before removing your tree): subject `Close #N: <what is now true>`, body in prose with what settled it, how it was measured, the honest
 limit of the evidence, what changed in the build and whether goldens moved, ending with a
 `Co-Authored-By:` trailer naming the model you run as (`PROJECT_CONTEXT.md`'s AI-assistance rule),
-e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Put crops and diffs beside it. For an
-issue, also write `close.txt` beside it: the closing comment, the same prose without the trailer;
+e.g. `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Put crops and diffs beside it. Also
+write `close.txt` beside it: the closing comment, the same prose without the trailer;
 the orchestrator posts it once the commit is on main. A `capture` or `playtest` issue the item
 alone owned gets its own `close-<N>.txt`.
 
 If the item cannot be closed without the user (a taste call, a decision between two faithful
 readings, a look at the controls that no instrument can replace): do everything that does not
-depend on the answer, then AMEND the item in place. For a `BL-NNN`: keep its id, set
-`[Next: decide]` or `[Next: look]`, and write the exact question or the exact sortie into the
-entry's body with the evidence you gathered. For an issue: write that text to
-`.scratch\<RUN>\<id>\comment.txt`, and name the triage label it should carry (`needs-info` or
-`ready-for-human`) on its first line as `Label: ...`; the orchestrator posts it. Do not file a
+depend on the answer, then AMEND the item: write the exact question or the exact sortie, with the
+evidence you gathered, to `.scratch\<RUN>\<id>\comment.txt`, and name the labels it should carry
+(`needs-info` or `ready-for-human`, and `next:decide` or `next:look`) on its first line as
+`Label: ...`; the orchestrator posts it. Do not file a
 `playtest` item for a look you merely would like; file one only when a landed change is
 unjudgeable by instrument. Write that commit message to the same path with subject
-`BL-NNN: <what changed>` or `#N: <what changed>`.
+`#N: <what changed>`.
 
 If you disprove the item's premise, that is a close ("closed, disproved"): record the disproof in
 the commit message and any transferable lesson as a `docs/verification.md` rule.

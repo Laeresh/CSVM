@@ -35,7 +35,7 @@ landing gate for any change under `CSVM/`.
   worktree, is in their script headers and [`GateCommand.ps1`](GateCommand.ps1).
 - **The content gate's checks** are scripts you can run by hand while editing:
   `CheckEncoding.ps1` (double-encoded UTF-8), `CheckItemIds.ps1` (an item or verification-rule ID
-  defined twice, a `backlog.md` tag outside its vocabulary), `CheckGoldenProse.ps1` (the golden
+  defined twice), `CheckGoldenProse.ps1` (the golden
   manifest's `exercises` fields), `CheckCommentCaps.ps1` (`-Summary` for one line per file),
   `CheckDocEntries.ps1` (architecture entries and the `docs/cli.md` bullet cap),
   `CheckUidSidecars.ps1` (a Godot `.uid` beside every `.cs`/`.gdshaderinc` under `CSVM/`) and
@@ -71,14 +71,14 @@ landing gate for any change under `CSVM/`.
 - Do not build to a turn of phrase. State the claim directly.
 - Technical documentation, not marketing copy.
 - **Docs state what is, not what was.** No dates and no event narration in live prose
-  (`docs/`, `backlog.md`, `playtest.md`, code comments): write "the unscaled arc reads like the
+  (`docs/`, `playtest.md`, issue bodies, code comments): write "the unscaled arc reads like the
   original at the controls", never "judged at the controls on 2026-08-16" or "retired 2026-08-16".
   A date in live prose is a claim that ages and makes the reader rebuild a timeline instead of
   reading the current state. When closing an item, the evidence and its date go in the closing
   commit's message, found later with `git log --grep=<ID>`. The dated
   `### ⚠ … — RETIRED (yyyy-mm-dd)` headings in `docs/org/*.md` are the record of superseded
   readings, and are the only place a date belongs; do not extend the pattern elsewhere.
-  `backlog.md` entries written before this rule keep their dated clauses until the entry closes or
+  `playtest.md` entries written before this rule keep their dated clauses until the entry closes or
   an edit reshapes its body, at which point the rule applies; there is no sweep of the old entries.
 - Comments explain why. Length caps and what belongs in one are in
   [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md)'s coding conventions; the terms to use are in

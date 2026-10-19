@@ -261,6 +261,11 @@ public sealed class DestructibleRegistry
         /// (<c>TargetPool.CollectOwners</c>).</summary>
         public string? Owner { get; set; }
 
+        /// <summary>The world velocity of <see cref="Centre"/>, written each step by whatever moves
+        /// the pool, and zero for one standing still. The original keeps it beside the position
+        /// (docs/org/targeting.md "Where a mission structure is"), and the lead reads it.</summary>
+        public Vector3 Velocity { get; set; }
+
         /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance
         /// has fallen past, the deepest progressive-damage stage it has escalated to. Only ever
         /// increases (damage escalates, never heals), so a stage effect fires exactly once; a

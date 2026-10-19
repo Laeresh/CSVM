@@ -23,6 +23,12 @@ internal static class WarhawkTorpedoRunSuites
     private const float StepDt = 1f / 60f;
     private const int Seconds = 90;
 
+    // MP3's cruise, the torpedo's dumbfire VELOCITY (wep_14) and wep_70's gun round.
+    private const float HullSpeed = 30f;
+    private const float TorpedoSpeed = 60f;
+    private const float GunRoundSpeed = 750f;
+    private const float ShotRange = 600f;
+
     [Suite("warhawk-torpedo-run",
         "a free-flying Black Hat Warhawk torpedoes a gasbag (BL-740): from C4/M03's own opening "
         + "geometry it takes the gasbag over the engine beside it, holds pursue while the flight "
@@ -162,5 +168,81 @@ internal static class WarhawkTorpedoRunSuites
             textures.Dispose();
         }
         ctx.WriteArtifact($"test-warhawk-torpedo-run.txt", report.ToString());
+    }
+
+    [Suite("zeppelin-part-lead",
+        "a gasbag pool riding a hull at 30 m/s reports the hull's velocity to the AI (#217): the "
+        + "rocketeer's torpedo and the gunner's intercept point lead it along the hull's track and "
+        + "meet it there, where a still hull's gasbag is aimed at itself")]
+    internal static void ZeppelinPartLead(TestContext ctx)
+    {
+        var gasbagPos = new Vector3(0f, 625f, 0f);
+        var gasbagNode = new Node3D { Name = "gasbag4", Position = gasbagPos };
+        ctx.Host.AddChild(gasbagNode);
+        try
+        {
+            var gasbag = new DestructibleRegistry().Register(
+                new AnimDefinition { Name = "gasbag4", AnimName = "zep_zone_gasbag4" }, gasbagNode, 120f);
+            gasbag.Gasbag = true;
+            var shooter = gasbagPos + new Vector3(0f, 0f, ShotRange);
+            var hullVel = new Vector3(HullSpeed, 0f, 0f);   // crossing the line of fire
+
+            gasbag.Velocity = hullVel;
+            CheckLead(ctx, "moving hull", shooter, gasbag, hullVel);
+
+            gasbag.Velocity = Vector3.Zero;
+            CheckLead(ctx, "CONTROL: still hull", shooter, gasbag, Vector3.Zero);
+        }
+        finally
+        {
+            gasbagNode.Free();
+        }
+    }
+
+    // Both solves, fed what the AI reads off the pool, from a shooter pointed where the torpedo
+    // must go. Each round must pass within a few metres of the gasbag's TRUE path. On the moving
+    // hull the torpedo's lead is about 30 degrees, so a shot at where the gasbag stood misses by
+    // hundreds of metres.
+    private static void CheckLead(TestContext ctx, string label, Vector3 shooter,
+        DestructibleRegistry.Instance gasbag, Vector3 hullVel)
+    {
+        TargetPool.TryTargetGeometry(gasbag, out var pos, out var vel, out var fwd, out bool live);
+        ctx.Check(live && vel.IsEqualApprox(hullVel),
+            $"{label}: the pool reports its carrier's velocity, ({vel.X:0},{vel.Y:0},{vel.Z:0}) m/s");
+        AimAssist.TryIntercept(shooter, TorpedoSpeed, pos, hullVel, out var lead, out _);
+        var nose = Basis.LookingAt(lead, Vector3.Up);
+        var rocketeer = new AiRocketeer(() => 0f);
+        var pylon = new RocketPylonView
+        {
+            Index = 0,
+            DamagesZeppelin = true,
+            Armed = true,
+            MountPos = shooter,
+            RoundSpeed = TorpedoSpeed,
+            MinRangeM = 350f,
+            MaxRangeM = 800f,
+        };
+        rocketeer.Solve(shooter, Vector3.Zero, nose, pos, vel, fwd, targetIsGasbag: true, new[] { pylon });
+        float torpedoMiss = rocketeer.SelectedPylon == 0
+            ? Miss(shooter, rocketeer.LaunchDirWorld * TorpedoSpeed, pos, hullVel)
+            : float.NaN;
+        ctx.Check(torpedoMiss < 5f,
+            $"{label}: the rocketeer takes the torpedo pylon and the torpedo meets the gasbag, missing by {torpedoMiss:0.0} m (verdict '{rocketeer.LastVerdict}')");
+
+        var gunner = new AiGunner(new RandomNumberGenerator { Seed = 217 });
+        gunner.Solve(shooter, Vector3.Zero, nose, pos, vel, fwd, GunRoundSpeed);
+        float gunMiss = Miss(shooter, gunner.AimDirWorld * GunRoundSpeed, pos, hullVel);
+        float ahead = (gunner.InterceptPoint - pos).Dot(hullVel.Normalized());
+        ctx.Check(gunMiss < 1f,
+            $"{label}: the gunner's round meets the gasbag, missing by {gunMiss:0.0} m, intercept {ahead:0.0} m along the hull's track");
+    }
+
+    // Closest approach between a round from origin at roundVel and a target from pos at vel.
+    private static float Miss(Vector3 origin, Vector3 roundVel, Vector3 pos, Vector3 vel)
+    {
+        var r0 = origin - pos;
+        var w = roundVel - vel;
+        float t = Mathf.Max(0f, -r0.Dot(w) / w.LengthSquared());
+        return (r0 + (w * t)).Length();
     }
 }

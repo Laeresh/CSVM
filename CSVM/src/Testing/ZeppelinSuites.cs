@@ -763,6 +763,60 @@ internal static class ZeppelinSuites
         });
     }
 
+    [Suite("zeppelin-part-velocity",
+        "every part of the chapter's two Zeppelin vs Zeppelin hulls reports its own centre's "
+        + "velocity (#217, the decoded FUN_004a2730 refresh): zero before the hulls' first step, "
+        + "then, once they fly their nets, each part's reported velocity carries its centre to "
+        + "where the next step puts it, and the target pool and the gun assist read that value")]
+    internal static void ZeppelinPartVelocitySuite(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, Spec.SessionSpec.ZvzMission);
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{Spec.SessionSpec.ZvzMission} zrdr");
+        ctx.WithWorld(ctx.Chapter, collision: false, Spec.SessionSpec.ZvzMission, world =>
+        {
+            var runtime = world.Session.Runtime;
+            var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter));
+            var zeps = new ZeppelinRuntime(Zeppelins.Load(missionZrdr),
+                name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
+            try
+            {
+                const float dt = 1f / 60f;
+                zeps.WireDamage(runtime);
+                var parts = new List<AimCandidate>();
+                zeps.CollectTargetParts(parts);
+                var pools = parts.Select(p => p.Source).OfType<DestructibleRegistry.Instance>().ToList();
+                ctx.Check(pools.Count > 0 && pools.All(p => p.Velocity == Vector3.Zero),
+                    $"CONTROL: before the first step all {pools.Count} part(s) stand still");
+                for (int i = 0; i < 600; i++)
+                    zeps.SimStep(dt);
+
+                var before = pools.ToDictionary(p => p, p => (p.Centre, p.Velocity));
+                zeps.SimStep(dt);
+                float worst = 0f, fastest = 0f;
+                foreach (var (pool, (centre, vel)) in before)
+                {
+                    worst = Mathf.Max(worst, pool.Centre.DistanceTo(centre + (vel * dt)));
+                    fastest = Mathf.Max(fastest, vel.Length());
+                }
+
+                parts.Clear();
+                zeps.CollectTargetParts(parts);
+                bool agree = parts.Count == pools.Count && parts.All(part =>
+                    TargetPool.TryTargetGeometry(part.Source, out _, out var read, out _, out _)
+                    && read != Vector3.Zero && part.Velocity == read);
+
+                ctx.Check(fastest > 1f, $"the hull is flying, its fastest part at {fastest:0.0} m/s");
+                ctx.Check(worst < 0.05f,
+                    $"each part's velocity carries its centre to where the next step puts it, worst {worst:0.000} m off");
+                ctx.Check(agree, $"the AI's read and the gun assist's candidate carry that same velocity");
+            }
+            finally
+            {
+                zeps.Free();
+            }
+        });
+    }
+
     // The broadside chain: C3/M03's Pandora as shipped (never engaged, so nothing opens or fires
     // on a player abeam), then C1/M04's piratezep engaged as COMPLETED_ZEPCANNONS would: deploy,
     // a volley at a player stand-in (repositioned through its flight model each step to hold the

@@ -3,8 +3,8 @@
 Issues for this repo live in GitHub Issues on `Laeresh/CSVM`. Use the `gh` CLI for all
 operations; it infers the repo from `git remote -v` inside a clone.
 
-New work goes there, internal and public alike. The committed markdown files below are the
-record of what was filed before the switch, and stay only until each entry closes.
+New work goes there, internal and public alike. `playtest.md` is the record of what was filed
+before the switch, and stays only until each entry closes.
 
 ## Conventions
 
@@ -21,7 +21,7 @@ record of what was filed before the switch, and stay only until each entry close
 
 ## Category labels
 
-Three labels replace the three private id prefixes for anything filed from now on:
+Three labels replace the three private id prefixes:
 
 | Label | Replaces | Holds |
 |---|---|---|
@@ -29,26 +29,56 @@ Three labels replace the three private id prefixes for anything filed from now o
 | `playtest` | `PT-nn` | **An owed at-the-controls check**: what to look for, the launch command, what it blocks. |
 | `capture` | `CAP-nn` | **An owed capture of the original game**, naming the `backlog` issue it unblocks. |
 
-An issue is cited by its number, `#123`, in commits, plans and other issues. The
-`⚠ Traps` section a `backlog.md` entry carried (rejected fixes, misleading instruments) goes
-in the issue body under the same heading. A public bug report from the form carries `bug`
+An issue is cited by its number, `#123`, in commits, plans and other issues. Rejected fixes
+and misleading instruments go in the issue body under a `⚠ Traps` heading. A `BL-NNN` cited in
+the code, the docs or `playtest.md` is a closed item of the retired backlog file; its record is
+in the commits `git log --grep=BL-NNN` finds. A public bug report from the form carries `bug`
 and none of these three; it is worked in its own thread as before.
 
 ## Backlog labels
 
-A `backlog` issue carries `backlog.md`'s type and property tags as labels, with the same
-vocabularies and meanings as that file's header, so the tracker can be filtered the way the
-backlog artifact is:
+A `backlog` issue carries type and property labels from fixed vocabularies, so the tracker can
+be filtered the way the backlog artifact is:
 
 | Group | Labels |
 |---|---|
-| Theme | one `theme:<slug>`: `damage`, `weapons`, `flight`, `environment`, `effects`, `audio`, `cameras`, `hud`, `splitscreen`, `missions`, `tooling`, `misc`. The label's description is the `backlog.md` heading it stands for, spelled exactly. |
+| Theme | one `theme:<slug>`: `damage`, `weapons`, `flight`, `environment`, `effects`, `audio`, `cameras`, `hud`, `splitscreen`, `missions`, `tooling`, `misc`. The label's description is the theme's heading, spelled exactly; the artifact groups by it. |
 | Type | one `type:<type>`: `bug`, `feature`, `research`, `tuning`, `cleanup`, `fidelity`, `perf`, `tooling`, `testing` |
 | Size | `size:S`, `size:M`, `size:L` |
 | Next step | `next:decode`, `next:data`, `next:code`, `next:look`, `next:decide` |
 | Impact | `impact:high`, `impact:low`, `impact:none` |
 | Evidence | `evidence:decoded`, `evidence:data`, `evidence:footage`, `evidence:spec`, `evidence:feel`, `evidence:trace` |
 | Status | `owed-playtest`, `blocked` (the body names the blocker), `divergence`; none means open and unblocked |
+
+What the values mean:
+
+- **Theme** is the system you would open to fix it. Splitscreen is the one cross-cutting
+  exception: an item whose subject is the single-viewer or single-player assumption takes
+  `theme:splitscreen`, even though the fix opens another theme's system. `misc` is for items
+  with no such system; if it grows past a handful, that is a missing theme.
+- **Type**: `bug` is behaviour wrong against the original or against intent; `feature` is
+  something the engine does not do yet; `research` delivers an answer, not code; `tuning` is a
+  hand-tuned constant needing judgement at the controls (the set of `type:tuning` issues is the
+  TUNE list); `cleanup` is debt with no player-visible change; `fidelity` is a decoded
+  mechanism ours differs from, with no symptom yet; `perf` is frame time or memory; `tooling`
+  is scripts, hooks and the verification loop; `testing` is a missing test or test aid.
+- **Size** is the fix's shape, never hours: `S` is one file, one constant, a test-only or
+  doc-only change, or a close with no code; `M` is one subsystem, a few files, or a change that
+  re-pins goldens; `L` is plan-sized, cross-cutting, or needs a design first.
+- **Next step** is what must happen before the item can move: `decode` reads the original
+  executable; `data` reads extracted game data, footage or a measurement; `code` writes code or
+  tests now with nothing owed first; `look` needs a human at the controls (every
+  `owed-playtest` item and every capture blocker); `decide` needs a user decision.
+- **Impact** is what a player would notice once it is done: `high` shows in ordinary play,
+  `low` is subtle, rare or only visible when looked for, `none` is cleanup, tooling,
+  instrumentation or an answer with no visible change.
+- **Evidence** is the strongest source the body rests on, in order of trust: an executable
+  decode, extracted data files, a capture under `OriginalScreenshots/`, the pre-release design
+  spec (mechanism only, `docs/verification.md` SRC-3), or a feel report or estimate. `trace` is
+  the case with no original-game source at all: a read of CSVM's own code, a log or a profile.
+- **Status**: `owed-playtest` means the code or constant side is done and a human at the
+  controls is missing; `blocked` means it cannot start regardless of priority (a capture, a
+  milestone, another issue, an upstream release, a user decision).
 
 Apply them when filing (`--label backlog,theme:audio,type:bug,...`) and change them when the body
 changes what they say. A new theme is a new `theme:` label whose description is the new heading.
@@ -62,15 +92,11 @@ that came from an issue cites the issue number. Scaffold one with `/new-plan`.
 
 ## The entries filed before the switch
 
-| File | Holds |
-|---|---|
-| `backlog.md` | The `BL-` entries still open. Closing one deletes it, as `PROJECT_CONTEXT.md` requires. No new entry is added. |
-| `playtest.md` | The `PT-` and `CAP-` entries still open. Same rule. |
-
-Do not migrate these in bulk; an entry moves to an issue only when it is reshaped or
-scheduled anyway, and then the `backlog.md` entry is deleted in the same commit and the
-issue body says which id it was. `New-ItemId.ps1` and `CheckItemIds.ps1` keep guarding the
-old ids until the files are empty.
+`playtest.md` holds the `PT-` and `CAP-` entries still open. Closing one deletes it, as
+`PROJECT_CONTEXT.md` requires, and no new entry is added. Do not migrate them in bulk; an
+entry moves to an issue only when it is reshaped or scheduled anyway, and then the entry is
+deleted in the same commit and the issue body says which id it was. `New-ItemId.ps1` and
+`CheckItemIds.ps1` keep guarding the old ids until the file is empty.
 
 ## When a skill says "publish to the issue tracker"
 
@@ -80,15 +106,15 @@ comment on the closed one.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`. If the user names a `BL-`/`PT-`/`CAP-` id instead,
-read that section of `backlog.md` or `playtest.md`, or the checklist item in the live
-`docs/PLAN-*.md`.
+Run `gh issue view <number> --comments`. If the user names a `PT-`/`CAP-` id instead,
+read that entry of `playtest.md`, or the checklist item in the live `docs/PLAN-*.md`; a
+`BL-` id is closed history, read with `git log --grep=<id>`.
 
 ## When work lands, the close-out is not optional
 
 `PROJECT_CONTEXT.md` binds these, and they apply to skill output too:
 
-- Close the issue (or delete the `backlog.md` entry) in the landing commit; a fixed item
+- Close the issue (or delete the `playtest.md` entry) in the landing commit; a fixed item
   does not stay open.
 - Record in the landing commit's message body: what landed, how verified, outcome, and the
   issue number so `git log --grep='#123'` finds it. There is no history file to append to.
@@ -101,8 +127,7 @@ read that section of `backlog.md` or `playtest.md`, or the checklist item in the
 
 ## Triage state
 
-Apply the label strings in `triage-labels.md` to the issue. A `backlog.md` entry that has not
-moved yet records its role inline as a `Status: <role>` line.
+Apply the label strings in `triage-labels.md` to the issue.
 
 ## Public reports
 

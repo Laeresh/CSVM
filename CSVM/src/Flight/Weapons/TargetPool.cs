@@ -181,7 +181,8 @@ public sealed class TargetPool
     /// is: a <see cref="FlightController"/>, a <see cref="SurfaceVehicle"/>, a
     /// <see cref="TurretController"/> or a <see cref="DestructibleRegistry.Instance"/>. No
     /// non-aircraft source carries a facing axis, so forward comes back zero. That collapses the
-    /// aspect test and the lead offset to "aim at the position".</summary>
+    /// aspect test and the lead offset to "aim at the position". A pool's velocity is its own
+    /// centre's, so a zeppelin's part far out on a turning hull is led along its own track.</summary>
     internal static bool TryTargetGeometry(object? target, out Vector3 position, out Vector3 velocity,
         out Vector3 forward, out bool live)
     {
@@ -212,7 +213,7 @@ public sealed class TargetPool
                 live = inst.Status != DestructibleRegistry.State.Destroyed
                     && GodotObject.IsInstanceValid(inst.Anchor) && inst.Anchor.IsInsideTree();
                 position = live ? inst.Centre : Vector3.Zero;
-                velocity = Vector3.Zero;
+                velocity = inst.Velocity;
                 forward = Vector3.Zero;
                 return true;
             default:

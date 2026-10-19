@@ -65,11 +65,10 @@ public sealed class InstantActionRuntime
     public const float ActorVolumeRadiusM = 10000f;
 
     /// <summary>How long the live world runs on after the ending before the wrap-up board takes
-    /// the screen. Decoded: the original's Instant Action tick seeds this countdown on the frame
-    /// the goal is reached and ticks it down on frame dt while the world runs in full
-    /// (docs/formats/instant-action/wrap-up.md, "The hold after the ending"). ⚠ The original holds
-    /// nothing on a death; what it waits out there is the crash animation, which this same hold
-    /// stands in for.</summary>
+    /// the screen, ticked on frame dt from the goal frame. Decoded in
+    /// docs/formats/instant-action/wrap-up.md, "The hold after the ending". ⚠ The original holds
+    /// nothing on a death; this same hold stands in for the crash animation it waits out there. A
+    /// <c>--screenshot</c> of the board must drive frames past it, or it photographs the world.</summary>
     public const float WrapupHoldS = 3f;
 
     // The five hand-authored pilot personalities a wave member's nine-stat vector is rolled

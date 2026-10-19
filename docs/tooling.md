@@ -385,8 +385,7 @@ themselves, so one still alive is stuck and ours; any other Godot here is left a
 **All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value, as the
 controller-disconnect freeze workaround: Godot's bundled SDL hangs the main thread forever when a
 >255-button DirectInput device disconnects, and disabling that backend removes the phantom views
-while real pads keep working via XInput/HIDAPI. Removal conditions are in `backlog.md` under "Drop
-the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
+while real pads keep working via XInput/HIDAPI. Removal conditions are in #227.
 
 ## Exporting a release build
 

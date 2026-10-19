@@ -5,15 +5,16 @@ description: Explain the active plan's item in plain language — where it sits,
 
 Explain one item of the **active plan** so it can be worked cold, then start it, close it, or park it.
 
-The sibling skill for `backlog.md` entries and `backlog` GitHub issues is
-[`/backlog`](../backlog/SKILL.md) — a `BL-NNN` or `#N` that is *not* scheduled into the active
-plan belongs there, not here. Wherever this file says "the backlog entry", a plan item that cites
-an issue (`#12`) instead has the issue's body plus comments as its entry, read with
-`gh issue view N --comments` per `docs/agents/issue-tracker.md`. The binary-decode **rule** below (§4's
+The sibling skill for `backlog` GitHub issues is
+[`/backlog`](../backlog/SKILL.md) — a `#N` that is *not* scheduled into the active
+plan belongs there, not here. Wherever this file says "the backlog entry", it is the cited issue's
+(`#12`) body plus comments, read with `gh issue view N --comments` per
+`docs/agents/issue-tracker.md`. A `BL-NNN` a plan cites is a closed historical item: its record is
+its commits (`git log --grep=BL-NNN`, `git log -S'BL-NNN'` when the grep finds nothing). The binary-decode **rule** below (§4's
 provenance triage, and §5 option 2's Ghidra read-only charter, its what-a-decode-reports contract and
 its write-it-down contract) is mirrored from that skill; keep those in sync. The **handoffs
 deliberately diverge**, and syncing them is the mistake: an item here carries an Approach and a Verify
-step to work from, so §5 works it directly, while a bare `BL-NNN` carries neither and that skill sizes
+step to work from, so §5 works it directly, while a bare issue carries neither and that skill sizes
 the work itself before it offers to do it.
 
 The explanation phase is **read-only**: no builds, no `RunTests.ps1`, no `--freecam` runs. Once the
@@ -62,11 +63,10 @@ Do the reading yourself; no Explore subagent. The item text and code need to sta
 1. **The plan, always** — the item's full `### <ID>` section, plus the plan's `## Ground rules`, its
    `## ⚠ Read this before implementing anything` section if it has one, `## Decisions`, the item's
    `## Checklist` line, and `## Dependency and parallelism notes`.
-2. **The backlog entry, always** — the `BL-NNN` the item cites, and its enclosing section heading
-   (the heading carries status); or the `#N` it cites, whole thread, latest comment last, since a
-   later comment can overturn the body, plus its state and triage label. Plan items summarise and
-   delegate — "Full evidence: `backlog.md` `BL-051`" or "Full evidence: #12" — so the counts, the
-   rejected fixes, and the real traps live there.
+2. **The backlog entry, always** — the `#N` the item cites, whole thread, latest comment last,
+   since a later comment can overturn the body, plus its state and triage label; for a `BL-NNN` it
+   cites, the commits `git log --grep=BL-NNN` finds. Plan items summarise and delegate — "Full
+   evidence: #12" — so the counts, the rejected fixes, and the real traps live there.
 3. **Only what the item names** — the code files and symbols (`FromToMotion.cs:109-111`,
    `WorldBuilder.NoCollisionNode`), the doc sections (a module's entry in
    `docs/architecture/<Namespace>.md`, found through the index in `docs/architecture.md`;
@@ -231,9 +231,8 @@ falls inside an existing decode page's topic (weather, clutter, flightModel, tra
 sequences, aim-assist), matching those pages' contract — behaviour and constants, every claim naming
 the function it came from, no decompiler output reproduced; otherwise **`analysis/<slug>/FINDINGS.md`**,
 dated, with the method stated. **In either case also offer the one-line amendment to the entry** —
-the number, its address, the pointer. For a `backlog.md` entry that is an edit with no date, since
-`backlog.md` is live prose and the decode's date belongs in the commit message that lands it; for
-an issue it is a comment (`gh issue comment N --body-file <file>`), posted after the write-up's
+the number, its address, the pointer. It is a comment on the issue
+(`gh issue comment N --body-file <file>`), posted after the write-up's
 commit so it can cite the hash. Without that line the next explanation re-reads the stale footage
 number, re-flags it, and re-recommends the decode that was already done.
 
@@ -242,15 +241,15 @@ change what the item's work should be — say so if it does.
 
 ### Option 3 — close it
 
-The plan bookkeeping is this skill's; the `BL-NNN` or `#N` side is not.
+The plan bookkeeping is this skill's; the `#N` side is not.
 
 - Flip the checklist line: **☑** if the work landed, **❌** if the explanation disproved it or it is
   moot. Ask which if it isn't obvious — the glyph is the plan's record of *why*.
 - Add the one-line verdict to the item's `### <ID>` body.
 - Advance `PROJECT_CONTEXT.md` "Current status" if this was the next-item pointer — **swap or delete
   only**, never add a sentence about what closed (that section's own fixed-shape rule).
-- Then hand to **`/close-backlog-item <BL-NNN or #N>`**, unmodified. It owns the closure kind,
-  deleting the entry or closing the issue, the closure record in the closing commit's message,
+- Then hand to **`/close-backlog-item #N`**, unmodified (an item that cites only a `BL-NNN` has
+  no tracker side to close). It owns the closure kind, closing the issue, the closure record in the closing commit's message,
   retiring any `CAP-nn`/`PT-nn` or `capture`/`playtest` issue, and the restated-caveat sweep. Do
   not pre-empt its closure record.
 - **If that was the plan's last open item**, say so and *offer* the completion: delete the plan
@@ -262,7 +261,7 @@ The plan bookkeeping is this skill's; the `BL-NNN` or `#N` side is not.
 
 ### Option 4 — defer it
 
-**Write nothing.** The item stays `☐ open` in the plan, `backlog.md` and the issue are untouched,
+**Write nothing.** The item stays `☐ open` in the plan, the issue is untouched,
 and `PROJECT_CONTEXT.md` is untouched — "not now" is a session decision, and a deferral note that
 is obsolete tomorrow is noise.
 
