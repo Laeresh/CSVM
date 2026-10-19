@@ -62,6 +62,23 @@ public class XrCockpitTests
             "the copy keeps its offset from the interior's wing above it");
     }
 
+    // The per-plane store placement. At the defaults it is the true pylon pose, bit for bit. Else
+    // the lateral distance is spread, then offset, and the store's own attitude is kept.
+    [Fact]
+    public void AStoreIsPlacedBySpreadingItsLateralDistanceThenOffsetting()
+    {
+        var pylon = new Transform3D(new Basis(Vector3.Up, 0.05f), new Vector3(-2.31f, -0.62f, 0.4f));
+
+        Assert.Equal(pylon, XrCockpit.Placed(pylon, Vector3.Zero, 1f));
+
+        var placed = XrCockpit.Placed(pylon, new Vector3(0f, 0.1f, -0.2f), 1.5f);
+        Assert.True(placed.Origin.IsEqualApprox(new Vector3(-3.465f, -0.52f, 0.2f)), $"placed at {placed.Origin}");
+        Assert.Equal(pylon.Basis, placed.Basis);
+        var mirror = XrCockpit.Placed(new Transform3D(pylon.Basis, pylon.Origin * new Vector3(-1f, 1f, 1f)), new Vector3(0f, 0.1f, -0.2f), 1.5f);
+        Assert.Equal(-placed.Origin.X, mirror.Origin.X);
+        Assert.Equal(placed.Origin.Y, mirror.Origin.Y);
+    }
+
     [Fact]
     public void TheWobbleTurnsTheInteriorAboutTheAirframeNotTheEye()
     {

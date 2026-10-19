@@ -333,21 +333,22 @@ origin as the airframe holds it (`InOrigin`, engine-free), so every transform Go
 is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
 its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it, and a sorting offset that puts it after the world's transparents on top of the one it was built with (the reticle overlay's). Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
 plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
-seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset` and `SetMountScale` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose (`InInterior`, engine-free).
+seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset`, `SetMountScale` and `PlaceStores` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose placed by the plane's store fields (`Placed`: the lateral distance times the spread, then the offset, in the aircraft's frame; `InInterior`; both engine-free). It keeps each part's airframe pose, so a store change or a rescale re-places them where a rebuild would.
 
 ## src/Flight/Hud/VrCockpits.cs
 The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
 headset: under `planes`, keyed by plane node name (`player_bhawk`), `interiorScaleFactor` multiplies
 the `cockpit1` mount's `Mech3/PlaneBuilder.cs` `InteriorScale` (0.25 to 4, default 1), `eyeOffsetZ`
 moves the seated eye in metres along the aircraft's Z, positive aft, and `eyeOffsetY` along its Y,
-positive up (each at most 1 m, default 0); keys starting `_` are notes. A plane or field left out
+positive up (each at most 1 m, default 0). `storeOffsetZ` (positive aft) and `storeOffsetY` (positive up) move the pylon stores' stereo copies from their true pylon poses (each at most 1 m, default 0), and `storeSpread` multiplies each store's distance from the centreline (0.25 to 4, default 1), since the interior is not the airframe scaled; keys starting `_` are notes. A plane or field left out
 takes the default. Read once per session by `Session/Roster/FlightRosterInputs.cs` only when the
 stereo path draws the interior; a missing or malformed file or entry warns and falls back.
 `Session/Roster/HumanFlightAdapter.cs` applies it; `XrCockpitTuner.cs` writes it.
 
 ## src/Flight/Hud/XrCockpitTuner.cs
 The `--xr-tune` lab: in a stereo session, live nudges of the flown plane's interior scale and seated
-eye offset from the right hand controller with its grip held (F22 to F24 on the keyboard), a readout
+eye offset from the right hand controller with its grip held (F22 to F24 on the keyboard), and of its
+pylon stores' placement with the left grip held instead (no keyboard twin), a readout
 on `XrHudPanel.cs`' surface, a save of the plane's values into `vr_cockpits.json` on disk, a reset to
 the file, and a step to the next plane through the mission airframe swap. `Launch/GameSession.cs`
 builds it and hands it the seat (`XrTuneSeat`) and the swap; it acts through `XrCockpit.cs`.
@@ -356,7 +357,7 @@ Arithmetic and writer: `VrCockpitTuning.cs`. Controls: docs/controls.md.
 ## src/Flight/Hud/VrCockpitTuning.cs
 The tuning lab's engine-free parts: a step of each field on the file's grid and range (`ScaleStep`
 0.025 is a millimetre per unit at the 0.04 mount, so the measured 0.875 alternative is five steps
-down; an eye offset steps 10 mm), the plane
+down; an eye or store offset steps 10 mm, the store spread 0.05), the plane
 order, the readout text, the held input's repeat (`VrTuneRepeat`), and `TryRewrite`, which writes one
 plane's numbers into the file's own bytes, adding a field or an entry where missing, and refuses a
 rewrite that would not read back with every other entry unchanged.
@@ -1335,7 +1336,7 @@ def's `RESET_STATE`) and parents it to that pylon marker at identity local trans
 launch pose; `Update` shows or hides each per its live `Hardpoint.Ammo`, the root's only owner. `FlightController` drives `Update` after the rockets, and the
 mounted body rides the plane and is freed with it. `Unmount` takes the set back off, detaching each
 body from its pylon immediately rather than queueing it, so the weapon lab's rebuild-on-swap cannot
-leave the old ordnance hanging beside the new. `--fly` only. In a stereo seat each body also gets a copy built through the stereo interior's shader and hung on `XrCockpit.Hang`, steady and stencilled beside the interior's wing; the body leaves the pilot's pane through `CockpitVisibility.Reseat`, and the pylon, the launch point, stays put.
+leave the old ordnance hanging beside the new. `--fly` only. In a stereo seat each body also gets a copy built through the stereo interior's shader and hung on `XrCockpit.Hang`, steady and stencilled beside the interior's wing, at the place the plane's `vr_cockpits.json` store fields give it; the body leaves the pilot's pane through `CockpitVisibility.Reseat`, and the pylon, the launch point, stays put.
 
 ## src/Flight/Airframe/PlaneCollider.cs
 Derives up to sixteen plane-frame convex hulls from the built model's mesh triangles alone, with no

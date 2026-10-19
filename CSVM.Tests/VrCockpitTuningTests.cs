@@ -64,6 +64,44 @@ public class VrCockpitTuningTests
         Assert.Equal(VrCockpit.Default, VrCockpitTuning.Step(VrCockpit.Default, VrTuneKnob.Plane, 3));
     }
 
+    [Fact]
+    public void TheStoreKnobsStepOnTheGridAndClampToTheFilesRange()
+    {
+        var at = VrCockpit.Default;
+        for (int i = 0; i < 7; i++)
+        {
+            at = VrCockpitTuning.Step(at, VrTuneKnob.StoreAft, -1);
+            at = VrCockpitTuning.Step(at, VrTuneKnob.StoreUp, 1);
+            at = VrCockpitTuning.Step(at, VrTuneKnob.StoreSpread, 1);
+        }
+
+        Assert.Equal(new VrCockpit(1f, 0f, 0f, -0.07f, 0.07f, 1.35f), at);
+        Assert.Equal(0.25f, VrCockpitTuning.Step(at, VrTuneKnob.StoreSpread, -100).StoreSpread);
+        Assert.Equal(4f, VrCockpitTuning.Step(at, VrTuneKnob.StoreSpread, 100).StoreSpread);
+        Assert.Equal(1f, VrCockpitTuning.Step(at, VrTuneKnob.StoreAft, 500).StoreOffsetZ);
+        Assert.Equal(-1f, VrCockpitTuning.Step(at, VrTuneKnob.StoreUp, -500).StoreOffsetY);
+        Assert.Equal(
+            "player_bhawk scale 1.0 aft 0.05 m up 0.0 m stores aft -0.07 m up 0.07 m spread 1.35",
+            VrCockpitTuning.Describe("player_bhawk", at with { EyeOffsetZ = 0.05f }));
+    }
+
+    [Fact]
+    public void StoreFieldsAreWrittenOnlyAwayFromTheirDefaultsOrWhereTheEntryHasThem()
+    {
+        string json = """{ "planes": { "player_bhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 } } }""";
+        var placed = new VrCockpit(1f, 0f, 0f, 0.12f, 0f, 1.6f);
+
+        string written = Rewrite(json, "player_bhawk", placed);
+        string back = Rewrite(written, "player_bhawk", VrCockpit.Default);
+
+        Assert.Equal("""{ "planes": { "player_bhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0, "storeOffsetZ": 0.12, "storeSpread": 1.6 } } }""", written);
+        Assert.Equal(placed, VrCockpits.Parse(Encoding.UTF8.GetBytes(written), new List<string>()).For("player_bhawk"));
+        Assert.Equal("""{ "planes": { "player_bhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0, "storeOffsetZ": 0.0, "storeSpread": 1.0 } } }""", back);
+        Assert.Equal(
+            """{ "planes": { "player_fury": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0, "storeOffsetY": -0.05 } } }""",
+            Rewrite("""{ "planes": {} }""", "player_fury", VrCockpit.Default with { StoreOffsetY = -0.05f }));
+    }
+
     [Theory]
     [InlineData(1f, "1.0")]
     [InlineData(0.875f, "0.875")]
@@ -154,17 +192,17 @@ public class VrCockpitTuningTests
         byte[] file = File.ReadAllBytes(Shipped);
         var entry = new VrCockpit(0.875f, 0.06f);
 
-        Assert.True(VrCockpitTuning.TryRewrite(file, "player_bhawk", entry, out var rewritten, out var why), why);
+        Assert.True(VrCockpitTuning.TryRewrite(file, "player_pfighter", entry, out var rewritten, out var why), why);
 
         string before = Encoding.UTF8.GetString(file);
         string after = Encoding.UTF8.GetString(rewritten);
         var problems = new List<string>();
         var table = VrCockpits.Parse(rewritten, problems);
         Assert.Empty(problems);
-        Assert.Equal(entry, table.For("player_bhawk"));
-        Assert.Equal(VrCockpit.Default, table.For("player_pfighter"));
-        const string Was = "\"player_bhawk\": { \"interiorScaleFactor\": 1.0, \"eyeOffsetZ\": 0.0 }";
-        const string Now = "\"player_bhawk\": { \"interiorScaleFactor\": 0.875, \"eyeOffsetZ\": 0.06 }";
+        Assert.Equal(entry, table.For("player_pfighter"));
+        Assert.Equal(VrCockpit.Default, table.For("player_autogyro"));
+        const string Was = "\"player_pfighter\": { \"interiorScaleFactor\": 1.0, \"eyeOffsetZ\": 0.0 }";
+        const string Now = "\"player_pfighter\": { \"interiorScaleFactor\": 0.875, \"eyeOffsetZ\": 0.06 }";
         string beforeLf = before.Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.Contains(Was, beforeLf, StringComparison.Ordinal);
         Assert.Equal(beforeLf.Replace(Was, Now, StringComparison.Ordinal), after.Replace("\r\n", "\n", StringComparison.Ordinal));
@@ -280,7 +318,7 @@ public class VrCockpitTuningTests
     {
         string idle = VrCockpitTuning.Summary("player_kestrel", 10, 11, new VrCockpit(0.95f, -0.12f), VrCockpit.Default, string.Empty);
 
-        Assert.Equal("tune player_kestrel (10 of 11): scale 0.95, aft -0.12, up 0.0, unsaved  [right grip]", idle);
+        Assert.Equal("tune player_kestrel (10 of 11): scale 0.95, aft -0.12, up 0.0, stores aft 0.0, up 0.0, spread 1.0, unsaved  [right grip] [left grip: stores]", idle);
         Assert.EndsWith("\nsave failed: x", VrCockpitTuning.Summary("player_kestrel", 10, 11, VrCockpit.Default, VrCockpit.Default, "save failed: x"), StringComparison.Ordinal);
     }
 

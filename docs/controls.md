@@ -164,6 +164,11 @@ left of the HUD panel: one line with the grip up, the full card with it held.
 | right stick click | reset the flown plane to the file's values |
 | left stick left / right | swap to the previous / next plane in the file's order, once per push, at the pose being flown |
 
+The **left grip** held turns the right stick and B / A onto the pylon stores: stick
+forward / back moves them fore / aft and B / A up / down by 1 cm, stick left / right
+their spread from the centreline by 0.05. The trigger, the stick click and the plane
+swap work under either grip.
+
 The keyboard's twin, in the debug block from `F13`: `F24` marks the next row of the
 card (plane, scale, aft, up), `F22` / `F23` step the marked row down / up (repeating
 while held), Shift+`F24` saves and Ctrl+`F24` resets.

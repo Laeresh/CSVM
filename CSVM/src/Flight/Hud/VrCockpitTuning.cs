@@ -20,6 +20,16 @@ public enum VrTuneKnob
 
     /// <summary>Which plane is flown: a step swaps the airframe.</summary>
     Plane,
+
+    /// <summary><see cref="VrCockpit.StoreOffsetZ"/>, positive aft. The keyboard's row cycle stops
+    /// before it.</summary>
+    StoreAft,
+
+    /// <summary><see cref="VrCockpit.StoreOffsetY"/>, positive up.</summary>
+    StoreUp,
+
+    /// <summary><see cref="VrCockpit.StoreSpread"/>.</summary>
+    StoreSpread,
 }
 
 /// <summary>
@@ -38,6 +48,9 @@ public static class VrCockpitTuning
     /// <summary>One step of either eye offset, in metres.</summary>
     public const float OffsetStepM = 0.01f;
 
+    /// <summary>One step of <see cref="VrCockpit.StoreSpread"/>.</summary>
+    public const float SpreadStep = 0.05f;
+
     // The file's grid: three decimals carries both steps exactly.
     private const int Decimals = 3;
 
@@ -52,6 +65,12 @@ public static class VrCockpitTuning
         },
         VrTuneKnob.Aft => at with { EyeOffsetZ = Offset(at.EyeOffsetZ, steps) },
         VrTuneKnob.Up => at with { EyeOffsetY = Offset(at.EyeOffsetY, steps) },
+        VrTuneKnob.StoreAft => at with { StoreOffsetZ = Offset(at.StoreOffsetZ, steps, VrCockpits.MaxStoreOffsetM) },
+        VrTuneKnob.StoreUp => at with { StoreOffsetY = Offset(at.StoreOffsetY, steps, VrCockpits.MaxStoreOffsetM) },
+        VrTuneKnob.StoreSpread => at with
+        {
+            StoreSpread = Snap(Math.Clamp(at.StoreSpread + (steps * SpreadStep), VrCockpits.MinStoreSpread, VrCockpits.MaxStoreSpread)),
+        },
         _ => at,
     };
 
@@ -104,9 +123,11 @@ public static class VrCockpitTuning
         text.Append(inv, $"{Mark(VrTuneKnob.Scale)}scale {Format(now.InteriorScaleFactor)} ({(now.InteriorScale * 1000f).ToString("0.0", inv)} mm per unit), step {Format(ScaleStep)}\n");
         text.Append(inv, $"{Mark(VrTuneKnob.Aft)}eye aft {Format(now.EyeOffsetZ)} m, step {Format(OffsetStepM)}\n");
         text.Append(inv, $"{Mark(VrTuneKnob.Up)}eye up {Format(now.EyeOffsetY)} m, step {Format(OffsetStepM)}\n");
-        text.Append(inv, $"  file: scale {Format(saved.InteriorScaleFactor)}, aft {Format(saved.EyeOffsetZ)}, up {Format(saved.EyeOffsetY)}\n");
+        text.Append(inv, $"  stores aft {Format(now.StoreOffsetZ)} m, up {Format(now.StoreOffsetY)} m, spread {Format(now.StoreSpread)}, step {Format(SpreadStep)}\n");
+        text.Append(inv, $"  file: scale {Format(saved.InteriorScaleFactor)}, aft {Format(saved.EyeOffsetZ)}, up {Format(saved.EyeOffsetY)}, stores aft {Format(saved.StoreOffsetZ)}, up {Format(saved.StoreOffsetY)}, spread {Format(saved.StoreSpread)}\n");
         text.Append("  right grip + right stick: left/right scale, forward/back eye; B/A eye up/down\n");
-        text.Append("  right grip + trigger saves, + right stick click resets, + left stick left/right plane\n");
+        text.Append("  left grip + right stick: left/right spread, forward/back stores; B/A stores up/down\n");
+        text.Append("  either grip + trigger saves, + right stick click resets, + left stick left/right plane\n");
         text.Append("  keys: F22/F23 step the marked row, F24 next row, Shift+F24 save, Ctrl+F24 reset");
         if (status.Length > 0)
         {
@@ -120,13 +141,14 @@ public static class VrCockpitTuning
     /// full card over it, and <paramref name="status"/> under it.</summary>
     public static string Summary(string plane, int index, int count, VrCockpit now, VrCockpit saved, string status)
     {
-        string line = string.Create(CultureInfo.InvariantCulture, $"tune {plane} ({index} of {count}): scale {Format(now.InteriorScaleFactor)}, aft {Format(now.EyeOffsetZ)}, up {Format(now.EyeOffsetY)}{(now == saved ? string.Empty : ", unsaved")}  [right grip]");
+        string line = string.Create(CultureInfo.InvariantCulture, $"tune {plane} ({index} of {count}): scale {Format(now.InteriorScaleFactor)}, aft {Format(now.EyeOffsetZ)}, up {Format(now.EyeOffsetY)}, stores aft {Format(now.StoreOffsetZ)}, up {Format(now.StoreOffsetY)}, spread {Format(now.StoreSpread)}{(now == saved ? string.Empty : ", unsaved")}  [right grip] [left grip: stores]");
         return status.Length > 0 ? line + "\n" + status : line;
     }
 
-    /// <summary>One line for the log: the plane and its three fields.</summary>
+    /// <summary>One line for the log: the plane and its six fields.</summary>
     public static string Describe(string plane, VrCockpit entry) =>
-        $"{plane} scale {Format(entry.InteriorScaleFactor)} aft {Format(entry.EyeOffsetZ)} m up {Format(entry.EyeOffsetY)} m";
+        $"{plane} scale {Format(entry.InteriorScaleFactor)} aft {Format(entry.EyeOffsetZ)} m up {Format(entry.EyeOffsetY)} m"
+        + $" stores aft {Format(entry.StoreOffsetZ)} m up {Format(entry.StoreOffsetY)} m spread {Format(entry.StoreSpread)}";
 
     /// <summary>Writes <paramref name="entry"/> as <paramref name="plane"/>'s values into the file's
     /// bytes <paramref name="file"/>. It replaces the numbers in place and adds a missing field or
@@ -178,8 +200,8 @@ public static class VrCockpitTuning
         return true;
     }
 
-    private static float Offset(float metres, int steps) =>
-        Snap(Math.Clamp(metres + (steps * OffsetStepM), -VrCockpits.MaxEyeOffsetM, VrCockpits.MaxEyeOffsetM));
+    private static float Offset(float metres, int steps, float max = VrCockpits.MaxEyeOffsetM) =>
+        Snap(Math.Clamp(metres + (steps * OffsetStepM), -max, max));
 
     private static float Snap(float value) => (float)Math.Round((double)value, Decimals, MidpointRounding.AwayFromZero);
 
@@ -189,11 +211,15 @@ public static class VrCockpitTuning
     {
         edits = new List<(int, int, string)>();
         string nl = Encoding.UTF8.GetString(body).Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var fields = new (string Name, float Value)[]
+        // An optional field at its default is written only where the entry already has it.
+        var fields = new (string Name, float Value, bool Write)[]
         {
-            (VrCockpits.ScaleField, entry.InteriorScaleFactor),
-            (VrCockpits.EyeZField, entry.EyeOffsetZ),
-            (VrCockpits.EyeYField, entry.EyeOffsetY),
+            (VrCockpits.ScaleField, entry.InteriorScaleFactor, true),
+            (VrCockpits.EyeZField, entry.EyeOffsetZ, true),
+            (VrCockpits.EyeYField, entry.EyeOffsetY, entry.EyeOffsetY != 0f),
+            (VrCockpits.StoreZField, entry.StoreOffsetZ, entry.StoreOffsetZ != 0f),
+            (VrCockpits.StoreYField, entry.StoreOffsetY, entry.StoreOffsetY != 0f),
+            (VrCockpits.SpreadField, entry.StoreSpread, entry.StoreSpread != 1f),
         };
         var reader = new Utf8JsonReader(body, new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip });
         int planesStart = -1, planesEnd = -1, lastPlaneName = -1, lastPlaneEnd = -1;
@@ -264,7 +290,7 @@ public static class VrCockpitTuning
 
         if (!matched)
         {
-            string fresh = $"\"{plane}\": {{ {Members(fields, includeY: entry.EyeOffsetY != 0f)} }}";
+            string fresh = $"\"{plane}\": {{ {Members(fields)} }}";
             bool multiLine = Contains(body, planesStart, planesEnd, (byte)'\n');
             edits.Add(lastPlaneEnd < 0
                 ? (planesStart + 1, planesStart + 1, multiLine ? $"{nl}    {fresh}{nl}  " : $" {fresh} ")
@@ -275,19 +301,19 @@ public static class VrCockpitTuning
         return true;
     }
 
-    private static void AddEntryEdits(byte[] body, Scan scan, int entryEnd, (string Name, float Value)[] fields,
+    private static void AddEntryEdits(byte[] body, Scan scan, int entryEnd, (string Name, float Value, bool Write)[] fields,
         string nl, List<(int Start, int End, string Text)> edits)
     {
-        var missing = new List<(string Name, float Value)>();
-        foreach (var (name, value) in fields)
+        var missing = new List<(string Name, float Value, bool Write)>();
+        foreach (var field in fields)
         {
-            if (scan.Numbers.TryGetValue(name, out var span))
+            if (scan.Numbers.TryGetValue(field.Name, out var span))
             {
-                edits.Add((span.Start, span.End, Format(value)));
+                edits.Add((span.Start, span.End, Format(field.Value)));
             }
-            else if (name != VrCockpits.EyeYField || value != 0f)
+            else if (field.Write)
             {
-                missing.Add((name, value));
+                missing.Add(field);
             }
         }
 
@@ -300,21 +326,21 @@ public static class VrCockpitTuning
         {
             // A field per line in an entry laid out a field per line, else on the anchor's line.
             string separator = Contains(body, scan.Start, entryEnd, (byte)'\n') ? "," + nl + Indent(body, anchor.NameStart) : ", ";
-            edits.Add((anchor.End, anchor.End, separator + Members(missing, includeY: true, separator)));
+            edits.Add((anchor.End, anchor.End, separator + Members(missing, separator)));
         }
         else
         {
-            string added = Members(missing, includeY: true, ", ");
+            string added = Members(missing, ", ");
             edits.Add((scan.Start + 1, scan.Start + 1, scan.HasMembers ? $" {added}," : $" {added} "));
         }
     }
 
-    private static string Members(IEnumerable<(string Name, float Value)> fields, bool includeY, string separator = ", ")
+    private static string Members(IEnumerable<(string Name, float Value, bool Write)> fields, string separator = ", ")
     {
         var parts = new List<string>();
-        foreach (var (name, value) in fields)
+        foreach (var (name, value, write) in fields)
         {
-            if (name != VrCockpits.EyeYField || includeY)
+            if (write)
             {
                 parts.Add($"\"{name}\": {Format(value)}");
             }
@@ -429,7 +455,8 @@ public static class VrCockpitTuning
                 return;
             }
 
-            if (reader.TokenType == JsonTokenType.Number && _property is VrCockpits.ScaleField or VrCockpits.EyeZField or VrCockpits.EyeYField)
+            if (reader.TokenType == JsonTokenType.Number && _property is VrCockpits.ScaleField or VrCockpits.EyeZField or VrCockpits.EyeYField
+                or VrCockpits.StoreZField or VrCockpits.StoreYField or VrCockpits.SpreadField)
             {
                 Numbers[_property] = (start, end);
                 Anchor = (_propertyStart, end);

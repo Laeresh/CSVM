@@ -13,12 +13,12 @@ namespace CSVM.Flight.Hud;
 public readonly record struct XrTuneSeat(XrCockpit Cockpit, string Plane, bool Silenced);
 
 /// <summary>
-/// The <c>--xr-tune</c> lab: live nudges of the flown plane's VR interior scale and seated eye
-/// offset, with a readout on the HUD panel. A save writes the plane's values back into
-/// <c>CSVM/data/vr_cockpits.json</c> on disk. Every control is held on the right controller's grip,
-/// so nothing reads while the grip is up; F22 to F24 are the keyboard's twin. A step swaps the next
-/// plane in the file's order, so one headset session judges all eleven. A plane flown again takes
-/// the values it was left with. Writer: <see cref="VrCockpitTuning"/>; controls: docs/controls.md.
+/// The <c>--xr-tune</c> lab: live nudges of the flown plane's VR interior scale, eye offset and
+/// pylon stores, with a readout on the HUD panel. A save writes the plane's values back into
+/// <c>CSVM/data/vr_cockpits.json</c> on disk. The right grip holds the interior and eye controls, the
+/// left the stores', so nothing reads while both are up. F22 to F24 are the keyboard's twin for all
+/// but the stores. A step swaps the next plane in the file's order, and a plane flown again takes
+/// the values it was left with. Writer: <see cref="VrCockpitTuning"/>.
 /// </summary>
 public sealed partial class XrCockpitTuner : Node
 {
@@ -160,13 +160,16 @@ public sealed partial class XrCockpitTuner : Node
     }
 
     /// <summary>One frame: follows the flown seat to a new aircraft, then reads the controllers while
-    /// the right grip is held. <see cref="_Process"/>'s body; a suite calls it with its own step.</summary>
+    /// either grip is held. <see cref="_Process"/>'s body; a suite calls it with its own step.</summary>
     public void Poll(float dt)
     {
         Follow();
         float Axis(XrAxis axis) => _hands.AxisValue(DeviceId.Xr, (int)axis);
         bool Button(XrButton button) => _hands.IsButtonDown(DeviceId.Xr, (int)button);
-        bool grip = Plane != null && !_silenced && Button(XrButton.RightGrip);
+
+        // The left grip, which no flight action holds, turns the right hand's nudges onto the stores.
+        bool stores = Button(XrButton.LeftGrip);
+        bool grip = Plane != null && !_silenced && (stores || Button(XrButton.RightGrip));
         _keyCard = Math.Max(0f, _keyCard - dt);
         if ((grip || _keyCard > 0f) != _expanded)
         {
@@ -187,11 +190,11 @@ public sealed partial class XrCockpitTuner : Node
             return;
         }
 
-        Nudge(VrTuneKnob.Scale, _scale.Step(Axis(XrAxis.RightStickX), dt));
+        Nudge(stores ? VrTuneKnob.StoreSpread : VrTuneKnob.Scale, _scale.Step(Axis(XrAxis.RightStickX), dt));
 
         // The stick pushed forward moves the eye forward, toward the panel: a smaller aft offset.
-        Nudge(VrTuneKnob.Aft, _aft.Step(-Axis(XrAxis.RightStickY), dt));
-        Nudge(VrTuneKnob.Up, _up.Step((Button(XrButton.RightUpperFace) ? 1f : 0f) - (Button(XrButton.RightLowerFace) ? 1f : 0f), dt));
+        Nudge(stores ? VrTuneKnob.StoreAft : VrTuneKnob.Aft, _aft.Step(-Axis(XrAxis.RightStickY), dt));
+        Nudge(stores ? VrTuneKnob.StoreUp : VrTuneKnob.Up, _up.Step((Button(XrButton.RightUpperFace) ? 1f : 0f) - (Button(XrButton.RightLowerFace) ? 1f : 0f), dt));
         bool save = Button(XrButton.RightTrigger);
         bool reset = Button(XrButton.RightStickClick);
         if (save && !_saveWas)
@@ -353,6 +356,7 @@ public sealed partial class XrCockpitTuner : Node
         var entry = Working(plane);
         _cockpit.EyeOffset = entry.EyeOffsetInAircraft;
         _cockpit.SetMountScale(entry.InteriorScale);
+        _cockpit.PlaceStores(entry.StoreOffsetInAircraft, entry.StoreSpread);
     }
 
     private bool TrySave(string plane, VrCockpit entry, out string why)

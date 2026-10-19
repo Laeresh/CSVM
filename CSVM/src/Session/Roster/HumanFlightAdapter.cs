@@ -247,7 +247,8 @@ internal sealed class HumanFlightAdapter
                 Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
                 Stereo = xrInterior && planeBuilder.CockpitInterior is { } interior
-                    ? new XrCockpit(interior, vrCockpit.EyeOffsetInAircraft, planeBuilder.InteriorEye)
+                    ? new XrCockpit(interior, vrCockpit.EyeOffsetInAircraft, planeBuilder.InteriorEye,
+                        vrCockpit.StoreOffsetInAircraft, vrCockpit.StoreSpread)
                     : null,
             },
             Scheme = scheme,

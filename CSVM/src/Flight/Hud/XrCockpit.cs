@@ -29,23 +29,31 @@ public sealed class XrCockpit : IXrInterior
     private readonly Node3D _interior;
     // Each geometry with the sorting offset it was built with, which lifting adds to.
     private readonly List<(GeometryInstance3D Geometry, float Own)> _geometry = new();
+    // Each hung part with its true pose on the airframe, which a placement change re-places it from.
+    private readonly List<(Node3D Part, Transform3D OnAirframe)> _hung = new();
     // The authored eye in the interior's own units (PlaneBuilder.InteriorEye).
     private readonly Vector3 _eye;
     // The airframe's mount, rescaled only by the tuning lab (SetMountScale).
     private Transform3D _mount;
+    private Vector3 _storeOffset;
+    private float _storeSpread;
     private bool _lifted;
 
     /// <summary>Follows <paramref name="interior"/>, as the plane builder mounted it under the
     /// airframe, with the seated eye <paramref name="eyeOffset"/> from the authored eye in the
     /// aircraft's frame (<see cref="VrCockpit.EyeOffsetInAircraft"/>). The interior must have been
     /// built for the stereo path (<c>xrInterior</c>), its authored eye at <paramref name="eyeInInterior"/>
-    /// in its own units (<see cref="PlaneBuilder.InteriorEye"/>).</summary>
-    public XrCockpit(Node3D interior, Vector3 eyeOffset = default, Vector3 eyeInInterior = default)
+    /// in its own units (<see cref="PlaneBuilder.InteriorEye"/>). Hung parts take
+    /// <paramref name="storeOffset"/> and <paramref name="storeSpread"/> (<see cref="Placed"/>).</summary>
+    public XrCockpit(Node3D interior, Vector3 eyeOffset = default, Vector3 eyeInInterior = default,
+        Vector3 storeOffset = default, float storeSpread = 1f)
     {
         _interior = interior;
         _mount = interior.Transform;
         _eye = eyeInInterior;
         EyeOffset = eyeOffset;
+        _storeOffset = storeOffset;
+        _storeSpread = storeSpread;
         Collect(interior, _geometry);
     }
 
@@ -102,6 +110,13 @@ public sealed class XrCockpit : IXrInterior
     public static Transform3D InInterior(in Transform3D mount, in Transform3D onAirframe) =>
         mount.AffineInverse() * onAirframe;
 
+    /// <summary>A store's pose <paramref name="onAirframe"/> placed for the interior: its distance
+    /// from the centreline (X) times <paramref name="spread"/>, then moved by <paramref name="offset"/>,
+    /// both in the aircraft's frame. The interior is not the airframe scaled, so each plane's
+    /// stores are placed at the headset (<see cref="VrCockpit"/>). Engine-free, so it unit-tests.</summary>
+    public static Transform3D Placed(in Transform3D onAirframe, Vector3 offset, float spread) =>
+        new(onAirframe.Basis, new Vector3(onAirframe.Origin.X * spread, onAirframe.Origin.Y, onAirframe.Origin.Z) + offset);
+
     /// <summary><paramref name="mount"/> rescaled to <paramref name="metresPerUnit"/> about the
     /// interior's point <paramref name="eyeInInterior"/>, which keeps its place on the airframe.
     /// Engine-free, so it unit-tests.</summary>
@@ -148,6 +163,9 @@ public sealed class XrCockpit : IXrInterior
             return;
         }
 
+        // A rebuild at this scale hangs the stores on the airframe, so the lab shows them there.
+        PlaceHung();
+
         if (_lifted)
         {
             var everywhere = Everywhere(_mount.Basis.Scale);
@@ -165,10 +183,20 @@ public sealed class XrCockpit : IXrInterior
         }
     }
 
+    /// <summary>Moves every hung part to <paramref name="offset"/> and <paramref name="spread"/>
+    /// (<see cref="Placed"/>): the tuning lab's live store placement.</summary>
+    public void PlaceStores(Vector3 offset, float spread)
+    {
+        _storeOffset = offset;
+        _storeSpread = spread;
+        PlaceHung();
+    }
+
     /// <summary>Hangs <paramref name="part"/>, built through the stereo interior's shader, under the
-    /// interior at <paramref name="anchor"/>'s pose on the airframe. It then moves with the interior,
-    /// rescales with its mount and draws in its frame; <paramref name="anchor"/> itself never moves.
-    /// False, and nothing hung, when the anchor is not under the node the interior is mounted on.</summary>
+    /// interior at <paramref name="anchor"/>'s pose on the airframe, placed by the plane's store
+    /// fields (<see cref="Placed"/>). It then moves with the interior and draws in its frame;
+    /// <paramref name="anchor"/> itself never moves. False, and nothing hung, when the anchor is not
+    /// under the node the interior is mounted on.</summary>
     public bool Hang(Node3D part, Node3D anchor)
     {
         var onAirframe = Transform3D.Identity;
@@ -182,7 +210,8 @@ public sealed class XrCockpit : IXrInterior
             onAirframe = step.Transform * onAirframe;
         }
 
-        part.Transform = InInterior(_mount, onAirframe);
+        part.Transform = InInterior(_mount, Placed(onAirframe, _storeOffset, _storeSpread));
+        _hung.Add((part, onAirframe));
         _interior.AddChild(part);
         int from = _geometry.Count;
         Collect(part, _geometry);
@@ -228,6 +257,16 @@ public sealed class XrCockpit : IXrInterior
         }
 
         return held;
+    }
+
+    // A part freed since it was hung (PylonOrdnance.Unmount) leaves the list.
+    private void PlaceHung()
+    {
+        _hung.RemoveAll(h => !GodotObject.IsInstanceValid(h.Part));
+        foreach (var (part, onAirframe) in _hung)
+        {
+            part.Transform = InInterior(_mount, Placed(onAirframe, _storeOffset, _storeSpread));
+        }
     }
 
     private void Lift()

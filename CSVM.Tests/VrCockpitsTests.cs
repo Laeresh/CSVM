@@ -78,7 +78,24 @@ public class VrCockpitsTests
         Assert.Equal(new VrCockpit(0.875f, 0.06f), table.For("player_warhawk"));
     }
 
+    [Fact]
+    public void TheStoreFieldsReadInRangeAndDefaultToNoChange()
+    {
+        var table = Parse("""{ "planes": { "player_kestrel": { "storeOffsetZ": 0.3, "storeOffsetY": -0.1, "storeSpread": 1.75 } } }""", out var problems);
+        var kestrel = table.For("player_kestrel");
+
+        Assert.Empty(problems);
+        Assert.Equal(new VrCockpit(1f, 0f, 0f, 0.3f, -0.1f, 1.75f), kestrel);
+        Assert.Equal(new Vector3(0f, -0.1f, 0.3f), kestrel.StoreOffsetInAircraft);
+        Assert.Equal(Vector3.Zero, VrCockpit.Default.StoreOffsetInAircraft);
+        Assert.Equal(1f, VrCockpit.Default.StoreSpread);
+    }
+
     [Theory]
+    [InlineData("""{ "storeOffsetZ": 1.5 }""")]
+    [InlineData("""{ "storeOffsetY": "up" }""")]
+    [InlineData("""{ "storeSpread": 0.1 }""")]
+    [InlineData("""{ "storeSpread": 5 }""")]
     [InlineData("""{ "interiorScaleFactor": "big" }""")]
     [InlineData("""{ "interiorScaleFactor": 0 }""")]
     [InlineData("""{ "interiorScaleFactor": 40 }""")]

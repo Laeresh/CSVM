@@ -14,9 +14,12 @@ namespace CSVM.Flight.Hud;
 /// of it stays on the interior, never on <c>XRServer.WorldScale</c>, which would resize the sky and
 /// every other aircraft with it. No lateral offset exists: the authored eye, the
 /// <c>cockpit_camera</c> marker read in interior units, centres every tub. The collimated reticle (<c>Mech3/GunsightReticle.cs</c>) stays on the guns from any eye, and a
-/// vertical offset only moves where the glass frames it; engine-free.
+/// vertical offset only moves where the glass frames it. The store fields place the pylon stores'
+/// stereo copies, since the interior is not the airframe scaled (<see cref="XrCockpit.Placed"/>);
+/// engine-free.
 /// </summary>
-public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffsetZ, float EyeOffsetY = 0f)
+public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffsetZ, float EyeOffsetY = 0f,
+    float StoreOffsetZ = 0f, float StoreOffsetY = 0f, float StoreSpread = 1f)
 {
     /// <summary>The shipped values for a plane nobody has judged at the headset: the flat mount, no
     /// offset.</summary>
@@ -28,6 +31,10 @@ public readonly record struct VrCockpit(float InteriorScaleFactor, float EyeOffs
     /// <summary>The eye offset in the aircraft's frame: along the stereo mount's Y and Z, which are
     /// the aircraft's own (<see cref="PlaneBuilder.StereoMount"/>).</summary>
     public Vector3 EyeOffsetInAircraft => new(0f, EyeOffsetY, EyeOffsetZ);
+
+    /// <summary>The stores' offset from their true pylon poses in the aircraft's frame, positive up
+    /// and aft.</summary>
+    public Vector3 StoreOffsetInAircraft => new(0f, StoreOffsetY, StoreOffsetZ);
 }
 
 /// <summary>
@@ -49,6 +56,12 @@ public sealed class VrCockpits
     internal const float MaxScaleFactor = 4f;
     internal const float MaxEyeOffsetM = 1f;
 
+    // A store a metre off its pylon has left the wing. A spread past the scale factor's range is a
+    // typo, as there.
+    internal const float MaxStoreOffsetM = 1f;
+    internal const float MinStoreSpread = 0.25f;
+    internal const float MaxStoreSpread = 4f;
+
     /// <summary>The scale factor's field name, which the tuning lab's writer also uses.</summary>
     internal const string ScaleField = "interiorScaleFactor";
 
@@ -57,6 +70,15 @@ public sealed class VrCockpits
 
     /// <summary>The up and down offset's field name.</summary>
     internal const string EyeYField = "eyeOffsetY";
+
+    /// <summary>The stores' fore and aft offset's field name.</summary>
+    internal const string StoreZField = "storeOffsetZ";
+
+    /// <summary>The stores' up and down offset's field name.</summary>
+    internal const string StoreYField = "storeOffsetY";
+
+    /// <summary>The stores' lateral spread's field name.</summary>
+    internal const string SpreadField = "storeSpread";
 
     private readonly Dictionary<string, VrCockpit> _planes;
     private readonly List<string> _names;
@@ -157,17 +179,22 @@ public sealed class VrCockpits
 
         if (!TryNumber(e, ScaleField, VrCockpit.Default.InteriorScaleFactor, out float factor)
             || !TryNumber(e, EyeZField, VrCockpit.Default.EyeOffsetZ, out float z)
-            || !TryNumber(e, EyeYField, VrCockpit.Default.EyeOffsetY, out float y))
+            || !TryNumber(e, EyeYField, VrCockpit.Default.EyeOffsetY, out float y)
+            || !TryNumber(e, StoreZField, VrCockpit.Default.StoreOffsetZ, out float storeZ)
+            || !TryNumber(e, StoreYField, VrCockpit.Default.StoreOffsetY, out float storeY)
+            || !TryNumber(e, SpreadField, VrCockpit.Default.StoreSpread, out float spread))
         {
             return null;
         }
 
         bool inRange = float.IsFinite(factor) && factor >= MinScaleFactor && factor <= MaxScaleFactor
-            && InOffsetRange(z) && InOffsetRange(y);
-        return inRange ? new VrCockpit(factor, z, y) : null;
+            && InOffsetRange(z, MaxEyeOffsetM) && InOffsetRange(y, MaxEyeOffsetM)
+            && InOffsetRange(storeZ, MaxStoreOffsetM) && InOffsetRange(storeY, MaxStoreOffsetM)
+            && float.IsFinite(spread) && spread >= MinStoreSpread && spread <= MaxStoreSpread;
+        return inRange ? new VrCockpit(factor, z, y, storeZ, storeY, spread) : null;
     }
 
-    private static bool InOffsetRange(float metres) => float.IsFinite(metres) && Math.Abs(metres) <= MaxEyeOffsetM;
+    private static bool InOffsetRange(float metres, float max) => float.IsFinite(metres) && Math.Abs(metres) <= max;
 
     // A field left out reads the fallback; one present must be a number.
     private static bool TryNumber(JsonElement entry, string field, float fallback, out float value)
