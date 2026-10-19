@@ -114,9 +114,9 @@ That build has no `defer_ms`/`idle_ms` terms, so its `frame_ms` is the whole fra
 
 Against the current build's 0.6 to 0.8 M primitives in the same flight.
 
-## Next step
+## At the controls
 
-A re-fly at the controls on the current build: host CM23 in network co-op under Enhanced with
-`--perf`, the guest on its own machine, and keep the session's log (`.scratch/logs/` in a repo run,
-`logs\` beside an export). If it reads under 60 fps, the `[perf] window` lines at that moment name
-the side, and the next measurement repeats this method at that point of the mission.
+Hosted at the controls on main at 573d5efbd, with the Steam Deck as the guest on its own machine,
+the PC holds 103 to 120 fps in every 10 s `[perf] rate` window of an 80 s flight at the same
+display settings. The 30 fps symptom does not reproduce. The flight hitches (21 frames over 40 ms
+on the host, the largest 310 ms, mostly unattributed without `--perf`); those are #246.
