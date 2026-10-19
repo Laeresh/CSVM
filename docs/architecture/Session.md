@@ -522,7 +522,7 @@ world, registered with the shared projectile pool so every player's aim assist s
 stepped by `SessionSimulation` after the zeppelin runtime so a slung mount reads its ride's moved
 pose. Built unconditionally with a chapter flight, as the original's own placement pass is.
 `SetActivatedUnder` is the Instant Action builder's subtree write, `SetTeamUnder` the same walk for
-the team a zeppelin record fans across its airship, `WakeAll` the `--wake-turrets` stand-in, and `SleepAll` a race session's whole-session sleep.
+the team a zeppelin record fans across its airship, `PreferOrdnanceUnder` the same walk for an airship's guns' round preference, `WakeAll` the `--wake-turrets` stand-in, and `SleepAll` a race session's whole-session sleep.
 Format and decode, including the wake ordering and the awake-by-data census:
 [../formats/turrets.md](../formats/turrets.md).
 

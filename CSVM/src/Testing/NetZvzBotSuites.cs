@@ -83,7 +83,9 @@ internal static class NetZvzBotSuites
         + "seat on both machines, while no part of its own hull is ever its target or carries its "
         + "rounds; a Black Hat Warhawk bot carrying torpedoes takes the enemy hull's nearest gas bag, "
         + "flies in until its rocketeer launches a torpedo at it, guns a cannon, turret or engine of "
-        + "that hull while the torpedo is locked out, and takes a gas bag again once it is ready; an enemy's hit on the bots' own hull turns the gun bot onto that enemy; and the "
+        + "that hull while the torpedo is locked out, sees a gun of that hull take the torpedo and "
+        + "shoot it down, and takes a gas bag again once it is ready; an enemy's hit on the bots' "
+        + "own hull turns the gun bot onto that enemy; and the "
         + "ABLE-TO-FAIL CONTROL, the gun bot from the same start with the objective off, takes no "
         + "hull part")]
     internal static void BotsAttackTheEnemyHull(TestContext ctx)
@@ -220,12 +222,21 @@ internal static class NetZvzBotSuites
         ctx.Check(Torpedoes(bot) < carried && launchedAt is DestructibleRegistry.Instance { Gasbag: true },
             $"and flies in until its rocketeer launches a torpedo at {TargetPool.TargetLabel(launchedAt)}, in {steps} step(s) ({carried} to {Torpedoes(bot)})");
         // The gasbag gate hides the bags while the torpedo is locked out, so the bot guns the hull.
+        // It is kept whole. The nose guns' rockets fired at its torpedo also strike it, and a hurt bot
+        // breaks off to rearm. That is Defends' note, not what this reading tests.
         var enemy = Parts(host, 0);
+        var enemyGuns = enemy.OfType<TurretController>().ToList();
+        var flyouts = new List<ProjectilePool.Flyout>();
+        bot.Projectiles?.CollectFlyouts(flyouts);
+        var launched = flyouts.FirstOrDefault(f => f.Weapon.Torpedo);
+        bool gunTook = false;
         object? gunned = null;
         int watched = 0;
         for (; watched < LockoutSteps && bot.Pilot.Rocketeer!.LockoutRemaining > 0f; watched++)
         {
             Lockstep(1, peers);
+            bot.Damage?.Reset();
+            gunTook |= launched != null && enemyGuns.Any(t => ReferenceEquals(t.TargetSource, launched));
             if (gunner.Target is { } held && enemy.Contains(held) && held is not DestructibleRegistry.Instance { Gasbag: true })
             {
                 gunned ??= held;
@@ -234,10 +245,13 @@ internal static class NetZvzBotSuites
 
         ctx.Check(watched > 0 && gunned != null,
             $"and while its torpedo is locked out it guns a cannon, turret or engine of {EnemyHull} ({TargetPool.TargetLabel(gunned)} in {watched} step(s) of lockout)");
+        ctx.Check(gunTook && launched is { Destroyed: true, Live: false },
+            $"and a gun of {EnemyHull} takes the torpedo it launched as its target, and the torpedo is shot down ({TargetPool.TargetLabel(launched)}, taken {gunTook}, health {launched?.Health:0.#}, gone {launched?.Live == false})");
         int back = 0;
         for (; back < ReturnSteps && gunner.Target is not DestructibleRegistry.Instance { Gasbag: true }; back++)
         {
             Lockstep(1, peers);
+            bot.Damage?.Reset();
         }
 
         ctx.Check(gunner.Target is DestructibleRegistry.Instance { Gasbag: true },

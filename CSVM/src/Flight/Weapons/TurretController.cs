@@ -65,6 +65,10 @@ public sealed class TurretController
     /// well (docs/formats/turrets.md "Acquiring").</summary>
     public const float MountSkirtM = 1.5f;
 
+    /// <summary>The cost weight a <see cref="PrefersOrdnance"/> gunner gives a <c>TARGETABLE</c> round,
+    /// the literal at <c>0x004ac799</c> in the turret cost <c>0x004ac720</c> (docs/org/targeting.md).</summary>
+    public const float OrdnanceWeight = 0.6f;
+
     private readonly FlightController? _host;
     private readonly IWorldQuery? _worldQuery; // the carried case's line-of-sight seam; null on an emplacement
     private readonly ProjectilePool _pool;
@@ -158,6 +162,11 @@ public sealed class TurretController
     /// unless Zeppelin vs Zeppelin names a hull's turrets for that hull. A carried gunner's rounds
     /// are its aeroplane's.</summary>
     public int RoundShooter { get; set; } = ProjectilePool.NoShooter;
+
+    /// <summary>The turret's <c>+0x6f</c> byte: a <c>TARGETABLE</c> round costs 0.6 weight units
+    /// rather than 1.0, 480 m of slack. Only a zeppelin's walk over its own guns sets it
+    /// (docs/org/targeting.md "The picker's cost").</summary>
+    public bool PrefersOrdnance { get; set; }
 
     /// <summary>True in a firing spell, false in the bored pause between spells (a duty cycle, not
     /// two moods: bored suppresses firing only, the aim solution keeps running). The windows are
@@ -708,9 +717,9 @@ public sealed class TurretController
         return (parentBasis * restBasis).Orthonormalized();
     }
 
-    // The nearest live hostile entry of the engine's VehicleList and mission-structure pools inside
-    // DETECTION_RANGE, the shared target-picker's minimise-a-score structure with distance as the
-    // score. The own plane (carried) and teammates are gated out by the aim assist's team rule.
+    // The nearest live hostile entry of the engine's VehicleList, mission-structure and round pools
+    // inside DETECTION_RANGE, the shared target-picker's minimise-a-score structure with distance
+    // as the score. The own plane (carried) and teammates are gated out by the aim assist's team rule.
     // ⚠ Not the aircraft half of the vehicle list: the decoded picker walks the whole pool, which
     // holds AI ground and sea vehicles too. A hull is a candidate as the vessel it is, and must
     // never reach one by being registered as aircraft (docs/org/targeting.md).
@@ -752,14 +761,20 @@ public sealed class TurretController
 
         // The aircraft-first preference, the same remake-only rule the aeroplane picker takes, so a
         // zeppelin's guns and the wingmen beside them go after the same enemies.
-        if (AiTargetRanking.AircraftFirst && aircraftInReach)
+        if (!(AiTargetRanking.AircraftFirst && aircraftInReach))
         {
-            return best < float.MaxValue;
+            AcquireStructure(here, ref best, ref pos, ref vel);
         }
 
-        // Walked after the vehicles against the same running best, ties going to it, which is the
-        // decoded pass order. A gasbag is the one class this pass drops. A structure is marked
-        // where it stands and never leads, so its velocity is zero.
+        AcquireOrdnance(here, ref best, ref pos, ref vel);
+        return best < float.MaxValue;
+    }
+
+    // Walked after the vehicles against the same running best, ties going to it, which is the
+    // decoded pass order. A gasbag is the one class this pass drops. A structure is marked
+    // where it stands and never leads, so its velocity is zero.
+    private void AcquireStructure(Vector3 here, ref float best, ref Vector3 pos, ref Vector3 vel)
+    {
         _pool.CollectTurretStructures(_scan, _team);
         foreach (var c in _scan.Structures)
         {
@@ -778,8 +793,32 @@ public sealed class TurretController
             vel = Vector3.Zero;
             TargetSource = c.Source;
         }
+    }
 
-        return best < float.MaxValue;
+    // The fourth pass, a TARGETABLE round in flight, last and on a strict win, as FUN_0041f9c0 takes
+    // it. The range gate reads the true distance. The 0.6 weight against the other passes' 1.0 is
+    // then taken off that distance as metres, this picker's distance-only arithmetic.
+    // It is no structure, so the aircraft-first preference leaves it in.
+    private void AcquireOrdnance(Vector3 here, ref float best, ref Vector3 pos, ref Vector3 vel)
+    {
+        _pool.CollectTargetableOrdnance(_scan);
+        float slack = PrefersOrdnance ? (1f - OrdnanceWeight) * AiTargetRanking.WeightScale : 0f;
+        foreach (var c in _scan.Ordnance)
+        {
+            if (!AimAssist.Hostile(_team, c.Team))
+            {
+                continue;
+            }
+            float d = here.DistanceTo(c.Position);
+            if (d > Def.DetectionRange || d - slack >= best)
+            {
+                continue;
+            }
+            best = d - slack;
+            pos = c.Position;
+            vel = c.Velocity;
+            TargetSource = c.Source;
+        }
     }
 
     // The WA-Turret dispatch site (docs/formats/combat-voice.md): one report per acquisition

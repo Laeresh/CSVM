@@ -177,6 +177,21 @@ public sealed partial class TurretEmplacementRuntime : Node
         return changed;
     }
 
+    /// <summary>Sets <see cref="TurretController.PrefersOrdnance"/> on every emplacement standing on
+    /// <paramref name="root"/> or under it. This is the walk a zeppelin's build makes over its guns
+    /// (<c>FUN_004beee0</c>, docs/org/targeting.md "The picker's cost").</summary>
+    public void PreferOrdnanceUnder(Node3D root)
+    {
+        foreach (var t in _turrets)
+        {
+            if (t.Site is { } site && GodotObject.IsInstanceValid(site)
+                && (site == root || root.IsAncestorOf(site)))
+            {
+                t.PrefersOrdnance = true;
+            }
+        }
+    }
+
     public void SimStep(float dt)
     {
         foreach (var t in _turrets)

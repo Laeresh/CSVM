@@ -374,7 +374,7 @@ read first, so each class carries its own pair and none reads another's:
 | `FUN_004a5b20` | `TargetVehicle`, `0x0060886c` | `+0x91d` (the dead byte) must be CLEAR, `+0x944` (awake) must be SET | `0x004a5b40`/`44`/`48` |
 | `FUN_004a5bd0` | `TargetTurret`, `0x006088cc` | `+0x6c` and `+0x6d` both set | `0x004a5bea`/`ee`/`f2` |
 | `FUN_004a5b90` | `TargetStruct`, `0x0060364c` | `+0x8c` and `+0x90` both set | `0x004a5bb0`/`b4`/`b8` |
-| `FUN_004a5c10` | emplacement hosts | none, the team test alone through the object at `+0x8` | `0x004a5c1e`/`22`/`26` |
+| `FUN_004a5c10` | emplacement hosts; `TargetProjectile`, `0x00608920` | none, the team test alone through the object at `+0x8` | `0x004a5c1e`/`22`/`26` |
 
 `FUN_004a5c10`'s codegen inverts polarity through `XOR EAX,EAX / SETZ DL` and resolves to the same
 truth table.
@@ -405,14 +405,15 @@ side, through the same predicate the player HUD's scan uses.
 ### What a turret's candidate set holds
 
 `FUN_0041f9c0`'s four passes, in the order it takes them, all against one running best cost so a
-later pool wins only by scoring lower (ties to the later pool):
+later pool wins only by scoring lower (every pass compares with a strict `<`, so a tie keeps the
+earlier pool's candidate):
 
 | Pass | Pool | Admitted |
 |---|---|---|
 | 1 | `VehicleList` (`DAT_0071dabc`) | **every entry, unconditionally.** The list holds aircraft AND AI ground/sea vehicles (see [`aim-assist.md`](aim-assist.md) "The four lists"), so a boat or a ship is a turret candidate exactly as an aeroplane is. The cost carries a per-entry bias from `entity+0x340` |
 | 2 | Turrets (`DAT_0071d914`) | every entry, unconditionally |
 | 3 | `MStructList` (`DAT_0071d33c`…`0x0071d340`) | only when the picker's 4th argument is set, and then only entries whose `+0x8d` is non-zero and whose `+0x65` gasbag flag is clear (the 3rd argument would admit gasbags; the turret passes `0`) |
-| 4 | Live fused ordnance (`DAT_0064f78c`) | entries whose `+0x6c` tracking byte is set. A winner here returns immediately |
+| 4 | Live fused ordnance (`DAT_0064f78c`) | entries whose `+0x6c` tracking byte is set, which is the `TARGETABLE` torpedo alone. A winner here returns immediately, having already beaten the other three; [`aiPilot.md`](aiPilot.md) "The fourth list" decodes the pass |
 
 Every candidate passes `FUN_00422890` first: the hostility virtual `+0x34` against the query's
 team, and then, when the query's `+0x14` byte is set, a rejection of any candidate whose Y sits
@@ -482,12 +483,26 @@ For a turret that vtable is `0x00608b68` and the function is `0x004ac720`:
 - **In range the cost is `1200 * weight + distance`** (`0x00603534` holds `1200.0`, and the add is
   at `0x004ac81a`). The weight starts at `1.0` and is **replaced**, not accumulated:
   `0.8` when the candidate's entity is the local player's plane (`DAT_0071c298`, compared at
-  `0x004ac75a`); `0.6` when the turret's own `+0x6f` byte is set and the candidate casts to
-  `TargetProjectile`; `1.4` when it casts to `TargetVehicle` whose `+0x67c` is `4`, the `wingman`
+  `0x004ac75a`); `0.6` (the store at `0x004ac799`) when the turret's own `+0x6f` byte is set and
+  the candidate casts to `TargetProjectile`; `1.4` when it casts to `TargetVehicle` whose `+0x67c` is `4`, the `wingman`
   mode class, which is the same preference the AI pilot's scorer spends as an additive `+0.4`
   ([`aiPilot.md`](aiPilot.md)). A further `0.5` comes off whatever weight stands when the wrapper's
   `+0x1c` virtual reports the gasbag flag, and a `TargetTurret` candidate instead takes `42.0`
   (`0x00608b6c`) onto its **distance**.
+
+**The `0.6` is a zeppelin gun's, and its byte is a copy on the query.** The test at `0x004ac777`
+reads the QUERY's `+0x1c`, and `FUN_004aabb0` fills it from the turret's own `+0x6f`
+(`MOV BL,[ESI+0x6f]` at `0x004aaf44`, stored to the query at `0x004aaf67`), beside `+0x18` from
+`+0x168`. The turret constructor `FUN_004a9a60` clears `+0x6f` at `0x004a9b18`. Three sites in the
+image write it, and one decides anything: `FUN_004beee0` sets it to `1` at `0x004beef5` on every
+turret standing on a node of the subtree it walks (the turret registry lookup `FUN_004a9890` by
+node, then the children at `+0x5c`). `FUN_004bf050` starts that walk at the zeppelin's root
+`+0x1c`, and the zeppelin record parser `FUN_004bd8d0` calls it at `0x004bed10` on no condition,
+after the team fan. The third writer, `FUN_004ac6f0` behind `FUN_004a96f0`, copies the byte from a
+network message of type `0x118` (`+0xd` of the payload), the replication of the same state. So
+every gun an airship carries prefers a `TARGETABLE` round by 480 m, the `1200.0` at `0x00603534`
+times the 0.4 the `0.6` takes off `1.0`, and a ground or carried gun weighs one like any other
+target. The cast is the RTTI `TargetProjectile` descriptor at `0x00620840`.
 
 So the weights are 240 m, 480 m and 600 m of slack in a distance race, not filters. A turret on the
 player's team never reaches the `0.8` branch at all, because the predicate has already rejected the

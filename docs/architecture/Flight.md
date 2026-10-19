@@ -117,9 +117,9 @@ Schema: [../formats/turrets.md](../formats/turrets.md); the team space:
 One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host off the vehicle def's
 `TurretMount`s, ticked from `FlightController.SimStep`) and world emplacement (`BuildEmplacements`,
 per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`). Per tick it takes
-the nearest hostile out of the vehicle list and then the mission structures, stopping at the vehicle
-pass while `AiTargetRanking.AircraftFirst` holds and an aircraft is in reach, solves the lead through
-`AimAssist.TryIntercept`, slews the PARTS nodes inside the authored arcs, and runs the fire gates:
+the nearest hostile out of the vehicle list, the mission structures (not while `AircraftFirst` holds
+and an aircraft is in reach) and the `TARGETABLE` rounds (0.6 for a `PrefersOrdnance` zeppelin gun),
+solves the lead through `AimAssist.TryIntercept`, slews the PARTS nodes inside the arcs, and runs the fire gates:
 activation, the attack window, the barrel-on-solution cone, a cached line of sight and the
 `FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`. A carried turret reports each round to its host rig, which is what a network match puts on the wire, and the gunner on an aeroplane flown elsewhere does not run here at all. An acquired human player is reported once per episode to `ProjectilePool`, the combat voice's `WA-Turret` site. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md), [../formats/combat-voice.md](../formats/combat-voice.md).
 
@@ -594,8 +594,8 @@ score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `
 ## src/Flight/Ai/GunnerAcquisition.cs
 One AI aircraft's target acquisition, stepped from the sim step before the guns: the decoded hold
 that re-scores a standing target until it fails or expires, then the sweep over the whole
-VehicleList, the turrets and the structures, each candidate carrying its own class bias, handed with
-the machine's ATTACK radius and the gunner's `PlayersPreferred` to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
+VehicleList, the turrets, the structures and the `TARGETABLE` rounds, each carrying its own class
+bias, handed with the machine's ATTACK radius and the gunner's `PlayersPreferred` to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
 ordnance gate. `AcquiringShooter` is the shooter's view the host answers once per tick; `Step`
 leaves the pick on `AiGunner.Target`, or drops it for a `Disengaged` gunner, and `RankedSources`/`ScannedStructureCount` expose the last
 sweep. `FlightController` owns one as `Acquisition`. Decode: [../org/aiPilot.md](../org/aiPilot.md).

@@ -163,9 +163,10 @@ public sealed partial class ZeppelinRuntime : Node
     }
 
     /// <summary>Completes the record-team fan onto the guns standing on each airship, which is the
-    /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist; a record authoring
+    /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist. A record authoring
     /// no team leaves its guns on their own <c>TURRET</c> default, since substituting one there is
-    /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved.</summary>
+    /// the same invention <see cref="AuthoredTeam"/> refuses. Returns how many gunners moved. Every
+    /// airship's guns also take the round preference its build walk sets (<c>FUN_004bf050</c>).</summary>
     public int FanTeamsOntoTurrets(TurretEmplacementRuntime turrets)
     {
         // Adopted here because the caller holds them, not so a later team write can work: that one
@@ -174,6 +175,8 @@ public sealed partial class ZeppelinRuntime : Node
         int moved = 0;
         foreach (var zep in _live)
         {
+            // Every airship's guns, team or none: the record parse makes this walk unconditionally.
+            turrets.PreferOrdnanceUnder(zep.Host);
             if (zep.Team is not { } team)
             {
                 continue;

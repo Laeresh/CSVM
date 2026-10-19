@@ -176,7 +176,7 @@ RTTI names survive in the binary.
 | `TargetVehicle` | `DAT_0071dabc` | `FUN_004a6330` | `0x0060886c` | `0x004a5b20`: `+0x91d` clear, `+0x944` set, hostile team | candidate `+0x340` |
 | `TargetTurret` | `DAT_0071d914` | `FUN_004a6370` | `0x006088cc` | `0x004a5bd0`: `+0x6c` and `+0x6d` set, hostile team | scorer `+0x344` |
 | `TargetStruct` | `DAT_0071d33c`–`DAT_0071d340` | inline | `0x0060364c` | `FUN_004a5b90`: `+0x8c` and `+0x90` set, hostile team; plus object `+0x8d` set and `+0x65` needs gasbag ordnance | scorer `+0x344` |
-| `TargetProjectile` | `DAT_0064f78c` | `FUN_004a63b0` | `0x00608920` | object `+0x6c` set | none |
+| `TargetProjectile` | `DAT_0064f78c` | `FUN_004a63b0` | `0x00608920` | object `+0x6c` set; `0x004a5c10`: hostile team | none (see below) |
 
 `FUN_0041f9c0` carries one running minimum across all four lists, so the pick is the global minimum;
 the return chain resolves projectile, struct, turret, vehicle only because a later list records a
@@ -185,6 +185,44 @@ winner solely when it already beat the earlier ones. The Admission column is the
 whose own second arm (reject a candidate below the query's Y) is inert here because the query
 builder `FUN_00421e00` zeroes the enable byte at query `+0x14`. `TargetProjectile` is the consumer
 of the `TARGETABLE` weapon flag.
+
+### The fourth list: a `TARGETABLE` round
+
+The projectile pass is the last of `FUN_0041f9c0`'s four, and an AI pilot and a turret run the
+same code, so both take an incoming torpedo on the same terms.
+
+- **Admission.** The pass walks `DAT_0064f78c` and skips an entry whose object `+0x6c` byte is clear
+  (the `CMP byte [+0x6c]` ahead of the `FUN_004a63b0` wrap). `FUN_00441830` sets that byte on the
+  `TARGETABLE` path alone ([`ordnanceTypes.md`](ordnanceTypes.md) "The shootable flyout"), so a
+  round wrapped only for its fuse distance is on the list and never ranked.
+- **Hostility.** The wrapper's `+0x34` slot (vtable `0x00608920`) is `0x004a5c10`: the object's
+  `+0x8` against the query team, hostile when they differ and neither is 0, with no liveness bytes
+  read. The object's `+0x8` is the shooter's own team, the `&shooter+8` both callers of
+  `FUN_00441830` push (the aircraft fire path at `0x004b6e8c`, the turret fire at `0x004ab3e0`),
+  copied by the base constructor `FUN_00441b90`. Then `FUN_00422890`'s Y arm, inert for a pilot.
+- **Geometry.** The object's vtable `0x006063c4` answers position from round `+0x48`
+  (`0x004416e0`) and its second slot from round `+0x60`, the velocity (`0x004416f0`). So the
+  scorer's closing term dots the round's velocity, and a torpedo flying at the scorer is the
+  unfavourable arm. The object's `+0x04` is 0 from `FUN_00441b90`, so `FUN_00421ad0`'s `+0x04 >= 3`
+  reject never fires on a round.
+- **Score.** The pass compares the scorer's cost straight against the running minimum: no
+  `target_bias` (`+0x340` is added on the vehicle pass only) and no `struct_bias` (the second
+  argument is added on the turret and structure passes only). The weight is the plain `1.0`: a round
+  is never the player, never a `TargetVehicle`, and its `+0x1c` slot is the constant-false
+  `0x00422720`. `FUN_0041ae40`'s objective term casts to neither `TargetVehicle` nor `TargetTurret`
+  and walks the rating list against the round's scene node and its parents, which no roster names,
+  so it is 0. A `jet` scores `1200 × (1.0 ± 0.2 ± 0.2 ± 0.2) + distance`, any other scorer
+  `1200 + distance`.
+- **The win.** Strict `<` against the running minimum, as every pass takes it, so a tie keeps the
+  earlier list's candidate. A projectile that wins returns at once, but it can only win by beating
+  every vehicle, turret and structure already walked: the early return is the return order, not a
+  priority. Against an AI aeroplane's `target_bias` of `-100.0`, a torpedo wins only when it is
+  100 m nearer, and against a `struct_bias` of `-200.0` structure, 200 m nearer.
+
+The turret's own cost function weights a round differently; see
+[`targeting.md`](targeting.md) "The picker's cost". CSVM's `GunnerAcquisition` ranks the round through
+`ProjectilePool.CollectTargetableOrdnance` with no class or objective bias, and the remake-only
+aircraft-first preference leaves it ranked, since it withdraws turrets and structures alone.
 
 ### `target_bias` and `struct_bias` are the two class-dependent rank terms
 
