@@ -147,16 +147,16 @@ public static class AiControlLaw
         : targetSpeed >= LeadSpeedHi ? LeadFar
         : LeadNear + (targetSpeed - LeadSpeedLo) * LeadSlope;
 
-    /// <summary>One step's stick and throttle for an aim point. <paramref name="emergency"/> is the
-    /// crash-recovery arm; <paramref name="engaged"/> is the combat driver's authority bonus;
-    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution;
-    /// <paramref name="stationKeeping"/> swaps the desired-speed ceiling for
-    /// <see cref="StationCeiling"/> and is the escort's alone; <paramref name="openAltitudeBand"/>
-    /// drops the aim-altitude clamp for this solve, which only the danger-zone approach asks.</summary>
+    /// <summary>One step's stick and throttle for an aim point. The crash-recovery arm is
+    /// <paramref name="emergency"/>, and the combat driver's authority bonus is <paramref name="engaged"/>.
+    /// Setting <paramref name="gunLead"/> solves a firing solution; a <paramref name="roundLeadSpeed"/>
+    /// solves that round's own lead instead (<see cref="AiPilot.TorpedoLeadSpeed"/>). The escort alone sets
+    /// <paramref name="stationKeeping"/> (<see cref="StationCeiling"/>). The danger-zone approach alone
+    /// sets <paramref name="openAltitudeBand"/>, which drops the aim-altitude clamp.</summary>
     public static FlightInput Steer(FlightModel model, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, float throttle, float dt, bool emergency = false, bool engaged = false,
         bool gunLead = false, float skillFactor = 1f, bool stationKeeping = false,
-        bool openAltitudeBand = false)
+        bool openAltitudeBand = false, float? roundLeadSpeed = null)
     {
         var stats = model.Stats;
         var att = model.Attitude;
@@ -191,7 +191,7 @@ public static class AiControlLaw
             return new FlightInput { Throttle = Mathf.Clamp(throttle, 0f, 1f) };
 
         float want = DesiredSpeed(stats, delta, rangeSq, aimVelocity, p, emergency, noseY, stationKeeping);
-        var aimDir = AimDirection(model, pos, aimPoint, aimVelocity, delta, want, gunLead);
+        var aimDir = AimDirection(model, pos, aimPoint, aimVelocity, delta, want, gunLead, roundLeadSpeed);
 
         float bx = aimDir.Dot(att.X);   // + = the aim point is to the right
         float by = aimDir.Dot(att.Y);   // + = above
@@ -314,8 +314,18 @@ public static class AiControlLaw
     }
 
     private static Vector3 AimDirection(FlightModel model, Vector3 pos, Vector3 aimPoint,
-        Vector3 aimVelocity, Vector3 delta, float want, bool gunLead)
+        Vector3 aimVelocity, Vector3 delta, float want, bool gunLead, float? roundLeadSpeed)
     {
+        // A remake-only rule, since the original seats no bots. The round's lead is solved against
+        // the aim velocity, as the rocketeer leads a motorless round.
+        // Rule: docs/org/aiPilot/aiWeapons.md "A bot seat's torpedo lead".
+        if (roundLeadSpeed is { } round)
+        {
+            return AimAssist.TryIntercept(pos, round, aimPoint, aimVelocity, out var roundDir, out _)
+                ? roundDir
+                : delta.Normalized();
+        }
+
         // gunLead solves the gun problem at a fixed round speed against RELATIVE velocity
         // (docs/org/aiControlLaw.md); a no-root geometry falls back to the straight line.
         var relative = gunLead ? aimVelocity - (model.VelocityDir * model.Speed) : aimVelocity;

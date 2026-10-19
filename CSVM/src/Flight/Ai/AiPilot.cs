@@ -93,6 +93,12 @@ public sealed class AiPilot
     /// </summary>
     public float? CruiseThrottle;
 
+    /// <summary>A bot seat's ready torpedo's speed, m/s, or null. The host sets it each step. Against a
+    /// gas bag the pursuit then steers on that round's own lead, not the 860 m/s gun solution, so the
+    /// bot launches far out. A remake-only rule, since the original seats no bots.
+    /// Rule: docs/org/aiPilot/aiWeapons.md "A bot seat's torpedo lead"</summary>
+    public float? TorpedoLeadSpeed;
+
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
@@ -492,11 +498,11 @@ public sealed class AiPilot
     // multiplies all three channels every step; a pilot with no machine gets a neutral 1.
     private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false,
-        bool stationKeeping = false, bool openAltitudeBand = false)
+        bool stationKeeping = false, bool openAltitudeBand = false, float? roundLeadSpeed = null)
     {
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
             emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, stationKeeping,
-            openAltitudeBand);
+            openAltitudeBand, roundLeadSpeed);
         if (CruiseThrottle is { } cruise && !emergency)
             input.Throttle = cruise;
         Throttle = input.Throttle;
@@ -530,7 +536,8 @@ public sealed class AiPilot
             aimVelocity = u * MergeSpeedMps;
             aim.Y += new Vector2(u.X, u.Z).Length() * MergeVerticalBias(model.Speed);
         }
-        return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
+        return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis,
+            roundLeadSpeed: quarry.IsGasbag ? TorpedoLeadSpeed : null);
     }
 
     // The climb-out both laws share: 1000 m above the aeroplane itself, on the emergency arm, with

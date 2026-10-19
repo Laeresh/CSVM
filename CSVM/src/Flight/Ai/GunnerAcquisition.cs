@@ -72,7 +72,12 @@ public sealed class GunnerAcquisition
     /// (<c>FUN_00420070</c>). The Zeppelin vs Zeppelin bot rule asks it too, so a torpedo bot goes for
     /// a gas bag exactly while the acquisition would offer one.</summary>
     public static bool GasbagOrdnanceReady(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo) =>
-        GasbagOrdnanceState(loadout, rocketeer, infiniteAmmo) == ReadyWord;
+        ReadyGasbagPylon(loadout, rocketeer, infiniteAmmo) != null;
+
+    /// <summary>The first gasbag pylon that passes <see cref="GasbagOrdnanceReady"/>'s test, or null:
+    /// a DAMAGES_ZEPPELIN slot with ammo and both launch timers run out.</summary>
+    public static Hardpoint? ReadyGasbagPylon(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo) =>
+        GasbagGate(loadout, rocketeer, infiniteAmmo, out _);
 
     /// <summary>One gunner tick: keep the standing target while the hold holds it, else re-acquire
     /// through the ranking when <see cref="AiGunner.AutoTarget"/> allows, leaving the pick on
@@ -132,16 +137,28 @@ public sealed class GunnerAcquisition
     private static string GasbagOrdnanceState(in AcquiringShooter shooter) =>
         GasbagOrdnanceState(shooter.Loadout, shooter.Rocketeer, shooter.InfiniteAmmo);
 
-    // The gasbag gate's verdict as a word. The decoded admission wants a DAMAGES_ZEPPELIN slot with
-    // ammo whose two launch timers have run out (FUN_00420070, docs/org/aiPilot.md). Which condition
-    // withheld the gasbags is what the log has to say.
     private static string GasbagOrdnanceState(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo)
     {
+        GasbagGate(loadout, rocketeer, infiniteAmmo, out string state);
+        return state;
+    }
+
+    // The decoded gasbag gate: a DAMAGES_ZEPPELIN slot with ammo whose two launch timers have run
+    // out (FUN_00420070, docs/org/aiPilot.md). The first such pylon, or null with the condition that
+    // withheld the gasbags as a word, which is what the log has to say.
+    private static Hardpoint? GasbagGate(Loadout? loadout, AiRocketeer? rocketeer, bool infiniteAmmo, out string state)
+    {
         if (loadout is not { Hardpoints.Count: > 0 } fit)
-            return "no pylons";
+        {
+            state = "no pylons";
+            return null;
+        }
         if (rocketeer == null)
-            return "no rocketeer";
-        string state = "no gasbag pylon";
+        {
+            state = "no rocketeer";
+            return null;
+        }
+        state = "no gasbag pylon";
         for (int i = 0; i < fit.Hardpoints.Count; i++)
         {
             var hp = fit.Hardpoints[i];
@@ -152,9 +169,12 @@ public sealed class GunnerAcquisition
             else if (!rocketeer.SlotReady(i))
                 state = "gasbag pylon locked";
             else
-                return ReadyWord;
+            {
+                state = ReadyWord;
+                return hp;
+            }
         }
-        return state;
+        return null;
     }
 
     // Whether this tick keeps the standing target. The decoded hold: a picked target is re-scored

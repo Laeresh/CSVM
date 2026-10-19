@@ -156,6 +156,9 @@ velocity; with `gunLead` set it is solved at **860.0 m/s** against the velocity 
 aircraft, which is a firing solution rather than a fly-to solution. No solution falls back to the
 straight-line direction. When two roots exist and `DAT_0064ee4c` is clear, the law takes whichever
 root has the larger dot product with the current nose, that is the one needing less turning.
+A bot seat pursuing a gas bag takes a remake-only rule here: the aim is solved at its ready
+torpedo's own `VELOCITY` against the aim velocity
+([aiPilot/aiWeapons.md, "A bot seat's torpedo lead"](aiPilot/aiWeapons.md#a-bot-seats-torpedo-lead)).
 
 **4. Body frame.** The aim direction is rotated by the 3x3 at `obj+0x180` into `bx` (right), `by`
 (up), `bz`.

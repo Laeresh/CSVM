@@ -482,7 +482,7 @@ an optional `Machine`, an optional `Escort` and a bot's `RearmOrder`), one `Flig
 `FlightController` whose `Pilot` is set. A `Machine` is stepped first and picks this step's aim point
 and parameter table; an `Escort` whose leader is in play takes the dispatch away from every mode but
 stunned and avoid crash, which is the original's own wingman fork. `Stun` is the AI stun's entry,
-leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag. A standing rearm run disengages the gunner and replaces patrol in the dispatch. A standing `ObjectiveRun` (a Capture the Flag bot's flag) outranks pursuit and the rearm run with the gunner left engaged, only a stun, avoid crash, a live escort and a maneuver coming first. A `Tether` past its radius (a defender's) takes the quarry away as a rearm run does. `ResetForSpawn` is a seat pilot's one reset on a return: the gunner's quarry, the machine, the launcher, a stun, a rearm run and a danger-zone run are dropped, and the new placement's course and lever taken, while the orders a mission or launch set stay. A standing order added later clears there too.
+leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag. A standing rearm run disengages the gunner and replaces patrol in the dispatch. A standing `ObjectiveRun` (a Capture the Flag bot's flag) outranks pursuit and the rearm run with the gunner left engaged, only a stun, avoid crash, a live escort and a maneuver coming first. A `Tether` past its radius (a defender's) takes the quarry away as a rearm run does. `ResetForSpawn` is a seat pilot's one reset on a return: the gunner's quarry, the machine, the launcher, a stun, a rearm run and a danger-zone run are dropped, and the new placement's course and lever taken, while the orders a mission or launch set stay. A standing order added later clears there too. `TorpedoLeadSpeed` carries the bot-seat torpedo lead ([../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)).
 Pure and seeded, so a fixed-dt run is deterministic. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/Ai/AiRearmOrder.cs
@@ -503,7 +503,7 @@ aim point, that point's velocity and one of four parameter tables read out of th
 intercept solve for the direction, bank-to-turn with the elevator joining once the bank command is
 inside a deadband, a wings-level rule, a low-speed unload, and a per-axis scale and limit stage off
 `PlaneStats`. The throttle lever has one path, the walk toward the desired speed; the original's
-distance-gated open-loop branch is not ported. The aim-altitude band is clamped for every caller but one: the danger-zone approach opens it for its own solve and closes it again, as the original does. Engine-free and pure over its arguments.
+distance-gated open-loop branch is not ported. The aim-altitude band is clamped for every caller but one: the danger-zone approach opens it for its own solve and closes it again, as the original does. `roundLeadSpeed` carries the bot-seat torpedo lead ([../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)). Engine-free and pure over its arguments.
 
 ## src/Flight/Ai/AiEscort.cs
 The formation-escort law a netless `mode wingman` aircraft flies, which in the shipped data is the
@@ -598,7 +598,7 @@ VehicleList, the turrets, the structures and the `TARGETABLE` rounds, each carry
 bias, handed with the machine's ATTACK radius and the gunner's `PlayersPreferred` to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
 ordnance gate. `AcquiringShooter` is the shooter's view the host answers once per tick; `Step`
 leaves the pick on `AiGunner.Target`, or drops it for a `Disengaged` gunner, and `RankedSources`/`ScannedStructureCount` expose the last
-sweep. `FlightController` owns one as `Acquisition`. Decode: [../org/aiPilot.md](../org/aiPilot.md).
+sweep. `ReadyGasbagPylon` names the pylon that gate passes. `FlightController` owns one as `Acquisition`. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/Ai/ZvzBotObjective.cs
 A Zeppelin vs Zeppelin bot's target, a remake-only rule decided each step and engine-free: an enemy

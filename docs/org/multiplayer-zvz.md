@@ -237,8 +237,11 @@ airframe's attack radius. Otherwise the bot attacks the other hull. Only a `DAMA
 hurts a gas bag, so a bot whose torpedo can fire now takes the nearest live gas bag, and the
 rocketeer's torpedo match launches at it. "Can fire now" is the decoded gasbag gate's own test
 (`GunnerAcquisition.GasbagOrdnanceReady`, `FUN_00420070`), which hides gas bags while the torpedo is
-locked out. Every other bot, a torpedo bot between launches included, takes a broadside cannon that
-is out of the hull, then a turret, then an engine, nearest first. A torpedo bot returns to a gas bag
+locked out. While its torpedo is ready a bot steers on the torpedo's own lead against a gas bag, not
+on the decoded 860 m/s gun solution, so it launches far out from any angle
+([aiPilot/aiWeapons.md, "A bot seat's torpedo lead"](aiPilot/aiWeapons.md#a-bot-seats-torpedo-lead)).
+Every other bot, a torpedo bot between launches included, takes a broadside cannon that is out of
+the hull, then a turret, then an engine, nearest first. A torpedo bot returns to a gas bag
 the step its torpedo is ready. A bot keeps its part while the same
 rule still offers it. The broadsides' arcs are not avoided, since they aim at the other hull. A team
 holds at most one torpedo bot, the Black Hat Warhawk. Known gap: the attacker is read off pool

@@ -3753,6 +3753,10 @@ public partial class FlightController : Node3D
             // aircraft that can actually boost.
             machine.NitroUsable ??= () => Nitro.Installed && !_model.EngineDead;
         }
+        // A bot seat alone steers on its ready torpedo's lead; every other AI keeps the decoded law.
+        Pilot!.TorpedoLeadSpeed = IsBotSeat && GunnerAcquisition.ReadyGasbagPylon(Loadout, Pilot.Rocketeer, InfiniteAmmo) is { } torpedo
+            ? torpedo.Weapon.Velocity ?? ProjectilePool.DefaultVelocity
+            : null;
         var input = Pilot!.Next(_model, dt);
         _throttleSetting = input.Throttle;
         _leverGap = _throttleSetting - _throttle;

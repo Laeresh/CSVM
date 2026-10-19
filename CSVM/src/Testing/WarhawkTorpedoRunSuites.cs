@@ -29,6 +29,13 @@ internal static class WarhawkTorpedoRunSuites
     private const float GunRoundSpeed = 750f;
     private const float ShotRange = 600f;
 
+    // The torpedo-lead run starts beam-on, inside the bot's 900 m band, so the decoded steering
+    // launches only once pursuit has swung it astern. The off-seat launch is pinned to the decoded run.
+    private const float CrossingStartM = 900f;
+    private const float BotLaunchFloorM = 500f;
+    private const float ControlLaunchM = 192f;
+    private const float ControlToleranceM = 10f;
+
     [Suite("warhawk-torpedo-run",
         "a free-flying Black Hat Warhawk torpedoes a gasbag (BL-740): from C4/M03's own opening "
         + "geometry it takes the gasbag over the engine beside it, holds pursue while the flight "
@@ -170,6 +177,27 @@ internal static class WarhawkTorpedoRunSuites
         ctx.WriteArtifact($"test-warhawk-torpedo-run.txt", report.ToString());
     }
 
+    [Suite("bot-torpedo-lead",
+        "a Black Hat Warhawk on a bot seat, armed as a bot is, steers on its ready torpedo's own lead "
+        + "against a gasbag crossing at 30 m/s and launches far out, where the ABLE-TO-FAIL CONTROL, "
+        + "the same aeroplane and arming off a bot seat as every campaign and Instant Action AI "
+        + "flies, keeps the decoded gun-lead steering and its close launch")]
+    internal static void BotTorpedoLead(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("player_warhawk");
+        float? bot = LaunchRange(ctx, texturesPath, botSeat: true);
+        float? control = LaunchRange(ctx, texturesPath, botSeat: false);
+        ctx.Check(bot is > BotLaunchFloorM,
+            $"the bot seat launches its torpedo at the crossing gasbag from {bot:0} m, beyond {BotLaunchFloorM:0} m");
+        ctx.Check(control is { } close && Mathf.Abs(close - ControlLaunchM) <= ControlToleranceM,
+            $"ABLE-TO-FAIL CONTROL: off a bot seat the same aeroplane launches at {control:0} m, the decoded steering's {ControlLaunchM:0} +- {ControlToleranceM:0} m");
+        ctx.Note($"launch range: bot seat {bot:0} m, off a bot seat {control:0} m");
+    }
+
     [Suite("zeppelin-part-lead",
         "a gasbag pool riding a hull at 30 m/s reports the hull's velocity to the AI (#217): the "
         + "rocketeer's torpedo and the gunner's intercept point lead it along the hull's track and "
@@ -235,6 +263,96 @@ internal static class WarhawkTorpedoRunSuites
         float ahead = (gunner.InterceptPoint - pos).Dot(hullVel.Normalized());
         ctx.Check(gunMiss < 1f,
             $"{label}: the gunner's round meets the gasbag, missing by {gunMiss:0.0} m, intercept {ahead:0.0} m along the hull's track");
+    }
+
+    // One free-flying Black Hat Warhawk, armed as AiFlightAssembler arms a bot, against a lone gasbag
+    // crossing its nose at HullSpeed. The range to the gasbag at its first torpedo launch, or null.
+    private static float? LaunchRange(TestContext ctx, string texturesPath, bool botSeat)
+    {
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_warhawk", "bhatwarhawk");
+        var textures = new TextureArchive(texturesPath);
+        var gasbagNode = new Node3D { Name = "gasbag4", Position = new Vector3(0f, 625f, 0f) };
+        ProjectilePool? pool = null;
+        FlightController? ai = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            ctx.Host.AddChild(gasbagNode);
+            var registry = new DestructibleRegistry();
+            var gasbag = registry.Register(
+                new AnimDefinition { Name = "gasbag4", AnimName = "zep_zone_gasbag4" }, gasbagNode, 120f);
+            gasbag.Team = AimAssist.PlayerTeam;
+            gasbag.Gasbag = true;
+            var hullVel = new Vector3(HullSpeed, 0f, 0f);
+            gasbag.Velocity = hullVel;
+
+            var aiPos = gasbagNode.Position + new Vector3(0f, 75f, CrossingStartM);
+            var pilot = AiPilot.HoldingCourse(aiPos, gasbagNode.Position);
+            pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 232 })
+            {
+                DeadEyeAngleDeg = skills.DeadEyeAngleDeg(6),
+                QuickDrawAngleDeg = skills.QuickDrawAngleDeg(6),
+            };
+            pilot.Rocketeer = new AiRocketeer(new RandomNumberGenerator { Seed = 4242 }.Randf)
+            {
+                QuickDrawAngleDeg = skills.QuickDrawAngleDeg(6),
+                QuickDrawChance = skills.QuickDrawChance(6),
+                FiresOnFailedRoll = true,
+            };
+            pilot.Rocketeer.UseWingmanRule();
+            pilot.Machine = new AiModeMachine(new System.Random(7))
+            {
+                ActivationRange = skills.MinAiActiveDist,
+                AttackRange = stats.AiAttackRange,
+                ReturnRange = stats.AiReturnRange,
+                SteadyHandExponent = 0f,
+                ProbeBlocked = (_, _) => null,
+            };
+            var aiModel = new PlaneBuilder(planesGamez, textures).Build(stats.NodeName);
+            ai = new FlightController
+            {
+                PlaneModel = aiModel,
+                Collider = PlaneCollider.Build(aiModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = FlightRoster.ShooterIdBase,
+                IsHumanPiloted = false,
+                IsBotSeat = botSeat,
+                Pilot = pilot,
+                Projectiles = live,
+                Destructibles = registry,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            ai.AddChild(aiModel);
+            ai.Loadout = Loadout.BindAi(stats.AiWeapons, "bhatwarhawk", aiModel, weapons);
+            ai.Setup(new FlightModel(stats), null, new CamParams(), aiPos, gasbagNode.Position);
+            ctx.Host.AddChild(ai);
+            ai.Team = AimAssist.PlayerTeam + 1;
+
+            var torpedo = ai.Loadout.Hardpoints.First(h => h.Weapon.DamagesZeppelin);
+            int carried = torpedo.Ammo;
+            for (int i = 0; i < 60 * Seconds && torpedo.Ammo == carried; i++)
+            {
+                gasbagNode.Position += hullVel * StepDt;
+                ai.SimStep(StepDt);
+                live.SimStep(StepDt);
+            }
+
+            return torpedo.Ammo < carried ? ai.WorldPosition.DistanceTo(gasbag.Centre) : null;
+        }
+        finally
+        {
+            pool?.Free();
+            ai?.Free();
+            gasbagNode.Free();
+            textures.Dispose();
+        }
     }
 
     // Closest approach between a round from origin at roundVel and a target from pos at vel.

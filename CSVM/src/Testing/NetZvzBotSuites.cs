@@ -213,14 +213,16 @@ internal static class NetZvzBotSuites
         // the gun order.
         int steps = 0;
         object? launchedAt = null;
+        float launchRange = 0f;
         for (; steps < MaxFlightSteps && Torpedoes(bot) == carried; steps++)
         {
             launchedAt = gunner.Target;
+            launchRange = bot.WorldPosition.DistanceTo(Where(launchedAt));
             Lockstep(1, peers);
         }
 
         ctx.Check(Torpedoes(bot) < carried && launchedAt is DestructibleRegistry.Instance { Gasbag: true },
-            $"and flies in until its rocketeer launches a torpedo at {TargetPool.TargetLabel(launchedAt)}, in {steps} step(s) ({carried} to {Torpedoes(bot)})");
+            $"and flies in until its rocketeer launches a torpedo at {TargetPool.TargetLabel(launchedAt)} from {launchRange:0} m, in {steps} step(s) ({carried} to {Torpedoes(bot)})");
         // The gasbag gate hides the bags while the torpedo is locked out, so the bot guns the hull.
         // It is kept whole. The nose guns' rockets fired at its torpedo also strike it, and a hurt bot
         // breaks off to rearm. That is Defends' note, not what this reading tests.

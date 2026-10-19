@@ -31,6 +31,7 @@ turret's 0.4-second cadence sounds continuous while still emitting one projectil
   - [A `mode ship` vehicle's mount](#a-mode-ship-vehicles-mount)
 - [The specials](#the-specials)
 - [What `AiGunner` runs](#what-aigunner-runs)
+  - [A bot seat's torpedo lead](#a-bot-seats-torpedo-lead)
 - [What the shipped data amounts to](#what-the-shipped-data-amounts-to)
 - [Function map](#function-map)
 - [Open](#open)
@@ -418,6 +419,31 @@ holds a target for the hardcoded 20 s. The live half is the `surface-vehicle-gun
 Warhawk crosses it at roughly 95 m/s, so the 5 s refire allows a single `quick_draw_chance` draw
 per approach, 0.31 at rating 6. A mission flight showing no torpedo from a flight of Warhawks is
 the expected tail of that, not a closed gate.
+
+### A bot seat's torpedo lead
+
+A remake-only rule: the original seats no bots, so nothing binds how one flies a torpedo run. Under
+the decoded law, pursuit of a structure sets `gunLead`, so the nose follows an 860 m/s firing
+solution (`FUN_0041b560`, [../aiControlLaw.md](../aiControlLaw.md)), and the torpedo leaves the main
+gun mount clamped to the ±11° gun limits within the `0.9962` residual (`FUN_004b7670`). A 60 m/s
+`wep_14` against a hull crossing at 30 m/s needs up to 30° of lead, so that launch waits until the
+approach angle shrinks it, and comes close.
+
+A bot seat (`FlightController.IsBotSeat`) steers on the torpedo's own lead instead. While its fit has
+a pylon that passes the gasbag gate, the host sets `AiPilot.TorpedoLeadSpeed` to the `VELOCITY` of
+the first such pylon (`GunnerAcquisition.ReadyGasbagPylon`, the same walk the gate runs). Pursuing a
+gas bag, the law then solves that round's lead against the bag's world velocity, the frame the
+rocketeer leads a motorless round in. The residual closes from any angle, and the launch comes as
+soon as the band and the quick-draw cone allow. The rocketeer takes the first pylon that clears its
+own walk, which is that same pylon whenever every gasbag pylon carries one weapon, as every shipped
+fit does; a fit with two `DAMAGES_ZEPPELIN` weapons of different speeds could steer on one and fire
+the other. The gate's numbers are unchanged, and the rule does not vary with skill. Every AI off a bot
+seat, the campaign's and Instant Action's included, keeps the decoded law. The `bot-torpedo-lead`
+suite pins both sides.
+
+The rule only steers a bot that is pursuing. A Zeppelin vs Zeppelin bot approaching from far off
+loses pursuit to the decoded attack dwell about 1.6 km out and flies past the bag on patrol, so in
+`net-zvz-bot` it launches at 333 m after turning back.
 
 ## What the shipped data amounts to
 
