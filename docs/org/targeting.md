@@ -58,7 +58,7 @@ Two findings will not be guessed correctly from the screenshots:
 | `FUN_004a2730` | The per-frame refresh of `+0x74`/`+0x80`, gated on the `+0x8f` moving flag; `+0x80` is the centre's change over the frame dt, zeroed past 447.04 m/s |
 | `FUN_004bee10` | Sets `+0x8f` on every structure in a node subtree, recursively; the zeppelin record reader `FUN_004bd8d0` runs it over the hull through `FUN_004bee50` |
 | `FUN_004cf2c0` | Node → point: the active bbox (`FUN_004cd960`, six floats at `node + 0x70`), its midpoint (`FUN_004d8b10`), in the frame `FUN_004cef20` builds |
-| `0x004ac720` | **The turret's cost function**, slot 0 of the query vtable `0x00608b68`. Range gate, then `1200 * weight + distance` |
+| `0x004ac720` | **The turret's cost function**, slot 0 of the query vtable `0x00608b68`. Range gate, then `distance + weight * 1200` |
 | `FUN_004b9770` | The take-a-hit path. Appends the shooter to the attacker queue |
 | `FUN_004a5f40` | `Target::GetColor`, the marker colour rule |
 | `FUN_004574d0` | **Draws the bracket box** (six line sprites) and computes the label anchor |
@@ -480,15 +480,33 @@ For a turret that vtable is `0x00608b68` and the function is `0x004ac720`:
   returns the constant at `0x00608b40`, `1e+21`. That is the same value a candidate the predicate
   rejected scores, and it is above the loop's `1e+20` seed, so an out-of-range candidate can never
   win the minimisation.
-- **In range the cost is `1200 * weight + distance`** (`0x00603534` holds `1200.0`, and the add is
-  at `0x004ac81a`). The weight starts at `1.0` and is **replaced**, not accumulated:
-  `0.8` when the candidate's entity is the local player's plane (`DAT_0071c298`, compared at
-  `0x004ac75a`); `0.6` (the store at `0x004ac799`) when the turret's own `+0x6f` byte is set and
-  the candidate casts to `TargetProjectile`; `1.4` when it casts to `TargetVehicle` whose `+0x67c` is `4`, the `wingman`
-  mode class, which is the same preference the AI pilot's scorer spends as an additive `+0.4`
-  ([`aiPilot.md`](aiPilot.md)). A further `0.5` comes off whatever weight stands when the wrapper's
-  `+0x1c` virtual reports the gasbag flag, and a `TargetTurret` candidate instead takes `42.0`
-  (`0x00608b6c`) onto its **distance**.
+- **In range the cost is `distance + (weight - 0.5 * gasbag) * 1200`** (`0x00603534` holds
+  `1200.0`, the multiply is at `0x004ac812` and the add of the distance at `0x004ac81a`). The
+  weight starts at `1.0` (`0x004ac760`) and is **replaced**, not accumulated, by the first arm that
+  matches, in this order:
+  1. `0.8` (`0x004ac76a`) when the candidate's entity is the local player's plane (`DAT_0071c298`,
+     compared at `0x004ac75a`). This arm jumps straight to the gasbag test (`0x004ac772`), so the
+     player takes none of the casts below.
+  2. `0.6` (the store at `0x004ac799`) when the query's `+0x1c` (the turret's `+0x6f`) is set and
+     the candidate casts to `TargetProjectile` (RTTI `0x00620840`).
+  3. A `TargetTurret` (RTTI `0x00620748`) keeps `1.0` and takes `37.5` (`0x00608b6c` holds
+     `0x42160000`) onto its **distance** (`0x004ac7c2`).
+  4. `1.4` (`0x004ac7f5`) when it casts to `TargetVehicle` (RTTI `0x00620780`) whose entity's
+     `+0x67c` is `4`, the `wingman` mode class, the preference the AI pilot's scorer spends as an
+     additive `+0.4` ([`aiPilot.md`](aiPilot.md)).
+
+  The `0.5` (`0x006032e0`) comes off whatever weight stands when the wrapper's slot `+0x1c`
+  (`0x004ac801`) answers true. Only `TargetStruct` (vtable `0x0060364c`) has a live slot there,
+  `0x004227a0`, which returns the structure's `+0x65` gasbag byte. `TargetVehicle` (`0x0060886c`),
+  `TargetTurret` (`0x006088cc`) and the projectile wrapper return the constant false at `0x00422720`.
+  A turret's picker admits no gasbag (below), so for a turret the term never fires.
+- **The picker adds a bias of its own after the cost function returns, different per pass.**
+  `FUN_0041f9c0` adds the candidate entity's `+0x340`, its def's `target_bias`, on the vehicle
+  pass, for every caller. It adds its second argument, the shooter's `struct_bias`, on the turret
+  and structure passes, and the turret update pushes `0.0` there (and `0` for the gasbag
+  admission, `EBX` cleared at `0x004aaf93`, pushed at `0x004aaf95` and `0x004aaf99`). It adds
+  nothing on the projectile pass. So a turret's whole cost is `distance + weight * 1200`, plus the
+  candidate's `target_bias` on a vehicle and `37.5` on a turret.
 
 **The `0.6` is a zeppelin gun's, and its byte is a copy on the query.** The test at `0x004ac777`
 reads the QUERY's `+0x1c`, and `FUN_004aabb0` fills it from the turret's own `+0x6f`
@@ -504,9 +522,23 @@ every gun an airship carries prefers a `TARGETABLE` round by 480 m, the `1200.0`
 times the 0.4 the `0.6` takes off `1.0`, and a ground or carried gun weighs one like any other
 target. The cast is the RTTI `TargetProjectile` descriptor at `0x00620840`.
 
-So the weights are 240 m, 480 m and 600 m of slack in a distance race, not filters. A turret on the
-player's team never reaches the `0.8` branch at all, because the predicate has already rejected the
-player as friendly.
+So the weights are slack in a distance race, not filters: the player's `0.8` is 240 m, an
+airship gun's `0.6` round 480 m and a wingman's `1.4` 480 m against. A gun takes another
+vehicle of equal `target_bias` over the player only when it is 240 m nearer, and an airship gun
+takes a torpedo over a player with no `target_bias` while it is less than 240 m farther. The
+shipped `target_bias` values widen those margins by their difference ([`../formats/vehicle.md`](../formats/vehicle.md)):
+`-300.0` on `player_airplane`, which every human's def inherits, `-100.0` on the twelve wingman
+defs (`wingman`, `wbloodhawk` and the rest), and none on a plain AI aeroplane's. So a gun takes a
+human over a plain AI aeroplane up to 540 m nearer, and over one on a wingman def up to 440 m. A
+turret on the player's team never reaches the `0.8` branch at all, because the predicate has
+already rejected the player as friendly.
+
+CSVM's `TurretController.Cost` is this sum. Its `0.8` goes to every human-piloted aeroplane,
+local or remote, a remake-only rule: the original has one local player and CSVM's splitscreen and
+network play have several, so the condition that generalises is human against AI, as the aim
+assist's ([`aim-assist.md`](aim-assist.md), Decision 7) and the AI pilot's ranking already read it. It also keeps
+every machine of a network match ranking a world emplacement's candidates alike. CSVM's gunner walks no turret pool, so the `37.5`
+has no candidate to apply to.
 
 ### Nothing in the turret path reads an objective, capture or pickup flag
 

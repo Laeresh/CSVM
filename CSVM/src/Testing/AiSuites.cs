@@ -3071,12 +3071,19 @@ internal static class AiSuites
                 warnedAbout = about;
             };
 
-            // The AI decoy sits nearer than the player, so the gunner's own picker holds it: an
-            // acquisition against an AI raises nothing however close it is.
+            // The AI decoy sits nearer than the player by more than the player's weight is worth
+            // (TurretController.Cost), so the gunner's own picker holds it. An acquisition against
+            // an AI raises nothing however close it is.
+            float flownRange = reach * 0.9f;
+            float margin = TurretController.Cost(0f, 1f, stats.AiTargetBias)
+                - TurretController.Cost(0f, TurretController.PlayerWeight, stats.AiTargetBias);
+            float decoyRange = flownRange - margin - reach * 0.05f;
+            ctx.Check(decoyRange > 0f,
+                $"the gunner's {reach:0} m field holds a decoy past the {margin:0} m margin decoy={decoyRange:0} m");
             var decoy = PoolRig(FlightRoster.ShooterIdBase + 11, AimAssist.PlayerTeam, human: false,
-                ctx.PlaneName, stats, gunAt + new Vector3(reach * 0.3f, 0f, 0f));
+                ctx.PlaneName, stats, gunAt + new Vector3(decoyRange, 0f, 0f));
             var flown = PoolRig(FlightRoster.ShooterIdBase + 12, AimAssist.PlayerTeam, human: true,
-                ctx.PlaneName, stats, gunAt + new Vector3(reach * 0.6f, 0f, 0f));
+                ctx.PlaneName, stats, gunAt + new Vector3(flownRange, 0f, 0f));
             var outOfReach = gunAt + new Vector3(reach * 4f, 0f, 0f);
 
             // Only the gunner is stepped: an unstepped pool moves no round, so nothing this leg
@@ -3115,7 +3122,7 @@ internal static class AiSuites
             StepGun(60);
             ctx.Check(gunner.TargetSource == null && acquisitions == 1,
                 $"the gunner loses the player with nothing new raised gate={gunner.Gate} events={acquisitions}");
-            flown.PlaceHeld(gunAt + new Vector3(reach * 0.6f, 0f, 0f), gunAt);
+            flown.PlaceHeld(gunAt + new Vector3(flownRange, 0f, 0f), gunAt);
             StepGun(60);
             ctx.Check(acquisitions == 2,
                 $"…and re-acquiring it warns the flight again events={acquisitions}");

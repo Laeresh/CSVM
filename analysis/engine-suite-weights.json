@@ -505,6 +505,7 @@
     "turret-grouped-site-sightline": 0.022,
     "turret-hull-blocks-own-fire": 1.968,
     "turret-own-mount-sightline": 0.015,
+    "turret-player-weight": 0.9,
     "turret-self-fire": 3.751,
     "turret-structure-targets": 0.964,
     "turret-vessel-targets": 1.058,

@@ -92,7 +92,7 @@ internal static class TorpedoInterceptSuites
     // A hand-placed emplacement: an authored standalone entry repointed at nodes built here. Its arcs
     // are freed, its scatter zeroed and its spell held open. The suite proves the candidate class,
     // not an entry's authored behaviour.
-    private static TurretController? BuildGun(TestContext ctx, TurretDefs defs, TurretDef def,
+    internal static TurretController? BuildGun(TestContext ctx, TurretDefs defs, TurretDef def,
         WeaponDefs weapons, ProjectilePool pool, Vector3 at, out Node3D site)
     {
         const string pattern = "test_torpedo_gun";

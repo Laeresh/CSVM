@@ -233,17 +233,20 @@ entity in `FUN_00475820`, `def+0x138` to `+0x340` and `def+0x13c` to `+0x344`
 both at `0x004b088e`/`0x004b0894`, so a def that authors neither spends nothing.
 
 - **`target_bias`, candidate `+0x340`,** added when this entity is the candidate and only on the
-  `TargetVehicle` arm. Shipped: `-300.0` on `player_pfighter`, `-100.0` on the twelve AI aeroplane
-  defs, and unauthored on `patrolboat`, `t_truck` and every zeppelin.
+  `TargetVehicle` arm. Shipped: `-300.0` on `player_pfighter`, `-100.0` on the twelve wingman
+  defs (`wingman`, `wbloodhawk` and their siblings, not every AI aeroplane), and unauthored on `patrolboat`, `t_truck` and every zeppelin.
 - **`struct_bias`, scorer `+0x344`,** added to every turret and structure candidate and to no
   aircraft. Shipped: `-200.0` on eleven aeroplane defs, unauthored elsewhere.
 
 ⚠ **Both are negative, so under minimisation both ATTRACT.** An equidistant structure is therefore
 ranked about 100 m AHEAD of an equidistant AI aeroplane by an aeroplane that authors both, and
 about 100 m behind the player. Read `+0x344` as a structure preference, not as the handicap its
-position in the arithmetic suggests. A turret's own picker spends neither: `FUN_004aabb0` pushes a
-literal `0` for both the second and third arguments (`0x004aaf95` and `0x004aaf99`, EBX zeroed at
-`0x004aaf93`), so `struct_bias` is an AI aircraft's term alone and a turret admits no gasbag.
+position in the arithmetic suggests. A turret's own picker spends no `struct_bias`:
+`FUN_004aabb0` pushes a literal `0` for both the second and third arguments (`0x004aaf95` and
+`0x004aaf99`, EBX zeroed at `0x004aaf93`), so `struct_bias` is an AI aircraft's term alone and a
+turret admits no gasbag. It does spend `target_bias`, because `FUN_0041f9c0` adds a candidate
+vehicle's `+0x340` on its vehicle pass for every caller ([`targeting.md`](targeting.md) "The
+picker's cost").
 
 ### A dead vehicle's surviving parts stay candidates
 

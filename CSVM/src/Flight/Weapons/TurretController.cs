@@ -27,15 +27,14 @@ public enum TurretGate
     Firing,
 }
 
-/// <summary>One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md): the same tracking loop for
-/// a carried turret riding an aircraft (<see cref="BuildCarried"/>) and a world emplacement placed
-/// at the entry's <c>NODES</c> patterns (<see cref="BuildEmplacements"/>). Per sim tick it acquires
-/// the nearest hostile vehicle inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
-/// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs, slews the
-/// barrel, writes the pose onto the <c>PARTS</c> nodes, and fires through the shared
-/// <see cref="ProjectilePool"/>, hit resolution is geometric, with <c>INACCURACY</c> as a scatter
-/// cone, never a probability roll. A plain class, not a Node: a carried gunner is ticked by its
-/// host's <c>SimStep</c>, an emplacement by <c>Session.World.TurretEmplacementRuntime</c>.</summary>
+/// <summary>One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md), carried on an aircraft
+/// (<see cref="BuildCarried"/>) or placed at an entry's <c>NODES</c> (<see cref="BuildEmplacements"/>).
+/// Per sim tick it acquires the cheapest hostile inside <c>DETECTION_RANGE</c> (<see cref="Cost"/>).
+/// It solves a constant-velocity intercept (<see cref="AimAssist.TryIntercept"/>) and clamps it to
+/// the authored arcs. It slews the barrel, poses the <c>PARTS</c> nodes and fires through the shared
+/// <see cref="ProjectilePool"/>. Hits are geometric, <c>INACCURACY</c> a scatter cone, never a roll.
+/// A plain class, not a Node: a carried gunner is ticked by its host's <c>SimStep</c>, an
+/// emplacement by <c>Session.World.TurretEmplacementRuntime</c>.</summary>
 public sealed class TurretController
 {
     /// <summary>The barrel's catch-up rate toward the clamped aim direction, per second, the
@@ -68,6 +67,16 @@ public sealed class TurretController
     /// <summary>The cost weight a <see cref="PrefersOrdnance"/> gunner gives a <c>TARGETABLE</c> round,
     /// the literal at <c>0x004ac799</c> in the turret cost <c>0x004ac720</c> (docs/org/targeting.md).</summary>
     public const float OrdnanceWeight = 0.6f;
+
+    /// <summary>The cost weight a human-piloted aeroplane takes, the literal at <c>0x004ac76a</c>
+    /// (docs/org/targeting.md "The picker's cost"). Every human takes it, a remake-only rule: the
+    /// original tests its one local player, and CSVM's splitscreen and network play have several.
+    /// The aim assist generalises the same way (docs/org/aim-assist.md, Decision 7).</summary>
+    public const float PlayerWeight = 0.8f;
+
+    /// <summary>The cost weight an aeroplane in <c>wingman</c> mode takes, the literal at
+    /// <c>0x004ac7f5</c> (docs/org/targeting.md "The picker's cost"). It replaces the 1.0.</summary>
+    public const float WingmanWeight = 1.4f;
 
     private readonly FlightController? _host;
     private readonly IWorldQuery? _worldQuery; // the carried case's line-of-sight seam; null on an emplacement
@@ -635,6 +644,17 @@ public sealed class TurretController
         _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);
     }
 
+    /// <summary>One candidate's cost, minimised: distance plus weight times 1200 (<c>0x004ac720</c>),
+    /// plus the bias the picker <c>FUN_0041f9c0</c> adds, a vehicle's <c>target_bias</c> and 0 elsewhere.
+    /// Pass the weight from <see cref="VehicleWeight"/>, <see cref="OrdnanceWeight"/> or 1.0
+    /// (docs/org/targeting.md "The picker's cost").</summary>
+    internal static float Cost(float distance, float weight, float bias = 0f) =>
+        distance + weight * AiTargetRanking.WeightScale + bias;
+
+    /// <summary>A vehicle candidate's weight: a human's 0.8 first, then a wingman's 1.4, else 1.0.</summary>
+    internal static float VehicleWeight(bool human, bool wingman) =>
+        human ? PlayerWeight : wingman ? WingmanWeight : 1f;
+
     /// <summary>The mounting section's own colliders, collected once: the RIDs a round this gunner
     /// fires owns. Internal so the suite can read the set rather than infer it
     /// from behaviour. RIDs are stable for the world's lifetime and the subtree gains no
@@ -717,9 +737,9 @@ public sealed class TurretController
         return (parentBasis * restBasis).Orthonormalized();
     }
 
-    // The nearest live hostile entry of the engine's VehicleList, mission-structure and round pools
-    // inside DETECTION_RANGE, the shared target-picker's minimise-a-score structure with distance
-    // as the score. The own plane (carried) and teammates are gated out by the aim assist's team rule.
+    // The cheapest live hostile of the VehicleList, mission-structure and round pools inside
+    // DETECTION_RANGE, the range gate on true distance. Team rule gates the own plane and teammates.
+    // A gasbag's 0.5 never applies: this picker admits none (docs/org/targeting.md "The picker's cost").
     // ⚠ Not the aircraft half of the vehicle list: the decoded picker walks the whole pool, which
     // holds AI ground and sea vehicles too. A hull is a candidate as the vessel it is, and must
     // never reach one by being registered as aircraft (docs/org/targeting.md).
@@ -748,12 +768,16 @@ public sealed class TurretController
             {
                 continue;
             }
-            aircraftInReach |= c.Source is FlightController;
-            if (d >= best)
+            var fc = c.Source as FlightController;
+            aircraftInReach |= fc != null;
+            // A hull flies neither as a human nor as a wingman, and carries no def's target_bias here.
+            float cost = Cost(d, VehicleWeight(fc is { IsHumanPiloted: true }, fc?.Pilot?.Escort != null),
+                fc?.Stats?.AiTargetBias ?? 0f);
+            if (cost >= best)
             {
                 continue;
             }
-            best = d;
+            best = cost;
             pos = c.Position;
             vel = c.Velocity;
             TargetSource = c.Source;
@@ -770,9 +794,9 @@ public sealed class TurretController
         return best < float.MaxValue;
     }
 
-    // Walked after the vehicles against the same running best, ties going to it, which is the
-    // decoded pass order. A gasbag is the one class this pass drops. A structure is marked
-    // where it stands and never leads, so its velocity is zero.
+    // Walked after the vehicles against the same running best on a strict win, the decoded pass
+    // order. A gasbag is the one class this pass drops. A structure is marked where it stands and
+    // never leads, so its velocity is zero. The gunner's picker passes 0 for struct_bias.
     private void AcquireStructure(Vector3 here, ref float best, ref Vector3 pos, ref Vector3 vel)
     {
         _pool.CollectTurretStructures(_scan, _team);
@@ -784,11 +808,12 @@ public sealed class TurretController
                 continue;
             }
             float d = here.DistanceTo(c.Position);
-            if (d > Def.DetectionRange || d > best)
+            float cost = Cost(d, 1f);
+            if (d > Def.DetectionRange || cost >= best)
             {
                 continue;
             }
-            best = d;
+            best = cost;
             pos = c.Position;
             vel = Vector3.Zero;
             TargetSource = c.Source;
@@ -796,13 +821,11 @@ public sealed class TurretController
     }
 
     // The fourth pass, a TARGETABLE round in flight, last and on a strict win, as FUN_0041f9c0 takes
-    // it. The range gate reads the true distance. The 0.6 weight against the other passes' 1.0 is
-    // then taken off that distance as metres, this picker's distance-only arithmetic.
-    // It is no structure, so the aircraft-first preference leaves it in.
+    // it, with no bias. It is no structure, so the aircraft-first preference leaves it in.
     private void AcquireOrdnance(Vector3 here, ref float best, ref Vector3 pos, ref Vector3 vel)
     {
         _pool.CollectTargetableOrdnance(_scan);
-        float slack = PrefersOrdnance ? (1f - OrdnanceWeight) * AiTargetRanking.WeightScale : 0f;
+        float weight = PrefersOrdnance ? OrdnanceWeight : 1f;
         foreach (var c in _scan.Ordnance)
         {
             if (!AimAssist.Hostile(_team, c.Team))
@@ -810,11 +833,12 @@ public sealed class TurretController
                 continue;
             }
             float d = here.DistanceTo(c.Position);
-            if (d > Def.DetectionRange || d - slack >= best)
+            float cost = Cost(d, weight);
+            if (d > Def.DetectionRange || cost >= best)
             {
                 continue;
             }
-            best = d - slack;
+            best = cost;
             pos = c.Position;
             vel = c.Velocity;
             TargetSource = c.Source;
