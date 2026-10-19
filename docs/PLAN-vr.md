@@ -197,7 +197,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, spikes (the gate)
 
-1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
+1. ☑ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☑ A2 The `--xr-sim` stand-in interface
 3. ❌ A3 Precision near the eye: render-only floating origin, double-precision fallback
    ☑ A3b A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
@@ -206,33 +206,33 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the VR rig
 
-6. ◐ B6 VR mode option, relaunch, fallback and mode gating
+6. ☑ B6 VR mode option, relaunch, fallback and mode gating
 7. ☑ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
 8. ☑ B8 The cockpit interior in the main world under VR
-9. ◐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
-   ◐ B10 Billboards and sky sprites face the eye and hold the world's up as the head turns
+9. ☑ B9 Views in VR: rigid chase, nose, head tracking in place of head look
+   ☑ B10 Billboards and sky sprites face the eye and hold the world's up as the head turns
 
 ### Wave C, screen, HUD and input
 
-10. ◐ C10 The virtual theater screen for menus, boards and cinemas
+10. ☑ C10 The virtual theater screen for menus, boards and cinemas
 11. ◐ C11 `DeviceKind.Xr`, XR actions and the screen pointer
-12. ◐ C12 The cockpit-locked HUD panel
-13. ◐ C13 World-tied markers and the edge-marker ring
-   ◐ C13b The gunsight reticle collimated at infinity in VR
+12. ☑ C12 The cockpit-locked HUD panel
+13. ☑ C13 World-tied markers and the edge-marker ring
+   ☑ C13b The gunsight reticle collimated at infinity in VR
 14. ◐ C14 An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
 ### Wave D, cutscenes, comfort and performance
 
 15. ◐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
 16. ◐ D16 Comfort: fades, tunnel vignette, render-scale slider
-17. ◐ D17 Port the screen-space effects to multiview
-18. ◐ D18 Performance pass to the 90 Hz budget
-19. ◐ D19 Spyglass as a binocular quad
+17. ☑ D17 Port the screen-space effects to multiview
+18. ☑ D18 Performance pass to the 90 Hz budget
+19. ☑ D19 Spyglass as a binocular quad
 
 ### Wave E, headset pass and release
 
-20. ◐ E20 Per-plane scale and eye-offset tuning at the headset
-21. ☐ E21 At-the-headset playtests on both runtimes
+20. ☑ E20 Per-plane scale and eye-offset tuning at the headset
+21. ◐ E21 At-the-headset playtests on both runtimes
 22. ◐ E22 Experimental release: docs, shortcut, known issues
 
 ## Dependency and parallelism notes
@@ -258,7 +258,7 @@ author at the headset.
 
 # Wave A, spikes (the gate)
 
-## A1 ◐ OpenXR boots in a flight session on VDXR and SteamVR
+## A1 ☑ OpenXR boots in a flight session on VDXR and SteamVR
 
 **Goal.** A dev launch with `--xr-mode on` puts a `--stage=empty` flight into the headset on both
 runtimes, head tracking moves the view, and the flat launch is unchanged. The render-thread question
@@ -309,17 +309,22 @@ the `--`. B7 grows the per-player rig out of `XrSession` and `XrMount`.
 **Model recommendation.** <TODO: tier not settled in the session.>
 
 **Verify.** The complete battery is green with the new settings and OpenXR off, goldens unmoved.
-Owed at the headset (the author's): on VDXR and on SteamVR (`XR_RUNTIME_JSON` at
-`C:\Program Files (x86)\Steam\steamapps\common\SteamVR\steamxr_win64.json`), each with the
-separate and the single render thread, a `--stage=empty --view=cockpit --no-cockpit-pass` flight
-(1) shows the stage in stereo, (2) turns with the head, (3) logs `xr: OpenXR live` naming the
-runtime, and (4) leaves `xr frames` lines whose `late`/`missed` and `mean_ms` against the refresh
-period answer which thread model holds the headset rate. A headset launch writes its stereo variants
-into the shared shader cache, so the next flat launch on the machine should print one
-`br != variant_size` line (A2, LOG-25; traced, not run under OpenXR): the first engine stage after a
-headset session can fail its error screen on it, and a second run is clean. A launch with the
-runtime off logs the warning and flies flat. The HUD, menus, boards and the cockpit pass are canvas layers and do not
-show in the headset; that is C10, C12 and B8, not a failure here.
+At the headset (E21's batch, steps 31 and 32 on each runtime: C1 map centre in Cockpit, the separate
+then the single render thread):
+- (1) Stereo, (2) head tracking and (3) `xr: OpenXR live` naming the runtime: pass on both. VDXR
+  logs `runtime="VirtualDesktopXR" version=1.0.10 system="Meta Quest 3" eye_px=2112x2304
+  refresh_hz=90`, SteamVR (`XR_RUNTIME_JSON` at
+  `C:\Program Files (x86)\Steam\steamapps\common\SteamVR\steamxr_win64.json`, the author's Quest
+  through the Steam Link app) `runtime="SteamVR/OpenXR" version=2.17.10` at 2064x2208, 120 Hz.
+- (4) The thread model: VDXR separate 88.9 fps mean of 90 (20 hitches, 11 of 235 windows under
+  85), safe 88.8 (14 hitches, 13 of 225); SteamVR separate 117.8 of 120, safe 116.3. The author
+  felt both modes smooth and alike on both runtimes. Decision: the headset keeps the project's
+  separate render thread (`thread_model=2`); no change.
+- The shader cache: B6's sweep owns it; the battery run after the batch's headset sessions logged
+  no engine error line.
+- Runtime off: with the streamer disconnected the game played flat with the notice (step 33, B6).
+- SteamVR's first launch hung the Quest when Steam Link crashed there, a runtime fault; the retry
+  ran clean.
 
 The first run (VDXR, separate render thread) came up as `VirtualDesktopXR 1.0.10`, Meta Quest 3,
 3072x3264 per eye at 120 Hz, stereo with head tracking; the earlier attempt with the headset not
@@ -341,7 +346,9 @@ of 6297, engine 527 passed, 2 skipped, goldens 25/25 hash-identical. That first 
 logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors in one shard, the
 first flat run after the author's headset session; the engine stage re-run was clean. Godot's
 shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
-stereo variants reach them all once (B6 owns the fix).
+stereo variants reach them all once (B6 owns the fix). At the headset (E21's batch, steps 31 and 32
+on VDXR at 90 Hz and SteamVR at 120 Hz): every check above passed, and the render thread stays
+separate.
 
 ## A2 ☑ The `--xr-sim` stand-in interface
 
@@ -736,21 +743,15 @@ remainder, the same shader for C12) are Standard.
 and the goldens stage, where `c1-cockpit-xr-sim` re-pins and `c1-cockpit-xr-sim-far` (A3's 20 km
 pose, both eyes) pins the precise path; the 24 flat shots are unmoved.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit
-.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit
-```
-The first pose is the C1 map centre (8.7 km from the origin), the second a far corner (16.3 km).
-Look for: (1) sitting still, the dials, needles and canopy frame hold steady with no shimmer at both
-poses; (2) on fast head turns and leans, the cockpit stays fixed against the world rather than
-swimming behind or ahead of it; (3) the needles and lamps sit on their dial faces at the panel's
-depth. An interior with no depth of its own (both eyes alike) would mean the eye feed never ran.
-B8 leaves the red plate behind the eye out and makes the stereo interior the default, so these runs
-need no `--no-cockpit-pass`; before B8 the interior was culled at both poses (B8's Evidence). The first flat run after a headset session
-prints one shader-cache error (B6 owns it).
+At the headset, VDXR, the C1 map centre (8.7 km from the origin) and the far corner
+(-11500, 300, -11500; 16.3 km) in Cockpit:
+- (1) Steady, no shimmer, and (2) no swim on head turns and leans: pass at both poses in both
+  render-thread modes (the author's run Decision 17 records); E21's batch step 14 at the far corner
+  read steady again.
+- (3) The needles and lamps on their dial faces at the panel's depth: not asked as such in either
+  run; no defect raised.
+- Step 14 found the world showing through around the gauges and beside the Bloodhawk's centre
+  stack: #207, under B8.
 
 **⚠ Traps.**
 - Do not take an eye's offset from `EYE_OFFSET` differences or the combined camera's position:
@@ -767,7 +768,9 @@ prints one shader-cache error (B6 owns it).
 
 **Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
-clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
+clean engine errors, goldens 27/27 hash-identical. At the headset: steady at both poses in both
+render-thread modes (Decision 17), and again at step 14 of E21's batch (VDXR, 90 Hz, 2112x2304 per
+eye); check (3) was not judged on its own.
 
 ## A4 ☑ Screen-space effects under multiview
 
@@ -1005,7 +1008,7 @@ stereo variants reach them all once (B6 owns the fix).
 
 # Wave B, the VR rig
 
-## B6 ◐ VR mode option, relaunch, fallback and mode gating
+## B6 ☑ VR mode option, relaunch, fallback and mode gating
 
 **Goal.** Options carries "VR mode"; toggling it saves the choice and relaunches the executable with
 `--xr-mode on`. With VR on, a failed runtime falls back to flat with a clear message, local
@@ -1085,21 +1088,18 @@ the dev-run exclusions, no loop, the apply rule, the fallback condition), `XrSha
 the store round trip, the seat limit and the VIDEO row. Suites: `xr-relaunch-args`, `xr-one-seat`,
 `xr-fallback-notice`, and the Built-in Options walk in `menu-original-tracer`. The "requested but
 failed" path is exercised as the pure `XrRelaunch.FellBack` and the notice it posts, so nothing here
-starts a runtime. Owed at the headset (the author's), each from a fresh `.\RunGame.ps1`:
-1. Options, VR mode On, ACCEPT CHANGES: the game closes and relaunches into the headset. The first
-   launch's `.scratch/logs/menu-*.log` ends `xr: restarting into the headset (...)`, and the child's
-   log carries `xr: OpenXR live runtime=...`.
-2. In that headset launch, Options, VR mode Off, ACCEPT CHANGES: it relaunches flat, logging
-   `xr: swept N shader cache files` before `xr: restarting flat`.
-3. With VR mode left On, quit and run `.\RunGame.ps1` again: one window opens and closes, the
-   headset launch follows (`xr: restarting into the headset (VR mode is saved on)`).
-4. Fallback: with the Virtual Desktop streamer disconnected (or the headset off), `.\RunGame.ps1`
-   with VR mode On: the relaunched game plays flat and the menu shows "VR mode is on, but no headset
-   started..." (Original's box; `.\RunGame.ps1 --force-builtin` shows the error line).
-5. After a headset session ends normally, the next flat engine and goldens stages
-   (`.\RunTests.ps1 -SkipUnits`) log no `br != variant_size` and no `Uniform buffer supplied` line.
-6. `.\RunGame.ps1 -EngineArgs '--xr-mode','off'` with VR mode On stays flat.
-The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratch/export/CSVM.exe`).
+starts a runtime. At the headset (E21's batch, steps 33 and 34 on VDXR, each from a fresh
+`.\RunGame.ps1`):
+1. VR mode On, ACCEPT CHANGES relaunches into the headset: pass.
+2. VR mode Off in the headset launch relaunches flat: pass (the round trip flat, headset, flat,
+   headset).
+3. Saved On, a fresh start: one window flashes, the headset launch follows: pass.
+4. Fallback, the streamer disconnected: plays flat with "VR mode is on, but no headset started":
+   pass. Built-in's error line is moot: main removed Built-in.
+5. The shader cache: the complete battery run after the batch's headset sessions logged no engine
+   error line.
+6. `--xr-mode off` with VR mode saved On stays flat: pass.
+The exported build's repeat is E22's release step 3.
 
 **⚠ Traps.**
 - Sweep the cache before `OS.CreateProcess`, never after: the child's renderer reads
@@ -1115,7 +1115,9 @@ The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratc
 
 **Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
-clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
+clean engine errors, goldens 27/27 hash-identical. At the headset (VDXR, 90 Hz, steps 33 and 34 of
+E21's batch): checks 1 to 4 and 6 passed; the battery on `d8660e694` after the headset sessions had
+clean engine errors (check 5).
 With the review fixes (the flare's own layers, the headset boot's recovery, the start-failure notice): the
 complete battery on the merged tree, build PASS, units 6531 passed 3 skipped, engine 552 passed 2
 skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
@@ -1126,7 +1128,7 @@ skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
 cockpit eye ("rehoming works"). The runtime's own recenter and the dome's parallax were not
 reported separately; E21 carries them.
 
-**Outcome: built and pinned on the stand-in; the recenter at the headset is owed.** The VR seat is
+**Outcome: built and pinned on the stand-in; the recenter passed at the headset.** The VR seat is
 `Flight/Camera/XrRig.cs`, bound to the session's first `PlayerRig`; the sky follows the tracked
 head; recenter is automatic on focus and on the runtime's own recenter, and a new action on `Home`;
 `CSVM/data/vr_cockpits.json` ships Decision 13's defaults for all eleven planes.
@@ -1212,16 +1214,14 @@ malformed fallbacks, the offset along the tilted Z, the mount's first-person-onl
 defaults nothing they draw moves). A first goldens run flipped `c1-flight-kill` once
 (`e4984f01` to `344e2358`) with another session's Godot running; the same build's rerun was 27/27.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-```
-Look for: (1) sitting off-centre when the game starts, the view still opens on the cockpit eye,
-gunsight ahead, and the log has `xr: recentered (session focused)`; (2) lean 20 cm to one side and
-turn the head, press `Home` (or a PlayStation pad's touchpad click): the eye returns to the cockpit
-eye facing the nose with the head's tilt kept, `xr: recentered (the recenter action)`; (3) hold the
-headset's system button for the runtime's recenter: the same, `xr: recentered (the runtime
-recentered)`; (4) leaning about, the moon and the horizon dome show no parallax. The same on SteamVR.
+At the headset (E21's batch; VDXR at 90 Hz, SteamVR at 120 Hz):
+- (1) Opening on the cockpit eye: every batch launch logs `xr: recentered (session focused)` and
+  opened in the cockpit with no complaint; the off-centre start was not tried as such.
+- (2) The recenter action: the left stick click recentered (step 26, VDXR); `Home` and the
+  PlayStation touchpad were not tried.
+- (3) The runtime's recenter: VDXR step 31 logged 7 `the runtime recentered` lines and each put
+  the eye back on the cockpit eye; SteamVR step 32 logged 2, recenter OK.
+- (4) No parallax of the moon and the horizon on a lean: VDXR step 31, pass; on SteamVR not tried.
 
 **⚠ Traps.**
 - The suites receive `_camera` from the Launcher (`Launch/Launcher.cs`); the flat rig keeps that
@@ -1234,7 +1234,9 @@ recentered)`; (4) leaning about, the moon and the horizon dome show no parallax.
 
 **Verified.** The complete battery on the merged tree with B7 and the C14 follow-up: build PASS,
 units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
-hash-identical. The headset checks named above are still owed.
+hash-identical. At the headset (steps 26, 31 and 32 of E21's batch): the runtime's recenter on both
+runtimes and the XR recenter action pass, no parallax on VDXR; not judged: the off-centre start,
+`Home` and the touchpad, and parallax on SteamVR.
 
 ## B8 ☑ The cockpit interior in the main world under VR
 
@@ -1243,8 +1245,8 @@ cockpit stays clear in the cloud band. The gunsight glass reads fainter than in 
 reticle doubles when the eyes converge on a distant target; that moves to C13b. The target markers
 are absent, as expected until C12 and C13.
 
-**Outcome: built and pinned on the stand-in; the headset look is owed.** A stereo session builds no
-cockpit pass and always draws `XrCockpit`'s interior, with or without `--no-cockpit-pass`. The
+**Outcome: built and pinned on the stand-in; the headset look passed (E21's batch).** A stereo
+session builds no cockpit pass and always draws `XrCockpit`'s interior, with or without `--no-cockpit-pass`. The
 stereo interior leaves the head plate out (`Mech3/CockpitPlate.cs`), marks itself in the stencil so
 the whiteout and the flare rings leave even its far wings clear, and draws its glass between the
 whiteout and the flash. On the way, a culling defect from A3b was found and fixed: the lifted
@@ -1368,20 +1370,24 @@ order with the glass, the stencil read), `world-flare-pixels`. Goldens: 28 of 28
 12.8 km out facing away from the origin, no flag, head 10 cm aft, stable over 5 runs) pins the
 default, the plate and the culling; `c1-cockpit-xr-sim-far` and `c3-flare-xr-sim` unmoved.
 
-Owed at the headset (the author's), VDXR at 90 Hz first, then SteamVR, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --graphics=enhanced
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_warhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,1000,-6144" "--direction=0,0,-1" --view=cockpit
-```
-Look for: (1) the cockpit is there at the C1 map centre facing away from the origin; (2) leaning back
-and looking ahead, no red silhouette (the Warhawk's sits about 27 cm back); (3) the interior lit as
-in the flat game from the same command without `-EngineArgs` (Original, then Enhanced): the
-gunsight glass reads fainter in VR than in the flat pass, and under Enhanced the side rails under the
-canopy frame are lit where the flat pass shades them, both to judge; (4) the needles and lamps on
-their dial faces; (5) in the cloud band, the panel, the canopy and the wings when you turn to them
-stay clear while the world whitens, with the glass over the white.
+At the headset (E21's batch; VDXR at 90 Hz, steps 7 and 9 again on SteamVR at 120 Hz):
+- (1) The cockpit at the C1 map centre: pass (steps 7, 8, 30).
+- (2) No red silhouette on a lean: no defect raised in any plane, the Warhawk included (step 30);
+  not asked as such.
+- (3) Lighting against flat: under Enhanced the interior and its side rails match the flat game
+  (step 9, both runtimes); the reticle reads as in the flat game (step 7). Original's interior
+  lighting was not asked on its own.
+- (4) The needles and lamps on their dial faces: not asked as such; no defect raised.
+- (5) The cloud band: the pylon stores now stay visible in cloud with the wing (#206, below); the
+  whiteout over the panel and canopy was not asked on its own.
+- Found at the headset: the world showing through around the gauges and beside the Bloodhawk's
+  centre stack (step 14, #207). A generated dark backdrop (`2ed39c835`) covered parts the author
+  wants kept and came out again on the author's decision (`7b5acb260`); #207 waits for a remodel
+  of the player cockpits. The pylon stores jittered against the interior and vanished in cloud
+  (#206): they hang on the stereo interior (`2ed39c835`), with a per-plane placement
+  (`d8660e694`, E20) the author tuned under SteamVR and judged right. The Kestrel's and
+  Peacemaker's cockpits stood off-centre until the stereo interior's eye moved to the cockpit
+  marker's own point (`a97fd1caa`); the Kestrel's missing parts are its authored interior.
 
 **⚠ Traps.**
 - The flat game keeps the pass (the boundary rule); every change here is VR-only.
@@ -1392,12 +1398,14 @@ stay clear while the world whitens, with the glass over the white.
 
 **Verified.** The complete battery on the merged tree with B8, C10 and the head-locked quads' tint
 fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with clean engine errors,
-goldens 29/29 hash-identical. The headset checks named above are still owed.
+goldens 29/29 hash-identical. At the headset (VDXR 1.0.10 at 90 Hz, 2112x2304 per eye; SteamVR
+2.17.10 at 120 Hz, 2064x2208): checks 1 and 3 passed, 2, 4 and 5 raised no defect without being
+asked on their own; #207 stays open, #206 fixed.
 
-## B9 ◐ Views in VR: rigid chase, nose, head tracking in place of head look
+## B9 ☑ Views in VR: rigid chase, nose, head tracking in place of head look
 
-**Outcome: built and pinned on the stand-in; the comfort of the chase and the view cycle are owed
-at the headset.** A headset flight opens in Cockpit; Cockpit and Nose stand the origin on the seated
+**Outcome: built and pinned on the stand-in; the chase and the view cycle passed at the headset,
+the level chase and the flyby after fixes.** A headset flight opens in Cockpit; Cockpit and Nose stand the origin on the seated
 eye with the aircraft's axes; the chase is a fixed offset in the aircraft's axes with no lag; head
 look is off; every other camera is level, and a static one holds its heading. Each cut raises
 `XrRig.Cut`, D16's seam. The per-camera table is in `docs/org/cameraViews.md`, "Views under a
@@ -1502,26 +1510,24 @@ sweep of attitudes including inverted and past vertical, the heading reversal, `
 anchor, the opening view, the flag). Suites: `xr-view-first-person`, `xr-view-chase`,
 `xr-view-head-look`, `xr-view-static`, each with its flat control. Goldens: none new, 29 unmoved.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669"
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase --xr-chase=level
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=flyby
-.\RunGame.ps1 -EngineArgs '--xr-mode','on'
-```
-Look for: (1) the first flight opens in the cockpit with no `--view=`; `F8` (or the pad's D-pad down)
-walks Cockpit, Nose, Chase and back, each a hard cut, Nose with no interior; (2) in the chase the
-aircraft sits a little under your straight-ahead gaze at a comfortable distance, and banks, loops
-and rolls are tolerable with the world turning about you, and the offset reads right; (3) the second
-line flies the level chase: the same manoeuvres with the horizon never tilting while the world
-pitches with the nose, the gun pipper clear above the aircraft, and the half-turn roll at the top of
-a loop; say which should be the default; (4) the numpad, the right stick and its click,
-`numpad 0` and the middle mouse button change nothing; (5) the flyby (third line, or `F7`) cuts to a
-spot behind the aircraft facing it and holds a level view while it flies away, each spot about a
-second longer than the flat flyby's; (6) from
-the menu (fourth line) with the saved Default View on Exterior, an Instant Action flight still opens
-in the cockpit; (7) crash into the ground in each view: the crash cut faces the impact level, which
-leaves the wreck about 56° below the gaze at the authored 30 m back and 45 m up, to judge.
+At the headset (E21's batch; VDXR at 90 Hz, step 18 again on SteamVR at 120 Hz):
+- (1) Opens in the cockpit; `F8` walks Cockpit, Nose, Chase, each landing on D16's fade: pass
+  (step 18, both runtimes).
+- (2) The rigid chase: the aircraft's place, distance and offset right, banks, loops and rolls
+  tolerable: pass (step 18, both runtimes).
+- (3) The level chase: heading-only, the aircraft sat in front of the pipper, so the author kept the
+  rigid chase as the default (step 19). The level chase then took the unrolled frame
+  (`dc382fccc`): pipper clear above the aircraft, the pitching comfortable. Its swing through
+  vertical flight fades on its own hand-over cut (`aa48e41d3`, `da1168d7c`, `66e15b0dc`), held
+  black longer than the other cuts (`9bcc3d78d`): judged good.
+- (4) The numpad, the right stick and its click, `numpad 0` and the middle mouse: no defect raised
+  (step 18; the answer named only the flyby).
+- (5) The flyby: facing the flight path, the author had to search for the aircraft at every cut.
+  It now sits 20 m behind the tail, faces the aircraft and holds each spot a second longer
+  (`efbf65f35`): judged good (step 20).
+- (6) Instant Action from the menu with Default View on Exterior opens in the cockpit: pass
+  (step 26).
+- (7) The crash cut and the wreck about 56° below the gaze: pass (step 18).
 
 **⚠ Traps.**
 - Do not re-aim a static camera's origin per frame under a headset: a flyby passing at 6 m yaws the
@@ -1537,11 +1543,13 @@ leaves the wreck about 56° below the gaze at the authored 30 m back and 45 m up
 **Verified.** The complete battery on the merged tree with B9 and C11: build PASS, units 6417
 passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 28/29 with
 `c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
-hash-identical on two goldens re-runs (#114's pattern). The headset checks named above are still owed.
+hash-identical on two goldens re-runs (#114's pattern). At the headset (steps 18 to 20 and 26 of
+E21's batch, VDXR at 90 Hz; step 18 on SteamVR at 120 Hz): every check above passed, the level
+chase and the flyby after the fixes named there.
 
-## B10 ◐ Billboards and sky sprites face the eye and hold the world's up as the head turns
+## B10 ☑ Billboards and sky sprites face the eye and hold the world's up as the head turns
 
-**Outcome: fixed on the stand-in, VR only; the look at the headset is owed.** The author, at the
+**Outcome: fixed on the stand-in, VR only; the look passed at the headset.** The author, at the
 headset: "I found another bug in VR. The moon in C1 is turing with the head. Could happen to other
 billboard sprites too." Then: "It did not roll but rotate when i moved my head left to right or up
 down". Every stereo sprite whose quad copied the view's basis now faces the eye with world up.
@@ -1618,18 +1626,12 @@ off: `c1-cockpit-xr-sim` `7dd5c505e1d4ac51a1dd4eac449eb3b6`, `-far`
 one pixel), `c3-flare-xr-sim` `0cc3ce1320eb32570c7bc76d7d4d38b3` (218 pixels, up to 29 levels, all
 on faint puffs); `menu-original-xr-sim` unmoved.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,1500,-6144" "--direction=-0.6,0,-0.8" --view=nose
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,1500,-6144" "--direction=-0.6,0,-0.8" --view=nose --graphics=enhanced
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6104,300,-4420" "--direction=0,-0.33,0.94" --view=nose --graphics=enhanced
-```
-Look for: (1) the moon stands straight ahead, about 28° up, above the cloud deck; look left and right,
-up and down, and tilt your head: it stays a round disc facing you, upright to the horizon, at the
-same place in the sky; (2) the second line, Enhanced: the cloud field's bright sun-side rims stay
-put on each cloud as you turn and tilt; (3) the third line, Enhanced, low over the ground: fire
-rockets at the ground and look around the explosion, its smoke and the shimmer above it as you
-turn and tilt; nothing pivots or leans with the head.
+At the headset (E21's batch, VDXR at 90 Hz):
+- (1) The moon about 28° up, a round upright disc in place as the head turns and tilts: pass
+  (step 12; the moon judged is main's moon shader, which replaced this item's VR moon at a merge).
+- (2) Enhanced, the cloud rims stay put on each cloud: pass (step 13).
+- (3) Enhanced, the explosion, its smoke and the heat shimmer: nothing pivots or leans with the
+  head (step 16).
 
 **⚠ Traps.**
 - Do not give a stereo sprite Godot's billboard mode or a basis from `INV_VIEW_MATRIX` or
@@ -1646,15 +1648,15 @@ turn and tilt; nothing pivots or leans with the head.
 
 **Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
 re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
-skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
-still owed.
+skipped with clean engine errors, goldens 32/32 hash-identical. At the headset (steps 12, 13 and
+16 of E21's batch, VDXR 1.0.10 at 90 Hz, 2112x2304 per eye): all three checks passed.
 
 # Wave C, screen, HUD and input
 
-## C10 ◐ The virtual theater screen for menus, boards and cinemas
+## C10 ☑ The virtual theater screen for menus, boards and cinemas
 
 **Outcome: built and pinned on the stand-in; readability, size, distance, the surround, the pause
-board in flight and a cinema are owed at the headset.** Every root canvas layer from
+board in flight and a cinema passed at the headset.** Every root canvas layer from
 `HudLayers.Board` up (menus of both presentations, campaign boards and briefings, hangar, pause and
 results boards, load and boot screens, cinemas, B6's notice) draws into the theater screen's
 SubViewport, shown on a quad 2.5 m ahead of the seated eye. The controls never leave the root's
@@ -1781,23 +1783,19 @@ authored pixel on four layouts, the seat's 34 degrees, the inscribed board's hei
 its misses). Suite `theater-screen`. The golden `menu-original-xr-sim`; the 27 existing goldens
 unmoved.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on'
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --force-builtin
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --movie=zipper
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --graphics=enhanced --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
-```
-Look for: (1) at the Original menu and a campaign board, the smallest text reads without leaning in,
-and the board fits the view without turning the head; the log carries `theater: layout ...` with the
-runtime's eye size; (2) the surround reads as a dark room with a floor, not a void, and no sky or
-world shows behind the menus; (3) Built-in's menus read at the same size; (4) the `zipper` cinema
-plays on the screen at its own aspect with sound; (5) in flight, Esc raises the pause board over a
-dimmed world and Down/Enter or the pad drive it, and the board drawn over the dash is comfortable to
-read, with Resume taking the screen away; (6) under Enhanced the pause board's colours against (5).
-The values to tune are `TheaterLayout.Default` and `TheaterScreen.DimOpacity`, and the surround's
-two tones.
+At the headset (E21's batch; VDXR at 90 Hz, steps 9 and 26 again on SteamVR at 120 Hz):
+- (1) The smallest menu text reads without leaning in, the board fits without turning the head:
+  pass (step 26, both runtimes).
+- (2) A dark room with a floor behind the menus: pass (step 26).
+- (3) Built-in's menus: moot, main removed the Built-in presentation (#196); step 27 was dropped.
+- (4) The `zipper` cinema at its own aspect with sound: pass (step 28).
+- (5) The pause board in flight over a dimmed world, comfortable, Resume clears it: pass (step 8).
+- (6) Under Enhanced the pause board's colours match the flat game: pass (step 9, both runtimes).
+- At step 29 the author found the black bars round the menus, films and cutscenes distracting
+  against the dark room; they are gone under a stereo root (`07b0b2417`). The menus without them
+  passed in SteamVR's step 26; the films without them are D15's owed look.
+The tuned values (`TheaterLayout.Default`, `TheaterScreen.DimOpacity`, the surround's two tones)
+stay as built.
 
 **⚠ Traps.**
 - Do not size the screen or the surface from the window: under XR the root's layout is the eye's
@@ -1826,12 +1824,14 @@ it hides on resume and shows again on the next pause. Its text size on the scree
 
 **Verified.** The complete battery on the merged tree with B8, C10 and the head-locked quads' tint
 fix: build PASS, units 6392 passed 3 skipped, engine 535 passed 2 skipped with clean engine errors,
-goldens 29/29 hash-identical. The headset checks named above are still owed.
+goldens 29/29 hash-identical. At the headset (steps 8, 9, 26 and 28 of E21's batch, VDXR at 90 Hz;
+9 and 26 on SteamVR at 120 Hz): every check above passed, Built-in's moot.
 
 ## C11 ◐ `DeviceKind.Xr`, XR actions and the screen pointer
 
 **Outcome: built and pinned on the stand-in; the bindings on Touch controllers and the pointer's
-feel are owed at the headset.** The two hand controllers are one device in the binding seam
+feel passed at the headset, a trigger bound to a flight action among them; the controllers-off
+check is still to judge.** The two hand controllers are one device in the binding seam
 (`DeviceKind.Xr`, appended), shipped on three flight actions, all on the left hand, rebindable on
 both Controls pages under a headset. The right hand's laser points and clicks on the theater screen
 through C10's seam, and every polled reader takes it through one pointer source. The project ships
@@ -1941,26 +1941,24 @@ and the updated `DefaultBindingsTests`, `BindingStoreTests`, `ThrottleLeverTests
 `ControlsResetStickTests`. Suites `xr-pointer` and `xr-pointer-original-menu`, beside
 `theater-screen`, the Controls, pause and menu-pointer suites. The goldens stage, flat ones unmoved.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, then SteamVR (`XR_RUNTIME_JSON`
-at `C:\Program Files (x86)\Steam\steamapps\common\SteamVR\steamxr_win64.json`), Touch controllers on:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on'
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --force-builtin
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-```
-Look for: (1) at the Original menu a thin beam from the right controller and a dot where it meets
-the screen; the right trigger clicks PREFERENCES and the plaques under the dot, and nothing clicks
-when the trigger is pulled off the screen and swept onto a plaque; (2) Built-in's rows highlight
-under the dot and click on the trigger; (3) the left trigger moves the laser to the left hand without
-clicking, and the right trigger moves it back; (4) Options, CONTROLS, KEYS AND BUTTONS, Other tab:
-Pause lists "VR Menu", Recenter Headset "VR L Stick Click", and Views 1's Cycle Cockpit Views
-"VR Y"; click a cell and press B: it binds "VR B"; click a cell, let the trigger go and pull it
-again: it binds "VR R Trigger" and clicks nothing under the dot; (5) in flight,
-the left menu button pauses and the laser clicks Resume; Y cycles the views; the left stick click
-logs `xr: recentered (the recenter action)`; (6) the pointer's feel: beam and dot size and colour,
-the dot's steadiness on the screen, the click latency (`TheaterPointer.BeamWidthM`, `DotM`, the
-tints are the values to tune); (7) with both controllers off, the beam is gone and the desktop mouse
-behaves as C10 left it.
+At the headset (E21's batch, step 26; VDXR at 90 Hz, then SteamVR at 120 Hz through the Steam Link
+app, Touch controllers on):
+- (1) The beam and dot, the right trigger clicking PREFERENCES and the plaques, nothing clicking
+  on an off-screen pull swept onto a plaque: pass on both runtimes.
+- (2) Built-in's rows: moot, main removed the Built-in presentation (#196); step 27 was dropped.
+- (3) The left trigger takes the laser, the right takes it back: pass on both runtimes.
+- (4) The labels "VR Menu", "VR L Stick Click", "VR Y" and a cell bound to B: pass. The author
+  could bind every button and stick but no trigger, which C11 had kept for the pointer; the
+  triggers now bind to flight actions and still drive the laser on a screen (`5b33804c9`): a
+  trigger binds to Fire Guns from the main menu's KEYS AND BUTTONS on SteamVR, pass. A flight
+  launched straight from `--chapter` draws the pause's CONTROLS door disabled, since no menu host
+  holds the rebinding feature (`ProcessMenu.PauseOptions`); a flight started from the menu has it.
+  Decision: no shipped default binds a trigger; they stay bindable and unbound.
+- (5) In flight the left menu button pauses and the laser clicks Resume, Y cycles the views, the
+  left stick click recenters: pass (VDXR).
+- (6) The pointer's feel (beam and dot size and colour, steadiness, click latency): all fine, the
+  values stay as built.
+- (7) Both controllers off, the beam gone: not judged.
 
 **⚠ Traps.**
 - Do not read a hand's inputs without its profile check: OpenXR stops writing an unbound tracker,
@@ -1975,12 +1973,14 @@ behaves as C10 left it.
 **Verified.** The complete battery on the merged tree with B9 and C11: build PASS, units 6417
 passed 3 skipped, engine 541 passed 2 skipped with clean engine errors; goldens 28/29 with
 `c1-cloud-deck-enhanced` moved while the author's headset session ran on the same GPU, then 29/29
-hash-identical on two goldens re-runs (#114's pattern). The headset checks named above are still owed.
+hash-identical on two goldens re-runs (#114's pattern). At the headset (step 26 of E21's batch on
+VDXR at 90 Hz and SteamVR at 120 Hz): checks 1, 3 to 6 passed, check 4's trigger half on SteamVR
+after `5b33804c9`; owed: check 7.
 
-## C12 ◐ The cockpit-locked HUD panel
+## C12 ☑ The cockpit-locked HUD panel
 
-**Outcome: built and measured on the stand-in; legibility, distance, angle and glance comfort are
-owed at the headset.** A stereo session parents the flown pane's flight chrome (the HUD and its
+**Outcome: built and measured on the stand-in; legibility, distance, angle and glance comfort
+passed at the headset.** A stereo session parents the flown pane's flight chrome (the HUD and its
 message stack, the held scores, the chat) into a 2560x1440 surface, the HUD's own reference frame,
 and shows it on a quad in the XR origin's frame. The quad is the flat first-person pane set 2 m ahead
 of the seat: every surface pixel lands where the flat Nose view draws it. It rides the seat in
@@ -2101,27 +2101,17 @@ span, the eye-feed placement's small numbers, the 20 km arithmetic). Suite `xr-h
 clean engine errors. Goldens as above. The registration and the bursts re-run with the commands above
 and the `.scratch/C12/` tools; the bursts need the scratch card, which is not in the tree.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, Original then Enhanced:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=nose
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=nose
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --stunt --chapter=C1 --plane=player_bhawk --view=nose
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=nose --graphics=enhanced
-```
-Look for: (1) legibility: in Nose (first line) the dial faces, their figures and the heading tape
-read without leaning in, and in the stunt run (fifth line) the status line's small text reads; say
-if the panel should be larger (`XrHudPanelLayout.Default`'s 46.83°) or nearer or farther (2 m);
-(2) angle and glance comfort: the dial columns sit low left and right and the tape and messages
-above the gunsight; say whether reading a dial with a glance and a small head turn is comfortable,
-or the panel should drop further below the seat's axis (4.70°); (3) the panel stays fixed to the
-aircraft as you turn and lean your head, and banks with the aircraft; (4) in Cockpit (second line)
-the kill and crash messages appear on the panel over the dash and read at its depth, with no doubled
-image against the dash; (5) overlap with the ring: a Fury below and behind puts its ring arrow and
-label over the lower panel; say whether they read; (6) Chase (third line): the dials hang 2 m ahead
-of the chase eye, banking with the aircraft; (7) at the far corner (fourth line) the dials hold steady
-with no shimmer; (8) under Enhanced (last line) the dial colours against the flat game.
+At the headset (E21's batch, VDXR at 90 Hz):
+- (1) The dials and the heading tape read without leaning in, the panel's size (46.83°) and 2 m
+  right as is (step 12); the stunt status line reads (step 15).
+- (2) The dials low left and right are comfortable with a glance; the panel stays at 4.70° below
+  the seat's axis (step 12).
+- (3) The panel stays fixed to the aircraft as the head turns and leans (step 12).
+- (4) The kill and crash messages on the panel over the dash, no doubling: pass (step 8).
+- (5) The ring arrows and labels over the lower panel read: pass (step 8).
+- (6) Chase: the panel 2 m ahead of the chase eye: pass (step 18).
+- (7) The far corner: the panel's dials steady, no shimmer (step 14).
+- (8) Enhanced: the dial colours match the flat game (step 13).
 
 **⚠ Traps.**
 - The world-tied markers (C13) must leave the panel, otherwise they are drawn at panel depth;
@@ -2149,11 +2139,12 @@ with no shimmer; (8) under Enhanced (last line) the dial colours against the fla
 
 **Verified.** The complete battery on the merged tree with D15 and C12: build PASS, units 6462
 passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
-hash-identical. The headset checks named above are still owed.
+hash-identical. At the headset (steps 8, 12 to 15 and 18 of E21's batch, VDXR 1.0.10 at 90 Hz,
+2112x2304 per eye): all eight checks passed, no value changed.
 
-## C13 ◐ World-tied markers and the edge-marker ring
+## C13 ☑ World-tied markers and the edge-marker ring
 
-**Outcome: built and measured on the stand-in; the headset check is owed.** At the headset the
+**Outcome: built and measured on the stand-in; the headset check passed.** At the headset the
 author reported, verbatim: "Target marker is missing", and after C13b: "But can we have the floating
 reticle like in flat too? its better for gun targeting." A stereo session now draws the flat game's
 gun pipper, the selected target's box and label, and every flight tag (hostile fallback, race
@@ -2272,24 +2263,19 @@ unchanged, an empty frame hiding all). Suites `-Filter xr`, `target`, `marker`, 
 `head-locked`, `spyglass`, `versus`, `dogfight`, `race` pass. Goldens as above. The registration,
 disparity and burst re-run with the commands above and the `.scratch/C13/` tools.
 
-Owed at the headset (the author's), VDXR at 90 Hz, Original then Enhanced:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest --graphics=enhanced
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=3" --debug-markers
-.\RunGame.ps1 -EngineArgs '--xr-mode','on'
-```
-Look for: (1) the pipper floats ahead of the gunsight as in the flat game and is usable for
-gunnery: rounds fired with it on a target hit it, and it reads as one image with the target when
-your eyes are on the target; (2) the selected Fury carries its box (inside gun range) and its
-"Fury" label, on the aircraft at its depth, and the box stays square to the cockpit as you tilt
-your head; (3) a target turning out of view becomes an arrow on a ring about a quarter of the way
-out, pointing toward it with its name and clock bearing, and comes back to a box as you look at it;
-say whether the ring should be wider or narrower (`RingDeg`) or nearer (`RingDistanceM`); (4) a
-target below the nose shows its box over the dash: say if it should hide behind the panel instead;
-(5) the third line marks every aircraft at once, tags in the world and on the ring; (6) from the
-menu (fourth line) an Instant Action flight shows the same; (7) under Enhanced, the marker colours
-against the flat game.
+At the headset (E21's batch; VDXR at 90 Hz, step 9 again on SteamVR at 120 Hz):
+- (1) The pipper floats ahead and rounds fired with it on a target hit: pass (step 8).
+- (2) The box and "Fury" label on the aircraft, square to the cockpit as the head tilts: pass
+  (step 8).
+- (3) The ring's size and distance right as built (`RingDeg`, `RingDistanceM` unchanged; step 8).
+- (4) A box below the nose stays over the dash: the author's choice (step 8).
+- (5) Every aircraft marked at once, in the world and on the ring, reads: pass (step 11).
+- (6) An Instant Action flight from the menu: no defect raised (step 26, whose look-for named the
+  markers; not asked on their own).
+- (7) Enhanced, the marker colours match the flat game: pass (step 9, both runtimes).
+- At step 7 the author noted that the guns shoot at the pipper, not at the gunsight's cross, so two
+  aiming marks show and only the pipper is of use; the original has the same, and no change was
+  asked.
 
 **⚠ Traps.**
 - Do not use Godot's billboard modes or a `Label3D` billboard for a stereo marker: they copy the
@@ -2306,17 +2292,18 @@ against the flat game.
 
 **Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
 re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
-skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
-still owed.
+skipped with clean engine errors, goldens 32/32 hash-identical. At the headset (steps 8, 9, 11 and
+26 of E21's batch, VDXR at 90 Hz; step 9 on SteamVR at 120 Hz): every check above passed, check 6
+without being asked on its own.
 
-## C13b ◐ The gunsight reticle collimated at infinity in VR
+## C13b ☑ The gunsight reticle collimated at infinity in VR
 
-**Outcome: built and measured on the stand-in; the headset check is owed.** A stereo session lifts
-the reticle off the sight glass and draws it collimated (`Mech3/GunsightReticle.cs`): both eyes put
-every reticle line on the same eye-local pixel, the flat game's place from the authored eye, while
-the glass tint, its frame line and the sight body stay at the glass's 0.33-0.51 m. It is added in
-linear light, an illuminated reticle, and reads over the sky above the flat pass in both looks. All
-eleven airframes carry it. The flat game builds none of it; its 24 flat goldens are unmoved.
+**Outcome: built and measured on the stand-in; the headset check passed after two fixes.** A stereo
+session lifts the reticle off the sight glass and draws it collimated
+(`Mech3/GunsightReticle.cs`): both eyes put every reticle line on the same eye-local pixel, the
+flat game's place from the authored eye, while the glass tint, its frame line and the sight body
+stay at the glass's 0.33-0.51 m. It is added in linear light, an illuminated reticle, and reads
+over the sky above the flat pass in both looks. All eleven airframes carry it. The flat game builds none of it; its 24 flat goldens are unmoved.
 
 **Goal.** In VR the gunsight's reticle on the reflector glass reads at infinity, as a real
 collimated reflector sight does: both eyes see it in the same direction relative to the aircraft,
@@ -2409,16 +2396,19 @@ reproduced by the look, the shipped texture's split, the grouping rule, the look
 three re-pins and `stage-gunsight-xr-sim`. The disparity and the levels re-run with the commands
 above.
 
-Owed at the headset (the author's), VDXR at 90 Hz, Original then Enhanced:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --graphics=enhanced
-```
-Look for: (1) eyes on a distant hill or cloud, the ring and cross lie on it as one image, no
-crossed-eye feeling; (2) the reticle reads clearly against sky and ground, at least as well as the
-flat game's; (3) the glass's frame and the black sight body under it stay at the glass, in front of
-the reticle; (4) leaning sideways or back, the reticle is cut at the glass's edge the same way for
-both eyes; (5) the red index mark reads pink, being added light; say if it should stay red.
+At the headset (E21's batch; VDXR at 90 Hz, steps 7 and 9 again on SteamVR at 120 Hz):
+- (1) One image on a distant hill, no crossed-eye feeling: pass (step 7, both runtimes).
+- (2) Reads as well as the flat game's: pass, Original (step 7) and Enhanced (step 9).
+- (3) The glass frame and sight body in front of the reticle: pass (step 7).
+- (4) Cut at the glass's edge alike for both eyes: pass (step 7, both runtimes). Being behind the
+  glass, the ring was seldom whole; a smaller ring (`0a620d47d`, `HeadsetScale` 0.7) read the right
+  size but was still cut often, and from the eye at the cockpit marker's own point (`a97fd1caa`,
+  E20) the gunsight is no longer cut on any plane (step 30).
+- (5) The index mark: the author asked for red; it draws in its own layer and reads red
+  (`0a620d47d`, step 7 again).
+- The guns aim at the pipper, not at the gunsight's cross (C13's note). The flat view keeps the
+  eye `a97fd1caa` moved in VR (the Kestrel's flat sight stands 8.8° right of the pipper): not
+  fixed, by the author's decision.
 
 **⚠ Traps.**
 - Do not push the reticle to the far plane: depth-tested there the world hides it, untested the panel
@@ -2454,8 +2444,9 @@ after the interior's geometry, and lowered keeps its own).
 
 **Verified.** The complete battery on the merged tree with C13b, B10 and C13 (the stereo goldens
 re-pinned on the combined tree): build PASS, units 6443 passed 3 skipped, engine 543 passed 2
-skipped with clean engine errors, goldens 32/32 hash-identical. The headset checks named above are
-still owed.
+skipped with clean engine errors, goldens 32/32 hash-identical. At the headset (steps 7, 9 and 30
+of E21's batch, VDXR at 90 Hz; steps 7 and 9 on SteamVR at 120 Hz): every check above passed, with
+the red index mark and the smaller ring of `0a620d47d` and the eye of `a97fd1caa`.
 
 ## C14 ◐ An angle-based world flare rig (VR and flat Enhanced); the other pane effects as near quads in VR
 
@@ -2466,7 +2457,7 @@ adopts it once the author has judged it against the current rig; Original keeps 
 rig unchanged. (2) The remaining full-pane canvas effects (the cloud whiteout, `ScreenFlash`, the
 mission-end fade) get a VR form as head-locked quads near the eye.
 
-**Outcome: built and adopted in flat Enhanced; the VR ring default is the author's.** The world rig
+**Outcome: built and adopted in flat Enhanced; the VR flare keeps its rings.** The world rig
 (`Session/World/WorldFlareRig.cs`) draws every stereo session's flare and every flat Enhanced one;
 flat Original stays on `LensFlareRig`, which is unchanged. The whiteout, `ScreenFlash`, the sun wash
 and the mission-end fade have head-locked stereo quads (`UI/Boards/HeadLockedQuads.cs`). The
@@ -2589,9 +2580,10 @@ nearer than the HUD panel (C12).
 builds `HeadLockedQuads`, which follows the whiteout rectangle, `ScreenFlash.CurrentFor(0)`, the
 world rig's wash and the director's `LeavingFade`; the flat canvas layers are untouched. The ring
 gain is read from `GraphicsMode.Enhanced` each tick, so a live switch to Original drops it to 1.
-**Owed to the author:** a look at the gain montage (`montage-C14b-overview.png`) to confirm the
-rings, and at the headset (E21) whether the VR flare keeps the rings, which it shows by default
-now, or shows the core and wash only.
+**At the headset** (E21's batch, step 17, C3 Enhanced near the sun, VDXR at 90 Hz): the VR flare
+keeps its rings, the author's choice over the core and wash alone. The near quads showed no defect
+through the batch (the fades in D16, the cloud whiteout in B8). **Owed to the author:** a look at
+the gain montage (`montage-C14b-overview.png`) to confirm the rings; no verdict on it was found.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
@@ -2629,11 +2621,12 @@ conversion, and check the drawn colour in a capture.
 
 **Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
-clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
+clean engine errors, goldens 27/27 hash-identical.
 
 **Verified.** The complete battery on the merged tree with B7 and the C14 follow-up: build PASS,
 units 6365 passed 3 skipped, engine 534 passed 2 skipped with clean engine errors, goldens 27/27
-hash-identical. The headset checks named above are still owed.
+hash-identical. At the headset (step 17 of E21's batch, VDXR 1.0.10 at 90 Hz): the rings stay in
+VR; the gain montage's look is still owed.
 With the review fixes (the flare's own layers, the headset boot's recovery, the start-failure notice): the
 complete battery on the merged tree, build PASS, units 6531 passed 3 skipped, engine 552 passed 2
 skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
@@ -2642,8 +2635,8 @@ skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
 
 ## D15 ◐ Cutscenes as a stereo 3D-cinema pair on the theater screen
 
-**Outcome: built and pinned on the stand-in; the window feel, the comfort of the depth and the
-letterbox are owed at the headset.** A presenting cutscene under VR plays on the theater screen in
+**Outcome: built and pinned on the stand-in; the window feel and the comfort of the depth passed at
+the headset; the intro without its letterbox bars is still to see there.** A presenting cutscene under VR plays on the theater screen in
 the full dark surround: two cameras on the authored camera, the runtime's IPD apart, each eye's
 picture picked by `VIEW_INDEX` in the board's 4:3 rect, converged on the letterbox card so the bars
 stand on the screen plane. The XR origin no longer takes the cutscene camera's heading (B9's arm);
@@ -2741,23 +2734,19 @@ each eye read through `shot=`; SHOT-48, disparity by a subpixel shift, never cen
 golden names its missing-profile assumption; GOLD-3, the screen shader changed, so the whole golden
 set is swept on the merged tree, not only the three probed here.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --campaign=csvm-vr:0 --plane=player_bhawk
-.\RunGame.ps1 -EngineArgs '--xr-mode','on'
-```
-The first plays sequence 0's intro straight away (C3/M01, `generic_intro`; a profile name that does
-not exist is fine, and an `--xr-sim --no-det` run of it logged the pair); the second goes through the
-menu to a campaign mission, whose intro is the real path. Look for: (1) the
-intro opens on the screen in the dark room and reads as a window: the scene behind the glass, the
-dark room where the letterbox bars stood, no black frame; the log has `theater: cutscene pair 1600x1200 per eye, <n> mm apart,
-converged at 7.5 m, ..., film rows 0.1862 to 0.81`; (2) the depth is comfortable through the whole intro, no doubled image on the
-far sky and nothing straining on near aircraft, and it reads as 3D at all; (3) turning or leaning the
-head changes nothing inside the frame; (4) the framing matches the flat intro's film band between its bars; (5) Esc
-raises the pause board over the playing cutscene; (6) the hand-back to the cockpit is one cut. The
-values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and sinks the bars),
-`TheaterLayout.CutsceneSize` and the surround. Frame pacing during the cutscene is in the
-`xr frames` lines of the run's log: two world renders a frame, the pair's (D18 cut the headset's own).
+At the headset (E21's batch, step 29 `--campaign=csvm-vr:0 --plane=player_bhawk` and step 26's
+campaign mission from the menu, VDXR at 90 Hz):
+- (1) The intro on the screen in the dark room, reading as a window: pass (steps 26 and 29). The
+  author found the black bars round it distracting against the dark room; the screen now keeps
+  only the film rows between them (`07b0b2417`). **Still to see at the headset:** the intro with
+  the dark room where the bars stood, no black frame; the log has `theater: cutscene pair
+  1600x1200 per eye, <n> mm apart, converged at 7.5 m, ..., film rows 0.1862 to 0.81`.
+- (2) The depth comfortable through the intro and reading as 3D: pass (step 29).
+- (3) Head turns change nothing inside, (4) the framing matches flat, (5) Esc raises the pause
+  board: pass (step 29).
+- (6) The take and the hand-back fade through black, one cut back to the cockpit: pass (step 29).
+The tuned values (`StereoPair.ConvergenceOfCard`, `TheaterLayout.CutsceneSize`, the surround)
+stay as built. Not repeated on SteamVR.
 
 **⚠ Traps.**
 - Do not take the cutscene camera's heading for the origin, and do not hold the origin's position
@@ -2775,12 +2764,13 @@ values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and
 
 **Verified.** The complete battery on the merged tree with D15 and C12: build PASS, units 6462
 passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
-hash-identical. The headset checks named above are still owed.
+hash-identical. At the headset (steps 26 and 29 of E21's batch, VDXR 1.0.10 at 90 Hz, 2112x2304
+per eye): checks 1 to 6 passed with the bars; the intro without them (`07b0b2417`) is owed.
 
 ## D16 ◐ Comfort: fades, tunnel vignette, render-scale slider
 
-**Outcome: built and pinned on the stand-in; the fade's feel and durations, the vignette's curve
-and strength, and the render scale are owed at the headset.** Every cut the headset sees lands on a
+**Outcome: built and pinned on the stand-in; the fades, the vignette and the render scale passed at
+the headset, the vignette after a fix; the mission end's fade is still to see there.** Every cut the headset sees lands on a
 black frame. A cut the game makes (`XrRig.Cut`: a respawn, a crash, a new aircraft, a static
 camera's re-site, the camera taken by another owner or handed back, so a cutscene's take and
 hand-back) snaps to black on its own frame and clears over 0.3 s. A view key (`F8`, D-pad down, the
@@ -2892,27 +2882,21 @@ passed (93 of 93, clean engine errors), units 6465 passed 3 skipped. Goldens: no
 `xr-sim` shots unmoved. The rules that bite (docs/verification.md): SHOT-44 (each eye is read in the
 side-by-side capture), METHOD-9 (the vignette's Off and cruise runs are the controls for its roll).
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669"
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --xr-vignette=mild
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --xr-vignette=strong
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --xr-render-scale=70
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --campaign=csvm-vr:0 --plane=player_bhawk
-.\RunGame.ps1 -EngineArgs '--xr-mode','on'
-```
-Look for: (1) first line: the first flight frame comes out of black; `F8` (D-pad down, the left
-upper face) darkens briefly and each view lands on black, the delay acceptable; `F7` and each flyby
-re-site, `Backspace` (pad Y) and a crash into the ground do the same; say whether the fades are too
-long, too short or too abrupt; (2) second and third lines: hard rolls and tight turns in Cockpit and
-Chase; whether the vignette helps, comes in late or pumps, Mild against Strong, and whether gentle
-flying stays clear; (3) fourth line: sharpness, and the `xr frames` lines' `gpu_ms` against the first
-line's at 100 % (the log has `xr: render scale 0.7 eye_px=...`); (4) fifth line: the intro's take and
-hand-back fade through black with the dark room; (5) sixth line: Options, VIDEO under the headset
-shows Comfort Vignette on the Display Mode line and VR Render Scale on the V-Sync line; in a flight,
-Esc, Options, change the render scale and ACCEPT CHANGES: the picture changes resolution at once with
-no more than a frame's hitch; a campaign mission's end keeps its 2 s fade. The values to tune are
-`XrFade.DefaultOutS`/`DefaultInS`, `XrVignette`'s six constants, and the scale's steps.
+At the headset (E21's batch; VDXR at 90 Hz, step 18 again on SteamVR at 120 Hz):
+- (1) The first frame out of black, `F8`, `F7`, `Backspace` and a crash each through black, the
+  delay right and the fades neither too long nor too short: pass (step 18, both runtimes);
+  `XrFade.DefaultOutS`/`DefaultInS` stay. The level chase's hand-over cut takes a longer fade of
+  its own (B9, `9bcc3d78d`).
+- (2) The vignette pumped as the turn rate dipped and climbed; the author asked that it hold until
+  the manoeuvre ends, finds it less needed in Cockpit and wants it kept as an option. It now holds
+  for 1 s after the rate falls under the onset (`SettleS`, `efbf65f35`): holds, good (step 21).
+  Gentle flying stays clear; Mild and Strong both stay (step 22); the default stays off.
+- (3) Render scale 70: `xr: render scale 0.7`, 1478x1613 per eye, visibly softer and fine
+  (step 23). The `gpu_ms` comparison with the 100 % run was not recorded.
+- (4) The intro's take and hand-back fade through black: pass (step 29, D15).
+- (5) The VIDEO page under the headset and a render-scale change in flight applying at once: pass
+  (step 26; the question named VR Mode's dropdown at the page's foot, not the comfort rows' lines).
+  **Still to see at the headset:** a campaign mission's end keeps its 2 s fade.
 
 **⚠ Traps.**
 - Do not hold the origin at the old pose to fade out a cut the game makes: the view's dressing (the
@@ -2931,12 +2915,14 @@ no more than a frame's hitch; a campaign mission's end keeps its 2 s fade. The v
 **Verified.** The complete battery on the merged tree with D16, D17 and the exit-finalizer fix
 (LOG-27): build PASS, units 6476 passed 3 skipped, engine 549 passed 2 skipped with clean engine
 errors, goldens 35/35 hash-identical. A first run on the tree without the exit fix crashed one shard
-at quit after a passing report. The headset checks named above are still owed.
+at quit after a passing report. At the headset (steps 18, 21 to 23, 26 and 29 of E21's batch, VDXR
+1.0.10 at 90 Hz; step 18 on SteamVR at 120 Hz): checks 1 to 4 and 5's rows and live render scale
+passed, the vignette after `efbf65f35`; the mission end's 2 s fade is owed.
 
-## D17 ◐ Port the screen-space effects to multiview
+## D17 ☑ Port the screen-space effects to multiview
 
-**Outcome: the race ghost's dither ported and measured on the stand-in; its look at the headset is
-owed.** A stereo process draws the ghost with a text whose dither pattern sits at each fragment's own
+**Outcome: the race ghost's dither ported and measured on the stand-in; its look passed at the
+headset.** A stereo process draws the ghost with a text whose dither pattern sits at each fragment's own
 depth (`RaceGhost.StereoFragmentLine`), so the pattern carries the aircraft's disparity within a
 pixel where it carried none. The four effects A4 found correct need no port, and the clutter fade
 keeps its screen-locked dither. `--debug-race-ghost` makes the ghost capturable on one seat, and the
@@ -3023,15 +3009,10 @@ move (the flat text is unchanged and the flag is off in all of them). The four e
 correct were not re-captured: their screen and depth reads are unchanged since A4, and B10's stereo
 texts changed only their basis, under its own suite.
 
-Owed at the headset (the author's), VDXR at 90 Hz, Original then Enhanced:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase --debug-race-ghost
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=chase --debug-race-ghost --graphics=enhanced
-```
-Look for: (1) the aircraft ahead reads as a see-through aircraft at its own depth, its dots on its
-skin, not as a mesh standing on the lenses in front of it; (2) as you turn your head the dots move
-over the skin, as the flat ghost's do whenever the view moves: say whether that swim bothers you in
-the headset; (3) say whether the ghost reads well enough or wants alpha-to-coverage.
+At the headset (E21's batch, VDXR at 90 Hz, Chase with `--debug-race-ghost`):
+- (1) See-through at its own depth, the dots on its skin: pass (step 24, Original).
+- (2) The dots swimming over the skin as the head turns: fine (step 24).
+- (3) Good enough under Enhanced; no alpha-to-coverage (step 25).
 
 **⚠ Traps.**
 - The shaders are generated in C# (`Mech3/ShaderTwins.cs` pairs per graphics mode); a port touches
@@ -3044,11 +3025,12 @@ the headset; (3) say whether the ghost reads well enough or wants alpha-to-cover
 **Verified.** The complete battery on the merged tree with D16, D17 and the exit-finalizer fix
 (LOG-27): build PASS, units 6476 passed 3 skipped, engine 549 passed 2 skipped with clean engine
 errors, goldens 35/35 hash-identical. A first run on the tree without the exit fix crashed one shard
-at quit after a passing report. The headset checks named above are still owed.
+at quit after a passing report. At the headset (steps 24 and 25 of E21's batch, VDXR 1.0.10 at
+90 Hz, 2112x2304 per eye): all three checks passed.
 
-## D18 ◐ Performance pass to the 90 Hz budget
+## D18 ☑ Performance pass to the 90 Hz budget
 
-**Outcome: the cost is found and cut on the stand-in; the headset's own frame times are owed.** The
+**Outcome: the cost is found and cut on the stand-in; the headset holds 90 Hz on the profile.** The
 flat options cost a VR cockpit 20-43 ms of GPU time at the runtime's 3072x3264 per eye, almost all
 of it Enhanced's soft sun shadow, whose search radius on Godot 4.7.0 grows with the camera's distance
 from the world origin (a Godot bug, fixed in 4.7.2). A VR quality profile (anti-aliasing off over
@@ -3188,23 +3170,24 @@ that bite (docs/verification.md): PERF-49 (a soft shadow's cost depends on the p
 spyglass census inflates `proc_ms`), PERF-51 (what `gpu_ms` covers under the stand-in), PERF-9
 (interleaved A/B), PERF-39 (viewports outside the root).
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, its resolution at the runtime's
-default for 90 Hz (the log's `eye_px=` says which), from the tree this lands in:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --graphics=enhanced
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-40000,600,-40000" "--direction=-0.743,0,-0.669" --graphics=enhanced
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C5 --plane=player_bhawk "--pos=-9256,250,-3155" "--direction=-0.588,0,-0.809" --graphics=enhanced
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C5 --plane=player_bhawk "--pos=-9256,250,-3155" "--direction=-0.588,0,-0.809" --graphics=original
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C5 --plane=player_bhawk "--pos=-9256,250,-3155" "--direction=-0.588,0,-0.809" --graphics=enhanced --xr-foveation=on
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-40000,600,-40000" "--direction=-0.743,0,-0.669" --graphics=enhanced --xr-quality=flat
-```
-Fly each for a minute in the cockpit, then chase. Look for: (1) the log's `[world] vr quality:
-profile=vr anti_aliasing=off msaa=4x shadow_quality=low foveation=off` (and `profile=flat` on the
-last line); (2) the `xr frames` lines: `gpu_ms` under 5.5 ms and `late` near 0 on the first four,
-against the last line's flat options past the edge (expected 20 ms or more, the bug's control);
-(3) whether the hard-edged sun shadow and the absence of TAA read acceptably in the cockpit and on
-the ground, and whether the fifth line's edge of view looks different; (4) past the map edge, no
-double image. Pick from the trades above if the first lines miss 5.5 ms.
+At the headset (E21's batch, steps 1 to 6, 17, 36 and 37 with `--perf`; VDXR 1.0.10 at 90 Hz, its
+default 2112x2304 per eye):
+- (1) The log's profile line: `profile=vr` on the headset runs, `profile=flat` on step 6.
+- (2) GPU time per frame: C1 past the edge 2.9 ms mean (3.7 worst) at 85-90 fps; C5 night city
+  Enhanced 3.9 mean (5.2 at p95, 6.1 worst) at 83-90 fps; C5 Original 2.8 (3.2 worst); C5 with
+  foveation 3.1; C1 centre held 89-90 fps; C4 88.7 fps, C3 with foveation 88.2. The flat options
+  past the edge read 18.6 mean (23.8 worst) at 46-59 fps, the bug's control. The first step 1 run
+  once settled at 11.5 fps and did not recur; step 4 showed single frames of about 100 ms with the
+  GPU idle, the main thread waiting on the render thread. Steps 31 and 32 (A1) flew both thread
+  modes alike, so the render thread stays separate.
+- (3) The hard sun shadow without TAA reads acceptably on C1 (steps 1, 2), C5 (3, 4), C3 (step
+  17) and C4 (step 36). Foveation: the edge of view looked visibly worse over C5's buildings,
+  where the far band of #205 (filed from step 3) lights them differently, and slightly worse over
+  water (step 5); on C3 no difference (step 37). Foveation stays off.
+- (4) Past the map edge, no double image (step 2).
+No trade above is taken: the author's runtime setting runs the profile at about a quarter of the
+frame. The Godot 4.7.2 upgrade that restores a soft shadow is deferred by the author's decision,
+possibly to 4.8.
 
 **⚠ Traps.**
 - Do not raise the profile's shadow to a level with a penumbra on this engine: its cost grows with
@@ -3219,12 +3202,14 @@ double image. Pick from the trades above if the first lines miss 5.5 ms.
 
 **Verified.** The complete battery on the merged tree with D18: build PASS, units 6490 passed 3
 skipped, engine 550 passed 2 skipped with clean engine errors, goldens 37/37 hash-identical; exit 0.
-The headset check named above is still owed.
+At the headset (E21's batch, VDXR 1.0.10 at 90 Hz, 2112x2304 per eye): every check above passed,
+at 2.8-3.9 ms mean GPU time on the profile; SteamVR 2.17.10 at 120 Hz, 2064x2208, held 116-119 fps
+on steps 9, 18, 31 and 32.
 
-## D19 ◐ Spyglass as a binocular quad
+## D19 ☑ Spyglass as a binocular quad
 
-**Outcome: built and measured on the stand-in; the size, the place and the look are owed at the
-headset.** The plan's premise was a zoom that narrows the field of view, and the flat spyglass is no
+**Outcome: built and measured on the stand-in; the size, the place and the look passed at the
+headset, the size after a fix.** The plan's premise was a zoom that narrows the field of view, and the flat spyglass is no
 such thing: it is the picture of the selected target while the target is off screen, drawn in a disc
 at the edge marker (`docs/org/spyglass.md`). A stereo session now shows that same picture, rendered
 once for both eyes, on a disc on the head ring inside the selection's ring arrow, with the flat rim
@@ -3316,22 +3301,17 @@ looking at the target, disarming and a hidden HUD each taking it down, each with
 `c1-spyglass-xr-sim` (the probe above at `eye=640x720,fov=70`): `e439ac87510fac5b420a722a57bc7088`
 on three runs, frame-sensitive 39.14 %.
 
-Owed at the headset (the author's), runtime at 90 Hz, VDXR first, Original then Enhanced:
-```
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=nose --ai=player_fury --target=ai1_player_fury
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest
-.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=cockpit "--ai=player_fury:n=2" --ai-attack --target=nearest --graphics=enhanced
-```
-Look for: (1) first line: the Fury sits 250 m ahead; turn your head about 30 degrees or more away
-from it and a round picture of it appears on the ring inside its arrow, the name and clock tag
-beside it; turn back and it closes as the box returns; say whether the picture should be larger or
-smaller (`SpyglassScale` 1.5) and whether it reads sharp; (2) the picture is one flat image at the
-ring's depth, not doubled, and moves with your head as the ring does; (3) Shift+S (pad: Misc1, the
-Share or Capture button) turns it off and on, armed at load; (4) the second line, a dogfight in
-Cockpit: the picture follows a Fury past your shoulder, shows no box, tag or whiteout inside it, and
-whether the place inside the ring arrow works or it should stand elsewhere; (5) under Enhanced (third
-line), the picture's contrast against the world: the headset's AgX tonemaps the already tonemapped
-picture once more (SHOT-46).
+At the headset (E21's batch; VDXR at 90 Hz, step 9 again on SteamVR at 120 Hz):
+- (1) The picture opens inside the ring arrow 30° and more off the Fury and closes on the way
+  back, sharp (step 10). Its size in Nose is right; in Cockpit it drew 1.45x larger, and the author
+  asked for Nose's size in both: `XrMarkerLaw.SpyglassTangentPerRef` sizes it from Nose's angle in
+  every view (`0a620d47d`), the same size in both, judged good (step 10 again).
+- (2) One flat image, not doubled: pass (step 10); its following the head with the ring was not
+  asked on its own.
+- (3) Shift+S toggles it: pass (step 10).
+- (4) The dogfight in Cockpit: it follows a Fury past the shoulder with nothing drawn inside:
+  pass (step 8); the place inside the ring arrow drew no change.
+- (5) Enhanced, the picture's contrast matches the flat game: pass (step 9, both runtimes).
 
 **⚠ Traps.**
 - Do not aim the stereo picture along the head's gaze: the spyglass is the selection's picture, and
@@ -3351,14 +3331,15 @@ picture once more (SHOT-46).
 hash-identical. D19 found that the Danger Zone photograph's camera (`OutsideCullMask` of the pane's
 mask) would draw the head-locked quads, marker cards and HUD panel into the photo under VR; its mask
 now drops `HeadsetLayer` and `HeadOverlayLayer` (Decision 15: the photograph reads a mono camera).
-The headset check named above is still owed.
+At the headset (steps 8 to 10 of E21's batch, VDXR 1.0.10 at 90 Hz, 2112x2304 per eye; step 9 on
+SteamVR at 120 Hz): every check above passed, the Cockpit size after `0a620d47d`.
 
 # Wave E, headset pass and release
 
-## E20 ◐ Per-plane scale and eye-offset tuning at the headset
+## E20 ☑ Per-plane scale and eye-offset tuning at the headset
 
-**Outcome: the lab is built and pinned on the stand-in; the author's per-plane judgement is owed at
-the headset.** `--xr-tune` turns on live nudges of the flown plane's interior scale and seated eye
+**Outcome: the lab is built and pinned on the stand-in; the author judged all eleven planes at the
+headset and their values are in `vr_cockpits.json`.** `--xr-tune` turns on live nudges of the flown plane's interior scale and seated eye
 offset (fore and aft, up and down) from the right hand controller with its grip held, a readout on
 the HUD panel, a save into `vr_cockpits.json` in the tree the game runs from, a reset to the file,
 and a step to the next plane by the mission airframe swap, so one headset session covers all eleven.
@@ -3439,19 +3420,29 @@ order). Suite `xr-cockpit-tune` (weight 0.42 s in `analysis/engine-suite-weights
 the readout shows only under `--xr-tune`; on the item's tree the goldens stage was 37/37
 hash-identical.
 
-Owed at the headset (the author's), VDXR at 90 Hz: the per-plane sign-off. One session covers all
-eleven through the plane step; the per-plane lines are the fallback if a swap misbehaves:
-```
-$env:CSVM_DATA_ROOT='Z:\CSVM'; & 'Z:\CSVM\.claude\worktrees\vr\RunGame.ps1' -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,600,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --xr-tune
-```
-Planes in the file's order: `player_bhawk` (Bloodhawk), `player_pfighter` (Devastator),
-`player_fury`, `player_warhawk`, `player_autogyro` (Hoplite), `player_avenger` (Hellhound),
-`player_balmoral`, `player_brigand`, `player_fbrand` (Firebrand), `player_kestrel`,
-`player_peacemaker`. A5's starting points to try (the file's `_proposed` notes): Warhawk aft 0.06;
-Hoplite, Hellhound and Balmoral scale 0.875. A5's forward move for the head plate is moot, since the
-stereo interior leaves the plate out (B8, the `head plate left out` log line). Per plane: judge the
-panel's distance and size and the tub's width with the grip up, nudge, save with the trigger, then
-the left stick to the next plane; `xr tune: saved ...` in the log is the record.
+The per-plane sign-off at the headset (E21's batch, step 30, all eleven planes through the plane
+step, C1 at 600 m in Cockpit with `--xr-tune`):
+- The first pass kept every scale at 1.0 (A5's 0.875 for the Hoplite, Hellhound and Balmoral not
+  taken; the `_proposed` notes removed) and saved the Warhawk 0.18 m and the Brigand 0.06 m aft
+  (`7e88ada42`). The Kestrel's and Peacemaker's cockpits stood off-centre: the stereo interior's eye
+  sat at the interior's origin, not on the cockpit marker's own point, which `a97fd1caa` corrects
+  (the lab now rescales about that eye and the offset is no longer tilted, so the Evidence above
+  on the authored eye and the tilted `eyeOffsetY` describes the build before it). Both saved
+  offsets went back to the default to be judged again from the new eye.
+- Judged again from the marker eye and saved (`4f3a1232e`): the Fury, Warhawk, Brigand and
+  Kestrel 0.05 m aft, the Peacemaker 0.12 m aft and 0.05 m down; the other six at the default. The
+  Kestrel and Peacemaker are centred; rolls with their seat about 2 m off the roll axis are "Fine
+  as is", so no centreline eye option; the gunsight is no longer cut at the glass edge, and nothing
+  flickered.
+- The pylon stores (#206) at the true pylon pose sat in the Bloodhawk's and Avenger's interior gun
+  barrels; drawing them without `XrUnderInterior` did not move them, and the flat mount's pose
+  hung them too far forward. `vr_cockpits.json` takes per-plane `storeOffsetZ`, `storeOffsetY` and
+  `storeSpread`, nudged in the lab with the left grip (`d8660e694`); the author placed the
+  Bloodhawk's, Warhawk's, Brigand's, Kestrel's and Peacemaker's under SteamVR, the other six need
+  none, and the interior hides them cleanly: "Looks right".
+- The keyboard twin F22 to F24 stays.
+- A flicker of the compass and the sight's edge about 67 km from the map centre (float precision)
+  is ignored for now and not filed, by the author's decision.
 
 **⚠ Traps.**
 - Look judgements are the author's; a measured scale does not override them.
@@ -3471,23 +3462,64 @@ the left stick to the next plane; `xr tune: saved ...` in the log is the record.
 
 **Verified.** The complete battery on the merged tree with E20 and E22: build PASS, units 6517 passed
 3 skipped, engine 551 passed 2 skipped with clean engine errors, goldens 37/37 hash-identical;
-exit 0. The headset check named above is still owed.
+exit 0. At the headset (step 30 of E21's batch on VDXR 1.0.10 at 90 Hz, the stores under SteamVR
+2.17.10 at 120 Hz): all eleven planes signed off, the values committed in `4f3a1232e` and
+`d8660e694`.
 
-## E21 ☐ At-the-headset playtests on both runtimes
+## E21 ◐ At-the-headset playtests on both runtimes
+
+**Outcome: the headset batch is flown on both runtimes and its verdicts are recorded per item;
+network play in VR and a few looks are still owed.**
 
 **Goal.** The author has flown each mode in VR on VDXR and on Steam Link/SteamVR and judged comfort,
 controller binding, the theater screen, the HUD and the cutscene window.
 
-**Evidence (confidence: lead-only).** Decision 11.
+**Evidence (confidence: the author's verdicts at the headset, with the runs' logs).**
+- **The rig.** Meta Quest 3, RTX 5080. VDXR 1.0.10 at 90 Hz, 2112x2304 per eye (its 90 Hz
+  default); SteamVR 2.17.10 through the Steam Link app at 120 Hz, 2064x2208 per eye.
+- **The batch.** `.scratch/HeadsetBatch.ps1 <step>` in the `vr` worktree (untracked) prints each
+  step's look-for, starts the game with `--perf`, and the author answers after the run. Steps 1-6
+  performance (D18); 7-17 the cockpit, gunsight, HUD panel, markers, spyglass, sprites and flare;
+  18-25 views and comfort; 26-29 menus, controllers, a cinema and a cutscene; 30 the per-plane
+  tuning (E20); 31-34 the render thread, the runtime's recenter and the VR mode option; 35-37 the
+  sunny maps. Step 27 (Built-in) was dropped with Built-in itself; C3's sun (step 35) was judged at
+  step 17. Under SteamVR steps 31, 32, 7, 9, 26 and 18 were repeated and passed; step 31's
+  recenter and parallax were not tried there (step 32's recenter was).
+- **Modes flown.** Free flight on C1, C3, C4 and C5; a dogfight against attacking Furies; the stunt
+  course; the race ghost; Instant Action and a campaign mission from the menu; a campaign intro;
+  the `zipper` cinema. Network play was not flown in VR.
+- **Fixes landed from the verdicts.** The flyby and the vignette (`efbf65f35`); the gunsight's red
+  index mark, smaller ring and the spyglass's one size (`0a620d47d`); the level chase's unrolled
+  frame and its hand-over fade (`dc382fccc`, `aa48e41d3` to `9bcc3d78d`); the pylon stores on the
+  stereo interior (`2ed39c835`) placed per plane (`d8660e694`); the cockpit backdrop tried and
+  removed (`2ed39c835`, `7b5acb260`); bindable triggers (`5b33804c9`); no black bars on the
+  theater (`07b0b2417`); the stereo interior's eye at the cockpit marker's point (`a97fd1caa`);
+  the per-plane values (`7e88ada42`, `4f3a1232e`).
+- **Filed.** #205, a dark band of buildings at a fixed distance in C5 Enhanced, where Original's
+  buildings draw in; #206, the pylon stores, fixed on `vr`; #207, the world through the cockpit's
+  gaps, open for a remodel of the player cockpits.
+- **The author's decisions.** The render thread stays separate; no shipped default binds a
+  trigger; the rigid chase stays the default; the vignette stays off by default with Mild and
+  Strong; foveation stays off; the VR flare keeps its rings; a target box below the nose stays
+  over the dash; the flat view's eye and gunsight offset is not fixed; the compass and sight-edge
+  flicker about 67 km from the map centre is ignored for now and not filed; the Godot 4.7.2
+  upgrade is deferred, possibly to 4.8.
+- **Still owed.** Network play in VR; the controllers-off check (C11); the intro without its letterbox bars (D15); a campaign mission's 2 s end fade (D16);
+  the C14 gain montage, a flat look. SteamVR repeated only steps 7, 9, 18, 26, 31 and 32, so the
+  cutscene window, among others, was seen on VDXR alone.
 
-**Approach.** File the checks as `playtest` GitHub issues (`docs/agents/issue-tracker.md`).
-<TODO: the check list per mode.>
+**Approach.** The checks ran as one scripted batch in place of `playtest` issues, each verdict
+recorded in its item's Verify and Verified paragraphs.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** The issues closed with the author's verdicts.
+**Verify.** Every item's headset check carries the author's verdict or names what is still owed.
 
-**⚠ Traps.** <TODO: none known yet.>
+**⚠ Traps.**
+- SteamVR on the Quest runs through the Steam Link app; a Steam Link crash on the headset left it
+  with no way out of VR, a runtime fault, not the game's. A retry ran clean.
+- `XR_RUNTIME_JSON` set in a PowerShell session stays set (A1's trap); the batch script clears it
+  unless `-SteamVR` is given.
 
 ## E22 ◐ Experimental release: docs, shortcut, known issues
 
@@ -3597,4 +3629,7 @@ At release time (the author's; the sandbox opens a window, so no agent runs it):
 
 **Verified.** The complete battery on the merged tree with E20 and E22: build PASS, units 6517 passed
 3 skipped, engine 551 passed 2 skipped with clean engine errors, goldens 37/37 hash-identical;
-exit 0. The headset check named above is still owed.
+exit 0. The headset check named above (release step 3) is still owed. For the known-issues list,
+E21's batch settles: two runtimes tried, VDXR and SteamVR through Steam Link, on one headset (Meta
+Quest 3); the hard shadows read acceptably in VR; each plane now has its judged eye offset (E20);
+open from the batch are #205 (the dark band of buildings) and #207 (the cockpits' gaps).
