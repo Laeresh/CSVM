@@ -91,7 +91,7 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
 ## Ground rules <!-- [core], carried verbatim from every prior plan here (self-contained history). Keep as-is unless a rule genuinely doesn't apply. -->
 
 - **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
-  never guess a value. Inventing content is the trap this project falls into most often.
+  never guess a value. Inventing content is the mistake this project makes most often.
 - **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
