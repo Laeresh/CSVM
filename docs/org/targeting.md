@@ -411,7 +411,7 @@ earlier pool's candidate):
 | Pass | Pool | Admitted |
 |---|---|---|
 | 1 | `VehicleList` (`DAT_0071dabc`) | **every entry, unconditionally.** The list holds aircraft AND AI ground/sea vehicles (see [`aim-assist.md`](aim-assist.md) "The four lists"), so a boat or a ship is a turret candidate exactly as an aeroplane is. The cost carries a per-entry bias from `entity+0x340` |
-| 2 | Turrets (`DAT_0071d914`) | every entry, unconditionally |
+| 2 | Turrets (`DAT_0071d914`) | every entry the `TargetTurret` predicate passes: alive, a world emplacement, and hostile (below). The cost adds the picker's second argument, `0.0` for a turret |
 | 3 | `MStructList` (`DAT_0071d33c`…`0x0071d340`) | only when the picker's 4th argument is set, and then only entries whose `+0x8d` is non-zero and whose `+0x65` gasbag flag is clear (the 3rd argument would admit gasbags; the turret passes `0`) |
 | 4 | Live fused ordnance (`DAT_0064f78c`) | entries whose `+0x6c` tracking byte is set, which is the `TARGETABLE` torpedo alone. A winner here returns immediately, having already beaten the other three; [`aiPilot.md`](aiPilot.md) "The fourth list" decodes the pass |
 
@@ -419,6 +419,51 @@ Every candidate passes `FUN_00422890` first: the hostility virtual `+0x34` again
 team, and then, when the query's `+0x14` byte is set, a rejection of any candidate whose Y sits
 below the shooter's. That byte comes from the turret's own `+0x1e8`, so a gun can be authored to
 refuse anything beneath it.
+
+**The turret pass holds world emplacements alone.** The `TargetTurret` predicate `0x004a5bd0`
+requires the turret's `+0x6c` (`0x004a5bd3`) and `+0x6d` (`0x004a5bda`) before the team test.
+
+- `+0x6c` is the alive byte, and the turret update `FUN_004aabb0` writes it ahead of its
+  `ACTIVATED` test (`+0x6e`, `0x004aac16`), so a dormant emplacement is a candidate. The test is
+  `node+0x24` bit `0x4`, the active bit, and it takes one of two branches on the byte's value at
+  the start of the tick:
+  - **Clear** (`0x004aabe2` to `0x004aac12`): it tests only the healthy node `+0x70`, the turret's
+    own node `+0xc` and the node at `+0xb4`. When all three are active it writes `1` at
+    `0x004aac12` and the tick goes on to the `ACTIVATED` gate.
+  - **Set** (`0x004aac72` to `0x004aacc1`): it tests `+0x70` and `+0xb4`, then walks the turret's
+    node and every ancestor through `+0x58` up to the root, and writes `0` when any of them is
+    inactive (`0x004aac8a`, `0x004aacb0`) or the root reached is not the world root `DAT_0071c0b8`
+    (`0x004aacc1`). Such a tick drops the target (`0x004aacfb`) and returns (`0x004aad10`).
+
+  `gwNodeSetActive` (`FUN_004cca30`, and `FUN_004e0b90` for a kind-10 node) toggles the one node it
+  is given and does not recurse. So a gun whose own nodes are switched off, or destroyed, stays at
+  `0`. A gun whose own nodes stay active under an ancestor a `.gw` switched off (a ring under a
+  hidden hull root) alternates: the set branch clears the byte, and the next tick's clear branch,
+  which reads no ancestor, sets it again. In the original that gun is a candidate on every other
+  tick, and on each revived tick it runs on to the `ACTIVATED` gate.
+- `+0x6d` is the turret-pass byte. The constructor `FUN_004a9a60` sets it to `1` (`0x004a9b10`),
+  and the one other writer clears it: `FUN_00473090`, the vehicle's turret-mount builder (called
+  twice from `FUN_00476250`, at `0x00476a1b` and `0x00476a36`, for the def's two mount lists),
+  creates each carried gunner through `FUN_004ac480` by `TITLE` and writes `0` at `0x0047313a`.
+  The emplacement builder `FUN_004ac170` (every `ai.zrd` entry whose `CREATE_STANDALONE` is absent
+  or non-zero, per `NODES` match) leaves it set. `0x004a5bda` is its only reader.
+
+So a gun carried by an aeroplane is in `DAT_0071d914` and never a candidate, of a turret or of an
+AI pilot, while an airship's guns, which are `NODES` emplacements on the hull's nodes, are. Two
+hulls' guns inside each other's `DETECTION_RANGE` duel. The pass adds no line-of-sight test; the
+range gate is the cost function's, on the true distance.
+
+⚠ **CSVM's reading of a hidden gun is a remake-only rule.** `TurretController.Alive` reads the
+healthy node's visibility in the tree, so a gun under a hidden hull root is never a candidate, on
+any tick; the original's alternating byte would let a visible gun shoot at an unseen one on every
+other frame, and no gun fires at an unseen gun here.
+
+Whether two live hulls duel in a shipped Instant Action: C1C/IA1 and C5/IA1 leave `piratezep`
+switched on, parked at the map corner, the origin ([../formats/interp.md](../formats/interp.md)),
+and a `zeppelin_run` there switches on `multiplayer1zep`, which flies its net (`IAZep`, C1C
+`ne000035`; `IAZeprun`, C5 `ne000030`). No node or edge of either net comes nearer the origin than 8380 m
+(C1C) or 8454 m (C5), against a largest `DETECTION_RANGE` of 1000 m in `ai.zrd`, so the two hulls'
+guns never stand in each other's range. C1C is also not offered by the Instant Action launcher.
 
 **The picker's 4th argument, the one that switches the structure pool on, is
 `DAT_00629c20 != 0 || turretTeam != playerTeam`** (`0x004aaf71`). `DAT_00629c20` is set to `1` at
@@ -537,8 +582,12 @@ CSVM's `TurretController.Cost` is this sum. Its `0.8` goes to every human-pilote
 local or remote, a remake-only rule: the original has one local player and CSVM's splitscreen and
 network play have several, so the condition that generalises is human against AI, as the aim
 assist's ([`aim-assist.md`](aim-assist.md), Decision 7) and the AI pilot's ranking already read it. It also keeps
-every machine of a network match ranking a world emplacement's candidates alike. CSVM's gunner walks no turret pool, so the `37.5`
-has no candidate to apply to.
+every machine of a network match ranking a world emplacement's candidates alike. Its turret pass
+takes the hostile, alive world emplacements (`ProjectilePool.CollectTurretEmplacements`) at
+`Cost(d + 37.5, 1.0)`, between the vehicles and the structures on a strict win, so an enemy gun
+must stand 37.5 m nearer than an AI aeroplane of no `target_bias` to be taken. The remake-only
+aircraft-first preference withdraws it with the structures while an aircraft is in reach, as it
+withdraws both classes from the AI pilot's picker.
 
 ### Nothing in the turret path reads an objective, capture or pickup flag
 

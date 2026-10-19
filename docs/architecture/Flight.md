@@ -114,14 +114,14 @@ Schema: [../formats/turrets.md](../formats/turrets.md); the team space:
 [../org/targeting.md](../org/targeting.md). Read `TurretController.cs` next.
 
 ## src/Flight/Weapons/TurretController.cs
-One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host off the vehicle def's
-`TurretMount`s, ticked from `FlightController.SimStep`) and world emplacement (`BuildEmplacements`,
-per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`). Per tick it takes
-the cheapest hostile (`Cost`: distance, weight times 1200, a vehicle's `target_bias`) out of the
-vehicle list, the mission structures (not while `AircraftFirst` holds and an aircraft is in reach)
-and the `TARGETABLE` rounds (0.6 for a `PrefersOrdnance` zeppelin gun), solves the lead through
-`AimAssist.TryIntercept`, slews the PARTS nodes inside the arcs, and runs the fire gates
-(activation, attack window, barrel cone, cached line of sight, `FIRE_RATE`), each round renewing its `GunVoice` off `SOUNDS.CANNON`. A carried turret reports each round to its host rig, which is what a network match puts on the wire, and the gunner on an aeroplane flown elsewhere does not run here at all. An acquired human player is reported once per episode to `ProjectilePool`, the combat voice's `WA-Turret` site. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md), [../formats/combat-voice.md](../formats/combat-voice.md).
+One `ai.zrd` turret gunner, both families: carried (`BuildCarried` off the vehicle def's
+`TurretMount`s, ticked by `FlightController.SimStep`) and world emplacement (`BuildEmplacements` per
+matched `NODES` node, ticked by `Session/TurretEmplacementRuntime`). Per tick it takes the cheapest
+hostile by `Cost` over the vehicle list, the world emplacements, the mission structures and the
+`TARGETABLE` rounds, solves the lead (`AimAssist.TryIntercept`), slews the PARTS nodes inside the
+arcs and runs the fire gates, renewing its `GunVoice` per round. A carried gunner reports its rounds
+to its host rig, the network path; an acquired human goes once per episode to `ProjectilePool`.
+Decode: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Flight/Ai/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path

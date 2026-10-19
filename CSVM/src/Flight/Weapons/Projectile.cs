@@ -940,8 +940,22 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Registers the session's world emplacements for
-    /// <see cref="CollectTurrets"/>, the same one-live-roster rule as the aircraft list.</summary>
+    /// <summary>The world emplacements, narrowed to those a turret on <paramref name="team"/> can pick,
+    /// as <see cref="CollectTurretStructures"/> narrows. The team is read before the engine calls; the
+    /// turret's own pass applies the team rule. A carried gunner is never one (docs/org/targeting.md).</summary>
+    public void CollectTurretEmplacements(AimCandidateSet into, int team)
+    {
+        foreach (var turret in _worldTurrets)
+        {
+            if (AimAssist.Hostile(team, turret.Team) && turret.Alive)
+            {
+                into.AddTurret(turret.WorldPosition, turret.PlatformVelocity, turret.Team, live: true, turret);
+            }
+        }
+    }
+
+    /// <summary>Registers the session's world emplacements for <see cref="CollectTurrets"/> and
+    /// <see cref="CollectTurretEmplacements"/>, the same one-live-roster rule as the aircraft list.</summary>
     public void RegisterWorldTurrets(IReadOnlyList<TurretController> turrets) =>
         _worldTurrets.AddRange(turrets);
 

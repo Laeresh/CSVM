@@ -527,7 +527,7 @@ public sealed class AimCandidateSet
     /// <summary><see cref="AddStructures"/> narrowed to what a turret on <paramref name="team"/> can
     /// pick: a live, hostile pool that is not a gasbag. Those reads are plain fields and run before
     /// the anchor's engine calls, so a scan over a large registry pays for the hostile few alone.
-    /// The turret's own pass drops the rest, so what it picks is unchanged.</summary>
+    /// The gasbag drop is the turret picker's rule and lives here alone; the team rule is re-read by the pass.</summary>
     public void AddTurretStructures(DestructibleRegistry registry, int team)
     {
         foreach (var inst in registry.All)

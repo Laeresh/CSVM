@@ -884,6 +884,9 @@ internal static class AiSuites
 
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], false),
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
+                    // Hidden again, as C1/IA1 leaves it. Its rings stand within 65 m of the piratezep's,
+                    // and a stowed gun alive in the tree is still an enemy gun's candidate.
+                    mp1[0].Visible = false;
                 }
 
                 // The stand-in wakes it, explicit, counted, logged, and it engages. ⚠ BORED pinned
