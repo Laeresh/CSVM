@@ -114,8 +114,9 @@ What a rebinding screen may capture, and the scan that turns a press into a `Bin
 key list, Godot's pad button and SDL axis ranges, and the mouse buttons past the pointer's own. `Arm`
 masks everything already held. Every pad control is stamped with the seat's own identity, not a
 hardware GUID. A key pressed under Shift, Ctrl or Alt carries them; a modifier bound alone resolves
-on its release. A pad axis is rest-then-move, since a resting stick drifts, with a fixed
-`CapturedDeadzone`. A pad's hat is not scanned; sticks are, through `StickCapture`, steered by the
+on its release. A pad axis is rest-then-move, since a resting stick drifts, stamped by
+`PadDeadzoneFor(row)`: the stick's `DeadzoneFor(row)` on a flight row, `CapturedDeadzone` (0.5)
+elsewhere. A pad's hat is not scanned; sticks are, through `StickCapture`, steered by the
 constructor's `row` and `sticksOnly`. Escape and the pad's Back cancel and are never captured.
 
 ## src/Bindings/StickCapture.cs
