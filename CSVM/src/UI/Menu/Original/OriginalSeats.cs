@@ -288,9 +288,11 @@ public sealed partial class OriginalShell
             return chips;
         }
 
-        // A co-op host's own first seat goes by its callsign, as a lobby host's row does.
+        // A co-op host's own first seat goes by its callsign, as a lobby host's row does. A player
+        // its cap sits out has no chip.
         var seats = _setup.Seats;
-        for (int i = 0; i < seats.Count; i++)
+        int flown = _net is { IsCoopHost: true } coopHost ? Math.Min(seats.Count, coopHost.CoopSeats) : seats.Count;
+        for (int i = 0; i < flown; i++)
         {
             chips.Add(Chip(i, true, false, _net is { IsCoopHost: true } open ? open.CoopSeatName(i) : ""));
         }

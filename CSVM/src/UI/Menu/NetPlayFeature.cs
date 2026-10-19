@@ -204,9 +204,11 @@ public sealed class NetPlayFeature : IMenuFeature
         set => _localSeats = Math.Clamp(value, 1, _picks.Length);
     }
 
-    /// <summary>How many seats the host gave this co-op guest's machine. That is its first, then as
-    /// many more as it asked (<see cref="LocalSeats"/>) and the cap had room for.</summary>
-    public int CoopSeats => CoopFlow is { } flow ? Math.Min(_localSeats, 1 + flow.Extra) : 1;
+    /// <summary>How many seats this co-op machine flies. A guest's are its first, then as many more
+    /// as it asked (<see cref="LocalSeats"/>) and the cap had room for. A host's are its local
+    /// players as its admission granted them, the same way.</summary>
+    public int CoopSeats =>
+        IsCoopHost ? HostSeats : CoopFlow is { } flow ? Math.Min(_localSeats, 1 + flow.Extra) : 1;
 
     /// <summary>How many other peers are on the wire: the guests a host has, or 1 once a guest
     /// has reached its host. A guest a campaign host refused as full is not counted.</summary>
@@ -345,7 +347,7 @@ public sealed class NetPlayFeature : IMenuFeature
         get
         {
             var guests = new List<CoopGuest>(_admission.Admitted.Count);
-            int slot = _localPlayers;
+            int slot = HostSeats;
             foreach (int peer in _admission.Admitted)
             {
                 for (int local = 0; local < _admission.GrantedTo(peer); local++, slot++)
@@ -387,14 +389,16 @@ public sealed class NetPlayFeature : IMenuFeature
     }
 
     /// <summary>The line a machine shows when the cap gave it fewer seats than its players, or ""
-    /// when every player has one. A co-op guest's band shows it. So do a Dogfight lobby's pinned
-    /// rows, on a guest or on a host whose joined seats outrun its own cap.</summary>
+    /// when every player has one. A co-op host's or guest's band shows it. So do a Dogfight lobby's
+    /// pinned rows, on a guest or on a host whose joined seats outrun its own cap.</summary>
     public string SeatsShort
     {
         get
         {
-            int flown = IsCoopGuest ? CoopSeats : _dogfight?.SeatsFlown ?? _localSeats;
-            return (IsCoopGuest || _dogfight != null) && flown < _localSeats ? CoopDoorText.SeatsShort(flown, _localSeats) : "";
+            bool coop = IsCoopHost || IsCoopGuest;
+            int joined = IsCoopHost ? _localPlayers : _localSeats;
+            int flown = coop ? CoopSeats : _dogfight?.SeatsFlown ?? joined;
+            return (coop || _dogfight != null) && flown < joined ? CoopDoorText.SeatsShort(flown, joined) : "";
         }
     }
 
@@ -470,10 +474,10 @@ public sealed class NetPlayFeature : IMenuFeature
     public bool CoopFlightOver =>
         !IsCoopGuest || CoopFlow is not { Screen: NetCoopScreen.InMission } flow || (_flightEpoch is { } flown && flow.Epoch != flown);
 
-    // The seats this host's machine flies against the cap: a campaign's local players, or the
-    // Dogfight's joined seats its admission granted. A joined seat past them sits out
-    // (SeatsShort). One the host lets go leaves at once, before the next admission.
-    private int HostSeats => _kind == NetSessionKind.CampaignCoop ? _localPlayers : Math.Min(_localSeats, _admission.HostSeats);
+    // The seats this host's machine flies against the cap: its joined seats, a campaign's local
+    // players or a Dogfight's pads, as its admission granted them. A joined seat past them sits
+    // out (SeatsShort). One the host lets go leaves at once, before the next admission.
+    private int HostSeats => Math.Min(HostJoined, _admission.HostSeats);
 
     // The seats this host's machine asks the admission for.
     private int HostJoined => _kind == NetSessionKind.CampaignCoop ? _localPlayers : _localSeats;
@@ -490,7 +494,7 @@ public sealed class NetPlayFeature : IMenuFeature
     {
         if (IsCoopHost)
         {
-            if (slot < _localPlayers)
+            if (slot < HostSeats)
             {
                 return slot == 0 ? Identity.PlayerName : "";
             }
@@ -805,8 +809,9 @@ public sealed class NetPlayFeature : IMenuFeature
         OpenHost(Math.Min(maxGuests, CoopHumans), NetSessionKind.CampaignCoop);
 
     /// <summary>What a coop host's advert names: its next mission, its host name, and its local
-    /// player count. Guests are counted on top of
-    /// <paramref name="localPlayers"/>. Reaches the peers on the next <see cref="Step"/>.</summary>
+    /// player count. The players count against the cap with every seat a guest holds, and one
+    /// signed on in a full lobby sits out (<see cref="CoopSeats"/>). Reaches the peers on the next
+    /// <see cref="Step"/>.</summary>
     public void Offer(int missionSeq, string hostName, int localPlayers)
     {
         _missionSeq = missionSeq is >= 0 and < SessionAdvertMessage.NoMission
@@ -1278,7 +1283,7 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         var seated = new List<(int Peer, int Seats)>(_admission.Admitted.Count);
-        int humans = _localPlayers;
+        int humans = HostSeats;
         foreach (int peer in _admission.Admitted)
         {
             seated.Add((peer, _admission.GrantedTo(peer)));
@@ -1291,7 +1296,7 @@ public sealed class NetPlayFeature : IMenuFeature
             names[slot] = CoopSeatName(slot);
         }
 
-        HostFlow.Send(_transport, seated, _localPlayers, _epoch, ReadyNow, names);
+        HostFlow.Send(_transport, seated, HostSeats, _epoch, ReadyNow, names);
     }
 
     // At once rather than on the next step, so a film's end reaches a guest before the board after it.

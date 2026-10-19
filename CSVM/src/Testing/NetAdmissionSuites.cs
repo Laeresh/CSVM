@@ -31,12 +31,17 @@ internal static class NetAdmissionSuites
         + "the same step a newcomer arrives; a pad a guest drops frees its place to the host's waiting "
         + "seat ahead of a newcomer arriving in the same step and ahead of another guest's waiting seat; "
         + "an earlier guest's added pad sits out rather than take a later guest's granted second seat, "
-        + "and takes the place that guest's dropped pad frees")]
+        + "and takes the place that guest's dropped pad frees; a campaign host capped at four and full "
+        + "with three guests sits out the further guest it signs on, the field its advert and "
+        + "every guest's flow name staying at four, and that player takes the place a leaving guest "
+        + "frees before a later arrival, which is refused as full; it never takes a guest's granted "
+        + "second seat")]
     internal static void ALaunchSeatsOnlyTheListedPeers(TestContext ctx)
     {
         DogfightLaunch(ctx);
         CoopBind(ctx);
         HostSeatPastTheCap(ctx);
+        CoopHostPlayerPastTheCap(ctx);
     }
 
     private static void DogfightLaunch(TestContext ctx)
@@ -210,9 +215,44 @@ internal static class NetAdmissionSuites
         });
     }
 
-    // A cap-four Dogfight host flying one seat and filled by guests joined with the given seats each.
-    // The carrier holds one more guest off the wire until a leg lets it arrive.
-    private static void InAFullLobby(TestContext ctx, int seed, int[] guestSeats, Action<FullLobby, DogfightLobby> legs)
+    // A campaign host's local players count against the cap as a Dogfight host's seats do. Its
+    // field is what the advert and every guest's flow name.
+    private static void CoopHostPlayerPastTheCap(TestContext ctx)
+    {
+        InAFullLobby(ctx, 9, new[] { 1, 1, 1 }, coop: true, rig =>
+        {
+            var guests = rig.Guests;
+            rig.Host.Offer(3, HostName, 2);
+            rig.Settle();
+            ctx.Check(rig.Field == Cap && rig.HostFlies == 1 && rig.Host.SeatsShort.Length > 0 && guests.All(guest => guest.CoopFlow?.Humans == Cap),
+                $"a further guest the full campaign host signs on sits out, the field still {Cap} ({rig.Field} seats, host flies {rig.HostFlies}, guests told {rig.Humans}, short \"{rig.Host.SeatsShort}\")");
+
+            rig.Leave(2);
+            rig.Settle();
+            ctx.Check(rig.Field == Cap && rig.HostFlies == 2 && rig.Host.SeatsShort.Length == 0 && guests[0].CoopFlow?.Slot == 2,
+                $"a guest's leaving frees a place the host's waiting player takes ({rig.Field} seats, host flies {rig.HostFlies}, first guest at slot {guests[0].CoopFlow?.Slot})");
+
+            rig.Carrier.Unarrived.Clear();
+            rig.Settle();
+            ctx.Check(rig.Field == Cap && rig.Host.Peers == 2,
+                $"a guest arriving afterwards is refused as full ({rig.Field} seats, {rig.Host.Peers} guests)");
+        });
+
+        InAFullLobby(ctx, 10, new[] { 2, 1 }, coop: true, rig =>
+        {
+            rig.Host.Offer(3, HostName, 2);
+            rig.Settle();
+            ctx.Check(rig.Field == Cap && rig.HostFlies == 1 && rig.Guests[0].CoopSeats == 2,
+                $"the campaign host's added player sits out rather than take a guest's granted second seat ({rig.Field} seats, host flies {rig.HostFlies}, guest {rig.Guests[0].CoopSeats})");
+        });
+    }
+
+    private static void InAFullLobby(TestContext ctx, int seed, int[] guestSeats, Action<FullLobby, DogfightLobby> legs) =>
+        InAFullLobby(ctx, seed, guestSeats, coop: false, rig => legs(rig, rig.Host.Dogfight!));
+
+    // A cap-four host flying one seat, a Dogfight's or a campaign's, filled by guests joined with the
+    // given seats each. The carrier holds one more guest off the wire until a leg lets it arrive.
+    private static void InAFullLobby(TestContext ctx, int seed, int[] guestSeats, bool coop, Action<FullLobby> legs)
     {
         var mesh = LoopbackTransport.Mesh(guestSeats.Length + 2, LoopbackConditions.Perfect, new Random(seed));
         var carrier = new LateHangUp(mesh[0]) { Unarrived = { mesh[^1].LocalPeer } };
@@ -228,15 +268,23 @@ internal static class NetAdmissionSuites
 
         try
         {
-            rig.Host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            if (coop)
+            {
+                rig.Host.OpenCoopHost(NetSeats.MaxPlayers - 1);
+                rig.Host.Offer(3, HostName, 1);
+            }
+            else
+            {
+                rig.Host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            }
+
             rig.Guests.ForEach(guest => guest.OpenJoin());
             rig.Settle();
             rig.Guests.ForEach(guest => guest.Dogfight?.Show());
             rig.Settle();
-            var lobby = rig.Host.Dogfight!;
-            ctx.Check(lobby.SeatOwners.Count == Cap && rig.Host.Peers == guestSeats.Length && lobby.SeatsFlown == 1,
-                $"ABLE-TO-FAIL CONTROL: the host's seat and guests of {string.Join("+", guestSeats)} seats fill the cap of {Cap} ({lobby.SeatOwners.Count} seats, {rig.Host.Peers} guests)");
-            legs(rig, lobby);
+            ctx.Check(rig.Field == Cap && rig.Host.Peers == guestSeats.Length && rig.HostFlies == 1,
+                $"ABLE-TO-FAIL CONTROL: the {(coop ? "campaign" : "Dogfight")} host's seat and guests of {string.Join("+", guestSeats)} seats fill the cap of {Cap} ({rig.Field} seats, {rig.Host.Peers} guests)");
+            legs(rig);
         }
         finally
         {
@@ -258,6 +306,14 @@ internal static class NetAdmissionSuites
     private sealed record FullLobby(IReadOnlyList<LoopbackTransport> Mesh, LateHangUp Carrier, NetPlayFeature Host, List<NetPlayFeature> Guests)
     {
         public int Late => Mesh[^1].LocalPeer;
+
+        // The seats the host fields, a Dogfight's listed seats or a campaign's advertised players.
+        public int Field => Host.Dogfight?.SeatOwners.Count ?? Host.Advertising?.Players ?? 0;
+
+        public int HostFlies => Host.Dogfight?.SeatsFlown ?? Host.CoopSeats;
+
+        // The field each campaign guest was told.
+        public string Humans => string.Join(" ", Guests.Select(guest => guest.CoopFlow?.Humans));
 
         public void Settle()
         {

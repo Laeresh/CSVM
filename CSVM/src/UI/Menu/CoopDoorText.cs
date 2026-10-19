@@ -273,7 +273,8 @@ public static class CoopDoorText
     /// <summary>A campaign host's band. With a join code it names the guests, the code and the copy
     /// key <paramref name="way"/> offers, and on a second line whether the game is listed. Without
     /// one it names the port, the router's address and the guests, then
-    /// <see cref="HostFallbackLines"/>. Empty while the door is not a campaign host.</summary>
+    /// <see cref="HostFallbackLines"/>. A local player the cap sits out is named last
+    /// (<see cref="NetPlayFeature.SeatsShort"/>). Empty while the door is not a campaign host.</summary>
     public static string HostBand(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
@@ -284,11 +285,12 @@ public static class CoopDoorText
 
         int guests = net.Peers;
         string joined = guests == 1 ? "1 guest" : $"{guests.ToString(CultureInfo.InvariantCulture)} guests";
+        string shortLine = net.SeatsShort.Length > 0 ? "\n" + net.SeatsShort : "";
 
         // A code reaches this host from anywhere, so the address a guest would type is not shown.
         if (net.Internet.JoinCode is { } code)
         {
-            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code, way)}\n{Listing(net.Identity.Private)}";
+            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code, way)}\n{Listing(net.Identity.Private)}{shortLine}";
         }
 
         string port = net.Port.ToString(CultureInfo.InvariantCulture);
@@ -301,7 +303,7 @@ public static class CoopDoorText
         };
         var lines = new List<string> { $"NETWORK OPEN  {where}  {joined}" };
         lines.AddRange(HostFallbackLines(net, way));
-        return string.Join("\n", lines);
+        return string.Join("\n", lines) + shortLine;
     }
 
     /// <summary>What a host without a join code shows in its place. While the master server is still
@@ -530,7 +532,7 @@ public static class CoopDoorText
         return shortLine.Length > 0 ? $"CO-OP  {doing}\n{shortLine}" : $"CO-OP  {doing}";
     }
 
-    /// <summary>What a guest or a Dogfight host is told when the cap gave its machine
+    /// <summary>What a guest or a host is told when the cap gave its machine
     /// <paramref name="given"/> seats for its <paramref name="players"/> players.</summary>
     public static string SeatsShort(int given, int players)
     {
