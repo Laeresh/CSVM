@@ -72,7 +72,8 @@ The `README.md` in the zip has a "VR (experimental)" section with the details.
 - **Shadows:** in the headset the sun's shadows are hard-edged. The engine version CSVM uses makes
   the soft shadow cost more the farther you fly from one corner of the map, and that cost is too
   high for 90 Hz in VR.
-- **Cockpit gaps:** in some cockpits the world shows through small gaps around the gauges, and
+- **Cockpit gaps:** the original cockpit models were never meant to be seen in VR. They are very
+  simple and have many gaps, so in some cockpits the world shows through around the gauges, and
   beside the Bloodhawk's centre panel.
 - **Starting with VR Mode on** shows the flat window for a moment before the game restarts in the
   headset.
