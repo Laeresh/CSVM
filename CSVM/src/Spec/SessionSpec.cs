@@ -2036,7 +2036,8 @@ public sealed record SessionSpec
             VsLives = cli.VsLivesExplicit ? cli.VsLives : vsLives ?? cli.VsLives,
             VsAutoRespawn = cli.VsAutoRespawnExplicit ? cli.VsAutoRespawn : vsAutoRespawn ?? cli.VsAutoRespawn,
             Mode = SessionMode.Fly,
-            WorldMode = true,
+            // --stage=empty keeps its bare stage, as Parse rules for a command-line flight.
+            WorldMode = !cli.EmptyStage,
             Scenario = cli.ScenarioExplicit ? cli.Scenario : iaDef?.MissionType ?? mode switch
             {
                 MenuMode.Stunt => "stunt_flying",
