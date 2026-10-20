@@ -50,6 +50,12 @@ internal static class XrModeSuites
         + "player's saved VR mode")]
     internal static void XrRelaunchArgs(TestContext ctx)
     {
+        // VR is Windows only, so nothing elsewhere restarts into it; Linux .NET sees no command line.
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new SuiteSkippedException("the VR mode restart runs on Windows only");
+        }
+
         string[] commandLine = System.Environment.GetCommandLineArgs();
         string exe = Godot.OS.GetExecutablePath();
         ctx.Check(commandLine.Length > 0 && string.Equals(System.IO.Path.GetFileName(commandLine[0].Trim('"')),

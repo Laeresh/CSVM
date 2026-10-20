@@ -43,6 +43,9 @@ internal static class XrTuneSuites
         }
 
         string shipped = ProjectSettings.GlobalizePath(VrCockpits.DefaultPath);
+
+        // The lab saves into the file on disk, which an exported build packs into its .pck.
+        ctx.RequireData(shipped, $"the VR cockpit table on disk (a repo checkout's)");
         string dir = Path.Combine(Path.GetTempPath(), "csvm-tests", "xr-tune-" + Guid.NewGuid().ToString("N"));
         string file = Path.Combine(dir, "vr_cockpits.json");
         Directory.CreateDirectory(dir);

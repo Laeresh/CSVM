@@ -532,7 +532,15 @@ internal static class StuntRaceSuites
         var view = new ComposedBoardView();
         try
         {
-            var font = (line.Face is { } face ? view.Installed(face) : null) ?? view.GetThemeDefaultFont();
+            var installed = line.Face is { } face ? view.Installed(face) : null;
+            if (line.Face is { } missing && installed == null)
+            {
+                // Without the family the board sets its own wider face, and a long name scrolls.
+                ctx.Note($"the row face {missing.Family} is not installed here, so the widest-name fit is not measured");
+                return;
+            }
+
+            var font = installed ?? view.GetThemeDefaultFont();
             var measure = ComposedBoardView.MeasureBox(fit, font, line.Size);
             var (name, wide) = OriginalRosters.Airframes.Select(a => (a.Name, measure(a.Name, 100000f).X)).MaxBy(p => p.X);
             ctx.Note($"the widest stock airframe name, {name}, measures {wide:0.0} px");
