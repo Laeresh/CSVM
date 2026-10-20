@@ -173,7 +173,11 @@ public sealed class WorldSession
             // Null when the chapter ships no such file, every decoration then stands at its
             // authored model and size, which is also what an empty file (C1C/C2B) produces.
             var clutterProps = ClutterTemplateSpec.Load(o.ChapterZrdrPath);
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps);
+            // The armed volumes mark the stamps inside them by row. ⚠ The rows are VolumesOf's
+            // order, a walk of gamez.Nodes, which SkyStage's census for WeatherRig repeats exactly.
+            var fogVolumes = FogVolumeSpec.Load(o.ChapterZrdrPath) is { FogZoneArmed: true }
+                ? FogVolumeSpec.VolumesOf(gamez) : null;
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);

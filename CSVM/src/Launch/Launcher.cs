@@ -516,6 +516,8 @@ public partial class Launcher : Node3D
         // The per-view table beside them, empty, so every shader reads the four above until a
         // splitscreen pane's zone differs from the first one's.
         FogViewTable.RegisterGlobals();
+        // The fog volumes' planes and zone fog, for the Enhanced view of a volume from outside.
+        WeatherRig.RegisterGlobals();
         // The same SUNLIGHT uncollapsed, for the cloud cards and the enhanced billboard grades
         // (docs/org/vertexLighting.md). The defaults, ambient 1 and diffuse 0, draw a card as
         // authored in a view without mission weather.

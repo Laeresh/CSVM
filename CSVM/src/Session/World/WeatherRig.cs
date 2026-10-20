@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using CSVM.Effects;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -23,6 +24,18 @@ namespace CSVM.Session.World;
 /// docs/org/weather.md.</summary>
 public sealed class WeatherRig
 {
+    /// <summary>The global sampler holding the volume zone's fog and the armed volumes' planes
+    /// (<see cref="VolumeFogData"/>). The count global beside it is 0 when nothing is published.
+    /// <c>csky_fog_volume.gdshaderinc</c> reads both. <c>Launcher</c> registers them.</summary>
+    public const string VolumeFogDataParam = "csky_fog_volume_data";
+
+    /// <inheritdoc cref="VolumeFogDataParam"/>
+    public const string VolumeFogCountParam = "csky_fog_volume_count";
+
+    /// <summary>The D of a padding plane in <see cref="VolumeFogData"/>. With a zero normal, every
+    /// point lies this deep inside it. So it neither cuts the ray nor thins the fog.</summary>
+    public const float VolumeUnboundD = 1e9f;
+
     // ⚠ TUNE, judged at the controls: the authored SUNLIGHT numbers are the original's own
     // lighting units, not Godot energies. Both factors are anchored on the install's modal day
     // zone (diffuse 1.5, ambient 0.5) landing on the 1.6 and 0.9 the faithful path hardcodes, so
@@ -81,6 +94,57 @@ public sealed class WeatherRig
     // The original's camera state inside an armed fog volume, which wears ZONE3. Rule: docs/org/weather.md,
     // "Precedence: 3 beats 2".
     private const int InVolumeCameraState = 3;
+
+    // The camera state below the deck and outside every volume. It is the only one a C5 camera
+    // outside a strip reaches, since C5's deck band sits at 9,950 m (docs/org/weather.md).
+    private const int OutsideCameraState = 1;
+
+    // Metres the volume body's boxes stand off the volumes' bounds, so no face lies on a wall.
+    private const float VolumeBodyMargin = 1f;
+
+    // The face planes csky_fog_volume.gdshaderinc reads per volume (CSKY_FOG_VOLUME_MAX_FACES).
+    private const int VolumeMaxFaces = 16;
+
+    // The body draws first among the transparent passes, so nothing in front of a volume greys.
+    // Everything translucent draws after it ungreyed: the blended ground layer, the fvol cloud
+    // cards and the emitters (docs/org/weather.md, the volume approach).
+    private const int VolumeBodyPriority = (int)RenderingServer.MaterialRenderPriorityMin;
+
+    // The volume body (VolumeBody). Its far faces carry each pixel's view ray. The scene depth ends
+    // the ray at the opaque surface there; over the sky it runs its whole RAY, past the map.
+    private const string VolumeBodyShader = """
+        shader_type spatial;
+        render_mode unshaded, blend_mix, cull_front, depth_draw_never, depth_test_disabled, shadows_disabled, fog_disabled;
+
+        #include "res://shaders/csky_atmosphere.gdshaderinc"
+        #include "res://shaders/csky_fog_volume.gdshaderinc"
+
+        uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
+        const float RAY = 32768.0;
+        // C5's strip streets, its zone-3 meshes, lie at 0 to 44 m, and an outside view draws none
+        // of them. So a ray into a strip ends at street level rather than in the void below.
+        const float STREET_Y = 0.0;
+        varying flat int v_row;
+
+        void vertex() {
+            v_row = int(UV.x + 0.5);
+        }
+
+        void fragment() {
+            float raw = texture(depth_texture, SCREEN_UV).r;
+            vec4 scene = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, raw, 1.0);
+            float scene_m = raw > 0.0 ? length(scene.xyz / scene.w) : RAY;
+            vec3 eye = CAMERA_POSITION_WORLD;
+            vec3 ray = normalize((INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz - eye) * RAY;
+            float street = ray.y < 0.0 ? (STREET_Y - eye.y) / ray.y : 1.0;
+            float over = csky_fog_volume_over(v_row, eye, ray, clamp(min(scene_m / RAY, street), 0.0, 1.0));
+            if (over <= 0.0) {
+                discard;
+            }
+            ALBEDO = csky_fog_volume_color();
+            ALPHA = over;
+        }
+        """;
 
     // TUNE, judged at the controls, enhanced mode only. A view takes the volume zone's fog and dome over
     // this last stretch to an armed volume's wall. Rule: docs/org/weather.md, the volume approach.
@@ -169,6 +233,10 @@ public sealed class WeatherRig
     // and the authored fog_color (FogVolumeWhiteout). Disarmed everywhere but C5, where it costs
     // nothing: Density short-circuits on the flag before touching a volume.
     private FogVolumeWhiteout _fogWhiteout = FogVolumeWhiteout.Disarmed;
+    // The texture behind VolumeFogDataParam, held so the global keeps a live reference.
+    private ImageTexture? _volumeFogTexture;
+    // The armed volumes' body (VolumeBody), built with the first publish.
+    private MeshInstance3D? _volumeBody;
     // The first rig in the list Tick is handed. Its zone drives everything there is one of per
     // session (the scene sun, its bearing, the ambient) and the plain fog and vertex-light globals.
     private int _primary;
@@ -369,6 +437,52 @@ public sealed class WeatherRig
             Mathf.Lerp(from.WorldLight, to.WorldLight, t));
     }
 
+    /// <summary>Registers <see cref="VolumeFogDataParam"/> and <see cref="VolumeFogCountParam"/>,
+    /// once per process before any material reads them. The defaults, no texture and count 0, draw
+    /// nothing.</summary>
+    public static void RegisterGlobals()
+    {
+        RenderingServer.GlobalShaderParameterAdd(VolumeFogDataParam,
+            RenderingServer.GlobalShaderParameterType.Sampler2D, default);
+        RenderingServer.GlobalShaderParameterAdd(VolumeFogCountParam,
+            RenderingServer.GlobalShaderParameterType.Int, 0);
+    }
+
+    /// <summary>The RGBA float texels of <see cref="VolumeFogDataParam"/>, <paramref name="width"/>
+    /// to a row. Row 0 is the volume zone's linear fog colour, then its range and altitude. Row
+    /// v + 1 is volume v's outward face planes as (normal, D), padded with (0, 0, 0,
+    /// <see cref="VolumeUnboundD"/>). Pure.</summary>
+    public static float[] VolumeFogData(FogWritten zone, IReadOnlyList<FogVolumeBox> volumes, out int width)
+    {
+        // Row 0's two texels set the floor.
+        width = 2;
+        foreach (var volume in volumes)
+            width = Math.Max(width, volume.Faces.Count);
+        var data = new float[width * (volumes.Count + 1) * 4];
+        for (int at = (width * 4) + 3; at < data.Length; at += 4)
+            data[at] = VolumeUnboundD;
+        data[0] = zone.ColorLinear.X;
+        data[1] = zone.ColorLinear.Y;
+        data[2] = zone.ColorLinear.Z;
+        data[4] = zone.Range.X;
+        data[5] = zone.Range.Y;
+        data[6] = zone.Altitude.X;
+        data[7] = zone.Altitude.Y;
+        for (int v = 0; v < volumes.Count; v++)
+        {
+            for (int i = 0; i < volumes[v].Faces.Count; i++)
+            {
+                var face = volumes[v].Faces[i];
+                int at = (((v + 1) * width) + i) * 4;
+                data[at] = face.Normal.X;
+                data[at + 1] = face.Normal.Y;
+                data[at + 2] = face.Normal.Z;
+                data[at + 3] = face.D;
+            }
+        }
+        return data;
+    }
+
     /// <summary>Paints one Environment's sky a single flat colour, enhanced mode's stand-in for
     /// the mission's horizon dome. Godot draws a reflection off a <c>Sky</c> resource only, so the
     /// colour goes in as a panorama; a background colour alone leaves the specular with no radiance
@@ -414,6 +528,7 @@ public sealed class WeatherRig
         Resolve(_baseFog);
         foreach (var view in _views.Values)
             Resolve(view);
+        PublishVolumeFog();
         var primary = PrimaryView();
         if (primary.Zone != null)
             WriteGlobals(FogOf(_primary), FogField.All);
@@ -833,6 +948,82 @@ public sealed class WeatherRig
             WriteGlobals(FogOf(rig.Index), FogField.All);
     }
 
+    // The volumes seen from outside (csky_fog_volume.gdshaderinc): the volume zone's fog and every
+    // armed volume's planes. Published when the chapter arms them and no sky zone is forced; count 0
+    // leaves it off. Also builds the volumes' body, shown under Enhanced alone.
+    private void PublishVolumeFog()
+    {
+        bool on = _weather != null && _fogWhiteout.Armed && !_spec.SkyZoneExplicit && _fogVolumes.Count > 0;
+        RenderingServer.GlobalShaderParameterSet(VolumeFogCountParam, on ? _fogVolumes.Count : 0);
+        if (!on)
+            return;
+        var fog = ZoneFog(_weather!.Zone(_weather.ZoneForState(InVolumeCameraState)));
+        float[] data = VolumeFogData(fog, _fogVolumes, out int width);
+        if (width > VolumeMaxFaces)
+            Log.Error("world", $"fog volume body: a volume carries {width} face planes, the shader reads {VolumeMaxFaces}");
+        _volumeFogTexture = TextureUpload.Create(width, _fogVolumes.Count + 1, Image.Format.Rgbaf,
+            MemoryMarshal.AsBytes(data.AsSpan()).ToArray());
+        RenderingServer.GlobalShaderParameterSet(VolumeFogDataParam, _volumeFogTexture);
+        if (_volumeBody == null)
+        {
+            _volumeBody = VolumeBody();
+            _worldRoot.AddChild(_volumeBody);
+        }
+        _volumeBody.Visible = GraphicsMode.Enhanced;
+    }
+
+    // One box per volume around its bounds, carrying its texture row in UV.x. The shader fogs each
+    // pixel over the view ray's stretch inside the volume's own shape, up to the scene depth. So the
+    // blocks, the undrawn street and the ground and sky behind grey together. On the outside state's
+    // zone layer, so a camera inside a volume, which wears the zone's own fog, never draws it. A
+    // spyglass picture takes its pane's layers, so an eye across a wall from its pane disagrees.
+    private MeshInstance3D VolumeBody()
+    {
+        var vertices = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        (Vector3 N, Vector3 U, Vector3 V)[] faces =
+        {
+            (Vector3.Right, Vector3.Up, Vector3.Back), (Vector3.Left, Vector3.Back, Vector3.Up),
+            (Vector3.Up, Vector3.Back, Vector3.Right), (Vector3.Down, Vector3.Right, Vector3.Back),
+            (Vector3.Back, Vector3.Right, Vector3.Up), (Vector3.Forward, Vector3.Up, Vector3.Right),
+        };
+        for (int v = 0; v < _fogVolumes.Count; v++)
+        {
+            var box = _fogVolumes[v].Box.Grow(VolumeBodyMargin);
+            var centre = box.GetCenter();
+            var half = box.Size / 2f;
+            foreach (var (n, u, w) in faces)
+            {
+                // Clockwise seen from outside, Godot's front face, so cull_front keeps the far side.
+                Vector3 Corner(float a, float b) => centre + (n * half) + (u * half * a) + (w * half * b);
+                foreach (var (a, b) in new[] { (-1f, -1f), (1f, 1f), (1f, -1f), (-1f, -1f), (-1f, 1f), (1f, 1f) })
+                {
+                    vertices.Add(Corner(a, b));
+                    uvs.Add(new Vector2(v + 1, 0f));
+                }
+            }
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = vertices.ToArray();
+        arrays[(int)Mesh.ArrayType.TexUV] = uvs.ToArray();
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        ShaderCensus.Note(VolumeBodyShader);
+        mesh.SurfaceSetMaterial(0, new ShaderMaterial
+        {
+            Shader = new Shader { Code = VolumeBodyShader },
+            RenderPriority = VolumeBodyPriority,
+        });
+        return new MeshInstance3D
+        {
+            Name = "FogVolumeBody",
+            Mesh = mesh,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Layers = ZoneGate.LayerFor(OutsideCameraState),
+        };
+    }
+
     // The approach's other half. The volume zone's grey dome shows only from inside, so a greying
     // city would stand over the black night dome until the wall. While a view approaches, its rig also
     // shows that dome, veiled in the outside fog colour by the weight still to go. It reads black far
@@ -1046,6 +1237,7 @@ public sealed class WeatherRig
     // globals keep their registered no-op range. Call LoadWeather first.
     private void SetupWeather(IReadOnlyList<PlayerRig> rigs)
     {
+        PublishVolumeFog();
         if (_weather == null)
             return;
         var fog = _weather.Zone(_activeZone);

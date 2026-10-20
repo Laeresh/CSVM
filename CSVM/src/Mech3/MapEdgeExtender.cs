@@ -869,7 +869,8 @@ public sealed partial class MapEdgeExtender : Node3D
                     continue;
                 if (!_sprites.TryGetValue((cx, cz), out var list))
                     _sprites[(cx, cz)] = list = new List<(int, Transform3D, Color, int)>();
-                list.Add((k, xf, fades[i], i));
+                // A mirrored stamp stands outside the fog volume its source stood in.
+                list.Add((k, xf, fades[i] with { A = 0f }, i));
             }
         }
     }

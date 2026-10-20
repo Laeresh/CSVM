@@ -4,6 +4,7 @@ using System.Globalization;
 using CSVM;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Session.World;
 using Godot;
 using Xunit;
 
@@ -157,6 +158,35 @@ public class FogVolumeTests
     public void AnAbsentFileIsNullRatherThanAThrow()
     {
         Assert.Null(FogVolumeSpec.Load(TestData.TempDir()));
+    }
+
+    /// <summary>A stamp inside a volume carries its texture row, one past the zone row. That row
+    /// holds the volume's planes, zero-padded to the widest volume.</summary>
+    [Fact]
+    public void AStampInsideAVolumeCarriesTheRowHoldingItsPlanes()
+    {
+        var box = new Aabb(new Vector3(0f, -10f, 0f), new Vector3(100f, 20f, 100f));
+        var planes = new[]
+        {
+            new Plane(Vector3.Right, 100f), new Plane(Vector3.Left, 0f),
+            new Plane(Vector3.Up, 10f), new Plane(Vector3.Down, 10f),
+            new Plane(Vector3.Back, 100f), new Plane(Vector3.Forward, 0f),
+        };
+        var other = new FogVolumeBox("fvol2", box, new[] { new Plane(Vector3.Up, -50f) });
+        var volumes = new[] { other, new FogVolumeBox("fvol1", box, planes) };
+        Assert.Equal(2f, ClutterBuilder.FogVolumeRow(volumes, new Vector3(50f, 0f, 50f)));
+        Assert.Equal(0f, ClutterBuilder.FogVolumeRow(volumes, new Vector3(150f, 0f, 50f)));
+
+        var zone = new WeatherRig.FogWritten(
+            new Vector3(0.004f, 0.005f, 0.006f), new Vector2(50f, 250f), new Vector2(9000f, 10000f), 1f);
+        float[] data = WeatherRig.VolumeFogData(zone, volumes, out int width);
+        Assert.Equal(6, width);
+        Assert.Equal(6 * 3 * 4, data.Length);
+        Assert.Equal(new[] { 0.004f, 0.005f, 0.006f, 0f }, data[0..4]);
+        Assert.Equal(new[] { 50f, 250f, 9000f, 10000f }, data[4..8]);
+        Assert.Equal(new[] { 0f, 1f, 0f, -50f }, data[24..28]);
+        Assert.Equal(new[] { 0f, 0f, 0f, WeatherRig.VolumeUnboundD }, data[28..32]);
+        Assert.Equal(new[] { 1f, 0f, 0f, 100f }, data[48..52]);
     }
 
     [ExtractedDataTheory]

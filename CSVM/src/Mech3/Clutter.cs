@@ -80,6 +80,9 @@ public sealed class ClutterBuilder
     // with no block here is retail-data-normal and means every default: no substitution, scale 1.
     private readonly ClutterTemplateSpec? _props;
 
+    // The armed fog volumes a stamp is tested against for its fade vector's w (FogVolumeRow).
+    private readonly IReadOnlyList<FogVolumeBox> _fogVolumes;
+
     // Every kind this Build will export, INCLUDING the substitution-only kinds minted in
     // ResolveProperties, models no template scatters directly, which exist solely as the target
     // of somebody else's roll (43 of C5's 78 blocks). They carry no CellPlacements, so they are
@@ -98,19 +101,20 @@ public sealed class ClutterBuilder
     // logs. Replaced per Build, never accumulated across two.
     private LatticeStats _stats = new();
 
-    /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path. Null leaves only
-    /// the sprite path.</param>
-    /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md), driving
+    /// <param name="scene">The world's SceneBuilder for the 3D decorations; null leaves only sprites.</param>
+    /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md) for
     /// <c>substitute</c>, <c>scale_range</c> and <c>far_fade_range</c>. Null builds every decoration
-    /// at its authored model and size, never fading, so a caller with no reader still gets clutter
-    /// rather than an exception.</param>
+    /// at its authored model and size, never fading, rather than throwing.</param>
+    /// <param name="fogVolumes">The chapter's armed fog volumes; a stamp inside one carries its row
+    /// in the fade vector's w (<see cref="FogVolumeRow"/>).</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
-        ClutterTemplateSpec? props = null)
+        ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null)
     {
         _gamez = gamez;
         _textures = textures;
         _scene = scene;
         _props = props;
+        _fogVolumes = fogVolumes ?? Array.Empty<FogVolumeBox>();
     }
 
     /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
@@ -168,6 +172,19 @@ public sealed class ClutterBuilder
     /// <summary>Shape attachments made by the last Build, one per collidable 3D decoration.</summary>
     public int SolidCollisionInstances { get; private set; }
 
+
+    /// <summary>A stamp's fade-vector w: one more than the index of the first fog volume holding
+    /// <paramref name="point"/>, 0 outside them all. It is the row csky_fog_volume.gdshaderinc reads
+    /// that volume's planes from.</summary>
+    public static float FogVolumeRow(IReadOnlyList<FogVolumeBox> volumes, Vector3 point)
+    {
+        for (int i = 0; i < volumes.Count; i++)
+        {
+            if (volumes[i].Contains(point))
+                return i + 1;
+        }
+        return 0f;
+    }
 
     /// <summary>The chapter's registered clutter template names, read from the interp extraction's
     /// <c>AddClutterTemplates</c> lines. Empty when the file or script is missing.
@@ -555,7 +572,7 @@ public sealed class ClutterBuilder
     // clutter rotate and stretch with the painted ground, and a fixed grid loses C1 most of its trees.
     private static void PlaceOnTriangle(Template template, Vector3 a, Vector3 b, Vector3 c,
         Vector2 uva, Vector2 uvb, Vector2 uvc, int owner, HashSet<(int, int, int)> seen,
-        LatticeStats stats, Random rng, Random fadeRng)
+        LatticeStats stats, Random rng, Random fadeRng, IReadOnlyList<FogVolumeBox> fogVolumes)
     {
         // ⚠ Guard world area and UV area independently. Neither implies the other, and a strip
         // artifact with healthy UVs and no world area plants a row of trees along a line.
@@ -636,7 +653,7 @@ public sealed class ClutterBuilder
                         // and leaving the substitute/scale draws alone keeps a fade A/B fade-only.
                         var fade = ClutterKindProps.FadeThresholds(
                             kind.FarFadeMin, kind.FarFadeMax, (float)fadeRng.NextDouble());
-                        target.Fades.Add(new Color(fade.X, fade.Y, fade.Z, 0f));
+                        target.Fades.Add(new Color(fade.X, fade.Y, fade.Z, FogVolumeRow(fogVolumes, p)));
 
                         // A sprite drops its basis and authored Y, since the shader re-faces it and
                         // its mesh carries the card's extent; a 3D decoration keeps both.
@@ -811,7 +828,17 @@ public sealed class ClutterBuilder
     // authored flags, emitted as variants so a lit, fogged kind gets the base form.
     // ⚠ A blended card takes depth_prepass_alpha, never depth_draw_never: a kind is one MultiMesh,
     // one draw in buffer order, so a card writing no depth is painted over by every later card.
-    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend) => $$"""
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
+    {
+        // Enhanced only: a blended card draws after the fog volume's body, so it greys itself.
+        bool volumeFog = blend && fogged && GraphicsMode.Enhanced;
+        string volumeDecls = volumeFog ? "#include \"res://shaders/csky_fog_volume.gdshaderinc\"\nvarying flat float v_fog_row;" : "";
+        string volumeVertex = volumeFog ? "\n    v_fog_row = INSTANCE_CUSTOM.w;" : "";
+        string volumeFragment = volumeFog
+            ? "    ALBEDO = mix(ALBEDO, csky_fog_volume_color(), csky_fog_volume_over(int(v_fog_row + 0.5), "
+                + "CAMERA_POSITION_WORLD, fog_world - CAMERA_POSITION_WORLD, 1.0));\n"
+            : "";
+        return $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_prepass_alpha" : "")}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageMode)}};
 
@@ -832,12 +859,13 @@ public sealed class ClutterBuilder
         #include "res://shaders/csky_instance_uniforms.gdshaderinc"
 
         varying flat float v_alpha;
+        {{volumeDecls}}
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
             // The authored far fade: past it the card collapses to its planted point and costs no
             // fragments; inside the ramp the fragment stage dithers it out.
-            v_alpha = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
+            v_alpha = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);{{volumeVertex}}
             // The face below replaces the instance basis. A hidden or cratered stamp has a zero
             // basis, so it is read off here, or the card keeps drawing.
             float live = step(1e-12, dot(MODEL_MATRIX[1].xyz, MODEL_MATRIX[1].xyz));
@@ -852,10 +880,11 @@ public sealed class ClutterBuilder
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
-        {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
+        {{(fogged ? FogLines : "")}}{{volumeFragment}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
         {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}
         """;
+    }
 
     // The basis a card's vertices are turned by, the rendering half of its decoration model's own
     // FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a different N").
@@ -1187,7 +1216,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 2]],
-                        uvs[i], uvs[i + 1], uvs[i + 2], owner, seen, _stats, rng, fadeRng);
+                        uvs[i], uvs[i + 1], uvs[i + 2], owner, seen, _stats, rng, fadeRng, _fogVolumes);
             }
             else
             {
@@ -1196,7 +1225,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[0]],
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        uvs[0], uvs[i], uvs[i + 1], owner, seen, _stats, rng, fadeRng);
+                        uvs[0], uvs[i], uvs[i + 1], owner, seen, _stats, rng, fadeRng, _fogVolumes);
             }
         }
     }

@@ -383,9 +383,37 @@ reciprocal metres, so the grey thickens through the approach rather than in its 
 the same stretch the rig also shows `dome_zone3`, veiled in the outside fog colour by the weight
 still to go (the `csky_tint` instance uniform). From outside, the strips' zone-3 street ground is
 undrawn and that dome is what fills the void, so sky and streets grey with the city. The night
-dome's stars and moon are behind it on the way in. The camera-state edge and the 16 m curtain stay
-at the wall, as in the original, which switches zone there, where a strip seen from just outside shows its
-blocks fully lit under the black `ZONE1` fog; Original keeps that switch.
+dome's stars and moon are behind it on the way in.
+
+Seen from outside, an armed volume greys what lies in it into that zone's fog
+(`csky_fog_volume.gdshaderinc`), so a strip seen from beyond the 100 m approach reads as a grey bank
+rather than a lit street over black ground. Under Enhanced the rig draws the volumes' body, one box
+around each volume's bounds whose far faces carry each pixel's view ray up to the scene depth. The
+ray also ends at street level (0 m): the strips' own streets are zone-3 meshes an outside view never
+draws, and a ray running on into that void would grey at full strength right at the wall. The fog
+is the volume zone's own colour and range, measured horizontally like the view's, on the stretch of
+that ray inside the volume's authored convex shape: the latest entry and earliest exit over its
+face planes. So a block at the strip's near edge stays nearly clear, the deep ones grey out, the
+ground and sky behind the strip grey with them, and any surface greys only where the ray to it
+crosses the volume. The fog thins toward every face by how deep the ray passes inside, against
+60 m or 0.08 of its distance, whichever is more (`CSKY_FOG_VOLUME_SOFT_METRES`/`_SLOPE`), so no
+face, near or far, ends the bank in a straight cut. The view keeps its own fog's share and the body
+lays only what exceeds it over the pixel. It sits on the outside state's zone layer, so a camera
+inside a volume never draws it; there the view already wears the zone's fog, so the in-strip look
+does not change, and at the wall the approach blend has already brought the view's fog to the
+zone's, which leaves the body nothing to add. Blocks outside every volume keep the night darkening
+above. The camera-state edge and the 16 m curtain stay at the wall, as in the original, which
+switches zone there; seen from just outside, the original shows a strip's blocks fully lit under
+the black `ZONE1` fog, and Original keeps that switch.
+
+The body draws first among the transparent passes, so nothing in front of a volume greys. Known
+limits of that order: everything translucent draws after it ungreyed, the blended ground layer's
+roads and decals, the fvol cloud cards, the emitters, and an unmarked card behind a strip, which
+paints over the strip's grey. A blended clutter card inside a volume writes no depth for the body,
+so it greys itself by the same term. Where two volumes overlap, each box lays its own grey over the
+other's, which unions the two rather than summing their metres. A spyglass picture takes its
+pane's layers, so an eye on the other side of a wall from its pane draws or skips the body as the
+pane does.
 
 ## The lens flare (measured, not decoded)
 
