@@ -25,7 +25,7 @@ terminal in the folder holding it and run this, with the name replaced by the ar
 actually have:
 
 ```
-sha256sum CSVM-v0.3.0-linux-x64.tar.gz
+sha256sum CSVM-v0.4.0-linux-x64.tar.gz
 ```
 
 The printed hash must match the one on the release page (upper and lower case do not
@@ -41,8 +41,8 @@ project published, rather than something a third party rebuilt or altered.
   compatibility renderer, which the engine may switch to on a machine without Vulkan.
   Current Mesa drivers (AMD and Intel) and NVIDIA's own driver provide Vulkan.
 - **A copy of the original game's installed folder**, the folder a Windows install of
-  Crimson Skies (the original 2000 PC game) creates. "Getting the original game's folder"
-  below covers where it can come from.
+  Crimson Skies (the original 2000 PC game) creates, or the game's disc or an ISO image of
+  it. "Getting the original game's folder" below covers where it can come from.
 - **About 1 GB of free disk space** for the game data you extract.
 - **For a flight stick only:** the system's SDL2 library, `libSDL2-2.0.so.0`. SteamOS and
   most desktop distributions install it already; elsewhere it is the `SDL2` or
@@ -60,7 +60,7 @@ CSVM first and unpack into it. From a terminal:
 
 ```
 mkdir CSVM
-tar -xzf CSVM-v0.3.0-linux-x64.tar.gz -C CSVM
+tar -xzf CSVM-v0.4.0-linux-x64.tar.gz -C CSVM
 ```
 
 `tar` keeps the executable permission that `CSVM.x86_64` and `tools/unzbd` carry in the

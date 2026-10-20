@@ -171,6 +171,8 @@ video memory.
 
 **Graphics and world**
 
+- Under Enhanced, C5's night city fades into its fog with distance instead of standing out bright
+  against a black background, and no band of buildings darkens at a fixed distance.
 - The C3 suspension bridge takes hits on its deck and towers, not only one rope.
 - The flat moon in C1, C1C and C5 no longer rolls with the aircraft.
 - The autogyro's second front propeller shows the blur disc.

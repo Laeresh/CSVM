@@ -19,7 +19,7 @@ terminal in the folder holding the zip and run this, with the name replaced by t
 actually have:
 
 ```
-Get-FileHash CSVM-v0.3.0-win64.zip -Algorithm SHA256
+Get-FileHash CSVM-v0.4.0-win64.zip -Algorithm SHA256
 ```
 
 The printed hash must match the one on the release page (upper and lower case do not
@@ -34,7 +34,8 @@ project published, rather than something a third party rebuilt or altered.
   the build picks whichever is available. Below that line the program starts and then
   vanishes at the intro film, before any menu; "The game disappears after it starts" below
   says how to recognise that case.
-- **A retail Crimson Skies install** (the original 2000 PC game) on this machine.
+- **A retail Crimson Skies install** (the original 2000 PC game) on this machine, or the
+  game's disc or an ISO image of it.
 - **About 1 GB of free disk space** for the game data you extract.
 - Nothing else. The .NET runtime this engine needs is inside the download, so there is no
   runtime or framework to install.
