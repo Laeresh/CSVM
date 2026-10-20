@@ -1,17 +1,3 @@
-<!--
-Draft for PublishRelease.ps1 -NotesFile. HTML comments do not render on the release page; delete
-this one before publishing.
-
-VR's release-time checks, after the bump and .\ExportRelease.ps1:
-1. In the clean-machine run (.\RunSandbox.ps1 -Driver sandbox\PublicRelease.ps1 -MapReadOnly
-   <retail install> -KeepOpen), double-click CSVM-VR.cmd in Downloads\CSVM-v0.4.0-win64\. The
-   sandbox has no OpenXR runtime: the game starts flat with "VR mode is on, but no headset started"
-   on the menu, and its log shows the OpenXR warning.
-2. At the headset with VDXR running, double-click .scratch\export\CSVM-VR.cmd: the newest file in
-   .scratch\export\logs\ carries "xr: OpenXR live runtime=" and "[world] vr quality: profile=vr".
-   Then turn VR Mode on in Options, quit, double-click CSVM.exe: the game restarts in the headset.
-Never run CSVM-VR.cmd beside the real exe from an agent: it starts OpenXR on the attached headset.
--->
 ## CSVM v0.4.0
 
 CSVM is a fan-made remake engine for **Crimson Skies** (2000, Zipper Interactive / Microsoft). It
