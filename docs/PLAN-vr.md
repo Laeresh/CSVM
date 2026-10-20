@@ -232,7 +232,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E, headset pass and release
 
 20. ☑ E20 Per-plane scale and eye-offset tuning at the headset
-21. ◐ E21 At-the-headset playtests on both runtimes
+21. ☑ E21 At-the-headset playtests on both runtimes
 22. ◐ E22 Experimental release: docs, shortcut, known issues
 
 ## Dependency and parallelism notes
@@ -1793,7 +1793,7 @@ At the headset (E21's batch; VDXR at 90 Hz, steps 9 and 26 again on SteamVR at 1
 - (6) Under Enhanced the pause board's colours match the flat game: pass (step 9, both runtimes).
 - At step 29 the author found the black bars round the menus, films and cutscenes distracting
   against the dark room; they are gone under a stereo root (`07b0b2417`). The menus without them
-  passed in SteamVR's step 26; the films without them are D15's owed look.
+  passed in SteamVR's step 26, a campaign intro without them in step 41 (D15).
 The tuned values (`TheaterLayout.Default`, `TheaterScreen.DimOpacity`, the surround's two tones)
 stay as built.
 
@@ -3474,10 +3474,10 @@ exit 0. At the headset (step 30 of E21's batch on VDXR 1.0.10 at 90 Hz, the stor
 2.17.10 at 120 Hz): all eleven planes signed off, the values committed in `4f3a1232e` and
 `d8660e694`.
 
-## E21 ◐ At-the-headset playtests on both runtimes
+## E21 ☑ At-the-headset playtests on both runtimes
 
 **Outcome: the headset batch is flown on both runtimes and its verdicts are recorded per item;
-network play in VR is still owed.**
+network play in VR passed.**
 
 **Goal.** The author has flown each mode in VR on VDXR and on Steam Link/SteamVR and judged comfort,
 controller binding, the theater screen, the HUD and the cutscene window.
@@ -3491,12 +3491,12 @@ controller binding, the theater screen, the HUD and the cutscene window.
   18-25 views and comfort; 26-29 menus, controllers, a cinema and a cutscene; 30 the per-plane
   tuning (E20); 31-34 the render thread, the runtime's recenter and the VR mode option; 35-37 the
   sunny maps; 38 Look Forward and Look Back recentering; 39 the flat flare's live swap on `G`; 40
-  the controllers off; 41 a campaign intro without bars and the mission end's fade. Step 27 (Built-in) was dropped with Built-in itself; C3's sun (step 35) was judged at
-  step 17. Under SteamVR steps 31, 32, 7, 9, 26 and 18 were repeated and passed; step 31's
+  the controllers off; 41 a campaign intro without bars and the mission end's fade. Step 27
+  (Built-in) was dropped with Built-in itself; C3's sun (step 35) was judged at step 17. Under SteamVR steps 31, 32, 7, 9, 26 and 18 were repeated and passed; step 31's
   recenter and parallax were not tried there (step 32's recenter was).
 - **Modes flown.** Free flight on C1, C3, C4 and C5; a dogfight against attacking Furies; the stunt
   course; the race ghost; Instant Action and a campaign mission from the menu; a campaign intro;
-  the `zipper` cinema. Network play was not flown in VR.
+  the `zipper` cinema; network play, a Steam Deck hosting and the headset machine joining.
 - **Fixes landed from the verdicts.** The flyby and the vignette (`efbf65f35`); the gunsight's red
   index mark, smaller ring and the spyglass's one size (`0a620d47d`); the level chase's unrolled
   frame and its hand-over fade (`dc382fccc`, `aa48e41d3` to `9bcc3d78d`); the pylon stores on the
@@ -3513,7 +3513,7 @@ controller binding, the theater screen, the HUD and the cutscene window.
   over the dash; the flat view's eye and gunsight offset is not fixed; the compass and sight-edge
   flicker about 67 km from the map centre is ignored for now and not filed; the Godot 4.7.2
   upgrade is deferred, possibly to 4.8.
-- **Still owed.** Network play in VR. SteamVR repeated only steps 7, 9, 18, 26, 31 and 32, so the
+- **One runtime only.** SteamVR repeated only steps 7, 9, 18, 26, 31 and 32, so the
   cutscene window, among others, was seen on VDXR alone.
 
 **Approach.** The checks ran as one scripted batch in place of `playtest` issues, each verdict
