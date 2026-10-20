@@ -871,7 +871,10 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   skips a listing SDL2 maps as a gamepad (`SDL_IsGameController`) and any device of Valve's vendor
   id `28DE` (the Deck's built-in controls, a Steam Controller and Steam Input's virtual pad), and
   opens every other device whether or not Godot lists it. Each skip logs its reason on a
-  `stick skipped:` line. Windows keeps the model match alone.
+  `stick skipped:` line. Windows keeps the model match alone, over the models Godot maps as
+  gamepads (`Input.IsJoyKnown`). A shipped build does not set `SDL_JOYSTICK_DIRECTINPUT=0`, so
+  Godot's SDL3 lists DirectInput flight sticks there as raw pads it has no mapping for; their
+  model must not keep SDL2 off them (issue #248).
 - **Godot's view of an opened stick.** `StickPump` hands the opened models to
   `Pads.ClaimForSticks`, and `Pads.Connected` leaves every Godot pad of a claimed model out of the
   pad roster, so the stick is read once, through its stick profile. A raw `InputEventJoypadButton`
