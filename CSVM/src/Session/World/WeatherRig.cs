@@ -78,7 +78,7 @@ public sealed class WeatherRig
     // dissolving into the coming haze instead of vanishing the frame before it starts.
     private const float EnhancedShadowFadeStart = 0.8f;
 
-    // The binary's camera state inside an armed fog volume, which wears ZONE3. Rule: docs/org/weather.md,
+    // The original's camera state inside an armed fog volume, which wears ZONE3. Rule: docs/org/weather.md,
     // "Precedence: 3 beats 2".
     private const int InVolumeCameraState = 3;
 
@@ -808,7 +808,7 @@ public sealed class WeatherRig
 
     // Enhanced only: outside an armed fog volume a view's fog runs toward the volume zone's own. The
     // ramp spans VolumeApproachMetres from the nearest volume. Flying in is then no step from
-    // a lit street to the grey bank. The original switches at the wall, as ApplyZoneEdge still does.
+    // a lit street to the grey bank. The original switches at the wall, as ApplyZoneEdge does.
     private void ApplyVolumeApproach(PlayerRig rig, WeatherState weather)
     {
         var view = ViewOf(rig.Index);
@@ -821,7 +821,7 @@ public sealed class WeatherRig
             && !insideZone.Equals(view.Trigger.Zone, StringComparison.OrdinalIgnoreCase))
         {
             foreach (var volume in _fogVolumes)
-                t = MathF.Max(t, FogVolumeWhiteout.VolumeDensity(volume, rig.Camera.Position, VolumeApproachMetres, 0f));
+                t = MathF.Max(t, FogVolumeWhiteout.VolumeDensity(volume, rig.SkyAnchor, VolumeApproachMetres, 0f));
             if (t > 0f)
                 approach = BlendFog(view.Fog, ZoneFog(inside), t);
         }

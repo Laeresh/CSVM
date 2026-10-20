@@ -373,7 +373,7 @@ that gives C5's small blocks (authored band 200 to 350 m) and its 21 tower kinds
 
 The `fvol` cards take the same ramp over their own AUTHORED band (1,000 to 1,800 m,
 `csky_clutter_dark`), since every card is authored `fog: false` and no zone fog darkens them. This
-is a remake-only rule: the original never draws those blocks past their band. Day zones and the
+is a remake-only rule: the original never draws the cards past their band. Day zones and the
 faithful path keep the authored fade.
 
 **The volume approach.** Under Enhanced a view's fog blends toward the fog volume's zone (C5's
@@ -383,8 +383,8 @@ reciprocal metres, so the grey thickens through the approach rather than in its 
 the same stretch the rig also shows `dome_zone3`, veiled in the outside fog colour by the weight
 still to go (the `csky_tint` instance uniform). From outside, the strips' zone-3 street ground is
 undrawn and that dome is what fills the void, so sky and streets grey with the city. The night
-dome's stars and moon are behind it on the way in. The camera-state edge and the 16 m curtain are
-unchanged. The original switches zone at the wall, where a strip seen from just outside shows its
+dome's stars and moon are behind it on the way in. The camera-state edge and the 16 m curtain stay
+at the wall, as in the original, which switches zone there, where a strip seen from just outside shows its
 blocks fully lit under the black `ZONE1` fog; Original keeps that switch.
 
 ## The lens flare (measured, not decoded)

@@ -437,7 +437,7 @@ rocketeer leads a motorless round in. The residual closes from any angle, and th
 soon as the band and the quick-draw cone allow. The rocketeer takes the first pylon that clears its
 own walk, which is that same pylon whenever every gasbag pylon carries one weapon, as every shipped
 fit does; a fit with two `DAMAGES_ZEPPELIN` weapons of different speeds could steer on one and fire
-the other. The gate's numbers are unchanged, and the rule does not vary with skill. Every AI off a bot
+the other. The gate keeps its decoded numbers, and the rule does not vary with skill. Every AI off a bot
 seat, the campaign's and Instant Action's included, keeps the decoded law. The `bot-torpedo-lead`
 suite pins both sides.
 
