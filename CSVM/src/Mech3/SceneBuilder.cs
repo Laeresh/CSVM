@@ -2048,7 +2048,7 @@ void fragment() {
         string clutterVertex = clutterFade
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
-              + (clutterDark ? "    v_clutter_dark = csky_clutter_dark(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n" : "")
+              + (clutterDark ? "    v_clutter_dark = csky_clutter_dark_lit(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n" : "")
             : "";
         string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
         // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)

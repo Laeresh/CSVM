@@ -155,8 +155,8 @@
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "07eefd7f1e428c4eea64cfb91e63aa01",
-      "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks darkening to the black fog over their authored band, the far skyline fading into it, TAA, outside the whiteout; frame-sensitive 23.30 %.",
+      "hash": "481972e24755ec454d88dad6cc06b014",
+      "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks lit out to their own fade, the far towers darkening into the black fog from 1,400 m, the far skyline fading into it, TAA, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {

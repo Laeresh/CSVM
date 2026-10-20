@@ -78,6 +78,14 @@ public sealed class WeatherRig
     // dissolving into the coming haze instead of vanishing the frame before it starts.
     private const float EnhancedShadowFadeStart = 0.8f;
 
+    // The binary's camera state inside an armed fog volume, which wears ZONE3. Rule: docs/org/weather.md,
+    // "Precedence: 3 beats 2".
+    private const int InVolumeCameraState = 3;
+
+    // TUNE, judged at the controls, enhanced mode only. A view takes the volume zone's fog and dome over
+    // this last stretch to an armed volume's wall. Rule: docs/org/weather.md, the volume approach.
+    private const float VolumeApproachMetres = 100f;
+
     // ⚠ TUNE, and the FALLBACK only, a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It holds because the three reachable-band chapters that author
     // nothing measure right at this value: the original's C1 in-cloud interior reads 248 against
@@ -346,6 +354,21 @@ public sealed class WeatherRig
     /// takes it in every zone.</summary>
     public static float EnhancedFogScale() => GraphicsMode.Enhanced ? EnhancedFogRangeScale : 1f;
 
+    /// <summary>One view's fog a fraction <paramref name="t"/> of the way to another's: the colour,
+    /// altitude and world light linearly, the range in reciprocal metres. A linear range would hold
+    /// the nearer fog off until the last metres of the approach. Pure.</summary>
+    public static FogWritten BlendFog(FogWritten from, FogWritten to, float t)
+    {
+        // The 1 m floor only guards the division against a range authored at 0 m.
+        static float Reciprocal(float a, float b, float t) =>
+            1f / Mathf.Lerp(1f / MathF.Max(a, 1f), 1f / MathF.Max(b, 1f), t);
+        return new FogWritten(
+            from.ColorLinear.Lerp(to.ColorLinear, t),
+            new Vector2(Reciprocal(from.Range.X, to.Range.X, t), Reciprocal(from.Range.Y, to.Range.Y, t)),
+            from.Altitude.Lerp(to.Altitude, t),
+            Mathf.Lerp(from.WorldLight, to.WorldLight, t));
+    }
+
     /// <summary>Paints one Environment's sky a single flat colour, enhanced mode's stand-in for
     /// the mission's horizon dome. Godot draws a reflection off a <c>Sky</c> resource only, so the
     /// colour goes in as a panorama; a background colour alone leaves the specular with no radiance
@@ -393,9 +416,9 @@ public sealed class WeatherRig
             Resolve(view);
         var primary = PrimaryView();
         if (primary.Zone != null)
-            WriteGlobals(primary.Fog, FogField.All);
+            WriteGlobals(FogOf(_primary), FogField.All);
         else if (primary.Over is { } over)
-            WriteGlobals(primary.Fog, FieldsOf(over));
+            WriteGlobals(FogOf(_primary), FieldsOf(over));
     }
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
@@ -437,7 +460,7 @@ public sealed class WeatherRig
             view.Over = fog;
             view.Fog = WithFogState(view.Fog, fog, view.Zone);
         }
-        WriteGlobals(PrimaryView().Fog, FieldsOf(fog));
+        WriteGlobals(FogOf(_primary), FieldsOf(fog));
         Log.Info("world", $"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': {(fog.Color is { } c ? Log.Format($"fog {c.R:0.00} gray, ") : "")}{(fog.Range is { } r ? Log.Format($"range {r.X:0}–{r.Y:0} m, ") : "")}{(fog.Altitude is { } a ? Log.Format($"altitude {a.X:0}–{a.Y:0} m") : "")}{(_spec.NoFog ? " (--no-fog: range untouched)" : "")}");
     }
 
@@ -493,8 +516,9 @@ public sealed class WeatherRig
 
     /// <summary>The fog one rig's view wears (<see cref="FogGlobals"/>'s shape), by
     /// <see cref="PlayerRig.Index"/>: its own camera state's zone and any <c>FOG_STATE</c> since.
-    /// A rig no Tick has seen yet reports the build's.</summary>
-    public FogWritten FogOf(int rigIndex) => _views.TryGetValue(rigIndex, out var view) ? view.Fog : _baseFog.Fog;
+    /// Under Enhanced it blends toward a fog volume's zone as the camera nears the volume
+    /// (<see cref="BlendFog"/>). A rig no Tick has seen yet reports the build's.</summary>
+    public FogWritten FogOf(int rigIndex) => _views.TryGetValue(rigIndex, out var view) ? view.Approach ?? view.Fog : _baseFog.Fog;
 
     /// <summary>The vertex light one rig's view wears, by <see cref="PlayerRig.Index"/>: its own
     /// camera state's zone, as <see cref="FogOf"/>. The faithful aircraft and the lit cloud cards
@@ -654,14 +678,17 @@ public sealed class WeatherRig
             if (_weather != null)
             {
                 foreach (var rig in rigs)
+                {
                     ApplyZoneEdge(rig, _weather);
+                    ApplyVolumeApproach(rig, _weather);
+                }
             }
             if (primaryMoved && PrimaryView().Zone is { } zone)
             {
                 // The light follows the fog onto the new first rig's zone, the pairing ApplyZone needs.
                 if (zone != _appliedZone)
                     ApplyZone(zone);
-                WriteGlobals(PrimaryView().Fog, FogField.All);
+                WriteGlobals(FogOf(_primary), FogField.All);
             }
         }
         PublishViews(rigs);
@@ -774,8 +801,69 @@ public sealed class WeatherRig
             return;
         }
         ApplyZone(fog);
-        WriteGlobals(view.Fog, FogField.All);
+        WriteGlobals(FogOf(rig.Index), FogField.All);
         Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}'){LightSuffix(fog)}");
+    }
+
+    // Enhanced only: outside an armed fog volume a view's fog runs toward the volume zone's own. The
+    // ramp spans VolumeApproachMetres from the nearest volume. Flying in is then no step from
+    // a lit street to the grey bank. The original switches at the wall, as ApplyZoneEdge still does.
+    private void ApplyVolumeApproach(PlayerRig rig, WeatherState weather)
+    {
+        var view = ViewOf(rig.Index);
+        FogWritten? approach = null;
+        float t = 0f;
+        var insideZone = weather.ZoneForState(InVolumeCameraState);
+        var inside = weather.Zone(insideZone);
+        if (GraphicsMode.Enhanced && _fogWhiteout.Armed && !_spec.SkyZoneExplicit
+            && rig.CameraWeatherState != InVolumeCameraState
+            && !insideZone.Equals(view.Trigger.Zone, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var volume in _fogVolumes)
+                t = MathF.Max(t, FogVolumeWhiteout.VolumeDensity(volume, rig.Camera.Position, VolumeApproachMetres, 0f));
+            if (t > 0f)
+                approach = BlendFog(view.Fog, ZoneFog(inside), t);
+        }
+        ShowVolumeDome(rig, view, t);
+        if (approach == view.Approach)
+            return;
+        view.Approach = approach;
+        if (rig.Index == _primary)
+            WriteGlobals(FogOf(rig.Index), FogField.All);
+    }
+
+    // The approach's other half. The volume zone's grey dome shows only from inside, so a greying
+    // city would stand over the black night dome until the wall. While a view approaches, its rig also
+    // shows that dome, veiled in the outside fog colour by the weight still to go. It reads black far
+    // out and its own grey at the wall, and hides the night dome's stars and moon on the way.
+    private void ShowVolumeDome(PlayerRig rig, ViewFog view, float t)
+    {
+        if (t > 0f)
+        {
+            foreach (var dome in rig.HorizonDomes)
+            {
+                if (ZoneGate.Draws(dome.ZoneId, InVolumeCameraState))
+                    dome.Node.Visible = true;
+            }
+        }
+        if (t == view.VeilWeight)
+            return;
+        view.VeilWeight = t;
+        var outside = view.Fog.ColorLinear;
+        var veil = new Color(outside.X, outside.Y, outside.Z, t > 0f ? 1f - t : 0f);
+        foreach (var dome in rig.HorizonDomes)
+        {
+            if (dome.ZoneId == InVolumeCameraState)
+                Veil(dome.Node);
+        }
+
+        void Veil(Node node)
+        {
+            if (node is GeometryInstance3D geometry)
+                geometry.SetInstanceShaderParameter(SceneBuilder.TintParam, veil);
+            foreach (var child in node.GetChildren())
+                Veil(child);
+        }
     }
 
     // Hands the shaders' table every view drawing the world this frame, with its rig's fog and
@@ -965,7 +1053,7 @@ public sealed class WeatherRig
         _baseFog.Over = null;
         _baseFog.Fog = ZoneFog(fog);
         _baseFog.Sun = ZoneSun(fog);
-        WriteGlobals(_baseFog.Fog, FogField.All);
+        WriteGlobals(FogOf(_primary), FogField.All);
         var fogRange = _baseFog.Fog.Range;
         Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog)}");
         if (_fogWhiteout.Armed)
@@ -1365,6 +1453,8 @@ public sealed class WeatherRig
     // vertex light, which no FOG_STATE touches.
     private sealed class ViewFog
     {
+        private FogWritten _fog;
+
         public ViewFog(FogStateTrigger trigger) => Trigger = trigger;
 
         public FogStateTrigger Trigger { get; }
@@ -1373,7 +1463,23 @@ public sealed class WeatherRig
 
         public AnimRuntime.FogStateChange? Over { get; set; }
 
-        public FogWritten Fog { get; set; }
+        // Every write clears Approach, so the next frame blends from the new fog and writes it again.
+        public FogWritten Fog
+        {
+            get => _fog;
+            set
+            {
+                _fog = value;
+                Approach = null;
+            }
+        }
+
+        // What the view wears instead of Fog while its camera approaches an armed fog volume
+        // (ApplyVolumeApproach).
+        public FogWritten? Approach { get; set; }
+
+        // The approach weight this view's zone-3 dome was last veiled at (ShowVolumeDome).
+        public float VeilWeight { get; set; }
 
         public SunWritten Sun { get; set; }
     }

@@ -112,6 +112,22 @@ public class GraphicsModeTests
         }
     }
 
+    /// <summary>The approach to a fog volume blends C5's black outer fog into its grey volume fog.
+    /// Each end is exact, and halfway the range already sits well inside the outer near.</summary>
+    [Fact]
+    public void TheVolumeApproachBlendsTheRangeInReciprocalMetres()
+    {
+        var outside = new WeatherRig.FogWritten(Godot.Vector3.Zero, new Godot.Vector2(1500f, 2250f), new Godot.Vector2(9000f, 10000f), 1f);
+        var inside = new WeatherRig.FogWritten(Godot.Vector3.One * 0.005f, new Godot.Vector2(50f, 250f), new Godot.Vector2(9000f, 10000f), 1f);
+        Assert.Equal(outside.Range, WeatherRig.BlendFog(outside, inside, 0f).Range);
+        Assert.Equal(inside.Range.X, WeatherRig.BlendFog(outside, inside, 1f).Range.X, 3);
+        Assert.Equal(inside.Range.Y, WeatherRig.BlendFog(outside, inside, 1f).Range.Y, 3);
+        var half = WeatherRig.BlendFog(outside, inside, 0.5f);
+        Assert.Equal(96.8f, half.Range.X, 1);
+        Assert.Equal(450f, half.Range.Y, 1);
+        Assert.Equal(0.0025f, half.ColorLinear.X, 5);
+    }
+
     /// <summary>The View Distance layers as the graphics mode does: the flag beats the saved word,
     /// which beats the config key, which beats the default. A word outside the four falls through.
     /// Kept in this class because the resolve sets the process-wide reach.</summary>

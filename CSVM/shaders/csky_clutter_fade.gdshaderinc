@@ -31,15 +31,43 @@ float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
 }
 
 // Enhanced Graphics only: how far a clutter instance has darkened toward the fog colour under a night
-// zone. It runs over the AUTHORED band, unscaled: 0 inside near, 1 at far, where the original drops
-// the instance. Past it the extended reach draws a silhouette in the fog's own colour, so the later
-// cull has nothing lit to pop. Linear in squared distance like the fade; a band of 0 never darkens.
-float csky_clutter_dark(vec3 origin, vec3 camera, vec4 fade) {
+// zone, 0 inside near and 1 at far, with the squared camera distance multiplied by `scale_sq` first
+// as the fade's own scale does. Past far the extended reach draws a silhouette in the fog's own
+// colour, so the later cull has nothing lit to pop. Linear in squared distance like the fade; a band
+// of 0 never darkens.
+float csky_clutter_dark_scaled(vec3 origin, vec3 camera, vec4 fade, float scale_sq) {
     if (fade.y <= 0.0) {
         return 0.0;
     }
     vec3 d = origin - camera;
-    return clamp((dot(d, d) - fade.x) * fade.z, 0.0, 1.0);
+    return clamp((scale_sq * dot(d, d) - fade.x) * fade.z, 0.0, 1.0);
+}
+
+// The fvol cards' darkening, over their AUTHORED band, unscaled: they reach the fog's colour where
+// the original drops them.
+float csky_clutter_dark(vec3 origin, vec3 camera, vec4 fade) {
+    return csky_clutter_dark_scaled(origin, camera, fade, 1.0);
+}
+
+// TUNE, judged at the controls. A city block darkens over its band times this, so it stays lit at
+// least twice as far as the original draws it. Rule: docs/org/weather.md, the night clutter.
+const float CSKY_CLUTTER_LIT_REACH = 2.0;
+
+// The band the darkening scales is at least C5's tower band (near 700 m, far 800 m), so no block
+// darkens before the towers do and brightness falls with distance. Rule: docs/org/weather.md.
+const float CSKY_CLUTTER_DARK_NEAR_MIN = 700.0;
+const float CSKY_CLUTTER_DARK_FAR_MIN = 800.0;
+
+// The city blocks' darkening. A block whose own fade (csky_clutter_fade_scale_sq) ends first fades
+// out still lit.
+float csky_clutter_dark_lit(vec3 origin, vec3 camera, vec4 fade) {
+    if (fade.y <= 0.0) {
+        return 0.0;
+    }
+    vec2 band = max(fade.xy, vec2(CSKY_CLUTTER_DARK_NEAR_MIN * CSKY_CLUTTER_DARK_NEAR_MIN,
+            CSKY_CLUTTER_DARK_FAR_MIN * CSKY_CLUTTER_DARK_FAR_MIN));
+    vec4 floored = vec4(band, 1.0 / max(band.y - band.x, 1.0), 0.0);
+    return csky_clutter_dark_scaled(origin, camera, floored, 1.0 / (CSKY_CLUTTER_LIT_REACH * CSKY_CLUTTER_LIT_REACH));
 }
 
 // The same near/far test with the per-instance VIEW-ANGLE term the fog-volume scatter installs:

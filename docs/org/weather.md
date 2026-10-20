@@ -356,15 +356,36 @@ out 2x for its shadows. Pushed, C5's black fog let the lit walls of its far city
 ground already gone dark, and inside a fog volume (`ZONE3`, 50 to 250 m) it showed streets the
 original fogs to flat 16 grey.
 
-Under a night zone Enhanced also darkens the clutter toward the fog colour over each instance's
-AUTHORED fade band (`csky_clutter_dark`, the shader twin of the key being `csky_night_fog`): C5's
-city blocks are lit inside their authored near (200 to 300 m) and reach the fog's colour at their
-authored far (300 to 450 m), where the original drops them. The extended Enhanced reach past that
-draws silhouettes in the fog's colour, never lit blocks that dither out. The `fvol` cards take the
-same ramp over their own band (1,000 to 1,800 m), since every card is authored `fog: false` and no
-zone fog darkens them. This is a remake-only rule: the original never draws those blocks past their
-band, and Enhanced's longer reach would otherwise show them lit against a black fog. Day zones and
-the faithful path keep the authored fade.
+Under a night zone Enhanced also darkens the city clutter toward the fog colour over a scaled fade
+band (`csky_clutter_dark_lit`, the shader twin of the key being `csky_night_fog`). The band is the
+block's own authored band but at least C5's tower band, near 700 m and far 800 m
+(`CSKY_CLUTTER_DARK_NEAR_MIN`/`_FAR_MIN`), so no block darkens before the towers do. It is scaled
+by two (`CSKY_CLUTTER_LIT_REACH`), and a block whose own fade ends first fades out still lit. What
+that gives C5's small blocks (authored band 200 to 350 m) and its 21 tower kinds (700 to 900 m):
+
+| Effects / View Distance | Small blocks | Towers |
+|---|---|---|
+| High / Far (the defaults) | lit to their fade, out at 800 to 1,400 m | lit inside 1,400 to 1,600 m, dark by 1,600 to 1,800 m, with the `ZONE1` fog from 1,500 m |
+| Medium / Normal | lit to their fade, out at 200 to 350 m | lit to their fade, out at 700 to 900 m |
+| Low / Normal | lit to their fade, out at 130 to 230 m | lit to their fade, out at 470 to 600 m |
+| Medium / Far | lit to their fade, out at 400 to 700 m | lit inside 1,400 to 1,600 m, out at 1,400 to 1,800 m as they darken |
+| Low / Far | lit to their fade, out at 270 to 470 m | lit to their fade, out at 930 to 1,200 m |
+
+The `fvol` cards take the same ramp over their own AUTHORED band (1,000 to 1,800 m,
+`csky_clutter_dark`), since every card is authored `fog: false` and no zone fog darkens them. This
+is a remake-only rule: the original never draws those blocks past their band. Day zones and the
+faithful path keep the authored fade.
+
+**The volume approach.** Under Enhanced a view's fog blends toward the fog volume's zone (C5's
+`ZONE3`, 16 grey at 50 to 250 m) over the camera's last 100 m to the nearest armed volume's wall
+(`VolumeApproachMetres`). `WeatherRig.BlendFog` mixes the colour linearly and the range in
+reciprocal metres, so the grey thickens through the approach rather than in its last metres. Over
+the same stretch the rig also shows `dome_zone3`, veiled in the outside fog colour by the weight
+still to go (the `csky_tint` instance uniform). From outside, the strips' zone-3 street ground is
+undrawn and that dome is what fills the void, so sky and streets grey with the city. The night
+dome's stars and moon are behind it on the way in. The camera-state edge and the 16 m curtain are
+unchanged. The original switches zone at the wall, where a strip seen from just outside shows its
+blocks fully lit under the black `ZONE1` fog; Original keeps that switch.
 
 ## The lens flare (measured, not decoded)
 
