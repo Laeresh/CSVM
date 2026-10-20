@@ -100,6 +100,10 @@ internal sealed class FrameInstruments
         _renderTime = new MeasuredRenderTime(viewport);
     }
 
+    /// <summary>The root viewport's measured render times, which a headset's frame line reads too
+    /// (<see cref="XrSession"/>).</summary>
+    public MeasuredRenderTime RenderTime => _renderTime;
+
     /// <summary>Opens the hitch sidecar beside the log, or under the log directory when
     /// <c>Log.Open</c> failed. Ahead of --dump-config, since it registers the hitchSidecar.* keys.
     /// </summary>

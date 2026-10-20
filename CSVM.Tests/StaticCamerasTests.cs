@@ -241,6 +241,22 @@ public class StaticCamerasTests
         Assert.Equal(2, rig.Placements);
     }
 
+    /// <summary>A headset's flyby takes the flat one's draws, radius and switch distance, but sits
+    /// behind the tail and watches a second longer. The flat flyby is the control.</summary>
+    [Fact]
+    public void AHeadsetFlybySitsBehindAndWatchesLonger()
+    {
+        var flat = new StaticCameras(Params(), Fixed(0.3f));
+        var vr = new StaticCameras(Params(), Fixed(0.3f));
+        var a = flat.StepFlyby(0f, Vector3.Zero, Basis.Identity, Speed, null, null);
+        var b = vr.StepFlyby(0f, Vector3.Zero, Basis.Identity, Speed, null, null, headset: true);
+        Assert.True(a.Z < -100f, $"flat: ahead of the nose ({a.Z})");
+        Assert.Equal(StaticCameras.VrBehindM, b.Z, Tol);
+        Assert.Equal(new Vector2(a.X, a.Y), new Vector2(b.X, b.Y));
+        Assert.Equal(flat.WatchUntil + StaticCameras.VrExtraWatchS, vr.WatchUntil, Tol);
+        Assert.Equal(flat.SwitchDistance, vr.SwitchDistance, Tol);
+    }
+
     /// <summary>The local offset goes through the aircraft's own basis, so a rolled aeroplane
     /// carries its death camera round with it instead of leaving it in world space.</summary>
     [Fact]

@@ -107,6 +107,10 @@ public sealed partial class Precipitation : Node3D
         }
         """;
 
+    // A flat flake copies the camera's axes, which under a headset are the head's, so it would pivot
+    // as the head turns. The stereo text faces each flake toward the eye instead.
+    private const string FlatFlake = "offset = (INV_VIEW_MATRIX[0].xyz * VERTEX.x + INV_VIEW_MATRIX[1].xyz * VERTEX.y) * sz;";
+
     private MultiMesh _mm = null!;
 
     /// <summary>Builds the field for a mission's precipitation, or null if there is none.
@@ -122,6 +126,14 @@ public sealed partial class Precipitation : Node3D
         field.Init(p, cloudBottom, cloudTop);
         return field;
     }
+
+    /// <summary>The shader text: the flat one, or under <paramref name="stereo"/> the same text with
+    /// each flake posed by <see cref="Mech3.StereoFacing"/>'s basis toward the eye.</summary>
+    internal static string CodeFor(bool stereo) => !stereo ? ShaderCode : ShaderCode
+        .Replace("#include \"res://shaders/csky_time.gdshaderinc\"",
+            "#include \"res://shaders/csky_time.gdshaderinc\"\n" + Mech3.StereoFacing.Include)
+        .Replace(FlatFlake, "mat3 face = csky_facade_spherical(center, CAMERA_POSITION_WORLD);\n"
+            + "        offset = (face[0] * VERTEX.x + face[1] * VERTEX.y) * sz;");
 
     // A soft round dot (white RGB, radial-falloff alpha): the snow flake.
     private static ImageTexture MakeFlakeTexture()
@@ -177,8 +189,9 @@ public sealed partial class Precipitation : Node3D
         var tint = p.Color.SrgbToLinear();
         float peakAlpha = p.AlphaGradient.X * OpacityTune;
 
-        ShaderCensus.Note(ShaderCode);
-        var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
+        string code = CodeFor(Mech3.StereoFacing.Live);
+        ShaderCensus.Note(code);
+        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
         mat.SetShaderParameter("sprite", rain ? MakeStreakTexture() : MakeFlakeTexture());
         mat.SetShaderParameter("tint", new Vector3(tint.R, tint.G, tint.B));
         mat.SetShaderParameter("box_half", new Vector3(boxHalf, boxHalf, boxHalf));

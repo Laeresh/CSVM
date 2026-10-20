@@ -73,6 +73,16 @@
       "name": "c5-city",
       "exercises": "the night city: the largest clutter build in the set (solid 3D blocks, collidable) and the LIGHT_STATE point-light data texture",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809"]
+    },
+    {
+      "name": "c1-cockpit-xr-sim",
+      "exercises": "the stereo cockpit through the stand-in headset at 2112x2304 per eye, Enhanced on the VR quality profile: both eyes' world, the stereo interior, the MSAA resolve. gpu_ms is the headset's render; the window blit is not in it",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,600,-6144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--graphics=enhanced", "--xr-sim=eye=2112x2304,fov=96"]
+    },
+    {
+      "name": "c5-city-xr-sim",
+      "exercises": "the heaviest stereo pose at the runtime's own 3072x3264 per eye: the night city from the cockpit, Enhanced on the VR quality profile, the frame the VR budget holds to half of the 90 Hz period's 11.1 ms",
+      "args": ["--chapter=C5", "--plane=player_bhawk", "--pos=-9256,250,-3155", "--direction=-0.588,0,-0.809", "--view=cockpit", "--hold=0,0,0,0.6", "--graphics=enhanced", "--xr-sim=eye=3072x3264,fov=96"]
     }
   ]
 }

@@ -40,6 +40,15 @@ public static class RaceGhost
     internal const string FragmentLine =
         "    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_ghost_alpha)) { discard; }";
 
+    /// <summary>The stereo text's dither: the same keep, its pattern shifted in each eye. The shift is
+    /// the pixel a view-axis point at the fragment's own depth projects to. The pattern then carries
+    /// the surface's disparity, within the floor's pixel. A screen-locked one lies on the display.
+    /// Measured in docs/org/clutter.md, "The dither under a headset".</summary>
+    internal const string StereoFragmentLine =
+        "    vec4 ghost_at = PROJECTION_MATRIX * vec4(0.0, 0.0, VERTEX.z, 1.0);\n"
+        + "    vec2 ghost_anchor = mod(floor((ghost_at.xy / ghost_at.w * 0.5 + 0.5) * VIEWPORT_SIZE), 4.0);\n"
+        + "    if (!csky_clutter_dither_keep(FRAGCOORD.xy + 4.0 - ghost_anchor, v_ghost_alpha)) { discard; }";
+
     /// <summary><see cref="VertexLineFor"/> under the current graphics mode, which is what the bias
     /// shader generator writes.</summary>
     internal static string VertexLine => VertexLineFor(GraphicsMode.Enhanced);

@@ -48,7 +48,8 @@ public sealed class ActiveDevice
 
     /// <summary>The binding a prompt names: the active side's first, else the other side's. A key
     /// beats a mouse button, and on the pad side a stick's binding beats a gamepad's while
-    /// <paramref name="onStick"/> is set, and loses otherwise.
+    /// <paramref name="onStick"/> is set, and loses otherwise. A hand controller's comes last on the
+    /// pad side.
     /// ⚠ Without <paramref name="readsKeyboard"/> keys and the mouse are skipped. A pad-only
     /// splitscreen seat must not be told to press a key that does nothing for it.</summary>
     public static Binding? PromptBinding(
@@ -58,9 +59,16 @@ public sealed class ActiveDevice
         Binding? mouse = null;
         Binding? stick = null;
         Binding? gamepad = null;
+        Binding? xr = null;
         for (int i = 0; i < (bindings?.Count ?? 0); i++)
         {
             var binding = bindings![i];
+            if (binding.Device.Kind == DeviceKind.Xr)
+            {
+                xr ??= binding;
+                continue;
+            }
+
             switch (binding.Control.Kind)
             {
                 case ControlKind.Key when readsKeyboard:
@@ -84,7 +92,7 @@ public sealed class ActiveDevice
         }
 
         var keyboard = key ?? mouse;
-        var pad = onStick ? stick ?? gamepad : gamepad ?? stick;
+        var pad = (onStick ? stick ?? gamepad : gamepad ?? stick) ?? xr;
         return side == DeviceSide.Pad ? pad ?? keyboard : keyboard ?? pad;
     }
 

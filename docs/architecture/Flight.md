@@ -256,17 +256,17 @@ holds the state and the camera, `StepViewKeys` takes the selection controls' pre
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
 The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair, turned by two aircraft frames `EaseFrame` eases at the `*_catch_up` rates times `CatchUpScale`, frames the look-behind shares; `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
-authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts; with the rig's `Fade` the view keys wait for black (`XrFade.Cover`) and land together on it. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
-The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death
-camera the pilot's own destruction enters, and the flyby. One placement shape serves both random
-ones, a circle about the flight axis carried `speed · interval + z` along the nose, and one
-clearance serves all three, a vertical probe that never lets a spot sit closer than `crash_elev`
-above the terrain under it. The flyby adds its own bookkeeping: a drawn watch deadline in sim time
-and a drawn switch distance, the re-site landing on the step after both are past. Placement and
-clearance are static and engine-free but for the `IWorldQuery` probe; `CameraController` owns one
-and does the aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
+The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death camera the pilot's
+own destruction enters, and the flyby. One placement shape serves both random ones, a circle about the flight axis
+carried `speed · interval + z` along the nose, and one clearance serves all three, a vertical probe that never lets
+a spot sit closer than `crash_elev` above the terrain under it. The flyby adds its own bookkeeping: a drawn watch
+deadline in sim time and a drawn switch distance, the re-site landing on the step after both are past. A headset's
+flyby takes the same draws but sits `VrBehindM` behind the tail and watches `VrExtraWatchS` longer. Placement and
+clearance are static and engine-free but for the `IWorldQuery` probe; `CameraController` owns one and does the
+aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
 
 ## src/Flight/Camera/HeadLook.cs
 The pilot's head, decoded from the original's shared look controller and shared by every view: it
@@ -295,7 +295,7 @@ draws `cockpit1` and hides the `healthy` body, Nose hides the interior, the body
 so a held look-behind brings the body back. The interior takes node visibility. The airframe groups
 move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
 that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them,
-and so do `CockpitReseat.Hidden` on the frames the interior is drawn. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+and so do `CockpitReseat.Hidden` and the stores given to `Reseat` on the frames the interior is drawn. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/CockpitReseat.cs
 The remake-only fix for the Cockpit view's floating wingtip lights and prop discs, in both
@@ -309,8 +309,8 @@ outcome: [../org/cameraViews.md](../org/cameraViews.md), "Remake-only" under mod
 
 ## src/Flight/Hud/FirstPersonDressing.cs
 What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
-`Interior`, `Panel` (`CockpitGauges`) and `Pass` (`CockpitOverlay`), all null on a rig built no
-interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
+`Interior`, `Panel` (`CockpitGauges`), `Pass` (`CockpitOverlay`) and, under the stereo path,
+`Stereo` (`XrCockpit`), all null on a rig built no interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
 held look-behind brings the body back, and takes the screen-space cluster off while the panel is
 on screen; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
 after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
@@ -323,8 +323,95 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 `CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
-lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig`; `Sync` follows
+lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does; `Sync` follows
 the interior `Visible` and sets each material's `light_origin` to the eye for the point lights.
+
+## src/Flight/Hud/XrCockpit.cs
+The cockpit interior under the stereo path, drawn in the main world the cockpit pass's way: while it
+shows it is top level at the world origin, turned to the XR origin's axes and offset from that
+origin as the airframe holds it (`InOrigin`, engine-free), so every transform Godot composes for it
+is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
+its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. A stereo session always takes it; lifted, each geometry carries `Everywhere`, a box sized through the mount scale so no eye on a map culls it, and a sorting offset that puts it after the world's transparents on top of the one it was built with (the reticle overlay's). Hidden, it goes back under the airframe. `Live` tells a plane build to choose that shader; `EyeOffset` is the
+plane's seated eye offset (`VrCockpits.cs`), so `EyeInAircraft` moves with the XR origin; it is the
+seat's `IXrInterior`, and `Flight/Camera/XrRig.cs` calls `Follow` each frame. `XrCockpitTuner.cs` sets `EyeOffset`, `SetMountScale` and `PlaceStores` live. `Hang` carries a stereo-built part (a pylon store) at an airframe node's pose placed by the plane's store fields (`Placed`: the lateral distance times the spread, then the offset, in the aircraft's frame; `InInterior`; both engine-free). It keeps each part's airframe pose, so a store change or a rescale re-places them where a rebuild would.
+
+## src/Flight/Hud/VrCockpits.cs
+The reader of `CSVM/data/vr_cockpits.json`, the per-plane VR cockpit data the author tunes at the
+headset: under `planes`, keyed by plane node name (`player_bhawk`), `interiorScaleFactor` multiplies
+the `cockpit1` mount's `Mech3/PlaneBuilder.cs` `InteriorScale` (0.25 to 4, default 1), `eyeOffsetZ`
+moves the seated eye in metres along the aircraft's Z, positive aft, and `eyeOffsetY` along its Y,
+positive up (each at most 1 m, default 0). `storeOffsetZ` (positive aft) and `storeOffsetY` (positive up) move the pylon stores' stereo copies from their true pylon poses (each at most 1 m, default 0), and `storeSpread` multiplies each store's distance from the centreline (0.25 to 4, default 1), since the interior is not the airframe scaled; keys starting `_` are notes. A plane or field left out
+takes the default. Read once per session by `Session/Roster/FlightRosterInputs.cs` only when the
+stereo path draws the interior; a missing or malformed file or entry warns and falls back.
+`Session/Roster/HumanFlightAdapter.cs` applies it; `XrCockpitTuner.cs` writes it.
+
+## src/Flight/Hud/XrCockpitTuner.cs
+The `--xr-tune` lab: in a stereo session, live nudges of the flown plane's interior scale and seated
+eye offset from the right hand controller with its grip held (F22 to F24 on the keyboard), and of its
+pylon stores' placement with the left grip held instead (no keyboard twin), a readout
+on `XrHudPanel.cs`' surface, a save of the plane's values into `vr_cockpits.json` on disk, a reset to
+the file, and a step to the next plane through the mission airframe swap. `Launch/GameSession.cs`
+builds it and hands it the seat (`XrTuneSeat`) and the swap; it acts through `XrCockpit.cs`.
+Arithmetic and writer: `VrCockpitTuning.cs`. Controls: docs/controls.md.
+
+## src/Flight/Hud/VrCockpitTuning.cs
+The tuning lab's engine-free parts: a step of each field on the file's grid and range (`ScaleStep`
+0.025 is a millimetre per unit at the 0.04 mount, so the measured 0.875 alternative is five steps
+down; an eye or store offset steps 10 mm, the store spread 0.05), the plane
+order, the readout text, the held input's repeat (`VrTuneRepeat`), and `TryRewrite`, which writes one
+plane's numbers into the file's own bytes, adding a field or an entry where missing, and refuses a
+rewrite that would not read back with every other entry unchanged.
+
+## src/Flight/Hud/XrMarkers.cs
+The flight markers of a stereo session, which draws no canvas layer: the pipper (`ImpactReticle`),
+`TargetHud`'s `WorldMark`s. Each is drawn by the flat HUD's own code into a
+small 2D surface, its card, at `CardScale` texels per reference pixel (in the flat cockpit view a reference pixel spans
+about 0.045 degrees, under one headset pixel). A marker within `XrMarkerLaw.RingDeg` of the view axis stands at its world
+point (clamped to `MaxDistanceM`), facing the tracked head with the seat's up, a reference pixel spanning the flat view's angle. Past it, an
+arrow and label hang on a ring in the head's frame at `RingDistanceM`. Setting the flat controls'
+`MarksInWorld` stops their own drawing; `AnswerSpyglass` then answers `TargetHud`'s spyglass gates off the
+head's view, and the selection on the ring carries the picture (`XrSpyglassDisc.cs`). Cards stand on `UI.Boards.SplitScreen.HeadOverlayLayer`; priorities: `UI/Boards/HeadLockedQuads.cs`; `Launch/GameSession.cs` builds it.
+
+## src/Flight/Hud/XrSpyglassDisc.cs
+The spyglass picture in a stereo session: `Camera/SpyglassView.cs`'s texture, rendered once at
+`XrMarkerLaw.SpyglassSide` texels, on one quad on the head ring one radius inside the selection's arrow,
+placed in the head's frame by its shader as the ring cards are, so both eyes see one mono picture at the
+ring's 2 m. The shader masks it to a circle and draws the flat disc's rim and drop shadow, mixed in gamma
+space as the canvas is. It stands on `UI.Boards.SplitScreen.HeadOverlayLayer`, which the picture's own
+camera leaves out, at `HeadLockedQuads.SpyglassPriority`. `XrMarkers.cs` builds and places it.
+
+## src/Flight/Hud/XrHudPanel.cs
+The cockpit-locked HUD panel of a stereo session: the flown pane's chrome (HUD, message stack, held
+scores, chat) is parented into its `PanelSurface` through `Camera/PlayerRig.cs`'s `ChromeParent`,
+and `HudMetrics.cs` takes that surface as the HUD's window, so the HUD lays out as on a 1440p
+screen. A quad in the XR origin's frame shows it, placed from `Launch/XrEyeFeed.cs` as the stereo
+cockpit is, so it rides the seat in Cockpit and Nose and the chase pose in Chase, never the head; it
+hides while no chrome layer draws. It draws at `UI/Boards/HeadLockedQuads.cs`' `HudPanelPriority`,
+mixed in gamma space as a canvas layer is. `Launch/GameSession.cs` builds it; geometry is `XrHudPanelLayout.cs`.
+
+## src/Flight/Hud/XrHudPanelLayout.cs
+The HUD panel's geometry, engine-free: the 2560x1440 surface (the HUD's reference frame), the pose 2 m
+ahead on the original's first-person axis (`PlaneBuilder.HeadPitchOffsetRad`, 4.7 degrees under the
+seat's), the flat Nose and Chase view's 46.8 degrees tall, about 31 surface rows per degree, so every
+surface pixel lands where the flat first-person view draws it. `Placement` gives the quad's transform
+with or without the eye feed. Defaults are TUNE at the headset; coverage is
+`CSVM.Tests/XrHudPanelLayoutTests.cs`, and the suite `xr-hud-panel` reads the live panel.
+
+## src/Flight/Hud/XrMarkerLaw.cs
+The stereo markers' geometry, engine-free: the tangent one flat HUD reference pixel spans in a view of a given vertical
+angle, a point's place in the head's frame and its angle off the view axis, the `RingDeg` cone that sends a marker from
+the world to the ring (25 degrees, TUNE: the flat views' 5 percent edge inset sits 29.5 degrees above the cockpit view's
+centre and 21.3 above the chase view's), the ring's bearing (dead astern points down, as `EdgeMarker` does), a world
+card's facing axes and a label's inward step, and the ring's spyglass disc: `SpyglassScale` 1.5 times the flat disc at the Nose
+view's angle in every view (`SpyglassTangentPerRef`; at 21 headset pixels per degree it spans 104 pixels, where the flat
+angle gives 69 against a 1440p screen's 96), its texel side at `SpyglassTexelsPerRef` (about 2.8 texels a headset pixel) and
+its place inside the arrow. `CSVM.Tests/XrMarkerLawTests.cs` covers it; `XrMarkers.cs` is the user.
+
+## src/Flight/Hud/WorldMark.cs
+One marker a flat HUD draws at a world point, as data: its style (`WorldMarkStyle`: the selection's
+box and label, or a tag), point, colour, tag, the selection it labels, whether
+the gun's reach boxes it, and its edge stagger. `TargetHud.WorldMarks` lists
+them; the flat pane projects them through its camera, `XrMarkers.cs` places them in the world.
 
 ## src/Flight/Hud/CockpitGauges.cs
 The authored instrument panel inside the pilot's own `cockpit1` interior: five needle nodes take an
@@ -434,7 +521,7 @@ The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCaptu
 `dist` ahead on the nose's level heading, a world-axis scatter of 0.15, 0.25 and 0.15 `dist`, and a
 roll-free look back at the aircraft. The node is a `SubViewport` on the pane's world that poses its
 camera in `_Process` after the controller's, at the external FOV with no HUD, draws a first-person
-pilot's airframe through `UI.Boards.SplitScreen.OutsideCullMask`, arms the fill light (`csky_photo_eye`) on its pilot's
+pilot's airframe through `PhotoMask` (`UI.Boards.SplitScreen.OutsideCullMask` less the headset's layers and the world flare's band), arms the fill light (`csky_photo_eye`) on its pilot's
 instances, renders once, and disarms and reads back on the frame after that draw was issued. Decode:
 [../formats/campaign-screens.md](../formats/campaign-screens.md), "The danger-zone slot".
 
@@ -748,10 +835,10 @@ The one place the flight HUD decides how big it draws: `Scale(control, reference
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
 only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
-`ReadingBox` places: a full-screen view's box is the reference 16:9 at full height, centred, keeping
-ultrawide columns within reading width; a splitscreen pane, short of the window, is its own box.
-`ColumnOutdent` is the narrow half, a pane under that aspect giving its columns all but a minimal
-border back. One module.
+`ReadingBox`: a full-screen view's box is the reference 16:9 at full height, centred; a splitscreen
+pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a minimal border back.
+`WindowSize` is the window these measure against: the stereo HUD panel's surface
+(`XrHudPanel.cs`) for a HUD drawn on it, else the root window.
 
 ## src/Flight/Hud/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
@@ -772,7 +859,8 @@ The gun aiming reticle: a viewport-filling `Control` drawing the game's own `imp
 pipper at a world impact point `FlightController` feeds it each frame, projected through
 `Camera3D.UnprojectPosition` at draw time rather than cached. Fixed screen size scaled by
 `HudMetrics`, one per player pane. What the pipper follows, and why it is deliberately not the
-aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md).
+aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md). In a stereo session
+`XrMarkers.cs` draws it in the world instead (`MarksInWorld`).
 
 ## src/Flight/Hud/EdgeMarker.cs
 The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
@@ -800,9 +888,8 @@ own, one per pane, hung on `TargetHud` inside that pane's viewport. `Aim` points
 disc's drawn diameter, borrows the pane camera's clip planes and cull mask and starts it rendering;
 `Idle` stops it. The inherited world keeps the target in play and the flown zone's fog. `DiscMask`
 drops the pilot's own aeroplane's layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by
-`Session/HumanFlightAdapter`); under Enhanced it trades the sun for `SpyglassSun.cs` and adds
-`SplitScreen.FlatSeaLayer`, so the disc shows the flat sea, not the wave ocean (`SceneBuilder.FlatSeaEye`).
-`Census` is the `--perf` spyglass line, read on the render thread. `TargetHud.DrawDisc` masks it round.
+`Session/HumanFlightAdapter`) and the world flare's band (`SplitScreen.WorldFlareBand`); under Enhanced it trades the sun for `SpyglassSun.cs` and adds
+`SplitScreen.FlatSeaLayer`, so the disc shows the flat sea, not the wave ocean (`SceneBuilder.FlatSeaEye`). Under a headset (`Headset`) it also drops the headset's two layers. `Census` is the `--perf` spyglass line, read on the render thread. `TargetHud.DrawDisc` masks it round; a headset shows it through `Hud/XrSpyglassDisc.cs`.
 
 ## src/Flight/Camera/SpyglassSun.cs
 The spyglass discs' own sun under Enhanced: a shadowless `DirectionalLight3D` on
@@ -963,7 +1050,7 @@ bracket box and label block and owns the colour table, the label layout, the sel
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+read after the flight rigs (`AfterFlightRigs`). In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
@@ -1250,7 +1337,7 @@ def's `RESET_STATE`) and parents it to that pylon marker at identity local trans
 launch pose; `Update` shows or hides each per its live `Hardpoint.Ammo`, the root's only owner. `FlightController` drives `Update` after the rockets, and the
 mounted body rides the plane and is freed with it. `Unmount` takes the set back off, detaching each
 body from its pylon immediately rather than queueing it, so the weapon lab's rebuild-on-swap cannot
-leave the old ordnance hanging beside the new. `--fly` only.
+leave the old ordnance hanging beside the new. `--fly` only. In a stereo seat each body also gets a copy built through the stereo interior's shader and hung on `XrCockpit.Hang`, steady and stencilled beside the interior's wing, at the place the plane's `vr_cockpits.json` store fields give it; the body leaves the pilot's pane through `CockpitVisibility.Reseat`, and the pylon, the launch point, stays put.
 
 ## src/Flight/Airframe/PlaneCollider.cs
 Derives up to sixteen plane-frame convex hulls from the built model's mesh triangles alone, with no
@@ -1481,11 +1568,38 @@ paint pick stays an index pair rather than free RGB. Decode:
 ## src/Flight/Camera/PlayerRig.cs
 One rendered view's state bag: the player index, the camera and its optional `SubViewport`, the
 HUD parent, the visual layer, that player's `FlightController`, and the camera-anchored horizon,
-deck and whiteout copies, which re-anchor every frame and so need one set per pane. The ambient
-cloud field is deliberately not one of them, being world-anchored geometry every pane shares
-behind a cull mask. `CameraWeatherState` is a per-rig field rather than a shared one, since
-splitscreen panes can sit in different states at the same instant; `Session/WeatherRig.Tick`
-writes it each frame.
+deck and whiteout copies, which re-anchor every frame and so need one set per pane (the ambient
+cloud field is world-anchored and shared). `CameraWeatherState` is per rig, since splitscreen
+panes can sit in different states at once; `Session/WeatherRig.Tick` writes it each frame. `Xr` is the VR seat's `XrRig.cs` while the headset flies the pane, and
+`SkyAnchor` then centres the sky on the tracked head rather than the camera; `ChromeParent` is then
+the HUD panel's surface (`Hud/XrHudPanel.cs`), where the pane's flight chrome is parented.
+
+## src/Flight/Camera/XrMount.cs
+Where a headset's tracking origin sits in the world each frame, engine-free, by the `XrAnchor` a
+camera write names: `Seat`, the flat eye at a live aircraft's attitude plus the seated eye offset
+(the flat view's head pitch left out); `Camera`, the flat camera's pose as a headset write left it;
+`Level`, the flat eye with its heading only, for a camera another owner drives. `Chase` is the VR
+chase, a fixed offset in the aircraft's frame (`XrChase.Rigid`) or that frame unrolled (`XrChase.Level`, `NoRoll`),
+and `Watch` the level heading a static camera holds, facing the aircraft's track. `Screened` is the
+origin under a cutscene on the theater screen: the camera's eye on a held level heading. `XrRig.cs`
+applies it; `CameraController.cs` writes the poses; the per-view choices are in [../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".
+
+## src/Flight/Camera/XrRig.cs
+The VR flavour of `PlayerRig.cs`: the one VR seat's `XROrigin3D` and tracked `XRCamera3D` (`Head`),
+and the pane bound to them (`Bind`, `Release`). `Launch/XrSession.cs` builds it at boot and calls
+`Place` each frame after every camera writer: the origin where the pilot's camera write asks
+(`CameraController.TakeXrWrite`, through `XrMount.cs`), by heading for a camera another owner drives,
+then the stereo interior through `IXrInterior` (`Flight/Hud/XrCockpit.cs`; this namespace names
+nothing in Flight but the airframe). While `CutscenePlays` (the launcher's composition) it is
+`Screening`: at the cutscene camera's eye on the heading held from the cut, the theater screen playing the pair.
+`Cut` fires where the view jumps, which `UI/Boards/ComfortQuads.cs` lands on black, and `Fade` (the composition's `UI/Boards/XrFade.cs`) goes to the pilot's camera on every `Place`. `Recenter` is `XRServer.CenterOnHmd` keeping the tilt, not the height. The sky follows `Head` through `PlayerRig.SkyAnchor`; `LauncherContext.Xr` hands the rig to a session.
+
+## src/Flight/Camera/XrSimEyes.cs
+The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch, a roll about
+its own line of sight and an offset from the seated eye, each eye's world transform composed as Godot's OpenXR interface composes it
+(the XR origin, the recenter frame, then head and eye in world-scaled metres), and each eye's
+symmetric projection at a horizontal field of view. `Launch/XrSimInterface.cs` answers the
+renderer through it, and `Spec/XrSimSpec.cs` holds the values it is built from.
 
 ## src/Flight/Airframe/CollisionLayers.cs
 The named physics collision layers, world and aircraft, plus the combined mask. The first and only

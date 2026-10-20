@@ -136,6 +136,32 @@ covers it.
   off, never off the frame alone.** The airframe skins carry rivet rows that read as the same dot
   grid, so a frame-only figure scores the texture (`AirframeShadowLookupOffset`).
 
+- **SHOT-44**, **A stereo viewport is a two-layer texture and draws no canvas layers, so a plain
+  `GetImage()` of it is the left eye alone and a missing HUD in it is not a HUD defect; read each
+  eye by its layer (`RenderingServer.Texture2DLayerGet`).** Godot skips 2D on any viewport whose view
+  count is above one (`can_draw_2d` in its `renderer_viewport.cpp`), so under `--xr-sim` the HUD,
+  the boards and the cockpit pass are absent from both eyes.
+
+- **SHOT-45**, **Judge where a stereo eye draws the cockpit against the flat `--no-cockpit-pass`
+  frame taken from that eye's own point, not against another stereo build.** On the empty stage
+  `--xr-sim=eye=1280x720,fov=96.4268,ipd=20,head=0.01/0/0,shot=left,pitch=-4.70001` puts the left eye
+  on the flat camera; the stereo interior registered within 0.04 px of the flat frame in every
+  region at 0 and 20 km, while the earlier stereo path differed by 0.1 px through its depth bias.
+
+- **SHOT-46**, **A canvas layer composites after the tonemap and a world quad before it, so compare a
+  canvas effect with its world twin in the Original look, where the tonemap is linear; under
+  Enhanced the A/B measures AgX, not the port.** The world flare matched the screen rig on C3 to 0.22 %
+  of pixels over 2 levels in Original, while under Enhanced its rings read 4 to 9 levels over the sky
+  against the screen rig's 6 to 21.
+- **SHOT-47**, **A `Color` set on a 3D material's uniform reaches the shader already linear, whatever
+  the uniform's hint, so check a drawn colour in the capture, never in the parameter it was handed.**
+  The theater surround's sRGB 0.075 floor, passed as a `Color` and linearised again in its shader,
+  drew 2 of 255; passed as a `Vector3` it drew 19.
+- **SHOT-48**, **Measure a small marker's stereo disparity by a least-squares subpixel shift of its
+  crop between the eyes, never by thresholded centroids.** On one capture the pipper's centroids
+  read 0.18 px of disparity and a 0.43 px vertical offset; the shift search read 0.76 px and 0.00,
+  matching its 463 m range, and gave the box the aircraft's own 2.5 px.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -184,6 +210,13 @@ covers it.
   the moved pixels sit on such a pair.** Seven invisible boxes parked 100 km below C1 moved
   `c1-rocket-hit-enhanced` by 3 pixels at the radio tower's two alpha sheets, as
   `threading/worker_pool/max_threads=2` does (`analysis/goldens/README.md`).
+
+- **GOLD-21**, **A stereo golden that moves a few levels where the new code draws nothing is not yet
+  the new code's defect; hide the new transparent and re-run before reading the move.** The HUD
+  panel's quad, every fragment discarded in Cockpit view, moved `c1-cockpit-xr-sim-aft` by at most 4
+  levels on the collimated reticle's lines alone, and hiding the quad restored the old hash. The
+  cause was a sort tie the renderer broke differently with one more transparent in the frame
+  (`docs/org/cameraViews.md`, "Draw order"), which the reticle's own sorting offset now settles.
 
 ## DET, determinism and randomness
 
@@ -328,6 +361,30 @@ covers it.
   `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
   apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
   in a later one, against a merge effect of 0.4 to 1.8 ms.
+- **PERF-49**, **On Godot 4.7.0 and 4.7.1 a soft sun shadow's cost depends on where the camera stands
+  in the world, so a penumbra cost measured at one pose does not transfer to another; time it across
+  positions along the sun's direction, with `--no-soft-shadows` as the control.** The PCSS search
+  radius is `(range_pos - range_begin) * tan(angle)`, where the shader's `range_pos` is view-space and
+  `range_begin` the cascade's world-space near plane (`renderer_scene_cull.cpp`), so the radius grows
+  with the camera's world position projected on the sun; 4.7.2 subtracts it (godotengine/godot#120774).
+  A C1 cockpit under the stand-in at 2112x2304 per eye read 5.5 ms at x=0, 9.8 at -6144, 14.9 at
+  -12000 and 19.2 at -20000 with z held, 9.8 to 10.2 ms with x held and z swept, and 3.5 ms hard at
+  every one. The flat cockpit pass draws its interior near the origin, so flat play pays far less:
+  0.64, 0.72 and 0.99 ms at x=0, -6144 and -20000 at 1280x720 against 0.52 ms hard.
+- **PERF-50**, **`--perf`'s spyglass census asks each live disc for its draw counts, which on the
+  editor binary prints Godot's per-frame synchronisation warning with a C# backtrace, so a window
+  with a disc up reads about 12 ms of `proc_ms` that is the instrument's console write.** A C1
+  dogfight against six attacking Furies read `proc_ms` 14.6 to 16.0 ms flat and stereo alike, with
+  every named site summing to about 2 ms and about 2,900 lines of warning and backtrace in the two windows; without the
+  attack, so with no disc up, the same pose read 2.1 ms. Read `gpu_ms` there, and a CPU cost only
+  from a window whose `[perf] spyglass` line is absent (PERF-35, PERF-43).
+- **PERF-51**, **Under `--xr-sim` the `gpu_ms` term is the headset's stereo render alone: a playing
+  cutscene's two picture viewports and the spyglass disc are viewports of their own and are not in
+  it (PERF-39).** At `eye=2112x2304,fov=96` the stand-in read 11.06 ms on the C1 cockpit with the
+  author's options against 10.8 ms mean at the headset at the same eye size, and 19.9 ms at
+  3072x3264 against 20.4 to 23.8 ms there: close enough to rank settings, never a substitute for the
+  headset's own `xr frames` line, which also carries the runtime's compositing. The cutscene pair
+  added 1.3 to 1.6 ms at 1600x1200 per eye.
 
 ## LOG, logs, error censuses, and exit codes
 
@@ -358,6 +415,16 @@ covers it.
   census read `3,8×3,0×5,6 m` on a German machine, which no suite sees under the invariant culture.
 - **LOG-24**, **Take a socket suite's port from `Testing/SuitePorts.cs`: beside a sibling shard, a
   walk past a busy port still leaves the bind's engine `ERROR` line and fails the run.**
+- **LOG-25**, **A launch that compiles a different set of shader variants must not write the shader
+  cache the other launches read: Godot 4.7 misreads a cache file holding a variant the reader has
+  disabled, and the `br != variant_size` line it prints fails the engine stage's error screen.**
+  One `--xr-sim` launch with the cache on made the next flat launch print it for `VrsShaderRD`.
+- **LOG-26**, **Keep a material on a Shader whose text is rewritten in place until Godot recompiles
+  it: Godot 4.7 recompiles a rewritten shader only when a material on it updates, and enabling the
+  advanced group first (a process's first TAA draw, PERF-45) marks it built from the old text.**
+  Every later material on it then prints `Uniform buffer supplied (binding: 0) size (128) is smaller
+  than size of shader uniform: (144)`. Which rewritten shaders had lost their last material varied
+  from run to run, so the same ordered suites failed 1 to 3 of 6 concurrent processes.
 - **LOG-27**, **A process that crashes after its report or shot (`0xC0000005`, `0xC000001D`,
   `FATAL ... script_bindings`, `!rc_owner`) died of a .NET finalizer racing Godot's teardown, which
   `Launcher.SettleFinalizers` prevents; a new exit path must run it too.** Under a forced race a
@@ -758,6 +825,8 @@ flows, and fidelity claims requiring the original. Automated checks must state t
 Scripted probes are pinned by `--det`; `--no-det` restores live input, clocks, spawn, and
 randomness. Expect variation in flight framing, weather, water, particles, random animation,
 damage effects, and liveries. Measure a fresh same-build floor for the exact scenario.
+A stereo run is pinned only through `--xr-sim`, whose head pose comes from the flag; a headset's
+head pose is live input, so a capture from a real session is a sample, never a baseline.
 
 ## Known environmental reds
 

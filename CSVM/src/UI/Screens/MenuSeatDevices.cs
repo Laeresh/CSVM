@@ -23,6 +23,10 @@ public interface IJoinRoster
     /// <summary>The name of the device on that entry, empty where the entry is open.</summary>
     string Device(int entry);
 
+    /// <summary>Whether that entry takes no pad at all in this process, a seat past the one VR mode
+    /// flies. The captain's entry 0 is never closed.</summary>
+    bool Closed(int entry);
+
     /// <summary>Gives every signed-on pad back, the way off the board that keeps nobody: the
     /// captain's claim released and each joined seat unjoined.</summary>
     void DropSignOns();
@@ -219,6 +223,9 @@ public sealed class MenuSeatDevices : IJoinRoster
         entry == 0 ? P1Pad >= 0 : entry > 0 && entry < _setup.Seats.Count;
 
     /// <inheritdoc/>
+    public bool Closed(int entry) => entry > 0 && entry >= _setup.SeatLimit;
+
+    /// <inheritdoc/>
     public string Device(int entry)
     {
         if (entry == 0)
@@ -274,8 +281,13 @@ public sealed class MenuSeatDevices : IJoinRoster
             return true;
         }
 
-        if (_setup.Seats.Count >= PlayerSetupFeature.MaxSeats)
+        if (_setup.Seats.Count >= _setup.SeatLimit)
         {
+            if (_setup.OneSeatForVr)
+            {
+                Log.Info("ui", $"join board: pad {pad} refused, {PlayerSetupFeature.VrOneSeat}");
+            }
+
             return false;
         }
 

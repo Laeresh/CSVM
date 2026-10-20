@@ -16,6 +16,12 @@
     --viewer is what asks for the static inspection view instead. See
     docs/cli.md for the full arg list.
 
+.PARAMETER EngineArgs
+    Godot's own options, placed BEFORE the `--` separator where Godot reads them, e.g.
+    `-EngineArgs '--xr-mode','on'` to start OpenXR for a headset, or
+    `-EngineArgs '--render-thread','safe'` to run the renderer on the main thread instead of
+    the project's separate render thread. Pass them as a string array.
+
 .EXAMPLE
     .\RunGame.ps1
     Build, then the launchscreen (Mode -> Chapter -> Plane), keyboard or controller.
@@ -27,7 +33,20 @@
 .EXAMPLE
     .\RunGame.ps1 --viewer --plane=player_kestrel
     Build, then orbit-view the Kestrel; press L for the livery lab.
+
+.EXAMPLE
+    .\RunGame.ps1 -EngineArgs '--xr-mode','on' --stage=empty
+    Build, then fly the empty stage in a VR headset through the active OpenXR runtime.
 #>
+
+# PositionalBinding=$false, or the first game flag would bind positionally to -EngineArgs.
+# `--flag=value` tokens never bind to a named parameter (PowerShell binds single-dash names
+# only), so every game argument lands in $GameArgs as before.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [string[]]$EngineArgs = @(),
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$GameArgs = @()
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -73,7 +92,7 @@ if (-not $env:SDL_JOYSTICK_DIRECTINPUT) { $env:SDL_JOYSTICK_DIRECTINPUT = "0" }
 
 # Forward any args as-is (none = the launchscreen; an explicit content arg bypasses it).
 $UserArgs = @()
-if ($args.Count -gt 0) { $UserArgs += $args }
+if ($GameArgs.Count -gt 0) { $UserArgs += $GameArgs }
 
 # The engine's own default is silent (--volume=0, since 2026-08-05) so scripted runs never
 # sound by accident. This is the "play the game" entry point, so it asks for sound explicitly
@@ -83,13 +102,13 @@ if (@($UserArgs | Where-Object { $_ -like '--volume=*' -or $_ -eq '--mute' }).Co
     $UserArgs = @('--volume=1.0') + $UserArgs
 }
 
-if ($args.Count -gt 0) {
-    Write-Host "Launching Godot: $($UserArgs -join ' ')" -ForegroundColor Cyan
+if ($GameArgs.Count -gt 0) {
+    Write-Host "Launching Godot: $($EngineArgs -join ' ') -- $($UserArgs -join ' ')" -ForegroundColor Cyan
 } else {
-    Write-Host "Launching Godot: launchscreen ($($UserArgs -join ' '))" -ForegroundColor Cyan
+    Write-Host "Launching Godot: launchscreen ($($EngineArgs -join ' ') -- $($UserArgs -join ' '))" -ForegroundColor Cyan
 }
 # SHELL-19: -ArgumentList quotes nothing itself and this repo path contains a space.
-$LaunchArgs = @("--path", ('"' + $ProjectDir + '"'), "res://scenes/Main.tscn", "--") + $UserArgs
+$LaunchArgs = @("--path", ('"' + $ProjectDir + '"'), "res://scenes/Main.tscn") + @($EngineArgs) + @("--") + $UserArgs
 # The window is created WITHOUT focus (display/window/size/no_focus) so a scripted run never takes
 # the desktop from whoever is using the machine. An interactive launch does want it, and the engine
 # cannot take it for itself: Windows' foreground lock no-ops SetForegroundWindow from a process the
@@ -124,8 +143,12 @@ $ErrFile = Join-Path $LogDir "game-$Stamp.err"
 # interactive play neither waits nor registers (MemoryLedgerCore.ps1).
 . (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
 $Reservation = Request-MemLaunch -GodotArgs $UserArgs -Label "game" -Worktree $RepoRoot
-$proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
-    -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
+# --xr-sim needs the csvm_xr_sim feature tag at engine start (XrSimFeature.ps1 says why).
+. (Join-Path $PSScriptRoot "XrSimFeature.ps1")
+$proc = Invoke-WithXrSimFeature -Arguments $LaunchArgs -Launch {
+    Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
+        -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
+}
 Set-MemReservationPid -Reservation $Reservation -ProcessId $proc.Id
 # The main window does not exist at spawn; poll briefly rather than guessing a sleep.
 # Found via EnumWindows by pid, NOT Process.MainWindowHandle -- that property is zero for a

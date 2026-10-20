@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Flight.Hud;
 using CSVM.Utils;
 using Godot;
 
@@ -24,10 +25,12 @@ public sealed class PylonOrdnance
     public int Count => _mounts.Count;
 
     /// <summary>Instances one ordnance body per loaded pylon and parents it to that pylon marker,
-    /// nose-forward at the mount. Returns null when nothing could be mounted, no projectile pool, a
-    /// view without the world scene, or a chapter whose gamez lacks the prototype roots (the round
-    /// then flies its streak-only fallback and the wing simply shows no ordnance).</summary>
-    public static PylonOrdnance? Build(Loadout loadout, ProjectilePool? pool, bool infiniteAmmo)
+    /// nose-forward at the mount. Null when nothing could be mounted: no projectile pool, no world
+    /// scene, or no prototype root in this chapter's gamez, where the round flies streak-only. Under
+    /// the stereo interior <paramref name="stereo"/>, the interior also carries a stereo copy of each
+    /// body, and <paramref name="visibility"/> takes the body out of the pilot's pane.</summary>
+    public static PylonOrdnance? Build(Loadout loadout, ProjectilePool? pool, bool infiniteAmmo,
+        XrCockpit? stereo = null, CockpitVisibility? visibility = null)
     {
         if (pool == null)
         {
@@ -49,7 +52,24 @@ public sealed class PylonOrdnance
             model.Transform = Transform3D.Identity;
             bool shown = hp.Armed(infiniteAmmo);
             model.Visible = shown;
-            mounts.Add(new Mount { Hardpoint = hp, Model = model, Shown = shown });
+            // The copy draws steady, and the interior covers it wherever they overlap, as the flat pass
+            // does: the interior is not the airframe scaled. The pylon, the launch point, stays put.
+            Node3D? copy = null;
+            if (stereo != null && pool.BuildFlyoutBody(hp.Weapon, stereo: true) is { } built)
+            {
+                built.Name = $"stereo_ordnance{hp.Index}";
+                built.Visible = shown;
+                if (stereo.Hang(built, hp.Pylon))
+                {
+                    copy = built;
+                    visibility?.Reseat(model);
+                }
+                else
+                {
+                    built.QueueFree();
+                }
+            }
+            mounts.Add(new Mount { Hardpoint = hp, Model = model, Copy = copy, Shown = shown });
         }
         return mounts.Count > 0 ? new PylonOrdnance(mounts) : null;
     }
@@ -62,8 +82,11 @@ public sealed class PylonOrdnance
     {
         foreach (var m in _mounts)
         {
-            m.Model.GetParent()?.RemoveChild(m.Model);
-            m.Model.QueueFree();
+            foreach (var model in new[] { m.Model, m.Copy })
+            {
+                model?.GetParent()?.RemoveChild(model);
+                model?.QueueFree();
+            }
         }
         _mounts.Clear();
     }
@@ -81,6 +104,10 @@ public sealed class PylonOrdnance
             if (want != m.Shown)
             {
                 m.Model.Visible = want;
+                if (m.Copy != null)
+                {
+                    m.Copy.Visible = want;
+                }
                 m.Shown = want;
                 // Verification breadcrumb (the first few hides): the mounted body vanishing as its
                 // pylon empties is the depletion behaviour, unobservable headless otherwise; capped.
@@ -97,6 +124,8 @@ public sealed class PylonOrdnance
     {
         public Hardpoint Hardpoint = null!;
         public Node3D Model = null!;
+        // The stereo interior's copy of Model, or null outside a stereo seat.
+        public Node3D? Copy;
         public bool Shown;
     }
 }

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// How the monitor, size, display mode and V-Sync read as rows, and the index and step rules every
+/// How the monitor, size, display mode, V-Sync and the VR settings read as rows, and the index and step rules every
 /// word row shares. The two Options screens share it so they cannot disagree about a saved value.
 /// The labels are one per vocabulary entry
 /// and in that order, since a row reads and writes the store word by index. The index rules restate
@@ -15,6 +15,13 @@ namespace CSVM.UI.Menu;
 /// </summary>
 public static class DisplaySettingRows
 {
+    /// <summary>What the headset's render-scale row says. It reaches the runtime at once. Kept short
+    /// for the same wrap <see cref="VrModeDetail"/> keeps.</summary>
+    public const string VrRenderScaleDetail = "Headset render size, a share of the runtime's own. Lower runs faster. Applies at once.";
+
+    /// <summary>What the headset's comfort vignette row says, kept as short.</summary>
+    public const string VrVignetteDetail = "Darkens the edge of view while the aircraft turns, to ease motion sickness.";
+
     /// <summary>The display-mode labels. The two fullscreen modes read as one word each because the
     /// VIDEO page's authored box is 120 wide; which of them keeps the desktop alive beside the game
     /// is what a row's description says.</summary>
@@ -23,6 +30,13 @@ public static class DisplaySettingRows
     /// <summary>The V-Sync labels. A word that parses as a number is a cap in frames per second
     /// with V-Sync off, which is why the caps read as rates rather than as bare numbers.</summary>
     public static readonly IReadOnlyList<string> VSyncLabels = new[] { "On", "Off", "60 FPS", "120 FPS", "144 FPS" };
+
+    /// <summary>What the VR mode row says. Off Windows the row is dead, PC VR being a Windows build's
+    /// alone, and a row that refuses without saying why reads as broken. ⚠ Keep each under about 80
+    /// characters: the VIDEO page wraps it at 244 authored pixels above the next row's line.</summary>
+    public static string VrModeDetail(bool windows) => windows
+        ? "Experimental PC VR. Applied from the menu, the game restarts in the headset."
+        : "PC VR needs the Windows build and a headset.";
 
     /// <summary>Where a saved word sits among a row's own values: a word the vocabulary does not
     /// know, or none saved at all, shows as <paramref name="fallback"/>, the setting's own default

@@ -77,6 +77,13 @@ public sealed partial class TargetHud : Control
     /// <see cref="HudRed"/> is (200,0,0).</summary>
     internal static readonly Color HudGreen = new(0.6f, 1f, 0.6f);
 
+    /// <summary>The label block's line pitch in reference pixels, for a caller sizing a surface
+    /// the block is drawn into.</summary>
+    internal static readonly float LabelPitchRef = RefLabelPitch;
+
+    /// <summary>The step between two edge tags on one bearing, in reference pixels.</summary>
+    internal static readonly float StaggerStepRef = RefStaggerStep;
+
     // 1440p reference metrics, scaled by HudMetrics.
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
     private const float RefStaggerStep = 18f;  // --debug-markers: gap between two edge tags on one bearing
@@ -124,6 +131,7 @@ public sealed partial class TargetHud : Control
         { "Destroy", "Disable", "Disable Engines", "Damage" };
 
     private readonly List<string> _labelLines = new();  // rebuilt per draw
+    private readonly List<WorldMark> _drawn = new();    // rebuilt per draw
     private readonly Vector2[] _discPoints = new Vector2[DiscSegments];  // the mask, refilled per draw
     private readonly Vector2[] _discUvs = new Vector2[DiscSegments];
 
@@ -138,6 +146,7 @@ public sealed partial class TargetHud : Control
     private bool _bracketed;   // last frame's gate answer, for the hysteresis
     private object? _heldSubject;  // what the spyglass is holding, the clone at +0x20c
     private float _heldRadius;     // that subject's framing radius, measured once per hold
+    private bool _marksInWorld;
 
     /// <summary>This pane's own world pose, fed every frame by FlightController, the tracked
     /// hostile's clock bearing reads off it.</summary>
@@ -157,6 +166,22 @@ public sealed partial class TargetHud : Control
     /// load; the pilot's toggle flips it and every other gate is re-answered every frame regardless
     /// of it.</summary>
     public bool SpyglassOn { get; set; } = Spyglass.DefaultOn;
+
+    /// <summary>Whether a stereo session draws this pane's markers in the world
+    /// (<see cref="XrMarkers"/>). Set, this control draws none, and the hostile tracker still runs.
+    /// The stereo host then answers the spyglass's gates and shows its picture on the head ring.</summary>
+    public bool MarksInWorld
+    {
+        get => _marksInWorld;
+        set
+        {
+            _marksInWorld = value;
+            if (_spyglass != null)
+            {
+                _spyglass.Headset = value;
+            }
+        }
+    }
 
     /// <summary>Whether the round picture is up this frame, which is also what moves the anchor,
     /// the shaft's start and the label. Answered by <see cref="UpdateSpyglass"/>.</summary>
@@ -508,12 +533,12 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>Re-answers whether the round picture is up for <paramref name="target"/> at
-    /// <paramref name="at"/>, and aims it when it is: armed, off screen, and inside
-    /// <see cref="Spyglass.RangeGate"/> for this pane's fog band, the wider gate while this same
-    /// subject is already held. The framing radius is measured once per hold, a mesh box being
-    /// fixed. Called every <see cref="_Process"/>; public so the suite drives it without pumping
-    /// frames.</summary>
-    public bool UpdateSpyglass(in TargetRef target, Vector3 at, bool offScreen)
+    /// <paramref name="at"/>, and aims it when it is. It is up while armed, off screen, and inside
+    /// <see cref="Spyglass.RangeGate"/> for this pane's fog band, wider while the subject is held.
+    /// The framing radius is measured once per hold. The picture renders
+    /// <paramref name="side"/> texels square, or the disc's size on this pane with none given.
+    /// Public so the suite and the stereo host drive it.</summary>
+    public bool UpdateSpyglass(in TargetRef target, Vector3 at, bool offScreen, int side = 0)
     {
         bool held = _heldSubject != null && ReferenceEquals(_heldSubject, target.Source);
         float gate = Spyglass.RangeGate(FogRange?.Invoke() ?? Vector2.Zero, held);
@@ -530,8 +555,13 @@ public sealed partial class TargetHud : Control
         }
 
         DiscShown = true;
-        float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
-        if (_spyglass != null && s > 0f)
+        if (side <= 0)
+        {
+            float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
+            side = s > 0f ? Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)) : 0;
+        }
+
+        if (_spyglass != null && side > 0)
         {
             // The eye stands on the DRAWN pose, never the sim one the gates above read: an eye
             // quantised to the physics tick shakes against the frame around it. The roll is the
@@ -540,7 +570,7 @@ public sealed partial class TargetHud : Control
                 Spyglass.Pose(RenderPose.Origin, at, RenderPose.Basis,
                     target.Source is FlightController),
                 Spyglass.FovDeg(_heldRadius, PlanePos.DistanceTo(at)),
-                Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)));
+                side);
         }
 
         return true;
@@ -566,15 +596,45 @@ public sealed partial class TargetHud : Control
     {
         // A draw can land before _Process has sized this pane.
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
-        if (s <= 0f)
+        if (s <= 0f || MarksInWorld)
             return;
         var font = ChromeType.Face(this);
-        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
+        int markerFont = MarkerFontSize(s);
+        _drawn.Clear();
+        WorldMarks(_drawn);
+        foreach (var mark in _drawn)
+        {
+            if (mark.Style == WorldMarkStyle.Selected)
+            {
+                DrawSelected(font, mark, s, markerFont);
+            }
+            else
+            {
+                DrawOpponent(font, mark.At, mark.Color, mark.Tag, s, markerFont, mark.Stagger);
+            }
+        }
+    }
 
+    /// <summary>Appends every marker this HUD draws this frame to <paramref name="into"/>, in draw
+    /// order. That is the selection, then the debug overlay, which replaces the rest. Without it come
+    /// the race pilots and, with nothing selected, the hostile fallback. The flat draw projects the
+    /// list through this pane's camera; a stereo session places it in the world.</summary>
+    public void WorldMarks(List<WorldMark> into)
+    {
         // The shipped marker, drawn in BOTH modes unlike the hostile tracker below: --debug-markers
         // replaces that tracker but not this, so brackets, label and debug string draw in one frame
         // (the c1-flight-kill golden).
-        bool selected = Selected is { } target && DrawSelected(font, target, s, markerFont);
+        bool selected = false;
+        if (Selected is { Source: not null } target)
+        {
+            // At the source's render pose, like --debug-markers. The candidate's own Position is the
+            // gun's physics pose, a fly-by shake through a camera on the render pose. The gate in
+            // UpdateBrackets stays on the physics pose.
+            var pos = TargetPool.TryRenderPosition(target.Source, out var render) ? render : target.Position;
+            into.Add(new WorldMark(WorldMarkStyle.Selected, pos, MarkerColor(target, OwnTeam), "", target,
+                _bracketed, 0));
+            selected = true;
+        }
 
         // --debug-markers: every live aircraft at once, red hostile / blue own side, each with
         // its slant range. Replaces the single-hostile marker below rather than stacking on it,
@@ -590,10 +650,9 @@ public sealed partial class TargetHud : Control
                     || !GodotObject.IsInstanceValid(plane) || !plane.IsInsideTree())
                     continue;
                 var at = plane.GlobalPosition;
-                DrawOpponent(font, at, friendly ? HudBlue : HudRed,
-                    DebugTag(HostileTag(mark.Name), mark, PlanePos.DistanceTo(at),
-                        ModeSuffix(plane)),
-                    s, markerFont, stagger++);
+                into.Add(new WorldMark(WorldMarkStyle.Tagged, at, friendly ? HudBlue : HudRed,
+                    DebugTag(HostileTag(mark.Name), mark, PlanePos.DistanceTo(at), ModeSuffix(plane)),
+                    default, false, stagger++));
             }
 
             return;
@@ -609,8 +668,8 @@ public sealed partial class TargetHud : Control
                 if (!GodotObject.IsInstanceValid(pilot) || !pilot.IsInsideTree())
                     continue;
                 var at = TargetPool.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
-                DrawOpponent(font, at, HudGreen, TargetPool.AircraftDisplayName(pilot, OwnTeam) ?? pilot.Name,
-                    s, markerFont, stagger++);
+                into.Add(new WorldMark(WorldMarkStyle.Tagged, at, HudGreen,
+                    TargetPool.AircraftDisplayName(pilot, OwnTeam) ?? pilot.Name, default, false, stagger++));
             }
         }
 
@@ -619,7 +678,96 @@ public sealed partial class TargetHud : Control
         // covers a hostile freed between UpdateHostile's scan and this draw.
         if (!selected && GodotObject.IsInstanceValid(_hostile) && _hostile is { InPlay: true } hostile
             && hostile.IsInsideTree())
-            DrawOpponent(font, hostile.GlobalPosition, HudRed, _hostileTag, s, markerFont);
+            into.Add(new WorldMark(WorldMarkStyle.Tagged, hostile.GlobalPosition, HudRed, _hostileTag, default, false, 0));
+    }
+
+    /// <summary>The marker label's font size at scale <paramref name="s"/>, the player's marker text
+    /// multiplier included.</summary>
+    internal static int MarkerFontSize(float s) =>
+        Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
+
+    /// <summary>Draws a marker on view at <paramref name="at"/> into <paramref name="into"/>. A
+    /// selection takes its box and label block, the block flipping above the box where it would
+    /// pass <paramref name="paneHeight"/>. Any other marker takes a tag just above the point.
+    /// <paramref name="lines"/> is the caller's scratch list.</summary>
+    internal static void DrawInView(CanvasItem into, Font font, in WorldMark mark, Vector2 at,
+        float paneHeight, float s, int fontSize, List<string> lines)
+    {
+        lines.Clear();
+        if (mark.Style != WorldMarkStyle.Selected)
+        {
+            DrawTag(into, font, at + new Vector2(0f, -RefOnScreenLift * s), mark.Tag, mark.Color, fontSize);
+            return;
+        }
+
+        if (mark.Boxed)
+        {
+            DrawBrackets(into, at, mark.Color, s);
+        }
+
+        LabelLines(mark.Target, null, lines);
+        float below = at.Y + (RefBracketHalfH + RefLabelGap) * s;
+        float anchor = at.Y + (RefBracketHalfH + RefLabelBlock) * s <= paneHeight
+            ? below
+            : at.Y - (RefBracketHalfH + RefLabelAbove) * s;
+        DrawLabelBlock(into, font, new Vector2(at.X, anchor), lines, mark.Color, s, fontSize);
+    }
+
+    /// <summary>The label an off-view marker carries, top to bottom. A selection's is its label block
+    /// with the clock line and no empty slots; any other marker's is one line of tag and bearing.</summary>
+    internal static void EdgeLines(in WorldMark mark, int clockHour, List<string> into)
+    {
+        if (mark.Style == WorldMarkStyle.Selected)
+        {
+            LabelLines(mark.Target, $"{clockHour} o'clock", into, keepSlots: false);
+            return;
+        }
+
+        into.Add(EdgeTag(mark.Tag, clockHour));
+    }
+
+    /// <summary>The bracket box: six line sprites forming a <c>[ ]</c> pair around the projected
+    /// point. It is 20 x 16 reference pixels with 4-pixel arms (<c>0x00607a0c</c>/<c>0x00607a14</c>/
+    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by nothing
+    /// else, least of all by range.</summary>
+    internal static void DrawBrackets(CanvasItem into, Vector2 at, Color color, float s)
+    {
+        // The same drop shadow the arrow and the tags carry, so the box stays readable over sky.
+        Brackets(into, at + new Vector2(1.5f, 1.5f) * s, Shadow, s);
+        Brackets(into, at, color, s);
+    }
+
+    /// <summary>The label lines stacked downward from <paramref name="anchor"/> at the original's
+    /// 15-pixel pitch, each centred on it. The anchor is the block's first LINE, our text centred
+    /// vertically on its point where the original's sits on a baseline. That is the one place this
+    /// geometry is ours rather than measured.</summary>
+    internal static void DrawLabelBlock(CanvasItem into, Font font, Vector2 anchor, List<string> lines,
+        Color color, float s, int fontSize)
+    {
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].Length == 0)
+            {
+                continue;   // a blank slot draws nothing and still holds its place
+            }
+
+            DrawTag(into, font, anchor + new Vector2(0f, i * RefLabelPitch * s), lines[i], color,
+                fontSize);
+        }
+    }
+
+    /// <summary>The arrow the original draws: a shaft from <paramref name="tail"/> out to the tip,
+    /// carrying the apparent length, and the fixed head on the tip's end. Both take the drop shadow
+    /// the box and the tags carry, so the arrow stays readable over sky.</summary>
+    internal static void DrawArrow(CanvasItem into, Vector2 tip, Vector2 tail, Vector2 dir, float s, Color color)
+    {
+        var (point, left, right) = ArrowHead(tip, dir, s);
+        var off = new Vector2(1.5f, 1.5f) * s;
+        float w = Mathf.Max(1f, RefShaftWidth * s);
+        into.DrawLine(tail + off, point + off, Shadow, w, antialiased: true);
+        into.DrawColoredPolygon(new[] { point + off, left + off, right + off }, Shadow);
+        into.DrawLine(tail, point, color, w, antialiased: true);
+        into.DrawColoredPolygon(new[] { point, left, right }, color);
     }
 
     // The target's framing radius: half the diagonal of its merged mesh box, which is what holds a
@@ -636,11 +784,45 @@ public sealed partial class TargetHud : Control
         return Flight.Camera.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
     }
 
+    private static string EdgeTag(string tag, int clockHour) => $"{tag}  {clockHour} o'clock";
+
+    private static void Brackets(CanvasItem into, Vector2 at, Color color, float s)
+    {
+        float hw = RefBracketHalfW * s, hh = RefBracketHalfH * s, arm = RefBracketArm * s;
+        float w = Mathf.Max(1f, RefBracketWidth * s);
+        for (int side = 0; side < 2; side++)
+        {
+            float x = side == 0 ? at.X - hw : at.X + hw;
+            var inward = new Vector2(side == 0 ? arm : -arm, 0f);
+            var top = new Vector2(x, at.Y - hh);
+            var bottom = new Vector2(x, at.Y + hh);
+            into.DrawLine(top, bottom, color, w, antialiased: true);
+            into.DrawLine(top, top + inward, color, w, antialiased: true);
+            into.DrawLine(bottom, bottom + inward, color, w, antialiased: true);
+        }
+    }
+
+    private static void DrawTag(CanvasItem into, Font font, Vector2 center, string text, Color color, int fontSize)
+    {
+        float w = font.GetStringSize(text, HorizontalAlignment.Left, -1f, fontSize).X;
+        float h = font.GetHeight(fontSize);
+        var p = new Vector2(center.X - w / 2f, center.Y - h / 2f + font.GetAscent(fontSize));
+        into.DrawString(font, p + Vector2.One, text, HorizontalAlignment.Left, -1f, fontSize, Shadow);
+        into.DrawString(font, p, text, HorizontalAlignment.Left, -1f, fontSize, color);
+    }
+
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
     // _Draw: both latch, and a latch that advanced per repaint would depend on how often the pane
     // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing.
     private void StepSpyglass()
     {
+        // ⚠ Do not release here under a headset: the stereo host answers the gate later in the
+        // frame. A release each frame would drop the held subject and its wider gate.
+        if (MarksInWorld)
+        {
+            return;
+        }
+
         if (!Visible || Selected is not { Source: not null } sel
             || !GodotObject.IsInstanceValid(_camera))
         {
@@ -671,36 +853,23 @@ public sealed partial class TargetHud : Control
         return EdgeMarker.Resolve(sp, behind, Size);
     }
 
-    // The selected target's marker: on screen, the bracket box (when the gun reaches it) over the
-    // label block; off screen, the edge marker with that block plus the clock bearing and no box.
+    // The selected target's marker. On screen it is the label block under the box the gun's reach
+    // gates. Off screen it is the edge marker with that block and the clock bearing, and no box.
     // The FUN_004574d0 label anchor is computed from the box whether or not the box is drawn, so an
-    // out-of-range target's label does not move. False = nothing drawn, so the caller falls back.
+    // out-of-range target's label does not move.
     // ⚠ The clock line is the OFF-SCREEN case only: the Kestrel shot shows an on-screen target
     // with its name alone.
-    private bool DrawSelected(Font font, in TargetRef target, float s, int fontSize)
+    private void DrawSelected(Font font, in WorldMark mark, float s, int fontSize)
     {
-        if (target.Source == null)
-        {
-            return false;
-        }
-
-        var color = MarkerColor(target, OwnTeam);
-        var placed = Place(target, out var pos, out var sp, out bool behind);
-        _labelLines.Clear();
+        var pos = mark.At;
+        var color = mark.Color;
+        bool behind = _camera.IsPositionBehind(pos);
+        var sp = _camera.UnprojectPosition(pos);
+        var placed = EdgeMarker.Resolve(sp, behind, Size);
         if (placed.OnScreen)
         {
-            if (_bracketed)
-            {
-                DrawBrackets(sp, color, s);
-            }
-
-            LabelLines(target, null, _labelLines);
-            float below = sp.Y + (RefBracketHalfH + RefLabelGap) * s;
-            float anchor = sp.Y + (RefBracketHalfH + RefLabelBlock) * s <= Size.Y
-                ? below
-                : sp.Y - (RefBracketHalfH + RefLabelAbove) * s;
-            DrawLabelBlock(font, new Vector2(sp.X, anchor), color, s, fontSize);
-            return true;
+            DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines);
+            return;
         }
 
         // Off screen: the edge marker's arrow from the anchor out to the tip, and the block above or
@@ -714,11 +883,10 @@ public sealed partial class TargetHud : Control
             DrawDisc(placed.Anchor, radius, color, s);
         }
 
-        DrawArrow(placed.Tip, ShaftTail(placed.Anchor, placed.Dir, s, disc), placed.Dir, s, color);
-        LabelLines(target, $"{EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock",
-            _labelLines, keepSlots: false);
-        DrawLabelBlock(font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc), color, s, fontSize);
-        return true;
+        DrawArrow(this, placed.Tip, ShaftTail(placed.Anchor, placed.Dir, s, disc), placed.Dir, s, color);
+        _labelLines.Clear();
+        EdgeLines(mark, EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos), _labelLines);
+        DrawLabelBlock(this, font, EdgeLabelAnchor(placed.Anchor, Size.Y, s, disc), _labelLines, color, s, fontSize);
     }
 
     // The picture itself: the viewport's texture masked to a circle of that radius at that centre,
@@ -746,51 +914,6 @@ public sealed partial class TargetHud : Control
         DrawArc(center, radius, 0f, Mathf.Tau, DiscSegments, color, w, antialiased: true);
     }
 
-    /// <summary>The bracket box: six line sprites forming a <c>[ ]</c> pair around the projected
-    /// point, 20 x 16 reference pixels with 4-pixel arms (<c>0x00607a0c</c>/<c>0x00607a14</c>/
-    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by nothing
-    /// else, least of all by range.</summary>
-    private void DrawBrackets(Vector2 at, Color color, float s)
-    {
-        // The same drop shadow the arrow and the tags carry, so the box stays readable over sky.
-        Brackets(at + new Vector2(1.5f, 1.5f) * s, Shadow, s);
-        Brackets(at, color, s);
-    }
-
-    private void Brackets(Vector2 at, Color color, float s)
-    {
-        float hw = RefBracketHalfW * s, hh = RefBracketHalfH * s, arm = RefBracketArm * s;
-        float w = Mathf.Max(1f, RefBracketWidth * s);
-        for (int side = 0; side < 2; side++)
-        {
-            float x = side == 0 ? at.X - hw : at.X + hw;
-            var inward = new Vector2(side == 0 ? arm : -arm, 0f);
-            var top = new Vector2(x, at.Y - hh);
-            var bottom = new Vector2(x, at.Y + hh);
-            DrawLine(top, bottom, color, w, antialiased: true);
-            DrawLine(top, top + inward, color, w, antialiased: true);
-            DrawLine(bottom, bottom + inward, color, w, antialiased: true);
-        }
-    }
-
-    /// <summary>The label lines stacked downward from <paramref name="anchor"/> at the original's
-    /// 15-pixel pitch, each centred on it. The anchor is the block's first LINE (our text is centred
-    /// vertically on the point it is given, where the original's is drawn from a baseline), which is
-    /// the one place this geometry is ours rather than measured.</summary>
-    private void DrawLabelBlock(Font font, Vector2 anchor, Color color, float s, int fontSize)
-    {
-        for (int i = 0; i < _labelLines.Count; i++)
-        {
-            if (_labelLines[i].Length == 0)
-            {
-                continue;   // a blank slot draws nothing and still holds its place
-            }
-
-            DrawTag(font, anchor + new Vector2(0f, i * RefLabelPitch * s), _labelLines[i], color,
-                fontSize);
-        }
-    }
-
     /// <summary>One tracked hostile's marker: on screen, its tag floats just above the projected
     /// point; off screen (or behind), the edge marker's arrow + "N o'clock" bearing,
     /// <see cref="EdgeMarker"/>'s placement, plus the <paramref name="stagger"/> step
@@ -803,37 +926,14 @@ public sealed partial class TargetHud : Control
         var placed = EdgeMarker.Resolve(sp, behind, Size);
         if (placed.OnScreen)
         {
-            DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
+            DrawTag(this, font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
             return;
         }
-        DrawArrow(placed.Tip, placed.Anchor, placed.Dir, s, color);
+        DrawArrow(this, placed.Tip, placed.Anchor, placed.Dir, s, color);
         // Several planes on one bearing put their tags on the same pixel (--debug-markers marks
         // six at once); step each one along the screen edge so all of them stay readable.
         var along = new Vector2(-placed.Dir.Y, placed.Dir.X) * (stagger * RefStaggerStep * s);
-        DrawTag(font, EdgeLabelAnchor(placed.Anchor, Size.Y, s) + along,
-            $"{tag}  {EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)} o'clock", color, fontSize);
-    }
-
-    // The arrow the original draws: a shaft from the label anchor out to the tip, carrying the
-    // apparent length, and the fixed head on the tip's end. Both take the drop shadow the box and
-    // the tags carry, so the arrow stays readable over sky.
-    private void DrawArrow(Vector2 tip, Vector2 tail, Vector2 dir, float s, Color color)
-    {
-        var (point, left, right) = ArrowHead(tip, dir, s);
-        var off = new Vector2(1.5f, 1.5f) * s;
-        float w = Mathf.Max(1f, RefShaftWidth * s);
-        DrawLine(tail + off, point + off, Shadow, w, antialiased: true);
-        DrawColoredPolygon(new[] { point + off, left + off, right + off }, Shadow);
-        DrawLine(tail, point, color, w, antialiased: true);
-        DrawColoredPolygon(new[] { point, left, right }, color);
-    }
-
-    private void DrawTag(Font font, Vector2 center, string text, Color color, int fontSize)
-    {
-        float w = font.GetStringSize(text, HorizontalAlignment.Left, -1f, fontSize).X;
-        float h = font.GetHeight(fontSize);
-        var p = new Vector2(center.X - w / 2f, center.Y - h / 2f + font.GetAscent(fontSize));
-        DrawString(font, p + Vector2.One, text, HorizontalAlignment.Left, -1f, fontSize, Shadow);
-        DrawString(font, p, text, HorizontalAlignment.Left, -1f, fontSize, color);
+        DrawTag(this, font, EdgeLabelAnchor(placed.Anchor, Size.Y, s) + along,
+            EdgeTag(tag, EdgeMarker.ClockHour(PlanePos, HeadingDeg, pos)), color, fontSize);
     }
 }

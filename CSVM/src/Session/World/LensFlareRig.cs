@@ -144,6 +144,7 @@ public sealed class LensFlareRig
             spriteCanvas.AddChild(spriteRoot);
             rig.HudParent.AddChild(spriteCanvas);
             rig.WorldOverlays.Add(spriteCanvas);
+            inst.Canvases.Add(spriteCanvas);
 
             for (int i = 0; i < Elements.Length && i < names.Count; i++)
             {
@@ -179,6 +180,7 @@ public sealed class LensFlareRig
             washCanvas.AddChild(inst.Wash);
             rig.HudParent.AddChild(washCanvas);
             rig.WorldOverlays.Add(washCanvas);
+            inst.Canvases.Add(washCanvas);
 
             _instances.Add(inst);
         }
@@ -258,6 +260,23 @@ public sealed class LensFlareRig
         }
     }
 
+    /// <summary>Takes every pane's flare out of the tree and off its rig's world overlays. A live
+    /// graphics switch then builds the world rig in its place.</summary>
+    public void Drop()
+    {
+        foreach (var inst in _instances)
+        {
+            foreach (var canvas in inst.Canvases)
+            {
+                inst.Rig.WorldOverlays.Remove(canvas);
+                canvas.GetParent()?.RemoveChild(canvas);
+                canvas.QueueFree();
+            }
+        }
+
+        _instances.Clear();
+    }
+
     // Instant attack, timed release, the measured shape: the rig "pops in complete" when
     // the sun core enters frame and fades over ~0.1–0.15 s as it leaves.
     private static float Step(float current, bool on, double delta)
@@ -278,6 +297,7 @@ public sealed class LensFlareRig
     private sealed class Instance
     {
         public readonly List<TextureRect> Sprites = new();
+        public readonly List<CanvasLayer> Canvases = new();
         public PlayerRig Rig = null!;
         public Node3D Sun = null!;
         public ColorRect? Wash;

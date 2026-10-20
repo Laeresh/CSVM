@@ -193,6 +193,33 @@ public class PlayerSetupFeatureTests
         Assert.Equal(1, Seated(3, 1).ConfirmedCount);
     }
 
+    /// <summary>VR mode's one seat refuses a second claim. A local Dogfight's gate names VR rather
+    /// than inviting a second seat, and a network Dogfight still goes. A discard keeps the limit,
+    /// which is the process's and not the setup's.</summary>
+    [Fact]
+    public void UnderVrOneSeatASecondClaimIsRefusedAndALocalDogfightSaysWhy()
+    {
+        var setup = Setup();
+        setup.SeatLimit = 1;
+        Assert.True(setup.OneSeatForVr);
+        var lone = setup.Join(new ScriptedMenuSeat())!;
+        Assert.NotNull(lone);
+        Assert.Null(setup.Join(new ScriptedMenuSeat()));
+        Assert.Single(setup.Seats);
+
+        setup.Select(lone);
+        setup.Confirm(lone);
+        Assert.Equal(PlayerSetupFeature.VrOneSeat, setup.Refusal(MenuMode.Versus));
+        Assert.Null(setup.Refusal(MenuMode.Versus, networked: true));
+        Assert.Null(setup.Refusal(MenuMode.Free));
+
+        setup.Discard();
+        Assert.Equal(1, setup.SeatLimit);
+        setup.SeatLimit = 9;
+        Assert.Equal(PlayerSetupFeature.MaxSeats, setup.SeatLimit);
+        Assert.False(setup.OneSeatForVr);
+    }
+
     [Fact]
     public void TheChoicesCarryEachSeatsNodeDevicesFitAndCustomDef()
     {

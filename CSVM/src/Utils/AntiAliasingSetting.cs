@@ -26,8 +26,9 @@ public readonly record struct AntiAliasingPlan(AntiAliasingMethod Method, string
 
 /// <summary>
 /// The anti-aliasing method the 3D viewports run, one of
-/// <see cref="DisplayWords.AntiAliasingChoices"/>. <see cref="Lookup"/> reads the saved
-/// <c>antiAliasing</c> option, then the <see cref="Key"/> config key, then
+/// <see cref="DisplayWords.AntiAliasingChoices"/>. <see cref="Lookup"/> reads
+/// <c>--anti-aliasing=</c> or the VR profile's word (<see cref="VrQuality"/>), then the saved
+/// <c>antiAliasing</c> option. Then come the <see cref="Key"/> config key and
 /// <see cref="DefaultFor"/> the graphics mode. It is a display setting, so a chosen method is
 /// written whichever mode won. Only the default follows the mode.
 /// <see cref="ViewportQuality"/> is the one reader of <see cref="Method"/>. It
@@ -40,9 +41,9 @@ public static class AntiAliasingSetting
     /// <summary>The config key under the saved option, one of the five words.</summary>
     public const string Key = "graphics.antiAliasing";
 
-    /// <summary>The setting's registry entry. Anti-aliasing has no command-line flag, and its
-    /// fallback follows the graphics mode.</summary>
-    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices)
+    /// <summary>The setting's registry entry, beaten by <c>--anti-aliasing=</c>. Its fallback
+    /// follows the graphics mode.</summary>
+    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices, "--anti-aliasing")
     {
         SavedField = "antiAliasing",
         LogName = "anti_aliasing",

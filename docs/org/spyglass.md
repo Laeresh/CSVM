@@ -331,6 +331,7 @@ and do not read the footage as evidence that it works.**
 | Label placement | anchor x unchanged, y offset `+3` in the screen's upper half and `-45` in the lower, `windowBottom + 3` / `windowTop - 45` when the disc is up | the same both ways, `TargetHud.EdgeLabelAnchor`'s `disc` variant |
 | Colour | `Target::GetColor` into all three primitives | the same rule, `TargetHud`'s `color`, the disc's rim included |
 | Occluders | recorded and restored unchanged, a no-op | nothing |
+| Under a headset | no headset | the same picture, aimed from the aircraft at the target, shown once for both eyes on a disc on the head ring inside the selection's ring arrow (`Flight/Hud/XrSpyglassDisc.cs`); "off screen" is the ring's 25-degree cone about the head's view axis, and the disc is 1.5 times the flat one's angle (`XrMarkerLaw.SpyglassScale`, TUNE) |
 
 The remake's `Ref*` constants are 1440p-reference pixels scaled by `HudMetrics`, and the original's
 constants are absolute device pixels, so they transfer one for one into `Ref*` the way

@@ -40,7 +40,7 @@ process-wide unit quad and one compiled shader per blend and soft pair, with a t
 per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the two per-column marks Enhanced Graphics grades by (`IsFireSprite`, an ALBEDO gain over the glow threshold that the mixed alpha's clamp carries through; `IsSmokeSprite`, a `csky_sun_dir` gradient across the quad in the mix variant alone, clamped under that threshold: the faithful text carries neither term), the
 mission's distance fog off the sky's globals, and a mixed alpha that lands on DX7's byte-space mix. Blend arrives per atlas column from `Puffer.Create`,
 keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
-blend, each in write order and depth-sorted on its cloud's AABB centre. Read `Puffer.cs` next.
+blend, each in write order and depth-sorted on its cloud's AABB centre. Under the stereo path the quad and the smoke grade take `Mech3/StereoFacing.cs`'s basis instead. Read `Puffer.cs` next.
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table laid on a
@@ -50,7 +50,7 @@ MultiMesh per sprite kind, plus a map-edge continuation
 resolve through `ClutterBuilder.FindTemplateRoot`. `BandData` packs each sprite's own face normal
 and the one draw both `far_fade_range` pairs are interpolated with into a custom-data slot, which
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
-`Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position, and darkening toward a night zone's fog over its authored band ([../org/weather.md](../org/weather.md)). `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
+`Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical (under the stereo path the grade reads its gaze and sun offset off the card's own pose, `Mech3/StereoFacing.cs`), and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position, and darkening toward a night zone's fog over its authored band ([../org/weather.md](../org/weather.md)). `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Effects/Ocean.cs
 The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A camera-centred polar
@@ -133,7 +133,8 @@ whose shader derives each quad's position from a per-instance seed, `csky_time` 
 `CAMERA_POSITION_WORLD`, wrapped into a camera-centred box, so the field costs no per-frame CPU.
 SNOW flutters as flakes; RAIN streaks along the data's world fall velocity. The sprites are
 procedural (`MakeFlakeTexture`/`MakeStreakTexture`), the original having drawn untextured
-primitives no archive carries. Schema and the data-to-look TUNE mapping:
+primitives no archive carries. Under the stereo path a flake faces the eye with world up
+(`Mech3/StereoFacing.cs`). Schema and the data-to-look TUNE mapping:
 [../formats/weather.md](../formats/weather.md).
 
 ## src/Effects/Weather.cs
@@ -173,7 +174,7 @@ quad samples `hint_screen_texture` at a `csky_time`-driven noise offset scaled b
 by the fireball's own liveness, and writes it back with no gain, so it lifts no pixel over the glow
 bar. That copy is taken before the transparent pass and holds no fire or smoke, which is why the
 quad stands clear above the flame. `Spawn` recycles the oldest slot at the cap, `Step` retires a
-quad the frame its liveness goes false, and every size, lift, decay and amplitude constant is TUNE.
+quad the frame its liveness goes false, and every size, lift, decay and amplitude constant is TUNE. Under the stereo path the quad stands in `Mech3/StereoFacing.cs`'s basis rather than the view's.
 
 ## src/Effects/ScorchField.cs
 Remake-only scorch marks, a layer OVER the crater carve (`Mech3/CraterField.cs`) and never instead

@@ -134,6 +134,9 @@ public sealed class CameraController
     // separate nose marker (docs/org/cameraViews.md).
     private readonly Vector3 _cockpitCameraOffset;
 
+    // The view the run opened on, which a headset death returns to (ResetToChase).
+    private readonly PilotViewMode _openingView;
+
     // The dynamic chase radius: `dist` + `dist_factor`·V + the throttle transient. Advanced by
     // UpdateDynamics on the sim clock, and read by both the chase camera and the fixed views:
     // they are one number, so a numpad snap changes the angle and nothing else.
@@ -153,6 +156,10 @@ public sealed class CameraController
     private Quaternion _posFrame = Quaternion.Identity, _lookFrame = Quaternion.Identity;
     private bool _framesSeeded;
 
+    // The level chase's right axis on its last frame, and the shot it was taken in.
+    private Vector3 _xrChaseRight;
+    private int _xrChaseShot = -1;
+
     // The enhanced cue's state, this frame's FOV widening in degrees. Only StepEnhancedCues writes
     // it, and only under the enhanced presentation, so on the faithful path it stays 0. ⚠ Enhanced
     // has no attitude lag of its own. It rides the decoded catch-up, which already trails a roll.
@@ -162,6 +169,20 @@ public sealed class CameraController
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private CameraView _viewPrev = CameraView.Chase; // the view the last logged frame was drawn from
 
+    // Under a headset, the heading a static camera faces from its spot, taken when the spot is
+    // chosen. ⚠ Do not re-aim it per frame: a turning origin is a turn the player's body never made.
+    private Basis _heldHeading = Basis.Identity;
+    private int _heldPlacements = -1;
+
+    // What the last camera write asks of the headset's origin, until XrRig takes it.
+    private XrAnchor? _xrWrite;
+    private XrChase? _headset;
+
+    // Under a headset with a fade, the view keys pressed while the view darkens. They land together
+    // once it is black: the selection they walked to, then the flyby.
+    private PilotViewMode? _askedView;
+    private bool _askedFlyby;
+
     public CameraController(Camera3D camera, CamParams cam, Func<InputAction, bool> held, int pinnedView,
         PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default,
         Func<float>? staticDraw = null)
@@ -170,6 +191,7 @@ public sealed class CameraController
         _held = held;
         _pinnedView = pinnedView;
         ViewMode = viewMode;
+        _openingView = viewMode;
         _camParams = cam;
         _radius = cam.Dist;
         _cockpitCameraOffset = cockpitCameraOffset;
@@ -223,6 +245,36 @@ public sealed class CameraController
     /// cockpit.</summary>
     public bool FirstPerson => PilotView.IsFirstPerson(ViewMode);
 
+    /// <summary>The VR chase this pilot's headset flies, or null on a flat pane. Under a headset the
+    /// head reads no input and the look-behind is off. The chase is <see cref="XrMount.Chase"/> at
+    /// <see cref="VrChaseOffset"/>, and a static camera holds the heading it cut to.</summary>
+    public XrChase? Headset
+    {
+        get => _headset;
+        set
+        {
+            _headset = value;
+            if (value != null)
+            {
+                Head.Reset();
+            }
+        }
+    }
+
+    /// <summary>The headset's comfort fade, which <see cref="XrRig"/> hands over each frame. Under a
+    /// headset a view key waits on it, so the switch lands on a black frame. Null switches at once.
+    /// </summary>
+    public UI.Boards.XrFade? Fade { get; set; }
+
+    /// <summary>How many cuts this camera has made. A cut is a view change, a respawn, a static
+    /// camera's new spot or a new aircraft to watch. <see cref="XrRig"/> raises its own on a change.
+    /// </summary>
+    public int Shot { get; private set; }
+
+    /// <summary>The <see cref="Shot"/> the level chase's last hand-over past vertical flight made,
+    /// which the comfort fade holds longer (<c>XrRig.HandOverCut</c>).</summary>
+    public int HandOverShot { get; private set; } = -1;
+
     // The radius every forward-facing external pose reads. _radius itself never carries either
     // term; the look-behind takes its own bounds and no zoom at all.
     private float EffectiveRadius =>
@@ -231,19 +283,11 @@ public sealed class CameraController
     /// <summary>One press of the original's "Cycle Cockpit Views" key advances the three-stop
     /// cycle: Cockpit → Nose → Chase → Cockpit. It also leaves the flyby, which is how the
     /// original's own selector ends a camera mode it will not accept as a selection.</summary>
-    public void CycleCockpitViews()
-    {
-        FlybyActive = false;
-        ViewMode = PilotView.Cycle(ViewMode);
-    }
+    public void CycleCockpitViews() => Select(PilotView.Cycle(ViewMode));
 
     /// <summary>Select the chase view directly, without walking the three-stop cycle. Leaves the
     /// flyby for the same reason <see cref="CycleCockpitViews"/> does.</summary>
-    public void SelectChase()
-    {
-        FlybyActive = false;
-        ViewMode = PilotViewMode.Chase;
-    }
+    public void SelectChase() => Select(PilotViewMode.Chase);
 
     /// <summary>Enter the flyby camera: it takes a fresh spot at once rather than resuming the
     /// deadline the last pass left behind. A no-op while it is already running, so holding the key
@@ -261,19 +305,44 @@ public sealed class CameraController
     /// <summary>One frame of the view-selection controls, each acted on once per press. The cycle
     /// (<see cref="CycleCockpitViews"/>) and the direct Chase select come from each device half on
     /// its own edge, so a pad-only pilot reaches every view. The flyby comes last. The bindings are
-    /// this port's; the original's binding menu also puts its cycle on a joystick button.</summary>
+    /// this port's; the original's binding menu also puts its cycle on a joystick button. Under a
+    /// headset with a <see cref="Fade"/> the presses wait for black and land together.</summary>
     public void StepViewKeys(bool cycleKey, bool chaseKey, bool cyclePad, bool chasePad, bool flyby)
     {
-        if (ViewKeyEdge(0, cycleKey))
-            CycleCockpitViews();
-        if (ViewKeyEdge(1, chaseKey))
-            SelectChase();
-        if (ViewKeyEdge(2, cyclePad))
-            CycleCockpitViews();
-        if (ViewKeyEdge(3, chasePad))
-            SelectChase();
-        if (ViewKeyEdge(4, flyby))
-            EnterFlyby();
+        bool cycleKeyEdge = ViewKeyEdge(0, cycleKey);
+        bool chaseKeyEdge = ViewKeyEdge(1, chaseKey);
+        bool cyclePadEdge = ViewKeyEdge(2, cyclePad);
+        bool chasePadEdge = ViewKeyEdge(3, chasePad);
+        bool flybyEdge = ViewKeyEdge(4, flyby);
+
+        if (_headset == null || Fade == null)
+        {
+            _askedView = null;
+            _askedFlyby = false;
+            if (cycleKeyEdge)
+                CycleCockpitViews();
+            if (chaseKeyEdge)
+                SelectChase();
+            if (cyclePadEdge)
+                CycleCockpitViews();
+            if (chasePadEdge)
+                SelectChase();
+            if (flybyEdge)
+                EnterFlyby();
+            return;
+        }
+
+        if (cycleKeyEdge)
+            AskView(PilotView.Cycle(_askedView ?? ViewMode));
+        if (chaseKeyEdge)
+            AskView(PilotViewMode.Chase);
+        if (cyclePadEdge)
+            AskView(PilotView.Cycle(_askedView ?? ViewMode));
+        if (chasePadEdge)
+            AskView(PilotViewMode.Chase);
+        if (flybyEdge && !FlybyActive)
+            _askedFlyby = true;
+        LandAskedViews(Fade);
     }
 
     /// <summary>Enter the death camera: one spot chosen on the next step and held for the whole
@@ -284,32 +353,47 @@ public sealed class CameraController
         Statics.Arm();
     }
 
-    /// <summary>Both writes the destroy def's <c>CALLBACK 3</c> makes: the SELECTED view goes back
-    /// to the chase camera and the head-look angles return to level and forward
-    /// (docs/formats/anim-definitions/cutscenes.md). The selection is what outlives the death, so a
-    /// pilot shot down in the cockpit respawns behind the aeroplane.</summary>
+    /// <summary>Both writes the destroy def's <c>CALLBACK 3</c> makes
+    /// (docs/formats/anim-definitions/cutscenes.md). The SELECTED view goes back to the chase camera,
+    /// and the head returns to level and forward. The selection outlives the death, so a pilot shot
+    /// down in the cockpit respawns behind the aeroplane. Under a headset it returns to the opening
+    /// view instead: a view the player did not choose is a cut they did not ask for.</summary>
     public void ResetToChase()
     {
-        SelectChase();
+        // No cut counted: a static camera holds the frame now, and the respawn's Snap is the cut.
+        FlybyActive = false;
+        ViewMode = _headset != null ? _openingView : PilotViewMode.Chase;
         Head.Reset();
     }
 
     /// <summary>The look-behind view is on: <see cref="InputAction.LookBack"/> held on any control
     /// it is bound to, or the run pinned it with <c>--view=back</c>. It beats the snap cluster, as
     /// the original's own placement does: its look-behind arm never reaches the head-look
-    /// controller.</summary>
-    public bool BackActive() => _held(InputAction.LookBack) || _pinnedView == PinnedBackView;
+    /// controller. Never under a headset, whose head turns round by itself.</summary>
+    public bool BackActive() =>
+        _headset == null && (_held(InputAction.LookBack) || _pinnedView == PinnedBackView);
 
-    /// <summary>One frame of the pilot's head, in the shape the original's own controller takes it
-    /// (<c>FUN_0042d010(floor, autohead)</c>): the view placing the frame hands the elevation floor
-    /// it uses, level in the cockpit and <see cref="HeadLook.ChaseElevationFloor"/> on the chase
-    /// camera, and the one shared head takes the input. ⚠ The look-behind steps this head only in
-    /// first person, to dead astern while held; the chase camera's look-behind is a rigid pose of
-    /// its own, and the original's arm for it never reaches the controller.</summary>
+    /// <summary>The anchor the latest camera write asks of the headset, or null when none wrote since
+    /// the last call. The VR seat (<see cref="XrRig"/>) takes it once a frame, after every writer.</summary>
+    public XrAnchor? TakeXrWrite()
+    {
+        var write = _xrWrite;
+        _xrWrite = null;
+        return write;
+    }
+
+    /// <summary>One frame of the pilot's head, the original's controller (<c>FUN_0042d010</c>). The
+    /// placing view hands its elevation floor: level in the cockpit,
+    /// <see cref="HeadLook.ChaseElevationFloor"/> on the chase camera. ⚠ The look-behind steps this
+    /// head only in first person, to dead astern while held. The chase look-behind is a rigid pose of
+    /// its own. Under a headset, which owns the head, it stays level and forward and reads no input.</summary>
     public void StepHead(float dt, in HeadLookInput input, float elevationFloor)
     {
         Head.ElevationFloor = elevationFloor;
-        Head.Step(dt, input);
+        if (_headset == null)
+        {
+            Head.Step(dt, input);
+        }
     }
 
     /// <summary>The look-behind view (numpad 0, or <c>--view=back</c>): ahead of the nose looking
@@ -325,6 +409,7 @@ public sealed class CameraController
         var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
         _camera.Position = renderPose.Origin + (new Basis(_posFrame) * (dir * r));
         _camera.Basis = new Basis(_lookFrame) * Basis.LookingAt(-dir, Vector3.Up);
+        _xrWrite = XrAnchor.Level;
     }
 
     // Kept beside the methods that swing by it rather than up with the constructor, the same
@@ -408,11 +493,13 @@ public sealed class CameraController
     /// nose keeps its bearing while the aircraft manoeuvres under it.</summary>
     public void FirstPersonView(in Transform3D renderPose)
     {
+        bool looks = _headset == null;
         var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset,
-            Head.Elevation, Head.Azimuth);
+            looks ? Head.Elevation : 0f, looks ? Head.Azimuth : 0f);
         _framesSeeded = false;
         _camera.Position = position;
         _camera.Basis = basis;
+        _xrWrite = XrAnchor.Seat;
     }
 
     // Kept beside the instance method that calls it, for the same SA1204 reason as
@@ -474,9 +561,9 @@ public sealed class CameraController
     /// <summary>Advance the enhanced presentation's chase cue one frame: the widening
     /// <see cref="RestoreExternalFov"/> adds to the external FOV. The pose is the decoded one in
     /// both presentations. Off Enhanced, a live switch away included, it holds the widening at 0.
-    /// That keeps the faithful pose and FOV bit-identical.</summary>
+    /// That keeps the faithful pose and FOV bit-identical. A headset sets its own field of view.</summary>
     public void StepEnhancedCues(float speedFraction) =>
-        _fovWidenDeg = GraphicsMode.Enhanced ? SpeedFovWiden(speedFraction) : 0f;
+        _fovWidenDeg = GraphicsMode.Enhanced && _headset == null ? SpeedFovWiden(speedFraction) : 0f;
 
     /// <summary>The death camera: a spot chosen once from the <c>death_*</c> fields on the frame
     /// the pilot's aircraft is destroyed, held for the whole fall while the view re-aims at the
@@ -487,20 +574,21 @@ public sealed class CameraController
     {
         ApplyDecodedExternalFov(); // the death cut is an external framing, whatever view was selected
         AimStatic(Statics.StepDeath(renderPose.Origin, renderPose.Basis, speed, world, exclude),
-            renderPose.Origin);
+            renderPose.Origin, Statics.Placements != _heldPlacements, -renderPose.Basis.Z.Normalized());
     }
 
     /// <summary>The flyby camera: a spot out on the aircraft's flank and ahead of it, held while
-    /// the aeroplane runs past, then re-sited once the drawn watch time is up and the drawn switch
+    /// the aeroplane runs past. It re-sites once the drawn watch time is up and the drawn switch
     /// distance is exceeded. Takes SIM time, so the watch deadline survives a frame-rate change and
-    /// a halted sim freezes the pass rather than ending it.</summary>
+    /// a halted sim freezes the pass rather than ending it. Under a headset the spot is behind, and
+    /// each cut turns the held heading to face the aircraft, which flies away ahead of the seat.</summary>
     public void FlybyView(float simTime, in Transform3D renderPose, float speed, IWorldQuery? world,
         Godot.Collections.Array<Rid>? exclude)
     {
         ApplyDecodedExternalFov();
         AimStatic(
-            Statics.StepFlyby(simTime, renderPose.Origin, renderPose.Basis, speed, world, exclude),
-            renderPose.Origin);
+            Statics.StepFlyby(simTime, renderPose.Origin, renderPose.Basis, speed, world, exclude, _headset != null),
+            renderPose.Origin, Statics.Placements != _heldPlacements);
     }
 
     /// <summary>The authored crash camera (<c>crash_horiz</c>/<c>crash_y</c>): on a fatal crash
@@ -528,7 +616,7 @@ public sealed class CameraController
             StaticCameras.LiftClearOfWorld(
                 impact + (behind * _camParams.CrashHoriz) + (Vector3.Up * _camParams.CrashY),
                 _camParams, world, exclude),
-            impact);
+            impact, cut: true);
     }
 
     // Kept beside its one caller, for the same SA1204 reason as FirstPersonPose above.
@@ -609,6 +697,30 @@ public sealed class CameraController
     /// ⚠ Takes SIM dt but the DRAWN pose; a sim/render gap then shows as plane jitter, which a world lerp would mask.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude, float stickX = 0f, float stickY = 0f)
     {
+        if (_headset is { } frame)
+        {
+            // The VR chase: no eased frames, no swing, no zoom and no speed in the distance.
+            var mount = XrMount.Chase(planePos, attitude, VrChaseOffset(_camParams), frame);
+            if (frame == XrChase.Level)
+            {
+                // The level chase's hand-over past vertical flight is a cut, so the comfort fade covers it.
+                var axes = XrMount.Unrolled(attitude, _xrChaseShot == Shot ? _xrChaseRight : null, out bool handOver);
+                if (handOver)
+                {
+                    HandOverShot = ++Shot;
+                }
+
+                (_xrChaseRight, _xrChaseShot) = (axes.X, Shot);
+                mount = XrMount.Chase(planePos, axes, VrChaseOffset(_camParams));
+            }
+
+            _framesSeeded = false;
+            _camera.Position = mount.Origin;
+            _camera.Basis = mount.Basis;
+            _xrWrite = XrAnchor.Camera;
+            return;
+        }
+
         var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,
             _camParams.ThirdpPitchRad);
         StepFrames(dt, attitude, CatchUpScale(offset));
@@ -622,7 +734,19 @@ public sealed class CameraController
         }
         _camera.Position = planePos + (new Basis(_posFrame) * offset * EffectiveRadius);
         _camera.Basis = new Basis(_lookFrame) * aim;
+        _xrWrite = XrAnchor.Level;
     }
+
+    // Beside its one caller for the same SA1204 reason as FirstPersonPose above.
+#pragma warning disable SA1204
+    /// <summary>The VR chase's fixed offset from the aircraft, in metres in its frame. It is the
+    /// settled <see cref="AuthoredRig"/> at <c>dist</c> held to <c>[dist_min, dist_max]</c>, the flat
+    /// chase's cruise distance. The origin keeps the aircraft's axes, so the aircraft sits below the
+    /// level gaze by the rig's height. Pure, so it unit-tests.</summary>
+    public static Vector3 VrChaseOffset(CamParams cam) =>
+        AuthoredRig(0f, 0f, cam.ThirdpHeight, cam.ThirdpPitchRad).Offset
+        * ExternalRadius(cam.Dist, cam.DistMin, cam.DistMax, 0f);
+#pragma warning restore SA1204
 
     /// <summary>The chase view of another aircraft, the out-of-lives pilot's spectating camera. A
     /// <paramref name="fresh"/> target is taken at its settled pose, so a switch cuts rather than
@@ -631,6 +755,7 @@ public sealed class CameraController
     {
         if (fresh)
         {
+            Shot++;
             Head.Reset();
             RestoreExternalFov();
             // The eased frames still follow the pilot's own wreck; seeding them takes the new
@@ -645,6 +770,7 @@ public sealed class CameraController
     /// the given speed with the transient zeroed: a teleport is not an acceleration.</summary>
     public void Snap(Vector3 planePos, Basis attitude, float speed, in Transform3D renderPose)
     {
+        Shot++;
         _laggedSpeed = speed;
         _distExcess = 0f;
         _radius = _camParams.Dist + (_camParams.DistFactor * speed);
@@ -716,6 +842,7 @@ public sealed class CameraController
         _framesSeeded = false;
         _camera.Position = focus + (dir * _orbitDist);
         _camera.LookAt(focus, Vector3.Up);
+        _xrWrite = XrAnchor.Level;
     }
 
     /// <summary>One line per frame a view other than the chase camera is held, plus one on the
@@ -759,19 +886,44 @@ public sealed class CameraController
     private void ApplyDecodedExternalFov() => _camera.Fov = ExternalFovDeg;
 
     // The write every static camera shares: sit on the held world point and look at the aircraft.
-    // ⚠ Godot's LookAt rejects an up parallel to the view direction, which a camera lifted to
-    // straight overhead reaches, so the up axis swings to world back there rather than throwing.
-    private void AimStatic(Vector3 eye, Vector3 target)
+    // ⚠ Do not hand LookAt an up parallel to the view. A camera lifted straight overhead reaches one,
+    // so there the up swings to world back. Under a headset it holds, from the cut on, the level
+    // heading XrMount.Watch takes off the track ahead (`track`, zero to face the target).
+    private void AimStatic(Vector3 eye, Vector3 target, bool cut, Vector3 track = default)
     {
         _framesSeeded = false;
+        _xrWrite = XrAnchor.Camera;
         _camera.Position = eye;
         var toTarget = target - eye;
-        if (toTarget.LengthSquared() < 1e-6f)
+        if (toTarget.LengthSquared() >= 1e-6f)
         {
-            return;
+            var up = Mathf.Abs(toTarget.Normalized().Y) > 0.999f ? Vector3.Back : Vector3.Up;
+            _camera.LookAt(target, up);
         }
-        var up = Mathf.Abs(toTarget.Normalized().Y) > 0.999f ? Vector3.Back : Vector3.Up;
-        _camera.LookAt(target, up);
+
+        if (cut)
+        {
+            Shot++;
+            _heldPlacements = Statics.Placements;
+            _heldHeading = XrMount.Watch(eye, target, track);
+        }
+
+        if (_headset != null)
+        {
+            _camera.Basis = _heldHeading;
+        }
+    }
+
+    // Every change of the selected view: the flyby ends and, where the view moved, the camera cuts.
+    private void Select(PilotViewMode mode)
+    {
+        if (mode != ViewMode || FlybyActive)
+        {
+            Shot++;
+        }
+
+        FlybyActive = false;
+        ViewMode = mode;
     }
 
     // One frame of the two eased aircraft frames the external rig turns by, seeding both off the
@@ -798,5 +950,40 @@ public sealed class CameraController
         bool pressed = down && !_viewKeyPrev[slot];
         _viewKeyPrev[slot] = down;
         return pressed;
+    }
+
+    // A view press under a headset: the selection it walks to, which a later flyby press follows.
+    private void AskView(PilotViewMode mode)
+    {
+        _askedView = mode;
+        _askedFlyby = false;
+    }
+
+    // Lands the asked views once the fade is black. A press that would not move the camera (the
+    // view already standing, nothing in the flyby) asks for no fade at all.
+    private void LandAskedViews(UI.Boards.XrFade fade)
+    {
+        if (_askedView == ViewMode && !FlybyActive)
+        {
+            _askedView = null;
+        }
+
+        if ((_askedView == null && !_askedFlyby) || !fade.Cover())
+        {
+            return;
+        }
+
+        if (_askedView is { } view)
+        {
+            Select(view);
+        }
+
+        if (_askedFlyby)
+        {
+            EnterFlyby();
+        }
+
+        _askedView = null;
+        _askedFlyby = false;
     }
 }

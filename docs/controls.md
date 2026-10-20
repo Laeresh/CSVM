@@ -24,7 +24,7 @@ anything the file does not carry (`Bindings/LaunchBindings.cs`). A `--det` or
 committed tree and not of whoever ran it.
 
 Not every row here is a bindable action. The debug overlays and the lab panels
-(`F10` through `F21`, and the viewer and weapon-lab keys) are
+(`F10` through `F24`, and the viewer and weapon-lab keys) are
 development instruments and sit deliberately outside the action set, so no
 rebinding screen offers them and no player can break their own diagnostics on
 them. The few gameplay controls in the same position say so in their own row.
@@ -82,7 +82,7 @@ reset (INSTR-64).
 | `R` · `Shift+R` · `Ctrl+R` | | the non-aircraft cycle (turret emplacements, zeppelin sub-parts), the same three. The original gives this class's forward step its other pad targeting binding, joystick button 6 |
 | `Q` | | target whatever is nearest the crosshair, a hard 15° cone about the **nose**, 2 km max, friend or foe. The pad reaches it by holding d-pad up past 250 ms, which is the target-cycle binding above dispatched by hold length, so this action carries no pad default of its own |
 | `T` | | target nothing, clears the selection, and it **stays** cleared until one of the keys above |
-| `F8` | D-pad ↓ | cycle the views: Cockpit → Nose → Chase → Cockpit, the original's own three-stop walk confirmed at its controls, `--view=cockpit` / `--view=nose` / `--view=chase`. The original's binding for "Cycle Cockpit Views" (`OriginalScreenshots/Keybinds Views 1.png`, which also gives it a joystick button); the D-pad slot is this port's pick of the free buttons, and gives a pad-only seat its way in |
+| `F8` | D-pad ↓ | cycle the views: Cockpit → Nose → Chase → Cockpit, the original's own three-stop walk confirmed at its controls, `--view=cockpit` / `--view=nose` / `--view=chase`. The original's binding for "Cycle Cockpit Views" (`OriginalScreenshots/Keybinds Views 1.png`, which also gives it a joystick button); the D-pad slot is this port's pick of the free buttons, and gives a pad-only seat its way in. In VR the left hand controller's upper face button (Y on Touch) as well |
 | (none) | (none) | select the chase view directly, without walking the cycle, `--view=chase` (the default). This port's own action, and it ships on no control at all: the `F8` cycle above reaches the chase view already, so a default here would spend a key and a pad button on a second way in. It stays a flight action, so the controls page can give it either |
 | `F7` | | the flyby camera, `--view=flyby`. The view leaves the aeroplane and takes a spot ahead of it and off to one side, holds that spot while the aircraft runs past within a few metres, then re-sites itself a few seconds later. The original's own binding, labelled "Access Chase View" (`OriginalScreenshots/Keybinds Views 1.png`), which its own code settles as camera mode 9 rather than the following chase view. `F8` or `F6` leaves it; so does a respawn. Placement, radii and timing all come from `camparam.json` (`docs/formats/camparam.md`) |
 | `Shift+S` | Misc1 | arm or disarm the spyglass, on at level load. Armed, a selected target that is off screen and inside the fog-derived range gate is shown in a round inset picture at its edge marker, framed to a constant apparent size. The original's own chord ("Toggle Spyglass", `OriginalScreenshots/Keybinds Views 1.png`, which also gives it joystick button 5); Misc1 is the one pad control no other flight action holds |
@@ -99,10 +99,79 @@ reset (INSTR-64).
 | `G` | | switch the graphics mode between Original and Enhanced on the running world, for an A/B comparison, and save it as the Options row does. This port's own flight action, "Toggle Graphics Mode", so both Controls pages list and rebind it and the steal rule keeps `G` off every other flight action. Keyboard only; silent under photo mode and the pause's options page. The viewer has no flight seat, so its mesh lab keeps `G` for its normals density. The flight holds under a "switching graphics" board until the frames after the switch settle, and a pause already up stays up. A network game ignores it |
 | `F20` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`), `--debug-colliders` |
 | `F21` | | colour world objects by class (destructible/facade/clutter/scenery), `--debug-classoverlay` |
-| `Esc` | Start | pause, the original's "Pause/Quit/Objectives". The board it opens is in the "Any mode" table below |
+| `Esc` | Start | pause, the original's "Pause/Quit/Objectives". The board it opens is in the "Any mode" table below. In VR the left hand controller's menu button as well ([VR hand controllers](#vr-hand-controllers)) |
 | `` ` `` · Shift+`` ` `` | | network play only: open a chat line to everyone, or to your lobby team (the original's "Chat to Everyone" and "Chat to Team"). In a match without teams both open a line to everyone. Type, `Enter` sends, `Esc` drops the line, `Backspace` takes a character back; while the line is open your keys fly nothing and your pad flies on. Received lines stand at the top left of every pane for ten seconds. Keyboard only, so a pad-only splitscreen player reads the chat and types nothing. A line reading `ejectflag` is the original's developer console command, not chat: in Capture the Flag it lets the flag you carry go, and it floats on every machine |
 | `Tab` | Back | hold to show the scores, the original's "Display Scores (Multiplayer Only)", in a split screen or network stunt race (place, pilot, aircraft, best, gap, runs) or Dogfight (place, pilot, score, kills, deaths, a team match's lines first). The scores stand in the holding seat's own pane only while the control is held, and that pane's chat lines step aside for them. They are the original's own HUD text, yellow monospaced lines at the top left (a Dogfight in its name and score columns with this port's kills and deaths after them, a race in the same grid). Nothing shows in a mode that keeps no scores, solo or campaign. The original's press shows the table for four seconds; held is this port's rule. Back is the pad button no other flight action holds. `--debug-scores` holds it on every seat for a screenshot |
+| `Home` | touchpad click · back paddle 1 | VR only: recenter the headset, bringing the seated eye back onto the cockpit eye and the view's heading onto the aircraft's nose, the head's tilt kept. "Recenter Headset", this port's own flight action, inert in flat play. `Home` is a key the original leaves free; every common pad button is spent above, so the pad rows are the touchpad click (PlayStation pads) and the first back paddle (Elite-style pads). The runtime's own recenter (holding the headset's system button) does the same on any pad, and the game also recenters once when the headset session gains focus. The left hand controller's stick click does it as well ([VR hand controllers](#vr-hand-controllers)), and so do Look Forward (`numpad 5`) and Look Behind (`numpad 0`, the right-stick click) in a headset flight, once per press, which gives a standard pad its recenter |
+| - | | VR only: the headset turns the head, so the head-look rows above are inert in a headset flight: the numpad cluster, the MMB pan, `K`, `L` and `J`, the right stick and the chase zoom. `numpad 5`, `numpad 0` and the right-stick click recenter the headset instead (the row above). `F8` walks the same three views, each switch (and `F7`'s) darkening for 0.15 s and landing on a black frame, the chase rides the aircraft rigidly, and a flight opens in Cockpit (`docs/org/cameraViews.md`, "Views under a headset") |
 | - | | the original's commands this port has no action for leave their keys free: Shift+`L` level off, Ctrl+`X` bail out, and `F9`, the first of its four external cameras. The other three external-camera keys, `F10` through `F12`, are the one place this port sits on an original command's key: they carry the gltf export, the placement print and the screenshot, which are instruments rather than flight actions and are not in the shipped table a Controls door can rebind |
+
+## VR hand controllers
+
+Under a headset (`--xr-mode on`, or the Options VR mode) the two hand controllers
+are one device in the keymap, `xr`, beside the keyboard, the mouse and the pads.
+Flying stays on the pad, the stick or the keyboard; the controllers carry three
+flight actions and the screen pointer. Their buttons are named by role so another
+controller maps onto the same names: the lower and upper face buttons are X and Y
+on Meta Touch's left hand and A and B on its right. The OpenXR action map that
+names them is `CSVM/openxr_action_map.tres`, Godot's own default map.
+
+| Touch | Does |
+|---|---|
+| left menu (☰) | pause, beside `Esc` and Start. It is the one app menu button Touch has; the right hand's Meta button belongs to the runtime and never reaches the game |
+| left stick click | Recenter Headset, beside `Home`. A deliberate press no flight action holds. The runtime's own recenter (holding the Meta button) does the same |
+| Y (left upper face) | Cycle Cockpit Views, beside `F8` and D-pad ↓ |
+| right trigger | click on the theater screen, where the right hand's laser points |
+| left trigger | hand the laser to the left hand, without clicking; its next pull clicks. The right trigger hands it back. Only while a screen is up: in flight a trigger moves no laser |
+
+All three actions sit on the left hand because the right hand holds the laser by
+default. The laser is a ray from the pointing hand's aim pose, drawn as a thin beam
+with a dot where it meets the theater screen, and it is the pointer every menu,
+board and the pause's options page reads under a headset (the desktop mouse cannot
+reach the eye-size layout a headset gives the 2D). It shows only while the screen
+does. With no controller on, the desktop mouse is the pointer as before.
+
+Both Controls pages list the `xr` rows and capture them while a headset session is
+live: a hand button, a hand stick pushed past half travel, or a trigger pulled past
+half travel, which binds as "VR L Trigger" or "VR R Trigger" and fires past half its
+pull, as a pad trigger does. A capture takes a trigger only on a pull begun after it
+opened, so the pull that clicked the cell binds nothing, and while a capture listens
+the laser clicks nothing and changes no hand: the pull that binds is the capture's
+alone. With a capture open, Escape or pad B abandons it; every hand control binds. A
+bound trigger acts in flight while no screen is up. On a menu or a board both
+triggers keep the laser's click and hand switch, and the flight is not reading them
+then: a pause holds the clock (a network pause holds the seat instead), and a fire or
+other command bound to the pull that clicks Resume waits for it to be let go. Without a headset the pages hide the `xr`
+rows, so flat play's pages read as they always did, and the rows resolve to nothing.
+A keymap saved before the `xr` device existed (file version 3 or older) keeps the
+shipped `xr` row on every action it names.
+
+### The cockpit tuning lab (`--xr-tune`)
+
+A development lab, off unless `--xr-tune` is on the command line of a headset or
+`--xr-sim` flight (`docs/cli.md`). Every control reads only while the **right grip**
+is held, so with the grip up the right hand does what the table above says and
+nothing else. The controls are raw instruments, not keymap actions, and no Controls
+page lists them. A pause or the photo mode holds them. The readout stands at the top
+left of the HUD panel: one line with the grip up, the full card with it held.
+
+| Right grip held, then | Does |
+|---|---|
+| right stick left / right | the flown plane's interior scale down / up by 0.025 (1 mm per interior unit), repeating while held |
+| right stick forward / back | the seated eye forward / aft by 1 cm along the sight line, repeating while held |
+| B / A | the seated eye up / down by 1 cm |
+| right trigger | save the flown plane's values into `CSVM/data/vr_cockpits.json` of the tree the game runs from |
+| right stick click | reset the flown plane to the file's values |
+| left stick left / right | swap to the previous / next plane in the file's order, once per push, at the pose being flown |
+
+The **left grip** held turns the right stick and B / A onto the pylon stores: stick
+forward / back moves them fore / aft and B / A up / down by 1 cm, stick left / right
+their spread from the centreline by 0.05. The trigger, the stick click and the plane
+swap work under either grip.
+
+The keyboard's twin, in the debug block from `F13`: `F24` marks the next row of the
+card (plane, scale, aft, up), `F22` / `F23` step the marked row down / up (repeating
+while held), Shift+`F24` saves and Ctrl+`F24` resets.
 
 ## Flying with the mouse
 

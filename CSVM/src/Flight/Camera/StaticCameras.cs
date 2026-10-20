@@ -22,6 +22,14 @@ public sealed class StaticCameras
     /// always sits out on a flank rather than over or under the flight path.</summary>
     public const float FlybyWedgeRad = 0.2617994f;
 
+    /// <summary>How far behind the aircraft a headset's flyby sits, metres along its tail. Behind,
+    /// the aircraft flies away in front of the seat instead of straight at it. TUNE.</summary>
+    public const float VrBehindM = 20f;
+
+    /// <summary>Seconds a headset's flyby adds to the drawn watch time, so each spot holds longer.
+    /// TUNE.</summary>
+    public const float VrExtraWatchS = 1f;
+
     // What is left of a full turn once both wedges are removed, as a factor on the drawn angle.
     // The wedge is added back after the scale, which is what makes each excluded arc exactly
     // 2·FlybyWedgeRad wide however the draw lands.
@@ -140,20 +148,27 @@ public sealed class StaticCameras
         return _point;
     }
 
-    /// <summary>The flyby, one step, on the sim clock: re-site when one is owed and the watch
-    /// deadline has passed, then ask for the next one once the aircraft is past the drawn switch
-    /// distance. ⚠ The re-site check runs BEFORE the distance check, as it does in the original, so
-    /// a tripped threshold moves the camera on the FOLLOWING step and the pass is never cut at the
-    /// frame it is measured on.</summary>
+    /// <summary>The flyby, one step, on the sim clock. It re-sites when one is owed and the watch
+    /// deadline has passed, then asks for the next once the aircraft is past the switch distance.
+    /// ⚠ The re-site check runs BEFORE the distance check, as in the original. A tripped threshold
+    /// moves the camera on the FOLLOWING step, never on the frame it is measured on. A
+    /// <paramref name="headset"/> takes the same draws but sits
+    /// <see cref="VrBehindM"/> behind and watches <see cref="VrExtraWatchS"/> longer.</summary>
     public Vector3 StepFlyby(float now, Vector3 planePos, Basis attitude, float speed,
-        IWorldQuery? world, Godot.Collections.Array<Rid>? exclude)
+        IWorldQuery? world, Godot.Collections.Array<Rid>? exclude, bool headset = false)
     {
         if (_armed && _watchUntil <= now)
         {
             _armed = false;
-            _point = Place(FlybyLocalOffset(_cam, speed, _draw(), _draw(), _draw()), planePos,
-                attitude, _cam.FlybyY, _cam.FlybyMinAlt, world, exclude);
-            _watchUntil = now + Lerp(_cam.FlybyMinWatchTime, _cam.FlybyMaxWatchTime, _draw());
+            var local = FlybyLocalOffset(_cam, speed, _draw(), _draw(), _draw());
+            if (headset)
+            {
+                local.Z = VrBehindM;
+            }
+
+            _point = Place(local, planePos, attitude, _cam.FlybyY, _cam.FlybyMinAlt, world, exclude);
+            _watchUntil = now + Lerp(_cam.FlybyMinWatchTime, _cam.FlybyMaxWatchTime, _draw())
+                + (headset ? VrExtraWatchS : 0f);
             float switchDist = Lerp(_cam.FlybyMinSwitchDist, _cam.FlybyMaxSwitchDist, _draw());
             _switchDistSq = switchDist * switchDist;
         }

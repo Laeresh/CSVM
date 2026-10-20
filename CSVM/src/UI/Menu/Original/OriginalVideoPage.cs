@@ -55,6 +55,15 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
+    /// <summary>The page's VR mode dropdown, the window's last row.</summary>
+    public const string VrModeKey = "VRMODE";
+
+    /// <summary>The headset's comfort vignette dropdown, in Display Mode's place while a headset is
+    /// live.</summary>
+    public const string VrVignetteKey = "VRVIGNETTE";
+
+    /// <summary>The headset's render-scale dropdown, in V-Sync's place while a headset is live.</summary>
+    public const string VrRenderScaleKey = "VRRENDERSCALE";
     /// <summary>The window the dropdown rows scroll through.</summary>
     public const string WindowKey = "VP_DROPDOWNS";
 
@@ -79,6 +88,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private const float BarArrowHeight = 12f;
 
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
+
+    private static readonly string[] OffOnWords = { "Off", "On" };
 
     // The seven authored dropdown lines, top to bottom. The dropdown rows scroll through them as a
     // window, so a row takes the widgets of whichever line it stands on.
@@ -109,16 +120,36 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         new(DisplayModeKey, "Display Mode", null,
             _ => "Select how the window sits on the screen.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels, c => c.DisplayModeAt,
-            (c, i) => c.DisplayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
+            (c, i) => c.DisplayMode = CSVM.Utils.DisplayWords.DisplayModes[i], HeadsetRow: false),
+        new(VrVignetteKey, "Comfort Vignette", null,
+            _ => DisplaySettingRows.VrVignetteDetail,
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.VrVignetteSetting.Labels(),
+            c => DisplaySettingRows.WordIndex(CSVM.Utils.VrVignetteSetting.Words, c.VrVignette, CSVM.Utils.VrVignetteSetting.Default),
+            (c, i) => c.VrVignette = CSVM.Utils.VrVignetteSetting.Words[i], HeadsetRow: true),
         new(VSyncKey, "V-Sync", null,
             _ => "Select the frame pacing.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels, c => c.VSyncAt,
-            (c, i) => c.VSync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
+            (c, i) => c.VSync = CSVM.Utils.DisplayWords.VSyncChoices[i], HeadsetRow: false),
+        new(VrRenderScaleKey, "VR Render Scale", null,
+            _ => DisplaySettingRows.VrRenderScaleDetail,
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.VrRenderScaleSetting.Labels(),
+            c => DisplaySettingRows.WordIndex(CSVM.Utils.VrRenderScaleSetting.Words, c.VrRenderScale, CSVM.Utils.VrRenderScaleSetting.Default),
+            (c, i) => c.VrRenderScale = CSVM.Utils.VrRenderScaleSetting.Words[i], HeadsetRow: true),
         Word(RenderScaleKey, CSVM.Utils.RenderScaleSetting.Lookup, "Render Scale"),
         Word(AntiAliasingKey, CSVM.Utils.AntiAliasingSetting.Lookup, "Anti-aliasing"),
         Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality"),
         Word(ViewDistanceKey, CSVM.Utils.ViewDistance.Lookup, "View Distance"),
+        new(VrModeKey, "VR Mode", null,
+            _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
+            c => c.VrMode == true ? 1 : 0,
+            (c, i) => c.VrMode = i == 1,
+            _ => OperatingSystem.IsWindows()),
     };
+
+    // The dropdowns each kind of launch walks, one more than the window shows. Under a headset the
+    // comfort rows stand in Display Mode's and V-Sync's places, so both walks are as long.
+    private static readonly VideoOption[] FlatDrops = Dropdowns.Where(static o => o.Shows(false)).ToArray();
+    private static readonly VideoOption[] HeadsetDrops = Dropdowns.Where(static o => o.Shows(true)).ToArray();
 
     // The two checkboxes, fixed on the short authored lines under the window.
     private static readonly VideoOption[] Checks =
@@ -136,7 +167,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private static readonly VideoOption[] Options = Dropdowns.Concat(Checks).ToArray();
 
     // The furthest the window scrolls, which puts the last dropdown on its bottom line.
-    private static readonly int LastTop = Dropdowns.Length - DropSlots.Length;
+    private static readonly int LastTop = FlatDrops.Length - DropSlots.Length;
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
@@ -177,8 +208,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// left where it is, so picking Windowed or Fullscreen again gives the player it back.</summary>
     public bool ResolutionPinned => _choices.ResolutionPinned;
 
-    /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line and 1
-    /// with View Distance on the bottom one.</summary>
+    /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line, 1
+    /// with View Distance on the bottom one and 2 with VR Mode there.</summary>
     public int Top => _top;
 
     /// <summary>The graphics mode word the page would apply.</summary>
@@ -201,11 +232,33 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// apply, or null while nothing has been saved and no row has been touched.</summary>
     public string? VSyncChoice => _choices.VSync;
 
+    /// <summary>The VR mode the page would apply, or null while nothing has been saved and the row
+    /// has not been touched.</summary>
+    public bool? VrModeChoice => _choices.VrMode;
+
+    /// <summary>The headset render-scale word the page would apply, or null while never set.</summary>
+    public string? VrRenderScaleChoice => _choices.VrRenderScale;
+
+    /// <summary>The headset vignette word the page would apply, or null while never set.</summary>
+    public string? VrVignetteChoice => _choices.VrVignette;
+
+    /// <summary>Whether a headset is live. Its two comfort rows then take the Display Mode and V-Sync
+    /// places. A headset has no use for those two: it paces its own frames, and the window only
+    /// mirrors it. The hidden rows' words ride the apply unchanged. Settable for a test.</summary>
+    public Func<bool> Headset { get; set; } = static () => CSVM.Bindings.XrControllers.SessionLive;
+
     OriginalScreen IOriginalOptionsPage.Screen => OriginalScreen.Video;
 
     string IOriginalOptionsPage.AcceptKey => AcceptKey;
 
     string IOriginalOptionsPage.CancelKey => CancelKey;
+
+    // The dropdowns the page walks now. Under a headset its comfort rows stand in the places of two
+    // settings it has no use for.
+    private VideoOption[] Shown => Headset() ? HeadsetDrops : FlatDrops;
+
+    // Every row the page shows now, in walk order: the dropdowns, then the two checkboxes.
+    private List<VideoOption> Rows => Shown.Concat(Checks).ToList();
 
     /// <summary>The word the page would apply for <paramref name="setting"/>, or null while nothing has
     /// been saved and no row has been touched. A setting with no row here rides unchanged.</summary>
@@ -232,7 +285,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     public void OpenOn(string key)
     {
         Open();
-        int at = Array.FindIndex(Dropdowns, option => option.Key == key);
+        int at = Array.FindIndex(Shown, option => option.Key == key);
         _top = Math.Clamp(at - DropSlots.Length + 1, 0, LastTop);
         _host.FocusKey(key);
     }
@@ -243,16 +296,17 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     void IOriginalOptionsPage.BuildRows(List<OriginalRow> rows)
     {
         var screen = _chrome.Layout.Screen(Section);
+        var shown = Rows;
         if (screen == null)
         {
-            for (int i = 0; i < Options.Length; i++)
+            for (int i = 0; i < shown.Count; i++)
             {
-                var fallback = Options[i];
+                var fallback = shown[i];
                 rows.Add(_host.PlaqueRow(fallback.Key, fallback.Words(_choices)[fallback.Read(_choices)], i,
                     fallback.Editable(_choices), 0));
             }
 
-            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
+            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, shown.Count);
             return;
         }
 
@@ -409,7 +463,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             var closed = new List<OriginalRow>();
             BuildControls(screen, closed);
             controls = closed;
-            controlFocus = IndexOf(_open);
+            controlFocus = ShownIndexOf(_open);
             controlPressed = -1;
         }
 
@@ -469,10 +523,6 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         return at >= 0 ? Options[at] : null;
     }
 
-    // The line whose box a row wears: a dropdown's unscrolled line, View Distance taking the last.
-    private static VideoSlot HomeOf(VideoOption option) =>
-        option.Fixed ?? DropSlots[Math.Min(Array.IndexOf(Dropdowns, option), DropSlots.Length - 1)];
-
     // The size row's description says what the size does under the mode standing beside it. It does
     // something different in each. It is the window's own size, nothing at all, or the size the
     // game draws at inside a fullscreen window Godot will not resize.
@@ -486,6 +536,26 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         return choices.DisplayMode == CSVM.Utils.DisplayWords.Fullscreen
             ? "Select the size the game draws at, scaled up to fill the screen."
             : "Select the window size.";
+    }
+
+    // The line whose box a row wears: a dropdown's unscrolled line, the rows past the window taking
+    // the last.
+    private VideoSlot HomeOf(VideoOption option) =>
+        option.Fixed ?? DropSlots[Math.Clamp(Array.IndexOf(Shown, option), 0, DropSlots.Length - 1)];
+
+    // Where a key stands among the rows the page shows now, -1 when it is not shown.
+    private int ShownIndexOf(string key)
+    {
+        var shown = Rows;
+        for (int i = 0; i < shown.Count; i++)
+        {
+            if (shown[i].Key == key)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private bool CloseDropdown()
@@ -527,17 +597,17 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             return option.Fixed;
         }
 
-        int line = Array.IndexOf(Dropdowns, option) - _top;
+        int line = Array.IndexOf(Shown, option) - _top;
         return line >= 0 && line < DropSlots.Length ? DropSlots[line] : null;
     }
 
     // A dropdown out of view keeps its index at the window's nearer end, unseen and never a stop.
     private void BuildControls(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
-        foreach (var option in Options)
+        foreach (var option in Rows)
         {
             var slot = SlotOf(option);
-            int line = Array.IndexOf(Dropdowns, option) - _top;
+            int line = Array.IndexOf(Shown, option) - _top;
             var place = Place(screen, slot ?? DropSlots[line < 0 ? 0 : ^1], option.Kind, HomeOf(option));
             rows.Add(new OriginalRow(option.Key,
                 option.Kind == OriginalRowKind.Dropdown ? option.Words(_choices)[option.Read(_choices)] : string.Empty,
@@ -582,10 +652,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         }
         float trackTop = top + upSize.Height;
         float trackHeight = foot - top - upSize.Height - downSize.Height;
-        float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, DropSlots.Length, Dropdowns.Length, thumbSize.Height);
+        float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, DropSlots.Length, FlatDrops.Length, thumbSize.Height);
         var window = new ListWindow(first.TitleX, top, x + upSize.Width - first.TitleX, bottom - top,
             x, ListWindow.ThumbYFor(trackTop, trackHeight, thumbHeight, _top, LastTop), thumbSize.Width, thumbHeight,
-            trackTop, trackHeight, Dropdowns.Length, DropSlots.Length, _top);
+            trackTop, trackHeight, FlatDrops.Length, DropSlots.Length, _top);
         return new VideoBar(window, up, upSize, down, downSize, thumb);
     }
 
@@ -659,12 +729,16 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Func<OptionsChoices, string> Description, OriginalRowKind Kind,
         Func<OptionsChoices, IReadOnlyList<string>> Words,
         Func<OptionsChoices, int> Read, Action<OptionsChoices, int> Write,
-        Func<OptionsChoices, bool>? Live = null)
+        Func<OptionsChoices, bool>? Live = null, bool? HeadsetRow = null)
     {
         // Whether the row takes a press at all. A row another setting owns the value of is dead.
         // The cursor walks past it, the pointer cannot arm it, and it draws in its disabled frame.
         // Every other unavailable row on these pages already does that.
         public bool Editable(OptionsChoices choices) => Live?.Invoke(choices) ?? true;
+
+        // Whether the row stands on the page at all: a headset row only under a live headset, a
+        // flat row only without one. Two rows share each of two places in the walk.
+        public bool Shows(bool headset) => HeadsetRow is not { } only || only == headset;
     }
 
     // One row's place in authored pixels: the title box, the control's own rectangle and strip,

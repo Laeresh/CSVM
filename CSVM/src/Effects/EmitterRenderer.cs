@@ -47,6 +47,24 @@ public interface IEmitterRenderer
 /// </summary>
 public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 {
+    // The original's DX7 device mixes framebuffer bytes. This alpha makes Godot's linear mix land
+    // on that byte over the opaque background. ⚠ Do not drop it for the raw alpha: a linear-space
+    // mix draws a near-black plume at about half the original's darkening. Keep it a convex mix:
+    // an additive form blows a stack of light sprites out to white. See docs/org/puffer.md.
+    // Internal so the head-locked colour quads composite the same way (UI.Boards.HeadLockedQuads).
+    internal const string GammaMixComposite = """
+            vec3 src_g = csky_linear_to_srgb(clamp(ALBEDO, 0.0, 1.0));
+            vec3 dst_l = clamp(texture(screen_texture, SCREEN_UV).rgb, 0.0, 1.0);
+            vec3 dst_g = csky_linear_to_srgb(dst_l);
+            vec3 out_g = src_g * ALPHA + dst_g * (1.0 - ALPHA);
+            vec3 src_l = csky_srgb_to_linear(src_g);
+            vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+            float span = dot(src_l - dst_l, luma);
+            float moved = dot(csky_srgb_to_linear(out_g) - dst_l, luma);
+            ALBEDO = src_l;
+            ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
+""";
+
     private const string ShaderCode = """
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -141,27 +159,28 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // EnhancedLook.ApplyEnvironment reserves for the fire flipbook.
     private const float EnhancedSmokeCeiling = 0.98f;
 
-    // The original's DX7 device mixes framebuffer bytes. This alpha makes Godot's linear mix land
-    // on that byte over the opaque background. ⚠ Do not drop it for the raw alpha: a linear-space
-    // mix draws a near-black plume at about half the original's darkening. Keep it a convex mix:
-    // an additive form blows a stack of light sprites out to white. See docs/org/puffer.md.
-    private const string GammaMixComposite = """
-            vec3 src_g = csky_linear_to_srgb(clamp(ALBEDO, 0.0, 1.0));
-            vec3 dst_l = clamp(texture(screen_texture, SCREEN_UV).rgb, 0.0, 1.0);
-            vec3 dst_g = csky_linear_to_srgb(dst_l);
-            vec3 out_g = src_g * ALPHA + dst_g * (1.0 - ALPHA);
-            vec3 src_l = csky_srgb_to_linear(src_g);
-            vec3 luma = vec3(0.2126, 0.7152, 0.0722);
-            float span = dot(src_l - dst_l, luma);
-            float moved = dot(csky_srgb_to_linear(out_g) - dst_l, luma);
-            ALBEDO = src_l;
-            ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
-""";
-
     // Enhanced only: the composite clamps ALBEDO to 1.0, which would cut the fire gain's glow,
     // since every puffer sprite alpha-mixes. The overshoot is carried past the clamp and added back.
     private const string EnhancedMixComposite =
         "vec3 hdr_over = max(ALBEDO - vec3(1.0), vec3(0.0));\n" + GammaMixComposite + "\n    ALBEDO += hdr_over;";
+
+    // The flat pose and sun projection read the camera's basis, which under a headset is the head's.
+    // The quad would lie in the head's view plane and turn as the head looks about. The stereo text
+    // swaps these exact lines for Mech3.StereoFacing's pose; the xr-sprite-facing suite pins each swap.
+    private const string FlatPose = """
+            MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
+                INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+            MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
+            MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
+            MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+        """;
+
+    private const string FlatSunProjection = """
+            vec2 sun_q = vec2(dot(csky_sun_dir, INV_VIEW_MATRIX[0].xyz),
+                              -dot(csky_sun_dir, INV_VIEW_MATRIX[1].xyz));
+        """;
+
+    private const string AtmosphereLine = "#include \"res://shaders/csky_atmosphere.gdshaderinc\"";
 
     // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
     // not compile, on a German-locale machine only.
@@ -190,11 +209,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         "thickblksmoke01", "thickblksmoke02", "thickblksmoke03",
     };
 
-    // One compiled Shader per code variant (blend × soft), shared by every renderer. A Shader per
+    // One compiled Shader per code variant (blend × soft × stereo), shared by every renderer. A Shader per
     // emitter cost about 6 ms to compile, on every live miss and on each emitter a crash rig builds
     // ahead. ⚠ Keep the graphics mode out of the key. Each variant holds one shader per mode
     // (ShaderTwins), and a live switch moves the materials between them.
-    private static readonly Dictionary<(bool Mix, bool Soft), Mech3.ModeShader> ShaderVariants = new();
+    private static readonly Dictionary<(bool Mix, bool Soft, bool Stereo), Mech3.ModeShader> ShaderVariants = new();
 
     // One quad for every layer in the process: the mesh is a unit billboard and the per-instance
     // scale lives in the MultiMesh transforms, so nothing about it is per emitter. The material
@@ -322,21 +341,42 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         _add?.Publish();
     }
 
+    // One variant's text under a graphics mode, a pure function of its four arguments. The stereo
+    // text is the flat one with its pose and sun projection swapped, so the flat text never moves.
+    internal static string VariantCode(bool mix, bool soft, bool enhanced, bool stereo)
+    {
+        string code = VariantCode(mix, soft, enhanced);
+        if (!stereo)
+            return code;
+        bool shaded = enhanced && mix;
+        string pose = Mech3.StereoFacing.PoseLines("    ")
+            + (shaded ? "\n    v_sun_q = vec2(dot(csky_sun_dir, face[0]), -dot(csky_sun_dir, face[1]));" : "");
+        code = code
+            .Replace(AtmosphereLine, AtmosphereLine + "\n" + Mech3.StereoFacing.Include)
+            .Replace(FlatPose, pose);
+        return shaded
+            ? code.Replace("varying flat float v_shade;", "varying flat float v_shade;\nvarying flat vec2 v_sun_q;")
+                .Replace(FlatSunProjection, "    vec2 sun_q = v_sun_q;")
+            : code;
+    }
+
     private static string Literal(float value)
         => value.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
     private static Mech3.ModeShader ShaderFor(bool mix, bool soft)
     {
         Mech3.ShaderTwins.EnsureCurrent();
-        if (!ShaderVariants.TryGetValue((mix, soft), out var twins))
+        bool stereo = Mech3.StereoFacing.Live;
+        if (!ShaderVariants.TryGetValue((mix, soft, stereo), out var twins))
         {
-            ShaderVariants[(mix, soft)] = twins = Mech3.ShaderTwins.Make(
-                () => VariantCode(mix, soft, GraphicsMode.Enhanced), "emitter", $"emitter:{(mix ? "mix" : "add")}{(soft ? "-soft" : "")}");
+            ShaderVariants[(mix, soft, stereo)] = twins = Mech3.ShaderTwins.Make(
+                () => VariantCode(mix, soft, GraphicsMode.Enhanced, stereo), "emitter",
+                $"emitter:{(mix ? "mix" : "add")}{(soft ? "-soft" : "")}{(stereo ? "-stereo" : "")}");
         }
         return twins;
     }
 
-    // One variant's text under a graphics mode, a pure function of its three arguments.
+    // One variant's flat text under a graphics mode, a pure function of its three arguments.
     private static string VariantCode(bool mix, bool soft, bool enhanced)
     {
         // The sun grade is the mix variant's alone, since the smoke sprites all alpha-mix. An

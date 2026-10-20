@@ -38,7 +38,7 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples, and a fogged clutter instance darkens toward a night zone's fog over twice its fade band, the band at least C5's tower band, so no block darkens before the towers do (`csky_clutter_dark_lit`, [../org/weather.md](../org/weather.md)). The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves. `NodeMade` hands a suite each node a build makes, so a build that throws can be checked for what it left alive. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples, and a fogged clutter instance darkens toward a night zone's fog over twice its fade band, the band at least C5's tower band, so no block darkens before the towers do (`csky_clutter_dark_lit`, [../org/weather.md](../org/weather.md)). The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). `RaceGhostShader` adds `RaceGhost.cs`'s distance dither to the shaded arms under a key bit of its own, so no other build's shader text moves; a stereo process (`StereoFacing.Live`) keys the ghost's stereo text under another. `XrPreciseInterior` keys the stereo cockpit interior's variant the same way (`Flight/Hud/XrCockpit.cs`): each eye places a vertex from its offset to that eye, read off the `Xr*Global` uniforms, and the depth bias pulls toward the drawing eye; its opaque and cutout surfaces write `XrInteriorStencil`, which the stereo whiteout and flare rings skip, and its blended ones draw at `XrInteriorBlendPriority`, between the whiteout and the flash. `OmittedPolygons` leaves polygons out by identity (`CockpitPlate.cs`) while each surface group keeps its rank. `NodeMade` hands a suite each node a build makes, so a build that throws can be checked for what it left alive. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ShaderTwins.cs
 The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites, `EmitterRenderer`'s
@@ -46,10 +46,18 @@ variants), one `Shader` per text, and the materials wearing them. A cache key is
 graphics mode, so keys whose texts agree in a mode share one and Godot compiles it once. `Follow` records the key a
 material wears, `Copy` and `FadeCopy` the key a duplicate wears, and `Regenerate` moves each onto its key's shader for
 the standing mode with no text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
-(`EnhancedDrawn`) a first switch to Enhanced rewrites in place through `Rewrite` (the ocean's too). `Pooled` also serves
+(`EnhancedDrawn`) a first switch to Enhanced rewrites in place through `Rewrite` (the ocean's too) and pins each rewritten shader on a material until two frames have drawn (LOG-26). `Pooled` also serves
 per-instance constant texts (plane flare, light sprites, ground shadow). A test harness names the world it builds
 (`BuildingWorld`) and drops its materials when it destroys it (`Untrack`); a test or probe drops unworn shaders (`ReleaseUnworn`). Read `Launch/EnhancedLook.cs`.
 
+## src/Mech3/StereoFacing.cs
+How a camera-facing sprite takes its basis under the stereo path. A quad that copies the view's
+basis lies in the head's view plane there, so it is seen turning edge-on as the head looks away
+and rolls with every tilt. `Live` is set by `Launch/XrSession.cs` before any world is built, and
+each sprite then emits a stereo text posed by `csky_facade_spherical` toward the eye: the puffer
+sprites (`EmitterRenderer`), the heat shimmer, the snow flakes and the Enhanced cloud-field grade.
+The flat texts are untouched, and the moon's one facade text (`WorldBuilder`) faces the eye on every
+path. Suite `xr-sprite-facing`; golden `c1-moon-xr-sim`.
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
 with the zone set `{0, camera weather state}`; the walk draws a node iff its gamez `zone_id` is
@@ -130,16 +138,36 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
 (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+mounts `cockpit1` hidden at that offset under `InteriorScale` (times `interiorScaleFactor`, the stereo path's per-plane factor) and that same tilt, or for the stereo path untilted with the original's eye, the marker read in interior units (`StereoMount`, `InteriorEye`), then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. `raceGhost` keys the airframe builder alone for the race ghost, never the interior's, and `xrInterior` keys the interior's alone for the stereo path (`Flight/Hud/XrCockpit.cs`), which also leaves out the head plate (`CockpitPlate.cs`, counted in `InteriorOmittedPolygons`) and draws the sight's reticle collimated (`GunsightReticle.cs`, counted in `GunsightReticles`). Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Mech3/CockpitPlate.cs
+The flat head-and-shoulders plate every `cockpit1` carries behind the eye, as the polygons that draw
+it: one z plane 0 to 8 units aft (0.16-1.80 on ten interiors, 6.80 on the Warhawk), face normal aft,
+a colour material, priority 5. It faces aft, so the flat eye never sees its front, and a tracked head
+leaning past it does, which is why the stereo interior builder omits it. It shares its node with
+canopy structure, so the selection is by polygon; `Find` walks the interior in its own frame, and
+`CSVM.Tests/CockpitPlateTests.cs` pins the count per airframe (7 each, the Balmoral's 5). Engine-free.
+Read `PlaneBuilder.cs` next.
+
+## src/Mech3/GunsightReticle.cs
+The stereo interior's gunsight reticle, drawn collimated: each eye sees each line in the direction the
+authored eye sees it, so it reads at infinity. Every interior's sight glass is one polygon wearing one
+texture (`cockpit6`, the Warhawk's `crosshair`); `Split` lifts the reticle out of it, leaving the tint,
+the frame line and the sight body on the glass at its depth. `Overlay` builds the quad in the glass's
+plane that draws the reticle through `Look`, the authored eye's view of the glass, and `Find` walks the
+interior for the glass. The overlay carries `SortAfterGlassM` as its sorting offset, so it draws after
+the glass it shares a priority with. `CSVM.Tests/GunsightReticleTests.cs` pins the eleven glasses and the split.
+Measurements: [../org/cameraViews.md](../org/cameraViews.md). Read `PlaneBuilder.cs` next.
 
 ## src/Mech3/RaceGhost.cs
-The race ghost: how solid another race pilot's aircraft draws at a camera distance (`Alpha`,
-`GhostWithinM`, `SolidBeyondM`, and a floor per presentation, `GhostAlpha` and `EnhancedGhostAlpha`, all TUNE), the vertex line that carries those constants
+The race ghost: how solid another race pilot's aircraft draws at a camera distance (`Alpha`, `GhostWithinM`, `SolidBeyondM`, and a floor per presentation, `GhostAlpha` and `EnhancedGhostAlpha`, all TUNE), the vertex line that carries those constants
 into `csky_race_ghost.gdshaderinc`, and `Stamp`, the static per-instance `csky_ghost` write naming the
 owning pilot's first-person layer. The fade is measured in the shader from the drawing camera, so each
 splitscreen pane fades every other aircraft at its own distance in one shared scene; the owner's own
 cameras, which drop that layer, and its armed Danger Zone photograph draw it solid. The ghost is the
-clutter fade's ordered dither in the opaque pass, never a blend. Read `SceneBuilder.cs` next.
+clutter fade's ordered dither in the opaque pass, never a blend; a stereo process takes `StereoFragmentLine`,
+whose pattern sits at each fragment's depth, so it carries the aircraft's disparity
+([../org/clutter.md](../org/clutter.md)). Read `SceneBuilder.cs` next.
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`

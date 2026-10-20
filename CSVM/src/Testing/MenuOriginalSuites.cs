@@ -141,7 +141,8 @@ internal static class MenuOriginalSuites
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
         + "and picking a frame cap, over the Render Scale and Anti-aliasing rows, the Shadow Quality row "
-        + "dead under Original and live once the Enhanced Graphics checkbox flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
+        + "dead under Original and live once the Enhanced Graphics checkbox flips, View Distance and then VR Mode "
+        + "scrolling into the window's foot, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
         + "silence, the open page states its mix to the host every frame and names the level a "
@@ -994,22 +995,25 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
-        // The shadow row is the dropdown window's foot, so Down scrolls View Distance onto it. The
-        // install draws the two checkboxes under the window, Enhanced Graphics at the column's foot,
-        // and Down from it wraps out of the value column.
+        // The shadow row is the dropdown window's foot, so Down scrolls View Distance onto it, then
+        // VR Mode, a stop where it is live. The install draws the two checkboxes under the window,
+        // Enhanced Graphics at the column's foot, and Down from it wraps out of the value column.
+        var expected = new List<string> { OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey };
+        if (System.OperatingSystem.IsWindows())
+        {
+            expected.Add(OriginalVideoPage.VrModeKey);
+        }
+
+        expected.AddRange(new[] { OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey });
         var walk = new List<string> { shell.FocusedKey };
-        for (int i = 0; i < 5; i++)
+        while (walk.Count < expected.Count)
         {
             Press(host, seat, Down);
             walk.Add(shell.FocusedKey);
         }
 
-        ctx.Check(walk.SequenceEqual(new[]
-            {
-                OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey, OriginalVideoPage.WaterQualityKey,
-                OriginalVideoPage.GraphicsKey, OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
-            }) && shell.Options.Video.Top == 1,
-            $"Down walks the shadow row, scrolls View Distance into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
+        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 2,
+            $"Down walks the shadow row, scrolls View Distance and then VR Mode into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit

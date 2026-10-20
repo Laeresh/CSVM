@@ -14,7 +14,8 @@ namespace CSVM.Flight.Hud;
 /// felt, not seen (docs/org/aim-assist.md "What the gun pipper follows").</summary>
 public sealed partial class ImpactReticle : Control
 {
-    private const float RefSize = 40f; // pipper draw size in px at the 1440p reference (TUNE)
+    /// <summary>The pipper's draw size in pixels at the 1440p reference (TUNE).</summary>
+    internal const float RefSize = 40f;
 
     private Texture2D _texture = null!;
     private Camera3D _camera = null!;
@@ -25,6 +26,13 @@ public sealed partial class ImpactReticle : Control
     /// <summary>Whether to draw this frame. False hides the pipper, no firable gun, crashed, or no
     /// valid firing solution. Set by <see cref="Airframe.FlightController"/>.</summary>
     public bool Active { get; set; }
+
+    /// <summary>Whether a stereo session draws the pipper in the world (<see cref="XrMarkers"/>).
+    /// Set, this control draws nothing.</summary>
+    public bool MarksInWorld { get; set; }
+
+    /// <summary>The pipper picture, <c>impact_point.png</c>.</summary>
+    public Texture2D Texture => _texture;
 
     /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
     /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
@@ -66,7 +74,7 @@ public sealed partial class ImpactReticle : Control
     {
         // A draw can land before _Process has sized us to the pane; HudMetrics would then read a
         // zero window and the rect would be degenerate. Nothing to draw at zero height anyway.
-        if (!Active || Size.Y <= 0f)
+        if (!Active || MarksInWorld || Size.Y <= 0f)
         {
             return;
         }

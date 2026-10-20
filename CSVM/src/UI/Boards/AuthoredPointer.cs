@@ -5,7 +5,8 @@ namespace CSVM.UI.Boards;
 
 /// <summary>
 /// A seat's mouse on a board drawn in the original's authored 800x600 space. The viewport's pointer
-/// maps back through <see cref="BoardFit"/> into authored pixels, with the left button. The
+/// (<see cref="ScreenPointer"/>) maps back through <see cref="BoardFit"/> into authored pixels, with
+/// the left button. The
 /// Original race and pause boards read their pointer here. Module entry: docs/architecture/UI.md.
 /// </summary>
 public static class AuthoredPointer
@@ -22,9 +23,14 @@ public static class AuthoredPointer
             return null;
         }
 
+        if (ScreenPointer.Read(board.GetViewport()) is not { } pointer)
+        {
+            return null;
+        }
+
         var size = board.GetViewportRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        var at = board.GetViewport().GetMousePosition();
-        return ((at.X - fit.OriginX) / fit.Scale, (at.Y - fit.OriginY) / fit.Scale, Input.IsMouseButtonPressed(MouseButton.Left));
+        var at = pointer.At;
+        return ((at.X - fit.OriginX) / fit.Scale, (at.Y - fit.OriginY) / fit.Scale, pointer.Pressed);
     }
 }

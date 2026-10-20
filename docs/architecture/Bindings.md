@@ -9,9 +9,26 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 ## src/Bindings/DeviceId.cs
 Which device a binding sits on, as a value that survives a replug: `DeviceKind` plus, for a joypad,
 the stable hardware string its platform reports. Keyboard and mouse are singletons because the
-platform reports one state each whatever produced it. The default value names nothing, which is what
-a binding read from a file with a missing device becomes. Turning an identity into a live joypad
-index is `DeviceRegistry.cs`, read next.
+platform reports one state each whatever produced it, and so is `Xr`, a headset's two hand
+controllers (`XrControls.cs`). The default value names nothing, which is what a binding read from a
+file with a missing device becomes. Turning an identity into a live joypad index is
+`DeviceRegistry.cs`, read next.
+
+## src/Bindings/XrControls.cs
+The hand controllers' control table, engine-free: `XrButton` and `XrAxis` are the indices an `Xr`
+binding carries, named by role (lower and upper face button, menu, stick click, trigger, grip) so
+another controller maps onto them, each reading one action of the OpenXR action map on one hand's
+tracker. The action names are Godot's default map's, which `CSVM/openxr_action_map.tres` ships as
+generated. It holds the Touch captions and marks the two triggers, whose clicks are the screen
+pointer's; a capture takes a trigger as its axis. Reading the trackers is `XrControllers.cs`.
+
+## src/Bindings/XrControllers.cs
+The hand controllers behind the binding seam: an `IDeviceState` answering for `DeviceId.Xr` through
+`XrControls.cs`, and each hand's aim pose in the XR origin's frame for the screen pointer
+(`UI/Boards/TheaterPointer.cs`). The trackers sit behind `IXrHands`, so units read it over a fake. A
+hand no interaction profile binds reads zero, and every hand does until `SessionLive`, which
+`Launch/XrSession.cs` sets, so a flat launch makes no XR call. `SeatDeviceState.cs` passes it every
+`Xr` read on its pad half.
 
 ## src/Bindings/BindingControl.cs
 The tagged control half of a binding: `ControlKind` picks which of `Key`, `Button`, `Axis`, `Hat`,
@@ -53,8 +70,9 @@ what a rebinding screen compares when it takes a control off its previous owner.
 The tick's raw hardware state, addressed by device identity rather than connection index: keys,
 buttons, mouse buttons, axis travel with no deadzone applied, and a hat's full direction flags. Every
 member answers for an absent device instead of throwing, which is how an unplugged pad silences its
-actions without the map losing the rows. Two implementations ship: `GodotDeviceState.cs` for a single
-device identity through the registry, and `SeatDeviceState.cs` for a seat that reads a whole pad set.
+actions without the map losing the rows. `GodotDeviceState.cs` reads a single device identity
+through the registry, `SeatDeviceState.cs` a seat's whole pad set, `Sticks/StickDeviceState.cs` the
+sticks and `XrControllers.cs` a headset's hand controllers.
 
 ## src/Bindings/GodotDeviceState.cs
 The live `IDeviceState` over Godot's `Input` singleton, addressed by identity through an owned
@@ -80,7 +98,8 @@ and this answers for it: buttons ORed, axes taken at the largest magnitude acros
 go through `Pads.For` rather than a registry index, and only the pad half is gated, because Godot
 polls joypads regardless of window focus while key state is focus-scoped. `Refresh` takes the pad
 list once a tick. Every other joypad identity goes to an optional stick reader
-(`Sticks/StickDeviceState.cs`, seat 1's only), muted with the pads. Read `PlayerActions.cs` above it.
+(`Sticks/StickDeviceState.cs`, seat 1's only) and `DeviceId.Xr` to `XrControllers.cs`, both muted
+with the pads. Read `PlayerActions.cs` above it.
 
 ## src/Bindings/BindingSet.cs
 The bindings one action holds. `Resolve` ORs them, which is the original's four-slots rule
@@ -112,11 +131,12 @@ tick, each full axis on its action's side or as the lever's position, via `Conte
 ## src/Bindings/ControlCapture.cs
 What a rebinding screen may capture, and the scan that turns a press into a `Binding`: the bindable
 key list, Godot's pad button and SDL axis ranges, and the mouse buttons past the pointer's own. `Arm`
-masks everything already held. Every pad control is stamped with the seat's own identity, not a
-hardware GUID. A key pressed under Shift, Ctrl or Alt carries them; a modifier bound alone resolves
-on its release. A pad axis is rest-then-move, since a resting stick drifts, with a fixed
-`CapturedDeadzone`. A pad's hat is not scanned; sticks are, through `StickCapture`, steered by the
-constructor's `row` and `sticksOnly`. Escape and the pad's Back cancel and are never captured.
+masks everything already held; a pad control carries the seat's identity, not a GUID. A key under
+Shift, Ctrl or Alt carries them; a lone modifier resolves on release. A pad axis is rest-then-move,
+stamped by `PadDeadzoneFor(row)`: the stick's `DeadzoneFor(row)` on a flight row, `CapturedDeadzone`
+(0.5) elsewhere. Sticks are scanned through `StickCapture` (steered by `row` and `sticksOnly`), and so
+are the hand controllers: a trigger binds as its axis on a pull begun after `Arm`, its click let go,
+and `TakeListening` has the theater pointer swallow that pull. Escape and the pad's Back cancel.
 
 ## src/Bindings/StickCapture.cs
 The stick half of a capture, over every identity the reader lists (`IStickDevices`): buttons 0..127,
@@ -224,8 +244,8 @@ The keymap file: versioned JSON, one per player under `user://`, written atomica
 file and a rename. Named and versioned against the original, which writes 2400 unversioned raw bytes
 to the registry and points its live array at the loaded buffer, so a record-layout change there
 reinterprets an old save. `Encode` and `Decode` are the token grammar (version 3 adds full-axis and
-stick hat tokens, the lever row reusing the full-axis token); an older file loads whole, so the
-reader checks no version. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
+stick hat tokens, the lever row reusing the full-axis token, version 4 the `xr` device); an older file
+loads whole, and a row it names keeps the shipped `xr` binding. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
 Shape, tokens and unreadable rows: [../org/input.md](../org/input.md). `DirectoryOverride` keeps a
 suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`. A file that is no JSON object is moved to `.bad`.
 

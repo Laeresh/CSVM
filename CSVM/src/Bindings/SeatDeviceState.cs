@@ -10,27 +10,31 @@ namespace CSVM.Bindings;
 /// per-site twins); this ORs buttons and takes the largest-magnitude axis across the set.
 /// ⚠ Pad reads go through <see cref="Pads.For"/>, never a connection index from the device registry.
 /// It carries the <c>--no-pads</c> and focus gate and the phantom-device policy (span the set, never
-/// <c>pads[0]</c>). Every other joypad identity goes to the seat's stick reader, if it has one.
-/// </summary>
+/// <c>pads[0]</c>). Every other joypad identity goes to the seat's stick reader, if it has one,
+/// and the hand controllers to the XR reader.</summary>
 public sealed class SeatDeviceState : IDeviceState, IStickDevices
 {
     private readonly DeviceId _seatPad;
     private readonly Func<int[]?> _seatDevices;
     private readonly bool _readsPads;
     private readonly IDeviceState? _sticks;
+    private readonly IDeviceState? _xr;
     private readonly List<int> _pads = new();
 
-    /// <summary>A seat reading <paramref name="seatPad"/>'s bindings off the pads
-    /// <paramref name="seatDevices"/> names, re-asked each <see cref="Refresh"/> because a seat's
-    /// device list changes when a splitscreen player joins. Pass <paramref name="readsPads"/> false
-    /// for the keyboard-half reader of a site that resolves both halves separately; it mutes
-    /// <paramref name="sticks"/> too. <paramref name="sticks"/> answers for every other identity.</summary>
-    public SeatDeviceState(DeviceId seatPad, Func<int[]?> seatDevices, bool readsPads = true, IDeviceState? sticks = null)
+    /// <summary>A seat reading <paramref name="seatPad"/>'s bindings off the pads <paramref name="seatDevices"/>
+    /// names, re-asked each <see cref="Refresh"/> since a joining splitscreen player changes it. A
+    /// keyboard-half reader passes <paramref name="readsPads"/> false, muting the sticks and the hand
+    /// controllers too. <paramref name="sticks"/> answers for
+    /// every other joypad identity, <paramref name="xr"/> (else <see cref="XrControllers.Live"/>) for
+    /// <see cref="DeviceId.Xr"/>.</summary>
+    public SeatDeviceState(
+        DeviceId seatPad, Func<int[]?> seatDevices, bool readsPads = true, IDeviceState? sticks = null, IDeviceState? xr = null)
     {
         _seatPad = seatPad;
         _seatDevices = seatDevices ?? throw new ArgumentNullException(nameof(seatDevices));
         _readsPads = readsPads;
         _sticks = readsPads ? sticks : null;
+        _xr = readsPads ? xr ?? XrControllers.Live : null;
     }
 
     /// <summary>Whether the seat's stick reader reads neutral right now; false without one.</summary>
@@ -61,6 +65,8 @@ public sealed class SeatDeviceState : IDeviceState, IStickDevices
 
     public bool IsButtonDown(DeviceId device, int button)
     {
+        if (device.Kind == DeviceKind.Xr)
+            return _xr is not null && _xr.IsButtonDown(device, button);
         if (device != _seatPad)
             return _sticks is not null && _sticks.IsButtonDown(device, button);
         foreach (int pad in _pads)
@@ -76,6 +82,8 @@ public sealed class SeatDeviceState : IDeviceState, IStickDevices
     /// reads about zero and never masks the real stick.</summary>
     public float AxisValue(DeviceId device, int axis)
     {
+        if (device.Kind == DeviceKind.Xr)
+            return _xr?.AxisValue(device, axis) ?? 0f;
         if (device != _seatPad)
             return _sticks?.AxisValue(device, axis) ?? 0f;
         float best = 0f;

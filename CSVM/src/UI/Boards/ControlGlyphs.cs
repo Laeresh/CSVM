@@ -55,9 +55,15 @@ public static class ControlGlyphs
     }
 
     /// <summary>The glyph that stands for <paramref name="binding"/>'s control, or null where the set
-    /// draws none and the line keeps its words.</summary>
+    /// draws none and the line keeps its words. A hand controller's always keeps its words: its
+    /// button indices are not a pad's, so a pad glyph would name the wrong button.</summary>
     public static GlyphKey? For(Binding binding)
     {
+        if (binding.Device.Kind == DeviceKind.Xr)
+        {
+            return null;
+        }
+
         var key = GlyphKey.Of(binding);
         return _set.Draws(key) ? key : null;
     }

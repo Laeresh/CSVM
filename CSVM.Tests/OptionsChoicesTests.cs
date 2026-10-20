@@ -78,6 +78,9 @@ public class OptionsChoicesTests
             Rumble = false,
             DefaultView = PilotView.Name(PilotViewMode.Cockpit),
             AutoHeadTurn = true,
+            VrMode = true,
+            VrRenderScale = VrRenderScaleSetting.Words[0],
+            VrVignette = VrVignetteSetting.Words[^1],
         };
         foreach (var setting in WordSettings.All)
         {
@@ -90,13 +93,13 @@ public class OptionsChoicesTests
             new OptionsApplyExit(saved.GraphicsMode, saved.Difficulty, saved.MonitorIndex, saved.Resolution,
                 saved.DisplayMode, saved.VSync, saved.AudioMaster, saved.AudioMusic, saved.AudioEffects,
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
-                saved.Words),
+                saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette),
             choices.ToExit());
 
         choices.Load(null);
         Assert.Equal(
             new OptionsApplyExit(GraphicsMode.Default, Difficulty.Word(Difficulty.Normal), null, null, null, null,
-                null, null, null, null, null, null, null, null, new WordValues()),
+                null, null, null, null, null, null, null, null, new WordValues(), null, null, null),
             choices.ToExit());
     }
 }

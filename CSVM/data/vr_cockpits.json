@@ -1,0 +1,17 @@
+{
+  "_about": "Per-plane VR cockpit data, read once per VR session by src/Flight/Hud/VrCockpits.cs and applied only while a headset (or the --xr-sim stand-in) draws the interior; a flat launch never reads it. interiorScaleFactor multiplies the cockpit1 mount's scale (PlaneBuilder.InteriorScale, 0.04 m per interior unit). eyeOffsetZ moves the seated eye in metres along the mount's own Z axis, positive aft; eyeOffsetY, optional, along its Y, positive up. The collimated reticle keeps the gunsight on the guns from either. storeOffsetZ (positive aft) and storeOffsetY (positive up), optional, move the pylon stores' stereo copies in metres from their true pylon poses in the aircraft's frame, and storeSpread, optional, multiplies each store's distance from the centreline, so the stores can be placed on an interior that is not the airframe scaled. A plane left out, or a field left out, takes 1.0 for the factor and the spread and 0.0 for the offsets. Each plane takes the values judged at the headset with --xr-tune, which writes them here. Fields and ranges: docs/architecture/Flight.md, src/Flight/Hud/VrCockpits.cs.",
+
+  "planes": {
+    "player_bhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0, "storeOffsetZ": 0.66, "storeOffsetY": -0.09, "storeSpread": 1.05 },
+    "player_pfighter": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_fury": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05 },
+    "player_warhawk": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05, "storeOffsetZ": 0.38, "storeOffsetY": 0.52, "storeSpread": 1.05 },
+    "player_autogyro": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_avenger": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_balmoral": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_brigand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05, "storeOffsetY": 0.06, "storeSpread": 0.9 },
+    "player_fbrand": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.0 },
+    "player_kestrel": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.05, "storeOffsetZ": 0.35, "storeOffsetY": -0.13, "storeSpread": 1.1 },
+    "player_peacemaker": { "interiorScaleFactor": 1.0, "eyeOffsetZ": 0.12, "eyeOffsetY": -0.05, "storeOffsetY": -0.37, "storeSpread": 1.15 }
+  }
+}

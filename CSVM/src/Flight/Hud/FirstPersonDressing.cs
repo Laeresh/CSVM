@@ -41,6 +41,11 @@ public sealed class FirstPersonDressing
     /// renders in the main world instead.</summary>
     public CockpitOverlay? Pass { get; set; }
 
+    /// <summary>The interior's placement under the stereo path, which draws it in the main world
+    /// from the XR origin's frame. Null outside that path and whenever <see cref="Pass"/> holds the
+    /// interior.</summary>
+    public XrCockpit? Stereo { get; set; }
+
     /// <summary>The lights and propeller discs copied onto the interior, kept on their originals'
     /// visibility and spin while the interior is drawn.</summary>
     public CockpitReseat? Reseat { get; set; }

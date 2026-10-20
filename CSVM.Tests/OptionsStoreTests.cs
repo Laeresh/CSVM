@@ -107,6 +107,18 @@ public class OptionsStoreTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesVrModeAndAWrongKindReadsAsNeverSet()
+    {
+        var store = new OptionsStore(TestData.TempDir());
+        Assert.Null(store.Load().VrMode);
+        store.Save(new OptionsDef { VrMode = true });
+        Assert.True(store.Load().VrMode);
+        store.Save(new OptionsDef { VrMode = false });
+        Assert.False(store.Load().VrMode);
+        Assert.Null(OptionsStore.Deserialize("{\"version\":1,\"vrMode\":\"true\"}")!.VrMode);
+    }
+
+    [Fact]
     public void RoundTrip_PreservesTheDifficultyWord()
     {
         var store = new OptionsStore(TestData.TempDir());

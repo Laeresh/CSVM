@@ -172,10 +172,11 @@ nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind ev
 
 ## src/UI/Boards/AuthoredPointer.cs
 A keyboard seat's mouse on a board drawn in the authored 800x600 space: the viewport pointer
-mapped back through `BoardFit` into authored pixels, with the left button, and none for a pad seat
-or a board out of the tree. The Original race and pause boards (`Menu/Original/OriginalRaceBoard.cs`,
-`OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`. `PausePreferences` and the chrome
-`PauseBoard` read their pointer their own way, raw and capture-aware.
+(`ScreenPointer.cs`) mapped back through `BoardFit` into authored pixels, with the left button, and
+none for a pad seat or a board out of the tree. The Original race and pause boards
+(`Menu/Original/OriginalRaceBoard.cs`, `OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`.
+`PausePreferences` and the chrome `PauseBoard` read `ScreenPointer.cs` their own way, the second
+capture-aware.
 
 ## src/UI/Boards/ComposedBoard.cs
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
@@ -558,7 +559,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a
 skipper. Per seat, `OwnAirframeLayer` is dropped only by that pilot's disc and `FirstPersonLayer` only
-by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer` or carries `FlatSeaLayer` (no geometry, the disc's flat-sea marker), the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names.
+by that pilot's pane (`SeatAirframe` writes both); no pane draws `SpyglassSunLayer` or carries `FlatSeaLayer` (no geometry, the disc's flat-sea marker), the disc no `SunLayer`. Every camera draws `EveryCameraLayer`, the race ghost owner a seat flown elsewhere names. `HeadsetLayer` carries the theater screen and laser, which a picture camera (the stereo cutscene's) leaves out. `HeadOverlayLayer`, bit 28, carries the head-locked quads and the flight markers: both pane masks add it, the cutscene pair draws it and the spyglass picture leaves it out with `HeadsetLayer`. `WorldFlareLayer`, one per seat in bits 20 to 23, above Godot's 20 named layers, carries that seat's world flare: only its pane (`PlayerCullMask`, or `PaneCullMask` for the first) draws it, and the spyglass and photograph drop the whole `WorldFlareBand`.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp
@@ -578,6 +579,95 @@ wash blends both the weights and the colour by the original's own arithmetic and
 envelope without dropping what is displayed. The envelope is attack, sustain and release at fixed
 fractions of the duration, stepped on sim time, with a hard cut at the end. `Composite` is the
 paint-time rule `ScreenFlash` applies. Decode: [../org/ordnanceTypes.md](../org/ordnanceTypes.md).
+
+## src/UI/Boards/HeadLockedQuads.cs
+A stereo session's full-view colour layers, which a stereo viewport cannot draw as canvas layers: the
+cloud whiteout, the `ScreenFlash` wash, the sun wash and the mission-end fade, one quad each copying
+its flat layer's colour every frame, so the flat layers stay untouched. The shader places each quad in
+view space, locked to the head, composited in gamma space as the canvas is. Its render priorities are
+the stereo twin of `HudLayers`: the cockpit-locked HUD panel's (`Flight/Hud/XrHudPanel.cs`), the flight markers' world cards under it and their head ring over it (`Flight/Hud/XrMarkers.cs`), then the ring's spyglass picture (`SpyglassPriority`). The quads stand on `SplitScreen.HeadOverlayLayer`, off the spyglass picture. The whiteout alone
+is depth-tested at the seat clearance, which keeps the in-world interior clear of it as the flat
+cockpit pass does. `Launch/GameSession.cs` builds and wires it when the launcher hands it an XR head.
+
+## src/UI/Boards/TheaterScreen.cs
+A stereo session's theater screen: the menus, boards, load screens, cinemas and cutscenes on a quad ahead of the
+seated eye, in the XR origin's frame and placed from `Launch/XrEyeFeed.cs` as the stereo cockpit is.
+`CanvasRehost.cs` moves every root canvas layer from `HudLayers.Board` up into its SubViewport, while
+the controls keep the root's layout and input. Its geometry and resolution are `TheaterLayout.cs`. Under a stereo root the boards and cinemas ground only the board's rect, so the surround shows where flat play letterboxes.
+With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
+or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board, and shows only the film rows between the card's bars (`CutsceneController.FilmRows`). For that frame the camera's mask is cut to `HeadsetLayer` alone, after the pair has read it, and put back before the next physics and process pass, so the headset draws no world, sky or sun shadow behind the surround.
+Its geometry stands on `SplitScreen.HeadsetLayer`, which the pair leaves out, so it never draws into its own picture. Its render priorities sit over `HeadLockedQuads`'
+fade and under `ComfortQuads.cs`' fade, which `BoardShown` drops under it. `Launch/Launcher.cs` builds it beside `XrSession`; the laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
+
+## src/UI/Boards/CanvasRehost.cs
+Draws the root viewport's canvas layers of chosen numbers into a SubViewport through
+`CanvasLayer.CustomViewport`, taking each as it enters the tree and handing it back to the root as it
+leaves, which keeps Godot's own signal bookkeeping paired. Only the drawing moves: the controls stay
+in the root's tree, lay out against its visible rect and take its input. `TheaterScreen.cs` uses it
+for the boards. The HUD panel (`Flight/Hud/XrHudPanel.cs`) parents its layers instead, since the
+HUD must lay out on the panel's own 16:9 surface rather than the eye-size root.
+
+## src/UI/Boards/TheaterLayout.cs
+The theater screen's seat, size and resolution, engine-free: where the quad stands in the XR origin's
+frame, how big it is for a given 2D layout (the board `BoardFit` inscribes is the seat's height),
+the surface size at two texels per authored board pixel, which canvas layers it shows and which raise
+it in flight, where a pointer ray meets it and where a screen point stands (`PointAt`). A cutscene
+plays in the inscribed board's rect (`CutsceneRect`), each eye drawn at `CutsceneSize`, the board's
+4:3 at the same two texels. Under a stereo root the layout is one eye's render target, sized by the
+runtime. Pinned by `CSVM.Tests/TheaterLayoutTests.cs`.
+
+## src/UI/Boards/StereoPair.cs
+The 3D-cinema pair a cutscene plays as on the theater screen, engine-free, and `TheaterCutscene`, the
+camera and convergence the session hands the screen. Two cameras stand on the authored one, the
+runtime's interocular distance apart along its right axis, frusta shifted to meet the authored camera's at the
+convergence, so that depth lands on the screen plane. It converges on the letterbox card (7.5 m): the card's frame stands on
+the screen plane, where the screen masks the bars, and the scene recedes behind it. On the default seat, framed at 55.76°, infinity lies 12.1 mm behind
+(0.6 % of the width) and appears 3.1 m away; a point 3 m from the camera stands out at 1.9 m. Converging at 1.45 m
+instead makes the screen an undistorted window but its far parallax reaches the interocular. `ConvergenceOfCard` is the knob.
+
+## src/UI/Boards/ComfortQuads.cs
+The headset's comfort layers, one per process beside the theater: a black quad locked to the head
+that every cut lands on (`XrFade.cs`), and the optional tunnel vignette (`XrVignette.cs`), a black
+ring easing in past a clear cone. Both stand on `SplitScreen.HeadsetLayer`, so a cutscene's pair never
+draws them. The fade draws at 127, over the theater's surround and screen so a cutscene's take and
+hand-back fade too, and drops to 123 under the surround while a board shows (`TheaterScreen.BoardShown`);
+the vignette draws at 122, over every `HeadLockedQuads` tier. It darkens as a canvas fade does, linearly
+in sRGB. `Launch/Launcher.cs` builds it and hands it the rig's cuts; the first flight frame after a load
+is a cut of its own. The `xr-comfort-*` suites pin it.
+
+## src/UI/Boards/XrFade.cs
+The comfort fade's clock, engine-free: clear, darkening, black, clearing. A cut the game makes snaps to
+black on its own frame and clears over `DefaultInS` (0.3 s); a cut the player asks for, a view key,
+darkens over `DefaultOutS` (0.15 s) through `Cover`, which `Flight/Camera/CameraController.cs` calls
+every frame until it reports black and then cuts. A black nobody holds clears on the next frame, so a
+dropped request cannot leave the headset dark. Both durations are TUNE. Pinned by
+`CSVM.Tests/XrComfortTests.cs`.
+
+## src/UI/Boards/XrVignette.cs
+The tunnel vignette's curve, engine-free. The rate is the XR origin's own turn a second, to which head
+tracking adds nothing, and a cut is no turn. The strength is a smoothstep from 20 deg/s (nothing) to
+90 deg/s (full), followed in 0.1 s, held while the rate has been over 20 deg/s within the last
+second, then let go in 0.4 s, so a manoeuvre holds the tunnel rather than pumping it, and closes the clear cone's half-angle from
+60 degrees (past any eye's edge) to 40 (Mild) or 28 (Strong), feathered over 12. Every number is
+TUNE. Pinned by `CSVM.Tests/XrComfortTests.cs`; the level is `Utils/VrVignetteSetting.cs`.
+
+## src/UI/Boards/TheaterPointer.cs
+The hand controllers' laser on the theater screen: a ray from one hand's aim pose
+(`Bindings/XrControllers.cs`), drawn as a thin beam and a dot placed from the eye feed as the screen
+is, clicking with that hand's trigger. Godot controls and event readers get its moves and clicks as
+mouse events pushed at `TheaterScreen.LayoutPoint`; polled readers get the point through
+`ScreenPointer.cs`, which it overrides while a controller is present. The right hand points first;
+the other trigger hands the laser over without a click while the screen is up. While a capture
+listens (`ControlCapture.TakeListening`) a trigger pull clicks and switches nothing, since it binds.
+`Launch/Launcher.cs` builds it beside the screen; the `xr-pointer` suites drive it.
+
+## src/UI/Boards/ScreenPointer.cs
+The one pointer every polled reader takes: the desktop mouse's viewport position and left button,
+or the reading of the pointer that overrides it (`TheaterPointer.cs` under a headset, whose layout is
+the eye's size where the desktop cursor cannot reach). With no override every read is the mouse's,
+call for call. Its readers are `AuthoredPointer.cs`, `Screens/PauseBoard.cs`,
+`Screens/PausePreferences.cs` and seat 0's pointer in `Launch/ProcessMenu.cs`, which the Original
+presentation reads.
 
 ## src/UI/Overlays/ObjectivesHud.cs
 The flown campaign mission's objectives readout, drawn on the pause screen and nowhere else: the
@@ -913,6 +1003,13 @@ instance outliving every presentation switch. `DiscardTransient()` calls every f
 `Discard` and is the whole of what a switch discards, so anything a feature keeps past it is by
 definition persisted data.
 
+## src/UI/Menu/MenuNoticeFeature.cs
+One notice the launcher posts for the player to read at the menu's next show: only VR mode posts
+one, for the flat game it fell back to or a restart whose new process did not start
+(`Launch/XrRelaunch.cs`'s `MenuNotice`, posted through `Launch/ProcessMenu.cs`'s `Notice`). Original
+raises it as the one-button warning box (`OriginalShell.ShowNotice`); a presentation takes it once,
+and a switch keeps one nothing has shown.
+
 ## src/UI/Menu/MenuCommands.cs
 The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
 (auto-repeated cursor steps, edge presses with `KeylessAccept` marking an accept no key gave, typed text and a paste, `OnPad` naming the side a hint words itself for, an optional window-pixel `MenuPointer` whose
@@ -941,9 +1038,9 @@ playback, volume, the buses and the handoff into a launching session. The host i
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight or a lobby Stunt Race a `VersusRules` of kill target, minutes, lives, auto-respawn and the lobby type that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats, and the join board's bot rows a local Dogfight run carries as `Bots`, as a local Stunt Flying run does only with the Race Bots toggle on),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels and the gameplay switches, null where never set).
+`OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels, the gameplay switches, VR mode and the headset's render scale and vignette, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, and a screen
-hands back the settings it does not show; none of the seventeen is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
+hands back the settings it does not show; none of the twenty-one is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
 plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
 sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
@@ -952,7 +1049,7 @@ How the monitor, size, display mode and V-Sync read as rows, shared so the VIDEO
 about a saved value: one label per `DisplayWords` entry in that order, since a row reads and writes the store word by index,
 plus the forgiving reads (an unknown word is the setting's own default, a size the screen does not offer is the
 screen's own) and the wrap a sideways step takes, which the word rows share. Under a `Pinned` display mode the size row reads the screen's own size
-whatever is saved. A word setting's labels, detail and offered words are its own descriptor's (`Utils/WordSetting.cs`). The
+whatever is saved. A word setting's labels, detail and offered words are its own descriptor's (`Utils/WordSetting.cs`). The VR mode row's description says it is Windows only where the VIDEO page holds it dead off Windows, and the headset's render-scale and vignette rows carry their own fixed descriptions. The
 screens and the sizes are enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
@@ -960,7 +1057,8 @@ Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsT
 The settings an Options screen stages before the apply, one instance per screen, and the rules that couple them: a `Pinned`
 display mode freezes the size (the saved size kept), a registered word setting stages in `Words` (`Pick` runs its partner rule, as FSR 2.2
 clamps the render scale; an Enhanced-only one is `Live` under `Enhanced` alone).
-`Load` takes an `OptionsDef` (null for the shipped defaults) and `ToExit` hands every setting back as the `OptionsApplyExit`.
+`Load` takes an `OptionsDef` (null for the shipped defaults) and `ToExit` hands every setting back as the `OptionsApplyExit`,
+VR mode and the headset's render scale and vignette among them, three settings outside the registry.
 Original's `OriginalOptionsScreen` shares one instance among its Game Options, AUDIO and
 VIDEO pages, which read and write the values and the `*At` and `At` positions from their own authored rows. The screens and sizes come from
 readers handed in, so it tests engine-free (`CSVM.Tests/OptionsChoicesTests.cs`).
@@ -1206,7 +1304,7 @@ Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphi
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
 clear. The three word rows bind to their registered setting by key, which gives their words, labels, description and gate; the titles and
-places are the page's. The pin, the FSR clamp and the Enhanced gate are `OptionsChoices`', the form's shared instance, which also carries the other word settings unshown.
+places are the page's. The pin, the FSR clamp and the Enhanced gate are `OptionsChoices`', the form's shared instance, which also carries the other word settings unshown. VR Mode is the scrolled dropdown window's last row, live on Windows alone. While a headset is live (`Headset`) the comfort vignette and VR render scale (`Utils/VrVignetteSetting.cs`, `Utils/VrRenderScaleSetting.cs`) take Display Mode's and V-Sync's places in the window, whose words ride the apply unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over
@@ -1246,7 +1344,7 @@ come from `Sticks/StickLabels.cs`'s `Columns`. The page placing the column:
 The join board, one standalone module behind the top level's remake-only JOIN BOARD door and the only screen a pad signs onto a
 seat from. It draws as the open scrapbook (`SB_BackGround.jpg`, the `Album` palette): the CREW MANIFEST down the left page, one
 entry per seat carrying that seat's identity chip and player tag and either the device name over "signed on" or the open seat
-over the press that takes it, and the ARTICLES OF THE CREW down the right, three rules and the captain's cast-off line whose pad
+over the press that takes it (or, under VR mode's one seat, a closed seat saying why), and the ARTICLES OF THE CREW down the right, three rules and the captain's cast-off line whose pad
 buttons are drawn inline through `BoardLine.Glyph`. The gestures are `MenuSeatDevices`'s (`PrimeBoard`/`ScanBoard`), read raw off
 the devices because a pad with no seat has no commands to read; CONTINUE keeps the manifest and BACK drops every sign-on. The
 keyboard is never listed, since it holds seat 1 whatever the manifest says and the first pad to sign on shares that seat, and
@@ -1488,7 +1586,7 @@ seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAi
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
-the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit, or a Stunt Flying one with its race toggle on through `InstantActionFeature.BuildExit`, and survive a return from flight. It also holds a local Dogfight's map (`MatchChapter`) and mission rules, `MatchOptions` in the network lobby's own shape, opening on its values (`DogfightLobby.OpeningOptions`) and riding a Versus exit as `DogfightLobby.RulesOf` reads them. `Choices`
+the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit, or a Stunt Flying one with its race toggle on through `InstantActionFeature.BuildExit`, and survive a return from flight. `SeatLimit` is one while a headset or the `--xr-sim` stand-in draws (the launcher sets it), so a second claim is refused and a local Dogfight with no bot row is refused with `VrOneSeat`. It also holds a local Dogfight's map (`MatchChapter`) and mission rules, `MatchOptions` in the network lobby's own shape, opening on its values (`DogfightLobby.OpeningOptions`) and riding a Versus exit as `DogfightLobby.RulesOf` reads them. `Choices`
 and `BuildExit` are the typed result; a networked launch skips the minimum in `Refusal` and `BuildExit` alike, given the one answer the caller gated on. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs
@@ -1578,7 +1676,7 @@ The pad side of the shared player setup, for any presentation, over seat 0's `Me
 feature. `P1Pad` is the captain's pad, the first to sign on. `Sync` reconciles the
 seats with the connected pads: a seat whose pad vanished is unjoined, a vanished captain's pad frees
 seat 0, and seat 0's poller is bound to the captain's pad or to every unclaimed one.
-`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are the join board's and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
+`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are the join board's and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from, whose `Closed` entries are the seats past the feature's `SeatLimit`. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
 `PadOf` reads a joined seat's pad back off its
 `MenuInputSeat`, and `FlightPads` is the binding a launch carries, the answer the presentation
 hands the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.

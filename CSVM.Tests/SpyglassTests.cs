@@ -221,7 +221,7 @@ public class SpyglassTests
     }
 
     [Fact]
-    public void TheDiscDropsThePilotsOwnAirframeAndNothingElse()
+    public void TheDiscDropsThePilotsOwnAirframeAndTheWorldFlareAndNothingElse()
     {
         uint own = SplitScreen.OwnAirframeLayer(0);
         uint pane = SplitScreen.PlayerCullMask(0);
@@ -229,13 +229,48 @@ public class SpyglassTests
 
         Assert.Equal(0u, disc & own);
         Assert.NotEqual(0u, pane & own);            // the control: the pane itself still draws it
-        Assert.Equal(pane & ~own, disc);
+        Assert.NotEqual(0u, pane & SplitScreen.WorldFlareLayer(0));
+        Assert.Equal(0u, disc & SplitScreen.WorldFlareBand);
+        Assert.Equal(pane & ~own & ~SplitScreen.WorldFlareBand, disc);
         Assert.NotEqual(0u, disc & 1u);             // the shared world's own layer 1
         for (int other = 1; other < 4; other++)
         {
             // A splitscreen neighbour's aeroplane is a target like any other and stays in the
             // picture; only the aircraft the eye sits inside is taken out.
             Assert.NotEqual(0u, disc & SplitScreen.OwnAirframeLayer(other));
+        }
+    }
+
+    [Fact]
+    public void UnderAHeadsetTheDiscAlsoDropsTheHeadsetsTwoLayersAndNothingElse()
+    {
+        uint headset = SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer;
+        uint[] taken =
+        {
+            1u, ZoneGate.LayerBand, SplitScreen.SunLayer, SplitScreen.SpyglassSunLayer,
+            SplitScreen.FirstPersonLayer(0) | SplitScreen.FirstPersonLayer(1)
+                | SplitScreen.FirstPersonLayer(2) | SplitScreen.FirstPersonLayer(3),
+            SplitScreen.OwnAirframeLayer(0) | SplitScreen.OwnAirframeLayer(1)
+                | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
+            SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)
+                | SplitScreen.PlayerVisualLayer(2) | SplitScreen.PlayerVisualLayer(3),
+            SplitScreen.WorldFlareBand,
+        };
+        foreach (uint band in taken)
+        {
+            Assert.Equal(0u, band & headset);
+        }
+
+        Assert.NotEqual(SplitScreen.HeadsetLayer, SplitScreen.HeadOverlayLayer);
+        uint own = SplitScreen.OwnAirframeLayer(0);
+        foreach (bool enhanced in new[] { false, true })
+        {
+            uint pane = SplitScreen.PaneCullMask(0xFFFFFu);
+            uint flat = SpyglassView.DiscMask(pane, own, enhanced);
+            uint worn = SpyglassView.DiscMask(pane, own, enhanced, headset: true);
+            Assert.Equal(headset, pane & headset);       // the control: the pane draws both
+            Assert.Equal(headset, flat & headset);       // and so does the flat picture
+            Assert.Equal(flat & ~headset, worn);
         }
     }
 
@@ -251,6 +286,8 @@ public class SpyglassTests
                 | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
             SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)
                 | SplitScreen.PlayerVisualLayer(2) | SplitScreen.PlayerVisualLayer(3),
+            SplitScreen.WorldFlareBand,
+            SplitScreen.HeadsetLayer | SplitScreen.HeadOverlayLayer,
         };
         foreach (uint band in taken)
         {
@@ -273,8 +310,8 @@ public class SpyglassTests
             // The flat-sea marker: the disc carries it, the pane does not.
             Assert.Equal(0u, pane & SplitScreen.FlatSeaLayer);
             Assert.NotEqual(0u, disc & SplitScreen.FlatSeaLayer);
-            // Nothing else moves: the world, the zone gate and every other airframe stay as the pane has them.
-            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer, disc & ~SplitScreen.SpyglassSunLayer & ~SplitScreen.FlatSeaLayer);
+            // Nothing else moves but the world flare: the world, the zone gate and every other airframe stay as the pane has them.
+            Assert.Equal(pane & ~own & ~SplitScreen.SunLayer & ~SplitScreen.WorldFlareBand, disc & ~SplitScreen.SpyglassSunLayer & ~SplitScreen.FlatSeaLayer);
         }
 
         // The single-player camera, whose mask the launcher's fresh camera starts at all 20 layers.

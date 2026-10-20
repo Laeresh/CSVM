@@ -395,6 +395,7 @@ if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
     exit $MemDeferredExitCode
 }
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
+. (Join-Path $PSScriptRoot "XrSimFeature.ps1")
 $HiddenDesktop = Open-HiddenDesktop
 # Every child below joins this job, held until the summary, so a killed runner takes them with it.
 $null = Open-RunJob
@@ -662,9 +663,11 @@ function Start-Godot {
     if ($HiddenDesktop) {
         # CreateProcess takes ONE command line and it must carry argv[0] itself.
         $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
-        $handle = Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
-                                        -WorkingDirectory $RepoRoot `
-                                        -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+        $handle = Invoke-WithXrSimFeature -Arguments $Arguments -Launch {
+            Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                                  -WorkingDirectory $RepoRoot `
+                                  -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+        }
         return [pscustomobject]@{ Kind = "desktop"; Handle = $handle }
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -674,7 +677,7 @@ function Start-Godot {
     $psi.UseShellExecute        = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
+    $p = Invoke-WithXrSimFeature -Arguments $Arguments -Launch { [System.Diagnostics.Process]::Start($psi) }
     # Joined after it starts, which is safe because Godot starts no child process of its own.
     Add-ToRunJob -Process $p.Handle
     return [pscustomobject]@{

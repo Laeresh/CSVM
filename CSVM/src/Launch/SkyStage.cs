@@ -39,18 +39,25 @@ internal sealed class SkyStage
     private readonly ViewerSet _viewers;
     private readonly IReadOnlyList<PlayerRig> _rigs;
     private readonly Func<IReadOnlyList<Node3D>> _gatedObjects;
+    private readonly Node3D? _xrHead;
 
     // A FOG_STATE raised during the world bootstrap, before the weather rig exists. It is applied
     // once the rig has written its zone, the original's order: the zone first, the event over it.
     private AnimRuntime.FogStateChange? _fogStateBeforeWeather;
 
+    // What the flare was built from, kept so a live graphics switch can build the other rig.
+    private TextureArchive? _flareTextures;
+    private string _flareInterpPath = "";
+
     /// <summary>The stage over one session's world. The rigs are the session's pane list, read at
-    /// each build call. The gated objects are what the cloud band's per-object gate moves between
-    /// layers, read fresh each frame.</summary>
+    /// each build call. The cloud band's per-object gate moves the gated objects between layers,
+    /// read fresh each frame. The stereo path's tracked head is <paramref name="xrHead"/>, null in
+    /// a flat session.</summary>
     public SkyStage(SessionSpec spec, Node3D worldRoot, Camera3D camera, DirectionalLight3D sun,
         Godot.Environment? env, EffectAmbience ambience, ViewerSet viewers,
-        IReadOnlyList<PlayerRig> rigs, Func<IReadOnlyList<Node3D>> gatedObjects)
+        IReadOnlyList<PlayerRig> rigs, Func<IReadOnlyList<Node3D>> gatedObjects, Node3D? xrHead = null)
     {
+        _xrHead = xrHead;
         _spec = spec;
         _worldRoot = worldRoot;
         _camera = camera;
@@ -69,8 +76,35 @@ internal sealed class SkyStage
     /// <summary>The sun's lens flare, null before the world stage built one.</summary>
     public LensFlareRig? Flare { get; private set; }
 
+    /// <summary>The world flare rig, built in place of <see cref="Flare"/> under
+    /// <see cref="UsesWorldFlare"/>; null otherwise.</summary>
+    public WorldFlareRig? WorldFlare { get; private set; }
+
     /// <summary>The fogvol.zrd clutter field, null where the world has none.</summary>
     public FogVolumeClutter? CloudField { get; private set; }
+
+    /// <summary>Whether a session draws the world flare rig rather than the screen rig. Stereo always
+    /// does, since no canvas layer draws there; a flat session does in Enhanced unless
+    /// <c>--screen-flare</c> asks for the screen rig. Chosen at the build and again on a live
+    /// graphics switch (<see cref="FollowGraphicsMode"/>), so flat Original always draws the
+    /// calibrated screen rig.</summary>
+    public static bool UsesWorldFlare(bool stereo, bool enhanced, bool screenAsked) => stereo || (enhanced && !screenAsked);
+
+    /// <summary>Follow a live graphics-mode switch. When the mode now asks for the other flare rig,
+    /// the built one is dropped and the other is built. A stereo session never swaps.</summary>
+    public void FollowGraphicsMode()
+    {
+        if (_flareTextures == null || (WorldFlare != null) == UsesWorldFlare(_xrHead != null, GraphicsMode.Enhanced, _spec.ScreenFlare))
+        {
+            return;
+        }
+
+        Flare?.Drop();
+        WorldFlare?.Drop();
+        Flare = null;
+        WorldFlare = null;
+        BuildFlare();
+    }
 
     /// <summary>The world bootstrap's FOG_STATE sink: applied at once over a built rig, held until
     /// the rig has applied its zone otherwise.</summary>
@@ -94,8 +128,9 @@ internal sealed class SkyStage
 
         // ⚠ Build the flare after the weather. Its sun node is a child of each rig's horizon, and
         // finding it is one of the two gates. The chapter data decides whether anything is built.
-        Flare = new LensFlareRig(_spec);
-        Flare.Build(_rigs, state.Textures, state.InterpPath, _spec.Chapter);
+        _flareTextures = state.Textures;
+        _flareInterpPath = state.InterpPath;
+        BuildFlare();
     }
 
     /// <summary>Once the deck is in the tree at its original position, the weather rig learns its
@@ -137,6 +172,21 @@ internal sealed class SkyStage
         int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
         for (int i = 0; i < n; i++)
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
+    }
+
+    // The rig UsesWorldFlare picks for the mode that stands now.
+    private void BuildFlare()
+    {
+        if (UsesWorldFlare(_xrHead != null, GraphicsMode.Enhanced, _spec.ScreenFlare))
+        {
+            WorldFlare = new WorldFlareRig(_spec, _xrHead);
+            WorldFlare.Build(_rigs, _flareTextures!, _flareInterpPath, _spec.Chapter, _worldRoot);
+        }
+        else
+        {
+            Flare = new LensFlareRig(_spec);
+            Flare.Build(_rigs, _flareTextures!, _flareInterpPath, _spec.Chapter);
+        }
     }
 
     private void BuildWeather(BuildState state, WorldBuilder builder)

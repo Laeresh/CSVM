@@ -39,6 +39,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
+- `src/Mech3/StereoFacing.cs`, the stereo path's sprite basis: every camera-facing sprite faces the eye with world up, never the head's view plane.
 - `src/Mech3/ZoneGate.cs`, the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
 - `src/Mech3/CloudPuffs.cs`, Enhanced only: the rendered cloud puff pools for the deck cards and the placed cloud sprites, their tint and per-card pose.
 - `src/Mech3/ConflictRank.cs`, the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
@@ -48,6 +49,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
+- `src/Mech3/CockpitPlate.cs`, the head-and-shoulders plate behind the cockpit eye, selected by polygon, which the stereo interior leaves out.
+- `src/Mech3/GunsightReticle.cs`, the stereo interior's gunsight reticle lifted off the sight glass and drawn collimated at infinity.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
@@ -260,6 +263,9 @@ rows).
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
+- `src/Flight/Camera/XrMount.cs`, where a headset's tracking origin sits per view: the seat in first person, the rigid chase, a static camera's held heading, heading only for any other camera.
+- `src/Flight/Camera/XrRig.cs`, the VR seat: the XR origin and tracked head, the pane they fly, the per-frame placement and the recenter.
+- `src/Flight/Camera/XrSimEyes.cs`, the `--xr-sim` stand-in's eyes: the pinned head, each eye's view transform and its symmetric projection.
 - `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`Flight.Hud`**, everything drawn over the pilot's view, and the cockpit.
@@ -269,7 +275,17 @@ rows).
 - `src/Flight/Hud/CockpitVisibility.cs`, the per-mode hiding of the pilot's OWN plane in first person, from that pilot's pane alone; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
 - `src/Flight/Hud/CockpitReseat.cs`, the Cockpit view's copies of the wingtip lights and prop discs, seated on the interior's own fins and nacelles, and the open-air lights it hides (remake-only).
 - `src/Flight/Hud/FirstPersonDressing.cs`, what a pilot's own aircraft wears in first person, frame by frame: the body hide, the interior pass and the panel needles.
-- `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.
+- `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out and a stereo session builds none.
+- `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
+- `src/Flight/Hud/VrCockpits.cs`, the `vr_cockpits.json` reader: per plane, a factor on the interior's mount scale and the seated eye's offset.
+- `src/Flight/Hud/XrCockpitTuner.cs`, the `--xr-tune` lab: live nudges of the flown plane's VR interior scale and eye offset, a readout on the HUD panel, a save into `vr_cockpits.json`.
+- `src/Flight/Hud/VrCockpitTuning.cs`, the tuning lab's engine-free step arithmetic, readout text and `vr_cockpits.json` writer.
+- `src/Flight/Hud/XrMarkers.cs`, the flight markers in a stereo session: the flat HUD's drawings on cards at their world points, and off-view ones on a ring on the head.
+- `src/Flight/Hud/XrMarkerLaw.cs`, the stereo markers' geometry, engine-free: a reference pixel's angle, the ring's cone and bearing, a card's facing, the ring's spyglass disc.
+- `src/Flight/Hud/XrSpyglassDisc.cs`, the spyglass picture in a stereo session: one mono picture on a disc on the head ring inside the selection's arrow.
+- `src/Flight/Hud/XrHudPanel.cs`, the cockpit-locked HUD panel in a stereo session: the pane's flight chrome laid out on a 1440p surface, shown on a quad in the XR origin's frame.
+- `src/Flight/Hud/XrHudPanelLayout.cs`, the HUD panel's geometry, engine-free: its surface, pose on the first-person axis, size and placement.
+- `src/Flight/Hud/WorldMark.cs`, one marker a flat HUD draws at a world point, as data: what the flat pane projects and a stereo session places.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
 - `src/Flight/Hud/CanopyHoleCue.cs`, the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
@@ -390,6 +406,16 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/ChromeSize.cs`, the rungs of that ladder, largest first, from a board's page heading down to an in-flight marker label.
 - `src/UI/Boards/SeatStrip.cs`, the shape of the player chip strip: the face, the corner inset, the cell a chip centres in, the ink a seat takes, and the chip marks.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
+- `src/UI/Boards/HeadLockedQuads.cs`, a stereo session's whiteout, flash, sun wash and mission-end fade as head-locked quads copying the flat layers' colours.
+- `src/UI/Boards/TheaterScreen.cs`, a stereo session's menus, boards, cinemas and cutscenes on a quad ahead of the seated eye, in a dark surround (drawing no world behind a cutscene) or over a dimmed flight.
+- `src/UI/Boards/CanvasRehost.cs`, the root's canvas layers of chosen numbers drawn into a SubViewport, their controls left in the root's tree.
+- `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers, cutscene rect and pointer hit, engine-free.
+- `src/UI/Boards/StereoPair.cs`, the 3D-cinema pair a cutscene plays as on the theater screen: eye cameras, converging frusta and the parallax law, engine-free.
+- `src/UI/Boards/ComfortQuads.cs`, the headset's comfort fade and tunnel vignette as two black quads on the headset layer, the fade over the theater unless a board shows.
+- `src/UI/Boards/XrFade.cs`, the comfort fade's clock: every cut lands on a black frame, a view key darkening first, engine-free.
+- `src/UI/Boards/XrVignette.cs`, the tunnel vignette's curve over the XR origin's own turn rate, engine-free.
+- `src/UI/Boards/TheaterPointer.cs`, the hand controllers' laser on the theater screen: beam, dot, trigger clicks pushed into the root, and the override of the one pointer source.
+- `src/UI/Boards/ScreenPointer.cs`, the one pointer the polled readers take: the desktop mouse, or the laser while it stands in.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
@@ -502,6 +528,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/MenuHost.cs`, the process-lifetime host: it selects, shows and ticks the presentation and owns everything a switch outlives.
 - `src/UI/Menu/IMenuFeature.cs`, the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs`, the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
+- `src/UI/Menu/MenuNoticeFeature.cs`, one launcher notice the active presentation shows once at its next show: VR mode's fall back to flat.
 - `src/UI/Menu/MenuCommands.cs`, one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
 - `src/UI/Menu/IMenuAudio.cs`, the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs`, the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
@@ -620,6 +647,9 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/EngineGapCost.cs`, the frame time outside every scene-tree callback, split into the engine step after a tick, the end-of-frame flush, the draw and the idle rest.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
+- `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
+- `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
+- `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/ShaderCensus.cs`, every shader text a suite hands to Godot, as hashes in its report row, so a headless shard's shaders can be shown compiled by a windowed one.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
@@ -632,7 +662,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/TextureUpload.cs`, every Image handed to a texture, at creation or repaint, held until the render thread lets go so a queued upload never reads a refilled one or swaps a handle off the main thread.
 - `src/Utils/SwitchProfile.cs`, the live graphics-mode switch's per-step stopwatch, written on the switch's log line.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
-- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
+- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the flag/saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
 - `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config `WordSetting` lookup over ultra (high on an integrated GPU, off there at three or four panes), and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
 - `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
@@ -705,7 +735,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/ProcessMenu.cs`, the process's one menu: its host with the presentation and the shared features, seat 0's pointer, the menu's audio, the Original layout and the pause Preferences leaf.
 - `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
 - `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
-- `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.
+- `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare (screen rig or world rig).
 - `src/Launch/SessionProbes.cs`, the build's scripted probes that report and quit, and the `--destroy=`/`--debug-objective=` build-time forces.
 - `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, the ocean lab, flight labs and debug overlays.
 - `src/Launch/SessionBoards.cs`, the whole-window boards over a flight: the pause board and options leaf, the results boards, the menu readers and photo mode.
@@ -722,6 +752,12 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
 - `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
+- `src/Launch/XrSession.cs`, the stereo path when Godot started OpenXR or `--xr-sim` asked for the stand-in: the viewport to the interface, the VR seat's rig placed each frame, the recenter on focus, the boot and frame-pacing log lines.
+- `src/Launch/XrRelaunch.cs`, VR mode's restart rules: when a boot or a menu apply restarts the game, the child's arguments, the flat-only runs, the menu's notices.
+- `src/Launch/XrShaderCache.cs`, a headset launch's shader cache writes swept as it ends, with a marker that covers a crash, so flat launches never misread them.
+- `src/Launch/XrSimInterface.cs`, the `--xr-sim` stand-in headset: an XR interface with a pinned head and no runtime, drawing both eyes side by side.
+- `src/Launch/XrEyeFeed.cs`, a tracking-only XR interface whose render-thread pre-render writes the frame's own eye poses into the stereo interior's global uniforms.
+- `src/Launch/XrFrameWindow.cs`, the headset's frame pacing in wall-second windows: mean and worst interval, late frames and skipped refreshes.
 
 ### `src/Session/`, the session-build layer
 
@@ -783,6 +819,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
+- `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core, Enhanced ring gain; every stereo session and flat Enhanced (`--screen-flare` for the A/B).
 - `src/Session/World/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/World/CutsceneController.cs`, the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.
 - `src/Session/World/ScriptedPathVehicles.cs`, one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.
@@ -818,7 +855,9 @@ What a binding is, how one resolves against hardware, and the named actions a po
 for. The registry that turns a device identity into a live pad and the map that holds the actions
 both sit on top of these types.
 
-- `src/Bindings/DeviceId.cs`, which device a binding is on, as a value: the one keyboard, the one mouse, or a joypad named by its stable hardware string.
+- `src/Bindings/DeviceId.cs`, which device a binding is on, as a value: the one keyboard, the one mouse, a headset's hand controllers, or a joypad named by its stable hardware string.
+- `src/Bindings/XrControls.cs`, the hand controllers' buttons and axes by role, each one action of the OpenXR action map on one hand, with the Touch captions; engine-free.
+- `src/Bindings/XrControllers.cs`, the hand controllers as an `IDeviceState` and their aim poses, reading zero for an absent hand and with no stereo session.
 - `src/Bindings/BindingControl.cs`, the tagged control: a key, a button, a mouse button, one signed half of an axis past a deadzone, a whole axis over an action pair, or one hat direction.
 - `src/Bindings/AxisPairs.cs`, the four action pairs a full-axis binding drives and which member is the positive side, plus the absolute lever row, shared by the map, the store and capture.
 - `src/Bindings/LeverTakeover.cs`, when a bound throttle lever commands the throttle: only after it moves, until another command arrives while it is still.
@@ -990,6 +1029,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 ### `src/Spec/`, the launch spec
 
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
+- `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 - `src/Spec/BasePaths.cs`, the eight chapter-independent paths a launch reads, as one value resolved from the two roots and the spec's overrides.
 
 ### `CSVM.Tests/`, the unit tests

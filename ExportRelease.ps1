@@ -125,6 +125,7 @@ $LinuxReadme = Join-Path $RepoRoot "packaging\README-linux.md"
 # files' one home in the repo, so a copy is byte-identical to what the manifest names.
 $ReleaseFiles = @(
     @{ Source = Join-Path $RepoRoot "packaging\README.md";      Dest = "README.md" },
+    @{ Source = Join-Path $RepoRoot "packaging\CSVM-VR.cmd";    Dest = "CSVM-VR.cmd" },
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE";        Dest = "LICENSE" },
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE-unzbd";  Dest = "LICENSE-unzbd" },
     @{ Source = $ThirdPartyNotices;                             Dest = "LICENSE-thirdparty.txt" },
@@ -135,7 +136,8 @@ $ReleaseFiles = @(
 ) + $WebRtcLicences
 
 # The tarball payload, packaging/MANIFEST.md's Linux table: the zip's list with the Linux README,
-# the Linux notices and the Linux unzbd. Both platforms extract from inside the game, so neither ships a script.
+# the Linux notices and the Linux unzbd. Both platforms extract from inside the game, so neither ships an
+# extraction script; the zip's VR launcher stays out, since VR is the Windows build's alone.
 # Lf rows are text: git stores them LF and this checkout's autocrlf hands them over CRLF, so they
 # are staged with the carriage returns taken out, which is the committed bytes. The zip keeps the
 # checkout's CRLF, the Windows convention, and no attribute changes what any tree checks out.

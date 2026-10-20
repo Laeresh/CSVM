@@ -178,9 +178,20 @@ public sealed partial class PauseBoard : Control
 
     // The pausing seat's mouse in canvas pixels. Only a seat that reads the keyboard holds one
     // (MenuInput's rule for seat 0), and a captured pointer reports no position worth pointing with.
+    // The theater screen's pointer stands in for it under a headset, captured mouse or not.
     private (float X, float Y, bool Pressed)? SeatPointer()
     {
-        if (_input is not { Keyboard: true } || !IsInsideTree() || Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (_input is not { Keyboard: true } || !IsInsideTree())
+            return null;
+        if (ScreenPointer.Overrides(out var stand))
+        {
+            if (stand is not { } laser)
+                return null;
+            var on = GetCanvasTransform().AffineInverse() * laser.At;
+            return (on.X, on.Y, laser.Pressed);
+        }
+
+        if (Input.MouseMode == Input.MouseModeEnum.Captured)
             return null;
         var at = GetGlobalMousePosition();
         return (at.X, at.Y, Input.IsMouseButtonPressed(MouseButton.Left));

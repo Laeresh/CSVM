@@ -47,6 +47,10 @@ driver/threads/thread_model=2
 ; 16x anisotropic (level 4) for the world's grazing-angle ground; the SceneBuilder shader
 ; samples albedo with filter_linear_mipmap_anisotropic. Cheap on modern GPUs. (item 2.)
 textures/default_filters/anisotropic_filtering_level=4
+; No shader cache for a --xr-sim launch ([xr] below). Its extra stereo variants would be written into
+; the cache every other launch shares, and Godot 4.7 misreads such a file: the next flat launch
+; prints `br != variant_size`, which fails the engine stage's error screen.
+shader_compiler/shader_cache/enabled.csvm_xr_sim=false
 ; Global shader variable buffer holds our per-mesh node_bias instance uniform (the
 ; cross-node z-fight tie-break in SceneBuilder). Godot allocates 16 vec4 slots per
 ; instance, so the 65536 default caps at ~4096 mesh instances; C4 (4234) and C5 (4746)
@@ -56,3 +60,23 @@ textures/default_filters/anisotropic_filtering_level=4
 ; and inside a shard of sixty suites that overflowed it again. 1048576 = ~65536
 ; instances, 16 MB, room for three of the largest chapter and the shard's residue.
 limits/global_shader_variables/buffer_size=1048576
+
+[xr]
+
+; OpenXR and its multiview shader variants stay off, so a plain launch is the flat game and compiles
+; nothing for stereo. The engine argument `--xr-mode on` (before `--`) turns both on for that launch
+; only: Godot reads the mode ahead of either setting (RendererCompositor and openxr_is_enabled in its
+; source). src/Launch/XrSession.cs takes the session from there; how to launch it is docs/cli.md.
+openxr/enabled=false
+; Local (0): the tracking origin is the seated head where the session started, which the game
+; anchors at the cockpit eye. Godot's default, Stage, would put it on the room's floor.
+openxr/reference_space=0
+; No modal dialog when the runtime or headset is missing: the game logs it and flies flat.
+openxr/startup_alert=false
+shaders/enabled=false
+; The --xr-sim stand-in's variants, on only for a launch carrying the csvm_xr_sim feature tag. The
+; editor binary takes custom tags from GODOT_EDITOR_CUSTOM_FEATURES, which RunTests.ps1, RunProbe.ps1
+; and RunGame.ps1 set for that one process when its arguments carry --xr-sim. No other launch has
+; the tag, and an exported build reads no such variable. src/Launch/XrSession.cs refuses the
+; stand-in without it.
+shaders/enabled.csvm_xr_sim=true

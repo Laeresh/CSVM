@@ -234,6 +234,20 @@ public sealed class OptionsDef
     /// hand and <c>--master-server=</c> beats it. Null takes <see cref="MasterAddress.Default"/>.
     /// </summary>
     public string? NetMasterServer { get; set; }
+
+    /// <summary>Whether the game starts in a PC VR headset through OpenXR. Godot starts OpenXR only
+    /// with the engine, so a launch that did not ask for it restarts itself
+    /// (<c>Launch/XrRelaunch.cs</c>). Null is "never set" and reads as off. ⚠ Read only where that
+    /// module's dev-run rule allows, never under <c>--det</c> or <c>--run-tests</c>.</summary>
+    public bool? VrMode { get; set; }
+
+    /// <summary>The headset's eye size as a percentage of the runtime's recommendation, one of
+    /// <see cref="VrRenderScaleSetting.Words"/>. Null is "never set" and reads as 100.</summary>
+    public string? VrRenderScale { get; set; }
+
+    /// <summary>The headset's tunnel vignette, one of <see cref="VrVignetteSetting.Words"/>.
+    /// Null is "never set" and reads as off.</summary>
+    public string? VrVignette { get; set; }
 }
 
 /// <summary>
@@ -370,6 +384,9 @@ public sealed class OptionsStore
 
             Write(w, "netGameName", def.NetGameName);
             Write(w, "netMasterServer", def.NetMasterServer);
+            WriteFlag(w, "vrMode", def.VrMode);
+            Write(w, "vrRenderScale", def.VrRenderScale);
+            Write(w, "vrVignette", def.VrVignette);
             w.WriteEndObject();
         }
 
@@ -437,6 +454,9 @@ public sealed class OptionsStore
                         : null,
                 NetGameName = ReadShaped(root, "netGameName", static v => v.Length <= NameLimit),
                 NetMasterServer = ReadShaped(root, "netMasterServer", static v => MasterAddress.Parse(v) != null),
+                VrMode = ReadFlag(root, "vrMode"),
+                VrRenderScale = ReadShaped(root, "vrRenderScale", VrRenderScaleSetting.Lookup.IsWord),
+                VrVignette = ReadShaped(root, "vrVignette", VrVignetteSetting.Lookup.IsWord),
             };
             foreach (var setting in WordSettings.All)
             {

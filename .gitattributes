@@ -12,6 +12,10 @@ analysis/session-baseline/baseline.txt text eol=lf
 # compared with upstream's by hash. Git converts nothing in it, whatever core.autocrlf says.
 packaging/LICENSE-musl -text
 
+# The zip's VR launcher is a batch file, which cmd reads line by line and expects CRLF in. Checked out
+# CRLF on every OS, so an export from any clone ships it as Windows runs it.
+packaging/*.cmd text eol=crlf
+
 # The master server's deployment files are read on a Linux host, often copied there from a
 # Windows checkout rather than cloned: a CR in .env, the coturn config or the systemd unit ends up
 # inside a value. Checked out LF on every OS.

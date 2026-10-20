@@ -499,6 +499,12 @@ public sealed record SessionSpec
     /// *other* comparison (terrain colour, fog gradient, deck brightness, clutter density). Same
     /// role <c>--no-fog</c> plays for the fog wall.</summary>
     public bool NoFlare { get; private set; }
+
+    /// <summary><c>--screen-flare</c>: draw a flat Enhanced flight's lens flare with the screen rig
+    /// (<c>Session.World.LensFlareRig</c>) instead of the world rig. It is the A/B door for flare work.
+    /// Original draws the screen rig anyway, and a stereo session always draws the world rig.</summary>
+    public bool ScreenFlare { get; private set; }
+
     /// <summary><c>--mips=authored|generated</c>: whether a texture's levels 1 and 2 come from the
     /// archive's hand-authored <c>_1</c>/<c>_2</c> siblings (the default) or are box-filtered from
     /// the base like every level below them. See <see cref="Mech3.TextureArchive.MipSource"/>.</summary>
@@ -791,6 +797,30 @@ public sealed record SessionSpec
     /// head alike, so one run can compare the two. Zero (the default) is a centred stick, i.e.
     /// exactly today's behaviour, and a live stick beats it while deflected.</summary>
     public Vector2 PinnedLook { get; private set; }
+    /// <summary>The stand-in headset <c>--xr-sim[=spec]</c> asks for, null on every other launch.
+    /// <c>Launch/XrSession.cs</c> boots it when no OpenXR runtime is live; docs/cli.md has the
+    /// tokens and the launch it needs.</summary>
+    public XrSimSpec? XrSim { get; private set; }
+    /// <summary>The frame a headset's chase view rides, <c>--xr-chase=rigid|level</c>: locked to the
+    /// aircraft's attitude (the default) or to its heading alone. A flat launch never reads it.</summary>
+    public Flight.Camera.XrChase XrChase { get; private set; }
+    /// <summary><c>--xr-tune</c>: the VR cockpit tuning lab, live nudges of the flown plane's interior
+    /// scale and eye offset with a save into <c>data/vr_cockpits.json</c>. Read only by a stereo
+    /// session; a flat launch ignores it.</summary>
+    public bool XrTune { get; private set; }
+    /// <summary><c>--xr-render-scale=50..125</c>, the headset's eye size as a percentage of the
+    /// runtime's recommendation, one of <see cref="VrRenderScaleSetting.Words"/>. Null
+    /// when not given, and for an unknown word with a note. Beats the saved option.</summary>
+    public string? XrRenderScale { get; private set; }
+    /// <summary><c>--xr-vignette=off|mild|strong</c>, the headset's tunnel vignette. Null when not
+    /// given, and for an unknown word with a note. Beats the saved option.</summary>
+    public string? XrVignette { get; private set; }
+    /// <summary><c>--xr-quality=vr|flat</c>, whether a headset session flies the VR quality profile
+    /// (the default) or the flat options. Null when not given, and for an unknown word with a note.</summary>
+    public string? XrQuality { get; private set; }
+    /// <summary><c>--xr-foveation=on|off</c>, whether a headset shades the edges of each eye coarser.
+    /// Null when not given, and for an unknown word with a note. Beats the VR profile's choice.</summary>
+    public string? XrFoveation { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -887,6 +917,11 @@ public sealed record SessionSpec
     /// <summary><c>--debug-scores</c>: every local seat reads Display Scores as held. A
     /// <c>--screenshot</c> of a race or a Dogfight then shows the scores table.</summary>
     public bool DebugScores { get; private set; }
+
+    /// <summary><c>--debug-race-ghost</c>: each local seat's own aircraft draws as a race ghost to
+    /// its own cameras, so one seat in Chase shows the ghost's dither. A capture aid; a race arms
+    /// the ghost only between its pilots.</summary>
+    public bool DebugRaceGhost { get; private set; }
 
     /// <summary><c>--debug-race-end=host|guest</c>: a split screen stunt race's board posed as a
     /// network host's (Restart, Lobby) or guest's (waiting, Leave). Player 2 is marked left once its
@@ -1091,6 +1126,10 @@ public sealed record SessionSpec
     /// A flag beats the saved option and the config key, including under <c>--det</c>, the same rule
     /// <see cref="GraphicsMode"/> keeps.</summary>
     public Utils.WordValues WordFlags { get; } = new();
+
+    /// <summary><c>--msaa=off|2x|4x|8x</c>, the root viewport's 3D MSAA in place of the project's 4x.
+    /// Null when not given, and for an unknown word with a note. Beats the VR profile.</summary>
+    public string? Msaa { get; private set; }
 
     /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
     /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
@@ -1311,6 +1350,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
             else if (arg == "--debug-scores") { s.DebugScores = true; }
+            else if (arg == "--debug-race-ghost") { s.DebugRaceGhost = true; }
             else if (arg.StartsWith("--debug-race-end=")) { string role = arg["--debug-race-end=".Length..]; s.DebugRaceEnd = role is "host" or "guest" ? role : null; }
             else if (arg == "--debug-pause") { s.DebugPauseFrame = DefaultDebugPauseFrame; }
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
@@ -1676,6 +1716,7 @@ public sealed record SessionSpec
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
+            else if (arg == "--screen-flare") { s.ScreenFlare = true; }
             else if (arg == "--no-ssao") { s.SkippedPasses |= EnhancedPasses.Ssao; }
             else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
             else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
@@ -1824,6 +1865,53 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
                 }
             }
+            else if (arg == "--xr-tune")
+            {
+                s.XrTune = true;
+            }
+            else if (arg.StartsWith("--xr-chase="))
+            {
+                string want = arg["--xr-chase=".Length..];
+                if (Enum.TryParse(want, ignoreCase: true, out Flight.Camera.XrChase chase)
+                    && Enum.IsDefined(chase) && !int.TryParse(want, out _))
+                {
+                    s.XrChase = chase;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--xr-chase={want} is not rigid or level, ignoring it"));
+                }
+            }
+            else if (TryWordFlag(arg, VrRenderScaleSetting.Lookup, notes, out string? renderScaleWord))
+            {
+                s.XrRenderScale = renderScaleWord ?? s.XrRenderScale;
+            }
+            else if (TryWordFlag(arg, VrVignetteSetting.Lookup, notes, out string? vignetteWord))
+            {
+                s.XrVignette = vignetteWord ?? s.XrVignette;
+            }
+            else if (TryWordFlag(arg, VrQuality.Lookup, notes, out string? xrQualityWord))
+            {
+                s.XrQuality = xrQualityWord ?? s.XrQuality;
+            }
+            else if (TryWordFlag(arg, VrQuality.FoveationLookup, notes, out string? foveationWord))
+            {
+                s.XrFoveation = foveationWord ?? s.XrFoveation;
+            }
+            else if (TryWordFlag(arg, VrQuality.MsaaLookup, notes, out string? msaaWord))
+            {
+                s.Msaa = msaaWord ?? s.Msaa;
+            }
+            else if (arg == "--xr-sim") { s.XrSim = XrSimSpec.Default; }
+            else if (arg.StartsWith("--xr-sim="))
+            {
+                var problems = new List<string>();
+                s.XrSim = XrSimSpec.Parse(arg["--xr-sim=".Length..], problems);
+                foreach (string problem in problems)
+                {
+                    notes.Add(new Note("core", problem));
+                }
+            }
         }
 
         // The development options mean nothing to a session, so a stray one is named rather than
@@ -1948,7 +2036,8 @@ public sealed record SessionSpec
             VsLives = cli.VsLivesExplicit ? cli.VsLives : vsLives ?? cli.VsLives,
             VsAutoRespawn = cli.VsAutoRespawnExplicit ? cli.VsAutoRespawn : vsAutoRespawn ?? cli.VsAutoRespawn,
             Mode = SessionMode.Fly,
-            WorldMode = true,
+            // --stage=empty keeps its bare stage, as Parse rules for a command-line flight.
+            WorldMode = !cli.EmptyStage,
             Scenario = cli.ScenarioExplicit ? cli.Scenario : iaDef?.MissionType ?? mode switch
             {
                 MenuMode.Stunt => "stunt_flying",
@@ -2031,6 +2120,15 @@ public sealed record SessionSpec
 
         return this with { ViewMode = saved };
     }
+
+    /// <summary>A headset's opening view folded in: Cockpit, whatever the saved Default View says,
+    /// unless <c>--view=</c> names a view of its own. Applied after <see cref="WithSavedDefaultView"/>
+    /// and under <c>--det</c> too, since it is the mode's rule and not a saved option. Not folded
+    /// outside <see cref="Fly"/>, for that method's reason.</summary>
+    public SessionSpec WithHeadsetView(bool headset) =>
+        !headset || ViewModeExplicit || View != 0 || !Fly
+            ? this
+            : this with { ViewMode = Flight.Camera.PilotViewMode.Cockpit };
 
     /// <summary>The saved automatic head turn folded in, on
     /// <see cref="WithSavedNearestAfterKill"/>'s rules. Nothing on the command line names it, and
@@ -2345,6 +2443,10 @@ public sealed record SessionSpec
             MenuLoadouts = new[] { fit },
         };
 
+    /// <summary>A copy flying one pane, the first <c>--plane=</c> entry's, for a launch whose VR
+    /// headset or stand-in draws one seat in every mode. Unchanged when it already flies one.</summary>
+    public SessionSpec WithOneSeat() => Players <= 1 ? this : this with { Players = 1 };
+
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
     // Whether arg is a registered setting's flag. A word the setting does not know comes back null
@@ -2374,6 +2476,30 @@ public sealed record SessionSpec
         setting = null;
         word = null;
         return false;
+    }
+
+    // Whether arg is the flag of a setting outside the registry, such as the VR profile's. The same
+    // rule for an unknown word: null with a note.
+    private static bool TryWordFlag(string arg, Utils.WordSetting setting, List<Note> notes, out string? word)
+    {
+        word = null;
+        string prefix = setting.Flag + "=";
+        if (setting.Flag == null || !arg.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string want = arg[prefix.Length..];
+        if (setting.IsWord(want))
+        {
+            word = want;
+        }
+        else
+        {
+            notes.Add(new Note("world", $"{prefix}{want} is not one of {string.Join("/", setting.Words)}, keeping the saved option's value"));
+        }
+
+        return true;
     }
 
     // The type a menu launch flies. The three Dogfight types need the Dogfight mode, and Stunt Race

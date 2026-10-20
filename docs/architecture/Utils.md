@@ -341,7 +341,7 @@ is its own file, one line in `All` and an authored VIDEO row where it shows ther
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
-`taa` or `fsr2`. `Resolve` runs `WordSetting` over the saved `antiAliasing` word, then the `graphics.antiAliasing` config
+`taa` or `fsr2`. `Resolve` runs `WordSetting` over its flag (`--anti-aliasing=`, else the VR profile's word under a headset, `LiveSettings.Flags`), the saved `antiAliasing` word, then the `graphics.antiAliasing` config
 key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
 written whichever mode won, since only the default follows the mode. The resolve runs at launch after `GraphicsMode.Resolve`, and again
 on a live mode switch or an Options apply, landing in the static `Method` and `Word`, whose one reader is `ViewportQuality.Apply`;
@@ -397,8 +397,8 @@ The frame pacing, one setting carrying both whether the loop waits for the scree
 runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
 the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
 config key (true turns it on), then off and uncapped; a word outside `DisplayWords.VSyncChoices`
-reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
-`--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
+reads as never set, and `Default` is the word a never-set VIDEO row shows. `Headset` replaces all of
+them while `Launch/XrSession.cs` drives a headset. `SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
 called, by `Launch/LiveSettings.cs` at startup and on an Options apply, and logs the source that won. The cap is a
 render rate and reaches no simulation. Read `Launch/LiveSettings.cs` next for both call sites.
 
@@ -441,6 +441,31 @@ above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is pi
 to 100. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `LiveSettings`' `[world] graphics mode:` line announces it and any clamp.
 
+## src/Utils/VrRenderScaleSetting.cs
+The VR render scale, a headset setting: the multiple of the runtime's recommended eye size the session
+renders at, OpenXR's `render_target_size_multiplier`, which Godot 4.7 applies live by recreating the
+swapchain on the next frame whose size differs. It cuts the GPU's work and the runtime's compositing and
+encoding, where `RenderScaleSetting.cs` resamples the 3D inside that size; under a headset the two
+multiply, and the root's 2D layout (the eye's render target) shrinks with it. Words 50 to 125 percent
+(a runtime set to 2112x2304 against a 3072x3264 recommendation is about 70);
+`Resolve` takes `--xr-render-scale=` over the saved `vrRenderScale` over 100, and `SavedWord`
+holds the `--det` guard. `Launch/XrSession.cs` applies it at boot and on every options apply.
+
+## src/Utils/VrVignetteSetting.cs
+The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `VrVignette` level.
+`Resolve` takes `--xr-vignette=` over the saved `vrVignette` over off, the shipped default, and
+`SavedWord` holds the `--det` guard. The composition sets `Current` at boot and on every options
+apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
+
+## src/Utils/VrQuality.cs
+The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launch/LiveSettings.cs`
+before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no
+temporal history to smear on a head turn), the project's 4x MSAA, shadow quality `low` (no penumbra) and foveation off. On
+Godot 4.7.0 and 4.7.1 a sun with an angular distance costs more the farther the camera is from the world origin (the PCSS
+search radius takes the cascade's world-space near plane against a view-space depth, fixed in 4.7.2), which the VR cockpit,
+drawn in the main world, pays at every pixel: at 3072x3264 per eye Ultra cost 20-43 ms where `low` costs 5.7-6.3. A setting's
+own flag beats the profile, `--xr-quality=flat` keeps the flat words, `--xr-foveation=on` sets the root's VRS mode to XR
+(about -0.9 ms at 3072x3264, but the night city's window textures drop toward coarser mips at each eye's edge, hence off). The shadow trap is `docs/verification.md` PERF-49.
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`
@@ -448,7 +473,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
-display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

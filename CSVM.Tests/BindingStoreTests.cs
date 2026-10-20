@@ -424,7 +424,7 @@ public class BindingStoreTests
     {
         var json = BindingStore.Serialize(1, BindingProfile.Defaults(Pad, readsKeyboard: true));
 
-        Assert.Contains("\"version\": 3", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 4", json, StringComparison.Ordinal);
         Assert.Contains("\"FireGuns\"", json, StringComparison.Ordinal);
         Assert.Contains("keyboard/key:Space", json, StringComparison.Ordinal);
         Assert.Contains("keyboard/key:Shift+S", json, StringComparison.Ordinal);

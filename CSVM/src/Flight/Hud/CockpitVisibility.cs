@@ -19,8 +19,9 @@ public sealed class CockpitVisibility
 {
     private readonly Node3D? _interior, _body, _markers, _dontmove;
 
-    // CockpitReseat's originals, which leave the pilot's pane exactly while the interior is drawn.
-    private readonly IReadOnlyList<Node3D> _reseated;
+    // CockpitReseat's originals and the pylon stores, which leave the pilot's pane exactly while the
+    // interior is drawn.
+    private readonly List<Node3D> _reseated;
 
     // The pilot's airframe stamp and the layer a hidden group trades it for.
     private readonly uint _own, _out;
@@ -36,7 +37,7 @@ public sealed class CockpitVisibility
         _body = body;
         _markers = markers;
         _dontmove = dontmove;
-        _reseated = reseated;
+        _reseated = new List<Node3D>(reseated);
         _own = SplitScreen.OwnAirframeLayer(pilot);
         _out = SplitScreen.FirstPersonLayer(pilot);
     }
@@ -67,6 +68,15 @@ public sealed class CockpitVisibility
         return new CockpitVisibility(interior, FindGroup(planeModel, "healthy"),
             FindGroup(planeModel, "markers"), FindGroup(planeModel, "dontmove"),
             reseated ?? Array.Empty<Node3D>(), pilot);
+    }
+
+    /// <summary>Adds an outside part whose stereo copy the interior carries
+    /// (<see cref="XrCockpit.Hang"/>), so it leaves the pilot's pane with the reseated originals.</summary>
+    public void Reseat(Node3D node)
+    {
+        _reseated.Add(node);
+        // The next Apply moves every group again, the new part with them.
+        _hidden = default;
     }
 
     /// <summary>Write this frame's rule, every frame the rig owns its camera. The interior takes

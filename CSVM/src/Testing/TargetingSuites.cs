@@ -1410,8 +1410,8 @@ internal static class TargetingSuites
                 $"the disc's camera drops the layer this pilot's own aeroplane is drawn on (0x{hud.Picture?.DiscCullMask:X5} against the pane's 0x{ctx.Camera.CullMask:X5}), so no part of the aircraft the eye sits inside is in the picture");
             ctx.Check(hud.Picture is { } kept
                       && (kept.DiscCullMask & UI.Boards.SplitScreen.OwnAirframeLayer(1)) != 0
-                      && kept.DiscCullMask == (ctx.Camera.CullMask & ~own),
-                $"CONTROL: it drops that ONE bit and nothing else, so the world, every AI aircraft and a splitscreen neighbour's aeroplane are all still in the picture");
+                      && kept.DiscCullMask == (ctx.Camera.CullMask & ~own & ~UI.Boards.SplitScreen.WorldFlareBand),
+                $"CONTROL: it drops that ONE bit and the world flare's band and nothing else, so the world, every AI aircraft and a splitscreen neighbour's aeroplane are all still in the picture");
 
             hud.ReleaseSpyglass();
             ctx.Check(!hud.DiscShown && !hud.PictureLive,

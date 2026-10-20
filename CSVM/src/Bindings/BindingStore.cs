@@ -21,17 +21,21 @@ namespace CSVM.Bindings;
 public sealed class BindingStore
 {
     /// <summary>The schema version written into every file: how the tokens are encoded, not which
-    /// actions exist. A file not naming an action leaves it at its default. Bump it when a
-    /// token's shape changes. Version 2 is the key token's modifier prefix (<c>key:Shift+E</c>).
-    /// Version 3 adds the full-axis token (the throttle lever row reuses it) and readable stick hat
-    /// tokens. An older file names none of them and still loads whole, which is why the reader checks
-    /// no version.</summary>
-    public const int Version = 3;
+    /// actions exist, so it is bumped when a token's shape changes. Version 2 is the key token's
+    /// modifier prefix (<c>key:Shift+E</c>). Version 3 adds the full-axis token (the throttle lever
+    /// row reuses it) and readable stick hat tokens. Version 4 adds the <c>xr</c> device. An older
+    /// file still loads whole; the one version rule is <see cref="XrVersion"/>'s.</summary>
+    public const int Version = 4;
+
+    /// <summary>The first version that can name an XR control. A row an older file names keeps the
+    /// shipped XR defaults beside its own, since that file could not keep or drop them.</summary>
+    public const int XrVersion = 4;
 
     private const string MouseFlyingField = "mouseFlying";
     private const string MouseSensitivityField = "mouseSensitivity";
     private const string KeyboardToken = "keyboard";
     private const string MouseToken = "mouse";
+    private const string XrToken = "xr";
     private const string PadPrefix = "pad:";
 
     // The relaxed encoder, because the default one turns the '+' an axis token carries its sign in
@@ -156,11 +160,14 @@ public sealed class BindingStore
                 return profile;
             }
 
+            bool keepsXrDefaults = !(root.TryGetProperty("version", out var version)
+                && version.ValueKind == JsonValueKind.Number && version.TryGetInt32(out int written)
+                && written >= XrVersion);
             foreach (var entry in contexts.EnumerateObject())
             {
                 if (TryParseContext(entry.Name, out var context) && entry.Value.ValueKind == JsonValueKind.Object)
                 {
-                    ReadContext(profile.Map(context), context, entry.Value, pad);
+                    ReadContext(profile.Map(context), context, entry.Value, pad, keepsXrDefaults);
                 }
             }
         }
@@ -178,22 +185,24 @@ public sealed class BindingStore
     /// correct one row in a text editor.</summary>
     public static string Encode(Binding binding)
     {
+        bool xr = binding.Device.Kind == DeviceKind.Xr;
         string device = binding.Device.Kind switch
         {
             DeviceKind.Keyboard => KeyboardToken,
             DeviceKind.Mouse => MouseToken,
+            DeviceKind.Xr => XrToken,
             _ => PadPrefix + binding.Device.Id,
         };
         var c = binding.Control;
         return c.Kind switch
         {
             ControlKind.Key => $"{device}/key:{BindingControl.Prefix(c.Modifiers)}{EnumName<Key>(c.Index)}",
-            ControlKind.Button => $"{device}/button:{EnumName<JoyButton>(c.Index)}",
+            ControlKind.Button => $"{device}/button:{(xr ? EnumName<XrButton>(c.Index) : EnumName<JoyButton>(c.Index))}",
             ControlKind.Axis => string.Format(
                 CultureInfo.InvariantCulture,
                 "{0}/axis:{1}{2}@{3:0.###}",
                 device,
-                EnumName<JoyAxis>(c.Index),
+                xr ? EnumName<XrAxis>(c.Index) : EnumName<JoyAxis>(c.Index),
                 c.Sign < 0 ? "-" : "+",
                 c.Deadzone),
             ControlKind.Mouse => $"{device}/mouse:{EnumName<MouseButton>(c.Index)}",
@@ -211,7 +220,8 @@ public sealed class BindingStore
     /// <summary>The binding a stored token names, or null when this build cannot read it. A full
     /// axis or a hat needs a joypad device. A hat on the pad placeholder is deliberately unreadable.
     /// Godot reports a pad's d-pad as buttons, so the hat could only alias one of them
-    /// (`DefaultBindings`).</summary>
+    /// (`DefaultBindings`). The <c>xr</c> device holds buttons and axes alone, named by
+    /// <see cref="XrButton"/> and <see cref="XrAxis"/>.</summary>
     public static Binding? Decode(string token)
     {
         int split = token.LastIndexOf('/');
@@ -220,7 +230,12 @@ public sealed class BindingStore
             return null;
         }
 
-        if (!TryDevice(token[..split], out var device) || !TryControl(token[(split + 1)..], out var control))
+        if (!TryDevice(token[..split], out var device) || !TryControl(token[(split + 1)..], device, out var control))
+        {
+            return null;
+        }
+
+        if (device.Kind == DeviceKind.Xr && control.Kind is not (ControlKind.Button or ControlKind.Axis))
         {
             return null;
         }
@@ -284,7 +299,7 @@ public sealed class BindingStore
     // Every readable row is cleared before any is added, and full axes go in last. A full axis
     // written under one row lands on both, so clearing the partner's row after it would drop it.
     // Adding it last keeps each row's own bindings in the order the file lists them.
-    private static void ReadContext(ActionMap map, InputContext context, JsonElement element, DeviceId pad)
+    private static void ReadContext(ActionMap map, InputContext context, JsonElement element, DeviceId pad, bool keepsXrDefaults)
     {
         var saved = new List<(InputAction Action, List<Binding> Bindings)>();
         foreach (var entry in element.EnumerateObject())
@@ -321,6 +336,28 @@ public sealed class BindingStore
         }
 
         TakeControlsTheFileClaims(map, saved);
+        if (keepsXrDefaults)
+        {
+            KeepXrDefaults(map, context, pad, saved);
+        }
+    }
+
+    // A file older than the xr device could name no XR control. A row it names gets the shipped XR
+    // controls back, after its own and only where nothing holds them.
+    private static void KeepXrDefaults(
+        ActionMap map, InputContext context, DeviceId pad, List<(InputAction Action, List<Binding> Bindings)> saved)
+    {
+        var defaults = DefaultBindings.MapFor(context, pad);
+        foreach (var (action, _) in saved)
+        {
+            foreach (var binding in defaults.Bindings(action))
+            {
+                if (binding.Device.Kind == DeviceKind.Xr && map.OwnersOf(binding).Count == 0)
+                {
+                    map.Add(action, binding);
+                }
+            }
+        }
     }
 
     // An action's row name, including the one token a renamed action was saved under.
@@ -400,6 +437,12 @@ public sealed class BindingStore
             return true;
         }
 
+        if (text == XrToken)
+        {
+            device = DeviceId.Xr;
+            return true;
+        }
+
         if (text.StartsWith(PadPrefix, StringComparison.Ordinal) && text.Length > PadPrefix.Length)
         {
             device = DeviceId.Joypad(text[PadPrefix.Length..]);
@@ -410,7 +453,9 @@ public sealed class BindingStore
         return false;
     }
 
-    private static bool TryControl(string text, out BindingControl control)
+    // The control half of a token. A button or an axis on the xr device is named by the XR control
+    // enums, every other one by Godot's pad enums.
+    private static bool TryControl(string text, DeviceId device, out BindingControl control)
     {
         control = default;
         int colon = text.IndexOf(':');
@@ -421,14 +466,16 @@ public sealed class BindingStore
 
         string kind = text[..colon];
         string rest = text[(colon + 1)..];
+        bool xr = device.Kind == DeviceKind.Xr;
         switch (kind)
         {
             case "key":
                 return TryKey(rest, out control);
             case "button":
-                return TryIndex<JoyButton>(rest, out int button) && Made(BindingControl.Button(button), out control);
+                return (xr ? TryIndex<XrButton>(rest, out int button) : TryIndex<JoyButton>(rest, out button))
+                    && Made(BindingControl.Button(button), out control);
             case "axis":
-                return TryAxis(rest, out control);
+                return TryAxis(rest, xr, out control);
             case "mouse":
                 return TryIndex<MouseButton>(rest, out int mouseButton) && Made(BindingControl.Mouse(mouseButton), out control);
             case "fullaxis":
@@ -510,7 +557,7 @@ public sealed class BindingStore
             && Made(BindingControl.Key(keyCode, modifiers), out control);
     }
 
-    private static bool TryAxis(string text, out BindingControl control)
+    private static bool TryAxis(string text, bool xr, out BindingControl control)
     {
         control = default;
         int at = text.IndexOf('@');
@@ -526,7 +573,8 @@ public sealed class BindingStore
             return false;
         }
 
-        if (!TryIndex<JoyAxis>(text[..(at - 1)], out int axis) || deadzone < 0f || deadzone >= 1f)
+        string name = text[..(at - 1)];
+        if (!(xr ? TryIndex<XrAxis>(name, out int axis) : TryIndex<JoyAxis>(name, out axis)) || deadzone < 0f || deadzone >= 1f)
         {
             return false;
         }

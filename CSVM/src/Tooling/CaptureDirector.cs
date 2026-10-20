@@ -147,7 +147,7 @@ public sealed class CaptureDirector
         }
         // A burst (z-fight debugging) writes indexed files; a single shot keeps the plain path.
         // The image is the PREVIOUS frame's render, so _00 is un-jittered and _01+ carries the dither.
-        var img = viewport.GetTexture().GetImage();
+        var img = ReadFrame(viewport, spec.XrSim);
         if (img == null)
         {
             // Backstop for any renderer-less path the arg-parse guard in Launcher._Ready doesn't
@@ -228,6 +228,35 @@ public sealed class CaptureDirector
     {
         var xform = camera.GlobalTransform;
         return new PanePose(xform.Origin, -xform.Basis.Z, camera.Fov, aircraft);
+    }
+
+    // Under the stand-in headset the main viewport renders into one layer per eye, and the plain
+    // texture read returns only layer 0. Each eye is read by its layer and laid out as the flag asks.
+    private static Image? ReadFrame(Viewport viewport, XrSimSpec? sim)
+    {
+        if (sim == null || !viewport.UseXR)
+        {
+            return viewport.GetTexture().GetImage();
+        }
+
+        Rid texture = RenderingServer.ViewportGetTexture(viewport.GetViewportRid());
+        if (sim.Shot != XrSimShot.Both)
+        {
+            return RenderingServer.Texture2DLayerGet(texture, sim.Shot == XrSimShot.Left ? 0 : 1);
+        }
+
+        var left = RenderingServer.Texture2DLayerGet(texture, 0);
+        var right = RenderingServer.Texture2DLayerGet(texture, 1);
+        if (left == null || right == null)
+        {
+            return null;
+        }
+
+        int w = left.GetWidth();
+        var pair = Image.CreateEmpty(w * 2, left.GetHeight(), false, left.GetFormat());
+        pair.BlitRect(left, new Rect2I(Vector2I.Zero, left.GetSize()), Vector2I.Zero);
+        pair.BlitRect(right, new Rect2I(Vector2I.Zero, right.GetSize()), new Vector2I(w, 0));
+        return pair;
     }
 
     // Runs wherever the pane hands its frame over, a worker for a live readback.

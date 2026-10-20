@@ -205,17 +205,25 @@ internal sealed class HumanFlightAdapter
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
+        // The stereo interior's per-plane scale goes on the mount before XrCockpit captures it.
+        bool xrInterior = _policy.XrInterior && !paneless;
+        var vrCockpit = xrInterior ? _policy.XrCockpits.For(planeName) : VrCockpit.Default;
+        bool ghostSelf = _policy.DebugRaceGhost && !paneless;
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
-            raceGhost: _world.Racing);
+            raceGhost: _world.Racing || ghostSelf, xrInterior: xrInterior, interiorScaleFactor: vrCockpit.InteriorScaleFactor);
         var planeModel = planeBuilder.Build(planeName);
-        // Before the ghost stamp, so the copies on the interior wear the stamp their originals do.
-        var reseat = CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
+        // Before the ghost stamp, so the copies wear their originals' stamp. ponytail: none under the
+        // stereo path. Its lift draws the copies' flat shaders at the world origin. A stereo seat
+        // needs copies built through the interior's stereo variant.
+        var reseat = xrInterior ? null : CockpitReseat.Bind(planeModel, planeBuilder.CockpitInterior, planeName);
 
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
         // every camera keeps; the four-wide band then serves this machine's seats alone.
-        if (_world.Racing)
+        if (ghostSelf)
+            RaceGhost.Stamp(planeModel, SplitScreen.EveryCameraLayer);
+        else if (_world.Racing)
             RaceGhost.Stamp(planeModel, paneless ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
@@ -230,7 +238,7 @@ internal sealed class HumanFlightAdapter
                 AutoHeadTurn = _policy.AutoHeadTurn,
                 PinnedLook = _policy.PinnedLook,
             },
-            HudParent = paneless ? null : rig.Viewport,
+            HudParent = paneless ? null : rig.ChromeParent ?? rig.Viewport,
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
@@ -238,6 +246,10 @@ internal sealed class HumanFlightAdapter
                 Interior = planeBuilder.CockpitInterior,
                 Reseat = reseat,
                 Panel = CockpitGauges.Bind(planeBuilder),
+                Stereo = xrInterior && planeBuilder.CockpitInterior is { } interior
+                    ? new XrCockpit(interior, vrCockpit.EyeOffsetInAircraft, planeBuilder.InteriorEye,
+                        vrCockpit.StoreOffsetInAircraft, vrCockpit.StoreSpread)
+                    : null,
             },
             Scheme = scheme,
             Painter = planeBuilder.Painter,
@@ -246,6 +258,12 @@ internal sealed class HumanFlightAdapter
         };
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
+        if (controller.Dressing.Stereo != null)
+            Log.Info("flight", $"cockpit: '{planeName}' stereo interior at {vrCockpit.InteriorScale:0.####} m per unit, eye {vrCockpit.EyeOffsetZ:0.###} m aft and {vrCockpit.EyeOffsetY:0.###} m up of the marker, head plate left out ({planeBuilder.InteriorOmittedPolygons} polygons), gunsight reticle collimated ({planeBuilder.GunsightReticles})");
+        // The recenter action, for the seat the headset flies.
+        controller.RecenterHeadset = paneless ? null : _human.RecenterHeadset;
+        // The headset's own views, for the seat the headset flies.
+        controller.Headset = xrInterior ? _policy.XrChase : null;
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
         // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
@@ -368,7 +386,8 @@ internal sealed class HumanFlightAdapter
                 }
                 // Hang the FLYOUT-model ordnance under the pylons, one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
-                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
+                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo,
+                    controller.Dressing.Stereo, controller.Dressing.Visibility);
                 if (verbose)
                 {
                     int groups = 0;

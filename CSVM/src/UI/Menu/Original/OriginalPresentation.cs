@@ -763,6 +763,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         _devices!.Sync(0f);
         _devices.PrimeBoard();
         _joiningOpen = _shell.JoiningOpen;
+        if (host.Features.TryGet<MenuNoticeFeature>(out var notice) && notice.Take() is { } message)
+        {
+            _shell.ShowNotice(message);
+        }
 
         _layer.Visible = true;
         _shown = true;

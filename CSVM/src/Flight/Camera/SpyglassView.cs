@@ -5,11 +5,12 @@ using Godot;
 
 namespace CSVM.Flight.Camera;
 
-/// <summary>The spyglass picture: a square viewport rendering the SHARED world through a camera of
-/// its own, which <see cref="Hud.TargetHud"/> then draws as a disc at the off-screen marker's anchor.
+/// <summary>The spyglass picture: a square viewport rendering the SHARED world through its own
+/// camera. <see cref="Hud.TargetHud"/> draws it as a disc at the off-screen marker's anchor.
+/// A headset shows it once for both eyes on its head ring (<see cref="Hud.XrSpyglassDisc"/>).
 /// The world is inherited rather than owned, so the target is the one in play and wears the flown
-/// zone's fog; the pane's own camera lends its clip planes and cull mask, since the picture is the
-/// same view from the same aeroplane, less the pilot's own airframe (<see cref="DiscMask"/>).
+/// zone's fog. The pane's camera lends its clip planes and cull mask, the picture being its view
+/// less the pilot's own airframe (<see cref="DiscMask"/>).
 /// One per pane, built with the HUD, rendering only while
 /// <see cref="Aim"/> is being called. Where it looks and how wide is <see cref="Spyglass"/>'s.
 /// </summary>
@@ -40,6 +41,10 @@ public sealed partial class SpyglassView : SubViewport
     /// own airframe. Read by the suite.</summary>
     public uint DiscCullMask => _camera.CullMask;
 
+    /// <summary>Whether a headset shows this picture, on the head ring rather than the pane. Set, the
+    /// camera also leaves out what the headset draws over the view (<see cref="DiscMask"/>).</summary>
+    public bool Headset { get; set; }
+
     /// <summary>The picture at <paramref name="pane"/>'s side: idle until the first
     /// <see cref="Aim"/>, and hung on the HUD control that draws it, which is what keeps it inside
     /// that pane's viewport and therefore in that pane's world. <paramref name="ownLayer"/> is the
@@ -67,16 +72,25 @@ public sealed partial class SpyglassView : SubViewport
         return view;
     }
 
-    /// <summary>The picture's cull mask: <paramref name="paneMask"/> less the one layer the pilot's
-    /// own aeroplane is drawn on (<see cref="UI.Boards.SplitScreen.OwnAirframeLayer"/>). Under
-    /// <paramref name="enhanced"/> the shadowless sun (<see cref="SpyglassSun"/>) replaces the world's,
-    /// and <see cref="UI.Boards.SplitScreen.FlatSeaLayer"/> makes it show the flat sea, not the waves.
-    /// ⚠ NOT decoded, and do not put the airframe back on the decode's authority: the original's
-    /// update touches no per-object visibility (docs/org/spyglass.md).</summary>
-    public static uint DiscMask(uint paneMask, uint ownLayer, bool enhanced) => enhanced
-        ? (paneMask & ~ownLayer & ~UI.Boards.SplitScreen.SunLayer)
-            | UI.Boards.SplitScreen.SpyglassSunLayer | UI.Boards.SplitScreen.FlatSeaLayer
-        : paneMask & ~ownLayer;
+    /// <summary>The picture's cull mask: <paramref name="paneMask"/> less the pilot's own airframe's
+    /// layer (<see cref="UI.Boards.SplitScreen.OwnAirframeLayer"/>) and the world flare's band. Under
+    /// <paramref name="enhanced"/> it takes the shadowless sun (<see cref="SpyglassSun"/>) and the flat
+    /// sea (<see cref="UI.Boards.SplitScreen.FlatSeaLayer"/>). <paramref name="headset"/> drops the
+    /// headset's two layers, whose quads ride any camera. ⚠ NOT decoded, and do not put the airframe back on the
+    /// decode's authority: the original's update touches no per-object visibility (docs/org/spyglass.md).</summary>
+    public static uint DiscMask(uint paneMask, uint ownLayer, bool enhanced, bool headset = false)
+    {
+        uint mask = paneMask & ~UI.Boards.SplitScreen.WorldFlareBand;
+        if (headset)
+        {
+            mask &= ~(UI.Boards.SplitScreen.HeadsetLayer | UI.Boards.SplitScreen.HeadOverlayLayer);
+        }
+
+        return enhanced
+            ? (mask & ~ownLayer & ~UI.Boards.SplitScreen.SunLayer)
+                | UI.Boards.SplitScreen.SpyglassSunLayer | UI.Boards.SplitScreen.FlatSeaLayer
+            : mask & ~ownLayer;
+    }
 
     /// <summary>The square the picture renders at for a disc <paramref name="side"/> pixels across.
     /// Under Enhanced Graphics it is raised so the internal buffer never falls under
@@ -134,7 +148,7 @@ public sealed partial class SpyglassView : SubViewport
             // splitscreen seat draws through; the original hands camera 2 both alongside camera 1.
             _camera.Near = _pane.Near;
             _camera.Far = _pane.Far;
-            _camera.CullMask = DiscMask(_pane.CullMask, _ownLayer, Utils.GraphicsMode.Enhanced);
+            _camera.CullMask = DiscMask(_pane.CullMask, _ownLayer, Utils.GraphicsMode.Enhanced, Headset);
         }
 
         RenderTargetUpdateMode = UpdateMode.Always;

@@ -79,6 +79,50 @@ Windows also marks files that came from the internet. If something refuses to ru
 right-click the zip file, choose **Properties**, tick **Unblock**, click OK, and unzip it
 again.
 
+## VR (experimental)
+
+CSVM can be flown seated in a PC VR headset, through the OpenXR runtime that is active on this
+PC. VR is experimental in this release: it has been flown on one machine (a Quest 3 over Virtual
+Desktop, with an RTX 5080), and the release page lists its known issues. Windows only.
+
+**Runtimes.** Virtual Desktop's own runtime (VDXR) is the one VR was built on; SteamVR, which
+Steam Link uses for a Quest, is the second. Whichever is set as the system's OpenXR runtime is
+the one the game uses. Set it to **90 Hz** at its default resolution.
+
+**Starting it.** Start the headset and its runtime first, then either:
+
+- double-click **`CSVM-VR.cmd`** beside `CSVM.exe`, which starts that one launch in VR, or
+- turn on **VR Mode** in Options, on the Video page. The game restarts in the headset, and every
+  later start of `CSVM.exe` does the same until you turn VR Mode off again.
+
+If no headset starts, the game plays flat and the menu says so. Windows may ask before it runs
+`CSVM-VR.cmd`, as it does for `CSVM.exe` (see "Windows SmartScreen" above).
+
+**Playing.** Menus, briefings and films appear on a large screen in front of you; the right hand
+controller's laser points at it and its trigger clicks. You fly with a gamepad, a flight stick or
+the keyboard, as in flat play. A flight opens in the Cockpit view, and the headset is your head,
+so the look keys and the right stick's look do nothing. `F8`, D-pad down or the left controller's
+Y button cycles Cockpit, Nose and Chase; the chase view is fixed to the aircraft, so the world
+turns around you in a bank or a loop. The left controller's menu button pauses. VR is one player:
+splitscreen is not available, and network play is.
+
+**Recentering.** Sit as you would in the cockpit and recenter, which puts your eyes on the
+pilot's. `Home`, the left controller's stick click, a PlayStation pad's touchpad click, the first
+back paddle of an Elite-style pad, or the runtime's own recenter all do it, and the game
+recenters by itself when the headset session starts.
+
+**Quality and comfort.** A headset flight renders with its own VR quality profile in place of
+your graphics options: no anti-aliasing filter over 4x MSAA, Low shadows (hard-edged) and no
+foveated rendering, sized so the reference machine has headroom at 90 Hz. To fly with your own
+graphics options instead, which costs several times as much, start it from a terminal in this
+folder as `CSVM-VR.cmd -- --xr-quality=flat`. Under a headset, the Video page adds **VR Render
+Scale** (50 to 125 %, lower is lighter on the GPU) and **Comfort Vignette** (Off, Mild, Strong; it
+darkens the edge of view while the aircraft turns). Every cut, respawn and view change fades
+through black.
+
+To go back to flat play, turn VR Mode off in Options. `CSVM.exe --xr-mode off` starts one launch
+flat whatever VR Mode says.
+
 ## If something goes wrong
 
 Logs are written to `logs\` next to `CSVM.exe`, one file per run, named for the mode and
@@ -149,6 +193,8 @@ file that binds every action.
 
 - `CSVM.exe` and the `data_CSVM_windows_x86_64` folder beside it are the engine. They
   belong together; moving one without the other breaks the build.
+- `CSVM-VR.cmd` starts `CSVM.exe` in VR ("VR (experimental)" above). It holds one command line,
+  readable in any text editor.
 - `tools\unzbd.exe` is the extraction tool the engine runs to unpack the game's archives.
 - `LICENSE` is the GNU GPL v3 the engine is under, and `LICENSE-unzbd` the EUPL-1.2 the
   bundled extraction tool is under.

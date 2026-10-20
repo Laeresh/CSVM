@@ -213,6 +213,18 @@ an Instant Action mission does, because its opposition lives in the world and ca
 in place. An unpinned restart draws a new mission; a pinned one repeats.
 _Avoid_: relaunch, reload, hard reset
 
+**Theater screen**:
+Under VR, the quad ahead of the seated player that shows the menus, boards, load screens and
+cinemas, drawn from the root's board layers (`UI/Boards/TheaterScreen.cs`). Distinct from
+`CinemaScreen`, which is one cinema on a canvas layer and shows on the theater screen under VR.
+_Avoid_: virtual screen, VR screen, cinema screen, menu quad
+
+**Hand controllers**:
+Under VR, the headset's two tracked controllers, one device in the keymap (`DeviceKind.Xr`) whose
+buttons are named by role (`Bindings/XrControls.cs`). Their **laser** is the ray from the pointing
+hand's aim pose that points and clicks on the theater screen (`UI/Boards/TheaterPointer.cs`).
+_Avoid_: motion controllers, Touch (a profile, not the device), XR pad, VR mouse
+
 **Load screen**:
 The board drawn over the whole window while a session builds. Carries no progress: a build is one
 synchronous block.

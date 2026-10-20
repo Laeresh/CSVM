@@ -46,6 +46,13 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
     /// <summary>The menu host, null until the menu's first show.</summary>
     public MenuHost? Host { get; private set; }
 
+    /// <summary>How many local seats the player setup admits, read on the first show. A headset or
+    /// its stand-in holds it to one.</summary>
+    public System.Func<int> SeatLimit { get; init; } = static () => PlayerSetupFeature.MaxSeats;
+
+    /// <summary>The notice the menu's first show posts (<see cref="MenuNoticeFeature"/>), or null.</summary>
+    public System.Func<string?> Notice { get; init; } = static () => null;
+
     /// <summary>Counts <paramref name="steps"/> wheel steps for the menu seat's next read.</summary>
     public void TurnWheel(int steps) => _wheel += steps;
 
@@ -113,7 +120,14 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Features.Add(InstantActionFeature.ForDataRoot(at.DataRoot));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
-        host.Features.Add(new PlayerSetupFeature());
+        host.Features.Add(new PlayerSetupFeature { SeatLimit = SeatLimit() });
+        var notice = new MenuNoticeFeature();
+        if (Notice() is { } message)
+        {
+            notice.Post(message);
+        }
+
+        host.Features.Add(notice);
         var strings = UiStrings.TryLoad(at.DataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.ZrdrPath));
         // The campaign feature carries both cinemas because the presentation reads it and cannot
@@ -165,18 +179,16 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
     }
 
     // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,
-    // which the Original presentation maps into its authored space.
-    private (float X, float Y)? MousePosition()
-    {
-        var at = parent.GetViewport().GetMousePosition();
-        return (at.X, at.Y);
-    }
+    // which the Original presentation maps into its authored space. The theater screen's pointer
+    // stands in for it under a headset (ScreenPointer).
+    private (float X, float Y)? MousePosition() =>
+        ScreenPointer.Read(parent.GetViewport()) is { } pointer ? (pointer.At.X, pointer.At.Y) : null;
 
     // The primary button, the press half of seat 0's pointer. ⚠ Keep the stamp's check. Original
     // polls the button instead of taking GUI events, so a folder icon's click would also press the
     // plaque under it.
     private bool PrimaryPressed(UI.Screens.BuildStamp stamp) =>
-        Input.IsMouseButtonPressed(MouseButton.Left) && !stamp.HoldsPointer(parent.GetViewport().GetMousePosition());
+        ScreenPointer.Read(parent.GetViewport()) is { } pointer && pointer.Pressed && !stamp.HoldsPointer(pointer.At);
 
     // The wheel steps counted since the last read, the wheel half of seat 0's pointer.
     private int TakeWheel()

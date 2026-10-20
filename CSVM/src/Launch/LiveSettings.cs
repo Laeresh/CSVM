@@ -77,16 +77,36 @@ internal sealed class LiveSettings
         // --graphics bullet).
         var savedOptions = spec.Det ? null : OptionsStore.UserOptions().Load();
         bool graphicsEnhanced = GraphicsMode.Resolve(spec.GraphicsMode, savedOptions?.GraphicsMode);
+        // A headset session's profile stands in for the flat words' flags. It resolves before any of
+        // them, and a flat launch gets nothing from it.
+        var vrQuality = VrQuality.Resolve(XrSession.WillBoot(spec.XrSim), spec.XrQuality,
+            spec.WordFlags[AntiAliasingSetting.Lookup], spec.Msaa, spec.WordFlags[ShadowQualitySetting.Lookup], spec.XrFoveation);
+        VrQuality.Current = vrQuality;
         // Every word setting under the same --det rule, before any viewport or session builds, since
         // both read the words. They share the mode's line, so a softer or slower run than expected
         // is read off one line.
-        WordSettings.ResolveLaunch(spec.WordFlags, spec.Det);
+        WordSettings.ResolveLaunch(Flags(spec), spec.Det);
         ShadowQualitySetting.HardShadows = (spec.SkippedPasses & EnhancedPasses.SoftShadows) != 0;
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={graphicsWord} {WordSettings.Describe()}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         ViewportQuality.Apply(viewport);
+        // The stereo root's own MSAA and foveation, written only when the plan names them.
+        if (VrQuality.MsaaOf(vrQuality.Msaa) is { } msaa)
+        {
+            viewport.Msaa3D = msaa;
+        }
+
+        if (vrQuality.Foveation)
+        {
+            viewport.VrsMode = Viewport.VrsModeEnum.XR;
+        }
+
+        if (VrQuality.Describe(vrQuality) is { } vrLine)
+        {
+            Log.Info("world", $"{vrLine}");
+        }
     }
 
     /// <summary>A seat's Toggle Graphics Mode action: the switch runs at the top of the next
@@ -123,10 +143,11 @@ internal sealed class LiveSettings
 
     /// <summary>The options file's writer for an Options apply, shared by the menu's apply and the
     /// pause leaf's. The display settings, the mix, the word settings and the graphics mode apply now.
-    /// ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
-    /// them here. The pause leaf puts the head turn and targeting switch on the seats flying now
-    /// (PausePreferences.FeedGameOptions).</summary>
-    public void Persist(OptionsApplyExit applied, SessionSpec spec, GameSession? session)
+    /// A headset pacing the frames (<paramref name="headsetPaces"/>) keeps its pacing over V-Sync.
+    /// ⚠ The opening view, the difficulty and VR mode are saved and no more, so do not rebuild
+    /// anything for them here. The pause leaf puts the head turn and targeting switch on the seats
+    /// flying now (PausePreferences.FeedGameOptions).</summary>
+    public void Persist(OptionsApplyExit applied, SessionSpec spec, GameSession? session, bool headsetPaces = false)
     {
         var store = OptionsStore.UserOptions();
         var options = store.Load();
@@ -146,6 +167,9 @@ internal sealed class LiveSettings
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
         options.AudioVoice = applied.AudioVoice;
+        options.VrMode = applied.VrMode;
+        options.VrRenderScale = applied.VrRenderScale;
+        options.VrVignette = applied.VrVignette;
         store.Save(options);
         // The display settings take effect now, through the calls the startup path makes. The order
         // is the window's: the screen it sits on, the mode, the size, then the pacing, which
@@ -155,7 +179,9 @@ internal sealed class LiveSettings
         ResolutionSetting.Apply(
             ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
             _host.GetWindow());
-        VSyncSetting.Apply(VSyncSetting.Resolve(spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
+        VSyncSetting.Apply(headsetPaces
+            ? VSyncSetting.Headset
+            : VSyncSetting.Resolve(spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
@@ -163,8 +189,8 @@ internal sealed class LiveSettings
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
         // Each word setting resolved again with the applied word in the saved slot, so its flag still
-        // beats it.
-        WordSettings.ResolveAll(spec.WordFlags, applied.Words, spec.Det);
+        // beats it, and a headset's profile too.
+        WordSettings.ResolveAll(Flags(spec), applied.Words, spec.Det);
         Log.Info("world", $"word settings applied: {WordSettings.Describe()}");
         // A mode switch puts every word setting on the world itself; otherwise each applies alone.
         bool switching = GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced
@@ -182,6 +208,16 @@ internal sealed class LiveSettings
     {
         _cover?.Drop();
         _cover = null;
+    }
+
+    // The word settings' flags, with the VR profile's anti-aliasing and shadow words in place of an
+    // absent flag under a headset (VrQuality.Current). A flat launch gets the spec's own.
+    private static WordValues Flags(SessionSpec spec)
+    {
+        var flags = spec.WordFlags.Copy();
+        flags[AntiAliasingSetting.Lookup] = VrQuality.Current.AntiAliasing ?? flags[AntiAliasingSetting.Lookup];
+        flags[ShadowQualitySetting.Lookup] = VrQuality.Current.ShadowQuality ?? flags[ShadowQualitySetting.Lookup];
+        return flags;
     }
 
     // G's save, the one field it changes. Never under --det, whose runs must not write the player's

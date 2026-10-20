@@ -373,13 +373,13 @@ public sealed partial class PausePreferences : Control
     // (MenuInput's rule for seat 0), so a pad player's pause leaf is driven by the pad alone.
     private (float X, float Y, bool Pressed)? SeatPointer()
     {
-        if (_input is not { Keyboard: true } || !IsInsideTree())
+        if (_input is not { Keyboard: true } || !IsInsideTree()
+            || ScreenPointer.Read(GetViewport()) is not { } pointer)
         {
             return null;
         }
 
-        var at = GetViewport().GetMousePosition();
-        return (at.X, at.Y, Input.IsMouseButtonPressed(MouseButton.Left));
+        return (pointer.At.X, pointer.At.Y, pointer.Pressed);
     }
 
     // The pages draw the original's own pointer, so the OS one goes away while the leaf stands and

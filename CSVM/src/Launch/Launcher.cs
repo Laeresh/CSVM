@@ -87,6 +87,18 @@ public partial class Launcher : Node3D
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); created in
     // _Ready and kept across sessions, like _camera. --yaw=/--pitch= seed its initial angles.
     private OrbitCamera _orbit = null!;
+    // The headset path, null on every flat launch. Built once in _Ready, like the camera it follows.
+    private XrSession? _xr;
+    // The headset's theater screen, where the boards and menus draw under the stereo path.
+    private UI.Boards.TheaterScreen? _theater;
+    // Whether this launch asked Godot for OpenXR (--xr-mode on), which compiles the stereo shader
+    // variants whether or not a runtime then starts.
+    private bool _xrRequested;
+    // The shader cache watch such a launch keeps, swept as it ends or restarts; null otherwise.
+    private XrShaderCache? _xrCache;
+    // The VR mode a restart failed to start this process's child for, which the menu then tells
+    // the player about; null when none failed.
+    private bool? _xrStartFailed;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): each launch instantiates a
     // GameSession node, freed again by ReturnToMenu or RestartSession. The camera, lights and
@@ -164,7 +176,12 @@ public partial class Launcher : Node3D
     {
         _net = new NetFlight(ReturnToMenu, ExitSession);
         _audio = new LaunchAudio(this);
-        _menu = new ProcessMenu(this, _audio, _net, () => _paths, OnMenuExit);
+        _menu = new ProcessMenu(this, _audio, _net, () => _paths, OnMenuExit)
+        {
+            // Read on the menu's first show, after _Ready has booted the headset path or not.
+            SeatLimit = () => _xr != null ? 1 : PlayerSetupFeature.MaxSeats,
+            Notice = () => XrRelaunch.MenuNotice(_xrRequested, _xr is { PacesFrames: true }, _xrStartFailed),
+        };
     }
 
     // The screen ExitSession takes a flight back to, as the last launch settled it. The setter is
@@ -379,6 +396,13 @@ public partial class Launcher : Node3D
         {
             Log.Error("core", $"--synthetic-data could not write its tree: {_syntheticError}");
             GetTree().Quit(1);
+            return;
+        }
+
+        // VR mode at boot, before anything heavy runs: a restart into the headset leaves from here
+        // in the state the --extract branch below runs in.
+        if (StartXrMode())
+        {
             return;
         }
 
@@ -663,6 +687,48 @@ public partial class Launcher : Node3D
             return;
         }
 
+        // OpenXR starts with the engine or not at all, and the --xr-sim stand-in only with its feature
+        // tag. Without either Boot builds nothing, so a flat launch draws and paces exactly as it did.
+        _xr = XrSession.Boot(GetViewport(), _camera, _instruments.RenderTime, _spec.XrSim);
+        if (_xr != null)
+        {
+            AddChild(_xr);
+            // A stereo root draws no canvas layer, so every board, menu and cinema built from here
+            // on draws on the screen instead. A flight is on view once its first frame is ready.
+            var rig = _xr.Rig;
+            System.Func<bool> flightLive = () => rig.Pane != null && _session is { InSession: true, FirstFrameReady: true };
+            // A presenting cutscene plays on the screen as a stereo pair, converged on its letterbox.
+            rig.CutscenePlays = () => _session?.Cutscene is { Playing: true, Presenting: true };
+            _theater = UI.Boards.TheaterScreen.Build(
+                GetViewport(), _camera, () => rig.Origin.GlobalTransform,
+                flightLive,
+                eyeFeed: true,
+                cutscene: () => rig is { Screening: true, Pane: { } pane } && _session?.Cutscene is { } film
+                    ? new UI.Boards.TheaterCutscene(pane.Camera, UI.Boards.StereoPair.ConvergenceM(Mathf.Abs(film.CardBox.GetCenter().Z)), film.FilmRowsShown)
+                    : null,
+                interocular: () => XrEyeFeed.InterocularM);
+            AddChild(_theater);
+            // The hand controllers' laser pointer on it, since the desktop mouse cannot reach the
+            // eye-size layout a stereo root lays its 2D out in.
+            AddChild(UI.Boards.TheaterPointer.Build(GetViewport(), _theater, () => rig.Origin.GlobalTransform, eyeFeed: true));
+            // Every cut the headset sees lands on black, and the optional vignette closes in on turns.
+            rig.Fade = new XrFade();
+            var theater = _theater;
+            var comfort = UI.Boards.ComfortQuads.Build(rig.Fade, () => rig.Origin.GlobalTransform, flightLive,
+                () => theater.BoardShown, () => VrVignetteSetting.Current);
+            rig.Cut += comfort.OnCut;
+            AddChild(comfort);
+            ApplyVrComfort(VrRenderScaleSetting.SavedWord(_spec.Det), VrVignetteSetting.SavedWord(_spec.Det));
+        }
+
+        // VR is one local seat in every mode, so a command line asking for splitscreen flies one.
+        if (_xr != null && _spec.Players > 1)
+        {
+            Log.Warn("core", $"xr: --players={_spec.Players} refused, {PlayerSetupFeature.VrOneSeat} Flying one seat");
+            _spec = _spec.WithOneSeat();
+            _cli = _cli.WithOneSeat();
+        }
+
         // The F14 / --debug-fps readout, process-wide like the camera so it works at the
         // launchscreen too. Built after the --run-tests/--dump-* early exits, which render no
         // frame it would have anything to show.
@@ -768,6 +834,7 @@ public partial class Launcher : Node3D
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
+        SweepXrShaderCache();
         // ⚠ Do not move this below the teardown calls, nor out of here. The engine disposes the
         // peers a service thread may still poll, and a probe's quit closes no transport itself.
         try
@@ -896,7 +963,7 @@ public partial class Launcher : Node3D
         _audio.Tick((float)delta);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null);
+            _session?.Plane, _menu.Host is { Shown: true } || _extractionScreen != null || _spec.MovieName != null);
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
@@ -1285,7 +1352,8 @@ public partial class Launcher : Node3D
         // flight in the same process. The flag and --det rules are the spec's own.
         var saved = OptionsStore.UserOptions().Load();
         _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill)
-            .WithSavedDefaultView(saved.DefaultView).WithSavedAutoHeadTurn(saved.AutoHeadTurn);
+            .WithSavedDefaultView(saved.DefaultView).WithSavedAutoHeadTurn(saved.AutoHeadTurn)
+            .WithHeadsetView(_xr != null);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
@@ -1300,6 +1368,7 @@ public partial class Launcher : Node3D
             CaptureDirector = _captureDirector,
             MasterSeed = _masterSeed,
             Camera = _camera,
+            Xr = _xr?.Rig,
             Orbit = _orbit,
             Sun = _sun,
             Env = _env,
@@ -1568,16 +1637,134 @@ public partial class Launcher : Node3D
             return;
         }
 
-        _settings.Persist(applied, _spec, _session);
+        bool? vrBefore = OptionsStore.UserOptions().Load().VrMode;
+        PersistOptions(applied);
+        // A changed VR mode takes a new process, OpenXR starting only with the engine.
+        string? flatOnly = XrFlatOnly();
+        if (XrRelaunch.OnApply(vrBefore, applied.VrMode, _xrRequested, flatOnly) is { } vrOn
+            && Relaunch(vrOn, "the Options apply changed VR mode", skipIntro: true))
+        {
+            return;
+        }
+
+        if ((applied.VrMode == true) != (vrBefore == true) && flatOnly != null)
+        {
+            Log.Info("core", $"xr: VR mode saved {(applied.VrMode == true ? "on" : "off")}; a {flatOnly} run does not restart for it");
+        }
+
         host.Deactivate();
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
+    // VR mode at boot. Every launch first sweeps what a headset launch that never ended left, and
+    // one that compiled the stereo variants then opens its own watch (XrShaderCache.Boot). Then a
+    // launch with VR mode saved on that did not ask for OpenXR restarts into it. True means this
+    // process is quitting for that.
+    private bool StartXrMode()
+    {
+        var args = XrRelaunch.WithoutProgram(System.Environment.GetCommandLineArgs());
+        _xrRequested = XrLaunch.Requested(args, ProjectSettings.GetSetting(XrLaunch.EnabledSetting).AsBool());
+        string userDir = ProjectSettings.GlobalizePath("user://");
+        using (var self = System.Diagnostics.Process.GetCurrentProcess())
+        {
+            _xrCache = XrShaderCache.Boot(userDir, _xrRequested, self.Id, self.StartTime.ToUniversalTime(),
+                XrShaderCache.LiveStartUtc, out int? swept);
+            if (swept is { } count)
+            {
+                Log.Info("core", $"xr: a headset launch ended without sweeping the shader cache; swept {count} files it wrote");
+            }
+        }
+
+        string? flatOnly = XrFlatOnly();
+        bool? saved = flatOnly == null ? OptionsStore.UserOptions().Load().VrMode : null;
+        if (!XrRelaunch.AtBoot(saved, XrRelaunch.Mode(args), flatOnly))
+        {
+            return false;
+        }
+
+        return Relaunch(true, "VR mode is saved on", skipIntro: false);
+    }
+
+    // Why this process never restarts for VR mode, or null (XrRelaunch.FlatOnly).
+    private string? XrFlatOnly() =>
+        XrRelaunch.FlatOnly(_cli, DisplayServer.GetName() == "headless", OS.GetName() == "Windows");
+
+    // Starts this executable again with VR mode on or off, then quits. A headset launch's cache is
+    // swept first and watched again if the start fails (XrShaderCache.EndThenStart). False when the
+    // start failed: this process carries on, and the menu's next show tells the player why.
+    private bool Relaunch(bool on, string why, bool skipIntro)
+    {
+        var args = XrRelaunch.Arguments(XrRelaunch.WithoutProgram(System.Environment.GetCommandLineArgs()), on, skipIntro);
+        string exe = OS.GetExecutablePath();
+        string[] argv = new string[args.Count];
+        for (int i = 0; i < argv.Length; i++)
+        {
+            argv[i] = args[i];
+        }
+
+        int swept = 0;
+        int pid = _xrCache?.EndThenStart(() => OS.CreateProcess(exe, argv), out swept) ?? OS.CreateProcess(exe, argv);
+        LogXrShaderCacheSwept(swept);
+        if (pid < 0)
+        {
+            Log.Error("core", $"xr: could not restart {(on ? "into the headset" : "flat")} ({why}): {exe} {string.Join(' ', argv)}");
+            _xrStartFailed = on;
+            _menu.Host?.Features.Get<MenuNoticeFeature>().Post(XrRelaunch.StartFailedNotice(on));
+
+            return false;
+        }
+
+        Log.Info("core", $"xr: restarting {(on ? "into the headset" : "flat")} ({why}) pid={pid}: {exe} {string.Join(' ', argv)}");
+        if (_env != null)
+        {
+            BlankAndQuit();
+        }
+        else
+        {
+            GetTree().Quit();
+        }
+
+        return true;
+    }
+
+    // The headset's comfort settings, each flag beating the given word: the saved one at boot (none
+    // under --det), the apply's after it. Both take effect at once, the render scale in the runtime.
+    private void ApplyVrComfort(string? renderScaleWord, string? vignetteWord)
+    {
+        var scale = VrRenderScaleSetting.Resolve(_spec.XrRenderScale, renderScaleWord);
+        var vignette = VrVignetteSetting.Resolve(_spec.XrVignette, vignetteWord);
+        VrVignetteSetting.Current = VrVignetteSetting.LevelOf(vignette.Word);
+        Log.Info("core", $"xr: comfort vignette={vignette.Word} source={VrVignetteSetting.Lookup.SourceName(vignette.Source)} render_scale={scale.Word} source={VrRenderScaleSetting.Lookup.SourceName(scale.Source)}");
+        _xr?.ApplyRenderScale(VrRenderScaleSetting.ScaleOf(scale.Word));
+    }
+
+    // The headset launch's end: every shader cache file written since it started goes, once.
+    private void SweepXrShaderCache() => LogXrShaderCacheSwept(_xrCache?.End() ?? 0);
+
+    private void LogXrShaderCacheSwept(int swept)
+    {
+        if (swept > 0)
+        {
+            Log.Info("core", $"xr: swept {swept} shader cache files this headset launch wrote, so a flat launch reads none of them");
+        }
+    }
+
+    // The Options apply for the menu above and the pause leaf: the settings (LiveSettings.Persist),
+    // then a live headset's comfort settings. VR mode is saved and no more; the menu's ApplyOptions
+    // restarts for it.
+    private void PersistOptions(OptionsApplyExit applied)
+    {
+        _settings.Persist(applied, _spec, _session, headsetPaces: _xr is { PacesFrames: true });
+        if (_xr != null)
+        {
+            ApplyVrComfort(applied.VrRenderScale, applied.VrVignette);
+        }
+    }
+
     // The in-flight Preferences leaf both pause boards open, composed by ProcessMenu. Its options
-    // apply is LiveSettings.Persist, as the menu's is. ⚠ No ShowMenu: the flight returns to the sheet
+    // apply is PersistOptions, as the menu's is. ⚠ No ShowMenu: the flight returns to the sheet
     // over its own world, not tearing down what the pause stands on.
-    private UI.Screens.PausePreferences? BuildPauseOptions() =>
-        _menu.PauseOptions(applied => _settings.Persist(applied, _spec, _session));
+    private UI.Screens.PausePreferences? BuildPauseOptions() => _menu.PauseOptions(PersistOptions);
 
     // The host's exit sink: the one place a menu leaves through. The host has already hidden the
     // presentation, with its state kept so a failed build can show it again where it stood.
@@ -1859,6 +2046,11 @@ public sealed record LauncherContext
     public required Tooling.CaptureDirector CaptureDirector { get; init; }
     public required ulong MasterSeed { get; init; }
     public required Camera3D Camera { get; init; }
+
+    /// <summary>The VR seat's rig (<see cref="XrSession.Rig"/>), null in a flat launch. A session given
+    /// one binds its pane to it and draws its lens flare and full-view colour layers in the world.</summary>
+    public XrRig? Xr { get; init; }
+
     public required OrbitCamera Orbit { get; init; }
     public required DirectionalLight3D Sun { get; init; }
     public required Godot.Environment? Env { get; init; }

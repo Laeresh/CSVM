@@ -91,6 +91,7 @@ if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogD
 # A window belongs to the desktop its process was started on; falls back to a visible run
 # rather than failing (same policy as RunTests.ps1).
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
+. (Join-Path $PSScriptRoot "XrSimFeature.ps1")
 $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
 # The launch joins this job, so killing this script kills the probe (JobObjectCore.ps1).
 $null = Open-RunJob
@@ -137,9 +138,11 @@ if ($HiddenDesktop) {
     Write-Host ("desktop: {0}   streams: {1}.out / .err" -f [CSVMHiddenDesktop]::Name, $streamBase) -ForegroundColor DarkGray
     # CreateProcess takes ONE command line and it must carry argv[0] itself.
     $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
-    $handle = Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
-                                    -WorkingDirectory $RepoRoot `
-                                    -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+    $handle = Invoke-WithXrSimFeature -Arguments $Launch -Launch {
+        Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                              -WorkingDirectory $RepoRoot `
+                              -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+    }
     Set-MemReservationPid -Reservation $Reservation -ProcessId ([CSVMMemLedger]::ProcessId($handle))
     $code = Wait-OnHiddenDesktop -Process $handle -TimeoutSec $TimeoutSec
 } else {
@@ -153,7 +156,7 @@ if ($HiddenDesktop) {
     $psi.UseShellExecute        = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
+    $p = Invoke-WithXrSimFeature -Arguments $Launch -Launch { [System.Diagnostics.Process]::Start($psi) }
     # Joined after it starts, which is safe because Godot starts no child process of its own.
     Add-ToRunJob -Process $p.Handle
     Set-MemReservationPid -Reservation $Reservation -ProcessId $p.Id

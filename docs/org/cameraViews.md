@@ -303,19 +303,24 @@ half.
 
 ### Per-plane `cockpit_camera` offsets (local body frame)
 
-Decoded from the plane scene graphs (`extracted/…/planes/nodes.json`). The marker sits on the
-fuselage centerline, a bit above the local origin; the exact number is authored per plane. The
-current player fighter `player_pfighter` uses `(0, +0.75, −0.2)`, ~0.75 up, ~0.2 aft of the local
-origin. Selected values:
+Decoded from the plane scene graphs (`extracted/…/planes/nodes.json`), accumulated from below the
+plane root through `markers`. Most markers sit on the fuselage centerline a little above the local
+origin; the Kestrel and the Peacemaker seat the pilot off the centerline. The eleven player
+airframes:
 
-| Plane node | `cockpit_camera` translate (x, y, z) |
-|---|---|
-| `player_pfighter` (default fighter) | `(0, +0.75, −0.2)` |
-| (another) | `(0, +0.70, −0.34)` |
-| (another) | `(0, +0.83, +0.72)` |
-| (another) | `(1.98, +0.75, −1.21)` |
-| (another) | `(−1.8, +0.95, −0.44)` |
-| (another) | `(0, +2.31, +3.30)` |
+| Airframe | Plane node | `cockpit_camera` translate (x, y, z) |
+|---|---|---|
+| Bloodhawk | `player_bhawk` | `(0, +0.75, −0.20)` |
+| Devastator | `player_pfighter` | `(0, +0.75, −0.20)` |
+| Fury | `player_fury` | `(0, +0.75, −0.20)` |
+| Hoplite | `player_autogyro` | `(0, +0.75, −0.20)` |
+| Hellhound | `player_avenger` | `(0, +0.75, −0.20)` |
+| Balmoral | `player_balmoral` | `(0, +0.70, −0.34)` |
+| Brigand | `player_brigand` | `(0, +0.83, +0.72)` |
+| Firebrand | `player_fbrand` | `(−0.08, +1.17, −0.91)` |
+| Kestrel | `player_kestrel` | `(+1.98, +0.75, −1.21)` |
+| Peacemaker | `player_peacemaker` | `(−1.80, +0.95, −0.44)` |
+| Warhawk | `player_warhawk` | `(0, +2.31, +3.30)` |
 
 ### Axis convention (fixed from the default fighter's cockpit sub-nodes)
 
@@ -638,15 +643,49 @@ same footage without re-judging what it should look like would carry the old bas
 new number.
 
 **The interior is authored in its own space, and the two spaces are not a similarity apart.** The
-eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places the
-instrument panel at z −17.5 straight ahead of it), while the interior's own elevators sit at
-y −10.5 where the exterior's sit at −0.40. It is a stylised model built to be looked at from one
-point, not a scaled copy of the aircraft, so the framing is scale-invariant and
-`PlaneBuilder.InteriorScale` chooses only how the interior composites against world geometry. The
-original draws the interior in its own pass from the interior origin along the interior's own −Z,
-which is why a single-pass renderer says the same thing by mounting the subtree at the −4.70°
-head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
-applied to the mount.
+interior looks down −Z (the built dials sit straight ahead at z ≈ −10.6), while the interior's own
+elevators sit at y −10.5 where the exterior's sit at −0.40;
+the scale that fits the interior's wings to the hull's span runs from 0.030 (Bloodhawk) to 0.078
+(Balmoral). It is a stylised model built to be looked at from one point, not a scaled copy of the
+aircraft, so the framing is scale-invariant and `PlaneBuilder.InteriorScale` chooses only how the
+interior composites against world geometry.
+
+⚠ **The interior is not a human-proportioned room at any single scale.** All eleven share one
+instrument assembly whose main dials are 2.0 interior units across, centred 10.6-12.7 units from
+the eye (the Warhawk's 7.9), inside a tub 22-39 units wide. At 0.04 m per unit the dials are the
+79 mm standard instrument and a canopy, where there is one overhead, clears the eye by
+0.22-0.36 m, but the panel sits only 0.42-0.51 m away (the Warhawk's 0.32 m) and the tub is 0.9-1.6 m wide: depth is
+compressed and width is stretched, which is what an 80° flat view wants. Ten interiors (all but the
+Warhawk) also carry a flat head-and-shoulders plate 0.16-1.8 units behind the eye. These distances
+are from the interior's origin, where the flat view's eye sits; from the original's eye (below) the
+dials sit 10.6-12.4 units away on every airframe, the Warhawk's 11.9.
+
+### Where the eye sits in the interior
+
+`cockpit1` hangs under the plane root with no transform of its own (`Initial`), and the mode-6 draw
+in `FUN_0049fb00` renders it with the main camera, `FUN_004d6ac0(*DAT_0064ef78, DAT_0071c314, 0, 1)`,
+the camera that `FUN_0042d980` stands on the `cockpit_camera` marker. Nothing rescales or re-places
+the interior first, so the eye in the interior is the marker's numbers read in interior units. The
+data agrees on every airframe:
+
+- **The tub is built round that point.** The Kestrel's centre gauge column, artificial horizon,
+  compass, pilot seat (`pass_st`) and turret sit at x 1.97-1.99 against its marker's 1.98; the
+  Peacemaker's at −1.81 against −1.80; the Firebrand's at −0.08 against −0.08. The other eight sit
+  on x 0, where their markers are.
+- **The sight glass is dead ahead of it.** From the marker point the glass centre lies within 0.73°
+  across and 1.26° up or down of −Z on all eleven. From the interior's origin it sits 2.90° to
+  15.67° high (Warhawk), and 8.66° right (Kestrel) or 10.25° left (Peacemaker).
+
+The Kestrel's and Peacemaker's pilots really sit off the aircraft's centreline: the Kestrel's
+marker is on the right boom, the open seat with the rear turret behind it. So the outside eye is
+faithful, and only the eye inside the interior moved.
+
+The flat view draws the interior from its origin, mounted at the −4.70° head-pitch tilt, which
+brings the sight to within about a degree of the guns on the 0.75-unit airframes and leaves it
+8.7° and 10.3° to the side on the Kestrel and the Peacemaker. The stereo interior takes the
+original's eye: `PlaneBuilder.StereoMount` mounts it untilted with the marker's numbers on the
+marker, and `PlaneBuilder.InteriorEye` hands that point to `XrCockpit` and the collimated reticle.
+Head-look is not applied to either mount.
 
 ## The enhanced presentation's own chase cue (remake-only)
 
@@ -668,17 +707,149 @@ one cue that the original has no counterpart for, TUNE and living in
 the offset and 21.7° on the aim after a one-second 90°/s roll), and a faster lag in its place reads
 stiffer than the faithful camera, while one stacked on it lags the camera twice.
 
+## Views under a headset (remake-only)
+
+A headset turns the view with the player's own head, so a stereo session (`--xr-mode on` or
+`--xr-sim`) gives the seat the headset flies a VR form of each camera (`FlightController.Headset`,
+`CameraController.Headset`). `Flight/Camera/XrRig.cs` places the XR origin from the pose each camera
+write leaves and the `XrAnchor` it names (`XrMount.cs`). The flat camera holds that same pose, so
+every reader of it agrees with the headset. No flat pane takes any of this.
+
+| Camera | Under a headset |
+|---|---|
+| Cockpit, Nose | The eye at the `cockpit_camera` marker plus the plane's seated eye offset, in the aircraft's own axes, without the flat view's head pitch. Nose hides the interior as the flat view does. |
+| Chase | A fixed offset behind and above the aircraft in its own axes (`XrChase.Rigid`): the settled authored rig at `dist` held to `[dist_min, dist_max]`, so 14.9 to 25.9 m out and 7.57° below the level gaze, 11.1° on the Balmoral. No eased frames, no swing, no zoom, no speed in the distance and no speed FOV. `--xr-chase=level` takes the same offset in the aircraft's axes with the roll dropped (heading and pitch kept, right axis horizontal). |
+| Snap, free-look, padlock, the centre key, the look stick, look-behind, zoom | Inert. The head stays level and forward and reads no input. |
+| Opening view | Cockpit, unless `--view=` names a view, whatever the saved Default View says. |
+| The destroy callback's view reset | Back to the opening view, where the flat game returns to the chase view. |
+| Crash cut | The authored spot, facing the impact on a level heading. |
+| Death camera | The authored spot, holding the level heading that faces the nearest point of the aircraft's track ahead (`XrMount.Watch`), so a passing aircraft crosses the view and swings at most about 90° round. |
+| Flyby | The authored spot's flank offset, but `StaticCameras.VrBehindM` (20 m) behind the tail instead of ahead of the nose, held for the drawn watch time plus `VrExtraWatchS` (1 s). Each new spot is a cut whose level heading faces the aircraft, which then flies away ahead of the seat. |
+| A spent pilot watching another aircraft | The VR chase on the watched aircraft. |
+| A presenting cutscene | Not around the seat: the theater screen plays it as a stereo pair over a dark surround (`UI/Boards/StereoPair.cs`). The origin stands at the cutscene camera's eye, so the sky centres where the pair is drawn from, on the level heading it held as the cutscene took the camera. A shot change inside the cutscene is no cut. |
+| A camera another owner drives: the spectator and photo-mode cameras, the weapon lab's orbit | That camera's eye with its heading only. |
+
+Nothing in this table rolls or pitches the player's horizon except the aircraft the player flies:
+Cockpit, Nose and Chase ride its attitude, and every other camera is level. A static camera holds its
+heading instead of re-aiming, because a turning origin is a turn the seated body never made; a flyby
+passing at 6 m would otherwise yaw the world at hundreds of degrees a second. The headset's flyby sits
+behind the aircraft so that the heading facing it at the cut keeps it ahead of the seat; from the
+original's spot ahead, that heading leaves the aircraft passing behind the seat.
+
+**Why the chase rides the attitude.** The VR chase is specified as rigidly attached to the aircraft,
+with no spring lag, no speed FOV and no swing, and the comfort aids include no horizon lock. Riding the
+attitude keeps the chase in the cockpit's frame, so a view switch never changes how the world moves
+about the player, and it has no singular pose. `--xr-chase=level` flies the unrolled form for a
+side-by-side judgement at the headset: the same offset in a frame that keeps the nose's heading and
+pitch and drops the roll (`XrMount.NoRoll`), so the horizon never tilts, the world pitches with the
+nose, and the aircraft and the gun pipper on its nose axis keep the rig's angle apart. A heading-only
+frame puts the pipper on the aircraft whenever the nose drops a few degrees. The unrolled frame
+keeps its up on the sky's side, so past vertical flight, at the top of every loop, it rolls the view
+half a turn in one frame; nose exactly vertical it takes the aircraft's own right axis. A loop passing
+a little off vertical would spread that turn over a few frames, so within 20 deg of vertical the
+frame holds its right axis (`XrMount.Unrolled`). Leaving that cone it snaps to the unrolled frame in
+one frame, counted as a camera cut (`CameraController.Shot`), so the comfort fade covers it: once
+going up a loop and once coming down.
+
+Every jump of the origin (a view change, a respawn, a new static spot, a new watched aircraft, a
+camera taken by another owner or handed back) raises `XrRig.Cut`, and the comfort fade lands it on a
+black frame that clears over 0.3 s (`UI/Boards/ComfortQuads.cs`). The view keys and the flyby key wait
+for black instead: the view darkens over 0.15 s and changes on the black frame, so the player never
+sees the jump. The first flight frame after a load lands on black the same way.
+
+### The gunsight under a headset
+
+The sight is one glass polygon per interior, 0.41 m (Firebrand, Peacemaker) to 0.49 m (Brigand)
+from the stereo interior's eye at the 0.04 mount, wearing one 128x128 texture in every airframe (`cockpit6`, the Warhawk's
+`crosshair`, the same pixels). The texture holds the glass tint (alpha 38 of 255), the frame line on
+its outermost texels, the black sight body along its bottom edge and the reticle: the ring, the cross,
+the centre cross and the red index mark. Drawn at the glass's depth the reticle doubles when the eyes
+converge on a distant target, so a stereo interior lifts it off the glass (`Mech3/GunsightReticle.cs`)
+and draws it collimated, as a reflector sight shows its image: each eye's ray takes the texel the
+authored eye sees along that direction, so the reticle has no disparity and keeps the flat game's
+place. The tint, the frame line and the sight body stay on the glass at its depth.
+
+Which texels are reticle is read off the alpha: the texels off the tint by more than 6 levels group
+8-connected (the ringing beside a line dips to alpha 26 against the tint's 38, so it joins the
+reticle rather than the tint), and the reticle is the group at the centre plus every group clear of the second texel
+ring; the frame corners and the sight body reach that ring. On the shipped texture that is 902
+texels. The reticle shows where the head centre looks through the glass, one window for both eyes,
+so a lean out of the eye box loses it as a real sight does, and the opaque sight body covers it in
+each eye. It is added to the scene in linear light, an illuminated reticle: the glass's own blend
+lifts a grey line less than a level over a bright sky, where the flat cockpit pass's canvas composite
+lifts it about ten. The red index mark is the exception (`GunsightReticle.IndexMark`, the 20 reticle
+texels at x 62-68, y 1-4 whose red leads green and blue by more than 40). Added, it read pink over
+sky and cloud, so the overlay blends premultiplied: the lines keep alpha 0 and add as before (within
+one level), and the mark covers the scene at its coverage.
+
+The authored ring nearly fills the glass, so from the authored eye it clears the window's edge by
+only 0.5 mm (Kestrel, Peacemaker, Hoplite, Avenger) to 2 mm (Warhawk) of head movement, and a
+tracked head usually cuts it. The overlay draws the reticle at `GunsightReticle.HeadsetScale` (0.7,
+TUNE) of its authored size about the centre cross (`GunsightReticle.Centre`, texel 65, 62), which
+leaves 9 mm (Kestrel, Peacemaker, Avenger) to 25 mm (Warhawk) each way, 12 mm on the Bloodhawk. The
+ring's angular radius from the stereo eye goes from 3.75-9.84 degrees to 2.63-6.92 (Bloodhawk
+5.25 to 3.68); the flat cockpit keeps the authored size.
+
+| | bhawk | pfighter | fury | warhawk | autogyro | avenger | balmoral | brigand | fbrand | kestrel | peacemaker |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ring radius at 1.0 / 0.7, degrees | 5.25 / 3.68 | 5.81 / 4.07 | 7.61 / 5.34 | 9.84 / 6.92 | 4.44 / 3.11 | 3.80 / 2.66 | 6.93 / 4.87 | 7.88 / 5.53 | 7.10 / 4.98 | 3.75 / 2.63 | 4.22 / 2.96 |
+| head movement it stays whole, mm, at 1.0 / 0.7, from the interior's origin | 1.0 / 12.0 | 1.0 / 14.5 | 1.5 / 19.0 | 2.0 / 25.0 | 0.5 / 10.0 | 0.5 / 9.0 | 1.0 / 16.0 | 1.5 / 20.5 | 1.0 / 15.5 | 0.5 / 9.0 | 0.5 / 9.0 |
+
+The radii are from the stereo eye, the origin's measurement scaled by the eye-to-glass distances. The
+head-movement row was measured with the eye at the interior's origin and has not been re-measured
+from the marker.
+
+Measured on the stand-in with the reticle at its authored size, C1 empty stage, Bloodhawk, pose
+`--direction=0,0.34,-0.94 --hold=0,0,0,0.6`, frame 60. Both eyes at 63 mm (`shot=both`, 1280x720 each, 96.4268° wide): the reticle's lines sit at
+x 640.192 / 640.191 and y 321.24 in both eyes, the authored eye's projection of the centre cross being
+(640.15, 321.17); the sight body moves 81.5 px between the eyes, a point 0.44 m away. Every airframe
+puts the reticle in both eyes within 0.02 px of each other and within 0.35 px of its authored place.
+Lift over the sky beside the glass, Rec. 709 levels, on SHOT-45's left eye against the flat pass:
+
+| | flat pass | stereo, glass reticle | stereo, collimated |
+|---|---|---|---|
+| Original, reticle mean / 90th pct / max | -0.7 / 9.5 / 13.1 | -6.8 / -1.9 / -0.8 | 16.5 / 31.6 / 44.9 |
+| Enhanced (gain 6.0), the same | 24.7 / 44.8 / 58.6 | -3.2 / -0.1 / 0.0 | 31.3 / 49.3 / 58.2 |
+| glass tint mean, Original / Enhanced | 1.2 / 15.3 | -1.0 / -0.1 | unchanged |
+
+`GunsightReticle.EnhancedGain` takes back what AgX compresses in the world and not in the flat pass's
+canvas: 2.5 read 16.6 / 29.5 / 36.3, 4.0 read 23.8 / 40.3 / 47.3.
+
+The index mark's four reddest pixels at a headset's density (`shot=left,eye=2048x1152`, 21 pixels a
+degree; the same pitch and field), Bloodhawk, frame 60, sRGB:
+
+| | sky (empty stage) | ground (C1, nose down) | cloud (C1 deck) |
+|---|---|---|---|
+| Original, added | 255, 136, 147 | 255, 97, 67 | 255, 178, 175 |
+| Original, covering | 244, 42, 13 | 244, 40, 3 | 244, 44, 18 |
+| Enhanced, added | 255, 196, 181 | 255, 181, 150 | 255, 196, 182 |
+| Enhanced, covering | 206, 84, 59 | 207, 82, 54 | 207, 86, 61 |
+
+Enhanced's AgX desaturates the texture's red (247, 36, 0) to about 0.7 saturation wherever it
+stands; the mark gets no gain there.
+
+**Draw order.** The overlay shares the interior's blend priority (110) with the glass, and a lifted
+interior stands every geometry at the world origin, so their sort depths tie below float32's step at
+kilometres out. The renderer's order then moved whenever another transparent joined the frame: the
+HUD panel's fully discarded quad moved the reticle's lines by up to 4 levels on 272 pixels of
+`c1-cockpit-xr-sim-aft`. `GunsightReticle.SortAfterGlassM` gives the overlay a sorting offset of its
+own, which `XrCockpit` keeps on top of the lift's, so the reticle always draws after the glass and
+every other interior transparent. It is the nearest blended surface on its rays, so last is the
+right place. With the panel's quad drawn against left out of every camera, the reticle's region is
+now identical in both shots; 8 pixels on the gauge faces still differ by one level, a tie among the
+interior's other blended surfaces.
+
 ## Not resolved
 
 - **The non-selectable modes (`1`, `2`, `3`, `4`) still have no friendly name or
   identity.** The player-view selector (`FUN_0042c210`) rejects all of them, so none is a
   player-selected view; they are internal/context camera poses. Modes `5`, `8` and `9` are settled:
   the **crash** cut, the **death camera** and the **flyby**, the three static cameras above.
-- Which of the 22 `cockpit_camera` offsets corresponds to each named player airframe by display
-  name (the node→display map lives in `../formats/markers.md`); only `player_pfighter`'s is
-  pinned here.
-- **The tilted interior mount overshoots by 0.60°.** It leaves the gun pipper about 6 px above the
-  sight ring's crosshair at 720p where the original has them coincident. The exact fit is a 3.82°
-  tilt, but that is a Bloodhawk-fitted number with no decode behind it and the sight's height is
-  per-airframe geometry, so the decoded constant is what ships. Measuring the same offset on a
-  second airframe's cockpit footage is what would settle whether the constant should become a TUNE.
+- **What reads `instruments.zrd`.** Its seven gauge positions (z −17.5, x ±9) are not where the
+  built `cockpit1` meshes put the same assemblies (z ≈ −10.6, x ±5.0), and no uniform scale maps one
+  onto the other. The port reads the meshes.
+- **The flat view's tilted interior mount overshoots by 0.60°.** It leaves the gun pipper about 6 px
+  above the sight ring's crosshair at 720p where the original has them coincident. The cause is the
+  flat eye at the interior's origin rather than at the marker ("Where the eye sits in the
+  interior"), which also leaves the Kestrel's and Peacemaker's flat sights 8.7° and 10.3° to the
+  side. The flat view has not taken the stereo interior's eye.

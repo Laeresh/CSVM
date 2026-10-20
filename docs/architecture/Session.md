@@ -604,7 +604,7 @@ both skip every pane, HUD, camera, listener, pad and pause key, the roster's air
 (`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, with `IsBotSeat` set so its contacts take a person's rule (it grazes and bounces where world AI dies outright), and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`
 under its seat index as `PlayerIndex`, its far-field plant measured against `PersonSeatPositions` (every seat's aeroplane but a bot's or a departed guest's, the panes outside a network match, the one rule roster AI reads too), and given an `AiRearmOrder` probing the world's lines. Its seat's militia gives it, on every machine, that militia's livery (the shipped skins for Broadway Bomber, the session's for Fortune Hunter) and the weapons block of the def the militia flies its airframe as (`Mech3/MilitiaFits.cs`), the stock fit where no def exists; `BotSeats.ArmsFor` decides that order, a race seat's stock fit first (`SeatArms.Race`). Every later return of that aeroplane, through `FlightController.Respawned`, starts the pilot over with `AiPilot.ResetForSpawn` on its new placement's course. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
 It reads only the roster's copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its captured scheme and own build over
-that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run followed, its solo score key and its network seat's callsign; a seat with no pane here runs no course and joins no local race, and every stunt seat outside `--det` carries the rerun count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a pane-less seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
+that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run followed, its solo score key and its network seat's callsign; a seat with no pane here runs no course and joins no local race, and every stunt seat outside `--det` carries the rerun count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a pane-less seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. `--debug-race-ghost` (`FlightRosterPolicy.DebugRaceGhost`) builds every local seat ghost-keyed and stamps it with `EveryCameraLayer`, so its own cameras draw it as a ghost, race or no race. Read `FlightRoster.cs` next.
 
 ## src/Session/World/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects
@@ -653,3 +653,13 @@ per-rig block, one instance per pane. The per-pane state lives here rather than 
 because an instance is several nodes plus fade state. `--no-flare` suppresses the effect so a
 capture stays usable for unrelated comparisons. The spec is measured from capture footage; method
 and calibration: `git show analysis-archive:analysis/bl-165-lens-flare/FINDINGS.md`.
+
+## src/Session/World/WorldFlareRig.cs
+The same flare drawn in the world: the core and three rings as view-space quads at sky depth on the great circle from
+the sun to the view axis, so in a flat pane each lands on the screen rig's pixel at its size whatever the field of view.
+The core is depth-tested; the rings skip the seat. Each element adds in gamma space over the opaque picture, as the
+canvas does. Every stereo and every flat Enhanced session builds it in place of `LensFlareRig` (`--screen-flare` restores
+the screen rig in flat Enhanced; `Launch/SkyStage.cs` chooses at the build); stereo places it for the tracked head and
+hands its wash to `UI/Boards/HeadLockedQuads`. AgX tonemaps these quads and not the canvas, so under Enhanced the rings
+take a per-ring gain (`EnhancedGain`, measured in `docs/org/weather.md`). Each pane's quads stand on its own
+`UI.Boards.SplitScreen.WorldFlareLayer` (`LayerOf`), which no picture camera draws.

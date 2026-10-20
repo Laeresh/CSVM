@@ -67,6 +67,15 @@ public sealed class OptionsChoices
     /// <see cref="Pick"/>, which keeps a setting's partners in step.</summary>
     public WordValues Words { get; private set; } = new();
 
+    /// <summary>VR mode, null while never set, which reads as off.</summary>
+    public bool? VrMode { get; set; }
+
+    /// <summary>The <see cref="VrRenderScaleSetting.Words"/> word, null while never set.</summary>
+    public string? VrRenderScale { get; set; }
+
+    /// <summary>The <see cref="VrVignetteSetting.Words"/> word, null while never set.</summary>
+    public string? VrVignette { get; set; }
+
     /// <summary>The Master level (<see cref="AudioMix"/>'s 0..100), null while never set.</summary>
     public int? AudioMaster { get; set; }
 
@@ -136,6 +145,9 @@ public sealed class OptionsChoices
         _savedResolution = saved?.Resolution;
         DisplayMode = saved?.DisplayMode;
         VSync = saved?.VSync;
+        VrMode = saved?.VrMode;
+        VrRenderScale = saved?.VrRenderScale;
+        VrVignette = saved?.VrVignette;
         AudioMaster = saved?.AudioMaster;
         AudioMusic = saved?.AudioMusic;
         AudioEffects = saved?.AudioEffects;
@@ -146,7 +158,7 @@ public sealed class OptionsChoices
     public OptionsApplyExit ToExit() =>
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
-            NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy());
+            NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

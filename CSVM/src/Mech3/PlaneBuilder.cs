@@ -81,9 +81,14 @@ public sealed class PlaneBuilder
     private readonly bool _withDamagePanels;
     private readonly bool _withCockpitInterior;
     private readonly bool _withDockingHook;
+    // InteriorScale times the caller's interiorScaleFactor: the stereo path's per-plane factor,
+    // 1 everywhere else. The mount and the interior's depth bias both take it.
+    private readonly float _interiorScale;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
     private readonly List<Node3D> _cockpitDamagePanels = new();
+    // The stereo interior's sight glass textures split into their glass and reticle layers, by name.
+    private readonly Dictionary<string, GunsightReticle.Layers?> _gunsight = new();
     private PaintScheme? _scheme;
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
@@ -99,9 +104,10 @@ public sealed class PlaneBuilder
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
         bool cockpitInterior = false, bool dockingHook = false, PlanePainter? painter = null,
-        bool raceGhost = false)
+        bool raceGhost = false, bool xrInterior = false, float interiorScaleFactor = 1f)
     {
         _gamez = gamez;
+        _interiorScale = InteriorScale * interiorScaleFactor;
         _textures = textures;
         _scheme = scheme;
         _painter = scheme != null ? painter : null;
@@ -121,13 +127,16 @@ public sealed class PlaneBuilder
         {
             _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsInteriorBlendTexture,
                 cullBackfaces: true,
-                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
+                textureSubstitute: (name, tex) => InteriorTexture(name, _painter?.Substitute(name, tex) ?? tex, xrInterior),
+                sunVertexLit: true)
             {
-                DepthBiasScale = 1f / InteriorScale,
+                DepthBiasScale = 1f / _interiorScale,
                 // The panel is a wall of soft-alpha decals over dark instruments, which is where
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
                 NoAlphaCoverage = true,
+                // The stereo path's interior, which XrCockpit lifts to the XR origin's frame.
+                XrPreciseInterior = xrInterior,
             };
         }
         _spinningProps = spinningProps;
@@ -141,6 +150,14 @@ public sealed class PlaneBuilder
     public PlanePainter? Painter => _painter;
 
     public int MeshInstanceCount => _scene.MeshInstanceCount + (_interiorScene?.MeshInstanceCount ?? 0);
+
+    /// <summary>The interior's polygons the build left out: the head plate's under the stereo path
+    /// (<see cref="CockpitPlate"/>), none on every other build.</summary>
+    public int InteriorOmittedPolygons => _interiorScene?.OmittedPolygonCount ?? 0;
+
+    /// <summary>The collimated reticle overlays the stereo interior carries (<see cref="GunsightReticle"/>),
+    /// one per sight glass; none on every other build.</summary>
+    public int GunsightReticles { get; private set; }
 
     /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned with an
     /// additive amber tint. A <c>Flight.Airframe.WingLightBlinker</c> flashes them in flight;
@@ -177,6 +194,12 @@ public sealed class PlaneBuilder
     /// hidden and mounted at <see cref="CockpitCameraOffset"/>; null unless the builder was asked
     /// for one. <c>Flight.Hud.CockpitVisibility</c> is what shows it, per view mode.</summary>
     public Node3D? CockpitInterior { get; private set; }
+
+    /// <summary>Where the eye sits in <see cref="CockpitInterior"/>'s own units: the
+    /// <c>cockpit_camera</c> marker's numbers under the stereo path, the interior's origin on every
+    /// other build. The flat view keeps the origin and its tilt (docs/org/cameraViews.md, "Where the
+    /// eye sits in the interior").</summary>
+    public Vector3 InteriorEye { get; private set; }
 
     /// <summary>The interior's own textured materials paired with the texture each resolved from,
     /// the same registry <see cref="Repaint"/> uses. <c>Flight.Hud.CockpitGauges</c> reads it to
@@ -218,6 +241,13 @@ public sealed class PlaneBuilder
     /// <c>&lt;x&gt;_hook_extend</c> definition.</summary>
     public static bool IsDockingHook(string name) =>
         name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The stereo interior's mount: untilted, at <paramref name="metresPerUnit"/>, with the
+    /// interior's point at the marker's numbers standing on the marker. The original draws
+    /// <c>cockpit1</c> unscaled under the plane root with the first-person camera. Its eye in the
+    /// interior is therefore the marker read in interior units. Engine-free, so it unit-tests.</summary>
+    public static Transform3D StereoMount(Vector3 marker, float metresPerUnit) =>
+        new(Basis.Identity.Scaled(Vector3.One * metresPerUnit), marker - (marker * metresPerUnit));
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
@@ -379,12 +409,11 @@ public sealed class PlaneBuilder
             CollectWingFlares(child);
     }
 
-    // Builds the interior, places it and parks it hidden, on a pass of its own because the mount
-    // scale is what the depth bias must be told (_interiorScene). The eye is cockpit1's own origin,
-    // and that is where FirstPersonPose puts the camera, so the mount position is the
-    // cockpit_camera offset. ⚠ The mount also carries the fixed head-pitch tilt, and that is what
-    // puts the gunsight on the guns, untilted the sight rides 3.9° above the pipper's nose axis
-    // and never meets it. Head-look is NOT applied: the interior stays plane-fixed. See docs.
+    // Builds the interior on its own pass, since the depth bias must know the mount scale. The flat
+    // eye is cockpit1's origin, mounted on the cockpit_camera marker where FirstPersonPose stands.
+    // ⚠ The flat mount also carries the head-pitch tilt, which nearly puts the sight on the guns.
+    // Untilted, that sight rides 3.9° above the nose axis. Head-look is never applied to it.
+    // The stereo interior takes the original's eye instead (StereoMount), which needs no tilt.
     private void MountCockpitInterior(Node3D built, GameZNode root)
     {
         if (!_withCockpitInterior || _interiorScene == null)
@@ -398,6 +427,9 @@ public sealed class PlaneBuilder
             {
                 continue;
             }
+            // A tracked head can lean past the plate behind the eye, so the stereo interior drops it.
+            // The flat eye never sees its front, and the flat build keeps it untouched.
+            _interiorScene.OmittedPolygons = _interiorScene.XrPreciseInterior ? CockpitPlate.Find(_gamez, node) : null;
             // Exempt only THIS node from the skip list: `cockpit1` is on it unconditionally now
             // that the airframe pass never builds the interior, and it is the root here.
             if (_interiorScene.BuildSubtree(node, n => !ReferenceEquals(n, node) && Skip(n))
@@ -405,15 +437,55 @@ public sealed class PlaneBuilder
             {
                 return;
             }
-            n3d.Transform = new Transform3D(
-                new Basis(Vector3.Right, HeadPitchOffsetRad)
-                    .Scaled(Vector3.One * InteriorScale),
-                CockpitCameraOffset);
+            InteriorEye = _interiorScene.XrPreciseInterior ? CockpitCameraOffset : Vector3.Zero;
+            n3d.Transform = _interiorScene.XrPreciseInterior
+                ? StereoMount(CockpitCameraOffset, _interiorScale)
+                : new Transform3D(
+                    new Basis(Vector3.Right, HeadPitchOffsetRad)
+                        .Scaled(Vector3.One * _interiorScale),
+                    CockpitCameraOffset);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
+            if (_interiorScene.XrPreciseInterior)
+            {
+                AddGunsightReticles(n3d, node);
+            }
+
             built.AddChild(n3d);
             CockpitInterior = n3d;
             return;
+        }
+    }
+
+    // The stereo interior's sight glass wears its texture without the reticle, which an overlay
+    // draws collimated in its place (AddGunsightReticles). Every other texture and build is as given.
+    private ImageTexture? InteriorTexture(string name, ImageTexture? tex, bool xrInterior)
+    {
+        if (!xrInterior || tex == null || !GunsightReticle.IsGlass(name))
+        {
+            return tex;
+        }
+
+        if (!_gunsight.TryGetValue(name, out var layers))
+        {
+            _gunsight[name] = layers = GunsightReticle.SplitTexture(tex);
+        }
+
+        return layers?.Glass ?? tex;
+    }
+
+    // One collimated reticle overlay per sight glass the build split a texture for.
+    // It takes the glass's own depth bias, so it hides behind whatever hides the glass.
+    private void AddGunsightReticles(Node3D interior, GameZNode root)
+    {
+        foreach (var glass in GunsightReticle.Find(_gamez, root))
+        {
+            if (_gunsight.GetValueOrDefault(glass.TextureName) is { } layers
+                && GunsightReticle.Overlay(glass, layers, GunsightReticle.EyeReachM / _interiorScale, _interiorScene!.PriorityBias(glass.Priority), InteriorEye) is { } overlay)
+            {
+                interior.AddChild(overlay);
+                GunsightReticles++;
+            }
         }
     }
 

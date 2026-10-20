@@ -91,6 +91,9 @@ never `CSVM_DATA_ROOT`, so a worktree run cannot overwrite the primary tree's `e
 **`RunGame.ps1`, the play entry point.** `dotnet build`, then Godot with **no user args**, so the
 main menu (the Original presentation, `src/UI/Menu/Original/`) shows. Args are forwarded verbatim,
 so a content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/`--screenshot=`) bypasses it.
+`-EngineArgs` places Godot's own options before the `--` instead, the way `RunProbe.ps1`'s does:
+`-EngineArgs '--xr-mode','on'` for a headset, `'--render-thread','safe'` for the single-thread
+renderer ([cli.md](cli.md)'s last section).
 
 **`RunDev.ps1`, the dev helper**, same build step but with console prompts: no args gives
 interactive menus (plane roster, chapter) and then `--fly`, flight flags prompt for what is
@@ -467,6 +470,16 @@ greys a game of another major.minor.
 
 The payload is `packaging/MANIFEST.md`'s table, copied from its repo sources on every export, which
 keeps it byte-identical (the tarball's text files as git stores them, LF; see below).
+
+**`packaging/CSVM-VR.cmd` is the zip's VR launcher**, and its one script: `start` runs `CSVM.exe`
+from the launcher's own folder with `--xr-mode on` ahead of the arguments it was given, so the
+engine argument stands before any `--` (`docs/cli.md`, "Godot engine arguments"). A `.cmd` rather
+than a Windows shortcut because a `.lnk` stores an absolute target, which an unzipped folder cannot
+know. `.gitattributes` checks it out CRLF on every OS, which is what cmd reads. The tarball leaves it
+out, since VR is the Windows build's alone. ⚠ Proving it never means running it against the real
+exe: that starts OpenXR on whatever headset is attached. A stand-in `CSVM.exe` that writes its own
+command line (compiled with `Add-Type -OutputType WindowsApplication`, so no window opens) beside a
+copy of the launcher shows the arguments and the working directory it gets.
 
 **`packaging/README.md` is the whole of what a downloader is told**, written for someone who found
 the zip on the releases page and knows nothing else about the project: where the download comes
@@ -946,6 +959,13 @@ every saved option (DET-8). A resolution-sensitive artefact is invisible at the 
 **`-EngineArgs`** forwards any other Godot option ahead of the `--`, as a string array:
 `-EngineArgs '--render-thread','safe'` A/Bs the project's separate render thread, and
 `-EngineArgs '--log-file','<path>'` keeps every native ERROR line in one file.
+
+**`--xr-sim` launches.** `RunTests.ps1`, `RunProbe.ps1` and `RunGame.ps1` give a launch whose user
+arguments carry `--xr-sim` the `csvm_xr_sim` feature tag, through `GODOT_EDITOR_CUSTOM_FEATURES`
+set around that one process start and put back after it (`Invoke-WithXrSimFeature` in
+`XrSimFeature.ps1`, which all three dot-source). The tag is what turns Godot's multiview shader
+variants on and the shared shader cache off ([cli.md](cli.md)'s last section, LOG-25), so the golden
+workers launched beside an `--xr-sim` shot, and every later launch from the same shell, never see it.
 
 ### The run's job object: children die with the runner
 

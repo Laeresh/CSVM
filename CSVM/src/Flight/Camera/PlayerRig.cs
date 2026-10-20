@@ -39,6 +39,13 @@ public sealed class PlayerRig
     /// player's SubViewport in splitscreen, the session root in single player.</summary>
     public Node HudParent = null!;
 
+    /// <summary>Where this pane's flight chrome goes in place of its own parent: the HUD, its message
+    /// stack, the held scores and the chat. It is the cockpit-locked HUD panel's surface while a
+    /// headset flies the pane (<c>Flight/Hud/XrHudPanel.cs</c>), else null. The world overlays
+    /// (whiteout, flare, flash) stay on <see cref="HudParent"/>, since the headset draws them as
+    /// quads of their own.</summary>
+    public Node? ChromeParent;
+
     /// <summary>The visual layer carrying this player's private camera-anchored copies, or 0 in
     /// single player (everything stays on the default layer and no cull mask is narrowed).</summary>
     public uint VisualLayer;
@@ -46,7 +53,11 @@ public sealed class PlayerRig
     /// <summary>The player's aircraft, once the flight session builds it.</summary>
     public FlightController? Controller;
 
-    /// <summary>This player's skydome copy, re-centered on <see cref="Camera"/> each frame. It is a
+    /// <summary>The VR seat's rig while the headset flies this pane, null on every flat pane
+    /// (<see cref="XrRig.Bind"/> sets it).</summary>
+    public XrRig? Xr;
+
+    /// <summary>This player's skydome copy, re-centered on <see cref="SkyAnchor"/> each frame. It is a
     /// CONTAINER holding one <see cref="HorizonDomes"/> entry per built horizon zone,
     /// the anchor moves, the zone gate picks which child draws.</summary>
     public Node3D? Horizon;
@@ -58,7 +69,7 @@ public sealed class PlayerRig
     /// not render a frame with no sky in it.</summary>
     public List<HorizonDome> HorizonDomes = new();
 
-    /// <summary>This player's cloudlayer deck copy, re-anchored under the camera each frame.</summary>
+    /// <summary>This player's cloudlayer deck copy, re-anchored under <see cref="SkyAnchor"/> each frame.</summary>
     public Node3D? Deck;
 
     // No per-rig ambient cloud field: the authored fogvol clutter is world-anchored static
@@ -85,4 +96,10 @@ public sealed class PlayerRig
     /// <see cref="Deck"/>'s regime. Consumed by nothing yet; defaults to 1 (the binary's own
     /// default) until the first <c>Tick</c> resolves it.</summary>
     public int CameraWeatherState = 1;
+
+    /// <summary>Where this pane's camera-anchored sky is centred. While the headset flies the pane it
+    /// is the tracked head, so the dome and deck sit on the eyes; otherwise it is <see cref="Camera"/>.</summary>
+    public Vector3 SkyAnchor => Xr is { } xr && GodotObject.IsInstanceValid(xr.Head)
+        ? xr.Head.GlobalPosition
+        : Camera.Position;
 }

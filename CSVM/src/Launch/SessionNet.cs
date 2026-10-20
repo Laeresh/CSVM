@@ -427,7 +427,7 @@ internal sealed class SessionNet
             var panel = ChatPanel.ForPane(Chat.Chat, pane);
             var layer = new CanvasLayer { Name = "chat", Layer = HudLayers.Hud };
             layer.AddChild(panel);
-            pane.HudParent.AddChild(layer);
+            (pane.ChromeParent ?? pane.HudParent).AddChild(layer);
             _chatPanels.Add(panel);
             WireSeatChat(pane.Index);
         }

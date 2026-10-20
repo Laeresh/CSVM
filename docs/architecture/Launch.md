@@ -10,7 +10,7 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence and the `--synthetic-data` swap (`Tooling/SyntheticData.cs`), the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 (`LaunchAudio.cs`) with the saved mix under it (`Utils/AudioMix.cs`), the `--dump-*`/`--run-tests` early quits and the `--extract` run (`Extraction/ExtractionRun.cs` on a worker thread),
 and what outlives a session (camera, sun, the score, cinemas and master bus (`LaunchAudio.cs`), the perf and hitch instruments (`FrameInstruments.cs`), the stick pump `Sticks/StickPump.cs` started after the pad roster is logged, the typed-character feed `UI/Boards/TypedText.cs` its `_Input` fills with every key event's character and paste chord). It owns the
-menu through `ProcessMenu.cs`, whose `MenuHost` is built on the first show, the presentation resolution, the menu-side Options apply (`ApplyOptions` hands the choices to `LiveSettings.cs` and shows the presentation again at its top level; the in-flight `UI/Screens/PausePreferences.cs` leaf hands them there without that reshow),
+menu through `ProcessMenu.cs`, whose `MenuHost` is built on the first show, the presentation resolution, the menu-side Options apply (`ApplyOptions` hands the choices to `LiveSettings.cs` and shows the presentation again at its top level; the in-flight `UI/Screens/PausePreferences.cs` leaf hands them there without that reshow), VR mode's restart at boot and on a menu-side apply (`XrRelaunch.cs`), the headset launch's shader cache sweep (`XrShaderCache.cs`), and under a headset or the stand-in one seat (`--players` refused, `ProcessMenu`'s `SeatLimit`), the menu's fallback and failed-start notices (`ProcessMenu`'s `Notice`) and the theater screen the boards draw on (`UI/Boards/TheaterScreen.cs`) with the hand controllers' laser on it (`UI/Boards/TheaterPointer.cs`), the comfort fade and vignette (`UI/Boards/ComfortQuads.cs`, wired to the rig's cuts) and the headset's render scale and vignette level at boot and on an apply (`ApplyVrComfort`),
 the two startup calls that put the pacing, the window, the graphics mode and every word setting on the process (`LiveSettings.cs`, which also owns the live switch), the load screen's layer over the board `LaunchBoards.cs` composes, with that module's `--menu=pauseboard` doors,
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction or a stale stamp it shows `UI/Screens/NoGameDataScreen.cs` before any sound archive opens, and enters the menu from it in the same process, the base paths (`Spec/BasePaths.cs`) and the music resolved again. Each launch hands the session one `LauncherContext`, the settled paths, the persistent nodes, the process services and the match's wire (`NetTransport` with `NetHost` and `NetAirframes` beside it, or `NetSeats` and `NetHandshake` where a caller has them already), never a new argument, which is a `SessionSpec` change. The door, the wire and the seat roster a flight carries are `NetFlight.cs`'s, over the fields `SeatFields.cs` builds; the launcher composes it and routes the two exits its upkeep asks for. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
@@ -31,8 +31,8 @@ A lobby Dogfight's is `VersusLaunchField`: the host's first seat named as its ad
 `CliHostField` is a command-line host's (its panes, each peer, then the `--vs-bot` bots), and `LocalVersusField` a local `--vs` or join-board match's with bots (its panes, then the bots, no wire); both draw their bots through `Session/Roster/BotSeats.cs` (`ResolveBots`). `TeamNames` is a lobby's team names as a session reads them. Read `NetFlight.cs` next.
 
 ## src/Launch/LiveSettings.cs
-The Options page's settings on the running process, and the live graphics-mode switch. At launch `ApplyWindowAtLaunch` puts the frame pacing on (`Utils/VSyncSetting.cs`) and, for a session someone is at, the saved screen, mode and size (`Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`); `ResolveGraphicsAtLaunch` resolves the graphics mode and every registered word setting (`Utils/WordSettings.cs`) under the `--det` rule, logs the `[world] graphics mode:` line and gives the root viewport its render flags. The launcher calls each at its own point in `_Ready`, whose order is the behaviour.
-`Persist` is the options file's writer for an Options apply, the menu's and the pause leaf's alike: it saves every choice, then applies the display settings, the mix, the haptics and the word settings now, and switches the mode when the apply moved it. A switch (`Request`) is refused in a network session or while one is under way, runs at once with no world up, and otherwise runs under a `SwitchCover.cs` over the board `LaunchBoards.cs` gives it; `Tick` takes a seat's Toggle Graphics Mode action a frame late (saved, never under `--det`) and each `--debug-graphics-switch` frame, and sets `GraphicsMode.SwitchLocked`. `DropCover` takes a cover off a session being torn down. Read `EnhancedLook.cs` next.
+The Options page's settings on the running process, and the live graphics-mode switch. At launch `ApplyWindowAtLaunch` puts the frame pacing on (`Utils/VSyncSetting.cs`) and, for a session someone is at, the saved screen, mode and size (`Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`); `ResolveGraphicsAtLaunch` resolves the graphics mode and every registered word setting (`Utils/WordSettings.cs`) under the `--det` rule, logs the `[world] graphics mode:` line and gives the root viewport its render flags. It resolves the VR quality profile first (`Utils/VrQuality.cs`): under a headset its anti-aliasing and shadow words stand in for absent flags (`Flags`, at launch and on every apply), and its MSAA and foveation go on the root viewport. The launcher calls each at its own point in `_Ready`, whose order is the behaviour.
+`Persist` is the options file's writer for an Options apply, the menu's and the pause leaf's alike: it saves every choice, VR mode and the headset's two words among them, then applies the display settings (a pacing headset keeping `VSyncSetting.Headset`), the mix, the haptics and the word settings now, and switches the mode when the apply moved it. A switch (`Request`) is refused in a network session or while one is under way, runs at once with no world up, and otherwise runs under a `SwitchCover.cs` over the board `LaunchBoards.cs` gives it; `Tick` takes a seat's Toggle Graphics Mode action a frame late (saved, never under `--det`) and each `--debug-graphics-switch` frame, and sets `GraphicsMode.SwitchLocked`. `DropCover` takes a cover off a session being torn down. Read `EnhancedLook.cs` next.
 
 ## src/Launch/LaunchBoards.cs
 The whole-window boards the launcher stands with no flight in front of them, composed from the live spec and the base paths, and built per use since an extraction's hand-back re-resolves the paths. `LoadScreen` is the load screen for the launch being built: a campaign mission's chart sheet with its objectives and the seated profile's memento, or the blackboard headed by the flight's own name, a Dogfight's reading its multiplayer briefing ([../org/loading-screen.md](../org/loading-screen.md)). `SwitchScreen` is the blackboard over a live graphics switch. `ShowPauseAid` is the `--menu=pauseboard`, `pauseboard-ia` and `pauseboard-mp` doors, each standing a pause sheet alone, paused, under the node it is given ([../org/pause-screen.md](../org/pause-screen.md)). The launcher owns when a board goes up and comes down. Read `UI/Screens/LoadBoard.cs` next.
@@ -41,7 +41,7 @@ The whole-window boards the launcher stands with no flight in front of them, com
 The process's sound outside a flight's own, built with the launcher node, since a focus change can arrive before `_Ready` settles anything. `ApplyMasterVolume` writes the developer gain on bus 0 (`Utils/MasterVolume.cs` resolves it, and a full-volume launch leaves the bus alone), and `SetFocusMuted` mutes that bus and gates pad reads on window focus. `Build` opens the one music channel (`Mech3/MusicPlayer.cs`) over a sound archive of its own once every early quit is past; an install without one stays silent. `PlayCinema` is the `Video/CinemaHandoff.cs` seam every film goes through: it pauses the score under the film and resumes it after, and `StopCinema` ends a co-op guest's film with its host's. `PlayBoot` is the boot sequence (`UI/Screens/BootCard.cs`). `Tick`, `StopMusic` and `CueMenu` are the launcher's wall-clock tick, a launch's stop and every menu show's cue ([../org/music.md](../org/music.md)). Read `Mech3/MusicPlayer.cs` next.
 
 ## src/Launch/ProcessMenu.cs
-The process's one menu ([../menu-presentations.md](../menu-presentations.md)): its `MenuHost`, built on the first `Show` with the launcher's node as the presentations' parent. The build registers Original and adds the shared features: Free Flight, Instant Action, player setup, the hangar, the campaign with the process's one `ChapterCinema` and `ClosingCinema` over `LaunchAudio.cs`, the controls, and `NetFlight.cs`'s door. It joins seat 0 (the keyboard, every unclaimed pad, and the mouse through `UI/Menu/Original/PointerSeat.cs` with the build stamp's pointer check, the wheel `TurnWheel` counts), builds `MenuAudioService.cs` over the score, and selects the presentation. The host's availability answer loads and keeps the decoded Original layout; `Show` hands the cold start's `--menu=` aid to the presentation it creates, then consumes it; `PauseOptions` is the in-flight Preferences leaf over that layout. The paths are read live through the launcher. The launcher keeps the exit sink. Read `UI/Menu/MenuHost.cs` next.
+The process's one menu ([../menu-presentations.md](../menu-presentations.md)): its `MenuHost`, built on the first `Show` with the launcher's node as the presentations' parent. The build registers Original and adds the shared features: Free Flight, Instant Action, player setup, the hangar, the campaign with the process's one `ChapterCinema` and `ClosingCinema` over `LaunchAudio.cs`, the controls, `NetFlight.cs`'s door, and the notice the launcher's `Notice` answers (`UI/Menu/MenuNoticeFeature.cs`), the player setup held to the launcher's `SeatLimit`. It joins seat 0 (the keyboard, every unclaimed pad, and the pointer through `UI/Menu/Original/PointerSeat.cs`, read off `UI/Boards/ScreenPointer.cs` so the theater screen's laser stands in for the mouse under a headset, with the build stamp's pointer check, the wheel `TurnWheel` counts), builds `MenuAudioService.cs` over the score, and selects the presentation. The host's availability answer loads and keeps the decoded Original layout; `Show` hands the cold start's `--menu=` aid to the presentation it creates, then consumes it; `PauseOptions` is the in-flight Preferences leaf over that layout. The paths are read live through the launcher. The launcher keeps the exit sink. Read `UI/Menu/MenuHost.cs` next.
 
 ## src/Launch/GameSession.cs
 The per-launch orchestrator: `Launcher` constructs it from `(SessionSpec, LauncherContext)` and `StartSession` runs ordered build steps over one `BuildState.cs`, the shared input of every step. It owns the session clock, the world root, panes and seats, resource lifetimes and the per-frame tick order across the runtimes (`_Process`, both clock adapters and the phase map it hands `SessionSimulation`).
@@ -56,7 +56,7 @@ Exit frees the session subtree atomically and releases only the non-node resourc
 The per-build state `GameSession.StartSession`'s ordered steps thread through: the settled paths, the archives `LoadArchives` opened and which of them outlive the build, the world build's outputs (the gamez, the scene and runtime, the crash program, the craters, the staged aircraft, the landing rows and pickups) and the running mesh, collider and summary counts. It is the one input the build steps share, so a step reads what an earlier one wrote here rather than a session field, and nothing in it is cached across a rebuild. Read `GameSession.cs` next.
 
 ## src/Launch/SkyStage.cs
-The sky step of a session build and what it leaves standing: the mission's `Session/World/WeatherRig.cs` with each rig's horizon domes (one per zone the gate can tell apart, each scaled inside the camera's far plane), the fogvol cloud field, each pane's copy of the cloud deck, and the sun's `LensFlareRig`. A FOG_STATE the world bootstrap raises before the rig exists is held and applied over the zone. The session ticks `Weather` and `Flare` in its own frame order. Read `Session/World/WeatherRig.cs` next.
+The sky step of a session build and what it leaves standing: the mission's `Session/World/WeatherRig.cs` with each rig's horizon domes (one per zone the gate can tell apart, each scaled inside the camera's far plane), the fogvol cloud field, each pane's copy of the cloud deck, and the sun's flare rig (`LensFlareRig` in flat Original, `WorldFlareRig` in stereo and flat Enhanced, chosen at the build, and swapped by a flat session's live graphics switch through `FollowGraphicsMode`). A FOG_STATE the world bootstrap raises before the rig exists is held and applied over the zone. The session ticks `Weather` and `Flare` in its own frame order. Read `Session/World/WeatherRig.cs` next.
 
 ## src/Launch/SessionProbes.cs
 The session build's scripted probes and build-time forces: `--damage-test` and `--effects-test` over the chapter world just built, `--dump-tilegrid` once the map edge exists and the parked `--weapon-test` bench, each of which reports through `Tooling/ProbeRunner.cs` and ends the process, and `--destroy=` and `--debug-objective=`, which change the built world and let the session fly on. A probe that ran answers true and the build stops at that step. Read `Tooling/ProbeRunner.cs` next.
@@ -142,3 +142,57 @@ the clock directly where there is none), puts a blackboard `LoadBoard` over the 
 runs `EnhancedLook.Switch` on the cover's second frame, and drops both once three frames in a row
 come in under 50 ms or twice the fastest since (never past 500 ms). A player's pause stays up.
 `GraphicsMode.SwitchLocked` greys the Options row in a network session. Read `EnhancedLook.cs`.
+
+## src/Launch/XrSession.cs
+The stereo path of a process, built once by `Launcher._Ready` when Godot brought OpenXR up
+(`--xr-mode on` before `--`), else for `--xr-sim` through `XrSimInterface.cs` when the launch carries
+its feature tag; otherwise `Boot` logs why not and builds nothing. It turns the main viewport's
+`UseXR` on, paces by `Utils/VSyncSetting.cs`'s `Headset` under OpenXR alone, adds `XrEyeFeed.cs`,
+and builds the VR seat's `Flight/Camera/XrRig.cs` (`Rig`), which it has place itself each frame. It
+recenters on the head's first tracked pose after the session gains focus and after the runtime's
+own recenter. It logs the boot, the session states and an `xr frames` Debug line per wall second
+(`XrFrameWindow.cs`) with the seat's position and speed; `XrLaunch` reads `--xr-mode`. Its boot sets `Bindings/XrControllers.cs`'s `SessionLive`. `ApplyRenderScale` sets the interface's eye-size multiplier (`Utils/VrRenderScaleSetting.cs`), live under OpenXR. `WillBoot` answers ahead of the boot whether it will start, which the VR quality profile (`Utils/VrQuality.cs`) resolves from.
+
+## src/Launch/XrRelaunch.cs
+VR mode's restart rules, engine-free. OpenXR starts only with the engine, so the saved option
+(`Utils/OptionsStore.cs`'s `VrMode`) takes effect through a new process: a boot with it saved on and
+no `--xr-mode` given restarts once, and so does a menu Options apply that changed it. `Arguments`
+carries every engine and user argument verbatim with `--xr-mode on` first (or every `--xr-mode` pair
+dropped), so the child's own flag stops a loop. `FlatOnly` names the runs that never restart: off
+Windows, headless, pinned, scripted, the stand-in, the dev modes and labs. `MenuNotice` is what the
+menu shows (`UI/Menu/MenuNoticeFeature.cs`): `StartFailedNotice` when the new process did not start,
+else `FallbackNotice` where `FellBack` says so. `Launcher.cs` acts on the answers.
+
+## src/Launch/XrShaderCache.cs
+A headset launch's shader cache writes kept from the flat launches after it ([../verification.md](../verification.md)
+LOG-25): a launch that asked for OpenXR writes a marker at boot and, as it ends or restarts, deletes
+every `user://shader_cache` file written since its process started; a restart whose child fails to
+start watches again (`EndThenStart`). Every launch's `Boot`, a headset one's too, first sweeps the
+same way over the marker of a process that is gone, which covers a crash. The flat launches' own
+files are never touched, so a flat launch after a headset session recompiles only what that session
+rewrote. Engine-free; `Launcher.cs` passes the paths and the process start.
+
+## src/Launch/XrSimInterface.cs
+The `--xr-sim` stand-in headset: an `XRInterfaceExtension` that renders the main viewport in stereo
+through Godot's own XR path with no runtime, a pinned `head` tracker and `Flight/Camera/XrSimEyes.cs`
+answering the renderer's per-eye transform and projection. The window shows both eyes side by side
+without lens distortion; `Tooling/CaptureDirector.cs` reads the eye layers for a screenshot. The
+multiview shader variants come from the `csvm_xr_sim` feature tag the launch scripts set, never from
+this code. It reports the head again on a recenter, as OpenXR does every frame, and `MoveHead` lets
+a suite move it; `ConnectHands`, `AimHand` and `SetHandInput` give a suite two Touch hand trackers to
+point and press with, which no launch carries. `RenderTargetSizeMultiplier` is OpenXR's twin, scaling the flag's eye size, and its VRS image (`Xrvrs`, full rate round each eye's centre) serves `--xr-foveation=on`. Read `XrSession.cs` for the boot.
+
+## src/Launch/XrEyeFeed.cs
+A tracking-only `XRInterfaceExtension`, never primary, that hands the stereo cockpit interior the
+eyes its frame is drawn with. Godot runs every initialised interface's pre-render on the render
+thread after the headset's own has located the eye poses, so this one reads them there and writes
+each eye's offset from the XR origin, and the origin's world position, into the global shader
+uniforms `Mech3/SceneBuilder.cs` names; Godot uploads them before it culls that frame. The eyes'
+distance apart is `InterocularM`, the stereo cutscene pair's separation. Added by
+`XrSession.cs` after the headset's interface; `Flight/Hud/XrCockpit.cs` declares the uniforms.
+
+## src/Launch/XrFrameWindow.cs
+The headset's frame pacing folded into wall-time windows: frame count, mean and worst interval, the
+frames that ran over one and a half refresh periods and the refreshes they skipped. Under OpenXR the
+main loop waits on the runtime's frame call, so a long interval is a refresh shown without a new
+frame. Engine-free and unit-tested; `XrSession.cs` feeds it and logs each closed window.

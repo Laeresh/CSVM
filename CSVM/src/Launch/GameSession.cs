@@ -112,6 +112,10 @@ public partial class GameSession : Node3D
     private readonly Camera3D _camera;
     private readonly DirectionalLight3D _sun;
     private readonly Godot.Environment? _env;
+    // The VR seat's rig, null in a flat launch, and the first pane binds to it. Its head places the
+    // lens flare and full-view colour layers in the world, since a stereo viewport draws no canvas.
+    private readonly XrRig? _xrRig;
+    private readonly Node3D? _xrHead;
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
     // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
     private readonly OrbitCamera _orbit;
@@ -193,6 +197,8 @@ public partial class GameSession : Node3D
     // The FBFX_COLOR_FROM_TO wash, one ramp per rendered view, painted into the pane(s) the burst
     // was near.
     private UI.Boards.ScreenFlash? _screenFlash;
+    // The stereo session's full-view colour layers (_xrHead), null in a flat session.
+    private UI.Boards.HeadLockedQuads? _headQuads;
     // The active smoke screens (D18): laid by the SMOKE_SCREEN fire path, walked over every rig
     // and AI plane each sim step, washing humans through _screenFlash and stunning AI pilots.
     private SmokeScreens? _smokeScreens;
@@ -358,6 +364,8 @@ public partial class GameSession : Node3D
             TraceSteps = _spec.DebugNetTrace,
         };
         _camera = ctx.Camera;
+        _xrRig = ctx.Xr;
+        _xrHead = _xrRig?.Head;
         _orbit = ctx.Orbit;
         _sun = ctx.Sun;
         _env = ctx.Env;
@@ -428,6 +436,18 @@ public partial class GameSession : Node3D
     /// <summary>The spyglass discs' shadowless copy of the sun, null outside an Enhanced flight.
     /// Read by the suite.</summary>
     internal Flight.Camera.SpyglassSun? SpyglassSun => _spyglassSun;
+
+    /// <summary>The stereo session's head-locked colour quads, null in a flat session. Read by the
+    /// suites.</summary>
+    internal UI.Boards.HeadLockedQuads? HeadQuads => _headQuads;
+
+    /// <summary>The world flare rig, null where the session drew the screen rig or no flare. Read by
+    /// the suites.</summary>
+    internal WorldFlareRig? WorldFlare => _sky?.WorldFlare;
+
+    /// <summary>The screen flare rig, null where the session drew the world rig or no flare. Read by
+    /// the suites.</summary>
+    internal LensFlareRig? ScreenFlare => _sky?.Flare;
 
     /// <summary>The whole match's roster in seat order: a network match's, or a local match's with
     /// bots. Empty in any other session.</summary>
@@ -561,7 +581,7 @@ public partial class GameSession : Node3D
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
             _ambience, PlayerPositionsSnapshot, AnyPilotFirstPerson);
         _probes = new SessionProbes(_spec, _probeRunner, _worldRoot, code => GetTree().Quit(code));
-        _sky = new SkyStage(_spec, _worldRoot, _camera, _sun, _env, _ambience, _viewers, _rigs, GatedObjects);
+        _sky = new SkyStage(_spec, _worldRoot, _camera, _sun, _env, _ambience, _viewers, _rigs, GatedObjects, _xrHead);
         _labs = new InspectionLabs(new InspectionLabs.Inputs
         {
             Spec = _spec,
@@ -606,6 +626,28 @@ public partial class GameSession : Node3D
         _screenFlash = UI.Boards.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
         _worldRoot!.AddChild(_screenFlash);
         _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
+        if (_xrHead != null)
+        {
+            BuildHeadQuads();
+            // The flight markers in the world and on the head ring, read off the flown pane's HUD.
+            _worldRoot!.AddChild(Flight.Hud.XrMarkers.Build(_xrRig));
+            Log.Info("flight", $"stereo: flight markers drawn in the world, off-view ones on a ring on the head");
+            // The flown pane's chrome on a panel in the XR origin's frame. Built before any seat's
+            // HUD, so every chrome layer is parented there from the start.
+            var xrOrigin = _xrRig!.Origin;
+            var panel = Flight.Hud.XrHudPanel.Build(() => xrOrigin.GlobalTransform, Flight.Hud.XrCockpit.Live, GetViewport());
+            _worldRoot!.AddChild(panel);
+            _rigs[0].ChromeParent = panel.Surface;
+            if (_spec.XrTune)
+            {
+                _worldRoot!.AddChild(Flight.Hud.XrCockpitTuner.Build(panel.Surface, TunedSeat, SwapTunedAirframe));
+            }
+        }
+        else if (_spec.XrTune)
+        {
+            Log.Warn("flight", $"xr tune: --xr-tune needs a headset or --xr-sim, ignoring it");
+        }
+
         // The smoke screens ride the same wash and read the roster through a closure, since the
         // rigs and the AI planes are both built later than this. player.json missing falls back
         // to the static image's tunables with a warning rather than aborting the launch.
@@ -860,6 +902,7 @@ public partial class GameSession : Node3D
         _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
+        _sky?.FollowGraphicsMode();
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
         SwitchProfile.Mark("lights");
@@ -958,6 +1001,9 @@ public partial class GameSession : Node3D
             // Restore the persistent (Launcher-owned) main camera: splitscreen stood it down while
             // the panes rendered, and the launchscreen and the next session expect it current.
             _camera.Current = true;
+            // The VR seat is Launcher-owned as well; the origin falls back to that camera.
+            if (_rigs.Count > 0)
+                _xrRig?.Release(_rigs[0]);
             // The sun is Launcher-owned too, so a splitscreen session's pane default leaves with it.
             FollowPanes(1);
             // A line still open when the session ends leaves no field for the keyboard to type into.
@@ -1092,6 +1138,7 @@ public partial class GameSession : Node3D
         // After the weather tick: that is where each rig's dome is re-centred on its camera, and
         // the flare reads the sun node inside it.
         _sky?.Flare?.Tick(delta);
+        _sky?.WorldFlare?.Tick(delta);
 
         // One mirrored-tile window serves every pane (the union of the rings around each player),
         // so two players at opposite edges both get continued terrain. A no-op until one of them
@@ -2097,6 +2144,7 @@ public partial class GameSession : Node3D
             PauseState = _pauseState!,
             StuntBoard = boards.BuildSoloStuntBoard,
             ToggleGraphicsMode = _toggleGraphicsMode,
+            RecenterHeadset = _xrRig is { } xrRig ? () => xrRig.Recenter("the recenter action") : null,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
@@ -2877,6 +2925,7 @@ public partial class GameSession : Node3D
             // gate, and WeatherRig.Tick only ever NARROWS the band.
             _camera.CullMask = SplitScreen.PaneCullMask(Mech3.ZoneGate.OpenCullMask(_camera.CullMask));
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
+            _xrRig?.Bind(_rigs[0]);
             return;
         }
 
@@ -2904,7 +2953,27 @@ public partial class GameSession : Node3D
                 VisualLayer = SplitScreen.PlayerVisualLayer(i),
             });
         }
+        // VR flies one seat and the launch refuses more; should panes stand anyway, the first flies.
+        _xrRig?.Bind(_rigs[0]);
         Log.Info("flight", $"splitscreen: {count} panes sharing one world ({SplitScreen.LayoutName(count, GetViewport().GetVisibleRect().Size)})");
+    }
+
+    // The stereo session's full-view colour layers, each a head-locked quad copying its flat
+    // layer's colour off the first pane, since stereo flies one seat. Read through closures, as the
+    // whiteout, the flare and the director are all built later than this.
+    private void BuildHeadQuads()
+    {
+        var quads = UI.Boards.HeadLockedQuads.Build();
+        _worldRoot!.AddChild(quads);
+        var clear = new Color(0f, 0f, 0f, 0f);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.Whiteout,
+            () => _rigs.Count > 0 ? UI.Boards.HeadLockedQuads.CanvasColour(_rigs[0].Whiteout) : clear);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.Flash, () => _screenFlash?.CurrentFor(0) ?? clear);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.SunWash, () => _sky?.WorldFlare?.WashFor(0) ?? clear);
+        quads.Follow(UI.Boards.HeadLockedQuads.Tier.MissionEndFade,
+            () => new Color(0f, 0f, 0f, _campaign?.LeavingFade ?? 0f));
+        _headQuads = quads;
+        Log.Info("flight", $"stereo: whiteout, flash, sun wash and mission-end fade drawn as head-locked quads");
     }
 
     // A word setting's fallback may follow the pane count (WordSettings.FollowPanes). An integrated
@@ -2981,13 +3050,13 @@ public partial class GameSession : Node3D
             () => _sky?.Weather?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
 
     // One interior render pass per rig, on that player's own HUD parent. Splitscreen therefore gets
-    // a pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the
-    // rigs, since the interior it moves is the plane build's and the sun and environment it copies
-    // are the session's. ⚠ An airframe swap rebuilds the interior and leaves this pass holding the
-    // old node. The prototype hides itself rather than drawing a freed one (CockpitOverlay.Sync).
+    // a pass per pane rather than one for the window (--no-cockpit-pass and the stereo path build
+    // none). Built after the rigs, since the interior it moves is the plane build's and the sun and
+    // environment it copies are the session's. ⚠ An airframe swap rebuilds the interior and leaves
+    // this pass holding the old node. It hides itself rather than drawing a freed one (Sync).
     private void BuildCockpitPasses()
     {
-        if (!_spec.CockpitPass)
+        if (!Flight.Hud.CockpitOverlay.InteriorInPass(_spec.CockpitPass, Flight.Hud.XrCockpit.Live))
         {
             return;
         }
@@ -3155,6 +3224,34 @@ public partial class GameSession : Node3D
         {
             Log.Warn("flight", $"airframe swap to '{order.Airframe.PlaneNode}' failed: {e.Message}");
             return default;
+        }
+    }
+
+    // --xr-tune's seat: the headset's pane's stereo interior and the airframe the roster built it as.
+    private Flight.Hud.XrTuneSeat? TunedSeat() =>
+        _rigs.Count > 0 && _rigs[0].Controller is { } pilot && IsInstanceValid(pilot)
+            && pilot.Dressing.Stereo is { } stereo && _flightRoster?.FlyingAirframeOf(0)?.PlaneNode is { } plane
+            ? new Flight.Hud.XrTuneSeat(stereo, plane, pilot.Pause.Silenced || pilot.Pause.SheetOverFlight)
+            : null;
+
+    // --xr-tune's plane step: the mission swap's rebuild of the flown seat on another airframe. It
+    // keeps the pose it was flying and the pilot's own paint, and hands nothing over.
+    private void SwapTunedAirframe(string planeNode)
+    {
+        if (_flightRoster == null || _rigs.Count == 0 || _rigs[0].Controller == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var order = new AirframeSwapOrder(new AirframeSwapCode(0, string.Empty, planeNode), null, _rigs[0]);
+            _flightRoster.RunSwap(_rigs[0], order, handsOver: false);
+            _wire.RewireSeat(_rigs[0], SkipSwapRewire);
+        }
+        catch (Exception e)
+        {
+            Log.Warn("flight", $"xr tune: swap to '{planeNode}' failed: {e.Message}");
         }
     }
 

@@ -61,6 +61,10 @@ internal sealed class FlightRosterPolicy
     public bool AutoFireRockets { get; init; }
     public bool DebugMarkers { get; init; }
     public bool DebugScoreboard { get; init; }
+
+    /// <summary>Whether each local seat's aircraft draws as a race ghost to its own cameras
+    /// (<c>--debug-race-ghost</c>). A capture aid for the ghost's dither on one seat.</summary>
+    public bool DebugRaceGhost { get; init; }
     public bool EmptyStage { get; init; }
     public bool HudFontTest { get; init; }
     public bool InfiniteAmmo { get; init; }
@@ -71,6 +75,22 @@ internal sealed class FlightRosterPolicy
     /// (<see cref="MouseCapture.Allowed"/>, whose ⚠ carries the reason for each half of the
     /// answer).</summary>
     public bool MouseCaptureAllowed { get; init; }
+
+    /// <summary>Whether a human rig builds its interior for the stereo path
+    /// (<see cref="CSVM.Flight.Hud.XrCockpit"/>): that path is live. A stereo session builds no
+    /// cockpit pass (<see cref="CSVM.Flight.Hud.CockpitOverlay.InteriorInPass"/>), so the interior
+    /// stays in the main world whatever <c>--no-cockpit-pass</c> says.</summary>
+    public bool XrInterior { get; init; }
+
+    /// <summary>The per-plane VR cockpit data a stereo interior is built with
+    /// (<c>data/vr_cockpits.json</c>), read once per session and only under
+    /// <see cref="XrInterior"/>. Every other session holds the defaults and opens no file.</summary>
+    public VrCockpits XrCockpits { get; init; } = VrCockpits.Defaults;
+
+    /// <summary>The frame the headset's chase rides (<c>--xr-chase=</c>), handed to the seat the
+    /// headset flies (<see cref="FlightController.Headset"/>) and read only under
+    /// <see cref="XrInterior"/>.</summary>
+    public XrChase XrChase { get; init; }
 
     /// <summary>Whether each human pane's spyglass is armed at level load
     /// (<see cref="Spyglass.MachineDefaultFor"/>, answered once for the session's pane count).</summary>
@@ -107,6 +127,7 @@ internal sealed class FlightRosterPolicy
         AutoFireRockets = spec.AutoFireRockets,
         DebugMarkers = spec.DebugMarkers,
         DebugScoreboard = spec.DebugScoreboard,
+        DebugRaceGhost = spec.DebugRaceGhost,
         EmptyStage = spec.EmptyStage,
         HudFontTest = spec.HudFontTest,
         InfiniteAmmo = spec.InfiniteAmmo,
@@ -117,6 +138,10 @@ internal sealed class FlightRosterPolicy
         // arm, the launch's included, is what keeps a suite's mouse mode its own.
         MouseCaptureAllowed = MouseCapture.Allowed(
             DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
+        // Read here for the same reason: the stereo path is the process's, booted before any session.
+        XrInterior = XrCockpit.Live,
+        XrCockpits = XrCockpit.Live ? VrCockpits.Load() : VrCockpits.Defaults,
+        XrChase = spec.XrChase,
     };
 }
 
@@ -214,6 +239,10 @@ internal sealed class HumanRosterBindings
     /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
     /// leaves it inert.</summary>
     public Action? ToggleGraphicsMode { get; init; }
+
+    /// <summary>What a local seat's recenter action does: the VR seat's recenter, null in a flat
+    /// session, which leaves the action inert.</summary>
+    public Action? RecenterHeadset { get; init; }
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }

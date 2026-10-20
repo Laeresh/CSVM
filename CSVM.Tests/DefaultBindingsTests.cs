@@ -182,9 +182,9 @@ public class DefaultBindingsTests
         Assert.DoesNotContain(rocket, b => b.Device.Kind == DeviceKind.None);
     }
 
-    /// <summary>Spot checks against `docs/controls.md`: the throttle pair is the trigger pair, the
-    /// gun-group step is the right d-pad as a button, and pausing reads the original's one key plus
-    /// the pad's Start.</summary>
+    /// <summary>Spot checks against `docs/controls.md`: the throttle pair is the trigger pair, and
+    /// the gun-group step is the right d-pad as a button. Pausing reads the original's one key, the
+    /// pad's Start and, last, the left hand controller's menu button.</summary>
     [Fact]
     public void FlightDefaults_MatchTheControlsRecord()
     {
@@ -196,7 +196,8 @@ public class DefaultBindingsTests
         Assert.Contains(
             new Binding(Pad, BindingControl.Button((int)JoyButton.DpadRight)),
             map.Bindings(InputAction.SelectGunGroup));
-        Assert.Equal(2, map.Bindings(InputAction.Pause).Count);
+        Assert.Equal(3, map.Bindings(InputAction.Pause).Count);
+        Assert.Equal(new Binding(DeviceId.Xr, BindingControl.Button((int)XrButton.LeftMenu)), map.Bindings(InputAction.Pause)[2]);
     }
 
     /// <summary>The flight keymap is the original's shipped table, key for key
@@ -403,6 +404,36 @@ public class DefaultBindingsTests
             if (action != InputAction.ToggleGraphicsMode)
                 Assert.DoesNotContain(g, map.Bindings(action));
         }
+    }
+
+    /// <summary>The VR recenter is appended last and ships as a flight action on Home, which the
+    /// original leaves free. Its pad rows are the touchpad click and first back paddle, which no
+    /// other flight action holds. Its hand controller row is the left stick click. It reaches the
+    /// Original controls page's Other tab after the graphics switch.</summary>
+    [Fact]
+    public void TheVrRecenter_IsAppendedAndShipsOnHomeAndTheSparePadButtons()
+    {
+        var all = Enum.GetValues<InputAction>();
+        Assert.Equal(93, (int)InputAction.RecenterHeadset);
+        Assert.Equal(all.Length - 1, (int)InputAction.RecenterHeadset);
+
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var shipped = new[]
+        {
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Home)),
+            new Binding(Pad, BindingControl.Button((int)JoyButton.Touchpad)),
+            new Binding(Pad, BindingControl.Button((int)JoyButton.Paddle1)),
+            new Binding(DeviceId.Xr, BindingControl.Button((int)XrButton.LeftStickClick)),
+        };
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.RecenterHeadset));
+        Assert.Equal(shipped, map.Bindings(InputAction.RecenterHeadset));
+        foreach (var binding in shipped)
+        {
+            Assert.Equal(new[] { InputAction.RecenterHeadset }, map.OwnersOf(binding));
+        }
+
+        var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
+        Assert.Equal(other.IndexOf(InputAction.ToggleGraphicsMode) + 1, other.IndexOf(InputAction.RecenterHeadset));
     }
 
     /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its

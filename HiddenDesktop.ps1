@@ -1,5 +1,6 @@
 # Runs child processes on a SEPARATE, never-switched-to Windows desktop, so their windows cannot
-# appear on the user's screen at all. Dot-sourced by RunTests.ps1; see docs/tooling.md.
+# appear on the user's screen at all. Dot-sourced by RunTests.ps1 and RunProbe.ps1; see
+# docs/tooling.md.
 #
 # Why this exists: a scripted run's window is created without focus and the engine hides it as soon
 # as _Ready knows the flags, but the window still EXISTS for the ~1 s Godot takes to boot, and a full

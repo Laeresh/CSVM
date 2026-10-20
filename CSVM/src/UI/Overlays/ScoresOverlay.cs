@@ -68,7 +68,7 @@ public sealed partial class ScoresOverlay : Control
         };
         var layer = new CanvasLayer { Name = "scores", Layer = HudLayers.Hud };
         layer.AddChild(overlay);
-        pane.HudParent.AddChild(layer);
+        (pane.ChromeParent ?? pane.HudParent).AddChild(layer);
         return overlay;
     }
 

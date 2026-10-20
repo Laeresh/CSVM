@@ -565,7 +565,8 @@ public sealed class WeatherRig
 
         foreach (var rig in rigs)
         {
-            var camPos = rig.Camera.Position;
+            // The camera, or under a headset the tracked head, which is where the eyes are.
+            var camPos = rig.SkyAnchor;
 
             // The binary's per-frame camera weather state (1/2/3), published on the rig; the fog
             // edge trigger below the loop consumes it. Logged only on a change, at debug

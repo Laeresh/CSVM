@@ -78,7 +78,8 @@ What follows the switch, and how:
   the render scale, on every live 3D viewport (`ViewportQuality.ReapplyAll`).
 - Built or freed: the ground shadow, the scorch field, the heat shimmer pool,
   the world lights' omni pool and burst lights, and the clutter's cells (`ClutterInstances.Recut`).
-  A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
+  A flat session's sun flare swaps rigs (`SkyStage.FollowGraphicsMode`): the screen rig in
+  Original, the world rig in Enhanced unless `--screen-flare`. A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
 - Uploaded again, first of all: a texture's alpha depth. The faithful path uploads an alpha-plane
   texture at the original's 16 alpha levels and Enhanced keeps 256. `EnhancedLook.FollowAlphaDepth`
   decodes each one the archive handed out again from the archive and updates it in place, then
@@ -97,6 +98,15 @@ the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, the lab grammars 
 `SessionMode` is closed (Menu/Fly/Viewer/Freecam/AnimLab), with the `Stunt`, `Versus` and `Coop` modifiers, the one lobby type `MissionType` (`DogfightMissionType`, the Type box's four), and `SessionProbe` beside it. `FromMenu` and `FromCampaign` are the launchscreen's and the
 campaign cabin's counterparts to a command line, each carrying its own no-re-resolve rule on itself. `FromMenu` flies every Dogfight on its type's multiplayer map (`DeathmatchMission`, `CtfMission`, `ZvzMission`) and a lobby Stunt Race on the chapter's `StuntRaceMission` whatever `--mission` says, so every machine in one match builds the same mission, and takes `StuntRaceMinutes`, the race window, off the Instant Action def or a Stunt Race's Time box, every other launch keeping 5;
 a menu value that a spelled-out flag beats says so in an `*Explicit` field (`ScenarioExplicit`, `ViewModeExplicit` over the opening view, which keeps a `--view=` above the saved Default View even where both name chase, and `VsKillsExplicit`/`VsTimeExplicit` over Dogfight's kill target and time limit). The `WithSaved*` folds are how a saved option reaches a spec, each dropped under `--det`.
+`Resolve` carries its step order and the type's purity contract (DET-9). Per-rule coverage lives in `CSVM.Tests/SessionSpec*Tests`.
+
+## src/Spec/XrSimSpec.cs
+The stand-in headset a `--xr-sim[=spec]` launch asks for, as one engine-free value parsed from the
+flag's tokens ([../cli.md](../cli.md)): the pinned head's yaw, pitch, roll and offset, the IPD, each
+eye's pixel size and field of view, and whether a screenshot saves both eyes side by side or one.
+A token that does not parse keeps its default and becomes a spec warning. `SessionSpec.XrSim`
+carries it; `Launch/XrSimInterface.cs` draws through it and `Tooling/CaptureDirector.cs` reads its
+shot choice. Read `Flight/Camera/XrSimEyes.cs` for the pose law.
 `VsBots` is the command line's bot field, kept only for a `--net-host` Dogfight and cut to the seats left; a null plane is Random and an empty callsign a draw, both the host's at launch (`Session/Roster/BotSeats.cs`). `Resolve` carries its step order and the type's purity contract (DET-9). Per-rule coverage lives in `CSVM.Tests/SessionSpec*Tests`.
 
 ## src/Spec/BasePaths.cs

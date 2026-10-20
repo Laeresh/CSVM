@@ -417,7 +417,7 @@ public sealed class OriginalLocalLobby : IOriginalScreenModule
     {
         if (_setup.Pilots(Mode) < PlayerSetupFeature.MinimumSeats(Mode))
         {
-            return SecondPilotHint;
+            return PlayerSetupFeature.MinimumSeats(Mode) > _setup.SeatLimit ? PlayerSetupFeature.VrOneSeat : SecondPilotHint;
         }
 
         return _setup.Seats.Count >= PlayerSetupFeature.MaxSeats

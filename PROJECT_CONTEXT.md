@@ -98,7 +98,7 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
 
 - `CSVM/`, the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CSVM/shaders/`, shared `.gdshaderinc` blocks `#include`d by the generated shaders (instance-uniform order, sRGB, fog, lights, clock).
-- `CSVM/data/`, **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`) and `effect_pools.json` (per-root effect-template pool sizes; see `docs/architecture/Utils.md` on `EffectPools`).
+- `CSVM/data/`, **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`) and `effect_pools.json` (per-root effect-template pool sizes; see `docs/architecture/Utils.md` on `EffectPools`), and `vr_cockpits.json` (per-plane VR interior scale and seated eye offset; see `docs/architecture/Flight.md` on `VrCockpits`).
 - `CSVM.Tests/`, the xUnit project (`dotnet test`): reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
 - `CrimsonSkiesGame/`, the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/`, extraction output workdir (git-ignored), mirroring the game's ZBD structure. Loaders prefer an unpacked sibling folder over its `.zip`. Layout + what is deliberately not loaded: `docs/tooling.md`.
@@ -112,6 +112,7 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
 - `sandbox/`, the driver scripts `RunSandbox.ps1` runs inside the sandbox; `RendererFloor.ps1` launches the build, records the windows, dialogs, screenshots and logs, and flies a chapter when an extraction tree is mapped. `LinuxRelease.ps1` is the host-run Linux sibling: the tarball unpacked in WSL, extracted with its own `--extract`, and the in-engine suites run headless from it (`-NoSuites` for the extraction alone). Details: `docs/tooling.md`.
 - `RunProbe.ps1`, **every ad-hoc scripted Godot launch goes through this** (`--screenshot=`, `--dump-*`, one-off `--run-tests=`): hidden desktop + streams redirected to files, so nothing flashes on screen or prints over the calling terminal. Never invoke the Godot exe directly for a probe. Details: `docs/tooling.md`.
 - `HiddenDesktop.ps1`, dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
+- `XrSimFeature.ps1`, dot-sourced by `RunTests.ps1`, `RunProbe.ps1` and `RunGame.ps1`: sets the `csvm_xr_sim` feature tag around a launch that asks for `--xr-sim`. Details: `docs/tooling.md`.
 - `JobObjectCore.ps1`, dot-sourced through `HiddenDesktop.ps1`: one kill-on-close job object per `RunTests.ps1`/`RunProbe.ps1` run, so a killed runner takes its children with it (`JobObject.ps1 -SelfTest`). Details: `docs/tooling.md`.
 - `MemoryLedger.ps1` over `MemoryLedgerCore.ps1`, the machine-wide memory ledger admitting every scripted Godot launch (`RunTests.ps1`, `RunProbe.ps1`, a scripted `RunGame.ps1`/`RunDev.ps1`), so concurrent sessions queue instead of exhausting RAM; `status` prints it, `-SelfTest` checks it, and `CheckGodotCommand.ps1` blocks a direct Godot launch from an agent shell. Details: `docs/tooling.md`.
 - `GamingMode.ps1 on|off|status`, the command line over `GamingModeCore.ps1` (which the runners dot-source), gaming mode: while the user plays, `RunTests.ps1` and `RunProbe.ps1` runs from every worktree queue behind one machine-wide lock and run throttled (priority, CPU threads, fewer shards), and the format hook throttles without waiting; `-SelfTest` checks it. Details: `docs/tooling.md`.
@@ -237,8 +238,9 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 **Where the project is.** Milestones 1 through 6 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** [`docs/PLAN-enhanced-vegetation.md`](docs/PLAN-enhanced-vegetation.md), Wave A
-not started. Next: A1, A2.
+**Active plans:** [`docs/PLAN-enhanced-vegetation.md`](docs/PLAN-enhanced-vegetation.md), Wave A
+not started. Next: A1, A2. [`docs/PLAN-vr.md`](docs/PLAN-vr.md), Wave E: a few headset checks and
+network play in VR (E21) owed, then the release steps in E22.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

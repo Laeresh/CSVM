@@ -127,6 +127,10 @@ public sealed partial class FogVolumeClutter : Node3D
 
     // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
     // not compile, on a German-locale machine only.
+    // The grade's sun projection onto the camera's right and up, the two lines a stereo card swaps.
+    private static readonly System.Text.RegularExpressions.Regex FlatSunProjection = new(
+        @"vec2 sun_uv = vec2\(dot\(csky_sun_dir, INV_VIEW_MATRIX\[0\]\.xyz\),\s*-dot\(csky_sun_dir, INV_VIEW_MATRIX\[1\]\.xyz\)\);");
+
     private static readonly string EnhancedGradeBody = EnhancedGradeTemplate
         .Replace("TINT_GAIN", Literal(EnhancedSunTintGain))
         .Replace("RIM_GAIN", Literal(EnhancedRimGain))
@@ -260,6 +264,10 @@ public sealed partial class FogVolumeClutter : Node3D
     /// <summary>True when a kind of this template name draws from the rendered pool under Enhanced
     /// Graphics.</summary>
     internal static bool DrawsRenderedPuffs(string kindName) => EnhancedPuffKinds.Contains(kindName);
+
+    /// <summary>A card shader's text, flat or under <paramref name="stereo"/>, for a test to read.</summary>
+    internal static string ShaderCodeFor(bool lit, bool fogged, bool enhanced, bool pooled, bool stereo) =>
+        CardCode(lit, fogged, enhanced, pooled, stereo);
 
     // The gamez side of one clutter alternative: the sprite card its template root carries.
     // Resolved by ClutterBuilder's own template rule, a parentless Object3d of that name whose
@@ -457,7 +465,13 @@ public sealed partial class FogVolumeClutter : Node3D
     // dropped it, so a sprite outside its draw distance costs no fragments, what lets the whole
     // field be one static MultiMesh with no streaming. ⚠ The fade distance is the true 3D one, not
     // the fog's horizontal cylinder: a cloud overhead is as far away as one on the horizon.
-    private static string ShaderCode(bool lit, bool fogged, bool enhanced, bool pooled = false)
+    private static string ShaderCode(bool lit, bool fogged, bool enhanced, bool pooled = false) =>
+        CardCode(lit, fogged, enhanced, pooled, Mech3.StereoFacing.Live);
+
+    // The card's text, flat or stereo. Under a headset the camera's basis is the head's, so the
+    // Enhanced grade's gaze and sun offset would swing with the head. The stereo text reads both off
+    // the card's own facade basis instead.
+    private static string CardCode(bool lit, bool fogged, bool enhanced, bool pooled, bool stereo)
     {
         // ⚠ A `lighting: true` card takes the original's PER-VERTEX term on normals turned by the
         // same `face` the quad takes, never the collapsed csky_world_light and never another basis
@@ -502,6 +516,13 @@ public sealed partial class FogVolumeClutter : Node3D
                 ? $"textureLod(puff_tex, vec3(csky_puff_uv(v_puff_card_uv + {rimOffset}, v_puff_pose), v_puff_layer), rim_lod).a"
                 : $"textureLod(albedo_tex, UV + {rimOffset}, rim_lod).a")
             : string.Empty;
+        if (enhanced && stereo)
+        {
+            decls += "\nvarying flat vec3 v_grade_view;\nvarying flat vec2 v_grade_sun;";
+            carryNormal += "\n    v_grade_view = -face[2];"
+                + "\n    v_grade_sun = vec2(dot(csky_sun_dir, face[0]), -dot(csky_sun_dir, face[1]));";
+            grade = FlatSunProjection.Replace(grade.Replace("-INV_VIEW_MATRIX[2].xyz;", "v_grade_view;"), "vec2 sun_uv = v_grade_sun;");
+        }
         string soft = enhanced ? " * soft" : string.Empty;
         return $$"""
             shader_type spatial;
