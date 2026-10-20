@@ -156,7 +156,7 @@ public sealed partial class StickPump : Node
         Pads.ClaimForSticks(models);
     }
 
-    // The models Godot maps as gamepads, recomputed only when Pads hands back a new roster:
+    // The models Godot maps as gamepads, recomputed only when Pads hands back a new roster.
     // GetJoyInfo marshals a dictionary per pad, and the roster asks every frame. The same instance
     // back means unchanged.
     // ⚠ Leave out a pad Godot does not know. An exported build lets Godot's SDL3 see DirectInput,
