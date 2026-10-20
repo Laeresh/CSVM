@@ -82,11 +82,11 @@ again.
 ## VR (experimental)
 
 CSVM can be flown seated in a PC VR headset, through the OpenXR runtime that is active on this
-PC. VR is experimental in this release: it has been flown on one machine (a Quest 3 over Virtual
-Desktop, with an RTX 5080), and the release page lists its known issues. Windows only.
+PC. VR is experimental in this release: it has been flown on one machine (a Quest 3 with an RTX 5080),
+and the release page lists its known issues. Windows only.
 
-**Runtimes.** Virtual Desktop's own runtime (VDXR) is the one VR was built on; SteamVR, which
-Steam Link uses for a Quest, is the second. Whichever is set as the system's OpenXR runtime is
+**Runtimes.** Virtual Desktop's own runtime (VDXR) and SteamVR, which Steam Link uses for a
+Quest, have both been flown. Whichever is set as the system's OpenXR runtime is
 the one the game uses. Set it to **90 Hz** at its default resolution.
 
 **Starting it.** Start the headset and its runtime first, then either:
@@ -107,9 +107,10 @@ turns around you in a bank or a loop. The left controller's menu button pauses. 
 splitscreen is not available, and network play is.
 
 **Recentering.** Sit as you would in the cockpit and recenter, which puts your eyes on the
-pilot's. `Home`, the left controller's stick click, a PlayStation pad's touchpad click, the first
-back paddle of an Elite-style pad, or the runtime's own recenter all do it, and the game
-recenters by itself when the headset session starts.
+pilot's. `Home`, `numpad 5`, `numpad 0`, a pad's right-stick click, the left controller's stick
+click, a PlayStation pad's touchpad click, the first back paddle of an Elite-style pad, or the
+runtime's own recenter all do it, and the game recenters by itself when the headset session
+starts.
 
 **Quality and comfort.** A headset flight renders with its own VR quality profile in place of
 your graphics options: no anti-aliasing filter over 4x MSAA, Low shadows (hard-edged) and no
