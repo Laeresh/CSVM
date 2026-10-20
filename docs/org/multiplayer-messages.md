@@ -955,7 +955,9 @@ at the pose it took, the heading its nose's yaw. A guest sends it to the host, w
 from the machine flying that seat and relays it to the other guests. Every copy of that seat
 leaves its wreck there and its owner's poses fly it on, so a pose alone never ends a copy's wreck.
 A return in flight sends nothing, since the poses carry it. The same holds in every network
-session without a match.
+session without a match where a pilot returns from a crash: a networked free flight, and a co-op
+campaign mission under `--no-crash-loss`. Under the campaign's own rule a co-op human's crash is
+final (`CrashIsFinal`), so no return follows it and nothing is sent.
 
 **Wire compatibility.** A build without these ids drops them as unknown. Builds share a lobby only
 on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.
