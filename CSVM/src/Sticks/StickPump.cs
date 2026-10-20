@@ -156,11 +156,14 @@ public sealed partial class StickPump : Node
         Pads.ClaimForSticks(models);
     }
 
-    // Godot's pad models, recomputed only when Pads hands back a new roster: GetJoyInfo marshals a
-    // dictionary per pad, and the roster asks every frame. The same instance back means unchanged.
+    // The models Godot maps as gamepads, recomputed only when Pads hands back a new roster
+    // (GetJoyInfo marshals a dictionary per pad). ⚠ Pads.Listed, not Connected, which hides what
+    // Claim took: a pad SDL2 saw before Godot would stay a stick.
+    // ⚠ Leave out a pad Godot does not know. An exported build lets Godot's SDL3 see DirectInput,
+    // so it lists flight sticks too, and their model here would keep SDL2 off them (issue #248).
     private static IReadOnlyCollection<StickModel> GodotModels()
     {
-        var pads = Pads.Connected();
+        var pads = Pads.Listed();
         if (ReferenceEquals(pads, _godotRosterSeen))
         {
             return _godotModels;
@@ -169,6 +172,11 @@ public sealed partial class StickPump : Node
         var models = new List<StickModel>(pads.Count);
         foreach (int pad in pads)
         {
+            if (!Input.IsJoyKnown(pad))
+            {
+                continue;
+            }
+
             var info = Input.GetJoyInfo(pad);
             string? vendor = info.TryGetValue("vendor_id", out var v) ? v.ToString() : null;
             string? product = info.TryGetValue("product_id", out var p) ? p.ToString() : null;

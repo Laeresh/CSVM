@@ -42,8 +42,9 @@ public sealed class StickRoster : IDisposable
     private bool _listed;
 
     /// <param name="native">The stick library; the roster owns it and disposes it.</param>
-    /// <param name="godotModels">The models of Godot's pad roster. Returning the same instance
-    /// while it is unchanged spares a re-list every frame.</param>
+    /// <param name="godotModels">The models Godot maps as gamepads; a raw pad it lists without a
+    /// mapping is left out. Returning the same instance while it is unchanged spares a re-list
+    /// every frame.</param>
     /// <param name="inputBlocked">The read gate, <see cref="Pads.InputBlocked"/> in the game.</param>
     /// <param name="godotReadsGamepads">True off Windows: <see cref="GapFill"/>'s Linux rules.</param>
     public StickRoster(
@@ -64,10 +65,10 @@ public sealed class StickRoster : IDisposable
     /// <summary>Whether reads are suppressed right now; the roster keeps following plugs either way.</summary>
     public bool InputBlocked => _inputBlocked();
 
-    /// <summary>The gap-filler: the listed devices whose model Godot's roster lacks, in list order.
-    /// A model is dropped whole when Godot has it, so a pad never gets a second reader. With
-    /// <paramref name="godotReadsGamepads"/> (Linux) only SDL's gamepads and
-    /// <see cref="ValveVendor"/> devices are dropped, and <c>Pads</c> hides Godot's view of the rest.
+    /// <summary>The gap-filler: the listed devices whose model Godot does not map as a gamepad, in
+    /// list order. A model is dropped whole when Godot has it, so a pad never gets a second reader.
+    /// With <paramref name="godotReadsGamepads"/> (Linux) only SDL's gamepads and
+    /// <see cref="ValveVendor"/> devices are dropped. <c>Pads</c> hides Godot's view of the rest.
     /// Rules and reasons: <c>docs/tooling.md</c>, "SDL2 for flight sticks".</summary>
     public static StickListing[] GapFill(
         IReadOnlyList<StickListing> listed, IReadOnlyCollection<StickModel> godot, bool godotReadsGamepads = false)
@@ -213,7 +214,7 @@ public sealed class StickRoster : IDisposable
     // ⚠ Off Windows the model match must not apply. Godot's SDL3 lists every joystick there,
     // gamepad or not, so it would hand every stick to Godot as a raw pad (issue #130).
     private static string? SkipReason(StickListing listing, HashSet<StickModel> godot, bool godotReadsGamepads) =>
-        !godotReadsGamepads ? (godot.Contains(listing.Model) ? "Godot's pad roster has this model" : null)
+        !godotReadsGamepads ? (godot.Contains(listing.Model) ? "Godot maps this model as a gamepad" : null)
         : listing.Gamepad ? "SDL maps it as a gamepad, which Godot reads on this platform"
         : listing.Model.Vendor == ValveVendor ? "a Valve device (Steam Deck controls, Steam Controller or Steam Input)"
         : null;

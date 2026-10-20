@@ -17,7 +17,7 @@ What this build plays:
 - Network play: the Dogfight deathmatch and campaign co-op, hosted from the menu and joined by
   LAN search or by IP address.
 - Seated PC VR through OpenXR on Windows, experimental: flight in stereo from the cockpit, menus
-  and films on a virtual screen. [`packaging/README.md`](packaging/README.md#vr-experimental) says
+  and films on a theater screen. [`packaging/README.md`](packaging/README.md#vr-experimental) says
   how to start it.
 - 11 aircraft and 8 chapter worlds, in the original's liveries, animated and with sound.
 - Guns and rockets, AI aircraft that patrol, engage and evade, turrets, zeppelins, and world

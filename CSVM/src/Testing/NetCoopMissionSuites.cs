@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
@@ -70,6 +71,10 @@ internal static class NetCoopMissionSuites
     // cruises near 90 m/s, so a halted or pinned aeroplane is the only way to fall short.
     private const int TravelSteps = 120;
     private const float SeatTravelM = 50f;
+
+    // The placed return carries the pose as floats, so the copy lands on it to rounding alone.
+    private const float ReturnPoseM = 0.5f;
+    private const float ReturnHeadingDeg = 1f;
 
     // How far a host's copy of a guest's plane may sit from the guest's own: half a grid slot. A
     // copy following the guest's other plane misses by more. The copy draws about 0.13 s behind
@@ -281,6 +286,61 @@ internal static class NetCoopMissionSuites
             SkipAcross(ctx, "the host", hostEnd, ends, doors);
             Fly(SettleSteps, ends, doors);
             GuestSeatsFly(ctx, hostEnd, guestEnd, ends, doors);
+        }
+        finally
+        {
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
+        }
+    }
+
+    [Suite("net-coop-crash-return",
+        "a co-op campaign mission under --no-crash-loss, host and one guest over a lossy loopback: "
+        + "the guest's crash plays a wreck on the host, and its return from that crash brings the "
+        + "host's copy out of the wreck once, at the pose and heading the guest returned at, after "
+        + "which the copy flies on beside the guest")]
+    internal static void DCoopGuestReturnsFromItsCrash(TestContext ctx)
+    {
+        var mission = Mission(ctx);
+        var stock = StockLoadouts.Load();
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2407));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, "Host", 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            if (!guest.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"the guest joins the host's campaign door and is Ready ({guest.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, host.BuildLaunch()!, HostAmmo, out _, keepFlying: true);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host, keepFlying: true);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            var ends = new[] { hostEnd, guestEnd };
+            var doors = new[] { host, guest };
+            SkipAcross(ctx, "the host", hostEnd, ends, doors);
+            Fly(SettleSteps, ends, doors);
+            GuestReturns(ctx, hostEnd, guestEnd, ends, doors);
         }
         finally
         {
@@ -1663,7 +1723,7 @@ internal static class NetCoopMissionSuites
 
     private static Ends Launch(TestContext ctx, CampaignMission mission, StockLoadouts stock,
         NetPlayFeature door, MenuNetLaunch launch, int[] ammo, out CoopFit[] seatFits,
-        string profile = "", string? profilesDir = null)
+        string profile = "", string? profilesDir = null, bool keepFlying = false)
     {
         var own = CampaignLoadout.For(CoopFit.Of(ammo, null), stock);
         var planes = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
@@ -1672,7 +1732,7 @@ internal static class NetCoopMissionSuites
         door.TellCoopWingman(SeatFields.CoopWingmanFor(profile, profilesDir));
         door.TellCoopPersisted(SeatFields.CoopPersistedFor(profile, profilesDir));
         var fits = seatFits;
-        return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir), launch.Transport,
+        return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir, keepFlying), launch.Transport,
             isHost: true, HostSeed, roster, Flight.Hangar.StockAirframes.Nodes,
             seat => SeatFields.CoopSeatFitFor(seat, fits, null, stock));
     }
@@ -1681,7 +1741,8 @@ internal static class NetCoopMissionSuites
     // session with no profile, its own fit on its own seat and the host's word on every other.
     // Without hostLog it builds as a guest that never heard the host's persist log, a suite's control.
     private static Ends Follow(TestContext ctx, CampaignMission mission, StockLoadouts stock,
-        NetPlayFeature door, CoopFit fit, NetCombatSuites.Ends host, NetPlayFeature hostDoor, bool hostLog = true)
+        NetPlayFeature door, CoopFit fit, NetCombatSuites.Ends host, NetPlayFeature hostDoor, bool hostLog = true,
+        bool keepFlying = false)
     {
         for (int i = 0; i < OpenerSteps && !door.CoopLaunchDue; i++)
         {
@@ -1696,7 +1757,7 @@ internal static class NetCoopMissionSuites
 
         ctx.Check(door.CoopLaunchDue, $"a guest's door hears the host's opener");
         var launch = door.BuildLaunch()!;
-        return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock)), launch.Transport,
+        return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock), keepFlying: keepFlying), launch.Transport,
             isHost: false, HostSeed + 1, null, Flight.Hangar.StockAirframes.Nodes,
             seat => SeatFields.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman,
             coopPersisted: hostLog ? () => door.CoopPersisted : null);
@@ -1758,14 +1819,79 @@ internal static class NetCoopMissionSuites
         ctx.Note($"the guest's seats on the host: {reading}; crossed {crossed:0} m");
     }
 
+    // The guest crashes and returns. Its copy on the host is a wreck while it is down. The return
+    // is the one placement that copy takes, so a second word placing it would count here.
+    private static void GuestReturns(TestContext ctx, Ends host, Ends guest, Ends[] ends, NetPlayFeature[] doors)
+    {
+        var own = guest.Session.SeatRigs[1].Controller!;
+        var copy = host.Session.SeatRigs[1].Controller!;
+        ctx.Check(own is { RemoteOwned: false, InPlay: true } && copy is { RemoteOwned: true, InPlay: true },
+            $"the guest flies its seat and the host chases it as a remote aeroplane, both in play");
+
+        own.DebugForceCrash();
+        int steps = 0;
+        for (; steps < SkipWindowSteps && !copy.Crashed; steps++)
+        {
+            FlyOnce(ends, doors);
+        }
+
+        bool wreck = copy.Crashed && !copy.InPlay;
+        ctx.Check(wreck && own.Crashed && !own.CrashIsFinal && own.RespawnOffered,
+            $"ABLE-TO-FAIL CONTROL: the guest's death report plays its wreck on the host {steps} step(s) on, and --no-crash-loss leaves the guest's crash returnable (copy crashed={copy.Crashed} in play={copy.InPlay}, final={own.CrashIsFinal}, offered={own.RespawnOffered})");
+
+        Vector3? returned = null;
+        Vector3? placed = null;
+        float ownYaw = 0f;
+        float copyYaw = 0f;
+        own.Respawned += () =>
+        {
+            returned = own.WorldPosition;
+            ownYaw = Yaw(own);
+        };
+        copy.Respawned += () =>
+        {
+            placed = copy.WorldPosition;
+            copyYaw = Yaw(copy);
+        };
+        int ownBefore = own.RespawnCount;
+        int copyBefore = copy.RespawnCount;
+        own.HoldActionForTest(InputAction.Respawn, true);
+        FlyOnce(ends, doors);
+        own.HoldActionForTest(InputAction.Respawn, false);
+        for (steps = 0; steps < SkipWindowSteps && placed == null; steps++)
+        {
+            FlyOnce(ends, doors);
+        }
+
+        float off = returned is { } at && placed is { } there ? at.DistanceTo(there) : float.PositiveInfinity;
+        float turn = Mathf.Abs(Mathf.Wrap(copyYaw - ownYaw, -180f, 180f));
+        ctx.Check(returned != null && placed != null && off < ReturnPoseM && turn < ReturnHeadingDeg,
+            $"the guest's return reaches the host {steps} step(s) on and places the copy where the guest returned ({off:0.000} m off, heading {turn:0.00} deg off)");
+
+        Fly(TravelSteps, ends, doors);
+        float travel = placed is { } from ? copy.WorldPosition.DistanceTo(from) : 0f;
+        float gap = copy.WorldPosition.DistanceTo(own.WorldPosition);
+        ctx.Check(!copy.Crashed && copy.InPlay && travel > SeatTravelM && gap < SeatReplicaM,
+            $"the copy leaves its wreck and flies on from there beside the guest ({travel:0} m flown in {TravelSteps} steps, {gap:0.0} m from the guest, crashed={copy.Crashed} in play={copy.InPlay})");
+        ctx.Check(own.RespawnCount - ownBefore == 1 && copy.RespawnCount - copyBefore == 1,
+            $"one return on the guest places the host's copy once, with no second placement ({own.RespawnCount - ownBefore} on the guest, {copy.RespawnCount - copyBefore} on the host)");
+        ctx.Check(host.Session.Campaign?.Result == null && guest.Session.Campaign?.Result == null,
+            $"and the mission flies on on both machines");
+        ctx.Note($"the guest's return on the host: wreck control {wreck}, placed {steps} step(s) on, {off:0.000} m and {turn:0.00} deg off the return, then {travel:0} m flown and {gap:0.0} m from the guest; respawns {own.RespawnCount - ownBefore} guest / {copy.RespawnCount - copyBefore} host");
+    }
+
+    // The nose's yaw in degrees, the heading the placed return carries.
+    private static float Yaw(FlightController pilot) =>
+        Mathf.RadToDeg(Mathf.Atan2(-pilot.NoseDirection.X, -pilot.NoseDirection.Z));
+
     // A co-op launch with no profile behind it unless a suite's own store names one. Only a
-    // guest's is so in play, so no suite writes to the user's store.
+    // guest's is so in play, so no suite writes to the user's store. keepFlying is --no-crash-loss.
     private static SessionSpec Spec(CampaignMission mission, LoadoutChoice? fit, string profile = "",
-        string? profilesDir = null) =>
+        string? profilesDir = null, bool keepFlying = false) =>
         SessionSpec.FromCampaign(
-            SessionSpec.Parse(profilesDir == null
-                ? new[] { "--mute", "--no-pads" }
-                : new[] { "--mute", "--no-pads", $"--profiles={profilesDir}" }),
+            SessionSpec.Parse(new[] { "--mute", "--no-pads" }
+                .Concat(profilesDir == null ? Array.Empty<string>() : new[] { $"--profiles={profilesDir}" })
+                .Concat(keepFlying ? new[] { "--no-crash-loss" } : Array.Empty<string>())),
             profile, mission.Seq,
             new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) }, 1, new[] { fit });
 

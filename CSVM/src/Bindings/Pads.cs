@@ -35,6 +35,7 @@ public static class Pads
     // Input.GetJoyInfo per pad, which marshals a dictionary each time, and Connected runs several
     // times a frame; a roster that has not changed cannot change the answer.
     private static Godot.Collections.Array<int>? _deduped;
+    private static Godot.Collections.Array<int>? _raw;
     private static int[] _rawSeen = Array.Empty<int>();
 
     // The models the stick roster has opened, in ModelOf's form; see ClaimForSticks.
@@ -50,21 +51,15 @@ public static class Pads
     /// </summary>
     public static Godot.Collections.Array<int> Connected()
     {
+        var raw = Listed();
         if (Disabled)
         {
-            return _noPads ??= new Godot.Collections.Array<int>();
+            return raw;
         }
 
-        var raw = Input.GetConnectedJoypads();
-        if (_deduped != null && SameRoster(raw, _rawSeen))
+        if (_deduped != null)
         {
             return _deduped;
-        }
-
-        _rawSeen = new int[raw.Count];
-        for (int i = 0; i < raw.Count; i++)
-        {
-            _rawSeen[i] = raw[i];
         }
 
         var views = new List<(int Pad, bool XInput, string Model)>(raw.Count);
@@ -80,6 +75,34 @@ public static class Pads
         }
 
         return _deduped;
+    }
+
+    /// <summary>Every pad Godot lists, before <see cref="ClaimForSticks"/> and
+    /// <see cref="KeepXInputView"/>; empty when <see cref="Disabled"/>. The same instance while
+    /// unchanged. The stick roster asks this one, since a roster filtered by its own claim would
+    /// never show it Godot's pad arriving after the stick opened.</summary>
+    public static Godot.Collections.Array<int> Listed()
+    {
+        if (Disabled)
+        {
+            return _noPads ??= new Godot.Collections.Array<int>();
+        }
+
+        var raw = Input.GetConnectedJoypads();
+        if (_raw != null && SameRoster(raw, _rawSeen))
+        {
+            return _raw;
+        }
+
+        _rawSeen = new int[raw.Count];
+        for (int i = 0; i < raw.Count; i++)
+        {
+            _rawSeen[i] = raw[i];
+        }
+
+        _raw = raw;
+        _deduped = null;
+        return _raw;
     }
 
     /// <summary>Takes the models the stick roster has opened, as decimal <c>vendor/product</c>.
